@@ -8,15 +8,6 @@ import centraid.screen.v1.HealthConnectEvent
 import centraid.screen.v1.HealthHomeEvent
 import centraid.screen.v1.HealthMetricEvent
 import centraid.screen.v1.HealthWorkoutEvent
-import centraid.screen.v1.MoneyAccountsEvent
-import centraid.screen.v1.MoneyCategoriesEvent
-import centraid.screen.v1.MoneyHomeEvent
-import centraid.screen.v1.MoneyImportEvent
-import centraid.screen.v1.MoneyRecurringEvent
-import centraid.screen.v1.MoneyRulesEvent
-import centraid.screen.v1.MoneySearchEvent
-import centraid.screen.v1.MoneyTargetEvent
-import centraid.screen.v1.MoneyTransactionEvent
 import centraid.screen.v1.NotesEditorEvent
 import centraid.screen.v1.NotesHistoryEvent
 import centraid.screen.v1.NotesJournalEvent
@@ -109,47 +100,6 @@ public object ScreenOpenings {
                 ),
             ).encode(),
         )
-        is Destination.MoneyHome -> screen(
-            ScreenIds.MONEY_HOME,
-            MoneyHomeEvent(opened = MoneyHomeEvent.Opened(destination = destination.destination)).encode(),
-        )
-        is Destination.MoneyTransaction -> screen(
-            ScreenIds.MONEY_TRANSACTION,
-            MoneyTransactionEvent(
-                opened = MoneyTransactionEvent.Opened(txn_id = destination.txnId, parent = destination.parent),
-            ).encode(),
-        )
-        is Destination.MoneyTarget -> screen(
-            ScreenIds.MONEY_TARGET,
-            MoneyTargetEvent(
-                opened = MoneyTargetEvent.Opened(
-                    month = destination.month,
-                    category_id = destination.categoryId,
-                    currency = destination.currency,
-                ),
-            ).encode(),
-        )
-        is Destination.MoneyRecurring -> screen(
-            ScreenIds.MONEY_RECURRING,
-            MoneyRecurringEvent(opened = MoneyRecurringEvent.Opened(parent = destination.parent)).encode(),
-        )
-        is Destination.MoneyImport -> screen(
-            ScreenIds.MONEY_IMPORT,
-            MoneyImportEvent(opened = MoneyImportEvent.Opened(parent = destination.parent)).encode(),
-        )
-        is Destination.MoneyAccounts -> screen(
-            ScreenIds.MONEY_ACCOUNTS,
-            MoneyAccountsEvent(opened = MoneyAccountsEvent.Opened(parent = destination.parent)).encode(),
-        )
-        is Destination.MoneyRules -> screen(
-            ScreenIds.MONEY_RULES,
-            MoneyRulesEvent(opened = MoneyRulesEvent.Opened(parent = destination.parent)).encode(),
-        )
-        is Destination.MoneyCategories -> screen(
-            ScreenIds.MONEY_CATEGORIES,
-            MoneyCategoriesEvent(opened = MoneyCategoriesEvent.Opened(parent = destination.parent)).encode(),
-        )
-        Destination.MoneySearch -> screen(ScreenIds.MONEY_SEARCH, MoneySearchEvent(opened = MoneySearchEvent.Opened()).encode())
         // HEALTH: the phone's facts are stamped on arrival (`HealthRouting.opened`), never spelled here.
         is Destination.HealthHome -> screen(
             ScreenIds.HEALTH_HOME,

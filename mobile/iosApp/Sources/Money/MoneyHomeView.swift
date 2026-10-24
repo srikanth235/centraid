@@ -18,12 +18,12 @@ struct MoneyHomeView: View {
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_MoneyHomeState {
-        (try? Centraid_Screen_V1_MoneyHomeState(serializedBytes: data)) ?? .init()
+    private var state: Centraid_Core_V1_MoneyHomeState {
+        (try? Centraid_Core_V1_MoneyHomeState(serializedBytes: data)) ?? .init()
     }
 
-    private func event(_ build: (inout Centraid_Screen_V1_MoneyHomeEvent) -> Void) -> Data {
-        moneyEvent(Centraid_Screen_V1_MoneyHomeEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_MoneyHomeEvent) -> Void) -> Data {
+        moneyEvent(Centraid_Core_V1_MoneyHomeEvent.self, build)
     }
 
     private func addStatement() { send(event { $0.add = .init() }) }
@@ -106,7 +106,7 @@ struct MoneyHomeView: View {
     // MARK: - The three destinations
 
     @ViewBuilder
-    private func page(_ home: Centraid_Screen_V1_MoneyHomeData, state: Centraid_Screen_V1_MoneyHomeState) -> some View {
+    private func page(_ home: Centraid_Core_V1_MoneyHomeData, state: Centraid_Core_V1_MoneyHomeState) -> some View {
         if home.showsMonth { monthStepper(home, chrome: state.chrome) }
         switch state.destination {
         case .activity: activity(home.activity)
@@ -115,7 +115,7 @@ struct MoneyHomeView: View {
         }
     }
 
-    private func monthStepper(_ home: Centraid_Screen_V1_MoneyHomeData, chrome: Centraid_Screen_V1_MoneyHomeChrome) -> some View {
+    private func monthStepper(_ home: Centraid_Core_V1_MoneyHomeData, chrome: Centraid_Core_V1_MoneyHomeChrome) -> some View {
         HStack(spacing: 0) {
             KitIconKey(iconKey: "ChevronLeft", label: chrome.previousMonthLabel, identifier: "money-month-previous") {
                 send(event { $0.monthStepped = .with { $0.months = -1 } })
@@ -135,7 +135,7 @@ struct MoneyHomeView: View {
     }
 
     @ViewBuilder
-    private func spending(_ spending: Centraid_Screen_V1_MoneySpendingData) -> some View {
+    private func spending(_ spending: Centraid_Core_V1_MoneySpendingData) -> some View {
         if spending.hasEmpty {
             EmptyStateView(spending.empty, onAction: addStatement)
         } else {
@@ -174,7 +174,7 @@ struct MoneyHomeView: View {
         }
     }
 
-    private func categoryLine(_ line: Centraid_Screen_V1_MoneyCategoryLine, currency: String) -> some View {
+    private func categoryLine(_ line: Centraid_Core_V1_MoneyCategoryLine, currency: String) -> some View {
         // Planned, spent and left across the page; a line with no plan has only what was spent.
         let figure = line.hasPlan_p ? line.left : line.spent
         let categoryID = line.categoryID
@@ -191,7 +191,7 @@ struct MoneyHomeView: View {
     }
 
     @ViewBuilder
-    private func activity(_ activity: Centraid_Screen_V1_MoneyActivityData) -> some View {
+    private func activity(_ activity: Centraid_Core_V1_MoneyActivityData) -> some View {
         if activity.hasEmpty {
             EmptyStateView(activity.empty, onAction: addStatement)
         } else {
@@ -217,7 +217,7 @@ struct MoneyHomeView: View {
     }
 
     @ViewBuilder
-    private func cashflow(_ flow: Centraid_Screen_V1_MoneyCashflowData) -> some View {
+    private func cashflow(_ flow: Centraid_Core_V1_MoneyCashflowData) -> some View {
         if flow.hasEmpty {
             EmptyStateView(flow.empty, onAction: addStatement)
         } else {
@@ -246,7 +246,7 @@ struct MoneyHomeView: View {
 
     // MARK: - Sheets
 
-    private func sheetIsOpen(_ state: Centraid_Screen_V1_MoneyHomeState) -> Bool {
+    private func sheetIsOpen(_ state: Centraid_Core_V1_MoneyHomeState) -> Bool {
         switch state.sheet {
         case .more, .month, .account, .category: return true
         default: return false
@@ -254,7 +254,7 @@ struct MoneyHomeView: View {
     }
 
     @ViewBuilder
-    private func sheetContent(_ state: Centraid_Screen_V1_MoneyHomeState, home: Centraid_Screen_V1_MoneyHomeData?) -> some View {
+    private func sheetContent(_ state: Centraid_Core_V1_MoneyHomeState, home: Centraid_Core_V1_MoneyHomeData?) -> some View {
         let chrome = state.chrome
         switch state.sheet {
         case .more:

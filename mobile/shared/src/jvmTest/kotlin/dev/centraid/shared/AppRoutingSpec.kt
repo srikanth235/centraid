@@ -10,16 +10,6 @@ import centraid.screen.v1.DocsDriveState
 import centraid.screen.v1.DocsEditorEvent
 import centraid.screen.v1.DocsIngestState
 import centraid.screen.v1.HomeTile
-import centraid.screen.v1.MoneyHomeChrome
-import centraid.screen.v1.MoneyHomeEvent
-import centraid.screen.v1.MoneyHomeState
-import centraid.screen.v1.MoneyImportEvent
-import centraid.screen.v1.MoneyImportState
-import centraid.screen.v1.MoneyPageChrome
-import centraid.screen.v1.MoneySearchEvent
-import centraid.screen.v1.MoneySearchState
-import centraid.screen.v1.MoneyTargetEvent
-import centraid.screen.v1.MoneyTransactionEvent
 import centraid.screen.v1.NotesEditorChrome
 import centraid.screen.v1.NotesEditorEvent
 import centraid.screen.v1.NotesEditorState
@@ -42,16 +32,6 @@ import dev.centraid.shared.apps.health.HealthConnectMachine
 import dev.centraid.shared.apps.health.HealthHomeMachine
 import dev.centraid.shared.apps.health.HealthMetricMachine
 import dev.centraid.shared.apps.health.HealthWorkoutMachine
-import dev.centraid.shared.apps.money.MoneyAccountsMachine
-import dev.centraid.shared.apps.money.MoneyCategoriesMachine
-import dev.centraid.shared.apps.money.MoneyHomeMachine
-import dev.centraid.shared.apps.money.MoneyImportMachine
-import dev.centraid.shared.apps.money.MoneyRecurringMachine
-import dev.centraid.shared.apps.money.MoneyRouting
-import dev.centraid.shared.apps.money.MoneyRulesMachine
-import dev.centraid.shared.apps.money.MoneySearchMachine
-import dev.centraid.shared.apps.money.MoneyTargetMachine
-import dev.centraid.shared.apps.money.MoneyTransactionMachine
 import dev.centraid.shared.apps.notes.NotesBand
 import dev.centraid.shared.apps.notes.NotesEditorMachine
 import dev.centraid.shared.apps.notes.NotesHistoryMachine
@@ -127,12 +107,6 @@ class AppRoutingSpec : StringSpec({
             Destination.PeopleEditor("p") to PeopleEditorMachine.SCREEN_ID,
             Destination.PeopleTrash to PeopleTrashMachine.screenId,
             Destination.MoneyTarget("2026-10", "c", "EUR") to MoneyTargetMachine.SCREEN_ID,
-            Destination.MoneyRecurring() to MoneyRecurringMachine.SCREEN_ID,
-            Destination.MoneyImport() to MoneyImportMachine.SCREEN_ID,
-            Destination.MoneyAccounts() to MoneyAccountsMachine.SCREEN_ID,
-            Destination.MoneyRules() to MoneyRulesMachine.SCREEN_ID,
-            Destination.MoneyCategories() to MoneyCategoriesMachine.SCREEN_ID,
-            Destination.MoneySearch to MoneySearchMachine.SCREEN_ID,
             Destination.HealthHome() to HealthHomeMachine.SCREEN_ID,
             Destination.HealthMetric("steps") to HealthMetricMachine.SCREEN_ID,
             Destination.HealthWorkout("a") to HealthWorkoutMachine.SCREEN_ID,
@@ -229,59 +203,6 @@ class AppRoutingSpec : StringSpec({
         NotesRouting.route(NotesLibraryMachine.SCREEN_ID, byteArrayOf(-1, -1, -1), ByteArray(0)).shouldBeNull()
         NotesRouting.route("agenda.home", ByteArray(0), ByteArray(0)).shouldBeNull()
         NotesRouting.closeMove("")!!.openings.single().screenId shouldBe NotesLibraryMachine.SCREEN_ID
-    }
-
-    // --- Money -----------------------------------------------------------
-
-    "Money: every home intent pushes with the home's title as the back word; More's rows are pages" {
-        val state = MoneyHomeState(chrome = MoneyHomeChrome(title = "Spending"), month = "2026-10")
-        MoneyRouting.home(MoneyHomeEvent(add = MoneyHomeEvent.AddStatement()), state) shouldBe Destination.MoneyImport(parent = "Spending")
-        MoneyRouting.home(MoneyHomeEvent(search_opened = MoneyHomeEvent.SearchOpened()), state) shouldBe Destination.MoneySearch
-        MoneyRouting.home(MoneyHomeEvent(transaction = MoneyHomeEvent.TransactionPicked(txn_id = "t1")), state) shouldBe
-            Destination.MoneyTransaction("t1", "Spending")
-        MoneyRouting.home(MoneyHomeEvent(transaction = MoneyHomeEvent.TransactionPicked()), state).shouldBeNull()
-        MoneyRouting.home(
-            MoneyHomeEvent(category_line = MoneyHomeEvent.CategoryLinePicked(category_id = "c1", currency = "EUR")),
-            state,
-        ) shouldBe Destination.MoneyTarget("2026-10", "c1", "EUR")
-        MoneyRouting.home(MoneyHomeEvent(recurring = MoneyHomeEvent.RecurringOpened()), state) shouldBe Destination.MoneyRecurring("Spending")
-        val more = MoneyHomeMachine.initial().screen.chrome!!.more_rows.map { it.key }
-        more.forEach { key ->
-            MoneyRouting.home(MoneyHomeEvent(more = MoneyHomeEvent.MorePicked(key = key)), state).shouldNotBeNull()
-        }
-        MoneyRouting.home(MoneyHomeEvent(more = MoneyHomeEvent.MorePicked(key = MoneyHomeMachine.MORE_RULES)), state) shouldBe
-            Destination.MoneyRules("Spending")
-    }
-
-    "Money: the import's Add an account pushes and its Done pops; search picks a transaction" {
-        val importing = MoneyImportState(chrome = MoneyPageChrome(title = "Import"))
-        MoneyRouting.importer(MoneyImportEvent(add_account = MoneyImportEvent.AddAccount()), importing) shouldBe
-            NavMove.push(Destination.MoneyAccounts("Import"))
-        MoneyRouting.importer(MoneyImportEvent(done = MoneyImportEvent.Done()), importing) shouldBe NavMove.Pop
-        MoneyRouting.search(
-            MoneySearchEvent(transaction = MoneySearchEvent.TransactionPicked(txn_id = "t2")),
-            MoneySearchState(chrome = MoneyPageChrome(title = "Search")),
-        ) shouldBe Destination.MoneyTransaction("t2", "Search")
-        val done = MoneyRouting.route(MoneyImportMachine.SCREEN_ID, MoneyImportEvent(done = MoneyImportEvent.Done()).encode(), importing.encode())
-        done.shouldNotBeNull()
-        done.dropsTop shouldBe true
-        done.openings shouldBe emptyList()
-    }
-
-    "Money: an opening is sent with a draft token minted per arrival; a page without a draft is sent as it is" {
-        val opening = ScreenOpenings.of(Destination.MoneyTransaction("t1", "Spending"))!!
-        MoneyTransactionEvent.ADAPTER.decode(opening.event).opened!!.draft_token shouldBe ""
-        val sent = MoneyTransactionEvent.ADAPTER.decode(MoneyRouting.opened(opening.screenId, opening.event)).opened!!
-        sent.txn_id shouldBe "t1"
-        sent.parent shouldBe "Spending"
-        sent.draft_token.shouldNotBeEmpty()
-        val target = ScreenOpenings.of(Destination.MoneyTarget("2026-10", "c", "EUR"))!!
-        MoneyTargetEvent.ADAPTER.decode(MoneyRouting.opened(target.screenId, target.event)).opened!!.draft_token.shouldNotBeEmpty()
-        // THE HOME OPENS ON THE BAND IT WAS NAMED: a shared Money home route is no longer always Spending.
-        val activity = ScreenOpenings.of(Destination.MoneyHome(MoneyHomeState.Destination.DESTINATION_ACTIVITY))!!
-        MoneyRouting.opened(activity.screenId, activity.event) shouldBe activity.event
-        MoneyHomeEvent.ADAPTER.decode(activity.event).opened!!.destination shouldBe MoneyHomeState.Destination.DESTINATION_ACTIVITY
-        MoneyRouting.opened(MoneyTransactionMachine.SCREEN_ID, byteArrayOf(-1, -1)) shouldBe byteArrayOf(-1, -1)
     }
 
     // --- People ----------------------------------------------------------

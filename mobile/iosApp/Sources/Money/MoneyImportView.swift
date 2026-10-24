@@ -32,12 +32,12 @@ struct MoneyImportView: View {
         return types
     }()
 
-    private var state: Centraid_Screen_V1_MoneyImportState {
-        (try? Centraid_Screen_V1_MoneyImportState(serializedBytes: data)) ?? .init()
+    private var state: Centraid_Core_V1_MoneyImportState {
+        (try? Centraid_Core_V1_MoneyImportState(serializedBytes: data)) ?? .init()
     }
 
-    private func event(_ build: (inout Centraid_Screen_V1_MoneyImportEvent) -> Void) -> Data {
-        moneyEvent(Centraid_Screen_V1_MoneyImportEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_MoneyImportEvent) -> Void) -> Data {
+        moneyEvent(Centraid_Core_V1_MoneyImportEvent.self, build)
     }
 
     var body: some View {
@@ -91,7 +91,7 @@ struct MoneyImportView: View {
     }
 
     @ViewBuilder
-    private func page(_ plan: Centraid_Screen_V1_MoneyImportData, state: Centraid_Screen_V1_MoneyImportState) -> some View {
+    private func page(_ plan: Centraid_Core_V1_MoneyImportData, state: Centraid_Core_V1_MoneyImportState) -> some View {
         // THE HEAD IS ONE EAGER BLOCK: a lazy stack drops rows from sibling blocks
         // like these (a count and its neighbour went missing), so only the plan's
         // lines, which can run to thousands, are left to be lazy.
@@ -145,7 +145,7 @@ struct MoneyImportView: View {
     /// One statement: its span and totals, its counts and warnings, the checkpoint
     /// it was checked against, the questions it asks, then each line with its verdict.
     @ViewBuilder
-    private func statementView(_ statement: Centraid_Screen_V1_MoneyImportStatement, keepProposed: Bool) -> some View {
+    private func statementView(_ statement: Centraid_Core_V1_MoneyImportStatement, keepProposed: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             MoneySection(title: statement.title)
             MoneyNote(text: statement.refusal, ink: "net")

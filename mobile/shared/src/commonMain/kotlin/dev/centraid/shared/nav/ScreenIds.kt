@@ -38,15 +38,6 @@ public object ScreenIds {
     public const val PEOPLE_EDITOR: String = "people.editor"
     public const val PEOPLE_TRASH: String = "people.trash"
 
-    public const val MONEY_HOME: String = "money.home"
-    public const val MONEY_TRANSACTION: String = "money.transaction"
-    public const val MONEY_TARGET: String = "money.target"
-    public const val MONEY_RECURRING: String = "money.recurring"
-    public const val MONEY_IMPORT: String = "money.import"
-    public const val MONEY_ACCOUNTS: String = "money.accounts"
-    public const val MONEY_RULES: String = "money.rules"
-    public const val MONEY_CATEGORIES: String = "money.categories"
-    public const val MONEY_SEARCH: String = "money.search"
 
     /** Health's home place: Today, Trends and Workouts are its band's parameter (#1129). */
     public const val HEALTH_HOME: String = "health.home"

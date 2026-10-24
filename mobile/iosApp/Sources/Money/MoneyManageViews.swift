@@ -16,12 +16,12 @@ struct MoneyAccountsView: View {
     let send: (Data) -> Void
     let onBack: () -> Void
 
-    private var state: Centraid_Screen_V1_MoneyAccountsState {
-        (try? Centraid_Screen_V1_MoneyAccountsState(serializedBytes: data)) ?? .init()
+    private var state: Centraid_Core_V1_MoneyAccountsState {
+        (try? Centraid_Core_V1_MoneyAccountsState(serializedBytes: data)) ?? .init()
     }
 
-    private func event(_ build: (inout Centraid_Screen_V1_MoneyAccountsEvent) -> Void) -> Data {
-        moneyEvent(Centraid_Screen_V1_MoneyAccountsEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_MoneyAccountsEvent) -> Void) -> Data {
+        moneyEvent(Centraid_Core_V1_MoneyAccountsEvent.self, build)
     }
 
     var body: some View {
@@ -72,7 +72,7 @@ struct MoneyAccountsView: View {
     }
 
     @ViewBuilder
-    private func confirm(_ state: Centraid_Screen_V1_MoneyAccountsState) -> some View {
+    private func confirm(_ state: Centraid_Core_V1_MoneyAccountsState) -> some View {
         ConfirmSheet(
             state.confirm,
             onConfirm: { send(event { $0.confirmAccepted = .init() }) },
@@ -81,7 +81,7 @@ struct MoneyAccountsView: View {
     }
 
     @ViewBuilder
-    private func page(_ accounts: Centraid_Screen_V1_MoneyAccountsData) -> some View {
+    private func page(_ accounts: Centraid_Core_V1_MoneyAccountsData) -> some View {
         if !accounts.netWorth.isEmpty {
             MoneyNetWorthCard(label: accounts.netWorthLabel, figures: accounts.netWorth, note: accounts.netWorthNote)
         }
@@ -99,7 +99,7 @@ struct MoneyAccountsView: View {
     }
 
     @ViewBuilder
-    private func editorSheet(_ state: Centraid_Screen_V1_MoneyAccountsState) -> some View {
+    private func editorSheet(_ state: Centraid_Core_V1_MoneyAccountsState) -> some View {
         if state.hasEditor {
             let editor = state.editor
             MoneyFormSheet(
@@ -152,15 +152,15 @@ struct MoneyRulesView: View {
     let send: (Data) -> Void
     let onBack: () -> Void
 
-    private var state: Centraid_Screen_V1_MoneyRulesState {
-        (try? Centraid_Screen_V1_MoneyRulesState(serializedBytes: data)) ?? .init()
+    private var state: Centraid_Core_V1_MoneyRulesState {
+        (try? Centraid_Core_V1_MoneyRulesState(serializedBytes: data)) ?? .init()
     }
 
-    private func event(_ build: (inout Centraid_Screen_V1_MoneyRulesEvent) -> Void) -> Data {
-        moneyEvent(Centraid_Screen_V1_MoneyRulesEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_MoneyRulesEvent) -> Void) -> Data {
+        moneyEvent(Centraid_Core_V1_MoneyRulesEvent.self, build)
     }
 
-    private func sheetIsOpen(_ state: Centraid_Screen_V1_MoneyRulesState) -> Bool {
+    private func sheetIsOpen(_ state: Centraid_Core_V1_MoneyRulesState) -> Bool {
         state.hasEditor && (state.sheet == .editor || state.sheet == .category || state.sheet == .account)
     }
 
@@ -210,7 +210,7 @@ struct MoneyRulesView: View {
     }
 
     @ViewBuilder
-    private func page(_ rules: Centraid_Screen_V1_MoneyRulesData) -> some View {
+    private func page(_ rules: Centraid_Core_V1_MoneyRulesData) -> some View {
         MoneyNote(text: rules.limitLine)
         ForEach(Array(rules.rows.enumerated()), id: \.offset) { _, row in
             let ruleID = row.ruleID
@@ -229,7 +229,7 @@ struct MoneyRulesView: View {
     }
 
     @ViewBuilder
-    private func sheetContent(_ state: Centraid_Screen_V1_MoneyRulesState, rules: Centraid_Screen_V1_MoneyRulesData?) -> some View {
+    private func sheetContent(_ state: Centraid_Core_V1_MoneyRulesState, rules: Centraid_Core_V1_MoneyRulesData?) -> some View {
         let editor = state.editor
         if state.sheet == .category {
             MoneyChoiceSheet(
@@ -297,7 +297,7 @@ struct MoneyRulesView: View {
     }
 
     @ViewBuilder
-    private func confirm(_ state: Centraid_Screen_V1_MoneyRulesState) -> some View {
+    private func confirm(_ state: Centraid_Core_V1_MoneyRulesState) -> some View {
         ConfirmSheet(
             state.confirm,
             onConfirm: { send(event { $0.confirmAccepted = .init() }) },
@@ -313,15 +313,15 @@ struct MoneyCategoriesView: View {
     let send: (Data) -> Void
     let onBack: () -> Void
 
-    private var state: Centraid_Screen_V1_MoneyCategoriesState {
-        (try? Centraid_Screen_V1_MoneyCategoriesState(serializedBytes: data)) ?? .init()
+    private var state: Centraid_Core_V1_MoneyCategoriesState {
+        (try? Centraid_Core_V1_MoneyCategoriesState(serializedBytes: data)) ?? .init()
     }
 
-    private func event(_ build: (inout Centraid_Screen_V1_MoneyCategoriesEvent) -> Void) -> Data {
-        moneyEvent(Centraid_Screen_V1_MoneyCategoriesEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_MoneyCategoriesEvent) -> Void) -> Data {
+        moneyEvent(Centraid_Core_V1_MoneyCategoriesEvent.self, build)
     }
 
-    private func sheetIsOpen(_ state: Centraid_Screen_V1_MoneyCategoriesState) -> Bool {
+    private func sheetIsOpen(_ state: Centraid_Core_V1_MoneyCategoriesState) -> Bool {
         switch state.sheet {
         case .add, .row, .merge: return true
         default: return false
@@ -372,7 +372,7 @@ struct MoneyCategoriesView: View {
     }
 
     @ViewBuilder
-    private func page(_ categories: Centraid_Screen_V1_MoneyCategoriesData) -> some View {
+    private func page(_ categories: Centraid_Core_V1_MoneyCategoriesData) -> some View {
         ForEach(Array(categories.groups.enumerated()), id: \.offset) { _, group in
             MoneySection(title: group.label)
             ForEach(Array(group.rows.enumerated()), id: \.offset) { _, row in
@@ -389,7 +389,7 @@ struct MoneyCategoriesView: View {
     }
 
     @ViewBuilder
-    private func sheetContent(_ state: Centraid_Screen_V1_MoneyCategoriesState, categories: Centraid_Screen_V1_MoneyCategoriesData?) -> some View {
+    private func sheetContent(_ state: Centraid_Core_V1_MoneyCategoriesState, categories: Centraid_Core_V1_MoneyCategoriesData?) -> some View {
         if let categories {
             switch state.sheet {
             case .add:
@@ -441,7 +441,7 @@ struct MoneyCategoriesView: View {
     }
 
     @ViewBuilder
-    private func confirm(_ state: Centraid_Screen_V1_MoneyCategoriesState) -> some View {
+    private func confirm(_ state: Centraid_Core_V1_MoneyCategoriesState) -> some View {
         ConfirmSheet(
             state.confirm,
             onConfirm: { send(event { $0.confirmAccepted = .init() }) },

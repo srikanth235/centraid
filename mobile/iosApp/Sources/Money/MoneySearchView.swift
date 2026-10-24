@@ -15,16 +15,16 @@ struct MoneySearchView: View {
     let onBack: () -> Void
     var openContainer: (Centraid_Screen_V1_ChatCard, String) -> Void = { _, _ in }
 
-    private var state: Centraid_Screen_V1_MoneySearchState {
-        (try? Centraid_Screen_V1_MoneySearchState(serializedBytes: data)) ?? .init()
+    private var state: Centraid_Core_V1_MoneySearchState {
+        (try? Centraid_Core_V1_MoneySearchState(serializedBytes: data)) ?? .init()
     }
 
-    private func event(_ build: (inout Centraid_Screen_V1_MoneySearchEvent) -> Void) -> Data {
-        moneyEvent(Centraid_Screen_V1_MoneySearchEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_MoneySearchEvent) -> Void) -> Data {
+        moneyEvent(Centraid_Core_V1_MoneySearchEvent.self, build)
     }
 
     /// The field as the machine holds it; before its first state it is an open, empty one.
-    private func field(_ state: Centraid_Screen_V1_MoneySearchState) -> Centraid_Screen_V1_SearchField {
+    private func field(_ state: Centraid_Core_V1_MoneySearchState) -> Centraid_Screen_V1_SearchField {
         if state.hasField { return state.field }
         var field = Centraid_Screen_V1_SearchField()
         field.open = true
@@ -64,7 +64,7 @@ struct MoneySearchView: View {
     }
 
     @ViewBuilder
-    private func results(_ search: Centraid_Screen_V1_MoneySearchData, state: Centraid_Screen_V1_MoneySearchState) -> some View {
+    private func results(_ search: Centraid_Core_V1_MoneySearchData, state: Centraid_Core_V1_MoneySearchState) -> some View {
         if search.rows.isEmpty, search.hasEmpty {
             EmptyStateView(search.empty)
             if state.field.hasAskRow { SearchAskRow(ask: state.field.askRow) }
@@ -91,8 +91,8 @@ struct MoneySearchView: View {
         }
     }
 
-    private func countLine(_ sentence: String) -> Centraid_Screen_V1_StatusLine {
-        var line = Centraid_Screen_V1_StatusLine()
+    private func countLine(_ sentence: String) -> Centraid_Core_V1_StatusLine {
+        var line = Centraid_Core_V1_StatusLine()
         line.sentence = sentence
         return line
     }
