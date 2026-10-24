@@ -107,11 +107,11 @@ fn every_enum_is_exactly_what_the_table_states() {
             gap.column
         );
     }
-    // The four CHECK-backed enums the model speaks today (a transaction's status is the fourth,
-    // #1099).
+    // The five CHECK-backed enums the model speaks today (a transaction's status is the fourth,
+    // #1099; a daily figure's metric the fifth, #1135).
     assert_eq!(
         seen.len(),
-        4,
+        5,
         "an enum field was added or removed: {seen:?}"
     );
 }

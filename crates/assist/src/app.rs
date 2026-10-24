@@ -1,4 +1,4 @@
-//! THE APPS THE ASSISTANT READS: seven, every one a chat scope. (Tally left with the app and Money
+//! THE APPS THE ASSISTANT READS: eight, every one a chat scope. (Tally left with the app and Money
 //! joined, #1099; Locker joined by the owner's ruling of 2026-10-22, #1135; Tasks were folded into
 //! Agenda, #1128.)
 //!
@@ -24,6 +24,7 @@ use centraid_vault::roster;
 pub enum App {
     Agenda,
     Docs,
+    Health,
     Locker,
     Money,
     Notes,
@@ -33,9 +34,10 @@ pub enum App {
 
 impl App {
     /// Every app, in registry order. A chat can be scoped to any of them.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Agenda,
         Self::Docs,
+        Self::Health,
         Self::Locker,
         Self::Money,
         Self::Notes,
@@ -55,6 +57,7 @@ impl App {
         match self {
             Self::Agenda => "Agenda",
             Self::Docs => "Docs",
+            Self::Health => "Health",
             Self::Locker => "Locker",
             Self::Money => "Money",
             Self::Notes => "Notes",

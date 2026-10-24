@@ -48,6 +48,7 @@ public object RowRoutes {
     private const val PERSON: String = "person"
     private const val EVENT: String = "event"
     private const val TRANSACTION: String = "transaction"
+    private const val WORKOUT: String = "workout"
     private const val THREAD: String = "thread"
     private const val LOCKER_ITEM: String = "locker_item"
 
@@ -77,6 +78,7 @@ public object RowRoutes {
         AppIds.AGENDA to EVENT -> AgendaEntry.event(eventId = row.id, instanceKey = row.qualifier)
         AppIds.PHOTOS to PHOTO -> Destination.PhotoLightbox(row.id, neighbours.ifEmpty { listOf(row.id) })
         AppIds.MONEY to TRANSACTION -> Destination.MoneyTransaction(row.id, parent = parent)
+        AppIds.HEALTH to WORKOUT -> Destination.HealthWorkout(row.id, parent = parent)
         AppIds.LOCKER to LOCKER_ITEM -> lockerItem(row, parent)
         else -> appHome(row.app)
     }

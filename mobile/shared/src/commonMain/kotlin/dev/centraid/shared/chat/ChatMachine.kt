@@ -140,14 +140,14 @@ public object ChatMachine {
 
     /**
      * THE APPS A CHAT CAN BE SCOPED TO, in the order the composer's menu lists
-     * them: every app a member opens, Locker included; a chat scoped to Agenda
+     * them: every app a member opens, Locker and Health included; a chat scoped to Agenda
      * covers its tasks (#1128, R-1128-F2). The core accepts exactly these: they are the apps of
      * `centraid_vault::roster::APPS` that open in themselves (R-1135-7-1), the one
      * constant `thread.save_turn`'s schema and `App::SCOPES` in `crates/assist` read;
      * `ChatScopeSpec` holds this list equal to it, and the shells draw their menu from here.
      */
     public val SCOPABLE_APPS: List<String> =
-        listOf("agenda", "docs", "locker", "money", "notes", "people", "photos")
+        listOf("agenda", "docs", "health", "locker", "money", "notes", "people", "photos")
 
     /**
      * THE SCOPE A VISIT TO [appId] GIVES A CHAT: the app it opens in, when that

@@ -53,6 +53,8 @@ notebook: name · links: notes · verbs: create edit delete
 folder: name · links: documents · verbs: create edit delete
 list: name, area · links: tasks · verbs: create edit
 transaction: name, date (posted), amount (USD), account, category, status (posted|void)
+daily figure: name, date (day), metric (steps|active_energy_kcal|exercise_min|sleep_min|resting_hr_bpm|weight_kg), value
+workout: name, date (start), moving (s), distance (m), energy (kcal), heart_rate (bpm), climb (m)
 
 vault directory:
 albums: Wedding (#1), Summer (#2)

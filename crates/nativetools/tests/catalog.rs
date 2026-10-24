@@ -98,14 +98,7 @@ fn a_declared_kind_has_no_variant_and_a_declared_verb_names_a_catalog_action() {
         );
     }
     let ids: BTreeSet<&str> = DECLARED_KINDS.iter().map(|kind| kind.id).collect();
-    for expected in [
-        "daily_figure",
-        "workout",
-        "account",
-        "category",
-        "budget",
-        "rule",
-    ] {
+    for expected in ["account", "category", "budget", "rule"] {
         assert!(ids.contains(expected), "no declared kind {expected}");
     }
     let all = manifests();
@@ -162,7 +155,10 @@ fn every_declared_enum_is_exactly_its_columns_check_list() {
             seen += 1;
         }
     }
-    assert_eq!(seen, 2, "daily_figure.metric and account.type");
+    assert_eq!(
+        seen, 1,
+        "account.type (daily_figure.metric is live: `meta.rs` holds it)"
+    );
     // and the live kinds' enums are still the live test's (`meta.rs`)
     assert!(!meta::mapped_columns().is_empty());
 }
