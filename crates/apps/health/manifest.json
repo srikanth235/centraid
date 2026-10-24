@@ -55,6 +55,11 @@
         "verbs": "act"
       },
       {
+        "schema": "follow",
+        "table": "stop",
+        "verbs": "act"
+      },
+      {
         "schema": "entity",
         "table": "trash",
         "verbs": "act"
@@ -241,6 +246,50 @@
         },
         "required": ["id"],
         "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "stop-following",
+      "verb": "detach",
+      "kind": "daily_figure",
+      "inverse": null,
+      "sealed": [],
+      "command": "follow.stop",
+      "phrasings": [
+        "stop reading my health app",
+        "disconnect Apple Health",
+        "stop following Health Connect"
+      ],
+      "description": "Stop following the phone's health store through follow.stop: the store's origin is retired and its workouts forget their source. Every day and every workout stays, an ordinary row from now on.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["system", "ref"],
+        "additionalProperties": false,
+        "properties": {
+          "system": {
+            "type": "string",
+            "enum": ["contacts", "calendar", "files", "health", "statement"]
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
       },
       "output": {
         "type": "object",

@@ -35,6 +35,11 @@ message Route {
     DocsDocumentRoute docs_document = 201;
     DocsEditorRoute docs_editor = 202;
     DocsVersionsRoute docs_versions = 203;
+    // ---- health (300-399) ----
+    HealthHomeRoute health_home = 300;
+    HealthMetricRoute health_metric = 301;
+    HealthWorkoutRoute health_workout = 302;
+    HealthConnectRoute health_connect = 303;
     // ---- notes (600-699) ----
     NotesHomeRoute notes_home = 600;
     NotesEditorRoute notes_editor = 601;
@@ -166,6 +171,51 @@ message DocsEditorRoute {
 message DocsVersionsRoute {
   string document_id = 1;
   string title = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Health
+// ---------------------------------------------------------------------------
+
+// Which of the band's tabs `health.home` shows. Today · Trends · Workouts are one
+// screen, so a tap on the band changes this value and no stack entry.
+enum HealthDestination {
+  HEALTH_DESTINATION_UNSPECIFIED = 0;
+  HEALTH_DESTINATION_TODAY = 1;
+  HEALTH_DESTINATION_TRENDS = 2;
+  HEALTH_DESTINATION_WORKOUTS = 3;
+}
+
+// A metric page's range: the last 7 days, 30 days, or 12 months.
+enum HealthMetricRange {
+  HEALTH_METRIC_RANGE_UNSPECIFIED = 0;
+  HEALTH_METRIC_RANGE_WEEK = 1;
+  HEALTH_METRIC_RANGE_MONTH = 2;
+  HEALTH_METRIC_RANGE_YEAR = 3;
+}
+
+// `health.home`: UNSPECIFIED is Today.
+message HealthHomeRoute {
+  HealthDestination destination = 1;
+}
+
+// `health.metric`: one metric's key (`steps`, `sleep_min`, ...). `parent` is the
+// pushing page's title, which the back control says; empty reads "Health".
+message HealthMetricRoute {
+  string metric = 1;
+  HealthMetricRange range = 2;
+  string parent = 3;
+}
+
+// `health.workout`: one workout.
+message HealthWorkoutRoute {
+  string activity_id = 1;
+  string parent = 2;
+}
+
+// `health.connect`: what Health may read, and Connect.
+message HealthConnectRoute {
+  string parent = 1;
 }
 
 // ---------------------------------------------------------------------------

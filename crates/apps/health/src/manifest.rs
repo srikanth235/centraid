@@ -17,10 +17,11 @@ pub const MANIFEST_JSON: &str = include_str!("../manifest.json");
 pub const APP_ID: &str = "health";
 
 /// The action each vault command is declared as.
-pub const ACTIONS: [ActionRow; 3] = [
+pub const ACTIONS: [ActionRow; 4] = [
     act("record-days", "measurement.record"),
     act("follow-workouts", "follow.health"),
     act("delete-workout", "entity.trash"),
+    act("stop-following", "follow.stop"),
 ];
 
 /// The parsed manifest.
@@ -54,7 +55,7 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_six_queries_and_three_actions() {
+    fn it_declares_six_queries_and_four_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 6);
         for name in [
@@ -94,10 +95,10 @@ mod tests {
         }
     }
 
-    /// HEALTH READS THE VAULT'S OWN TABLES AND WRITES THROUGH THREE COMMANDS: its days, the health
-    /// follow and the shared trash. It reaches no other app's verbs.
+    /// HEALTH READS THE VAULT'S OWN TABLES AND WRITES THROUGH FOUR COMMANDS: its days, the health
+    /// follow, the stop of a follow and the shared trash. It reaches no other app's verbs.
     #[test]
-    fn health_reads_the_vaults_tables_and_acts_through_three_commands() {
+    fn health_reads_the_vaults_tables_and_acts_through_four_commands() {
         use centraid_apps_kit::manifest::ScopeVerbs;
         let vault = manifest().vault.as_ref().expect("a vault block");
         for scope in &vault.scopes {

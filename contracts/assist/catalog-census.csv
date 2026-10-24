@@ -44,6 +44,7 @@ docs,delete-folder,delete,folder,direct,no,yes
 health,record-days,log,daily_figure,card,yes: apps/health/HealthImport.kt,no
 health,follow-workouts,import,workout,card,yes: apps/health/HealthImport.kt,no
 health,delete-workout,delete,workout,card,no,no
+health,stop-following,detach,daily_figure,card,yes: crates/screens/src/health/home.rs,no
 locker,add-item,create,locker_item,direct,yes: apps/locker/LockerEditor.kt,yes
 locker,edit-item,edit,locker_item,direct,yes: apps/locker/LockerEditor.kt,yes
 locker,trash-item,delete,locker_item,direct,yes: apps/locker/LockerItem.kt,yes

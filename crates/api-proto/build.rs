@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 34] = [
+const PROTOS: [&str; 35] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/command.proto",
@@ -85,6 +85,7 @@ const PROTOS: [&str; 34] = [
     "proto/centraid/core/v1/kit_screens.proto",
     "proto/centraid/core/v1/agenda_screens.proto",
     "proto/centraid/core/v1/docs_screens.proto",
+    "proto/centraid/core/v1/health_screens.proto",
     "proto/centraid/core/v1/notes_screens.proto",
     "proto/centraid/core/v1/screens.proto",
     // The on-device chat: a session, a question and a stream of events, over
@@ -122,6 +123,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.ViewState.kind.agenda_home")
         .boxed(".centraid.core.v1.ViewState.kind.docs_drive")
         .boxed(".centraid.core.v1.ViewState.kind.notes_home")
+        .boxed(".centraid.core.v1.ViewState.kind.health_home")
+        .boxed(".centraid.core.v1.HealthHomeState.content.data")
+        .boxed(".centraid.core.v1.HealthMetricState.content.data")
+        .boxed(".centraid.core.v1.HealthWorkoutState.content.data")
         .boxed(".centraid.screen.v1.PeopleHomeData.surface.touch")
         .boxed(".centraid.screen.v1.PeopleHomeState.content.data")
         .boxed(".centraid.screen.v1.PeopleHomeEvent.kind.data")

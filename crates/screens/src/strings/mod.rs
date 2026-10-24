@@ -129,6 +129,7 @@ pub mod agenda_event;
 pub mod agenda_home;
 pub mod agenda_todo;
 pub mod docs;
+pub mod health;
 pub mod notes;
 pub mod shared;
 pub mod task;

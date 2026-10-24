@@ -1360,6 +1360,49 @@ pub mod act {
                 value.request()
             }
         }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum StopFollowingSystem {
+            #[default]
+            Contacts,
+            Calendar,
+            Files,
+            Health,
+            Statement,
+        }
+        impl StopFollowingSystem {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Contacts => "contacts",
+                    Self::Calendar => "calendar",
+                    Self::Files => "files",
+                    Self::Health => "health",
+                    Self::Statement => "statement",
+                }
+            }
+        }
+
+        /// Stop following the phone's health store through follow.stop: the store's origin is retired and its workouts forget their source. Every day and every workout stays, an ordinary row from now on.
+        #[derive(Clone, Debug, Default)]
+        pub struct StopFollowing {
+            pub r#ref: String,
+            pub system: StopFollowingSystem,
+        }
+        impl StopFollowing {
+            pub const NAME: &str = "stop-following";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("ref".to_owned(), text(self.r#ref));
+                map.insert("system".to_owned(), text(self.system.wire()));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<StopFollowing> for wire::ActRequest {
+            fn from(value: StopFollowing) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod locker {
