@@ -135,9 +135,6 @@ public sealed interface ScreenEffect {
         public val delayMs: Long,
     ) : ScreenEffect
 
-    /** Ask the OS. The answer arrives as an event, because it is a state. */
-    public data object RequestMediaPermission : ScreenEffect
-
     /**
      * Submit a write.
      *
@@ -155,22 +152,6 @@ public sealed interface ScreenEffect {
     ) : ScreenEffect
 
     /**
-     * Tell the member a verb is WITHHELD rather than queued.
-     *
-     * A verb whose occurrence id is minted by the canonical engine is the case,
-     * so a seat withholds it offline rather than queueing a copy (`docs/mobile-offline.md:257`).
-     */
-    public data class WithheldOffline(
-        public val verb: String,
-        public val sentence: String,
-    ) : ScreenEffect
-
-    /** Start, pause or resume the camera-roll backup. */
-    public data class Backup(public val action: Action) : ScreenEffect {
-        public enum class Action { START, PAUSE, RESUME }
-    }
-
-    /**
      * RE-POINT THE WHOLE APP AT ANOTHER VAULT.
      *
      * An effect and not a reduce, because switching is closing one core and
@@ -183,59 +164,6 @@ public sealed interface ScreenEffect {
      * the other cannot.
      */
     public data class SwitchVault(public val vaultId: String) : ScreenEffect
-
-    /**
-     * FETCH ONE ORIGINAL THE MEMBER TAPPED (#1025 S5, D-1025-S7-63; #1080).
-     *
-     * WhatsApp's download arrow. An effect and not a write: it commits
-     * nothing.
-     *
-     * `ScreenRuntime` serves it through the core's `fetch_original` (arm 25,
-     * `CoreBackupDoors.fetchOriginal`): the bytes come back from this phone
-     * when they are already here, else from a paired gateway, sealed and
-     * checked, into the app's own store. The screen hears a `FetchSettled` —
-     * fetched, so its next read serves the original, or the line that names
-     * why not (`FetchedOriginal`). It is the way back for an original that
-     * free up space removed from the library.
-     */
-    public data class FetchOriginal(
-        public val screenId: String,
-        public val assetId: String,
-        public val contentHash: String,
-    ) : ScreenEffect
-
-    /**
-     * RENDER AN EDIT AND KEEP IT AS A NEW PHOTOGRAPH (#1029, photos port; v0's
-     * `photo-edit-save.ts`).
-     *
-     * An effect and not a write, because the write cannot be composed yet:
-     * `media.add_asset` names STAGED BYTES, and the bytes do not exist until a
-     * platform has decoded the original and drawn the plan onto it — CoreImage
-     * on one shell, `Bitmap` and `Matrix` on the other. The reducer states the
-     * intent; the shell renders, stages and commits, and answers with the
-     * screen's own settle event.
-     *
-     * [key] is CONTENT-DERIVED — the asset and the plan — so a settle that
-     * arrives for a plan the member has since changed is recognisably stale.
-     * [plan] is an encoded `PhotoEditPlan`: Swift decodes it with
-     * SwiftProtobuf, and a Wire object would not cross.
-     *
-     * [capturedAt], [tzOffsetMinutes] and [placeId] are the ORIGINAL's: an
-     * edit keeps the date and the place of the photograph it was made from, as
-     * Apple Photos does. Empty or null means the original records none, and
-     * none is written.
-     */
-    public data class RenderEdit(
-        public val screenId: String,
-        public val key: String,
-        public val sourceAssetId: String,
-        public val sourcePath: String,
-        public val title: String,
-        public val capturedAt: String,
-        public val tzOffsetMinutes: Int?,
-        public val placeId: String,
-        public val plan: okio.ByteString,
-    ) : ScreenEffect
 }
 
 /**

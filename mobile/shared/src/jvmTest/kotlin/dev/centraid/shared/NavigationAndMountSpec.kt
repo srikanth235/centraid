@@ -1,6 +1,5 @@
 package dev.centraid.shared
 
-import centraid.screen.v1.PhotoStateView
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.DocsEntry
 import dev.centraid.shared.nav.NavStack
@@ -56,18 +55,6 @@ class NavigationAndMountSpec : StringSpec({
         DocsEntry.folder("fld-1", "Taxes").route.docs_drive!!.folder_name shouldBe "Taxes"
         Destination.PeoplePerson(partyId = "p-1", name = "Dana Reyes").name shouldBe
             "Dana Reyes"
-    }
-
-    "a photo state view is a discriminated union" {
-        // Doctrine 3. The view is a oneof and not `{mode, party_id?}`; the arm
-        // that carried a person left with the face surfaces (Q-1047-2), and a
-        // view says which standing shelf it is and nothing else.
-        val trash = Destination.PhotoStateViewRoute(
-            PhotoStateView(
-                mode = PhotoStateView.Mode(kind = PhotoStateView.Mode.Kind.KIND_TRASH),
-            ),
-        )
-        trash.view.mode?.kind shouldBe PhotoStateView.Mode.Kind.KIND_TRASH
     }
 
     "there is no permission destination, and there is no vault parameter" {

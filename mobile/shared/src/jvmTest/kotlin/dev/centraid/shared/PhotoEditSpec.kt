@@ -13,7 +13,6 @@ import centraid.core.v1.StageHandle
 import centraid.core.v1.StageResponse
 import centraid.screen.v1.MediaPermission
 import dev.centraid.core.CentraidCore
-import dev.centraid.shared.apps.photos.PhotoFold
 import dev.centraid.shared.platform.FakePlatformServices
 import dev.centraid.shared.platform.LibraryRefs
 import dev.centraid.shared.platform.MediaLibrary
@@ -395,23 +394,5 @@ class PhotoEditSpec : StringSpec({
         LibraryRefs.worthOffering(insertedSinceToken = true, edited = true) shouldBe true
         LibraryRefs.worthOffering(insertedSinceToken = false, edited = true) shouldBe true
         LibraryRefs.worthOffering(insertedSinceToken = false, edited = false) shouldBe false
-    }
-
-    "the grid draws the newest photograph of a capture group and never folds an ungrouped one" {
-        val fold = PhotoFold.FOLDED
-        // The text `crates/vault/tests/page_fold.rs` runs against real rows.
-        // An edit covers the original it was made from, inside one capture group.
-        fold shouldContain "e.edited_from IS NOT NULL"
-        fold shouldContain "e.burst IS NOT NULL"
-        // And the newest of a group covers the older ones (ids are time-ordered).
-        fold shouldContain "o.burst = n.burst"
-        fold shouldContain "n.id > o.id"
-        fold shouldContain "n.form = 'photo'"
-        // A trashed or archived edit un-folds the original it covered.
-        fold shouldContain "n.id IN (SELECT id FROM entity WHERE deleted_at IS NULL)"
-        fold shouldContain "n.id NOT IN (SELECT from_id FROM edge WHERE rel = 'tagged' AND to_id = 'flag:archived')"
-        // An editor crop has no group, so R-1029-PH-5's two photographs both draw.
-        fold shouldNotContain "e.burst IS NULL"
-        PhotoFold.LIVE shouldContain fold
     }
 })

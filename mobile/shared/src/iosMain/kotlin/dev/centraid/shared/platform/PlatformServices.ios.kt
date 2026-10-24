@@ -991,7 +991,7 @@ public class IosMediaLibrary : MediaLibrary {
             // A LIVE PHOTO, OR AN EDIT: one capture. Burst members, motion
             // photos and RAW pairs get null, which is the interface's own rule.
             // The grid draws the newest photograph of a group, which is how a
-            // camera original stays under its edit (`PhotoFold`).
+            // camera original stays under its edit (`kit::rules::folded_by_edits`).
             captureGroupId = if (live || edited) identifier else null,
             resources = buildList {
                 if (camera) add(MediaLibrary.Resource(MediaLibrary.Resource.Role.CAMERA_ORIGINAL, LibraryRefs.camera(identifier)))

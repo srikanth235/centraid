@@ -3,9 +3,6 @@ package dev.centraid.shared
 import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.ErrorCode
 import centraid.core.v1.PageCursor
-import centraid.core.v1.Row
-import centraid.core.v1.Value
-import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.ReadFailureKind
 import dev.centraid.core.CoreFailure
 import dev.centraid.shared.apps.health.HealthHomeMachine
@@ -56,8 +53,6 @@ import dev.centraid.shared.apps.people.PeoplePersonMachine
 import dev.centraid.shared.apps.people.PeoplePersonReads
 import dev.centraid.shared.apps.people.PeopleTrashMachine
 import dev.centraid.shared.apps.people.PeopleTrashReads
-import dev.centraid.shared.apps.photos.PhotosGridMachine
-import dev.centraid.shared.apps.photos.PhotosReads
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.kit.TrashReads
 import dev.centraid.shared.shell.HomeMachine
@@ -97,13 +92,6 @@ class AppReadsSpec : StringSpec({
      * would be a fourth chance to leave one out.
      */
     val screens: List<Triple<String, ScreenReads<*, *>, ScreenMachine<*, *>>> = listOf(
-        Triple("photos", PhotosReads, PhotosGridMachine),
-        // THE PHOTOS MINIAPP'S OTHER SCREENS (#1029, photos port). Seven of
-        // them are `ScreenReads` and belong here; the ones that are not —
-        // Collections and Search — fan several statements out in their
-        // bridges and fold the answers, because their data case cannot be
-        // CONSTRUCTED from one table (`HomeSession.attachReads`' ruling).
-        // Those are asserted in their own specs, which is where the fold is.
         // LOCKER (#1047): the kit's trash over `entity`, kind `locker_item` (#1135). The statement is
         // the kit's own; `LockerTrashReads` adds only the gate in front of it
         // (`LockerSpec`).
@@ -112,7 +100,6 @@ class AppReadsSpec : StringSpec({
 
     /** The statement each screen makes when it is holding a state that can read. */
     fun statementOf(name: String) = when (name) {
-        "photos" -> PhotosReads.query(PhotosGridMachine.initial(), null)
         // A PARAMETERISED SCREEN IS ASKED IN THE STATE IT WOULD REALLY READ IN.
         // `query` returns null when a screen cannot yet say what to read, so a
         // shelf asked with no shelf, a lightbox with no asset or a review with
@@ -246,103 +233,12 @@ class AppReadsSpec : StringSpec({
         reactsTo(HomeMachine) shouldBe HomeReads.TABLES
     }
 
-    "a photo cell is projected off the columns it selected" {
-        val row = Row(
-            values = listOf(
-                Value(text = "asset-1"),
-                Value(text = "2026-02-03T05:00:00Z"),
-                Value(integer = -480L),
-                Value(text = "video"),
-                Value(text = "group-9"),
-                // THE GRID'S OWN THREE, after the cell's five: the pixel box a
-                // justified row packs from before a byte arrives, and a video's
-                // length. `duration_s` is REAL in the DDL.
-                Value(integer = 4032L),
-                Value(integer = 3024L),
-                Value(real = 12.5),
-                // THE DOOR'S APPENDED COLUMN (D-1025-S7-20): the path of the
-                // bytes this device holds for this row, resolved in the same
-                // statement rather than by a second trip nobody made.
-                Value(text = "/store/data/abc.data"),
-                // AND THE TWO THE HELD STATE IS DERIVED FROM (#1025 S5,
-                // D-1025-S7-62): the original's hash, so a tap can name a blob,
-                // and `original_held` as its OWN column — the thumbnail path
-                // falls back to the original's own bytes on a vault with no
-                // derivative rows, so it cannot stand in for this.
-                Value(text = "a0b1"),
-                Value(integer = 0L),
-            ),
-        )
-        val cell = PhotosReads.arrived(listOf(row), null)
-            .data_.shouldNotBeNull().data_.shouldNotBeNull().cells.single()
-        cell shouldBe PhotoCell(
-            asset_id = "asset-1",
-            captured_at = "2026-02-03T05:00:00Z",
-            captured_utc_offset_minutes = -480,
-            kind = PhotoCell.Kind.KIND_VIDEO,
-            capture_group_id = "group-9",
-            thumbnail_path = "/store/data/abc.data",
-            original_hash = "a0b1",
-            // A THUMBNAIL IS HERE AND THE DEFAULT RULE IS NOT WITHHOLDING THIS
-            // ONE: the read's default link is unmetered, and `WIFI_ONLY` on an
-            // unmetered link admits a video's original. So the cell is waiting
-            // for the bytes rather than for the member — no download arrow.
-            held = PhotoCell.Held.HELD_THUMBNAIL_ONLY,
-            width = 4032,
-            height = 3024,
-            // WHOLE SECONDS, rounded down: the tile prints a length, not a
-            // fraction of one.
-            duration_seconds = 12,
-            // THE CAPTURE-LOCAL DAY, NOT UTC'S. Five in the morning UTC at
-            // eight hours west is the evening before, and the timeline groups
-            // by the day the member lived.
-            day = "2026-02-02",
-        )
-    }
-
-    "a row with no held bytes carries no path, and that is an answer" {
-        // ABSENT HAS MORE THAN ONE CAUSE — the bytes have not reached this
-        // device, or they are a reading no surface may embed (the seat decides
-        // that where the path is produced, so this side cannot be handed one).
-        // Neither is an error and both draw the cell's own empty sentence.
-        val row = Row(
-            values = listOf(
-                Value(text = "asset-2"),
-                Value(text = "2026-02-03T10:00:00Z"),
-                Value(integer = 0L),
-                Value(text = "photo"),
-                Value(text = ""),
-            ),
-        )
-        val cell = PhotosReads.arrived(listOf(row), null)
-            .data_.shouldNotBeNull().data_.shouldNotBeNull().cells.single()
-        cell.thumbnail_path shouldBe null
-        // A ROW WITH NO BOX IS ZERO, never a guess: the view packs it square.
-        cell.width shouldBe 0
-        cell.height shouldBe 0
-    }
-
-    "an unrecognised kind is unspecified, never a photograph" {
-        // The DDL's CHECK admits four values today. A fifth arriving from a
-        // newer gateway must not be drawn as a still image.
-        val row = Row(values = listOf(Value(text = "a"), Value(text = ""), Value(integer = 0L)))
-        val cell = PhotosReads.arrived(listOf(row), null)
-            .data_.shouldNotBeNull().data_.shouldNotBeNull().cells.single()
-        cell.kind shouldBe PhotoCell.Kind.KIND_UNSPECIFIED
-        // An absent capture group is ABSENT, not the empty string: a Live
-        // Photo's pairing is a real id or it is nothing.
-        cell.capture_group_id shouldBe null
-    }
-
     "the cursor pair survives the one string a screen carries" {
         // `PageCursor` IS A PAIR and `next_cursor` is one string, so the two
         // halves are spelled with a separator. A cursor that did not round-trip
         // would be a second page that silently repeats the first.
         //
-        // The separator is the FIXTURES': `ScreenFixtureSpec` asserts that
-        // `photos-shelf/album-selecting`'s `next_cursor` contains a `|`, so that is the
-        // product's written-down spelling and a second one here would make the
-        // fixture a fixture of nothing.
+        // The separator is `|`, the runtime's own spelling.
         val cursor = PageCursor(sort_key = "2026-02-03", pk = "exp-1")
         ScreenRuntime.encodeCursor(cursor) shouldBe "2026-02-03|exp-1"
         ScreenRuntime.decodeCursor(ScreenRuntime.encodeCursor(cursor)) shouldBe cursor

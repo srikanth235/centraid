@@ -48,6 +48,4 @@ public object ScreenIds {
     public const val LOCKER_EXPORT: String = "locker.export"
     public const val LOCKER_IMPORT: String = "locker.import"
     public const val LOCKER_ACCESS: String = "locker.access"
-
-    public const val PHOTOS_SHELF: String = "photos.shelf"
 }
