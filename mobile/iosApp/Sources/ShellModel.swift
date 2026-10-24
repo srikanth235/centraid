@@ -1,5 +1,4 @@
 import Combine
-import Contacts
 import EventKit
 import Foundation
 import SwiftUI
@@ -243,6 +242,8 @@ final class ShellModel: ObservableObject {
     @Published var importNotice = ""
     /// An import is running: its banner has no exit until it ends.
     @Published var importing = false
+    /// iOS's own contact picker is up: People's import met limited access (iOS 18).
+    @Published var contactAccessPickerShown = false
     /// Whether the transfer-rules sheet is up (#1025 S4).
     @Published var transferRulesOpen = false
     /// THE MEMBER'S TRANSFER RULE, as the STORE's own word.
@@ -404,6 +405,7 @@ final class ShellModel: ObservableObject {
     func attachScreens(core: any ScreenCore) {
         let store = ScreenStore(core: core)
         store.onOpenRoute = { [weak self] route in self?.open(route) }
+        store.onContactsLimited = { [weak self] in self?.contactAccessPickerShown = true }
         screens = store
         Task {
             await store.start()

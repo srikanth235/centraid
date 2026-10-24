@@ -40,6 +40,8 @@ final class ScreenStore: ObservableObject {
     /// OPEN A PAGE NOW, wherever the member is (`OpenRoute`): the shell pushes the
     /// route as it pushes a tapped row's route. Set by `ShellModel`.
     var onOpenRoute: ((Centraid_Core_V1_Route) -> Void)?
+    /// An import over iOS's limited contact access: the shell raises the system's picker.
+    var onContactsLimited: (() -> Void)?
 
     init(core: any ScreenCore) {
         self.core = core
@@ -162,6 +164,15 @@ final class ScreenStore: ObservableObject {
             } else {
                 answer(request, .failed(Self.failure("not a URL")))
             }
+        case .openMap(let map)?:
+            var components = URLComponents(string: "https://maps.apple.com/")
+            components?.queryItems = [URLQueryItem(name: "q", value: map.query)]
+            if let url = components?.url {
+                UIApplication.shared.open(url)
+                answer(request, .done(Centraid_Core_V1_EffectDone()))
+            } else {
+                answer(request, .failed(Self.failure("not an address")))
+            }
         #endif
         case .keychain(let operation)?:
             answer(request, Self.keychain(operation))
@@ -169,6 +180,12 @@ final class ScreenStore: ObservableObject {
             Task {
                 let outcome = await PhoneCalendar.snapshot(read)
                 answer(request, outcome)
+            }
+        case .contactsRead(let read)?:
+            Task {
+                let outcome = await PhoneContacts.snapshot(read)
+                answer(request, outcome)
+                if read.askPermission, PhoneContacts.limited { onContactsLimited?() }
             }
         case .phoneWatch(let watch)?:
             self.watch(request, watch)
