@@ -40,7 +40,11 @@ fn command(d: &Driver, name: &str, input: serde_json::Value) {
 
 /// Run an action another surface would, and answer its output.
 pub fn arrange(d: &Driver, request: impl Into<wire::ActRequest>) -> serde_json::Value {
-    let response = d.act(request.into().keyed(format!("arrange:{}", kit_act::fresh())));
+    let response = d.act(
+        request
+            .into()
+            .keyed(format!("arrange:{}", kit_act::fresh())),
+    );
     assert_eq!(
         response.status,
         wire::ActStatus::Executed as i32,

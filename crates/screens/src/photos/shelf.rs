@@ -329,9 +329,7 @@ impl Shelf {
         let allowed = match prompt {
             Prompt::None => false,
             Prompt::EmptyTrash => self.is_trash() && !self.cells.is_empty(),
-            Prompt::DeleteAlbum | Prompt::RenameAlbum => {
-                self.is_album() && !self.head_trashed()
-            }
+            Prompt::DeleteAlbum | Prompt::RenameAlbum => self.is_album() && !self.head_trashed(),
             Prompt::SendLocation => !self.selection.picked().is_empty(),
         };
         if allowed {
@@ -358,7 +356,11 @@ impl Shelf {
     /// Purge exactly what the trash is showing, one `purge-photo` each: the ids
     /// the shelf holds, never a fresh list of the whole trash.
     fn empty_trash(&mut self, ctx: &Ctx) {
-        let ids: Vec<String> = self.cells.iter().map(|cell| cell.photo_id.clone()).collect();
+        let ids: Vec<String> = self
+            .cells
+            .iter()
+            .map(|cell| cell.photo_id.clone())
+            .collect();
         let written = each(ctx, &ids, "purge-photo", |id| {
             act::photos::PurgePhoto {
                 photo_id: id.to_owned(),
@@ -722,13 +724,11 @@ impl Screen for Shelf {
             album: self.album(locale),
             prompt: prompt as i32,
             confirm: self.confirm(locale),
-            location_choice: (prompt == Prompt::SendLocation).then(|| {
-                wire::PhotosLocationChoice {
-                    title: words::photos_send_place_title(locale),
-                    none_label: words::photos_send_no_location(locale),
-                    exact_label: words::photos_send_exact_location(locale),
-                    cancel_label: words::photos_cancel(locale),
-                }
+            location_choice: (prompt == Prompt::SendLocation).then(|| wire::PhotosLocationChoice {
+                title: words::photos_send_place_title(locale),
+                none_label: words::photos_send_no_location(locale),
+                exact_label: words::photos_send_exact_location(locale),
+                cancel_label: words::photos_cancel(locale),
             }),
             rename: (prompt == Prompt::RenameAlbum).then(|| wire::PhotosRenameSheet {
                 title: words::photos_rename_album(locale),
