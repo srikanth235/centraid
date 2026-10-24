@@ -332,10 +332,10 @@ impl Screen for Places {
                 wire::photos_places_state::Content::Loading(wire::Loading { first_load: true })
             }
             Phase::Failed => wire::photos_places_state::Content::Failure(read::failure(locale)),
-            Phase::Ready => wire::photos_places_state::Content::Data(self.data(locale)),
+            Phase::Ready => wire::photos_places_state::Content::Data(Box::new(self.data(locale))),
         };
         wire::ViewState {
-            kind: Some(wire::view_state::Kind::PhotosPlaces(
+            kind: Some(wire::view_state::Kind::PhotosPlaces(Box::new(
                 wire::PhotosPlacesState {
                     title: words::photos_places(locale),
                     presentation: self.presentation as i32,
@@ -345,7 +345,7 @@ impl Screen for Places {
                     status: self.status.clone(),
                     name_sheet: self.sheet(locale),
                 },
-            )),
+            ))),
             ..wire::ViewState::default()
         }
     }

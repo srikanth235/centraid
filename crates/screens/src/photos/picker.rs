@@ -265,7 +265,7 @@ impl Screen for Picker {
                 wire::photos_picker_state::Content::Loading(wire::Loading { first_load: true })
             }
             Phase::Failed => wire::photos_picker_state::Content::Failure(read::failure(locale)),
-            Phase::Ready => wire::photos_picker_state::Content::Data(self.data(locale)),
+            Phase::Ready => wire::photos_picker_state::Content::Data(Box::new(self.data(locale))),
         };
         let add_label = if self.picked.is_empty() {
             words::photos_add(locale)
@@ -276,7 +276,7 @@ impl Screen for Picker {
             )
         };
         wire::ViewState {
-            kind: Some(wire::view_state::Kind::PhotosPicker(
+            kind: Some(wire::view_state::Kind::PhotosPicker(Box::new(
                 wire::PhotosPickerState {
                     title: fill(
                         &words::photos_picker_title(locale),
@@ -290,7 +290,7 @@ impl Screen for Picker {
                     status: self.status.clone(),
                     finished: self.finished,
                 },
-            )),
+            ))),
             ..wire::ViewState::default()
         }
     }

@@ -702,7 +702,7 @@ impl Screen for Shelf {
                 wire::photos_shelf_state::Content::Loading(wire::Loading { first_load: true })
             }
             Phase::Failed => wire::photos_shelf_state::Content::Failure(read::failure(locale)),
-            Phase::Ready => wire::photos_shelf_state::Content::Data(self.data(locale)),
+            Phase::Ready => wire::photos_shelf_state::Content::Data(Box::new(self.data(locale))),
         };
         let prompt = self.prompt;
         let state = wire::PhotosShelfState {
@@ -761,7 +761,7 @@ impl Screen for Shelf {
             },
         };
         wire::ViewState {
-            kind: Some(wire::view_state::Kind::PhotosShelf(state)),
+            kind: Some(wire::view_state::Kind::PhotosShelf(Box::new(state))),
             ..wire::ViewState::default()
         }
     }

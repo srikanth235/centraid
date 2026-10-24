@@ -140,6 +140,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.AppQueryResponse.answer.photos_albums")
         .boxed(".centraid.core.v1.AppQueryResponse.answer.photos_photo")
         .boxed(".centraid.core.v1.AppQueryResponse.answer.photos_shelf")
+        .boxed(".centraid.core.v1.PhotosShelfState.content.data")
+        .boxed(".centraid.core.v1.PhotosPickerState.content.data")
+        .boxed(".centraid.core.v1.PhotosPlacesState.content.data")
+        .boxed(".centraid.core.v1.ViewState.kind.photos_shelf")
+        .boxed(".centraid.core.v1.ViewState.kind.photos_picker")
+        .boxed(".centraid.core.v1.ViewState.kind.photos_places")
         // The one read and the one write (#1135): a request carries a map, and
         // an answer the app's whole typed answer.
         .boxed(".centraid.core.v1.Request.kind.load")
