@@ -12,21 +12,13 @@ import dev.centraid.android.screens.DuplicatesScreen
 import dev.centraid.android.screens.LocalPhotoEditOpener
 import dev.centraid.android.screens.PhotoEditorScreen
 import dev.centraid.android.screens.PhotoLightboxScreen
-import dev.centraid.android.screens.PhotoPickerScreen
-import dev.centraid.android.screens.PhotoShelfScreen
-import dev.centraid.android.screens.PlacesScreen
 import dev.centraid.android.screens.RouteNav
-import dev.centraid.android.screens.exportShelfCopies
 import dev.centraid.android.screens.installPhotoEditRenderer
 import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.DuplicateReviewBridge
 import dev.centraid.shared.apps.photos.DuplicatesBridge
 import dev.centraid.shared.apps.photos.PhotoEditorBridge
 import dev.centraid.shared.apps.photos.PhotoLightboxBridge
-import dev.centraid.shared.apps.photos.PhotoPickerBridge
-import dev.centraid.shared.apps.photos.PhotoShelfBridge
-import dev.centraid.shared.apps.photos.PlacesBridge
-import dev.centraid.shared.apps.photos.PlacesMachine
 import dev.centraid.shared.nav.PhotosEntry
 import dev.centraid.shared.shell.PhotosDevice
 import dev.centraid.shared.nav.Destination
@@ -55,10 +47,7 @@ import kotlinx.coroutines.launch
  * leave the routed one drawing into nothing.
  */
 public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
-    private val photoShelf = PhotoShelfBridge()
     private val photoLightbox = PhotoLightboxBridge()
-    private val photoPicker = PhotoPickerBridge()
-    private val places = PlacesBridge()
     private val duplicates = DuplicatesBridge()
     private val duplicateReview = DuplicateReviewBridge()
     private val photoEditor = PhotoEditorBridge()
@@ -74,11 +63,8 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
     private val rust = PhotosRustHost(device)
 
     override fun handles(destination: Destination): Boolean = when (destination) {
-        is Destination.PhotoShelfRoute,
         is Destination.PhotoLightbox,
         is Destination.PhotoEditor,
-        is Destination.PhotoPicker,
-        is Destination.Places,
         is Destination.PhotoDuplicates,
         is Destination.PhotoDuplicateReview,
         -> true
@@ -103,10 +89,7 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
         rust.attach(session, scope)
         // Each `attach` is the bridge's, which is either `attachScreen` plus its legs
         // or `changes.route` plus a fan-out.
-        photoShelf.attach(session)
         photoLightbox.attach(session)
-        photoPicker.attach(session)
-        places.attach(session)
         duplicates.attach(session)
         duplicateReview.attach(session)
         // THE EDITOR'S SAVE RENDERS HERE, on this shell's own decoder, and
@@ -133,60 +116,6 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
         val scope = nav.scope
         when (destination) {
             is Destination.RustScreen -> rust.Routes(destination, nav)
-
-            // A PHOTO SHELF: the library under a predicate, and the one
-            // screen four of v0's routes became. The predicate ARRIVES
-            // WITH THE OPEN — `PhotoShelfReads.query` reads it off the
-            // state and a shelf opened without one answers null, which
-            // the member reads as "Centraid does not know what to read
-            // here".
-            //
-            // Keyed on the SHELF and not on the destination: they are
-            // the same value here, and naming the shelf says what the
-            // key is for — walking from Lisbon to Porto is a different
-            // shelf and re-opens, a rotation is not and does not.
-            is Destination.PhotoShelfRoute -> {
-                LaunchedEffect(destination.shelf) { photoShelf.opened(destination.shelf) }
-                val state by photoShelf.host.state.collectAsStateWithLifecycle()
-                val shelfContext = androidx.compose.ui.platform.LocalContext.current
-                PhotoShelfScreen(
-                    state = state,
-                    onEvent = { event -> scope.launch { photoShelf.host.send(event) } },
-                    // THIS SHELF'S OWN ORDER RIDES ALONG. A lightbox
-                    // that worked its neighbours out would page the
-                    // library once per photograph a member flicked
-                    // past, and would order them differently from the
-                    // shelf they came out of the moment the two
-                    // predicates drifted.
-                    onOpenAsset = { assetId, neighbours ->
-                        stack = stack.push(
-                            Destination.PhotoLightbox(
-                                assetId = assetId,
-                                neighbours = neighbours,
-                                // AN ALBUM'S LIGHTBOX KNOWS ITS ALBUM,
-                                // for "Make key photo".
-                                albumId = destination.shelf.album?.collection_id.orEmpty(),
-                            ),
-                        )
-                    },
-                    // THE PICKER'S ONLY DOOR, on either shell.
-                    onAddPhotographs = { collectionId, name ->
-                        stack = stack.push(
-                            Destination.PhotoPicker(
-                                collectionId = collectionId,
-                                collectionName = name,
-                            ),
-                        )
-                    },
-                    // "SEND A COPY" / "DOWNLOAD ORIGINAL" over the
-                    // pick: `screens/PhotoShelfCopies.kt`.
-                    onExport = { assetIds, export ->
-                        scope.launch { exportShelfCopies(shelfContext, photoShelf, assetIds, export) }
-                    },
-                    // THE ALBUM WAS DELETED; the shelf showing it goes.
-                    onClose = { stack = stack.pop() },
-                )
-            }
 
             is Destination.PhotoLightbox -> {
                 LaunchedEffect(destination.assetId, destination.neighbours) {
@@ -247,76 +176,6 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                         }
                     },
                 )
-            }
-
-            // THE PICKER, pushed by an album shelf's "Add
-            // photographs" — its one door, on either shell.
-            is Destination.PhotoPicker -> {
-                LaunchedEffect(destination.collectionId) {
-                    photoPicker.opened(
-                        collectionId = destination.collectionId,
-                        collectionName = destination.collectionName,
-                        // EMPTY, AND NOT A GAP: the picker reads the
-                        // album's whole membership itself on open
-                        // (`PhotoPickerMachine.MEMBERS_READ_ID`) — no
-                        // caller holds more than one page of it.
-                        alreadyInAlbumAssetIds = emptyList(),
-                    )
-                }
-                val state by photoPicker.host.state.collectAsStateWithLifecycle()
-                PhotoPickerScreen(
-                    state = state,
-                    onEvent = { event -> scope.launch { photoPicker.host.send(event) } },
-                    // ADDING IS THE END OF THIS SCREEN. The pop is the
-                    // shell's, which is what v0 did on a successful
-                    // batch.
-                    onFinished = { stack = stack.pop() },
-                )
-            }
-
-            // PLACES, AND CARDS-OR-MAP IS A PARAMETER — the band's rule
-            // applied to two of v0's routes over one read.
-            is Destination.Places -> {
-                // KEYED ON NOTHING, deliberately. The only parameter
-                // this destination carries is the presentation, and
-                // re-opening on a presentation toggle would be a full
-                // re-read every time a member looked at the plot and
-                // back. Leaving the screen disposes this effect, so a
-                // return still re-reads.
-                LaunchedEffect(Unit) { places.opened() }
-                val state by places.host.state.collectAsStateWithLifecycle()
-                PushedPage(
-                    title = PhotosCopy.PHOTOS_PLACES,
-                    parentTitle = PhotosCopy.PHOTOS_BAND_COLLECTIONS,
-                    onBack = { stack = stack.pop() },
-                ) {
-                    PlacesScreen(
-                        state = state,
-                        onEvent = { event ->
-                            // The presentation lives on the route as well
-                            // as on the state, for the band's reason and
-                            // with the band's consequence if only one moves.
-                            val moved = event.presentation
-                            if (moved != null) {
-                                stack = stack.withPlacesPresentation(moved.presentation)
-                            }
-                            scope.launch { places.host.send(event) }
-                        },
-                        // THE MACHINE'S OWN VALUE, never a `PhotoShelf`
-                        // composed here: both shells need the same one, and
-                        // a second spelling of it is a second chance to send
-                        // a place id with no name.
-                        onOpenPlace = { row ->
-                            stack = stack.push(
-                                Destination.PhotoShelfRoute(PlacesMachine.shelfFor(row)),
-                            )
-                        },
-                        // THE PHOTOGRAPHS WITH NO PLACE, as the machine builds it.
-                        onOpenShelf = { shelf ->
-                            stack = stack.push(Destination.PhotoShelfRoute(shelf))
-                        },
-                    )
-                }
             }
 
             is Destination.PhotoDuplicates -> {

@@ -212,6 +212,8 @@ internal class PhotosRustHost(private val device: PhotosDevice) {
         val open: (Route) -> Unit = { route -> nav.push(Destination.RustScreen(route)) }
 
         val home = view.photos_home
+        // THE SHELF FAMILY (a shelf, the picker, places) draws itself; the rest is below.
+        if (PhotosShelfFamilyScreen(view, send, open) { nav.pop() }) return
         // EACH PHOTOS SCREEN THAT MOVES TO RUST ADDS ITS ARM HERE.
         when {
             home != null -> PhotosHomeScreen(
