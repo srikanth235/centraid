@@ -231,9 +231,10 @@ impl Rules {
             words::rule_pattern_long(locale)
         } else if !has_effect {
             words::rule_effect_missing(locale)
-        } else if exponent.is_some() && !editor.min_text.trim().is_empty() && min.is_none() {
-            words::amount_invalid(locale)
-        } else if exponent.is_some() && !editor.max_text.trim().is_empty() && max.is_none() {
+        } else if exponent.is_some()
+            && ((!editor.min_text.trim().is_empty() && min.is_none())
+                || (!editor.max_text.trim().is_empty() && max.is_none()))
+        {
             words::amount_invalid(locale)
         } else if let (Some(min), Some(max)) = (min, max)
             && min > max

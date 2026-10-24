@@ -376,7 +376,6 @@ impl Home {
             },
             more: answer.next.is_some() && !at_ceiling,
             empty,
-            ..wire::MoneyActivityData::default()
         }
     }
 

@@ -241,7 +241,7 @@ impl Wall {
     /// The shell answered an effect. `Step::default()` when it was not ours.
     pub fn answered(&mut self, ctx: &Ctx, result: &wire::EffectResult) -> Step {
         let checked = match &result.outcome {
-            Some(wire::effect_result::Outcome::OwnerChecked(checked)) => checked.clone(),
+            Some(wire::effect_result::Outcome::OwnerChecked(checked)) => *checked,
             Some(wire::effect_result::Outcome::Failed(_)) if self.asking => {
                 // A shell that cannot raise the check leaves the wall to try again.
                 self.asking = false;

@@ -53,7 +53,6 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
 }
 
 /// A factory whose generate draws from `entropy`; tests inject a fixed stream.
-#[must_use]
 pub fn build_with(
     entropy: impl Fn() -> Entropy + Send + Sync + 'static,
 ) -> impl Fn(&wire::Route) -> Option<Box<dyn Screen>> + Send + Sync + 'static {
