@@ -444,6 +444,36 @@ fn touch_on_an_empty_vault_is_day_one() {
 /// A LEAP-DAY BIRTHDAY FALLS ON THE 28TH IN A COMMON YEAR, on Touch's rail: the day shown is
 /// the core's `today + in_days`, never the stored `MM-DD` that year lacks.
 #[test]
+fn the_words_the_core_corrected_are_on_the_field_and_a_new_term_clears_them() {
+    let mut d = clean();
+    person(&d, "Dana Reyes");
+    let i = begin(&mut d);
+    send_home(&mut d, i, H::SearchOpened(ev::SearchOpened {}));
+    send_home(
+        &mut d,
+        i,
+        H::SearchTerm(ev::SearchTermChanged {
+            term: "danaa".into(),
+        }),
+    );
+    let corrected = home_state(d.view(i)).search.clone().unwrap().corrected;
+    if !corrected.is_empty() {
+        assert!(
+            corrected.starts_with("Including results for "),
+            "{corrected}"
+        );
+    }
+    send_home(
+        &mut d,
+        i,
+        H::SearchTerm(ev::SearchTermChanged {
+            term: "dana".into(),
+        }),
+    );
+    assert_eq!(home_state(d.view(i)).search.clone().unwrap().corrected, "");
+}
+
+#[test]
 fn a_leap_day_birthday_is_shown_on_the_day_it_falls_on() {
     let mut d = clean();
     arrange(
