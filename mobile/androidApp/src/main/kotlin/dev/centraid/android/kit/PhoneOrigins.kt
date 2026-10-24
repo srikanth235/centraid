@@ -5,7 +5,7 @@ import dev.centraid.shared.sync.phone.PhoneIds
 /**
  * THE IDS AND ORIGINS THE ANDROID READERS HAND THE PHONE SYNC (R-1127-10, #1127).
  *
- * Pure string work, so a JVM test pins it: the readers in `ContactsImporter` and
+ * Pure string work, so a JVM test pins it: the readers in `PhoneContacts` and
  * `CalendarImporter` only choose which column feeds each argument.
  *
  * - **A contact** is `lookup:` plus its `LOOKUP_KEY`, the id `ContactsContract` documents as the
@@ -14,8 +14,8 @@ import dev.centraid.shared.sync.phone.PhoneIds
  * - **An event** is `uid:` plus its iCal UID (`uid2445`, the same on every device Google syncs
  *   to), else `local:` plus the event row id.
  * - **An account** is keyed `<type>/<name>` (a raw contact with no account is `local`), and
- *   **a calendar** `<type>/<name>/<key>`; the contacts reader hands the key to
- *   `ContactsImport.container` and the calendar reader answers it as `PhoneCalendar.key`, from
+ *   **a calendar** `<type>/<name>/<key>`; the contacts reader hands the key to Rust as
+ *   `PhoneContactContainer.key` and the calendar reader answers it as `PhoneCalendar.key`, from
  *   which each makes the origin both platforms share (the calendar's is Rust's). The calendar
  *   key is the sync adapter's `_sync_id` (the server's calendar id, so it survives a re-sync and a re-added account) and
  *   the calendar row id when the adapter writes none (a local calendar never re-syncs).

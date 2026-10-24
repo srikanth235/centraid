@@ -173,6 +173,11 @@
         "schema": "person",
         "table": "merge",
         "verbs": "act"
+      },
+      {
+        "schema": "follow",
+        "table": "contacts",
+        "verbs": "act"
       }
     ]
   },
@@ -1327,6 +1332,90 @@
         },
         "required": ["from", "into"],
         "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "follow-contacts",
+      "verb": "import",
+      "kind": "person",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "follow.contacts",
+      "phrasings": [
+        "import my phone's contacts",
+        "sync people from the address book on this phone",
+        "pull in my contacts"
+      ],
+      "description": "Follow the phone's address book through follow.contacts, one account at a time: a field the member never changed follows the phone, one they changed stands, a contact the vault does not know is matched by name to a person of the member's own before one is added, and one gone from a complete read goes to the trash if the member never edited it. A record carries a name, its phone numbers and email addresses as points, and an optional MM-DD birthday.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "complete": {
+            "type": "boolean"
+          },
+          "origin": {
+            "additionalProperties": false,
+            "properties": {
+              "config": {
+                "type": ["object", "null"]
+              },
+              "device_id": {
+                "type": ["string", "null"]
+              },
+              "fills": {
+                "type": ["string", "null"]
+              },
+              "label": {
+                "type": "string"
+              },
+              "ref": {
+                "type": "string"
+              }
+            },
+            "required": ["ref", "label"],
+            "type": "object"
+          },
+          "records": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "device_id": {
+                  "type": ["string", "null"]
+                },
+                "external_id": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "object"
+                }
+              },
+              "required": ["external_id", "fields"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "since": {
+            "type": "string"
+          }
+        },
+        "required": ["origin", "records"],
+        "type": "object"
       },
       "output": {
         "type": "object",

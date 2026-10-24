@@ -130,6 +130,7 @@ pub mod agenda_home;
 pub mod agenda_todo;
 pub mod docs;
 pub mod notes;
+pub mod people;
 pub mod shared;
 pub mod task;
 

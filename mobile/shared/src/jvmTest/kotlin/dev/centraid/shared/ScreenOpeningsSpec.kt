@@ -7,14 +7,13 @@ import centraid.screen.v1.PhotoShelf
 import dev.centraid.shared.apps.health.HealthHomeMachine
 import dev.centraid.shared.apps.money.MoneyHomeMachine
 import dev.centraid.shared.apps.money.MoneyTransactionMachine
-import dev.centraid.shared.apps.people.PeopleHomeMachine
-import dev.centraid.shared.apps.people.PeoplePersonMachine
 import dev.centraid.shared.apps.photos.PhotoLightboxMachine
 import dev.centraid.shared.apps.photos.PhotoShelfMachine
 import dev.centraid.shared.apps.photos.PhotosGridMachine
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.DocsEntry
+import dev.centraid.shared.nav.PeopleEntry
 import dev.centraid.shared.nav.RowRef
 import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.shared.nav.ScreenIds
@@ -57,7 +56,9 @@ class ScreenOpeningsSpec : StringSpec({
         opened.folder_name shouldBe "Taxes"
         opened.parent shouldBe "Search"
 
-        RowRoutes.route(row("people", "person", "pe1", "Ada"))!!.screenId shouldBe PeoplePersonMachine.SCREEN_ID
+        val person = RowRoutes.route(row("people", "person", "pe1", "Ada"))!!
+        person.screenId shouldBe ScreenIds.RUST_SCREEN
+        Route.ADAPTER.decode(person.event) shouldBe PeopleEntry.person("pe1", "Ada").route
         RowRoutes.route(row("money", "transaction", "tx1"))!!.screenId shouldBe MoneyTransactionMachine.SCREEN_ID
         // A NOTE MAY LINK A LOCKER ITEM (#1135), and opening the link is Locker's page, which the
         // lock wall covers like every Locker destination.
@@ -84,7 +85,7 @@ class ScreenOpeningsSpec : StringSpec({
     }
 
     "a noun the table has no row for opens the app's home, an unknown app opens nothing" {
-                RowRoutes.route(row("people", "tag", "x"))!!.screenId shouldBe PeopleHomeMachine.SCREEN_ID
+        Route.ADAPTER.decode(RowRoutes.route(row("people", "tag", "x"))!!.event) shouldBe PeopleEntry.home().route
         RowRoutes.route(row("money", "tag", "x"))!!.screenId shouldBe MoneyHomeMachine.SCREEN_ID
         RowRoutes.route(row("health", "activity", "x"))!!.screenId shouldBe HealthHomeMachine.SCREEN_ID
         RowRoutes.route(row("photos", "tag", "x"))!!.screenId shouldBe PhotosGridMachine.SCREEN_ID

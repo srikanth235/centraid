@@ -182,14 +182,9 @@ public fun FailureView(
  * (DESIGN.md copy table). The strings are finished; the action is the
  * screen's own event.
  *
- * AN APP'S DAY ONE can ask for one thing the shell answers, through a
- * CompositionLocal so no screen threads it:
- *
- * - **An import in place of the action** (`import_source`), when the shell
- *   provides the import door ([LocalPhoneImport]) and can read that source
- *   ([importLabel] is not empty — Android has no system reminders). The app's
- *   own add stays in its header, so the one action here is the faster way to
- *   the member's own data. Without an importer the action is drawn as before.
+ * A ported app's day one that offers the phone's own data (People's contacts,
+ * Agenda's calendar) puts the import's verb in `action_label` and answers it
+ * with the screen's own event (#1135); the app's own add stays in its header.
  */
 @Composable
 public fun EmptyStateView(
@@ -197,13 +192,6 @@ public fun EmptyStateView(
     onAction: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    val importVerb = importLabel(empty.import_source)
-    val door = LocalPhoneImport.current
-    val importer: (() -> Unit)? = if (importVerb.isNotEmpty() && door != null) {
-        { door(empty.import_source) }
-    } else {
-        null
-    }
     Column(
         modifier.fillMaxSize().padding(24.dp).testTag("kit-empty"),
         verticalArrangement = Arrangement.Center,
@@ -217,14 +205,7 @@ public fun EmptyStateView(
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
-        if (importer != null) {
-            OutlineButton(
-                label = importVerb,
-                testTag = "kit-empty-import",
-                modifier = Modifier.padding(top = 16.dp),
-                onPress = importer,
-            )
-        } else if (empty.action_label.isNotEmpty() && onAction != null) {
+        if (empty.action_label.isNotEmpty() && onAction != null) {
             OutlineButton(
                 label = empty.action_label,
                 testTag = "kit-empty-action",

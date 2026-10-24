@@ -75,10 +75,6 @@ class WriteRunnerSpec : StringSpec({
             SeatState.Connectivity.CONNECTIVITY_ONLINE_UNMETERED,
             SeatState.Durability.DURABILITY_AUTHORITATIVE,
         )
-        dev.centraid.shared.apps.people.PeopleHomeMachine.seatChanged(reachable)
-            .seat_changed?.seat shouldBe reachable
-        dev.centraid.shared.apps.people.PeopleTrashMachine.seatChanged(reachable)
-            .seat_changed?.seat shouldBe reachable
         dev.centraid.shared.apps.photos.PhotosGridMachine.seatChanged(reachable)
             .seat_changed?.seat shouldBe reachable
         dev.centraid.shared.shell.HomeMachine.seatChanged(reachable)

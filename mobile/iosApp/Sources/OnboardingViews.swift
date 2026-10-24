@@ -1,6 +1,3 @@
-import Contacts
-import ContactsUI
-import EventKit
 import SwiftUI
 
 import CentraidShared
@@ -9,19 +6,7 @@ import CentraidShared
 // data"): where the phone already holds an app's data, its day-one empty state
 // offers a one-tap import asked at the point of use. These are the shell's
 // halves: the environment door the kit's `EmptyStateView` reads, the banner the
-// import draws, and the address-book read.
-
-private struct ImportFromPhoneKey: EnvironmentKey {
-    static let defaultValue: ((Centraid_Screen_V1_ImportSource) -> Void)? = nil
-}
-
-extension EnvironmentValues {
-    /// An import from where the phone already holds the data, or nil.
-    var importFromPhone: ((Centraid_Screen_V1_ImportSource) -> Void)? {
-        get { self[ImportFromPhoneKey.self] }
-        set { self[ImportFromPhoneKey.self] = newValue }
-    }
-}
+// import draws.
 
 /// THE IMPORT'S STATUS LINE (DESIGN.md: "`StatusLine` is the one feedback
 /// channel … docked to the bottom of the frame … no floating overlay, no
@@ -75,149 +60,6 @@ struct ShellLineHost: ViewModifier {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if !placeDraws { ShellBanner(shell: shell) }
             }
-    }
-}
-
-/// THE PHONE'S ADDRESS BOOK. Read once the member taps "Import contacts" (the OS
-/// asks its own permission then, never at launch), and again, with no prompt, by
-/// the follower whenever the OS says the book changed and access is already
-/// granted (#1127).
-///
-/// **One origin per `CNContainer`** (R-1127-10): an account, as iOS names it
-/// ("iCloud", "Gmail"), so a whole account that leaves the phone is one question.
-/// A contact is its UNIFIED contact, so `phoneId` is `local:` plus the unified
-/// identifier; one linked across two containers is read once per container and
-/// the shared `ContactsImport` keeps it under one origin. **A read is complete
-/// unless access is limited (iOS 18) or a container would not read.**
-enum PhoneContacts {
-    enum Outcome {
-        case denied
-        case read(ContactsRead)
-    }
-
-    /// The tap: ask the OS, then read.
-    static func read() async -> Outcome {
-        let store = CNContactStore()
-        let granted = (try? await store.requestAccess(for: .contacts)) ?? false
-        guard granted else { return .denied }
-        return await Task.detached(priority: .userInitiated) { .read(snapshot(store)) }.value
-    }
-
-    /// Access the member has already given, in full or in part. Never prompts.
-    static var granted: Bool {
-        let status = CNContactStore.authorizationStatus(for: .contacts)
-        if #available(iOS 18.0, *), status == .limited { return true }
-        return status == .authorized
-    }
-
-    /// The follower's read: nil when access is not already granted.
-    static func readIfGranted() async -> ContactsRead? {
-        guard granted else { return nil }
-        let store = CNContactStore()
-        return await Task.detached(priority: .utility) { snapshot(store) }.value
-    }
-
-    /// LIMITED ACCESS (iOS 18): the member shared only the contacts they
-    /// picked, so asking again draws no prompt and reads only those. The
-    /// import then offers iOS's own picker (`ContactAccessPicker`) to share
-    /// more, and reads again.
-    static var limited: Bool {
-        if #available(iOS 18.0, *) {
-            return CNContactStore.authorizationStatus(for: .contacts) == .limited
-        }
-        return false
-    }
-
-    /// Every container present (empty ones too, so one with no contact is not
-    /// taken for gone) and the contacts in each.
-    static func snapshot(_ store: CNContactStore) -> ContactsRead {
-        var complete = !limited
-        var containers: [CNContainer] = []
-        do {
-            containers = try store.containers(matching: nil)
-        } catch {
-            complete = false
-        }
-        var origins: [PhoneOriginRef] = []
-        var found: [PhoneContact] = []
-        for container in containers.sorted(by: { $0.identifier < $1.identifier }) {
-            let origin = ContactsImport.shared.container(id: container.identifier, name: container.name)
-            origins.append(origin)
-            let predicate = CNContact.predicateForContactsInContainer(withIdentifier: container.identifier)
-            if !enumerate(store, predicate: predicate, origin: origin, into: &found) { complete = false }
-        }
-        return ContactsRead(contacts: found, origins: origins, complete: complete)
-    }
-
-    /// False when the container would not read: the read is then incomplete.
-    private static func enumerate(
-        _ store: CNContactStore,
-        predicate: NSPredicate,
-        origin: PhoneOriginRef,
-        into found: inout [PhoneContact]
-    ) -> Bool {
-        let keys: [CNKeyDescriptor] = [
-            CNContactFormatter.descriptorForRequiredKeys(for: .fullName),
-            CNContactOrganizationNameKey as CNKeyDescriptor,
-            CNContactPhoneNumbersKey as CNKeyDescriptor,
-            CNContactEmailAddressesKey as CNKeyDescriptor,
-            CNContactBirthdayKey as CNKeyDescriptor,
-        ]
-        let request = CNContactFetchRequest(keysToFetch: keys)
-        request.predicate = predicate
-        do {
-            try store.enumerateContacts(with: request) { contact, _ in
-                let name = CNContactFormatter.string(from: contact, style: .fullName) ?? contact.organizationName
-                found.append(
-                    PhoneContact(
-                        name: name,
-                        phones: contact.phoneNumbers.map { $0.value.stringValue },
-                        emails: contact.emailAddresses.map { $0.value as String },
-                        birthday: monthDay(contact.birthday),
-                        // R-1127-10: the unified identifier means something on this device only.
-                        phoneId: "local:" + contact.identifier,
-                        origin: origin.id,
-                        originLabel: origin.label
-                    )
-                )
-            }
-            return true
-        } catch {
-            return false
-        }
-    }
-
-    /// `MM-DD`, or empty: a People important date is a day of the year.
-    private static func monthDay(_ birthday: DateComponents?) -> String {
-        guard let month = birthday?.month, let day = birthday?.day else { return "" }
-        return String(format: "%02d-%02d", month, day)
-    }
-}
-
-/// IOS'S OWN CONTACT PICKER (`ContactAccessPicker`, iOS 18), raised when People's
-/// import meets limited access: the member shares more contacts in the
-/// system's sheet, and the identifiers it hands back are imported. Before
-/// iOS 18 there is no limited access, so there is nothing to raise.
-struct ContactAccessPickerHost: ViewModifier {
-    @ObservedObject var shell: ShellModel
-
-    func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) {
-            content.contactAccessPicker(isPresented: $shell.contactAccessPickerShown) { identifiers in
-                shell.contactsShared(identifiers)
-            }
-        } else {
-            content
-        }
-    }
-}
-
-/// THE FOLLOWER'S ADDRESS-BOOK READER (#1127): read off the main thread, only
-/// over access the member already gave. nil is "not granted", and the pass ends.
-final class ContactsFollowReader: NSObject, ContactsReader {
-    // (Kotlin/Native gives this protocol's parameter a trailing underscore; CalendarReader's has none.)
-    func read(deliver_: @escaping (ContactsRead?) -> Void) {
-        Task.detached(priority: .utility) { deliver_(await PhoneContacts.readIfGranted()) }
     }
 }
 

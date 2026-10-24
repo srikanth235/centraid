@@ -3252,6 +3252,24 @@
         "verb": "merge"
       },
       {
+        "action": "follow-contacts",
+        "also": [],
+        "app": "people",
+        "bulk": true,
+        "chat": "card",
+        "command": "follow.contacts",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "import my phone's contacts",
+          "sync people from the address book on this phone",
+          "pull in my contacts"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "import"
+      },
+      {
         "action": "upload",
         "also": [],
         "app": "photos",

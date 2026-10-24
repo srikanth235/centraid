@@ -1,8 +1,6 @@
 package dev.centraid.android.kit
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
@@ -12,23 +10,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.core.content.ContextCompat
 import dev.centraid.android.screens.docs.AndroidFolderReader
-import dev.centraid.android.screens.people.readPhoneContacts
 import dev.centraid.shared.apps.docs.FilesFollow
 import dev.centraid.shared.apps.health.HealthFollow
 import dev.centraid.shared.apps.health.HealthReader
-import dev.centraid.shared.apps.people.ContactsFollow
-import dev.centraid.shared.apps.people.ContactsRead
-import dev.centraid.shared.apps.people.ContactsReader
 import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.shell.PhoneFollowBridge
 import dev.centraid.shared.shell.PhoneFollowQuestion
 import dev.centraid.shared.sync.phone.PhoneSource
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 
 /**
  * ANDROID FOLLOWS THE PHONE (#1127): THE TRIGGERS, THE READERS AND THE QUESTION.
@@ -37,13 +26,13 @@ import kotlinx.coroutines.launch
  *   the address book and on the events, registered from `onStart` to `onStop`, each say
  *   [requested]. The bridge coalesces a burst, runs one pass per source at a time, and does
  *   nothing for a source the member never imported.
- * - **The calendar is Rust's (#1135).** Agenda's screen holds the calendar's follow
- *   (`crates/screens/src/agenda/calendar.rs`): it asks to watch the store with a `PhoneWatch`
- *   effect ([watchCalendar]) and reads it with `CalendarRead` (`ScreenEffects.kt`). Here the
- *   calendar is only the observer and the app coming forward, each reported to that watch.
- * - **Reads.** The [ContactsReader] below answers off the main thread, and
- *   **null when the permission is not already granted: a pass never asks the OS**, only the
- *   member's Import tap does (R-ONBOARD-4). Docs' folders are read by `AndroidFolderReader`, over
+ * - **The calendar and the contacts are Rust's (#1135).** Agenda's and People's screens hold
+ *   their follows (`crates/screens/src/agenda/calendar.rs`, `.../people/contacts.rs`): each asks
+ *   to watch its store with a `PhoneWatch` effect ([watchCalendar], [watchContacts]) and reads it
+ *   with `CalendarRead` / `ContactsRead` (`ScreenEffects.kt`), **a pass never asking the OS**:
+ *   only the member's Import tap does (R-ONBOARD-4). Here each is only the observer and the app
+ *   coming forward, reported to that watch.
+ * - **Reads.** Docs' folders are read by `AndroidFolderReader`, over
  *   the tree grants the member gave when they picked each folder; triggers for them are the app
  *   coming forward and the picker returning (`requested(PhoneSource.FILES)`), with no watcher.
  *   Health Connect is read by [health] (`HealthConnectReader`), over the types the member chose
@@ -57,9 +46,12 @@ import kotlinx.coroutines.launch
 internal class AndroidPhoneFollow(context: Context, private val health: HealthReader) {
     private val context: Context = context.applicationContext
     private val bridge = PhoneFollowBridge()
-    private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val main = Handler(Looper.getMainLooper())
-    private val contactsObserver = observer(PhoneSource.CONTACTS)
+    private val contactsObserver = object : ContentObserver(main) {
+        override fun onChange(selfChange: Boolean) {
+            contactsChanged?.invoke()
+        }
+    }
     private val calendarObserver = object : ContentObserver(main) {
         override fun onChange(selfChange: Boolean) {
             calendarChanged?.invoke()
@@ -68,6 +60,8 @@ internal class AndroidPhoneFollow(context: Context, private val health: HealthRe
 
     /** What Rust's `PhoneWatch` on the calendar wants told when the store changes, or null. Main thread. */
     private var calendarChanged: (() -> Unit)? = null
+    /** What Rust's `PhoneWatch` on the contacts wants told when the address book changes, or null. Main thread. */
+    private var contactsChanged: (() -> Unit)? = null
     private var started = false
     private var attached = false
 
@@ -78,7 +72,6 @@ internal class AndroidPhoneFollow(context: Context, private val health: HealthRe
     /** The foreground vault's session is open: followed from now on, and followed once at once. */
     fun attach(session: HomeSession) {
         val sources = listOf(
-            ContactsFollow(contactsReader),
             FilesFollow(AndroidFolderReader(context)),
             HealthFollow(health),
         )
@@ -101,6 +94,11 @@ internal class AndroidPhoneFollow(context: Context, private val health: HealthRe
         calendarChanged = changed
     }
 
+    /** Rust's `PhoneWatch` on the contacts, as [watchCalendar] is on the calendar. Main thread. */
+    fun watchContacts(changed: (() -> Unit)?) {
+        contactsChanged = changed
+    }
+
     /** The activity started: watch the phone for as long as it is in view, and follow once. */
     fun start() {
         if (started) return
@@ -110,6 +108,7 @@ internal class AndroidPhoneFollow(context: Context, private val health: HealthRe
         resolver.registerContentObserver(CalendarContract.Events.CONTENT_URI, true, calendarObserver)
         if (attached) requestAll()
         calendarChanged?.invoke()
+        contactsChanged?.invoke()
     }
 
     /** The activity stopped: no observers while no one is looking. */
@@ -133,29 +132,9 @@ internal class AndroidPhoneFollow(context: Context, private val health: HealthRe
     }
 
     private fun requestAll() {
-        bridge.requested(PhoneSource.CONTACTS)
         bridge.requested(PhoneSource.FILES)
         bridge.requested(PhoneSource.HEALTH)
     }
-
-    private fun observer(source: PhoneSource): ContentObserver = object : ContentObserver(main) {
-        override fun onChange(selfChange: Boolean) {
-            requested(source)
-        }
-    }
-
-    private val contactsReader = object : ContactsReader {
-        override fun read(deliver: (ContactsRead?) -> Unit) {
-            if (!granted(Manifest.permission.READ_CONTACTS)) return deliver(null)
-            io.launch {
-                val read = readPhoneContacts(context)
-                deliver(ContactsRead(read.contacts, read.origins, read.complete))
-            }
-        }
-    }
-
-    private fun granted(permission: String): Boolean =
-        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 }
 
 /**

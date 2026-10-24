@@ -1,5 +1,4 @@
 import Combine
-import Contacts
 import EventKit
 import Foundation
 import SwiftUI
@@ -153,12 +152,12 @@ final class ShellModel: ObservableObject {
         followPhone()
     }
 
-    /// THE APP CAME FORWARD, or the OS announced a change: People, Agenda, Docs
-    /// and Health follow the phone (#1127, #1129). Cheap; the shared gate decides
-    /// whether a pass runs. Health is read on coming forward only — background
-    /// delivery is a later wave — and a pass never asks HealthKit for access.
+    /// THE APP CAME FORWARD, or the OS announced a change: Docs and Health follow
+    /// the phone (#1127, #1129). Cheap; the shared gate decides whether a pass
+    /// runs. Health is read on coming forward only — background delivery is a
+    /// later wave — and a pass never asks HealthKit for access. People's contacts
+    /// and Agenda's calendar are followed by their home screens (Rust).
     func followPhone() {
-        follow.requested(source: .contacts)
         follow.requested(source: .files)
         follow.requested(source: .health)
     }
@@ -241,8 +240,10 @@ final class ShellModel: ObservableObject {
     /// THE SHELL'S ONE BANNER LINE: an import's progress and outcome (DESIGN.md: a banner, never a toast).
     /// Empty draws nothing.
     @Published var importNotice = ""
-    /// The contacts import is running: its banner has no exit until it ends.
+    /// An import is running: its banner has no exit until it ends.
     @Published var importing = false
+    /// iOS's own contact picker is up: People's import met limited access (iOS 18).
+    @Published var contactAccessPickerShown = false
     /// Whether the transfer-rules sheet is up (#1025 S4).
     @Published var transferRulesOpen = false
     /// THE MEMBER'S TRANSFER RULE, as the STORE's own word.
@@ -333,10 +334,11 @@ final class ShellModel: ObservableObject {
     /// connected it. The other three still go through `unwired()` below, and
     /// `mobile/README.md` carries that hand-off.
     private let home = HomeBridge()
-    private let contacts = ContactsImportBridge()
-    /// THE PHONE FOLLOWED (#1127): People, Agenda and Docs keep following what the
-    /// phone holds after the member imported it. One bridge for both; the gate,
-    /// the passes and the question are in `CentraidShared`.
+    /// THE PHONE FOLLOWED (#1127): Docs and Health keep following what the phone
+    /// holds after the member imported it. People's contacts and Agenda's calendar
+    /// are Rust's (their home screens follow through the `ContactsRead` and
+    /// `CalendarRead` effects); the gate, the passes and the question are in
+    /// `CentraidShared`.
     private let follow = PhoneFollowBridge()
     /// HEALTHKIT, READ ONLY (#1129): the follower's reader and Connect's.
     private let healthReader = HealthKitReader()
@@ -403,6 +405,7 @@ final class ShellModel: ObservableObject {
     func attachScreens(core: any ScreenCore) {
         let store = ScreenStore(core: core)
         store.onOpenRoute = { [weak self] route in self?.open(route) }
+        store.onContactsLimited = { [weak self] in self?.contactAccessPickerShown = true }
         screens = store
         Task {
             await store.start()
@@ -448,12 +451,6 @@ final class ShellModel: ObservableObject {
         home.observe { [weak self] bytes in
             self?.homeState = bytes.data
         }
-        // THE OS SAYS THE ADDRESS BOOK OR A CALENDAR CHANGED: follow it (#1127).
-        // The shared gate folds a burst of these into one pass, and a pass does
-        // nothing unless the member imported the source and access is already given.
-        NotificationCenter.default.addObserver(forName: .CNContactStoreDidChange, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.follow.requested(source: .contacts) }
-        }
         // THE PHONE'S HEALTH FACTS (#1129): the store, the units and the chosen
         // set, stated before any Health screen opens and again whenever the
         // member changes the region's measurement system.
@@ -466,17 +463,13 @@ final class ShellModel: ObservableObject {
         home.appearance { [weak self] stored in self?.appearance = stored }
         vaultWords.observe { [weak self] bytes in self?.vaultWordsChanged(bytes.data) }
         // A VAULT WAS MADE (`VaultWordsBridge.made`, once per make): its
-        // sentence stays on the vault sheet, as `found`'s did, and what the
-        // phone already holds is asked for once and brought in (R-ONBOARD-8):
-        // the photos, then the contacts, each
-        // prompt after the last one was answered — nobody is sent to an empty
-        // app to find its import.
+        // sentence stays on the vault sheet, as `found`'s did, and the photos are
+        // asked for once (R-ONBOARD-8). The contacts and the calendar are offered
+        // by People's and Agenda's day-one empty states, which Rust owns (#1135).
         vaultWords.observeMade { [weak self] sentence in
             guard let self else { return }
             self.gatewayStatus = sentence
-            self.photos.askForPhotos { [weak self] in
-                DispatchQueue.main.async { self?.importEverythingFromPhone() }
-            }
+            self.photos.askForPhotos {}
         }
         wordsEntry.camera = PairScanner.available
         wordsEntry.observe { [weak self] bytes in self?.wordsEntryChanged(bytes.data) }
@@ -529,11 +522,9 @@ final class ShellModel: ObservableObject {
             self.wordsEntry.attach(session: session)
             self.wordsShow.attach(session: session)
             self.pairLaptop.attach(session: session)
-            self.contacts.attach(session: session)
             self.follow.attach(
                 session: session,
                 sources: [
-                    ContactsFollow(reader: ContactsFollowReader()),
                     FilesFollow(reader: FolderFollowReader()),
                     HealthFollow(reader: self.healthReader, clock: PlatformServices_iosKt.platformServices().clock),
                 ],
@@ -1166,122 +1157,6 @@ final class ShellModel: ObservableObject {
             DispatchQueue.main.async {
                 self?.gatewayStatus = renamed.boolValue ? "" : HomeWords.shared.VAULTS_RENAME_FAILED
             }
-        }
-    }
-
-    // MARK: One-tap imports (docs/decisions.md, "Onboarding without sample data")
-
-    /// IMPORT FROM WHERE THE PHONE ALREADY HOLDS THE DATA, asked at the point
-    /// of use: the OS asks its own permission now, and never at launch.
-    /// Contacts → People. The calendar is Agenda's own (its screens ask the OS
-    /// through the `CalendarRead` effect); the reminders have no door yet.
-    func importFromPhone(_ source: Centraid_Screen_V1_ImportSource) {
-        guard !importing, let words = Self.importWords(source) else { return }
-        // CONTACTS SHARED IN PART (iOS 18's limited access): a second ask
-        // draws no prompt and reads only what was already shared, so the tap
-        // opens iOS's picker to share more, and what it hands back is
-        // imported (`contactsShared`).
-        if source == .contacts, PhoneContacts.limited {
-            contactAccessPickerShown = true
-            return
-        }
-        importing = true
-        importNotice = words.running
-        // ASKED FROM THE APP ITSELF: the rows land on the page the member is
-        // reading, so the line has nowhere else to send them.
-        importOpens = ""
-        Task { @MainActor in
-            let sentence = await self.imported(source)
-            self.importing = false
-            self.importNotice = sentence ?? words.denied
-        }
-    }
-
-    /// A VAULT WAS JUST MADE: the contacts, after the photos (R-ONBOARD-8). One banner says what came in
-    /// (`PhoneImport.madeSummary`); a store the member refused, or one with
-    /// nothing in it, says nothing.
-    private func importEverythingFromPhone() {
-        guard !importing else { return }
-        importing = true
-        Task { @MainActor in
-            var apps: [String] = []
-            var outcomes: [String] = []
-            for source in [Centraid_Screen_V1_ImportSource.contacts] {
-                self.importNotice = Self.importWords(source)?.running ?? ""
-                if let sentence = await self.imported(source) {
-                    apps.append(Self.importApp(source))
-                    outcomes.append(sentence)
-                }
-            }
-            self.importing = false
-            self.importNotice = PhoneImport.shared.madeSummary(outcomes: outcomes)
-            // THE LINE'S ONE ACTION opens what came in (the first app that
-            // received anything); a line with nothing new opens nothing.
-            self.importOpens = self.importNotice.isEmpty ? "" : PhoneImport.shared.madeOpens(apps: apps, outcomes: outcomes)
-        }
-    }
-
-    /// The app an import writes to: Contacts → People.
-    private static func importApp(_ source: Centraid_Screen_V1_ImportSource) -> String {
-        switch source {
-        case .contacts: return "people"
-        default: return ""
-        }
-    }
-
-    private static func importWords(_ source: Centraid_Screen_V1_ImportSource) -> (running: String, denied: String)? {
-        switch source {
-        case .contacts: return (PeopleCopy.shared.IMPORT_CONTACTS_RUNNING, PeopleCopy.shared.IMPORT_CONTACTS_DENIED)
-        default: return nil
-        }
-    }
-
-    /// ONE IMPORT, AWAITED: the OS asks its permission, then the shared
-    /// importer writes. The outcome's sentence, or nil when the OS said no.
-    private func imported(_ source: Centraid_Screen_V1_ImportSource) async -> String? {
-        switch source {
-        case .contacts:
-            switch await PhoneContacts.read() {
-            case .denied: return nil
-            case let .read(read):
-                let sentence: String = await withCheckedContinuation { done in
-                    contacts.sync(contacts: read.contacts, origins: read.origins, complete: read.complete) { outcome in
-                        done.resume(returning: ContactsImport.shared.sentence(outcome: outcome))
-                    }
-                }
-                // What an import leaves held (an account that left the phone) is asked by the follower.
-                follow.requested(source: .contacts)
-                return sentence
-            }
-        default: return ""
-        }
-    }
-
-    /// iOS's contact picker is up (limited access, iOS 18).
-    @Published var contactAccessPickerShown = false
-
-    /// THE PICKER CLOSED: read again, now over what it shared, and bring in what
-    /// is new. Over limited access the read is incomplete, so nothing is trashed.
-    /// Nothing shared is nothing to say.
-    func contactsShared(_ identifiers: [String]) {
-        guard !importing, !identifiers.isEmpty else { return }
-        importing = true
-        importNotice = PeopleCopy.shared.IMPORT_CONTACTS_RUNNING
-        importOpens = ""
-        Task { @MainActor in
-            guard let read = await PhoneContacts.readIfGranted() else {
-                self.importing = false
-                self.importNotice = PeopleCopy.shared.IMPORT_CONTACTS_DENIED
-                return
-            }
-            let sentence: String = await withCheckedContinuation { done in
-                contacts.sync(contacts: read.contacts, origins: read.origins, complete: read.complete) { outcome in
-                    done.resume(returning: ContactsImport.shared.sentence(outcome: outcome))
-                }
-            }
-            self.importing = false
-            self.importNotice = sentence
-            self.follow.requested(source: .contacts)
         }
     }
 

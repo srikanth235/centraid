@@ -1,20 +1,17 @@
 import SwiftUI
 
-/// A person's profile editor — or a new person's — as an `EditorRoom` (#1029
-/// app port; #1015 D3): autosave, close = done, band hidden.
+/// `people.editor` — a person's profile, or a new person's, as an `EditorRoom`
+/// (#1135; #1015 D3): autosave, close = done, band hidden.
 ///
 /// There is no Save. Each field's typed text lives here (seeded once, like the
-/// Notes editor's) and is handed to the machine as its edit event; the
-/// machine's `AutosaveLaw` writes after its debounce, and leaving is the flush
-/// (`onDeparted` → the bridge's `departed()` → `Left`). The hue and the
-/// cadence are choices the machine lights; the cadence is its own write, whose
-/// word is `save_label`.
+/// Notes editor's) and is handed to Rust as its edit event; Rust's autosave
+/// writes after its debounce, and leaving is the flush (`Left`, which Rust sends
+/// when the page pops). The cadence is a choice Rust lights; it is its own write,
+/// on the tap, and a refusal is the state's `status`.
 struct PeopleEditorView: View {
-    let data: Data
-    let opened: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_PeopleEditorState
+    let send: (Centraid_Core_V1_PeopleEditorEvent) -> Void
     let onClose: () -> Void
-    let onDeparted: () -> Void
 
     @State private var name = ""
     @State private var role = ""
@@ -24,49 +21,34 @@ struct PeopleEditorView: View {
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_PeopleEditorState {
-        (try? Centraid_Screen_V1_PeopleEditorState(serializedBytes: data)) ?? .init()
-    }
-
-    /// ONE BRIDGE SERVES EVERY PERSON: until the state is about the person
-    /// this route opened, the last one's draft is still held, and seeding from
-    /// it would put one person's words in another's fields.
-    private var mine: Bool {
-        guard let route = (try? Centraid_Screen_V1_PeopleEditorEvent(serializedBytes: opened))?.opened else { return true }
-        let id = route.partyID.isEmpty ? route.mintedPartyID : route.partyID
-        return id.isEmpty || state.partyID == id
-    }
-
-    private var content: ScreenContent<Centraid_Screen_V1_PeopleProfileDraft> {
-        guard mine else { return .loading(true) }
+    private var content: ScreenContent<Centraid_Core_V1_PeopleProfileDraft> {
         switch state.content {
-        case let .loading(loading): return .loading(loading.firstLoad)
-        case let .failure(failure): return .failed(failure)
-        case let .denied(denied): return .denied(denied)
-        case let .draft(draft): return .data(draft)
-        case .gone, .none: return .loading(true)
+        case let .loading(loading)?: return .loading(loading.firstLoad)
+        case let .failure(failure)?: return .failed(failure)
+        case let .denied(denied)?: return .gated(denied)
+        case let .draft(draft)?: return .data(draft)
+        case .gone?, nil: return .loading(true)
         }
     }
 
     var body: some View {
-        let state = state
         let chrome = state.chrome
         EditorRoom(
             title: chrome.title,
-            status: state.autosave,
+            status: state.autosave.legacy,
             closeLabel: chrome.closeLabel,
             onClose: onClose,
-            onDeparted: onDeparted
+            onDeparted: {}
         ) {
             EmptyView()
         } content: {
-            if mine, case let .gone(gone) = state.content {
-                EmptyStateView(gone)
+            if case let .gone(gone)? = state.content {
+                EmptyStateView(gone.legacy)
             } else {
                 ReadStateView(
                     content: content,
                     skeleton: { RowSkeleton(rows: 4, meta: false, label: chrome.loading) },
-                    onRetry: { send(opened) }
+                    onRetry: { send(PeopleEvents.editor { $0.refreshed = .init() }) }
                 ) { draft in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
@@ -96,7 +78,7 @@ struct PeopleEditorView: View {
                     }
                     .onAppear {
                         // ONCE — re-seeding would overwrite typing with the
-                        // state the machine still holds.
+                        // state Rust still holds.
                         if !seeded {
                             name = draft.displayName
                             role = draft.role
@@ -110,7 +92,7 @@ struct PeopleEditorView: View {
         }
     }
 
-    private func cadences(_ chrome: Centraid_Screen_V1_PeopleEditorChrome) -> some View {
+    private func cadences(_ chrome: Centraid_Core_V1_PeopleEditorChrome) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(chrome.cadenceField)
                 .centraidType("annotLabel")
@@ -128,10 +110,10 @@ struct PeopleEditorView: View {
                     }
                 }
             }
-            if !state.saveLabel.isEmpty {
-                Text(state.saveLabel)
+            if state.hasStatus, !state.status.sentence.isEmpty {
+                Text(state.status.sentence)
                     .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color(state.write.refused ? "net" : "textFaint", scheme))
+                    .foregroundStyle(Theme.color(state.status.refused ? "net" : "textFaint", scheme))
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)

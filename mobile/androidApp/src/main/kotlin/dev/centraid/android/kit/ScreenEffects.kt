@@ -33,6 +33,7 @@ import centraid.core.v1.PhoneChanged
 import centraid.core.v1.Route
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
 import dev.centraid.android.screens.docs.DocsPickers
+import dev.centraid.android.screens.people.readContactsSnapshot
 import dev.centraid.core.Screens
 import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.sync.phone.PhoneDevice
@@ -47,13 +48,15 @@ import okio.ByteString
  * screen, naming none. Rust sends an [EffectRequest]; this does it and answers
  * with the same `effect_id` ([Screens.answer]). Only the effects this shell can
  * perform are here — clipboard, haptic, share, open URL, the keychain (the
- * secure store), the phone's calendars (`CalendarRead`) and the watch on a phone
- * store (`PhoneWatch`); anything else is answered `failed`, by value, so the
+ * secure store), the phone's calendars (`CalendarRead`) and address book
+ * (`ContactsRead`), a map (`OpenMap`) and the watch on a phone store
+ * (`PhoneWatch`); anything else is answered `failed`, by value, so the
  * screen that asked is never left waiting.
  *
- * **The calendar permission is asked here, at the member's Import tap**
- * (`ask_permission`), through the activity's launcher; a following pass sets it
- * false and is answered `denied` when the OS has not already allowed it.
+ * **The calendar's and the contacts' permission is asked here, at the member's
+ * Import tap** (`ask_permission`), through the activity's launcher; a following
+ * pass sets it false and is answered `denied` when the OS has not already
+ * allowed it.
  *
  * [phone] is the activity's watcher of the phone's stores; a `PhoneWatch` with no
  * watcher is answered `failed`.
@@ -71,7 +74,7 @@ internal fun PerformScreenEffects(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
-    val asking = remember { CalendarPermission() }
+    val asking = remember { PermissionAsk() }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         asking.answer(granted)
     }
@@ -96,13 +99,13 @@ internal fun PerformScreenEffects(
 }
 
 /** The one permission prompt that may be out, and its answer. */
-private class CalendarPermission {
+private class PermissionAsk {
     private var waiting: CompletableDeferred<Boolean>? = null
 
-    fun ask(launch: (String) -> Unit): CompletableDeferred<Boolean> {
+    fun ask(permission: String, launch: (String) -> Unit): CompletableDeferred<Boolean> {
         val answer = CompletableDeferred<Boolean>()
         waiting = answer
-        launch(Manifest.permission.READ_CALENDAR)
+        launch(permission)
         return answer
     }
 
@@ -117,7 +120,7 @@ private suspend fun perform(
     effect: Effect?,
     context: Context,
     view: View,
-    asking: CalendarPermission,
+    asking: PermissionAsk,
     launchPermission: (String) -> Unit,
     phone: AndroidPhoneFollow?,
     report: (PhoneChanged) -> Unit,
@@ -162,8 +165,8 @@ private suspend fun perform(
         effect.keychain != null -> keychain(effect.keychain!!)
         effect.calendar_read != null -> {
             val read = effect.calendar_read!!
-            val allowed = granted(context) ||
-                (read.ask_permission && asking.ask(launchPermission).await())
+            val allowed = granted(context, Manifest.permission.READ_CALENDAR) ||
+                (read.ask_permission && asking.ask(Manifest.permission.READ_CALENDAR, launchPermission).await())
             if (!allowed) {
                 EffectResult(failed = EffectFailed(reason = "calendar access is off", denied = true))
             } else {
@@ -177,18 +180,41 @@ private suspend fun perform(
                 )
             }
         }
+        effect.contacts_read != null -> {
+            val read = effect.contacts_read!!
+            val allowed = granted(context, Manifest.permission.READ_CONTACTS) ||
+                (read.ask_permission && asking.ask(Manifest.permission.READ_CONTACTS, launchPermission).await())
+            if (!allowed) {
+                EffectResult(failed = EffectFailed(reason = "contacts access is off", denied = true))
+            } else {
+                runCatching {
+                    withContext(Dispatchers.IO) { readContactsSnapshot(context, PhoneDevice.id()) }
+                }.fold(
+                    onSuccess = { EffectResult(contacts = it) },
+                    onFailure = { failed("the address book could not be read") },
+                )
+            }
+        }
+        effect.open_map != null ->
+            start(context, Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=" + Uri.encode(effect.open_map!!.query))), done)
         effect.phone_watch != null -> {
             val watch = effect.phone_watch!!
+            val watched: ((() -> Unit)?) -> Unit = when {
+                phone == null -> { _ -> }
+                watch.source == ImportSource.IMPORT_SOURCE_CALENDAR -> phone::watchCalendar
+                watch.source == ImportSource.IMPORT_SOURCE_CONTACTS -> phone::watchContacts
+                else -> { _ -> }
+            }
             when {
-                phone == null || watch.source != ImportSource.IMPORT_SOURCE_CALENDAR ->
+                phone == null || (watch.source != ImportSource.IMPORT_SOURCE_CALENDAR && watch.source != ImportSource.IMPORT_SOURCE_CONTACTS) ->
                     failed("this phone store is not watched by this shell")
                 watch.on -> {
                     // ANSWERED EACH TIME THE STORE CHANGES, under this one effect id.
-                    phone.watchCalendar { report(PhoneChanged(source = watch.source)) }
+                    watched { report(PhoneChanged(source = watch.source)) }
                     null
                 }
                 else -> {
-                    phone.watchCalendar(null)
+                    watched(null)
                     done
                 }
             }
@@ -239,8 +265,8 @@ private fun start(context: Context, intent: Intent, done: EffectResult): EffectR
     failed("no app on this phone answers")
 }
 
-private fun granted(context: Context): Boolean =
-    ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
+private fun granted(context: Context, permission: String): Boolean =
+    ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
 private fun hapticOf(kind: HapticKind): Int = when (kind) {
     HapticKind.HAPTIC_KIND_SELECTION -> HapticFeedbackConstants.CLOCK_TICK

@@ -1,112 +1,103 @@
 import SwiftUI
 
-/// People's home — People (the roster) and Touch — on the kit (#1029 app port).
+/// `people.home` — People (the roster) and Touch under one band, with Search a
+/// field over the destination and More a sheet (#1135).
 ///
-/// **THE VIEW DECIDES NOTHING.** Every word, chip, count, hue and flag is on
-/// `PeopleHomeState`, folded by `PeopleHomeMachine`; this file maps fields to
-/// geometry and taps to events. The room's grammar is every app's: Add person
-/// top right, the search bar, ONE chip row (the machine's chips, its sort chip
-/// last), More an ordinary band tab whose rows are the machine's. The intents
-/// it sends (`PersonPicked`, `AddPersonRequested`, `MoreRowPicked`,
-/// `LogTouchRequested`) are routed by `PeopleScreens`, never here.
+/// **THE VIEW DECIDES NOTHING.** The destination, the band, the chip row and its
+/// sort chip, every row's words, hue, star and route, the tiles, the rails, the
+/// sheets and every empty sentence are on `PeopleHomeState`, which Rust makes
+/// (`crates/screens`, module `people`). A tap on the band is an event and swaps
+/// the destination; a row that opens a page carries its `Route` and a tap hands
+/// it to `open`.
 struct PeopleHomeView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_PeopleHomeState
+    let send: (Centraid_Core_V1_PeopleHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onHome: () -> Void
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_PeopleHomeState {
-        (try? Centraid_Screen_V1_PeopleHomeState(serializedBytes: data)) ?? .init()
-    }
-
-    private var content: ScreenContent<Centraid_Screen_V1_PeopleHomeData> {
-        switch state.content {
-        case let .loading(loading): return .loading(loading.firstLoad)
-        case let .failure(failure): return .failed(failure)
-        case let .denied(denied): return .denied(denied)
-        case let .data(data): return .data(data)
-        case .none: return .loading(true)
-        }
+    private var denied: Bool {
+        if case .denied? = state.content { return true }
+        return false
     }
 
     var body: some View {
-        let state = state
-        let content = content
         let chrome = state.chrome
         AppPlace(
             app: "people",
-            title: chrome.title,
-            trailing: content.isDenied || chrome.addPerson.isEmpty ? nil : RoomAction(
+            title: state.title,
+            trailing: denied || chrome.addPerson.isEmpty ? nil : RoomAction(
                 iconKey: "Plus",
                 label: chrome.addPerson,
                 identifier: "people-add-person",
-                action: { send(PeopleEvents.home { $0.addPerson = .init() }) }
+                action: { if state.hasAddPerson { open(state.addPerson) } }
             ),
-            search: SearchSlot(
-                field: state.search,
-                placeholder: chrome.searchPlaceholder,
-                closeLabel: chrome.searchClose,
-                onOpen: { send(PeopleEvents.home { $0.searchOpened = .init() }) },
-                onTerm: { term in send(PeopleEvents.home { $0.searchTerm = .with { $0.term = term } }) },
-                onClose: { send(PeopleEvents.home { $0.searchClosed = .init() }) }
-            ),
-            chips: Self.chips(state, send: send),
-            showsBand: !content.isDenied
+            search: denied ? nil : searchSlot,
+            chips: chips,
+            showsBand: !denied && !state.band.isEmpty
         ) {
             AppBand(
                 app: "people",
                 tabs: state.band.map { tab in
-                    BandView(
-                        label: tab.label,
-                        event: PeopleEvents.home { $0.band = .with { $0.key = tab.key } },
-                        iconKey: tab.iconKey,
-                        selected: tab.current
-                    )
+                    BandView(label: tab.label, event: Data(tab.key.utf8), iconKey: tab.iconKey, selected: tab.current, key: tab.key)
                 },
-                onSelect: send,
+                onSelect: { picked in
+                    let key = String(decoding: picked, as: UTF8.self)
+                    send(PeopleEvents.home { $0.band = .with { $0.key = key } })
+                },
                 onHome: onHome
             )
         } content: {
             VStack(spacing: 0) {
-                if !state.status.isEmpty {
-                    PeopleStatusLine(text: state.status)
+                if state.hasStatus, !state.status.sentence.isEmpty {
+                    PeopleStatusLine(text: state.status.sentence)
                 }
-                if state.search.open {
-                    PeopleSearchResults(state: state, send: send)
+                if state.search.open, state.search.hasResults {
+                    searchResults
                 } else {
                     ReadStateView(
-                        content: content,
+                        content: readContent,
                         loadingLabel: chrome.loading,
                         onRetry: { send(PeopleEvents.home { $0.refreshed = .init() }) }
-                    ) { home in
-                        switch home.surface {
-                        case let .roster(roster):
-                            PeopleRosterList(roster: roster, send: send)
-                        case let .touch(touch):
-                            PeopleTouchList(touch: touch, send: send)
-                        case .none:
-                            RowSkeleton(label: chrome.loading)
-                        }
+                    ) { _ in
+                        surface
                     }
                 }
             }
         }
         .sheet(isPresented: Binding(
             get: { state.sheet == .more || state.sheet == .order },
-            set: { open in
-                guard !open, state.sheet == .more || state.sheet == .order else { return }
+            set: { shown in
+                guard !shown, state.sheet != .none else { return }
                 send(PeopleEvents.home { $0.sheetClosed = .init() })
             }
         )) {
-            PeopleHomeSheet(state: state, send: send)
+            PeopleHomeSheet(state: state, send: send, open: open)
         }
     }
 
-    /// THE CHIP ROW (R-CHROME-3): the machine's filters with their counts,
-    /// then its sort chip, last, whose tap opens the order sheet.
-    private static func chips(_ state: Centraid_Screen_V1_PeopleHomeState, send: @escaping (Data) -> Void) -> [RoomChip] {
-        var chips = state.chips.map { chip in
+    // MARK: chrome
+
+    private var searchSlot: SearchSlot {
+        var field = Centraid_Screen_V1_SearchField()
+        field.open = state.search.open
+        field.term = state.search.term
+        field.corrected = state.search.corrected
+        return SearchSlot(
+            field: field,
+            placeholder: state.chrome.searchPlaceholder,
+            closeLabel: state.chrome.searchClose,
+            onOpen: { send(PeopleEvents.home { $0.searchOpened = .init() }) },
+            onTerm: { term in send(PeopleEvents.home { $0.searchTerm = .with { $0.term = term } }) },
+            onClose: { send(PeopleEvents.home { $0.searchClosed = .init() }) }
+        )
+    }
+
+    /// THE CHIP ROW (R-CHROME-3): Rust's filters with their counts, then its
+    /// sort chip, last, whose tap opens the order sheet.
+    private var chips: [RoomChip] {
+        var out = state.chips.map { chip in
             RoomChip(
                 identifier: "people-chip-\(chip.label.lowercased())",
                 label: chip.label,
@@ -117,7 +108,7 @@ struct PeopleHomeView: View {
             )
         }
         if state.hasSortChip {
-            chips.append(RoomChip(
+            out.append(RoomChip(
                 identifier: "people-chip-sort",
                 label: state.sortChip.label,
                 chevron: true,
@@ -125,48 +116,98 @@ struct PeopleHomeView: View {
                 action: { send(PeopleEvents.home { $0.sheetOpened = .with { $0.sheet = .order } }) }
             ))
         }
-        return chips
+        return out
+    }
+
+    // MARK: content
+
+    private var readContent: ScreenContent<Bool> {
+        switch state.content {
+        case .loading?, nil: return .loading(true)
+        case let .failure(failure)?: return .failed(failure)
+        case let .denied(denied)?: return .gated(denied)
+        default: return .data(true)
+        }
+    }
+
+    @ViewBuilder
+    private var surface: some View {
+        switch state.content {
+        case let .roster(roster)?:
+            PeopleRosterList(roster: roster, importLabel: state.chrome.importContacts, send: send, open: open)
+        case let .touch(touch)?:
+            PeopleTouchList(touch: touch, importLabel: state.chrome.importContacts, send: send, open: open)
+        default: EmptyView()
+        }
+    }
+
+    private var searchResults: some View {
+        let results = state.search.results
+        return Group {
+            if results.hasEmpty {
+                EmptyStateView(results.empty.legacy)
+                if state.search.hasAsk { SearchAskRow(ask: state.search.ask.legacy) }
+                Spacer(minLength: 0)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(results.rows, id: \.partyID) { row in
+                            PeopleRosterRowView(row: row, send: send, open: open)
+                        }
+                        if state.search.hasAsk { SearchAskRow(ask: state.search.ask.legacy) }
+                    }
+                }
+                .accessibilityIdentifier("people-search-results")
+            }
+        }
     }
 }
 
-/// Encoded People events. Bytes, because the bridge takes Wire's type and this
-/// side holds SwiftProtobuf's.
+/// `PeopleHomeEvent`s, built.
 enum PeopleEvents {
-    static func home(_ build: (inout Centraid_Screen_V1_PeopleHomeEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_PeopleHomeEvent()
+    static func home(_ build: (inout Centraid_Core_V1_PeopleHomeEvent) -> Void) -> Centraid_Core_V1_PeopleHomeEvent {
+        var event = Centraid_Core_V1_PeopleHomeEvent()
         build(&event)
-        return event.encoded
+        return event
     }
 
-    static func person(_ build: (inout Centraid_Screen_V1_PeoplePersonEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_PeoplePersonEvent()
+    static func person(_ build: (inout Centraid_Core_V1_PeoplePersonEvent) -> Void) -> Centraid_Core_V1_PeoplePersonEvent {
+        var event = Centraid_Core_V1_PeoplePersonEvent()
         build(&event)
-        return event.encoded
+        return event
     }
 
-    static func editor(_ build: (inout Centraid_Screen_V1_PeopleEditorEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_PeopleEditorEvent()
+    static func editor(_ build: (inout Centraid_Core_V1_PeopleEditorEvent) -> Void) -> Centraid_Core_V1_PeopleEditorEvent {
+        var event = Centraid_Core_V1_PeopleEditorEvent()
         build(&event)
-        return event.encoded
+        return event
     }
 }
 
 // MARK: - Roster
 
 private struct PeopleRosterList: View {
-    let roster: Centraid_Screen_V1_PeopleRosterData
-    let send: (Data) -> Void
+    let roster: Centraid_Core_V1_PeopleRosterData
+    let importLabel: String
+    let send: (Centraid_Core_V1_PeopleHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             if roster.hasEmpty {
-                EmptyStateView(roster.empty, onAction: { send(PeopleEvents.home { $0.addPerson = .init() }) })
+                // WHERE THE PHONE HOLDS CONTACTS, ITS IMPORT IS DAY ONE'S ACTION, sent to Rust as
+                // `ImportContactsTapped`; "Add person" stays in the header.
+                let offersImport = roster.empty.importSource == .contacts
+                EmptyStateView(roster.empty.legacy)
+                if offersImport {
+                    PeopleImportButton(label: importLabel, send: send)
+                }
                 Spacer(minLength: 0)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(roster.rows, id: \.partyID) { row in
-                            PeopleRosterRow(row: row, send: send)
+                            PeopleRosterRowView(row: row, send: send, open: open)
                         }
                         if !roster.statusLine.isEmpty {
                             PeopleStatusLine(text: roster.statusLine)
@@ -180,10 +221,27 @@ private struct PeopleRosterList: View {
     }
 }
 
-/// ONE PERSON IN THE ROSTER: avatar, the kit row, and the star.
-private struct PeopleRosterRow: View {
-    let row: Centraid_Screen_V1_PeopleRow
-    let send: (Data) -> Void
+/// THE PHONE'S CONTACTS, ASKED FOR: the verb is People's, the tap is Rust's
+/// (`ImportContactsTapped`; Rust asks this shell to read the address book through
+/// the `ContactsRead` effect).
+private struct PeopleImportButton: View {
+    let label: String
+    let send: (Centraid_Core_V1_PeopleHomeEvent) -> Void
+
+    var body: some View {
+        KitOutlineButton(label: label) {
+            send(PeopleEvents.home { $0.importContacts = .init() })
+        }
+        .accessibilityIdentifier("kit-empty-import")
+        .padding(.top, 4)
+    }
+}
+
+/// ONE PERSON IN A LIST: avatar, the kit row, and the star.
+private struct PeopleRosterRowView: View {
+    let row: Centraid_Core_V1_PeopleRow
+    let send: (Centraid_Core_V1_PeopleHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
 
     var body: some View {
         HStack(spacing: 0) {
@@ -192,11 +250,10 @@ private struct PeopleRosterRow: View {
             CentraidRow(
                 title: row.name,
                 meta: [row.role, row.meta].filter { !$0.isEmpty }.joined(separator: " · "),
-                chips: row.chips,
-                pending: row.starPending,
+                chips: row.chips.map(\.legacy),
                 accessibility: row.accessibilityLabel,
                 identifier: "people-row-\(row.partyID)",
-                onTap: { send(PeopleEvents.home { $0.person = .with { $0.partyID = row.partyID; $0.name = row.name } }) }
+                onTap: { open(row.route) }
             )
             PeopleStarButton(
                 starred: row.starred,
@@ -212,19 +269,26 @@ private struct PeopleRosterRow: View {
 // MARK: - Touch
 
 private struct PeopleTouchList: View {
-    let touch: Centraid_Screen_V1_PeopleTouchData
-    let send: (Data) -> Void
+    let touch: Centraid_Core_V1_PeopleTouchData
+    let importLabel: String
+    let send: (Centraid_Core_V1_PeopleHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
 
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         if touch.hasEmpty {
-            EmptyStateView(touch.empty, onAction: { send(PeopleEvents.home { $0.addPerson = .init() }) })
+            let offersImport = touch.empty.importSource == .contacts
+            EmptyStateView(touch.empty.legacy)
+            if offersImport {
+                PeopleImportButton(label: importLabel, send: send)
+            }
+            Spacer(minLength: 0)
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     tiles
-                    SectionHeader(touch.reconnectHead)
+                    SectionHeader(title: touch.reconnectHead.title, count: touch.reconnectHead.count)
                     if touch.reconnect.isEmpty {
                         PeopleStatusLine(text: touch.reconnectEmpty)
                     }
@@ -237,20 +301,16 @@ private struct PeopleTouchList: View {
                                 meta: [card.role, card.detail].filter { !$0.isEmpty }.joined(separator: " · "),
                                 accessibility: card.accessibilityLabel,
                                 identifier: "people-reconnect-\(card.partyID)",
-                                onTap: { send(PeopleEvents.home { $0.person = .with { $0.partyID = card.partyID; $0.name = card.name } }) }
+                                onTap: { open(card.route) }
                             )
                             if !card.actionLabel.isEmpty {
-                                KitOutlineButton(label: card.actionLabel) {
-                                    send(PeopleEvents.home {
-                                        $0.logTouch = .with { $0.partyID = card.partyID; $0.name = card.name }
-                                    })
-                                }
-                                .padding(.trailing, CentraidGeometry.pageMargin)
-                                .accessibilityIdentifier("people-log-touch-\(card.partyID)")
+                                KitOutlineButton(label: card.actionLabel) { open(card.logRoute) }
+                                    .padding(.trailing, CentraidGeometry.pageMargin)
+                                    .accessibilityIdentifier("people-log-touch-\(card.partyID)")
                             }
                         }
                     }
-                    SectionHeader(touch.upcomingHead)
+                    SectionHeader(title: touch.upcomingHead.title, count: touch.upcomingHead.count)
                     if touch.upcoming.isEmpty {
                         PeopleStatusLine(text: touch.upcomingEmpty)
                     }
@@ -264,11 +324,11 @@ private struct PeopleTouchList: View {
                                 trailing: row.whenLabel,
                                 accessibility: row.accessibilityLabel,
                                 identifier: "people-upcoming-\(row.dateID)",
-                                onTap: { send(PeopleEvents.home { $0.person = .with { $0.partyID = row.partyID; $0.name = row.name } }) }
+                                onTap: { open(row.route) }
                             )
                         }
                     }
-                    SectionHeader(touch.recentHead)
+                    SectionHeader(title: touch.recentHead.title)
                     if touch.recent.isEmpty {
                         PeopleStatusLine(text: touch.recentEmpty)
                     }
@@ -282,7 +342,7 @@ private struct PeopleTouchList: View {
                                 trailing: row.whenLabel,
                                 accessibility: row.accessibilityLabel,
                                 identifier: "people-recent-\(row.interactionID)",
-                                onTap: { send(PeopleEvents.home { $0.person = .with { $0.partyID = row.partyID; $0.name = row.name } }) }
+                                onTap: { open(row.route) }
                             )
                         }
                     }
@@ -297,8 +357,8 @@ private struct PeopleTouchList: View {
     }
 
     /// THE TILES: a figure over its label; a tappable one lands on People
-    /// under the matching chip (the machine's `TilePicked`), the Upcoming one
-    /// is a figure and nothing more.
+    /// under the matching chip (`TilePicked`), the Upcoming one is a figure and
+    /// nothing more.
     private var tiles: some View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
             ForEach(touch.tiles, id: \.key) { tile in
@@ -335,45 +395,14 @@ private struct PeopleTouchList: View {
     }
 }
 
-// MARK: - Search
-
-private struct PeopleSearchResults: View {
-    let state: Centraid_Screen_V1_PeopleHomeState
-    let send: (Data) -> Void
-
-    var body: some View {
-        if state.hasSearchData {
-            let results = state.searchData
-            if results.hasEmpty {
-                EmptyStateView(results.empty)
-                if state.search.hasAskRow { SearchAskRow(ask: state.search.askRow) }
-                Spacer(minLength: 0)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(results.rows, id: \.partyID) { row in
-                            PeopleRosterRow(row: row, send: send)
-                        }
-                        if state.search.hasAskRow { SearchAskRow(ask: state.search.askRow) }
-                    }
-                }
-                .accessibilityIdentifier("people-search-results")
-            }
-        } else if state.reading {
-            RowSkeleton(label: state.chrome.loading)
-        } else {
-            Spacer(minLength: 0)
-        }
-    }
-}
-
 // MARK: - Sheets
 
-/// More (the machine's rows: Trash — never search, sort or a filter) and the
-/// sort chip's order sheet.
+/// More (Rust's rows: Trash — never search, sort or a filter) and the sort
+/// chip's order sheet.
 private struct PeopleHomeSheet: View {
-    let state: Centraid_Screen_V1_PeopleHomeState
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_PeopleHomeState
+    let send: (Centraid_Core_V1_PeopleHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
 
     var body: some View {
         let chrome = state.chrome
@@ -393,7 +422,8 @@ private struct PeopleHomeSheet: View {
             OptionSheet(title: chrome.moreTitle) {
                 ForEach(state.moreRows, id: \.key) { row in
                     SheetRow(iconKey: row.iconKey, label: row.label, identifier: "people-more-\(row.key)") {
-                        send(PeopleEvents.home { $0.moreRow = .with { $0.key = row.key } })
+                        send(PeopleEvents.home { $0.sheetClosed = .init() })
+                        open(row.route)
                     }
                 }
             }
@@ -403,10 +433,10 @@ private struct PeopleHomeSheet: View {
 
 // MARK: - Shared pieces
 
-/// THE AVATAR: initials on the person's hue. The hue is a colour role the
-/// machine chose; an empty one is the soft ground.
+/// THE AVATAR: initials on the person's hue. The hue is a colour role Rust
+/// chose; an empty one is the soft ground.
 struct PeopleAvatarView: View {
-    let avatar: Centraid_Screen_V1_PeopleAvatar
+    let avatar: Centraid_Core_V1_PeopleAvatar
     var size: CGFloat = 32
 
     @Environment(\.colorScheme) private var scheme
@@ -429,7 +459,7 @@ struct PeopleAvatarView: View {
     }
 }
 
-/// The star: a set choice, drawn full when on, spoken by the machine's label.
+/// The star: a set choice, drawn full when on, spoken by Rust's label.
 struct PeopleStarButton: View {
     let starred: Bool
     let label: String
@@ -448,7 +478,7 @@ struct PeopleStarButton: View {
     }
 }
 
-/// A quiet line of the machine's words — a status, an empty rail.
+/// A quiet line of Rust's words — a status, an empty rail.
 struct PeopleStatusLine: View {
     let text: String
 
@@ -464,8 +494,8 @@ struct PeopleStatusLine: View {
     }
 }
 
-/// A People hue IS the theme's colour role (`cRose`) — the machine's, drawn
-/// as is. Empty, or a role this build's table lacks, draws `fallback`, because
+/// A People hue IS the theme's colour role (`cRose`) — Rust's, drawn as is.
+/// Empty, or a role this build's table lacks, draws `fallback`, because
 /// `Theme.color` traps on an unknown role and an avatar must never crash.
 func peopleHue(_ role: String, else fallback: String) -> String {
     KitHue.role(role) ?? fallback

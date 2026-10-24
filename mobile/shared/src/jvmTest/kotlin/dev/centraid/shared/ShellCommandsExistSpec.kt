@@ -350,8 +350,8 @@ private fun unknownIds(
 /**
  * THE `ScreenIds` CONSTANTS SOME SCREEN IS BOUND TO. `nav/ScreenIds.kt` states
  * the ids cross-app routes open screens by, and each machine aliases its own
- * (`SCREEN_ID = ScreenIds.PEOPLE_HOME`) or `ScreenOpenings` opens it
- * (`screen(ScreenIds.PEOPLE_TRASH, …)`); a constant no binding reads is NOT
+ * (`SCREEN_ID = ScreenIds.MONEY_HOME`) or `ScreenOpenings` opens it
+ * (`screen(ScreenIds.MONEY_TRANSACTION, …)`); a constant no binding reads is NOT
  * exempt, so a command parked in that file is still a finding.
  */
 private fun registeredScreenIds(sources: List<Pair<String, String>>): Set<String> =

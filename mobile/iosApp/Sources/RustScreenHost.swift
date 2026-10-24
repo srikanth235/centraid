@@ -167,6 +167,26 @@ private struct RustScreenView: View {
                 send: { store.send(instance, .notesHistory($0)) },
                 onBack: pop
             )
+        case .peopleHome(let state)?:
+            PeopleHomeView(
+                state: state,
+                send: { store.send(instance, .peopleHome($0)) },
+                open: open,
+                onHome: { shell.path.removeAll() }
+            )
+        case .peoplePerson(let state)?:
+            PeoplePersonView(
+                state: state,
+                send: { store.send(instance, .peoplePerson($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .peopleEditor(let state)?:
+            PeopleEditorView(
+                state: state,
+                send: { store.send(instance, .peopleEditor($0)) },
+                onClose: pop
+            )
         case .trash(let state)?:
             CoreTrashView(
                 state: state,
