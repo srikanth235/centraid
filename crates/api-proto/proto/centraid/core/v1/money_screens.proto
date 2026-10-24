@@ -1042,6 +1042,8 @@ message MoneyImportState {
   Sheet sheet = 10;
   // Keep the rows proposed as duplicates.
   bool keep_proposed = 13;
+  // Done: the shell pops the page.
+  bool finished = 14;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -1134,6 +1136,7 @@ message MoneyImportEvent {
     Publish publish = 8;
     Discard discard = 9;
     SheetClosed sheet_closed = 10;
+    Done done = 11;
   }
 
   // The member tapped Choose file: Rust asks the shell for a file.
@@ -1162,4 +1165,7 @@ message MoneyImportEvent {
   message Discard {}
 
   message SheetClosed {}
+
+  // The member tapped Done after an import.
+  message Done {}
 }
