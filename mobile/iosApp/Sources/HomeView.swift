@@ -40,7 +40,7 @@ struct HomeView: View {
                 ChatView(
                     chat: shell.chat,
                     typing: $chatTyping,
-                    onOpenCard: { card, among in shell.openChatCard(card, among: among) },
+                    onOpenRoute: { shell.open($0) },
                     onSetScope: { shell.setChatScope($0) }
                 )
             } else if shell.tab == .backup {

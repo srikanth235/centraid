@@ -422,7 +422,7 @@ final class ShellModel: ObservableObject {
                 ask: { [weak self] question in DispatchQueue.main.async { self?.followQuestion = question } }
             )
             self.backup.attach(session: session)
-            self.chat.attach(session: session)
+            if let screens = self.screens { self.chat.attach(store: screens) }
             // THE BACKGROUND WINDOWS NOW HAVE SOMETHING TO RUN (#1029 W18-6).
             //
             // `BackgroundPasses` registered both handlers at launch — it has to,
@@ -689,21 +689,11 @@ final class ShellModel: ObservableObject {
         if tab == .backup { readBackup() }
     }
 
-    /// A RESULT CARD WAS TAPPED: push the real row's route over the thread.
-    func openChatCard(
-        _ card: Centraid_Screen_V1_ChatCard,
-        among cards: [Centraid_Screen_V1_ChatCard]
-    ) {
-        guard let route = ChatRouting.route(for: card, among: cards) else { return }
-        path.append(route)
-    }
-
     /// Remember the scope a route gives the Chat tab.
     private func noteVisit(_ route: Route) {
         guard let app = ChatRouting.app(of: route) else { return }
-        let scope = ChatRouting.scope(of: app)
-        guard !scope.isEmpty else { return }
-        lastVisitedApp = scope
+        // Rust keeps the ids that are chat scopes and opens every app's otherwise (`chat::scope_of`).
+        lastVisitedApp = app
     }
 
     // MARK: The 24 words (#1047 E2)

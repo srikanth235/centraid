@@ -1,88 +1,58 @@
 import CryptoKit
 import Foundation
 
-import CentraidShared
-
 // THE ONLY THINGS CENTRAID EVER FETCHES: THE ON-DEVICE CHAT'S MODEL, AND — ONLY
 // WHEN A MEMBER FIRST ATTACHES A PHOTO — ITS VISION PROJECTOR.
 //
-// The shell owns these transfers and the shared chat machine only hears about
-// them (`ChatEvent.DownloadProgress`, `ChatEvent.DownloadFinished`, each with a
-// `vision` flag). The URLs, digests and sizes are `ChatModelAsset`'s, in
-// `commonMain`, so the two shells carry one copy of them; everything else —
-// where the file lands, the session, the hash, the iCloud
-// exclusion — is iOS's and is here, and is one code path for both files.
+// Rust names the file to fetch (`ModelDownload`: url, file name, SHA-256, size and the
+// directory) and hears about the transfer as `ChatEvent.DownloadProgress` and
+// `DownloadFinished` (each with a `vision` flag). Everything else is iOS's and is here, one code
+// path for both files: where the file lands, the session, the hash, the iCloud exclusion.
 
-/// WHICH FILE A TRANSFER IS. It rides on the task (`taskDescription`), so the
-/// delegate knows what landed without a table of its own.
-enum ChatAsset: String {
-    case model
-    case vision
+/// WHICH FILE A TRANSFER IS, as the effect named it. It rides on the task
+/// (`taskDescription`, encoded), so the delegate knows what landed without a table of its own.
+struct ChatAsset: Codable, Hashable {
+    let vision: Bool
+    let url: String
+    let fileName: String
+    let sha256: String
+    let directory: String
 
-    var isVision: Bool { self == .vision }
-
-    var fileName: String {
-        isVision ? ChatModelAsset.shared.VISION_FILE_NAME : ChatModelAsset.shared.FILE_NAME
+    init(_ download: Centraid_Core_V1_ModelDownload) {
+        vision = download.vision
+        url = download.url
+        fileName = download.fileName
+        sha256 = download.sha256
+        directory = download.modelsDir
     }
 
-    var sha256: String {
-        isVision ? ChatModelAsset.shared.VISION_SHA256 : ChatModelAsset.shared.SHA256
+    var isVision: Bool { vision }
+    var staging: String { vision ? ".download-vision" : ".download-model" }
+
+    var directoryURL: URL { URL(fileURLWithPath: directory, isDirectory: true) }
+
+    var encoded: String? {
+        (try? JSONEncoder().encode(self)).flatMap { String(data: $0, encoding: .utf8) }
     }
 
-    var url: URL? {
-        URL(string: isVision ? ChatModelAsset.shared.VISION_URL : ChatModelAsset.shared.URL)
+    static func decode(_ text: String?) -> ChatAsset? {
+        text.flatMap { $0.data(using: .utf8) }.flatMap { try? JSONDecoder().decode(ChatAsset.self, from: $0) }
     }
-
-    var staging: String { ".download-\(rawValue)" }
 }
 
 /// WHERE THE MODEL LIVES ON THIS PHONE.
 enum ChatModelStore {
-    /// `Application Support/models/`. Not Documents (a member never sees it in
-    /// Files) and not Caches (iOS may evict a cache under pressure, and the
-    /// file is half a gigabyte the member chose to fetch).
+    /// `Application Support/models/`. Not Documents (a member never sees it in Files) and not
+    /// Caches (iOS may evict a cache under pressure, and the file is half a gigabyte the member
+    /// chose to fetch). Rust is told this directory when the tab opens and names the files in it.
     static var directory: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("models", isDirectory: true)
     }
 
-    static var fileName: String { ChatAsset.model.fileName }
-
-    /// THE PATH THE CORE IS ASKED TO LOAD.
-    ///
-    /// A DEBUG build with `CENTRAID_DEV_MODEL` set (launched with
-    /// `SIMCTL_CHILD_CENTRAID_DEV_MODEL=<path>`) loads that file instead and
-    /// never downloads — the same shape as `ShellModel.devSeedHex`. A release
-    /// build compiles the branch out.
-    static var modelPath: String {
-        #if DEBUG
-        if let dev = ProcessInfo.processInfo.environment["CENTRAID_DEV_MODEL"], !dev.isEmpty {
-            return dev
-        }
-        #endif
-        return directory.appendingPathComponent(fileName).path
-    }
-
-    /// THE PATH THE CORE IS ASKED TO LOAD THE VISION PROJECTOR FROM, with the
-    /// same DEBUG override as the model: `CENTRAID_DEV_MMPROJ` names a file that
-    /// is loaded instead and never downloaded.
-    static var projectorPath: String {
-        #if DEBUG
-        if let dev = ProcessInfo.processInfo.environment["CENTRAID_DEV_MMPROJ"], !dev.isEmpty {
-            return dev
-        }
-        #endif
-        return directory.appendingPathComponent(ChatAsset.vision.fileName).path
-    }
-
-    /// The model's size as the download step quotes it before a byte moves.
-    static var expectedBytes: Int64 {
-        ChatModelAsset.shared.BYTES
-    }
-
-    /// Create the directory and keep it out of iCloud backup: half a gigabyte
-    /// that can be fetched again is not what a member's backup is for, and iOS
-    /// does not inherit the flag, so the file is marked in its own right too.
+    /// Create the directory and keep it out of iCloud backup: half a gigabyte that can be fetched
+    /// again is not what a member's backup is for, and iOS does not inherit the flag, so the file
+    /// is marked in its own right too.
     static func prepareDirectory() {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         excludeFromBackup(directory)
@@ -99,33 +69,30 @@ enum ChatModelStore {
 /// THE MODEL AND PROJECTOR DOWNLOADS, ON AN ORDINARY SESSION.
 ///
 /// Not a background `URLSession`: the app has exactly ONE, the upload mover's
-/// (`BackgroundUploads.swift`, #1080 ruling 2, held by `BackgroundPassLawSpec`),
-/// and `AppDelegate` answers any other session's events at once. So a transfer
-/// runs while the app does — the Chat tab says so while it is under way — and
-/// one the system ends with the app is started again from the step's
-/// "Download model" (`start` picks up a task this launch still holds).
+/// (`BackgroundUploads.swift`, #1080 ruling 2, held by `BackgroundPassLawSpec`), and `AppDelegate`
+/// answers any other session's events at once. So a transfer runs while the app does and one the
+/// system ends with the app is started again from the step's "Download model" (`start` picks up a
+/// task this launch still holds).
 ///
-/// What arrives is verified before it is kept: it is moved to a staging file
-/// inside the models directory (the system deletes its own copy when the
-/// delegate returns), hashed in 1 MB reads, and renamed into place only when
-/// the digest is `ChatModelAsset.SHA256`. A mismatch is deleted and reported as
-/// a failed download, so a truncated file or an error page can never reach the
-/// core as a model.
+/// What arrives is verified before it is kept: it is moved to a staging file inside the models
+/// directory (the system deletes its own copy when the delegate returns), hashed in 1 MB reads,
+/// and renamed into place only when the digest is the one Rust named. A mismatch is deleted and
+/// reported as a failed download, so a truncated file or an error page can never reach the core
+/// as a model.
 final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     static let shared = ChatModelDownloader()
 
-    /// Both fire on the main queue. The ChatModel points them at the bridge.
-    var onProgress: ((ChatAsset, Int64, Int64) -> Void)?
-    var onFinished: ((ChatAsset, Bool) -> Void)?
+    /// Both fire on the main queue. The ChatModel points them at the chat.
+    var onProgress: ((_ vision: Bool, Int64, Int64) -> Void)?
+    var onFinished: ((_ vision: Bool, Bool) -> Void)?
 
     private let lock = NSLock()
-    private var lastReportedAt: [ChatAsset: Date] = [:]
-    private var lastReportedPercent: [ChatAsset: Int] = [:]
+    private var lastReportedAt: [Bool: Date] = [:]
+    private var lastReportedPercent: [Bool: Int] = [:]
 
-    /// The asset a task is fetching. A task that says nothing is the model's:
-    /// it was started by a build from before there were two.
-    private func asset(of task: URLSessionTask) -> ChatAsset {
-        task.taskDescription.flatMap(ChatAsset.init(rawValue:)) ?? .model
+    /// The asset a task is fetching.
+    private func asset(of task: URLSessionTask) -> ChatAsset? {
+        ChatAsset.decode(task.taskDescription)
     }
 
     private lazy var session: URLSession = {
@@ -134,46 +101,46 @@ final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecke
         return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
     }()
 
-    /// Make sure the session exists before the bridge asks about running work.
+    /// Make sure the session exists before the chat asks about running work.
     func reconnect() {
         _ = session
     }
 
     /// SAY SO WHEN A TRANSFER IS ALREADY RUNNING.
     ///
-    /// A member who leaves the Chat tab mid-download and comes back finds the
-    /// model still arriving. Its progress is reported at once, bypassing the
-    /// throttle, and the shared machine treats progress heard before any tap as
-    /// "already downloading" — without this the tab offered "Download model"
-    /// over a half-done transfer until tapped. Called after the bridge is
-    /// attached and the tab has opened, so the event has a machine to land in.
+    /// A member who leaves the Chat tab mid-download and comes back finds the model still
+    /// arriving. Its progress is reported at once, bypassing the throttle, and the chat treats
+    /// progress heard before any tap as "already downloading".
     func reportRunning() {
         session.getAllTasks { [weak self] tasks in
             guard let self else { return }
             for running in tasks where running.state == .running {
-                let asset = self.asset(of: running)
+                guard let asset = self.asset(of: running) else { continue }
                 let done = running.countOfBytesReceived
                 let total = max(running.countOfBytesExpectedToReceive, 0)
-                DispatchQueue.main.async { self.onProgress?(asset, done, total) }
+                DispatchQueue.main.async { self.onProgress?(asset.vision, done, total) }
             }
         }
     }
 
     /// Start the transfer of `asset`, or pick up the one already running.
-    func start(_ asset: ChatAsset = .model) {
+    func start(_ asset: ChatAsset) {
         ChatModelStore.prepareDirectory()
         let session = session
         session.getAllTasks { [weak self] tasks in
             guard let self else { return }
             if let running = tasks.first(where: {
-                self.asset(of: $0) == asset && ($0.state == .running || $0.state == .suspended)
+                self.asset(of: $0)?.vision == asset.vision && ($0.state == .running || $0.state == .suspended)
             }) {
                 running.resume()
                 return
             }
-            guard let url = asset.url else { return }
+            guard let url = URL(string: asset.url) else {
+                self.finish(asset, false)
+                return
+            }
             let task = session.downloadTask(with: url)
-            task.taskDescription = asset.rawValue
+            task.taskDescription = asset.encoded
             task.resume()
         }
     }
@@ -187,28 +154,28 @@ final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecke
         totalBytesWritten: Int64,
         totalBytesExpectedToWrite: Int64
     ) {
-        // A callback per few kilobytes would be a state per few kilobytes: one
-        // per whole percent, and none sooner than a quarter second after the last.
-        let asset = asset(of: downloadTask)
+        guard let asset = asset(of: downloadTask) else { return }
+        // A callback per few kilobytes would be a state per few kilobytes: one per whole percent,
+        // and none sooner than a quarter second after the last.
         let total = max(totalBytesExpectedToWrite, 0)
         let percent = total > 0 ? Int(Double(totalBytesWritten) / Double(total) * 100) : -1
         lock.lock()
         let now = Date()
-        let due = percent != lastReportedPercent[asset, default: -1]
-            && now.timeIntervalSince(lastReportedAt[asset, default: .distantPast]) >= 0.25
+        let due = percent != lastReportedPercent[asset.vision, default: -1]
+            && now.timeIntervalSince(lastReportedAt[asset.vision, default: .distantPast]) >= 0.25
         if due {
-            lastReportedAt[asset] = now
-            lastReportedPercent[asset] = percent
+            lastReportedAt[asset.vision] = now
+            lastReportedPercent[asset.vision] = percent
         }
         lock.unlock()
         guard due else { return }
-        DispatchQueue.main.async { [weak self] in self?.onProgress?(asset, totalBytesWritten, total) }
+        DispatchQueue.main.async { [weak self] in self?.onProgress?(asset.vision, totalBytesWritten, total) }
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        guard let asset = asset(of: downloadTask) else { return }
         ChatModelStore.prepareDirectory()
-        let asset = asset(of: downloadTask)
-        let staging = ChatModelStore.directory.appendingPathComponent(asset.staging)
+        let staging = asset.directoryURL.appendingPathComponent(asset.staging)
         try? FileManager.default.removeItem(at: staging)
         let status = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? 0
         do {
@@ -229,20 +196,19 @@ final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecke
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Swift.Error?) {
         // A transfer that finished cleanly was settled in `didFinishDownloadingTo`.
-        guard error != nil else { return }
-        finish(asset(of: task), false)
+        guard error != nil, let asset = asset(of: task) else { return }
+        finish(asset, false)
     }
 
     // MARK: Verification
 
-    /// Move the staged file into place when its SHA-256 is the expected one;
-    /// delete it otherwise.
+    /// Move the staged file into place when its SHA-256 is the expected one; delete it otherwise.
     private static func keep(_ staging: URL, as asset: ChatAsset) -> Bool {
         guard let digest = sha256(of: staging), digest == asset.sha256 else {
             try? FileManager.default.removeItem(at: staging)
             return false
         }
-        let final = ChatModelStore.directory.appendingPathComponent(asset.fileName)
+        let final = asset.directoryURL.appendingPathComponent(asset.fileName)
         try? FileManager.default.removeItem(at: final)
         do {
             try FileManager.default.moveItem(at: staging, to: final)
@@ -271,9 +237,9 @@ final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecke
 
     private func finish(_ asset: ChatAsset, _ ok: Bool) {
         lock.lock()
-        lastReportedPercent[asset] = -1
-        lastReportedAt[asset] = .distantPast
+        lastReportedPercent[asset.vision] = -1
+        lastReportedAt[asset.vision] = .distantPast
         lock.unlock()
-        DispatchQueue.main.async { [weak self] in self?.onFinished?(asset, ok) }
+        DispatchQueue.main.async { [weak self] in self?.onFinished?(asset.vision, ok) }
     }
 }

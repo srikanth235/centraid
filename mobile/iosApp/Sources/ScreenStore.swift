@@ -319,6 +319,28 @@ final class ScreenStore: ObservableObject {
             DocsFollow.shared.stop(stop.origin) { outcome in
                 Task { @MainActor [weak self] in self?.answer(request, outcome) }
             }
+        // THE CHAT'S BLOCKING ASSISTANT CALLS (#1135, lane I): a model load or a whole turn, run off
+        // the main actor through the session's core. The turn's stream does not ride this answer:
+        // the core routes each assist event to the chat as `ScreenEvent.assist`.
+        case .assistCall(let call)?:
+            Task { [core] in
+                var assist = Centraid_Core_V1_Request()
+                assist.kind = .assist(call.request)
+                if let response = try? await core.call(assist), case .assist(let answered)? = response.kind {
+                    answer(request, .assistAnswered(answered))
+                } else {
+                    answer(request, .failed(Self.failure("the assistant did not answer")))
+                }
+            }
+        // THE MODEL'S (OR THE PHOTO READER'S) DOWNLOAD: the shell owns the transfer, and the chat
+        // hears progress and the end as events (`ChatModel`).
+        case .modelDownload(let download)?:
+            ChatModelDownloader.shared.start(ChatAsset(download))
+            answer(request, .done(Centraid_Core_V1_EffectDone()))
+        #if os(iOS)
+        case .pickLibraryPhoto?:
+            LibraryPhotoPerformer.pick { [weak self] outcome in self?.answer(request, outcome) }
+        #endif
         default:
             // Platform work this build does not perform yet: say so, by value.
             answer(request, .failed(Self.failure("not performed by this shell")))

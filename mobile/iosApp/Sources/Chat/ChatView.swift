@@ -1,9 +1,8 @@
 import SwiftUI
 import UIKit
 
-import CentraidShared
 
-/// THE CHAT TAB (`chat`, `screen.proto`'s Chat section).
+/// THE CHAT TAB (`chat.home`, `chat_screens.proto`).
 ///
 /// **THIS VIEW DECIDES NOTHING.** Which phase the chat is in, what the thread
 /// holds, which suggestions to offer, whether Stop or Send is drawn, every
@@ -42,7 +41,8 @@ struct ChatView: View {
     /// while it does, so the composer takes the keyboard's top edge as the
     /// system's own search does.
     @Binding var typing: Bool
-    let onOpenCard: (Centraid_Screen_V1_ChatCard, [Centraid_Screen_V1_ChatCard]) -> Void
+    /// Push a route Rust built (Photos' picker, for "Photo from vault").
+    let onOpenRoute: (Centraid_Core_V1_Route) -> Void
     /// A scope chosen from the composer's menu: an app id, or empty for every app.
     let onSetScope: (String) -> Void
 
@@ -56,8 +56,8 @@ struct ChatView: View {
     /// A chat the member asked to delete, until they confirm or cancel.
     @State private var deleting: DeleteTarget?
     @State private var deletingAll = false
-    /// The card whose row was gone when it was tapped, for the moment its line shows.
-    @State private var goneCard: String?
+    /// The card last tapped: if Rust finds its row gone (`card_gone_line`), the line shows under it.
+    @State private var tappedCard: String?
     /// The thread's foot is on screen: new text follows it. A member who has
     /// scrolled up to read is not pulled back down.
     @State private var pinned = true
@@ -182,7 +182,7 @@ struct ChatView: View {
 
     // MARK: The thread
 
-    private func thread(_ state: Centraid_Screen_V1_ChatState) -> some View {
+    private func thread(_ state: Centraid_Core_V1_ChatState) -> some View {
         let lastAnswer = state.messages.last(where: { $0.role == .assistant })?.id
         return ScrollViewReader { proxy in
             ScrollView {
@@ -196,10 +196,10 @@ struct ChatView: View {
                             state: state,
                             isLast: message.id == lastAnswer,
                             copied: copied == message.id,
-                            goneCard: goneCard,
+                            goneCard: state.cardGoneLine.isEmpty ? nil : tappedCard,
                             onCopy: { copy(message.id) },
                             onRetry: { chat.regenerate() },
-                            onOpenCard: { card, index in open(card, at: index, of: message) },
+                            onOpenCard: { _, index in open(at: index, of: message) },
                             onConfirmPending: { chat.confirmPending($0) },
                             onCancelPending: { chat.cancelPending($0) }
                         )
@@ -249,7 +249,7 @@ struct ChatView: View {
     }
 
     /// Everything that makes the thread grow without adding a message.
-    private func follow(_ state: Centraid_Screen_V1_ChatState) -> [Int] {
+    private func follow(_ state: Centraid_Core_V1_ChatState) -> [Int] {
         let last = state.messages.last
         return [
             last?.text.count ?? 0, last?.cards.count ?? 0, last?.pending.state.rawValue ?? 0,
@@ -269,7 +269,7 @@ struct ChatView: View {
 
     // MARK: The composer
 
-    private func composer(_ state: Centraid_Screen_V1_ChatState) -> some View {
+    private func composer(_ state: Centraid_Core_V1_ChatState) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             // THE STATUS LINE, just above the card while a turn runs: what the
             // model is doing, in muted ink. It replaces the thread's "…".
@@ -287,7 +287,8 @@ struct ChatView: View {
                 draft: $draft,
                 focused: $focused,
                 onSend: { send($0) },
-                onSetScope: onSetScope
+                onSetScope: onSetScope,
+                onOpenRoute: onOpenRoute
             )
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -300,24 +301,14 @@ struct ChatView: View {
         let line = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !line.isEmpty else { return }
         draft = ""
-        chat.send(line)
+        chat.sendText(line)
     }
 
-    /// A card was tapped: ask the vault whether its row is still there. A card
-    /// is a snapshot with no reference to its row, so a row deleted since the
-    /// answer is said to be gone instead of opening an empty screen.
-    private func open(_ card: Centraid_Screen_V1_ChatCard, at index: Int, of message: Centraid_Screen_V1_ChatMessage) {
-        chat.cardLive(card) { live in
-            if live {
-                onOpenCard(card, message.cards)
-            } else {
-                let key = "\(message.id)-\(index)"
-                goneCard = key
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    if goneCard == key { goneCard = nil }
-                }
-            }
-        }
+    /// A card was tapped. Rust asks the vault whether its row is still there, and answers with the
+    /// page to open or the line that says it is gone.
+    private func open(at index: Int, of message: Centraid_Core_V1_ChatMessage) {
+        tappedCard = "\(message.id)-\(index)"
+        chat.cardTapped(message: message.id, index: index)
     }
 
     private func copy(_ id: UInt64) {
@@ -351,7 +342,7 @@ private struct DeleteTarget: Identifiable {
 /// outlined, never filled: the composer's Send is this screen's one filled
 /// element.
 private struct ChatHeader: View {
-    let state: Centraid_Screen_V1_ChatState
+    let state: Centraid_Core_V1_ChatState
     let onDrawer: () -> Void
     let onNewChat: () -> Void
     let onRename: () -> Void
@@ -438,11 +429,11 @@ private struct ChatHeader: View {
 /// the caller's transition and animation own and reduced motion replaces with a
 /// fade.
 private struct ChatDrawer: View {
-    let state: Centraid_Screen_V1_ChatState
+    let state: Centraid_Core_V1_ChatState
     let onClose: () -> Void
     let onNewChat: () -> Void
-    let onOpen: (Centraid_Screen_V1_ChatThreadItem) -> Void
-    let onDelete: (Centraid_Screen_V1_ChatThreadItem) -> Void
+    let onOpen: (Centraid_Core_V1_ChatThreadItem) -> Void
+    let onDelete: (Centraid_Core_V1_ChatThreadItem) -> Void
     let onDeleteAll: () -> Void
     /// The drawer's search (#1097): the opener, the field's terms, its close.
     let onSearchOpen: () -> Void
@@ -485,7 +476,7 @@ private struct ChatDrawer: View {
             Group {
                 if state.drawerSearch.open {
                     CentraidSearchField(
-                        field: state.drawerSearch,
+                        field: state.drawerSearch.legacy,
                         placeholder: state.drawerSearchPlaceholder,
                         identifier: "chat-drawer-search",
                         onTerm: onSearchTerm,
@@ -577,7 +568,7 @@ private struct ChatDrawer: View {
 /// ONE PAST CHAT: its title over how long ago it moved. The open one carries an
 /// ink rule on its leading edge and a sunken ground; nothing is filled.
 private struct ChatThreadRow: View {
-    let row: Centraid_Screen_V1_ChatThreadItem
+    let row: Centraid_Core_V1_ChatThreadItem
     let currentLabel: String
     @Environment(\.colorScheme) private var scheme
 
@@ -614,7 +605,7 @@ private struct ChatThreadRow: View {
 // MARK: - The empty thread
 
 private struct ChatEmpty: View {
-    let state: Centraid_Screen_V1_ChatState
+    let state: Centraid_Core_V1_ChatState
     let onPick: (String) -> Void
     @Environment(\.colorScheme) private var scheme
 
@@ -655,8 +646,8 @@ private struct ChatEmpty: View {
 // MARK: - Messages
 
 private struct ChatMessageRow: View {
-    let message: Centraid_Screen_V1_ChatMessage
-    let state: Centraid_Screen_V1_ChatState
+    let message: Centraid_Core_V1_ChatMessage
+    let state: Centraid_Core_V1_ChatState
     /// The last answer in the thread: Retry is drawn on it.
     let isLast: Bool
     let copied: Bool
@@ -664,7 +655,7 @@ private struct ChatMessageRow: View {
     let goneCard: String?
     let onCopy: () -> Void
     let onRetry: () -> Void
-    let onOpenCard: (Centraid_Screen_V1_ChatCard, Int) -> Void
+    let onOpenCard: (Centraid_Core_V1_ChatCard, Int) -> Void
     /// Confirm and Cancel on the proposed write's card, by its id.
     let onConfirmPending: (String) -> Void
     let onCancelPending: (String) -> Void
@@ -712,7 +703,7 @@ private struct ChatMessageRow: View {
                 }
                 ForEach(Array(message.cards.enumerated()), id: \.offset) { index, card in
                     VStack(alignment: .leading, spacing: 4) {
-                        ChatCardRow(card: card, onOpen: { onOpenCard(card, index) })
+                        ChatCardRow(card: card, state: state, onOpen: { onOpenCard(card, index) })
                             .accessibilityIdentifier("chat-card-\(index)")
                         if goneCard == "\(message.id)-\(index)" {
                             Text(verbatim: state.cardGoneLine)
@@ -765,7 +756,7 @@ private struct ChatMessageRow: View {
         }
     }
 
-    private var copiedLabel: String { ChatCopy.shared.COPIED.isEmpty ? state.copyLabel : ChatCopy.shared.COPIED }
+    private var copiedLabel: String { state.copiedLabel }
 }
 
 /// An outlined action under an answer: the kit's outline button, glyph first.
@@ -783,7 +774,7 @@ private struct ChatActionButton: View {
 
 /// One failed turn: a sentence and the way to ask again.
 private struct ChatErrorLine: View {
-    let state: Centraid_Screen_V1_ChatState
+    let state: Centraid_Core_V1_ChatState
     let onRetry: () -> Void
     @Environment(\.colorScheme) private var scheme
 
@@ -806,11 +797,12 @@ private struct ChatErrorLine: View {
 /// its subtitle and meta, and the trailing arrow that says it opens. Raised
 /// paper, darker than the page in light; the app's hue lives in the mark alone.
 private struct ChatCardRow: View {
-    let card: Centraid_Screen_V1_ChatCard
+    let card: Centraid_Core_V1_ChatCard
+    let state: Centraid_Core_V1_ChatState
     let onOpen: () -> Void
     @Environment(\.colorScheme) private var scheme
 
-    private var appName: String { AppHomes.shared.nameOf(appId: card.app) }
+    private var appName: String { state.scopes.first { $0.app == card.app }?.name ?? "" }
 
     private var spoken: String {
         [card.title, card.subtitle, card.meta, appName].filter { !$0.isEmpty }.joined(separator: ", ")
@@ -882,7 +874,7 @@ private struct ChatCardPress: ButtonStyle {
 /// screen's one filled element), and a card that asks twice outlines Confirm in
 /// `net`. There is no toast and no Undo: an applied card says "Done." and stays.
 private struct ChatPendingCard: View {
-    let pending: Centraid_Screen_V1_ChatPending
+    let pending: Centraid_Core_V1_ChatPending
     let onConfirm: () -> Void
     let onCancel: () -> Void
     @Environment(\.colorScheme) private var scheme
@@ -945,14 +937,6 @@ private struct ChatPendingCard: View {
 
 // MARK: - The composer card
 
-/// WHAT THE COMPOSER OPENS FROM THE ATTACH MENU.
-private enum ChatAttachSheet: String, Identifiable {
-    case library
-    case document
-
-    var id: String { rawValue }
-}
-
 /// THE COMPOSER: ONE ROUNDED CARD OF RAISED PAPER above the band or the
 /// keyboard.
 ///
@@ -964,15 +948,15 @@ private enum ChatAttachSheet: String, Identifiable {
 /// where a microphone would go: system dictation is on the keyboard.
 private struct ChatComposerCard: View {
     @ObservedObject var chat: ChatModel
-    let state: Centraid_Screen_V1_ChatState
+    let state: Centraid_Core_V1_ChatState
     @Binding var draft: String
     var focused: FocusState<Bool>.Binding
     let onSend: (String) -> Void
     let onSetScope: (String) -> Void
+    let onOpenRoute: (Centraid_Core_V1_Route) -> Void
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var sheet: ChatAttachSheet?
 
     private static let radius: CGFloat = 20
 
@@ -1013,7 +997,7 @@ private struct ChatComposerCard: View {
 
             HStack(spacing: 8) {
                 attachMenu
-                ChatScopePill(app: state.scopeApp, label: state.scopeApp, onSetScope: onSetScope)
+                ChatScopePill(app: state.scopeApp, state: state, onSetScope: onSetScope)
                 Spacer(minLength: 0)
                 if state.streaming {
                     ChatSendButton(
@@ -1047,33 +1031,29 @@ private struct ChatComposerCard: View {
         )
         .animation(reduceMotion ? nil : ChatMotion.state, value: state.pending.count)
         .animation(reduceMotion ? nil : ChatMotion.state, value: state.hasVisionStep)
-        .sheet(item: $sheet) { which in
-            switch which {
-            case .document:
-                ChatDocumentSheet(chat: chat) { docID, title in
-                    chat.attachDocument(docID: docID, title: title)
-                }
-            case .library:
-                LibraryPhotoPicker { data in
-                    guard let data else { return }
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        guard let prepared = LibraryPhoto.prepare(data) else { return }
-                        DispatchQueue.main.async {
-                            chat.attachLibraryPhoto(jpeg: prepared.jpeg, thumbnail: prepared.thumbnail)
-                        }
-                    }
-                }
-                .ignoresSafeArea()
-            }
+        .sheet(isPresented: Binding(
+            get: { state.documentSheet.open },
+            set: { if !$0 { chat.closeDocuments() } }
+        )) {
+            ChatDocumentSheet(
+                sheet: state.documentSheet,
+                closeLabel: state.closeLabel,
+                onPicked: { docID, title in chat.attachDocument(docID: docID, title: title) },
+                onClose: { chat.closeDocuments() }
+            )
         }
     }
 
     /// A CIRCLE OUTLINED WITH A PLUS: never filled.
     private var attachMenu: some View {
         Menu {
-            Button(state.attachLibraryPhotoLabel) { sheet = .library }
+            if state.hasAttachPhotoRoute {
+                Button(state.attachVaultPhotoLabel) { onOpenRoute(state.attachPhotoRoute) }
+                    .accessibilityIdentifier("chat-attach-vault-photo")
+            }
+            Button(state.attachLibraryPhotoLabel) { chat.libraryPhotoTapped() }
                 .accessibilityIdentifier("chat-attach-library-photo")
-            Button(state.attachDocumentLabel) { sheet = .document }
+            Button(state.attachDocumentLabel) { chat.openDocuments() }
                 .accessibilityIdentifier("chat-attach-document")
         } label: {
             // DISABLED IS THE INK, not a faded container.
@@ -1098,21 +1078,22 @@ private struct ChatComposerCard: View {
 /// THE CHAT'S SCOPE, as a pill that opens a menu: every app, or one.
 private struct ChatScopePill: View {
     let app: String
-    let label: String
+    let state: Centraid_Core_V1_ChatState
     let onSetScope: (String) -> Void
     @Environment(\.colorScheme) private var scheme
 
+    /// The words are Rust's: "All apps" and each scope's app name (`ChatState.scopes`).
     private func name(_ id: String) -> String {
-        id.isEmpty ? ChatCopy.shared.SCOPE_ALL : AppHomes.shared.nameOf(appId: id)
+        id.isEmpty ? state.scopeAllLabel : (state.scopes.first { $0.app == id }?.name ?? id)
     }
 
     var body: some View {
         Menu {
-            Button(ChatCopy.shared.SCOPE_ALL) { onSetScope("") }
+            Button(state.scopeAllLabel) { onSetScope("") }
                 .accessibilityIdentifier("chat-scope-all")
-            ForEach(ChatRouting.scopeMenu, id: \.self) { id in
-                Button(name(id)) { onSetScope(id) }
-                    .accessibilityIdentifier("chat-scope-\(id)")
+            ForEach(state.scopes, id: \.app) { option in
+                Button(option.name) { onSetScope(option.app) }
+                    .accessibilityIdentifier("chat-scope-\(option.app)")
             }
         } label: {
             HStack(spacing: 6) {
@@ -1133,7 +1114,7 @@ private struct ChatScopePill: View {
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
-        .accessibilityLabel(ChatCopy.shared.SCOPE_LABEL + ", " + name(app))
+        .accessibilityLabel(state.scopeLabel + ", " + name(app))
         .accessibilityIdentifier("chat-scope")
     }
 }
@@ -1141,7 +1122,7 @@ private struct ChatScopePill: View {
 /// ONE ATTACHMENT, as a chip: a thumbnail (a photograph) or a document mark, the
 /// name, and — in the composer — the way to take it out. Outlined, never filled.
 private struct ChatAttachmentChip: View {
-    let attachment: Centraid_Screen_V1_ChatAttachment
+    let attachment: Centraid_Core_V1_ChatAttachment
     var removeLabel: String = ""
     var onRemove: (() -> Void)?
     @Environment(\.colorScheme) private var scheme
@@ -1197,7 +1178,7 @@ private struct ChatAttachmentChip: View {
 /// line and one action. The second download is the only other moment Centraid
 /// reaches the network, so its words and its action are in `net`.
 private struct ChatVisionBanner: View {
-    let step: Centraid_Screen_V1_ChatModelStep
+    let step: Centraid_Core_V1_ChatModelStep
     let onDownload: () -> Void
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -1284,12 +1265,12 @@ private struct ChatSendButton: View {
 /// The one action and the progress are in `net`: this is the only time
 /// Centraid fetches anything, and `net` is the colour of what leaves the device.
 private struct ChatModelStepView: View {
-    let state: Centraid_Screen_V1_ChatState
+    let state: Centraid_Core_V1_ChatState
     let onDownload: () -> Void
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var step: Centraid_Screen_V1_ChatModelStep { state.modelStep }
+    private var step: Centraid_Core_V1_ChatModelStep { state.modelStep }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1427,3 +1408,15 @@ extension View {
     }
 }
 
+
+extension Centraid_Core_V1_ChatDrawerSearch {
+    /// The kit's search field draws the drawer's search; it reads these four facts and no more.
+    var legacy: Centraid_Screen_V1_SearchField {
+        var field = Centraid_Screen_V1_SearchField()
+        field.open = open
+        field.term = term
+        field.answeredTerm = term
+        field.corrected = corrected
+        return field
+    }
+}
