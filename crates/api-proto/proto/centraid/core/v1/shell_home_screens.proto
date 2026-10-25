@@ -71,6 +71,9 @@ message HomeTileBody {
       string asset_id = 1;
       optional string thumbnail_path = 2;
     }
+    // Said under a strip of grey cells: "These photos aren't on this phone yet."
+    // Empty when at least one cell can be drawn.
+    string absent_line = 2;
   }
 
   message Docs {
@@ -296,6 +299,8 @@ message HomeBar {
   string search_label = 3;
   // Where the search key goes.
   Route search_route = 8;
+  // The label of the gear beside "N originals waiting": "Download settings".
+  string transfer_rules_label = 9;
   // The appearance key: the glyph and the words of the switch it makes.
   string appearance_icon = 4;
   string appearance_label = 5;

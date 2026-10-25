@@ -365,7 +365,7 @@ impl Home {
                 .map(|kind| wire::HomeTileBody { kind: Some(kind) }),
             accessibility_label: spoken(&open, made),
             open_label: open,
-            route: row_routes::app_home(app),
+            route: tile_route(app, made),
         }
     }
 
@@ -408,6 +408,7 @@ impl Home {
             backup,
             search_label: words::home_search_placeholder(locale),
             search_route: Some(routes::search()),
+            transfer_rules_label: photos::transfer_settings_label(locale),
             appearance_icon: if dark { "Sun" } else { "Moon" }.to_owned(),
             appearance_label: if dark {
                 words::appearance_to_light(locale)
@@ -560,6 +561,19 @@ impl Screen for Home {
     }
 }
 
+/// WHERE A TILE'S TAP GOES: the app's home. Notes opens its shelf when it has
+/// notes and a new note when it has none, and nothing while it is unread; a tile
+/// that is still reading opens nothing.
+fn tile_route(app: &str, made: &Made) -> Option<wire::Route> {
+    use wire::HomeTileStatus as Status;
+    match (app, made.status) {
+        (_, Status::Loading) => None,
+        ("notes", Status::Empty) => Some(crate::notes::routes::new_note()),
+        ("notes", Status::Unknown) => None,
+        _ => row_routes::app_home(app),
+    }
+}
+
 fn keychain_get() -> wire::Effect {
     effect(wire::effect::Kind::Keychain(wire::KeychainOp {
         op: wire::keychain_op::Op::Get as i32,
@@ -694,6 +708,39 @@ mod tests {
         // A held scheme that disagrees with the phone flips to the other held one.
         assert_eq!(Appearance::Dark.toggled(true), Appearance::Light);
         assert_eq!(Appearance::Light.toggled(false), Appearance::Dark);
+    }
+
+    #[test]
+    fn a_tile_opens_its_app_and_notes_opens_a_new_note_when_it_holds_none() {
+        use wire::HomeTileStatus as Status;
+        let made = |status| Made {
+            status,
+            count: None,
+            count_label: String::new(),
+            body: None,
+        };
+        let screen = |app: &str, status| tile_route(app, &made(status)).map(|route| route.screen);
+        assert_eq!(
+            screen("notes", Status::Content).as_deref(),
+            Some("notes.home")
+        );
+        assert_eq!(
+            screen("notes", Status::Empty).as_deref(),
+            Some("notes.editor")
+        );
+        // Nothing while it reads, or when it could not.
+        assert_eq!(screen("notes", Status::Loading), None);
+        assert_eq!(screen("notes", Status::Unknown), None);
+        // Every other app opens even when it is empty or unreadable.
+        assert_eq!(
+            screen("agenda", Status::Empty).as_deref(),
+            Some("agenda.home")
+        );
+        assert_eq!(
+            screen("photos", Status::Unknown).as_deref(),
+            Some("photos.home")
+        );
+        assert_eq!(screen("photos", Status::Loading), None);
     }
 
     #[test]

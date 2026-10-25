@@ -29,6 +29,7 @@ catalog! {
     plain home_search_placeholder = ("Search everything", "Search everything");
     plain home_search_recent_label = ("Recent", "Recent");
     plain home_search_scope_label = ("All apps", "All apps");
+    plain home_photos_absent = ("These photos aren't on this phone yet.", "These photos aren't on this phone yet.");
     plain open_app = ("Open {name}", "Open {name}");
     plain restore_first_action = ("Restore my vaults", "Restore my vaults");
     plain search_kind_chat = ("Chat", "Chat");

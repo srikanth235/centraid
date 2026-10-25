@@ -187,7 +187,7 @@ fn photos_tile(locale: Locale, shelf: &wire::PhotosShelf) -> Made {
     } else {
         drawable
     };
-    let cells = chosen
+    let cells: Vec<wire::home_tile_body::photos::Cell> = chosen
         .into_iter()
         .take(PHOTO_CELLS)
         .map(|cell| wire::home_tile_body::photos::Cell {
@@ -195,12 +195,18 @@ fn photos_tile(locale: Locale, shelf: &wire::PhotosShelf) -> Made {
             thumbnail_path: cell.thumbnail_path.clone().filter(|path| !path.is_empty()),
         })
         .collect();
+    // A strip with no cell to draw says why, under the grey.
+    let absent_line = if cells.iter().any(|cell| cell.thumbnail_path.is_some()) {
+        String::new()
+    } else {
+        words::home_photos_absent(locale)
+    };
     content(
         total,
         false,
         one,
         many,
-        Body::Photos(wire::home_tile_body::Photos { cells }),
+        Body::Photos(wire::home_tile_body::Photos { cells, absent_line }),
     )
 }
 
@@ -1535,6 +1541,7 @@ mod tests {
             ["p1", "p2", "p3", "p4"]
         );
         assert!(body.cells.iter().all(|c| c.thumbnail_path.is_none()));
+        assert_eq!(body.absent_line, "These photos aren't on this phone yet.");
     }
 
     #[test]
