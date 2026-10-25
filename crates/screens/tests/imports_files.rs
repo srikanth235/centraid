@@ -434,3 +434,70 @@ fn the_followed_list_is_the_vaults_origins_with_the_documents_each_holds_by_name
             .all(|folder| folder.documents == 0)
     );
 }
+
+/// The documents in Docs' trash, read the way the drive reads its Trash shelf.
+fn trashed(shell: &Shell) -> usize {
+    shell.d.with_ctx(|ctx| {
+        match read::read(
+            ctx,
+            load::docs::Drive {
+                shelf: Some("trash".to_owned()),
+                ..Default::default()
+            },
+            |answer| match answer {
+                Answer::DocsDrive(drive) => Some(drive),
+                _ => None,
+            },
+        ) {
+            read::Reading::Data(drive) => drive.documents.len(),
+            _ => panic!("the drive's trash reads"),
+        }
+    })
+}
+
+/// A folder followed with `count` files, each filed.
+fn followed_with(count: usize) -> Shell {
+    let mut shell = shell();
+    follow(&mut shell, "folder:abc", "Taxes");
+    settle(&mut shell);
+    let files: Vec<wire::FolderFile> = (0..count)
+        .map(|n| file(&format!("f{n}.txt"), 4 + n as u64, 100))
+        .collect();
+    answer_listing(&mut shell, listing("folder:abc", files, true));
+    for n in 0..count {
+        stage_pending(&mut shell, format!("file {n} {}", "x".repeat(n)).as_bytes());
+    }
+    assert_eq!(held(&shell).folders[0].documents, count as u32);
+    assert_eq!(trashed(&shell), 0);
+    shell
+}
+
+/// A read that lost one file of six trashes that one: the ordinary case.
+#[test]
+fn a_complete_read_that_lost_one_file_trashes_that_one() {
+    let mut shell = followed_with(6);
+    send(&mut shell, files::Kind::Requested(files::Requested {}));
+    settle(&mut shell);
+    let kept: Vec<wire::FolderFile> = (0..5)
+        .map(|n| file(&format!("f{n}.txt"), 4 + n as u64, 100))
+        .collect();
+    answer_listing(&mut shell, listing("folder:abc", kept, true));
+    assert_eq!(trashed(&shell), 1, "the file the read lost is trashed");
+}
+
+/// A SYNC GLITCH LOOKS LIKE A MASS DELETE (R-1127-9): a complete read that lost at least five
+/// followed files and more than half of them trashes nothing. Keep is the default; the KMP
+/// question that let the member choose is gone with the Kotlin follower, so the safe half of it
+/// stays here.
+#[test]
+fn a_complete_read_that_lost_most_of_a_folder_trashes_nothing() {
+    let mut shell = followed_with(6);
+    send(&mut shell, files::Kind::Requested(files::Requested {}));
+    settle(&mut shell);
+    answer_listing(
+        &mut shell,
+        listing("folder:abc", vec![file("f0.txt", 4, 100)], true),
+    );
+    assert_eq!(trashed(&shell), 0, "nothing is trashed");
+    assert!(!state(&shell).running);
+}
