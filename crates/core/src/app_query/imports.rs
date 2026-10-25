@@ -40,7 +40,9 @@ fn all(door: &dyn PageDoor, query: &PageQuery) -> KitResult<Vec<Row>> {
             None => return Ok(rows),
         }
     }
-    Err(KitError::Door("a followed table has too many pages".to_owned()))
+    Err(KitError::Door(
+        "a followed table has too many pages".to_owned(),
+    ))
 }
 
 fn files_only(name: &str, select: &str, from: &str) -> PageQuery {
@@ -57,7 +59,10 @@ fn stat_of(stated: &str) -> Option<String> {
 /// `shell.files-followed`.
 pub(crate) fn files_followed(door: &VaultDoor<'_>) -> Result<Answer> {
     let loaded = (|| -> KitResult<(wire::ImportsFilesHeld, Option<centraid_apps_kit::Denial>)> {
-        let origins = all(door, &files_only("files.origins", "id, ref, label", "origin"))?;
+        let origins = all(
+            door,
+            &files_only("files.origins", "id, ref, label", "origin"),
+        )?;
         let sources = all(
             door,
             &files_only(
@@ -81,8 +86,7 @@ pub(crate) fn files_followed(door: &VaultDoor<'_>) -> Result<Answer> {
             );
         }
         for row in &sources {
-            let Some(folder) = text_of(row, "origin_id").and_then(|id| folders.get_mut(&id))
-            else {
+            let Some(folder) = text_of(row, "origin_id").and_then(|id| folders.get_mut(&id)) else {
                 continue;
             };
             if text_of(row, "entity_id").is_some_and(|id| !id.is_empty()) {

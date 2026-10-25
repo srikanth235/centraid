@@ -115,9 +115,10 @@ pub fn photo(id: &str) -> wire::RollAsset {
 pub fn live(id: &str) -> wire::RollAsset {
     let mut asset = photo(id);
     asset.capture_group = id.to_owned();
-    asset
-        .resources
-        .push(resource(&format!("{id}#pairedVideo"), wire::roll_resource::Role::PairedVideo));
+    asset.resources.push(resource(
+        &format!("{id}#pairedVideo"),
+        wire::roll_resource::Role::PairedVideo,
+    ));
     asset
 }
 
@@ -233,7 +234,7 @@ pub fn serve_library(shell: &mut Shell, library: &mut Library) {
                     exhausted,
                 })
             }
-            K::LinkRead(_) => O::LinkReading(library.link.clone()),
+            K::LinkRead(_) => O::LinkReading(library.link),
             K::LibraryStage(stage_ask) => {
                 library
                     .asked
@@ -252,7 +253,9 @@ pub fn serve_library(shell: &mut Shell, library: &mut Library) {
                         ..wire::StageBegin::default()
                     };
                     stage(&shell.d, begin, &content);
-                    library.rendered.push((derivatives.r#ref.clone(), tier.clone()));
+                    library
+                        .rendered
+                        .push((derivatives.r#ref.clone(), tier.clone()));
                 }
                 O::Done(wire::EffectDone {})
             }

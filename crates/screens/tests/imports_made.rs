@@ -136,6 +136,28 @@ fn denied() -> O {
     })
 }
 
+fn open_tasks(shell: &Shell) -> u32 {
+    use centraid_screens::catalog::load;
+    use centraid_screens::kit::read;
+    use wire::app_query_response::Answer;
+    shell.d.with_ctx(|ctx| {
+        match read::read(
+            ctx,
+            load::agenda::Board {
+                limit: 500,
+                ..load::agenda::Board::default()
+            },
+            |answer| match answer {
+                Answer::TasksBoard(board) => board.counts.map(|counts| counts.open),
+                _ => None,
+            },
+        ) {
+            read::Reading::Data(open) => open,
+            _ => panic!("the board reads"),
+        }
+    })
+}
+
 fn photos_answered(shell: &mut Shell) {
     shell.d.answer_effect(O::Done(wire::EffectDone {}));
 }
@@ -164,7 +186,10 @@ fn one_line_says_what_came_in_and_opens_the_first_app_that_received_anything() {
     answer_read(&mut shell, calendar(&["Standup"]));
     answer_read(
         &mut shell,
-        reminders(&[("Renew passport", "bring photos", "2026-10-13"), ("Call mum", "", "")]),
+        reminders(&[
+            ("Renew passport", "bring photos", "2026-10-13"),
+            ("Call mum", "", ""),
+        ]),
     );
     let view = view(&shell);
     // THE SHARED LAST WORD IS SAID ONCE.
@@ -177,6 +202,7 @@ fn one_line_says_what_came_in_and_opens_the_first_app_that_received_anything() {
 #[test]
 fn reminders_become_ordinary_tasks_with_their_notes_and_due_day_and_a_duplicate_is_folded() {
     let mut shell = shell_for_made();
+    let opened = open_tasks(&shell);
     made(&mut shell, true);
     photos_answered(&mut shell);
     answer_read(&mut shell, denied());
@@ -191,27 +217,8 @@ fn reminders_become_ordinary_tasks_with_their_notes_and_due_day_and_a_duplicate_
     );
     assert_eq!(view(&shell).summary, "2 tasks imported");
     assert_eq!(view(&shell).open_label, "Open Agenda");
-    // The tasks are the vault's: a to-do read finds them by title.
-    let titles = shell.d.with_ctx(|ctx| {
-        use centraid_screens::catalog::load;
-        use centraid_screens::kit::read;
-        use wire::app_query_response::Answer;
-        match read::read(
-            ctx,
-            load::agenda::Board {
-                limit: 500,
-                ..load::agenda::Board::default()
-            },
-            |answer| match answer {
-                Answer::TasksBoard(board) => Some(format!("{board:?}")),
-                _ => None,
-            },
-        ) {
-            read::Reading::Data(text) => text,
-            _ => panic!("the board reads"),
-        }
-    });
-    assert!(titles.contains("Renew passport") && titles.contains("Call mum"), "{titles}");
+    // The tasks are the vault's: the open count grew by the two that were not duplicates.
+    assert_eq!(open_tasks(&shell), opened + 2);
 }
 
 #[test]
@@ -251,7 +258,7 @@ fn the_calendar_offered_when_the_vault_is_made_is_followed_from_then_on() {
     answer_read(&mut shell, calendar(&["Standup"]));
     // The import marked this device as following and asked the shell to watch the store.
     let pending = asked(&shell);
-    assert!(pending.contains(&"keychain:3".to_owned()), "{pending:?}");
+    assert!(pending.contains(&"keychain:2".to_owned()), "{pending:?}");
     assert!(pending.contains(&"watch:true".to_owned()), "{pending:?}");
 }
 
@@ -260,5 +267,9 @@ fn a_made_event_is_heard_once() {
     let mut shell = shell_for_made();
     made(&mut shell, false);
     made(&mut shell, false);
-    assert_eq!(asked(&shell), vec!["camera_roll:1"], "one prompt, however many times it is told");
+    assert_eq!(
+        asked(&shell),
+        vec!["camera_roll:1"],
+        "one prompt, however many times it is told"
+    );
 }

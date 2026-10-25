@@ -242,7 +242,7 @@ struct Feed {
 }
 
 enum Job {
-    Walk(Walk),
+    Walk(Box<Walk>),
     Feed(Feed),
 }
 
@@ -316,7 +316,7 @@ impl Roll {
             self.walk_queued = true;
             return Vec::new();
         }
-        self.job = Some(Job::Walk(Walk {
+        self.job = Some(Job::Walk(Box::new(Walk {
             passes: 0,
             cursor: String::new(),
             assets: VecDeque::new(),
@@ -329,7 +329,7 @@ impl Roll {
             moved: 0,
             offer: None,
             imported: 0,
-        }));
+        })));
         self.ask_permission(false, Why::Walk)
     }
 
@@ -365,7 +365,11 @@ impl Roll {
         match why {
             Why::Sync => Vec::new(),
             Why::Ask => {
-                if can_enumerate(read) { self.trigger() } else { Vec::new() }
+                if can_enumerate(read) {
+                    self.trigger()
+                } else {
+                    Vec::new()
+                }
             }
             Why::Walk => {
                 if !can_enumerate(read) {
@@ -381,12 +385,7 @@ impl Roll {
     }
 
     fn begin_page(&mut self) -> Vec<wire::Effect> {
-        self.publish(
-            wire::PhotosBackupPhase::Enumerating,
-            0,
-            0,
-            String::new(),
-        );
+        self.publish(wire::PhotosBackupPhase::Enumerating, 0, 0, String::new());
         self.wait = Wait::Cursor;
         vec![keychain(
             wire::keychain_op::Op::Get,
@@ -423,7 +422,11 @@ impl Roll {
             // walk for a change token) and it is kept.
             let mut effects = Vec::new();
             if !page.next_cursor.is_empty() && page.next_cursor != walk.cursor {
-                effects.push(keychain(wire::keychain_op::Op::Set, &key, &page.next_cursor));
+                effects.push(keychain(
+                    wire::keychain_op::Op::Set,
+                    &key,
+                    &page.next_cursor,
+                ));
             }
             // NOTHING NEW IS "DONE", NOT "IDLE": a member whose roll is fully backed up must be
             // able to tell that from a backup that is off.
@@ -494,13 +497,15 @@ impl Roll {
             // Only a photograph may cross a metered link: anything that is not an image is "a video".
             let video = !need.media_type.starts_with("image/");
             self.wait = Wait::Stage;
-            return vec![effect(wire::effect::Kind::LibraryStage(wire::LibraryStage {
-                r#ref: need.os_ref.clone(),
-                allow_network: may_fetch(link, video),
-                changed_in_place: false,
-                media_type: need.media_type.clone(),
-                byte_size: need.size,
-            }))];
+            return vec![effect(wire::effect::Kind::LibraryStage(
+                wire::LibraryStage {
+                    r#ref: need.os_ref.clone(),
+                    allow_network: may_fetch(link, video),
+                    changed_in_place: false,
+                    media_type: need.media_type.clone(),
+                    byte_size: need.size,
+                },
+            ))];
         }
         let Some(offer) = self.walk().and_then(|walk| walk.offer.as_ref()) else {
             return Vec::new();
@@ -529,7 +534,10 @@ impl Roll {
         let outcome = O::try_from(staged.outcome).unwrap_or(O::Unspecified);
         let (original, left) = match self.walk().and_then(|walk| walk.offer.as_ref()) {
             Some(offer) => (
-                offer.current.as_ref().is_some_and(|resource| resource.original),
+                offer
+                    .current
+                    .as_ref()
+                    .is_some_and(|resource| resource.original),
                 offer.left,
             ),
             None => return Vec::new(),
@@ -713,9 +721,18 @@ impl Roll {
         let mut effects = Vec::new();
         // ADVANCED PER ASSET. A pass the OS kills resumes where it was.
         if !offer.asset.after.is_empty() {
-            effects.push(keychain(wire::keychain_op::Op::Set, &key, &offer.asset.after));
+            effects.push(keychain(
+                wire::keychain_op::Op::Set,
+                &key,
+                &offer.asset.after,
+            ));
         }
-        self.publish(wire::PhotosBackupPhase::Transferring, queued, left, String::new());
+        self.publish(
+            wire::PhotosBackupPhase::Transferring,
+            queued,
+            left,
+            String::new(),
+        );
         effects.extend(self.next_asset(ctx));
         effects
     }
@@ -732,7 +749,11 @@ impl Roll {
         // THE PAGE'S OWN CURSOR LAST: it is the one the platform minted, and on iOS the one that
         // turns a finished walk into a change token.
         if !walk.next_cursor.is_empty() {
-            effects.push(keychain(wire::keychain_op::Op::Set, &key, &walk.next_cursor));
+            effects.push(keychain(
+                wire::keychain_op::Op::Set,
+                &key,
+                &walk.next_cursor,
+            ));
         }
         let phase = if walk.exhausted {
             wire::PhotosBackupPhase::Done
@@ -830,22 +851,24 @@ impl Screen for Roll {
                     self.vault_id = roll.vault_id.clone();
                 }
                 match roll.kind {
-                Some(C::Requested(requested)) => {
-                    use wire::imports_camera_roll_event::requested::Action;
-                    match Action::try_from(requested.action).unwrap_or(Action::Unspecified) {
-                        // A prompt over a running job would clobber what it waits on; a job that
-                        // runs means the grant already allows it.
-                        Action::AskPermission if self.job.is_some() => Vec::new(),
-                        Action::AskPermission => self.ask_permission(true, Why::Ask),
-                        Action::ImportNow => self.trigger(),
-                        Action::Unspecified => Vec::new(),
+                    Some(C::Requested(requested)) => {
+                        use wire::imports_camera_roll_event::requested::Action;
+                        match Action::try_from(requested.action).unwrap_or(Action::Unspecified) {
+                            // A prompt over a running job would clobber what it waits on; a job that
+                            // runs means the grant already allows it.
+                            Action::AskPermission if self.job.is_some() => Vec::new(),
+                            Action::AskPermission => self.ask_permission(true, Why::Ask),
+                            Action::ImportNow => self.trigger(),
+                            Action::ReadPermission if self.job.is_some() => Vec::new(),
+                            Action::ReadPermission => self.ask_permission(false, Why::Sync),
+                            Action::Unspecified => Vec::new(),
+                        }
                     }
-                }
-                // A NEW CAPTURE WHILE THE APP IS ON SCREEN: a nudge to run the ordinary pass, never
-                // a second way to learn what is new. The cursor is the durable answer.
-                Some(C::LibraryChanged(_) | C::Walk(_)) => self.trigger(),
-                Some(C::BytesNeeded(needed)) => self.feed(needed.needs),
-                None => Vec::new(),
+                    // A NEW CAPTURE WHILE THE APP IS ON SCREEN: a nudge to run the ordinary pass, never
+                    // a second way to learn what is new. The cursor is the durable answer.
+                    Some(C::LibraryChanged(_) | C::Walk(_)) => self.trigger(),
+                    Some(C::BytesNeeded(needed)) => self.feed(needed.needs),
+                    None => Vec::new(),
                 }
             }
             Some(E::EffectResult(result)) => {

@@ -83,7 +83,11 @@ pub fn summary(fragments: &[String]) -> String {
     let (last, rest) = said.split_last().expect("two or more fragments");
     let heads: Vec<&str> = rest
         .iter()
-        .map(|fragment| fragment.rsplit_once(' ').map_or(*fragment, |(head, _)| head))
+        .map(|fragment| {
+            fragment
+                .rsplit_once(' ')
+                .map_or(*fragment, |(head, _)| head)
+        })
         .collect();
     format!("{}, {}", heads.join(", "), last)
 }
@@ -239,13 +243,15 @@ impl Screen for Made {
         let open = self.came.first().map(|came| came.app).unwrap_or("");
         let finished = self.step == Step::Done;
         wire::ViewState {
-            kind: Some(wire::view_state::Kind::ImportsMade(wire::ImportsMadeState {
-                summary: summary(&fragments),
-                open_label: open_label(locale, open),
-                open_route: rows::app_home(open),
-                running: !matches!(self.step, Step::Idle | Step::Done),
-                finished,
-            })),
+            kind: Some(wire::view_state::Kind::ImportsMade(
+                wire::ImportsMadeState {
+                    summary: summary(&fragments),
+                    open_label: open_label(locale, open),
+                    open_route: rows::app_home(open),
+                    running: !matches!(self.step, Step::Idle | Step::Done),
+                    finished,
+                },
+            )),
             ..wire::ViewState::default()
         }
     }
@@ -266,7 +272,11 @@ mod tests {
             "6 people, 1 event imported"
         );
         assert_eq!(
-            summary(&said(&["6 people imported", "12 events imported", "2 tasks imported"])),
+            summary(&said(&[
+                "6 people imported",
+                "12 events imported",
+                "2 tasks imported"
+            ])),
             "6 people, 12 events, 2 tasks imported"
         );
     }

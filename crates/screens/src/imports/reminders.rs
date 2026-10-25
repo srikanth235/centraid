@@ -31,7 +31,8 @@ pub fn tasks(reminders: &[wire::PhoneReminder]) -> Vec<wire::PhoneReminder> {
         .iter()
         .filter_map(|reminder| {
             let title = reminder.title.trim();
-            if title.is_empty() || !seen.insert(format!("{}|{}", title.to_lowercase(), reminder.due))
+            if title.is_empty()
+                || !seen.insert(format!("{}|{}", title.to_lowercase(), reminder.due))
             {
                 return None;
             }
@@ -141,12 +142,39 @@ mod tests {
     #[test]
     fn the_outcome_is_one_sentence() {
         let l = Locale::En;
-        assert_eq!(sentence(l, Outcome::default()), "No open reminders to import");
         assert_eq!(
-            sentence(l, Outcome { added: 0, refused: 2 }),
+            sentence(l, Outcome::default()),
+            "No open reminders to import"
+        );
+        assert_eq!(
+            sentence(
+                l,
+                Outcome {
+                    added: 0,
+                    refused: 2
+                }
+            ),
             "Reminders did not import."
         );
-        assert_eq!(sentence(l, Outcome { added: 1, refused: 0 }), "1 task imported");
-        assert_eq!(sentence(l, Outcome { added: 4, refused: 1 }), "4 tasks imported");
+        assert_eq!(
+            sentence(
+                l,
+                Outcome {
+                    added: 1,
+                    refused: 0
+                }
+            ),
+            "1 task imported"
+        );
+        assert_eq!(
+            sentence(
+                l,
+                Outcome {
+                    added: 4,
+                    refused: 1
+                }
+            ),
+            "4 tasks imported"
+        );
     }
 }

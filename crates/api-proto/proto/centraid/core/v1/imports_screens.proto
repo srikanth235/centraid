@@ -45,6 +45,10 @@ message ImportsCameraRollEvent {
       ACTION_UNSPECIFIED = 0;
       ACTION_ASK_PERMISSION = 1;
       ACTION_IMPORT_NOW = 2;
+      // A Photos home opened (`PhotosDevice.opened()`): read the grant again, never ask, so a grant
+      // that landed after the session attached (Settings, a launch prompt) is on state before the
+      // member-visible frame.
+      ACTION_READ_PERMISSION = 3;
     }
   }
 

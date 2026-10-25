@@ -68,3 +68,28 @@ Agenda is the worked example: [`crates/screens/src/agenda/`](../crates/screens/s
 3. Move every string into `strings.rs` (counted ones as `counted`); move timers to `ctx.start_timer`.
 4. Port the `jvmTest` cases to `Driver` tests, then delete the KMP screen and its test.
 5. Draw the new `ViewState` in SwiftUI and Compose; delete the old native view.
+
+## Phone imports (lane I)
+
+[`crates/screens/src/imports`](../crates/screens/src/imports) holds three **headless services**: screens that are never drawn, opened once per foreground vault. A core is one vault (a vault switch is a new runtime), so each is a root of the runtime: the navigation root appends [`imports::roots()`](../crates/screens/src/imports/mod.rs) to its tabs (`imports-camera-roll`, `imports-files`, `imports-made`) and keeps them out of the tab bar. Every decision is Rust's; the shell only performs the effects below, **answers them in the order they were asked** (a cursor write is answered `EffectDone` and a later wait must not mistake it), and relays a few events.
+
+| Service | Replaces (KMP) | Shell sends | Shell draws / forwards |
+|---|---|---|---|
+| `imports.camera_roll` | `CameraRoll`, `CameraRollRunner`, `CameraRollSeat`, `LibraryFeed` | `ImportsCameraRollEvent` (always with `vault_id`): `Requested{ASK_PERMISSION, IMPORT_NOW, READ_PERMISSION}` for Photos' `CameraRoll` effect and when a Photos home opens, `Walk` when the app opens or comes forward (`ShelfDrain.installWalk`), `LibraryChanged` on a `PHChange`, `BytesNeeded` with `DrainResponse.need_bytes` | its view → every open Photos home as `PhotosPermissionChanged` / `PhotosBackupChanged` (and once when a home opens); when `imported_total` grows, `ShelfDrain.afterImport`; `fed_last_round` after `BytesNeeded` is the count that landed |
+| `imports.files` | `PhoneFollow`, `FollowGate`, `FilesFollow`, `FilesImport`, `DocsFollowBridge` | `ImportsFilesEvent`: `FolderFollowed` / `FolderStopped` (the answers of Docs' `FollowFolder` / `StopFollowing`, relayed), `Requested` when the folder store may have changed or the app came forward | `followed` → the Docs drive as `FollowedChanged` |
+| `imports.made` | `PhoneImport.made*` | `ImportsMadeEvent.Made{reminders}` when a vault is made (`reminders` false on Android) | `summary`, `open_label`, `open_route` as the one status line; close the service when `finished` |
+
+Effects (`screens.proto`, 1700-1899), each answered under the effect's `effect_id`:
+
+- `LibraryPermission{ask}` → `LibraryPermissionRead`. `ask` false reads the grant and never prompts; `ask` true shows the OS prompt.
+- `Keychain` (existing) holds the per-vault cursor `camera-roll.cursor.<vault>` as UTF-8 bytes.
+- `RollPage{cursor, limit}` → `RollPaged`: assets after the cursor with their resources (`ORIGINAL`, `CAMERA_ORIGINAL`, `PAIRED_VIDEO`), each `after` cursor, the capture group and `changed_in_place`.
+- `LinkRead` → `LinkReading{online, metered, platform_refused, rule}`. The transfer rule is the shell's store; Rust does the arithmetic (`camera_roll::may_fetch`).
+- `LibraryStage{ref, allow_network, changed_in_place, media_type, byte_size}` → `LibraryStaged`. The shell opens the resource and streams it through the stage door with `source = OS_LIBRARY` and the ref as `os_ref`, and answers the core's handle (`content_hash`, `byte_size`, `already_held`, `derivatives_held`) or `IN_CLOUD` / `GONE` / `FAILED`. With `changed_in_place` it first asks `library_assets` for the ref and answers `prior_asset_id` / `prior_content_hash`.
+- `LibraryDerivatives{ref, for_hash, tiers}` → `EffectDone`: render those tiers as the platform draws them and stage each against the original (`for_hash`, `tier`).
+- `FoldersRead{origins}` → `FoldersListing` (a listing only; a folder with no access is left out; `complete` false for a partial listing; the install's `device_id`), then `StageFolderFile{origin, path, media_type}` → `FolderFileStaged{ok, content_hash, byte_size}` for each file the vault has not seen as stated.
+- `RemindersRead{ask_permission}` → `RemindersSnapshot` of the **open** reminders (iOS EventKit).
+- `CameraRoll{ASK_PERMISSION}` from `imports.made` is answered `EffectDone` once the OS prompt is answered (the walk itself is the camera-roll service's).
+- The calendar and contacts reads of a made vault are the apps' own (`CalendarRead`, `ContactsRead`, `PhoneWatch`, `Keychain`); `imports.made` hosts People's `ContactsFollow` and Agenda's `CalendarFollow`, so what a made vault imports is followed from then on exactly as one imported from the app.
+
+The shell reads the vault's folders through the shell catalogue (`shell.files-followed`) only through Rust; it keeps no list of its own beyond the access it holds to each folder (a security-scoped bookmark, a persisted tree URI) keyed by the origin it minted.

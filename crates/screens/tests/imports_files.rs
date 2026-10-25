@@ -38,10 +38,14 @@ fn state(shell: &Shell) -> wire::ImportsFilesState {
 
 fn held(shell: &Shell) -> wire::ImportsFilesHeld {
     shell.d.with_ctx(|ctx| {
-        match read::read(ctx, load::shell::FilesFollowed::default(), |answer| match answer {
-            Answer::ImportsFilesHeld(held) => Some(held),
-            _ => None,
-        }) {
+        match read::read(
+            ctx,
+            load::shell::FilesFollowed::default(),
+            |answer| match answer {
+                Answer::ImportsFilesHeld(held) => Some(held),
+                _ => None,
+            },
+        ) {
             read::Reading::Data(held) => held,
             _ => panic!("the followed folders read"),
         }
@@ -143,7 +147,10 @@ fn a_vault_that_follows_no_folder_is_never_read() {
     let mut shell = shell();
     send(&mut shell, files::Kind::Requested(files::Requested {}));
     settle(&mut shell);
-    assert!(asked(&shell).is_empty(), "a foreground pass never imports into a vault that never followed");
+    assert!(
+        asked(&shell).is_empty(),
+        "a foreground pass never imports into a vault that never followed"
+    );
 }
 
 #[test]
@@ -193,7 +200,10 @@ fn following_a_folder_already_followed_makes_no_second_docs_folder() {
 fn a_new_file_is_staged_claimed_at_the_size_the_core_counted_and_sent_as_one_record() {
     let shell = followed_with_a_file();
     let held = held(&shell);
-    assert_eq!(held.folders[0].documents, 1, "one document follows the file");
+    assert_eq!(
+        held.folders[0].documents, 1,
+        "one document follows the file"
+    );
     assert_eq!(
         held.folders[0].files,
         vec![wire::ImportsHeldFile {
@@ -214,7 +224,10 @@ fn a_rescan_of_an_unchanged_folder_stages_nothing_and_sends_the_stat_alone() {
         &mut shell,
         listing("folder:abc", vec![file("2026/report.pdf", 12, 100)], true),
     );
-    assert!(asked(&shell).is_empty(), "no bytes asked for an unchanged file");
+    assert!(
+        asked(&shell).is_empty(),
+        "no bytes asked for an unchanged file"
+    );
     assert_eq!(held(&shell).folders[0].documents, 1);
 }
 
@@ -227,7 +240,10 @@ fn a_file_whose_size_or_time_moved_is_read_again_and_only_that_file() {
         &mut shell,
         listing(
             "folder:abc",
-            vec![file("2026/report.pdf", 12, 200), file("2026/other.txt", 5, 100)],
+            vec![
+                file("2026/report.pdf", 12, 200),
+                file("2026/other.txt", 5, 100),
+            ],
             true,
         ),
     );
@@ -256,7 +272,11 @@ fn a_file_that_would_not_read_is_not_sent_and_the_pass_still_ends() {
     settle(&mut shell);
     answer_listing(
         &mut shell,
-        listing("folder:abc", vec![file("a.pdf", 3, 1), file("b.pdf", 4, 1)], true),
+        listing(
+            "folder:abc",
+            vec![file("a.pdf", 3, 1), file("b.pdf", 4, 1)],
+            true,
+        ),
     );
     // a.pdf would not read
     shell
@@ -267,7 +287,10 @@ fn a_file_that_would_not_read_is_not_sent_and_the_pass_still_ends() {
     assert_eq!(asked(&shell), vec!["stage:b.pdf"]);
     stage_pending(&mut shell, b"bbbb");
     let held = held(&shell);
-    assert_eq!(held.folders[0].documents, 1, "only the file that read is filed");
+    assert_eq!(
+        held.folders[0].documents, 1,
+        "only the file that read is filed"
+    );
     assert!(!state(&shell).running);
 }
 
@@ -314,7 +337,10 @@ fn a_folder_the_vault_does_not_follow_is_not_sent() {
     let mut shell = shell();
     follow(&mut shell, "folder:abc", "Taxes");
     settle(&mut shell);
-    answer_listing(&mut shell, listing("folder:other", vec![file("x.txt", 3, 1)], true));
+    answer_listing(
+        &mut shell,
+        listing("folder:other", vec![file("x.txt", 3, 1)], true),
+    );
     assert!(asked(&shell).is_empty());
     assert_eq!(held(&shell).folders[0].documents, 0);
 }
@@ -325,9 +351,9 @@ fn a_shell_that_cannot_read_is_a_pass_that_did_nothing_and_the_next_trigger_trie
     follow(&mut shell, "folder:abc", "Taxes");
     settle(&mut shell);
     assert_eq!(asked(&shell), vec!["read"]);
-    shell
-        .d
-        .answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed::default()));
+    shell.d.answer_effect(wire::effect_result::Outcome::Failed(
+        wire::EffectFailed::default(),
+    ));
     assert!(!state(&shell).running);
     send(&mut shell, files::Kind::Requested(files::Requested {}));
     settle(&mut shell);
@@ -347,7 +373,10 @@ fn a_read_that_never_answers_is_abandoned_at_the_timeout() {
             timer: "files-read".to_owned(),
         }),
     );
-    assert!(!state(&shell).running, "one stuck read cannot hold the follow for good");
+    assert!(
+        !state(&shell).running,
+        "one stuck read cannot hold the follow for good"
+    );
 }
 
 #[test]
@@ -398,5 +427,10 @@ fn the_followed_list_is_the_vaults_origins_with_the_documents_each_holds_by_name
         .map(|folder| folder.name.clone())
         .collect();
     assert_eq!(names, vec!["Alpha", "zebra"]);
-    assert!(state(&shell).followed.iter().all(|folder| folder.documents == 0));
+    assert!(
+        state(&shell)
+            .followed
+            .iter()
+            .all(|folder| folder.documents == 0)
+    );
 }

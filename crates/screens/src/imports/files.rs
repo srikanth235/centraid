@@ -76,7 +76,10 @@ pub fn media_type_of(name: &str, given: &str) -> String {
     if !given.trim().is_empty() {
         return given.trim().to_owned();
     }
-    let extension = name.rsplit_once('.').map_or("", |(_, ext)| ext).to_lowercase();
+    let extension = name
+        .rsplit_once('.')
+        .map_or("", |(_, ext)| ext)
+        .to_lowercase();
     match extension.as_str() {
         "pdf" => "application/pdf",
         "png" => "image/png",
@@ -110,7 +113,9 @@ pub fn stat_of(file: &wire::FolderFile) -> String {
 #[must_use]
 pub fn usable(file: &wire::FolderFile) -> bool {
     let name = file.path.rsplit('/').next().unwrap_or("");
-    !squash(name).is_empty() && file.size > 0 && file.path.split('/').all(|part| !part.starts_with('.'))
+    !squash(name).is_empty()
+        && file.size > 0
+        && file.path.split('/').all(|part| !part.starts_with('.'))
 }
 
 /// What one pass did.
@@ -162,10 +167,14 @@ struct Files {
 }
 
 fn read_held(ctx: &Ctx) -> Reading<Vec<Held>> {
-    match read::read(ctx, load::shell::FilesFollowed::default(), |answer| match answer {
-        Answer::ImportsFilesHeld(held) => Some(held),
-        _ => None,
-    }) {
+    match read::read(
+        ctx,
+        load::shell::FilesFollowed::default(),
+        |answer| match answer {
+            Answer::ImportsFilesHeld(held) => Some(held),
+            _ => None,
+        },
+    ) {
         Reading::Data(held) => Reading::Data(
             held.folders
                 .into_iter()
@@ -264,7 +273,10 @@ impl Files {
         for folder in &listing.folders {
             // A folder the vault does not follow is not sent; a folder the shell could not reach
             // is not in the listing at all, so nothing is trashed for it.
-            let Some(held) = self.held.iter().find(|held| held.phone_origin == folder.origin)
+            let Some(held) = self
+                .held
+                .iter()
+                .find(|held| held.phone_origin == folder.origin)
             else {
                 continue;
             };
@@ -515,15 +527,19 @@ impl Screen for Files {
                     Vec::new()
                 }
             }
-            Some(E::EffectResult(result)) => match (self.pass.as_ref().map(|p| &p.stage), result.outcome) {
-                (Some(Stage::Listing), Some(O::FoldersListing(listing))) => self.listed(ctx, listing),
-                (Some(Stage::Staging { .. }), Some(O::FolderFileStaged(staged))) => {
-                    self.staged(ctx, &staged)
+            Some(E::EffectResult(result)) => {
+                match (self.pass.as_ref().map(|p| &p.stage), result.outcome) {
+                    (Some(Stage::Listing), Some(O::FoldersListing(listing))) => {
+                        self.listed(ctx, listing)
+                    }
+                    (Some(Stage::Staging { .. }), Some(O::FolderFileStaged(staged))) => {
+                        self.staged(ctx, &staged)
+                    }
+                    // The shell cannot read at all: a pass that did nothing.
+                    (Some(_), Some(O::Failed(_))) => self.finish(ctx),
+                    _ => Vec::new(),
                 }
-                // The shell cannot read at all: a pass that did nothing.
-                (Some(_), Some(O::Failed(_))) => self.finish(ctx),
-                _ => Vec::new(),
-            },
+            }
             _ => Vec::new(),
         }
     }
@@ -540,11 +556,13 @@ impl Screen for Files {
             .collect();
         followed.sort_by_key(|folder| folder.name.to_lowercase());
         wire::ViewState {
-            kind: Some(wire::view_state::Kind::ImportsFiles(wire::ImportsFilesState {
-                followed,
-                refusal: self.refusal.clone(),
-                running: self.pass.is_some(),
-            })),
+            kind: Some(wire::view_state::Kind::ImportsFiles(
+                wire::ImportsFilesState {
+                    followed,
+                    refusal: self.refusal.clone(),
+                    running: self.pass.is_some(),
+                },
+            )),
             ..wire::ViewState::default()
         }
     }

@@ -84,7 +84,11 @@ fn photographs(shell: &Shell) -> usize {
 fn a_limited_selection_is_a_library_not_a_denial() {
     assert!(can_enumerate(Permission::Limited));
     assert!(can_enumerate(Permission::Granted));
-    for no in [Permission::Denied, Permission::Restricted, Permission::NotAsked] {
+    for no in [
+        Permission::Denied,
+        Permission::Restricted,
+        Permission::NotAsked,
+    ] {
         assert!(!can_enumerate(no), "{no:?}");
     }
 }
@@ -145,6 +149,26 @@ fn a_grant_that_arrives_after_start_is_seen_by_the_next_walk() {
 }
 
 #[test]
+fn a_photos_home_opening_rereads_the_grant_and_never_asks() {
+    let mut library = Library::new();
+    library.permission = Permission::NotAsked;
+    let mut shell = started(&mut library);
+    assert_eq!(state(&shell).permission, Permission::NotAsked as i32);
+    // A grant that landed after the session attached (Settings, a launch prompt).
+    library.permission = Permission::Granted;
+    send(
+        &mut shell,
+        roll::Kind::Requested(roll::Requested {
+            action: roll::requested::Action::ReadPermission as i32,
+        }),
+    );
+    serve_library(&mut shell, &mut library);
+    assert_eq!(state(&shell).permission, Permission::Granted as i32);
+    assert_eq!(library.prompts, 0);
+    assert!(library.pages.is_empty(), "a read walks nothing");
+}
+
+#[test]
 fn the_screens_ask_is_one_prompt_and_a_grant_starts_the_walk() {
     let mut library = Library::new().with(photo("A"), &[("A", STILL)]);
     library.permission = Permission::NotAsked;
@@ -188,14 +212,22 @@ fn a_denied_grant_leaves_the_backup_idle_and_says_why_and_enumerates_nothing() {
     walk(&mut shell, &mut library);
     assert_eq!(phase(&shell), wire::PhotosBackupPhase::Idle as i32);
     assert!(reason(&shell).contains("Settings"));
-    assert!(library.pages.is_empty(), "a roll it may not read is not asked");
+    assert!(
+        library.pages.is_empty(),
+        "a roll it may not read is not asked"
+    );
     assert!(library.asked.is_empty());
     assert_eq!(photographs(&shell), seeded);
 }
 
 // ---- what may cross which link ----
 
-fn link(online: bool, metered: bool, refused: bool, rule: wire::link_reading::Rule) -> wire::LinkReading {
+fn link(
+    online: bool,
+    metered: bool,
+    refused: bool,
+    rule: wire::link_reading::Rule,
+) -> wire::LinkReading {
     wire::LinkReading {
         online,
         metered,
@@ -217,7 +249,10 @@ fn wifi_only_downloads_an_icloud_original_only_on_a_link_nobody_pays_for() {
 fn a_platform_that_would_not_say_is_expensive_and_offline_downloads_nothing() {
     use wire::link_reading::Rule;
     assert!(!may_fetch(&link(true, false, true, Rule::WifiOnly), false));
-    assert!(!may_fetch(&link(false, false, false, Rule::WifiOnly), false));
+    assert!(!may_fetch(
+        &link(false, false, false, Rule::WifiOnly),
+        false
+    ));
 }
 
 #[test]
@@ -254,7 +289,14 @@ fn the_write_names_the_staged_bytes_and_never_the_phones_own_id_for_them() {
     asset.captured_at = "2026-02-03T10:11:12Z".to_owned();
     let hash = "ab".repeat(32);
     let input = input_of(add_request(&asset, &hash, 12, "image/jpeg", false, None).into());
-    for name in ["blob", "size", "media_type", "form", "taken_at", "offset_min"] {
+    for name in [
+        "blob",
+        "size",
+        "media_type",
+        "form",
+        "taken_at",
+        "offset_min",
+    ] {
         assert!(input.contains_key(name), "{name}");
     }
     let text = |name: &str| match &input[name].kind {
@@ -265,12 +307,18 @@ fn the_write_names_the_staged_bytes_and_never_the_phones_own_id_for_them() {
     assert_eq!(text("media_type"), "image/jpeg");
     assert_eq!(text("form"), "photo");
     assert_eq!(text("taken_at"), "2026-02-03T10:11:12Z");
-    assert!(matches!(input["size"].kind, Some(wire::value::Kind::Integer(12))));
+    assert!(matches!(
+        input["size"].kind,
+        Some(wire::value::Kind::Integer(12))
+    ));
     // `edited_from` IS EDIT LINEAGE (#711); the phone's own id is nowhere, nor is a `phash`.
     assert!(!input.contains_key("edited_from") && !input.contains_key("phash"));
     for value in input.values() {
         if let Some(wire::value::Kind::Text(text)) = &value.kind {
-            assert!(!text.contains("9F1B2C3D"), "the phone's own id leaked: {text}");
+            assert!(
+                !text.contains("9F1B2C3D"),
+                "the phone's own id leaked: {text}"
+            );
         }
     }
 }
@@ -280,24 +328,43 @@ fn a_live_photos_two_halves_carry_one_capture_group_and_a_burst_member_gets_none
     let live = live("L/L0/001");
     let hash = "aa".repeat(32);
     let still = input_of(add_request(&live, &hash, 1, "image/heic", false, None).into());
-    let movie = input_of(add_request(&live, &"bb".repeat(32), 1, "video/quicktime", true, None).into());
+    let movie =
+        input_of(add_request(&live, &"bb".repeat(32), 1, "video/quicktime", true, None).into());
     for input in [&still, &movie] {
-        assert!(matches!(&input["burst"].kind, Some(wire::value::Kind::Text(t)) if t == "L/L0/001"));
+        assert!(
+            matches!(&input["burst"].kind, Some(wire::value::Kind::Text(t)) if t == "L/L0/001")
+        );
     }
     assert!(matches!(&still["form"].kind, Some(wire::value::Kind::Text(t)) if t == "photo"));
     assert!(matches!(&movie["form"].kind, Some(wire::value::Kind::Text(t)) if t == "video"));
 
     let mut burst = photo("B/L0/001");
     burst.capture_group.clear();
-    let input = input_of(add_request(&burst, &"cc".repeat(32), 1, "image/jpeg", false, None).into());
-    assert!(!input.contains_key("burst"), "a guess would invent a relationship");
+    let input =
+        input_of(add_request(&burst, &"cc".repeat(32), 1, "image/jpeg", false, None).into());
+    assert!(
+        !input.contains_key("burst"),
+        "a guess would invent a relationship"
+    );
 }
 
 #[test]
 fn an_edit_names_its_source_and_says_nothing_of_when_it_was_taken() {
     let asset = photo("E");
-    let input = input_of(add_request(&asset, &"dd".repeat(32), 1, "image/jpeg", false, Some("asset-1")).into());
-    assert!(matches!(&input["edited_from"].kind, Some(wire::value::Kind::Text(t)) if t == "asset-1"));
+    let input = input_of(
+        add_request(
+            &asset,
+            &"dd".repeat(32),
+            1,
+            "image/jpeg",
+            false,
+            Some("asset-1"),
+        )
+        .into(),
+    );
+    assert!(
+        matches!(&input["edited_from"].kind, Some(wire::value::Kind::Text(t)) if t == "asset-1")
+    );
     assert!(!input.contains_key("taken_at") && !input.contains_key("offset_min"));
 }
 
@@ -323,15 +390,18 @@ fn a_photograph_streams_from_the_library_commits_then_stages_its_two_derivatives
     );
     assert_eq!(library.asked, vec![("A".to_owned(), true)]);
     // ADVANCED PER ASSET: a pass the OS kills resumes where it was.
-    assert_eq!(library.keychain.get(&cursor_key("vault-1")).map(String::as_str), Some("A"));
+    assert_eq!(
+        library
+            .keychain
+            .get(&cursor_key("vault-1"))
+            .map(String::as_str),
+        Some("A")
+    );
 }
 
 #[test]
 fn a_live_photo_is_one_asset_two_resources_in_one_capture_group_with_derivatives_for_the_still() {
-    let mut library = Library::new().with(
-        live("L"),
-        &[("L", STILL), ("L#pairedVideo", MOVIE)],
-    );
+    let mut library = Library::new().with(live("L"), &[("L", STILL), ("L#pairedVideo", MOVIE)]);
     let mut shell = started(&mut library);
     walk(&mut shell, &mut library);
     let refs: Vec<&str> = library.asked.iter().map(|(r, _)| r.as_str()).collect();
@@ -343,7 +413,8 @@ fn a_live_photo_is_one_asset_two_resources_in_one_capture_group_with_derivatives
 }
 
 #[test]
-fn an_original_only_in_icloud_waits_for_wifi_with_the_cursor_before_it_and_is_fetched_once_it_may_be() {
+fn an_original_only_in_icloud_waits_for_wifi_with_the_cursor_before_it_and_is_fetched_once_it_may_be()
+ {
     use wire::link_reading::Rule;
     let mut library = Library::new()
         .with(photo("A"), &[("A", STILL)])
@@ -355,7 +426,10 @@ fn an_original_only_in_icloud_waits_for_wifi_with_the_cursor_before_it_and_is_fe
 
     // STAGING IS LOCAL: the photograph on the phone goes in on cellular.
     walk(&mut shell, &mut library);
-    assert_eq!(phase(&shell), wire::PhotosBackupPhase::WaitingForUnmetered as i32);
+    assert_eq!(
+        phase(&shell),
+        wire::PhotosBackupPhase::WaitingForUnmetered as i32
+    );
     assert_eq!(
         reason(&shell),
         "Some originals are only in iCloud. Centraid fetches them on Wi-Fi."
@@ -365,11 +439,20 @@ fn an_original_only_in_icloud_waits_for_wifi_with_the_cursor_before_it_and_is_fe
         library.asked,
         vec![("A".to_owned(), false), ("B".to_owned(), false)]
     );
-    assert_eq!(library.keychain.get(&cursor_key("vault-1")).map(String::as_str), Some("A"));
+    assert_eq!(
+        library
+            .keychain
+            .get(&cursor_key("vault-1"))
+            .map(String::as_str),
+        Some("A")
+    );
 
     library.link = wifi();
     walk(&mut shell, &mut library);
-    assert_eq!(&library.asked[2..], &[("B".to_owned(), true), ("C".to_owned(), true)][..]);
+    assert_eq!(
+        &library.asked[2..],
+        &[("B".to_owned(), true), ("C".to_owned(), true)][..]
+    );
     assert_eq!(phase(&shell), wire::PhotosBackupPhase::Done as i32);
     assert_eq!(state(&shell).imported_total, 3);
 }
@@ -396,7 +479,10 @@ fn a_restored_phones_rewalk_renders_only_the_tiers_the_vault_lacks() {
     library.derivatives_held = Some(vec!["thumb".to_owned()]);
     let mut shell = started(&mut library);
     walk(&mut shell, &mut library);
-    assert_eq!(library.rendered, vec![("A".to_owned(), "preview".to_owned())]);
+    assert_eq!(
+        library.rendered,
+        vec![("A".to_owned(), "preview".to_owned())]
+    );
 
     // BOTH HELD: nothing is rendered.
     let mut whole = Library::new().with(photo("A"), &[("A", b"another still")]);
@@ -434,12 +520,19 @@ fn a_library_change_walks_the_whole_burst_not_one_page() {
     }
     let mut shell = started(&mut library);
     let seeded = photographs(&shell);
-    send(&mut shell, roll::Kind::LibraryChanged(roll::LibraryChanged {}));
+    send(
+        &mut shell,
+        roll::Kind::LibraryChanged(roll::LibraryChanged {}),
+    );
     serve_library(&mut shell, &mut library);
     assert_eq!(state(&shell).imported_total, 60);
     assert_eq!(photographs(&shell), seeded + 60);
     assert_eq!(
-        library.pages.iter().map(|(_, limit)| *limit).collect::<Vec<_>>(),
+        library
+            .pages
+            .iter()
+            .map(|(_, limit)| *limit)
+            .collect::<Vec<_>>(),
         vec![25, 25, 25]
     );
 }
@@ -465,7 +558,9 @@ fn a_walk_resumes_from_the_cursor_the_keychain_holds() {
     let mut library = Library::new()
         .with(photo("A"), &[("A", STILL)])
         .with(photo("B"), &[("B", MOVIE)]);
-    library.keychain.insert(cursor_key("vault-1"), "A".to_owned());
+    library
+        .keychain
+        .insert(cursor_key("vault-1"), "A".to_owned());
     let mut shell = started(&mut library);
     walk(&mut shell, &mut library);
     assert_eq!(library.asked, vec![("B".to_owned(), true)]);
