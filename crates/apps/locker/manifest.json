@@ -105,6 +105,11 @@
         "verbs": "act"
       },
       {
+        "schema": "locker",
+        "table": "reveal_receipt",
+        "verbs": "act"
+      },
+      {
         "schema": "entity",
         "table": "trash",
         "verbs": "act"
@@ -1166,6 +1171,73 @@
           }
         }
       }
+    },
+    {
+      "name": "reveal",
+      "verb": "reveal",
+      "kind": "locker_item",
+      "inverse": "reveal",
+      "sealed": [],
+      "command": "locker.reveal_receipt",
+      "phrasings": [
+        "show me the password for my bank login",
+        "copy the card number of my Visa",
+        "reveal the wifi password"
+      ],
+      "description": "Receipt the reveal of ONE sealed field through locker.reveal_receipt, the record of who looked. It returns a receipt id and never the secret: the phone core opens the field behind the unlock and hands the plaintext only to the card or screen that asked, never to the model. Running it again only writes another receipt, so it is its own inverse.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "object_type": {
+            "type": "string",
+            "const": "locker.item"
+          },
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "columns": {
+            "aliases": ["field"],
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "type": "string",
+              "enum": ["password", "otp_seed", "card_number", "cvv", "content"]
+            }
+          },
+          "field_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "const": "reveal"
+          },
+          "use": {
+            "type": "string",
+            "enum": ["show", "copy"],
+            "default": "show"
+          }
+        },
+        "required": ["object_type", "item_id", "columns", "kind"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
     }
   ],
   "queries": [
@@ -1287,6 +1359,49 @@
         "properties": {
           "items": {
             "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "review",
+      "kind": "locker_item",
+      "figures": [
+        "compromised",
+        "insecure_address",
+        "expired",
+        "expiring",
+        "reviewed"
+      ],
+      "description": "What deserves a second look, from metadata alone: items the member flagged compromised, logins whose address is not https, cards past their expiry and cards expiring within the month. Weak and reused passwords are not scored (a secret is never read to judge it). Reads the first 2,000 live and archived items and says when it stopped.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "compromised": {
+            "type": "array"
+          },
+          "insecure_address": {
+            "type": "array"
+          },
+          "expired": {
+            "type": "array"
+          },
+          "expiring": {
+            "type": "array"
+          },
+          "reviewed": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
           },
           "vaultDenied": {
             "type": "object"

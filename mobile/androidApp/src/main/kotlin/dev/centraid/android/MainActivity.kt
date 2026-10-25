@@ -41,8 +41,6 @@ import androidx.core.view.WindowCompat
 import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.agenda.AgendaRoutes
-import dev.centraid.android.screens.locker.LockerRoutes
-import dev.centraid.android.screens.money.MoneyRoutes
 import dev.centraid.android.screens.notes.NotesRoutes
 import dev.centraid.android.screens.mediaPermissions
 import dev.centraid.android.screens.photos.PhotosRoutes
@@ -137,11 +135,9 @@ public class MainActivity : FragmentActivity() {
      */
     private val routes: List<AppRoutes> by lazy {
         listOf(
-            AgendaRoutes(phoneFollow, health),
+            agenda,
             PhotosRoutes(cacheDir),
             NotesRoutes(),
-            MoneyRoutes(),
-            locker,
             homeSearch,
         )
     }
@@ -150,15 +146,15 @@ public class MainActivity : FragmentActivity() {
     private val homeSearch: HomeSearchRoutes by lazy { HomeSearchRoutes() }
 
     /**
-     * LOCKER'S ROUTES, NAMED because two things outside them reach in: its
-     * wall's "Enter your 24 words" opens [words]' words.enter, and that
-     * sheet's close has the gate re-read `keyed` (#1047 E3).
+     * AGENDA'S, LOCKER'S AND MONEY'S ROUTES, NAMED: both draw the screen runtime's pages
+     * (#1135), and the 24 words' sheet's close has every Locker wall re-read
+     * `keyed` (#1047 E3).
      */
-    private val locker: LockerRoutes by lazy { LockerRoutes(openWords = { words.openRekey() }) }
+    private val agenda: AgendaRoutes by lazy { AgendaRoutes(phoneFollow, health, openWords = { words.openRekey() }) }
 
     /** THE 24 WORDS' SHEETS (#1047 E3), over every screen. See `WordsSheets`. */
     private val words: WordsSheets by lazy {
-        WordsSheets(onEnterClosed = { locker.reattach(this) }).also {
+        WordsSheets(onEnterClosed = { agenda.foregrounded() }).also {
             it.camera = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
         }
     }
@@ -275,6 +271,8 @@ public class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // A secret copied before the app was killed is cleared once its deadline has passed.
+        dev.centraid.android.kit.ClipboardDeadline.sweep(applicationContext)
         // EDGE TO EDGE, and it owns the system bars' icon contrast. The page
         // ground is the emitted `bg` and it reaches the notch; the insets are
         // then paid back by `safeDrawingPadding` below, which is the only place

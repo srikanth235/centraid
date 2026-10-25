@@ -20,6 +20,7 @@
 //! | locker item | locker | `locker_item` | the item's page, behind the Locker's lock wall |
 //! | workout | health | `workout` | the workout's page |
 //! | daily figure | health | `daily_figure` | Health's front door: a day's total has no page of its own |
+//! | account, category, budget, rule | money | the kind's name | Money's home |
 //!
 //! The album, notebook and folder routes are the shell's since the containers became search results
 //! (#1097, `ChatRouting.swift`): the card's `id` is the container's id and its `title` the name the route needs.
@@ -62,8 +63,17 @@ const fn row(kind: Kind, app: App, entity: &'static str) -> CardKind {
     }
 }
 
+const fn home(kind: Kind, app: App, entity: &'static str) -> CardKind {
+    CardKind {
+        kind,
+        app,
+        entity,
+        opens: Opens::AppHome,
+    }
+}
+
 /// THE TABLE. Every kind.
-pub const TABLE: [CardKind; 14] = [
+pub const TABLE: [CardKind; 18] = [
     row(Kind::Person, App::People, "person"),
     row(Kind::Event, App::Agenda, "event"),
     row(Kind::Task, App::Agenda, "task"),
@@ -83,6 +93,12 @@ pub const TABLE: [CardKind; 14] = [
         entity: "daily_figure",
         opens: Opens::AppHome,
     },
+    // Money's account, category, budget and rule have no page of their own in the shell's row
+    // routes: a tap opens Money's home, where the lists they live in are one tap away.
+    home(Kind::Account, App::Money, "account"),
+    home(Kind::Category, App::Money, "category"),
+    home(Kind::Budget, App::Money, "budget"),
+    home(Kind::Rule, App::Money, "rule"),
 ];
 
 /// How a kind is drawn.

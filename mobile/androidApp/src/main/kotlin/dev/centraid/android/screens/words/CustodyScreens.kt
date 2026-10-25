@@ -39,7 +39,7 @@ import dev.centraid.android.kit.ChoiceStack
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitSpinner
 import dev.centraid.android.kit.OutlineButton
-import dev.centraid.android.screens.locker.LockerSeam
+import dev.centraid.android.kit.OwnerPrompt
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.android.kit.RowSkeleton
@@ -130,7 +130,7 @@ internal fun ownerCheck(activity: FragmentActivity?, reason: String, onAnswer: (
     val info = BiometricPrompt.PromptInfo.Builder()
         .setTitle(reason)
         // NO NEGATIVE BUTTON: `DEVICE_CREDENTIAL` forbids one.
-        .setAllowedAuthenticators(LockerSeam.authenticators())
+        .setAllowedAuthenticators(OwnerPrompt.authenticators())
         .build()
     val raised = runCatching {
         BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), callback).authenticate(info)

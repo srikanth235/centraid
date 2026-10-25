@@ -7,18 +7,8 @@ import centraid.core.v1.Page
 import centraid.core.v1.Response
 import centraid.core.v1.Row
 import centraid.core.v1.Value
-import centraid.screen.v1.LockerBiometry
-import centraid.screen.v1.LockerLockEvent
-import centraid.screen.v1.LockerLockState
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreConfiguration
-import dev.centraid.design.copy.LockerCopy
-import dev.centraid.shared.apps.locker.GateEffect
-import dev.centraid.shared.apps.locker.GateInput
-import dev.centraid.shared.apps.locker.LockerDoor
-import dev.centraid.shared.apps.locker.LockerDoorAnswer
-import dev.centraid.shared.apps.locker.LockerGate
-import dev.centraid.shared.apps.locker.LockerLockMachine
 import dev.centraid.shared.custody.DevSeed
 import dev.centraid.shared.custody.VaultSecrets
 import dev.centraid.shared.platform.FakePlatformServices
@@ -33,7 +23,6 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import java.io.File
@@ -349,92 +338,6 @@ class KeyedOpenSpec : StringSpec({
         val configuration = CoreConfiguration(databasePath = "/v.sqlite3", vaultSeedHex = seed, vaultIndex = 3)
         configuration.toString() shouldNotContain seed
         configuration.toString() shouldContain "vaultIndex=3"
-    }
-
-    // --- the Locker wall on an unkeyed core ------------------------------------
-
-    val attached = GateInput.View(
-        LockerLockEvent(attached = LockerLockEvent.Attached(available = true, biometry = LockerBiometry.LOCKER_BIOMETRY_FACE)),
-    )
-    val tap = GateInput.View(LockerLockEvent(unlock = LockerLockEvent.UnlockTapped()))
-
-    "an unkeyed core draws the words' wall and never raises a prompt" {
-        var gate = LockerLockMachine.initial()
-        val effects = mutableListOf<GateEffect>()
-        listOf(GateInput.Keys(keyed = false), attached, tap).forEach {
-            val step = LockerLockMachine.reduce(gate, it)
-            gate = step.gate
-            effects += step.effects
-        }
-        gate.state.phase shouldBe LockerLockState.Phase.PHASE_UNAVAILABLE
-        gate.state.title shouldBe LockerCopy.LOCK_NO_WORDS_TITLE
-        gate.state.body shouldBe LockerCopy.LOCK_NO_WORDS_BODY
-        gate.state.notice shouldBe LockerCopy.LOCK_NO_WORDS_NOTICE
-        gate.state.cover.shouldBeTrue()
-        // NO FACE ID FOR A DOOR THAT CANNOT OPEN: the prompt would succeed and
-        // the core would then refuse with a sentence about a gateway.
-        gate.state.prompt.shouldBeNull()
-        effects.shouldBeEmpty()
-
-        // AND A KEYED CORE (a switch to a vault with its words) is the ordinary lock.
-        val back = LockerLockMachine.reduce(gate, GateInput.Keys(keyed = true)).gate
-        back.state.phase shouldBe LockerLockState.Phase.PHASE_LOCKED
-        back.state.title shouldBe LockerCopy.LOCK_TITLE
-    }
-
-    "no passcode on a keyed core still says passcode, not words" {
-        val noPasscode = GateInput.View(
-            LockerLockEvent(attached = LockerLockEvent.Attached(available = false)),
-        )
-        val gate = LockerLockMachine.reduce(LockerLockMachine.initial(), noPasscode).gate
-        gate.state.title shouldBe LockerCopy.LOCK_UNAVAILABLE_TITLE
-    }
-
-    "an open Locker whose core turns out unkeyed is relocked" {
-        var gate = LockerLockMachine.initial()
-        gate = LockerLockMachine.reduce(gate, attached).gate
-        gate = LockerLockMachine.reduce(gate, tap).gate
-        val token = gate.state.prompt.shouldNotBeNull().token
-        gate = LockerLockMachine.reduce(
-            gate,
-            GateInput.View(
-                LockerLockEvent(
-                    answered = LockerLockEvent.PromptAnswered(
-                        token = token,
-                        outcome = LockerLockEvent.PromptAnswered.Outcome.OUTCOME_SUCCEEDED,
-                    ),
-                ),
-            ),
-        ).gate
-        gate = LockerLockMachine.reduce(gate, GateInput.Core(open = true)).gate
-        gate.open.shouldBeTrue()
-
-        val step = LockerLockMachine.reduce(gate, GateInput.Keys(keyed = false))
-        step.gate.state.phase shouldBe LockerLockState.Phase.PHASE_UNAVAILABLE
-        step.effects shouldBe listOf(GateEffect.Relock)
-    }
-
-    "the running gate reads keyed before every view event, and asks the core nothing" {
-        runTest {
-            val asked = mutableListOf<String>()
-            val door = object : LockerDoor {
-                override suspend fun state(): LockerDoorAnswer = LockerDoorAnswer.Session(open = false).also { asked += "state" }
-                override suspend fun unlock(): LockerDoorAnswer = LockerDoorAnswer.Session(open = true).also { asked += "unlock" }
-                override suspend fun relock(): LockerDoorAnswer = LockerDoorAnswer.Session(open = false).also { asked += "relock" }
-                override suspend fun reveal(itemId: String, column: String): LockerDoorAnswer =
-                    LockerDoorAnswer.Session(open = false).also { asked += "reveal" }
-            }
-            var keyed = false
-            val gate = LockerGate(door, CoroutineScope(Dispatchers.Unconfined), keyed = { keyed })
-            gate.reduce(attached)
-            gate.reduce(tap)
-            gate.state.value.title shouldBe LockerCopy.LOCK_NO_WORDS_TITLE
-            asked.shouldBeEmpty()
-
-            keyed = true
-            gate.reduce(attached)
-            gate.state.value.phase shouldBe LockerLockState.Phase.PHASE_LOCKED
-        }
     }
 
     // --- a vault on its own words (R-1047-E18) ---------------------------------

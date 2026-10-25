@@ -21,23 +21,6 @@ public object ScreenIds {
 
     /** The folder page: the drive's machine on a bridge of its own, keyed apart so the drive under it keeps its tab. */
 
-    public const val MONEY_HOME: String = "money.home"
-    public const val MONEY_TRANSACTION: String = "money.transaction"
-    public const val MONEY_TARGET: String = "money.target"
-    public const val MONEY_RECURRING: String = "money.recurring"
-    public const val MONEY_IMPORT: String = "money.import"
-    public const val MONEY_ACCOUNTS: String = "money.accounts"
-    public const val MONEY_RULES: String = "money.rules"
-    public const val MONEY_CATEGORIES: String = "money.categories"
-    public const val MONEY_SEARCH: String = "money.search"
-
-    public const val LOCKER_HOME: String = "locker.home"
-    public const val LOCKER_ITEM: String = "locker.item"
-    public const val LOCKER_EDITOR: String = "locker.editor"
-    public const val LOCKER_TRASH: String = "locker.trash"
-    public const val LOCKER_EXPORT: String = "locker.export"
-    public const val LOCKER_IMPORT: String = "locker.import"
-    public const val LOCKER_ACCESS: String = "locker.access"
 
     public const val PHOTOS_GRID: String = "photos.grid"
     public const val PHOTOS_SHELF: String = "photos.shelf"

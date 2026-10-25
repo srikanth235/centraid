@@ -244,7 +244,7 @@ public object HomeReads {
 
     /**
      * WHETHER LOCKER IS OPEN, as the Locker gate says (#1047). A slot the
-     * shell owns and `apps.locker` fills, so Home never names an app's types
+     * shell owns and `nav.LockerEntry` fills, so Home never names an app's types
      * (`PerAppLayoutSpec`); closed until something says otherwise.
      */
     public var lockerOpen: () -> Boolean = { false }

@@ -8,40 +8,6 @@ import centraid.core.v1.Value
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.ReadFailureKind
 import dev.centraid.core.CoreFailure
-import dev.centraid.shared.apps.locker.LOCKER_TRASH
-import dev.centraid.shared.apps.locker.LockerAccessMachine
-import dev.centraid.shared.apps.locker.LockerAccessReads
-import dev.centraid.shared.apps.locker.LockerEditorMachine
-import dev.centraid.shared.apps.locker.LockerEditorReads
-import dev.centraid.shared.apps.locker.LockerExportMachine
-import dev.centraid.shared.apps.locker.LockerExportReads
-import dev.centraid.shared.apps.locker.LockerGeneratorMachine
-import dev.centraid.shared.apps.locker.LockerGeneratorReads
-import dev.centraid.shared.apps.locker.LockerHomeMachine
-import dev.centraid.shared.apps.locker.LockerHomeReads
-import dev.centraid.shared.apps.locker.LockerImportMachine
-import dev.centraid.shared.apps.locker.LockerImportReads
-import dev.centraid.shared.apps.locker.LockerItemMachine
-import dev.centraid.shared.apps.locker.LockerItemReads
-import dev.centraid.shared.apps.locker.LockerTrashMachine
-import dev.centraid.shared.apps.money.MoneyAccountsMachine
-import dev.centraid.shared.apps.money.MoneyAccountsReads
-import dev.centraid.shared.apps.money.MoneyCategoriesMachine
-import dev.centraid.shared.apps.money.MoneyCategoriesReads
-import dev.centraid.shared.apps.money.MoneyHomeMachine
-import dev.centraid.shared.apps.money.MoneyHomeReads
-import dev.centraid.shared.apps.money.MoneyImportMachine
-import dev.centraid.shared.apps.money.MoneyImportReads
-import dev.centraid.shared.apps.money.MoneyRecurringMachine
-import dev.centraid.shared.apps.money.MoneyRecurringReads
-import dev.centraid.shared.apps.money.MoneyRulesMachine
-import dev.centraid.shared.apps.money.MoneyRulesReads
-import dev.centraid.shared.apps.money.MoneySearchMachine
-import dev.centraid.shared.apps.money.MoneySearchReads
-import dev.centraid.shared.apps.money.MoneyTargetMachine
-import dev.centraid.shared.apps.money.MoneyTargetReads
-import dev.centraid.shared.apps.money.MoneyTransactionMachine
-import dev.centraid.shared.apps.money.MoneyTransactionReads
 import centraid.screen.v1.PhotoShelf
 import centraid.screen.v1.PhotoShelfEvent
 import centraid.screen.v1.PhotoLightboxEvent
@@ -115,10 +81,6 @@ class AppReadsSpec : StringSpec({
         // THE DUPLICATES SHELF IS AN APP QUERY (`photos.duplicates`, the core's
         // clustering), and is in `queryScreens`.
         Triple("photos.duplicate", DuplicateReviewReads, DuplicateReviewMachine),
-        // LOCKER (#1047): the kit's trash over `entity`, kind `locker_item` (#1135). The statement is
-        // the kit's own; `LockerTrashReads` adds only the gate in front of it
-        // (`LockerSpec`).
-        Triple("locker.trash", TrashReads(LOCKER_TRASH), LockerTrashMachine),
     )
 
     /** The statement each screen makes when it is holding a state that can read. */
@@ -164,7 +126,6 @@ class AppReadsSpec : StringSpec({
             null,
         )
         "photos.places" -> PlacesReads.query(PlacesMachine.initial(), null)
-        "locker.trash" -> TrashReads(LOCKER_TRASH).query(LockerTrashMachine.initial(), null)
         else -> {
             // THE CLUSTER'S MEMBERS ARE THE CORE'S, asked as the screen opens; a
             // cluster the core did not answer has no members to read.
@@ -246,30 +207,6 @@ class AppReadsSpec : StringSpec({
     val queryScreens: List<Triple<String, ScreenQueries<*, *>, ScreenMachine<*, *>>> = listOf(
         // PHOTOS' DUPLICATES (#1135): the core's clustering, asked as an app query.
         Triple("photos.duplicates", DuplicatesReads, DuplicatesMachine),
-        // LOCKER (#1047). Every read screen shares one table set — the item,
-        // its sidecars and its tags; the generator reads none.
-        Triple("locker.home", LockerHomeReads, LockerHomeMachine),
-        Triple("locker.item", LockerItemReads, LockerItemMachine),
-        Triple("locker.editor", LockerEditorReads, LockerEditorMachine),
-        Triple("locker.generator", LockerGeneratorReads, LockerGeneratorMachine),
-        // #1047 T2: the item page reads its access history (`receipt`);
-        // export and import read the shelf's counts.
-        Triple("locker.export", LockerExportReads, LockerExportMachine),
-        Triple("locker.import", LockerImportReads, LockerImportMachine),
-        // Q-1047-21: the whole Locker's access history reads the receipts and
-        // the two tables a receipt's item and field are named from.
-        Triple("locker.access", LockerAccessReads, LockerAccessMachine),
-        // MONEY (#1099). Every screen reads the same table set: one app query folds
-        // accounts, lines, targets, rules, checkpoints, categories and transfer links.
-        Triple("money.home", MoneyHomeReads, MoneyHomeMachine),
-        Triple("money.transaction", MoneyTransactionReads, MoneyTransactionMachine),
-        Triple("money.target", MoneyTargetReads, MoneyTargetMachine),
-        Triple("money.recurring", MoneyRecurringReads, MoneyRecurringMachine),
-        Triple("money.import", MoneyImportReads, MoneyImportMachine),
-        Triple("money.accounts", MoneyAccountsReads, MoneyAccountsMachine),
-        Triple("money.rules", MoneyRulesReads, MoneyRulesMachine),
-        Triple("money.categories", MoneyCategoriesReads, MoneyCategoriesMachine),
-        Triple("money.search", MoneySearchReads, MoneySearchMachine),
         // HOME'S SEARCH (R-CHROME-6). Like the powerbox it declares no table:
         // a transient screen over search results re-reads on a new term only.
         Triple("home.search", HomeSearchReads, HomeSearchMachine),

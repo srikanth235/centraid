@@ -95,6 +95,10 @@ message LockerItemRow {
   string updated_local_day = 10;
   // A card's expiry as stored (`MM/YY`). Empty otherwise.
   string expiry = 11;
+  // Only on the trash's rows (`locker.trash`): the civil days the item went to
+  // the trash and will be erased, in the request's zone.
+  string deleted_local_day = 12;
+  string purge_local_day = 13;
 }
 
 // `locker.item` (61): one item and its sidecars. Answers a TRASHED item too,
@@ -416,6 +420,9 @@ message LockerSessionResponse {
   optional LockerExported exported = 7;
   // An import's plan, or what a publish wrote.
   optional LockerImportPlan import_plan = 8;
+  // This core holds the vault's keys, so an unlock can succeed. False on a core
+  // opened without the seed: the wall says so before it raises any prompt.
+  bool keyed = 9;
 }
 
 enum LockerSessionState {

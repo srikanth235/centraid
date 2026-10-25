@@ -5,6 +5,8 @@
 pub mod act;
 pub mod autosave;
 pub mod civil;
+pub mod money;
 pub mod read;
 pub mod search;
+pub mod secret;
 pub mod trash;

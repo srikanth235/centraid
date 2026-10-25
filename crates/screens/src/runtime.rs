@@ -413,6 +413,21 @@ impl ScreenHost for Runtime {
                     &mut out,
                 );
             }
+            // THE APP LEFT OR CAME BACK: every open screen hears it (a Locker
+            // relocks the instant it leaves the foreground).
+            K::Lifecycle(lifecycle) => {
+                let lifecycle = *lifecycle;
+                Self::broadcast(
+                    &mut state,
+                    core,
+                    |_| {
+                        Some(wire::ScreenEvent {
+                            kind: Some(wire::screen_event::Kind::Lifecycle(lifecycle)),
+                        })
+                    },
+                    &mut out,
+                );
+            }
         }
         // The first call also carries the opened roots, so a snapshot is not a
         // second round trip: `start` filled `out` already.

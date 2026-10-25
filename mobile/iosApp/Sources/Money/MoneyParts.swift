@@ -10,22 +10,15 @@ import CentraidShared
 // the state's own exponent; nothing here adds two amounts, picks a sign, a tone
 // or a currency. The twin of Android's `screens/money/MoneyParts.kt`.
 
-/// One Money event, encoded: the bytes every Money bridge takes.
-func moneyEvent<Event: SwiftProtobuf.Message>(_ type: Event.Type, _ build: (inout Event) -> Void) -> Data {
-    var event = Event()
-    build(&event)
-    return event.encoded
-}
-
-/// The words a view assembles from the state's own: a rendered amount, a spoken
-/// phrase, a refusal's sentence. Nothing decided, only joined.
+/// The words a view assembles from the state's own: a finished amount, a spoken
+/// phrase. Nothing decided, only joined. An amount arrives finished from Rust
+/// (`kit::money` is the one formatter); nothing here renders, signs or sums one.
 enum MoneyWords {
-    /// Money as the vault says to render it; absent is nothing.
-    static func amount(_ money: Centraid_Screen_V1_Money) -> String { Money.render(money) }
+    static func amount(_ money: String) -> String { money }
 
-    /// The state's words, then the rendered money after them.
-    static func spoken(_ words: String, _ money: Centraid_Screen_V1_Money? = nil) -> String {
-        [words, money.map { Money.render($0) } ?? ""].filter { !$0.isEmpty }.joined(separator: ", ")
+    /// The state's words, then the finished amount after them.
+    static func spoken(_ words: String, _ money: String? = nil) -> String {
+        [words, money ?? ""].filter { !$0.isEmpty }.joined(separator: ", ")
     }
 
     /// Two clauses of one meta line.
@@ -33,127 +26,118 @@ enum MoneyWords {
         parts.filter { !$0.isEmpty }.joined(separator: " \u{00B7} ")
     }
 
-    /// The one status line a page hosts: the machine's own, else a refused write's sentence.
-    static func line(
-        _ status: Centraid_Screen_V1_StatusLine?,
-        write: Centraid_Screen_V1_WriteState? = nil
-    ) -> Centraid_Screen_V1_StatusLine {
-        if let status, !status.sentence.isEmpty { return status }
-        var line = Centraid_Screen_V1_StatusLine()
-        if let write {
-            line.sentence = write.refusal
-            line.refused = true
-        }
-        return line
+    /// The one status line a page hosts: Rust's own, or an empty one.
+    static func line(_ status: Centraid_Core_V1_StatusLine?) -> Centraid_Core_V1_StatusLine {
+        status ?? Centraid_Core_V1_StatusLine()
     }
 }
 
 // MARK: - The read law, per state
 
-extension Centraid_Screen_V1_MoneyHomeState {
-    var readContent: ScreenContent<Centraid_Screen_V1_MoneyHomeData> {
+extension Centraid_Core_V1_MoneyHomeState {
+    var readContent: ScreenContent<Centraid_Core_V1_MoneyHomeData> {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
+        case let .denied(denied)?: return .denied(denied.legacy)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
     }
 }
 
-extension Centraid_Screen_V1_MoneyTransactionState {
-    var readContent: ScreenContent<Centraid_Screen_V1_MoneyTransactionData> {
+extension Centraid_Core_V1_MoneyTransactionState {
+    var readContent: ScreenContent<Centraid_Core_V1_MoneyTransactionData> {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
+        case let .denied(denied)?: return .denied(denied.legacy)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
     }
 }
 
-extension Centraid_Screen_V1_MoneyTargetState {
-    var readContent: ScreenContent<Centraid_Screen_V1_MoneyTargetData> {
+extension Centraid_Core_V1_MoneyTargetState {
+    var readContent: ScreenContent<Centraid_Core_V1_MoneyTargetData> {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
+        case let .denied(denied)?: return .denied(denied.legacy)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
     }
 }
 
-extension Centraid_Screen_V1_MoneyRecurringState {
-    var readContent: ScreenContent<Centraid_Screen_V1_MoneyRecurringData> {
+extension Centraid_Core_V1_MoneyRecurringState {
+    var readContent: ScreenContent<Centraid_Core_V1_MoneyRecurringData> {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
+        case let .denied(denied)?: return .denied(denied.legacy)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
     }
 }
 
-extension Centraid_Screen_V1_MoneyImportState {
-    var readContent: ScreenContent<Centraid_Screen_V1_MoneyImportData> {
+extension Centraid_Core_V1_MoneyImportState {
+    var readContent: ScreenContent<Centraid_Core_V1_MoneyImportData> {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
+        case let .denied(denied)?: return .denied(denied.legacy)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
     }
 }
 
-extension Centraid_Screen_V1_MoneyAccountsState {
-    var readContent: ScreenContent<Centraid_Screen_V1_MoneyAccountsData> {
+extension Centraid_Core_V1_MoneyAccountsState {
+    var readContent: ScreenContent<Centraid_Core_V1_MoneyAccountsData> {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
+        case let .denied(denied)?: return .denied(denied.legacy)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
     }
 }
 
-extension Centraid_Screen_V1_MoneyRulesState {
-    var readContent: ScreenContent<Centraid_Screen_V1_MoneyRulesData> {
+extension Centraid_Core_V1_MoneyRulesState {
+    var readContent: ScreenContent<Centraid_Core_V1_MoneyRulesData> {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
+        case let .denied(denied)?: return .denied(denied.legacy)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
     }
 }
 
-extension Centraid_Screen_V1_MoneyCategoriesState {
-    var readContent: ScreenContent<Centraid_Screen_V1_MoneyCategoriesData> {
+extension Centraid_Core_V1_MoneyCategoriesState {
+    var readContent: ScreenContent<Centraid_Core_V1_MoneyCategoriesData> {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
+        case let .denied(denied)?: return .denied(denied.legacy)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
     }
 }
 
-extension Centraid_Screen_V1_MoneySearchState {
+extension Centraid_Core_V1_MoneySearchState {
     /// `resting` is a fifth arm the search page draws before the read: it is not
     /// a read, so it maps to loading here and the page checks it first.
-    var readContent: ScreenContent<Centraid_Screen_V1_MoneySearchData> {
+    var readContent: ScreenContent<Centraid_Core_V1_MoneySearchData> {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
+        case let .denied(denied)?: return .denied(denied.legacy)
         case let .data(data)?: return .data(data)
         case .resting?, nil: return .loading(true)
         }
@@ -258,18 +242,18 @@ struct MoneyHeading: View {
 /// A label beside its figure, inked by the figure's own tone.
 struct MoneyFigureRow: View {
     let label: String
-    let amount: Centraid_Screen_V1_Money
-    var tone: Centraid_Screen_V1_StatusChip.Tone = .neutral
+    let amount: String
+    var tone: Centraid_Core_V1_StatusChip.Tone = .neutral
 
     @Environment(\.colorScheme) private var scheme
 
-    init(figure: Centraid_Screen_V1_MoneyFigure) {
+    init(figure: Centraid_Core_V1_MoneyFigure) {
         self.label = figure.label
         self.amount = figure.amount
         self.tone = figure.tone
     }
 
-    init(label: String, amount: Centraid_Screen_V1_Money, tone: Centraid_Screen_V1_StatusChip.Tone = .neutral) {
+    init(label: String, amount: String, tone: Centraid_Core_V1_StatusChip.Tone = .neutral) {
         self.label = label
         self.amount = amount
         self.tone = tone
@@ -300,7 +284,7 @@ struct MoneyFigureRow: View {
 /// through the month today falls. Over plan reads as the `net` ink and the
 /// figure's own minus sign: colour is the second channel.
 struct MoneyHeroView: View {
-    let hero: Centraid_Screen_V1_MoneyHero
+    let hero: Centraid_Core_V1_MoneyHero
 
     @Environment(\.colorScheme) private var scheme
 
@@ -376,7 +360,7 @@ struct MoneyBar: View {
 
 /// THE TRANSACTION ROW: the one row, the signed amount as its figure.
 struct MoneyRowView: View {
-    let row: Centraid_Screen_V1_MoneyRow
+    let row: Centraid_Core_V1_MoneyRow
     var onTap: (() -> Void)? = nil
 
     var body: some View {
@@ -385,7 +369,7 @@ struct MoneyRowView: View {
             meta: MoneyWords.meta(row.categoryLabel, row.meta),
             trailing: MoneyWords.amount(row.amount),
             trailingTone: StatusChipView.ink(row.amountTone, neutral: "text"),
-            chips: row.chips,
+            chips: row.chips.map(\.legacy),
             dimmed: row.dimmed,
             accessibility: MoneyWords.spoken(row.accessibilityLabel, row.amount),
             identifier: "money-row-\(row.txnID)",
@@ -492,7 +476,7 @@ struct MoneyChoiceField: View {
 /// A ROW OF CHOICES AS CHIPS (a kind, a sign convention, a date order): one
 /// selected at most, each tap the screen's own event.
 struct MoneyChoiceChips: View {
-    let choices: [Centraid_Screen_V1_MoneyChoice]
+    let choices: [Centraid_Core_V1_MoneyChoice]
     let identifierPrefix: String
     let onPick: (String) -> Void
 
@@ -629,7 +613,7 @@ struct MoneySheetRow: View {
 /// A SHEET OF CHOICES that scrolls: a month, an account, a category, a merge target.
 struct MoneyChoiceSheet: View {
     let title: String
-    let choices: [Centraid_Screen_V1_MoneyChoice]
+    let choices: [Centraid_Core_V1_MoneyChoice]
     let identifierPrefix: String
     let onPick: (String) -> Void
 
@@ -684,14 +668,14 @@ struct MoneyFormSheet<Content: View>: View {
 
 /// THE STATUS LINE a pushed page hosts at its foot (DESIGN.md: no toast).
 struct MoneyStatusFoot: View {
-    let status: Centraid_Screen_V1_StatusLine
+    let status: Centraid_Core_V1_StatusLine
     var identifier: String = "money-status"
 
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         if !status.sentence.isEmpty {
-            StatusLineView(status: status, identifier: identifier) {}
+            StatusLineView(status: status.legacy, identifier: identifier) {}
                 .padding(.vertical, 4)
                 .background(Theme.color("bg", scheme))
         }
@@ -704,7 +688,7 @@ struct MoneyStatusFoot: View {
 /// Left, and In, Out and Net. The state decides the figures and their tones;
 /// this lays them across the page instead of down it.
 struct MoneyFigureColumns: View {
-    let figures: [Centraid_Screen_V1_MoneyFigure]
+    let figures: [Centraid_Core_V1_MoneyFigure]
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.moneyInset) private var inset
@@ -735,7 +719,7 @@ struct MoneyFigureColumns: View {
 
 /// THE IN / OUT / NET CARD: the same three figures on a raised plate.
 struct MoneyFigureCard: View {
-    let figures: [Centraid_Screen_V1_MoneyFigure]
+    let figures: [Centraid_Core_V1_MoneyFigure]
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.moneyInset) private var inset
@@ -791,7 +775,7 @@ struct MoneyCategoryHeader: View {
 struct MoneyCategoryRow: View {
     static let columnWidth: CGFloat = 68
 
-    let line: Centraid_Screen_V1_MoneyCategoryLine
+    let line: Centraid_Core_V1_MoneyCategoryLine
     let accessibility: String
     let identifier: String
     let onTap: () -> Void
@@ -840,7 +824,7 @@ struct MoneyCategoryRow: View {
 /// — nothing is measured here). A month that is not over is outlined, never
 /// filled, so it cannot be read as a whole month.
 struct MoneyCashflowChart: View {
-    let months: [Centraid_Screen_V1_MoneyCashflowMonth]
+    let months: [Centraid_Core_V1_MoneyCashflowMonth]
     let summary: String
 
     @Environment(\.colorScheme) private var scheme
@@ -930,7 +914,7 @@ struct MoneyLegend: View {
 /// A month's row in the table under the chart: its name, then In, Out and Net
 /// as three columns.
 struct MoneyMonthRow: View {
-    let month: Centraid_Screen_V1_MoneyCashflowMonth
+    let month: Centraid_Core_V1_MoneyCashflowMonth
     let identifier: String
 
     @Environment(\.colorScheme) private var scheme
@@ -942,7 +926,7 @@ struct MoneyMonthRow: View {
                 Text(month.label)
                     .centraidType("body")
                     .foregroundStyle(Theme.color(month.partial ? "textSoft" : "text", scheme))
-                let meta = MoneyWords.meta(month.rateLabel, month.partial ? MoneyCopy.shared.PARTIAL_MONTH : "")
+                let meta = month.meta
                 if !meta.isEmpty {
                     Text(meta)
                         .centraidType("annotLabel")
@@ -963,7 +947,7 @@ struct MoneyMonthRow: View {
         .accessibilityIdentifier(identifier)
     }
 
-    private func figure(_ money: Centraid_Screen_V1_Money, ink: String) -> some View {
+    private func figure(_ money: String, ink: String) -> some View {
         Text(MoneyWords.amount(money))
             .centraidType("annotLabel")
             .monospacedDigit()
@@ -979,7 +963,7 @@ struct MoneyMonthRow: View {
 /// rows (the state offers it as a choice, so no key is spelled here).
 struct MoneyNeedsRow: View {
     let label: String
-    let figures: [Centraid_Screen_V1_MoneyFigure]
+    let figures: [Centraid_Core_V1_MoneyFigure]
     let onTap: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -1067,7 +1051,7 @@ struct MoneyFactRow: View {
 /// beside it. The note under it is the state's.
 struct MoneyNetWorthCard: View {
     let label: String
-    let figures: [Centraid_Screen_V1_MoneyFigure]
+    let figures: [Centraid_Core_V1_MoneyFigure]
     let note: String
 
     @Environment(\.colorScheme) private var scheme
@@ -1116,7 +1100,7 @@ struct MoneyNetWorthCard: View {
 /// alert with the difference when they do not, and plain words when there is no
 /// statement balance yet. The tone is the state's; this only draws it.
 struct MoneyAccountRowView: View {
-    let row: Centraid_Screen_V1_MoneyAccountRow
+    let row: Centraid_Core_V1_MoneyAccountRow
     let onTap: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -1233,7 +1217,7 @@ struct MoneyChevronRow: View {
 /// amount and the state's sentence about it, on one plate.
 struct MoneyPreviewCard: View {
     let label: String
-    let amount: Centraid_Screen_V1_Money
+    let amount: String
     let note: String
 
     @Environment(\.colorScheme) private var scheme
@@ -1274,12 +1258,12 @@ struct MoneyPreviewCard: View {
 /// member's eye (Check these, Can't read) is outlined in `seam` and `net` once it
 /// is above zero, read off the fact's label so no count is spelled here.
 struct MoneyCountTiles: View {
-    let counts: [Centraid_Screen_V1_MoneyFact]
+    let counts: [Centraid_Core_V1_MoneyFact]
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.moneyInset) private var inset
 
-    private var pairs: [[Centraid_Screen_V1_MoneyFact]] {
+    private var pairs: [[Centraid_Core_V1_MoneyFact]] {
         stride(from: 0, to: counts.count, by: 2).map { Array(counts[$0..<min($0 + 2, counts.count)]) }
     }
 
@@ -1296,7 +1280,7 @@ struct MoneyCountTiles: View {
         .padding(.top, 8)
     }
 
-    private func tile(_ fact: Centraid_Screen_V1_MoneyFact) -> some View {
+    private func tile(_ fact: Centraid_Core_V1_MoneyFact) -> some View {
         // THE STATE SAYS WHICH COUNTS ARE OWED A LOOK, and in what tone.
         let ink = StatusChipView.ink(fact.tone, neutral: "text")
         let owed = ink != "text"

@@ -56,6 +56,13 @@ extension Centraid_Core_V1_StatusChip.Tone {
     }
 }
 
+extension StatusChipView {
+    /// A Rust-owned screen's tone, inked by the kit's one mapping.
+    static func ink(_ tone: Centraid_Core_V1_StatusChip.Tone, neutral: String) -> String {
+        ink(tone.legacy, neutral: neutral)
+    }
+}
+
 extension Centraid_Core_V1_StatusChip {
     var legacy: Centraid_Screen_V1_StatusChip {
         var out = Centraid_Screen_V1_StatusChip()

@@ -563,7 +563,8 @@ fn a_channel_tap_asks_the_os_to_call_mail_map_or_copy() {
         tap(&mut d, "Handle").kind,
         Some(K::ClipboardSet(wire::ClipboardSet {
             text: "@dana".into(),
-            sensitive: false
+            sensitive: false,
+            clear_after_ms: 0
         }))
     );
 }

@@ -256,6 +256,7 @@ fn a_refusal_from_the_os_is_the_stores_own_didnt_answer_and_nothing_is_written()
     d.answer_effect(Outcome::Failed(wire::EffectFailed {
         reason: "denied".to_owned(),
         denied: true,
+        cancelled: false,
     }));
     let state = connect_state(d.view(i));
     assert!(!state.working && !state.finished);

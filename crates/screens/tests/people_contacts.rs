@@ -128,6 +128,7 @@ fn an_import_the_os_refuses_says_where_to_turn_it_on_and_an_empty_phone_says_add
     d.answer_effect(O::Failed(wire::EffectFailed {
         reason: "contacts access not given".into(),
         denied: true,
+        cancelled: false,
     }));
     assert_eq!(
         status(&d, i),

@@ -98,8 +98,18 @@ fn a_declared_kind_has_no_variant_and_a_declared_verb_names_a_catalog_action() {
         );
     }
     let ids: BTreeSet<&str> = DECLARED_KINDS.iter().map(|kind| kind.id).collect();
-    for expected in ["account", "category", "budget", "rule"] {
-        assert!(ids.contains(expected), "no declared kind {expected}");
+    // Money's account, category, budget and rule went live with its screens, and Health's daily
+    // figure and workout with theirs (#1135).
+    for (id, name) in [
+        ("account", "account"),
+        ("category", "category"),
+        ("budget", "budget"),
+        ("rule", "rule"),
+        ("daily_figure", "daily figure"),
+        ("workout", "workout"),
+    ] {
+        assert!(!ids.contains(id), "{id} is still declared");
+        assert!(Kind::parse(name).is_some(), "{name} does not parse");
     }
     let all = manifests();
     for row in DECLARED_VERBS {
@@ -113,14 +123,11 @@ fn a_declared_kind_has_no_variant_and_a_declared_verb_names_a_catalog_action() {
             row.app, row.action
         );
     }
-    // An account is writable in the catalog, and not yet by the runtime: its direct actions are
-    // declared and named, not run.
-    let writes: BTreeSet<&str> = DECLARED_VERBS
-        .iter()
-        .filter(|row| row.kind == "account")
-        .map(|row| row.verb)
-        .collect();
-    assert!(writes.contains("edit"), "no declared `edit account`");
+    // and an account's direct actions are run, not declared
+    assert!(
+        DECLARED_VERBS.iter().all(|row| row.kind != "account"),
+        "an account's verbs are live"
+    );
 }
 
 /// The values of `column`'s `CHECK (column IN (...))` in `table`'s block of the rendered DDL.
@@ -155,10 +162,7 @@ fn every_declared_enum_is_exactly_its_columns_check_list() {
             seen += 1;
         }
     }
-    assert_eq!(
-        seen, 1,
-        "account.type (daily_figure.metric is live: `meta.rs` holds it)"
-    );
+    assert_eq!(seen, 0, "every kind the catalog declares is live");
     // and the live kinds' enums are still the live test's (`meta.rs`)
     assert!(!meta::mapped_columns().is_empty());
 }
@@ -191,7 +195,7 @@ fn the_census_lists_every_action_as_its_manifest_classifies_it() {
         }
     }
     let rows: Vec<Vec<&str>> = lines.map(|line| line.split(',').collect()).collect();
-    assert_eq!(rows.len(), 149);
+    assert_eq!(rows.len(), 151);
     assert_eq!(rows.len(), expected.len());
     for (row, want) in rows.iter().zip(&expected) {
         assert_eq!(row.len(), 7, "{row:?}");
@@ -235,7 +239,7 @@ fn the_census_lists_every_action_as_its_manifest_classifies_it() {
 #[test]
 fn the_exported_catalog_is_the_manifests() {
     let exported = catalog();
-    assert_eq!(exported["actions"].as_array().unwrap().len(), 149);
+    assert_eq!(exported["actions"].as_array().unwrap().len(), 151);
     // every query a manifest declares, however many that is: the core's `load` is held to the
     // same list both ways (`crates/core/src/load.rs`)
     let declared: usize = manifests().iter().map(|(_, m)| m.queries.len()).sum();

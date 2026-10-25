@@ -105,6 +105,18 @@ impl<'a> Ctx<'a> {
         self.core.act(request)
     }
 
+    /// One step of the Locker session. The tables are untouched: the session is
+    /// not a read.
+    ///
+    /// # Errors
+    /// Whatever the session refuses with.
+    pub fn locker(
+        &self,
+        request: &wire::LockerSessionRequest,
+    ) -> Result<wire::LockerSessionResponse> {
+        self.core.locker(request)
+    }
+
     /// The locale every string is made in.
     #[must_use]
     pub fn locale(&self) -> Locale {

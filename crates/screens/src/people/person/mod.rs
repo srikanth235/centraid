@@ -324,7 +324,7 @@ impl Person {
         let label = date.label.clone();
         let request = act::people::SetReminder {
             important_date_id: date_id.to_owned(),
-            reminders: if turns_on { "[0]" } else { "null" }.to_owned(),
+            reminders: turns_on.then(|| "[0]".to_owned()),
         };
         let outcome = fill(
             &if turns_on {
@@ -492,6 +492,7 @@ impl Person {
             _ => K::ClipboardSet(wire::ClipboardSet {
                 text: value.to_owned(),
                 sensitive: false,
+                clear_after_ms: 0,
             }),
         };
         vec![wire::Effect { kind: Some(kind) }]

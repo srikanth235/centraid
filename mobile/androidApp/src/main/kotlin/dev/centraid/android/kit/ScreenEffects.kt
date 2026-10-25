@@ -25,6 +25,8 @@ import centraid.core.v1.Effect
 import centraid.core.v1.EffectDone
 import centraid.core.v1.EffectFailed
 import centraid.core.v1.EffectResult
+import centraid.core.v1.BytesPicked
+import centraid.core.v1.FilePicked
 import centraid.core.v1.HapticKind
 import centraid.core.v1.ImportSource
 import centraid.core.v1.KeychainOp
@@ -32,6 +34,7 @@ import centraid.core.v1.KeychainValue
 import centraid.core.v1.PhoneChanged
 import centraid.core.v1.Route
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
+import android.provider.OpenableColumns
 import dev.centraid.android.screens.docs.DocsPickers
 import dev.centraid.android.screens.people.readContactsSnapshot
 import dev.centraid.core.Screens
@@ -69,6 +72,7 @@ import okio.ByteString
 internal fun PerformScreenEffects(
     screens: Screens,
     phone: AndroidPhoneFollow?,
+    onAnnounce: (String) -> Unit = {},
     docs: DocsPickers? = null,
     health: AndroidHealth? = null,
     openRoute: ((Route) -> Unit)? = null,
@@ -83,12 +87,17 @@ internal fun PerformScreenEffects(
     val healthLauncher = health?.let { store ->
         rememberLauncherForActivityResult(store.contract()) { granted -> store.permissionsAnswered(granted) }
     }
+    // THE FILE SHEETS (Locker's import and export): the system's pickers, one out at a time.
+    val fileDoors = remember { FileDoors() }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> fileDoors.picked(uri) }
+    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri -> fileDoors.saved(uri) }
     LaunchedEffect(screens) {
         screens.effects.collect { request ->
             // ONE COROUTINE PER EFFECT: a permission dialog waits for the member
             // without holding up the keychain read behind it.
             launch {
                 val effect = request.effect
+                val doors = Doors(fileDoors, { picker.launch(arrayOf("*/*")) }, { saver.launch(it) }, onAnnounce)
                 val answer: (EffectResult) -> Unit = { result -> launch { screens.answer(request, result) } }
                 val result = if (effect?.health_read != null) {
                     health?.snapshot(effect.health_read!!) { healthLauncher?.launch(it) }
@@ -96,7 +105,7 @@ internal fun PerformScreenEffects(
                 } else if (effect?.pick_file != null || effect?.follow_folder != null || effect?.stop_following != null || effect?.open_route != null) {
                     files(effect, docs, openRoute, answer)
                 } else {
-                    perform(effect, context, view, asking, { launcher.launch(it) }, phone) { changed ->
+                    perform(effect, context, view, asking, { launcher.launch(it) }, phone, doors) { changed ->
                         answer(EffectResult(phone_changed = changed))
                     }
                 }
@@ -131,6 +140,7 @@ private suspend fun perform(
     asking: PermissionAsk,
     launchPermission: (String) -> Unit,
     phone: AndroidPhoneFollow?,
+    doors: Doors,
     report: (PhoneChanged) -> Unit,
 ): EffectResult? {
     val done = EffectResult(done = EffectDone())
@@ -145,6 +155,8 @@ private suspend fun perform(
                 }
             }
             clipboard(context).setPrimaryClip(clip)
+            // THE DEADLINE OUTLIVES THE PROCESS: kept beside the clip, swept on the next launch.
+            ClipboardDeadline.armed(context, set.text, set.clear_after_ms.toLong())
             done
         }
         effect.clipboard_clear != null -> {
@@ -153,6 +165,7 @@ private suspend fun perform(
             if (held == effect.clipboard_clear!!.expected_text) {
                 clipboard(context).setPrimaryClip(ClipData.newPlainText("", ""))
             }
+            ClipboardDeadline.spent(context)
             done
         }
         effect.haptic != null -> {
@@ -171,6 +184,13 @@ private suspend fun perform(
         effect.open_url != null ->
             start(context, Intent(Intent.ACTION_VIEW, Uri.parse(effect.open_url!!.url)), done)
         effect.keychain != null -> keychain(effect.keychain!!)
+        effect.owner_check != null -> OwnerPrompt.check(context, effect.owner_check!!)
+        effect.pick_bytes != null -> doors.files.pick(context, doors.launchPicker)
+        effect.save_file != null -> doors.files.save(context, effect.save_file!!, doors.launchSaver)
+        effect.announce != null -> {
+            doors.announce(effect.announce!!.topic)
+            done
+        }
         effect.calendar_read != null -> {
             val read = effect.calendar_read!!
             val allowed = granted(context, Manifest.permission.READ_CALENDAR) ||
@@ -311,5 +331,71 @@ private suspend fun keychain(op: KeychainOp): EffectResult {
             EffectResult(done = EffectDone())
         }
         else -> failed("unknown keychain operation")
+    }
+}
+
+/** The platform hands one effect may need, so [perform] keeps one parameter for them. */
+private class Doors(
+    val files: FileDoors,
+    val launchPicker: () -> Unit,
+    val launchSaver: (String) -> Unit,
+    val announce: (String) -> Unit,
+)
+
+/**
+ * THE SYSTEM'S FILE SHEETS, ONE OUT AT A TIME (#1135): `PickBytes` reads the
+ * chosen document into bytes handed to Rust and kept nowhere here; `SaveFile`
+ * writes Rust's bytes to the document the member named and nowhere else. A
+ * dismissed sheet is a cancel, by value, never a failure the screen draws.
+ */
+private class FileDoors {
+    private var picking: CompletableDeferred<android.net.Uri?>? = null
+    private var saving: CompletableDeferred<android.net.Uri?>? = null
+
+    fun picked(uri: android.net.Uri?) {
+        picking?.complete(uri)
+        picking = null
+    }
+
+    fun saved(uri: android.net.Uri?) {
+        saving?.complete(uri)
+        saving = null
+    }
+
+    suspend fun pick(context: Context, launch: () -> Unit): EffectResult {
+        val answer = CompletableDeferred<android.net.Uri?>()
+        picking = answer
+        launch()
+        val uri = answer.await() ?: return EffectResult(bytes_picked = BytesPicked(cancelled = true))
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val resolver = context.contentResolver
+                val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getString(0) else null
+                }.orEmpty()
+                val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: error("unreadable")
+                EffectResult(
+                    bytes_picked = BytesPicked(
+                        name = name,
+                        media_type = resolver.getType(uri).orEmpty(),
+                        content = ByteString.of(*bytes),
+                    ),
+                )
+            }.getOrElse { failed("the file could not be read") }
+        }
+    }
+
+    suspend fun save(context: Context, file: centraid.core.v1.SaveFile, launch: (String) -> Unit): EffectResult {
+        val answer = CompletableDeferred<android.net.Uri?>()
+        saving = answer
+        launch(file.name)
+        val uri = answer.await()
+            ?: return EffectResult(failed = EffectFailed(reason = "the save was cancelled", cancelled = true))
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { it.write(file.content.toByteArray()) } ?: error("unwritable")
+                EffectResult(done = EffectDone())
+            }.getOrElse { failed("the file could not be written") }
+        }
     }
 }
