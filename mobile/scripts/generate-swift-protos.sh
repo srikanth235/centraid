@@ -48,9 +48,11 @@ if [ -z "$proto_dir" ]; then
   exit 1
 fi
 
-# Every proto, relative to the proto root and in a stable order.
+# Every `centraid.core.v1` proto, relative to the proto root and in a stable
+# order. Only the core package: the app draws `centraid.core.v1` view states and
+# no Swift reads `centraid.screen.v1` (#1135), which imports nothing from here.
 protos() {
-  (cd "$proto_dir" && find . -name '*.proto' | sed 's|^\./||' | LC_ALL=C sort)
+  (cd "$proto_dir" && find ./centraid/core -name '*.proto' | sed 's|^\./||' | LC_ALL=C sort)
 }
 
 generate() {
