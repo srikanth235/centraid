@@ -89,7 +89,7 @@ pub(crate) mod photos;
 // Tasks' arm (#1046): its conversions and tests, beside this one.
 pub(crate) mod agenda_task;
 // Home's arm (R-CHROME-6): every app's search domain, Locker's included.
-mod vault;
+pub(crate) mod vault;
 
 /// Answer one app query against the open vault.
 ///

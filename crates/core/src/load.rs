@@ -39,10 +39,10 @@ const CURSOR_SEPARATOR: char = '\u{1f}';
 /// parameter the query does not take, or one of the wrong type; whatever the
 /// query itself refuses with.
 pub fn load(vault: &Vault, request: &wire::LoadRequest) -> Result<wire::LoadResponse> {
-    let app = catalog::app(&request.app).ok_or_else(|| CoreError::InvalidRequest {
+    let manifest = catalog::manifest_of(&request.app).ok_or_else(|| CoreError::InvalidRequest {
         detail: format!("`{}` is not an app this core carries", request.app),
     })?;
-    if app.manifest().query(&request.query).is_none() {
+    if manifest.query(&request.query).is_none() {
         return Err(CoreError::InvalidRequest {
             detail: format!(
                 "app `{}` declares no query `{}`",
@@ -295,6 +295,15 @@ fn read(
 ) -> Result<Option<wire::app_query_response::Answer>> {
     let tz = p.zone();
     let answer = match (app, query) {
+        // The shell's own catalogue (`shell/manifest.json`), no app's.
+        ("shell", "search") => app_query::vault::search(
+            vault,
+            door,
+            &wire::VaultSearchRequest {
+                term: p.text("term")?,
+                tz,
+            },
+        )?,
         ("agenda", "upcoming") => app_query::agenda_upcoming(
             vault,
             door,
@@ -784,6 +793,16 @@ mod tests {
         (dir, vault)
     }
 
+    /// The eight apps' manifests and the shell's own.
+    fn every_manifest() -> Vec<(&'static str, &'static centraid_apps_kit::manifest::Manifest)> {
+        let mut all: Vec<_> = catalog::APPS
+            .iter()
+            .map(|app| (app.id, app.manifest()))
+            .collect();
+        all.push((crate::shell::APP_ID, crate::shell::manifest()));
+        all
+    }
+
     /// What `read` asked of the request: the names, whether it took the limit
     /// and whether it took the cursor, and whether it had a reader at all.
     fn asked_of(
@@ -817,13 +836,13 @@ mod tests {
     #[test]
     fn every_manifest_query_has_a_reader_and_no_reader_lacks_a_manifest_query() {
         let (dir, vault) = founded();
-        for app in catalog::APPS {
-            for query in &app.manifest().queries {
-                let (_, _, _, has_reader) = asked_of(&vault, &ask(app.id, &query.name));
+        for (id, manifest) in every_manifest() {
+            for query in &manifest.queries {
+                let (_, _, _, has_reader) = asked_of(&vault, &ask(id, &query.name));
                 assert!(
                     has_reader,
-                    "{}.{} is declared by its manifest and has no reader",
-                    app.id, query.name
+                    "{id}.{} is declared by its manifest and has no reader",
+                    query.name
                 );
             }
         }
@@ -842,9 +861,9 @@ mod tests {
     fn a_readers_arguments_are_the_properties_its_manifest_declares() {
         let (dir, vault) = founded();
         let mut wrong = Vec::new();
-        for app in catalog::APPS {
-            for query in &app.manifest().queries {
-                let (names, limit, after, _) = asked_of(&vault, &ask(app.id, &query.name));
+        for (id, manifest) in every_manifest() {
+            for query in &manifest.queries {
+                let (names, limit, after, _) = asked_of(&vault, &ask(id, &query.name));
                 let mut declared: BTreeSet<String> = query.input["properties"]
                     .as_object()
                     .map(|properties| properties.keys().cloned().collect())
@@ -856,22 +875,43 @@ mod tests {
                     if declared.remove(rider) {
                         assert!(
                             if rider == "limit" { limit } else { after },
-                            "{}.{} declares `{rider}` and its reader takes none",
-                            app.id,
+                            "{id}.{} declares `{rider}` and its reader takes none",
                             query.name
                         );
                     }
                 }
                 if names != declared {
                     wrong.push(format!(
-                        "{}.{}: the reader takes {names:?}, the manifest declares {declared:?}",
-                        app.id, query.name
+                        "{id}.{}: the reader takes {names:?}, the manifest declares {declared:?}",
+                        query.name
                     ));
                 }
             }
         }
         let _ = std::fs::remove_dir_all(dir);
         assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    }
+
+    /// THE SHELL'S CATALOGUE is served by `load` and by nothing else: it answers its
+    /// search, refuses a name it does not declare, and is no app (`act` has none).
+    #[test]
+    fn the_shell_catalogue_answers_the_vault_search_and_is_no_app() {
+        let (dir, vault) = founded();
+        let mut request = ask("shell", "search");
+        request.params.insert(
+            "term".to_owned(),
+            wire::Value {
+                kind: Some(wire::value::Kind::Text("nothing like this".to_owned())),
+            },
+        );
+        let response = load(&vault, &request).expect("a search");
+        assert!(matches!(
+            response.answer.and_then(|answer| answer.answer),
+            Some(wire::app_query_response::Answer::VaultSearch(_))
+        ));
+        assert!(load(&vault, &ask("shell", "no-such")).is_err());
+        assert!(catalog::app("shell").is_none(), "the shell is not an app");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

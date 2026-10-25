@@ -1,0 +1,37 @@
+{
+  "manifestVersion": 1,
+  "id": "shell",
+  "name": "Shell",
+  "description": "The reads that are no one app's: the shell's own catalogue. Not one of the eight apps: it has no actions, no grant and no tile, and the assistant does not carry it.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": [
+    {
+      "name": "search",
+      "kind": "search_hit",
+      "figures": ["matches"],
+      "description": "Home's vault search: every searchable app's rows for one term in one answer (notes, people, agenda, tasks, photos, docs, Locker items by their plain text, and the named containers and chat threads), at most eight of each kind, under the owner. Blank answers no hits. `corrected` names the words searched when the typed ones found little and a correction added rows.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "hits": {
+            "type": "array"
+          },
+          "corrected": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ]
+}
