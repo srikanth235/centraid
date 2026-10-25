@@ -48,7 +48,12 @@ struct Tab {
     stack: Vec<u64>,
 }
 
+/// Words the band for the tabs that exist: `(locale, tab ids in order, selected)`.
+/// The shell lane supplies it; a runtime without one has no band.
+pub type BandFn = fn(Locale, &[String], &str) -> wire::ShellBand;
+
 struct State {
+    band: Option<BandFn>,
     next_instance: u64,
     next_effect: u64,
     instances: BTreeMap<u64, Instance>,
@@ -80,6 +85,7 @@ impl Runtime {
             registry,
             roots,
             state: Mutex::new(State {
+                band: None,
                 next_instance: 1,
                 next_effect: 1,
                 instances: BTreeMap::new(),
@@ -91,6 +97,14 @@ impl Runtime {
                 started: false,
             }),
         }
+    }
+
+    /// Frame every tab root with a band (`Navigation.band`), worded by `band`
+    /// for the tabs that exist.
+    #[must_use]
+    pub fn with_band(self, band: BandFn) -> Self {
+        self.lock().band = Some(band);
+        self
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
@@ -126,6 +140,10 @@ impl Runtime {
                 })
                 .collect(),
             revision: state.nav_revision,
+            band: state.band.map(|band| {
+                let tabs: Vec<String> = state.tabs.iter().map(|tab| tab.id.clone()).collect();
+                band(state.env.locale, &tabs, &state.selected)
+            }),
         }
     }
 
@@ -234,6 +252,18 @@ impl Runtime {
             }
         }
         for effect in effects {
+            // A TAB SELECTION IS THE RUNTIME'S OWN: the selection moves here and
+            // the shell hears the new `Navigation`; nothing is performed on the
+            // platform, so no destination is ever named in Swift or Kotlin.
+            if let Some(wire::effect::Kind::SelectTab(select)) = &effect.kind {
+                if state.tabs.iter().any(|tab| tab.id == select.tab) && state.selected != select.tab
+                {
+                    state.selected.clone_from(&select.tab);
+                    state.nav_revision += 1;
+                    out.navigation = Some(Self::navigation(state));
+                }
+                continue;
+            }
             let effect_id = state.next_effect;
             state.next_effect += 1;
             out.effects.push(wire::EffectRequest {
@@ -400,6 +430,11 @@ impl ScreenHost for Runtime {
                     region: region_of(&environment.locale),
                     platform: environment.platform.clone(),
                 };
+                // The band's words follow the locale.
+                if state.band.is_some() {
+                    state.nav_revision += 1;
+                    out.navigation = Some(Self::navigation(&state));
+                }
                 Self::broadcast(
                     &mut state,
                     core,

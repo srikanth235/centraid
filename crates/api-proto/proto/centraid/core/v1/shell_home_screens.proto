@@ -1,0 +1,436 @@
+// HOME, THE SPRINGBOARD (#1135, lane H1): every app as a tile, graded as a
+// whole. Rust reads each tile through its app's own named query, grades the
+// springboard, packs the rows and finishes every sentence; SwiftUI and Compose
+// draw `HomeState`. What the shell alone knows (which vaults the phone holds, the
+// backup line, a stranded write's ribbon) is TOLD to Home as events and recorded
+// as is: Home sorts none of it and decides nothing about it.
+//
+// Arm range: shell 1000-1299 (this file and `shell_search_screens.proto`).
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/route.proto";
+
+// ONE TILE IS ONE OF THREE THINGS BEFORE IT IS A NUMBER. A read in flight is
+// `LOADING`; a read that landed and found nothing is `EMPTY`; a read that was
+// refused is `UNKNOWN`, never `EMPTY`: a tile that could not read has not learned
+// its app holds nothing, and a springboard that graded it `EMPTY` would tell the
+// member to start filling something that may already be full.
+enum HomeTileStatus {
+  HOME_TILE_STATUS_UNSPECIFIED = 0;
+  HOME_TILE_STATUS_LOADING = 1;
+  HOME_TILE_STATUS_UNKNOWN = 2;
+  HOME_TILE_STATUS_EMPTY = 3;
+  HOME_TILE_STATUS_CONTENT = 4;
+}
+
+enum HomeTileSize {
+  HOME_TILE_SIZE_UNSPECIFIED = 0;
+  HOME_TILE_SIZE_SMALL = 1;
+  HOME_TILE_SIZE_MEDIUM = 2;
+  HOME_TILE_SIZE_LARGE = 3;
+}
+
+// The springboard as a whole, regraded on every tile arrival.
+enum HomeSpringboard {
+  HOME_SPRINGBOARD_UNSPECIFIED = 0;
+  HOME_SPRINGBOARD_LOADING = 1;
+  // Every readable tile is empty: the day-one page.
+  HOME_SPRINGBOARD_FIRST_RUN = 2;
+  HOME_SPRINGBOARD_CONTENT = 3;
+}
+
+// A count, absent when the tile withholds it. `capped` draws `812+`: the
+// reader's ceiling, not a total it cannot stand behind.
+message HomeTileCount {
+  uint32 value = 1;
+  bool capped = 2;
+}
+
+message HomeTileBody {
+  oneof kind {
+    Photos photos = 1;
+    Docs docs = 2;
+    Agenda agenda = 3;
+    People people = 4;
+    Locker locker = 5;
+    Notes notes = 6;
+    Money money = 7;
+    Health health = 8;
+  }
+
+  // A mosaic of the newest photographs that have a thumbnail on this phone. A
+  // cell with no `thumbnail_path` is the photograph whose bytes are not here
+  // yet, drawn grey.
+  message Photos {
+    repeated Cell cells = 1;
+    message Cell {
+      string asset_id = 1;
+      optional string thumbnail_path = 2;
+    }
+  }
+
+  message Docs {
+    repeated Row rows = 1;
+    message Row {
+      string document_id = 1;
+      string name = 2;
+      // A phrase the core formatted ("2.4 MB"), never a number a view formats.
+      string size = 3;
+    }
+  }
+
+  message Agenda {
+    // The next event, "No events coming up" when there is none.
+    string title = 1;
+    string at = 2;
+    string after = 3;
+    // What is owed today: overdue and due-today tasks.
+    uint32 due_count = 4;
+    string due_label = 5;
+    string due_title = 6;
+  }
+
+  message People {
+    repeated Face faces = 1;
+    uint32 more = 2;
+    string more_label = 3;
+    message Face {
+      string party_id = 1;
+      string initials = 2;
+      // The identity hue key, resolved once here for both shells.
+      optional string color = 3;
+    }
+  }
+
+  // A state and its words, never a row: a launcher says how many items and
+  // whether the Locker is open, nothing a locked Locker holds.
+  message Locker {
+    bool locked = 1;
+    string state_label = 2;
+    string line = 3;
+  }
+
+  message Notes {
+    string note_id = 1;
+    string title = 2;
+    repeated Notebook notebooks = 3;
+    repeated Recent recent = 4;
+    message Notebook {
+      string notebook_id = 1;
+      string name = 2;
+      uint32 note_count = 3;
+    }
+    message Recent {
+      string note_id = 1;
+      string title = 2;
+    }
+  }
+
+  // This month's spending, one finished amount per currency.
+  message Money {
+    repeated string amounts = 1;
+    string caption = 2;
+  }
+
+  message Health {
+    string figure = 1;
+    string caption = 2;
+    string line = 3;
+  }
+}
+
+message HomeTile {
+  string app_id = 1;
+  // The app's name ("Photos"); the mark is the shells' design catalogue's.
+  string name = 2;
+  HomeTileStatus status = 3;
+  optional HomeTileCount count = 4;
+  string count_label = 5;
+  HomeTileSize size = 6;
+  bool wide = 7;
+  // What an empty tile says to do ("Add your first document").
+  string empty_copy = 8;
+  optional HomeTileBody body = 9;
+  // "Open Photos".
+  string open_label = 10;
+  // "Open Photos, 812 photos".
+  string accessibility_label = 11;
+  // WHERE A TAP GOES: the app's home, as the route the shell pushes.
+  Route route = 12;
+}
+
+message HomeTileRow {
+  repeated string app_ids = 1;
+}
+
+enum HomeTone {
+  HOME_TONE_UNSPECIFIED = 0;
+  HOME_TONE_QUIET = 1;
+  HOME_TONE_ATTENTION = 2;
+  HOME_TONE_URGENT = 3;
+}
+
+// THE RIBBON above the grid, told by the shell (a stranded write, a low disk).
+message HomeStatus {
+  HomeTone tone = 1;
+  string copy = 2;
+  string action = 3;
+  Destination destination = 4;
+
+  // Where the action goes, as a verb the shell performs.
+  enum Destination {
+    DESTINATION_UNSPECIFIED = 0;
+    DESTINATION_NONE = 1;
+    DESTINATION_PHONE = 2;
+    DESTINATION_NOTIFICATIONS = 3;
+    DESTINATION_BACKUP = 4;
+  }
+}
+
+message HomeData {
+  HomeSpringboard springboard = 1;
+  // In the springboard's order.
+  repeated HomeTile tiles = 2;
+  // Which tiles share a row (two small ones, or one wide one).
+  repeated HomeTileRow grid_rows = 3;
+  // Every readable tile failed: Home says so rather than draw eight empties.
+  bool every_tile_unreadable = 4;
+  // The day-one page's words, set when `springboard` is `FIRST_RUN`.
+  string day_one_title = 5;
+  string day_one_body = 6;
+}
+
+enum HomeVaultState {
+  HOME_VAULT_STATE_UNSPECIFIED = 0;
+  HOME_VAULT_STATE_ONLINE = 1;
+  // The vault moved to another phone: read-only here.
+  HOME_VAULT_STATE_FROZEN = 2;
+}
+
+// A vault this phone holds, as the shelf lists it: facts, not words. Rust words
+// the name, the second line and the originals line from them.
+message ShellVault {
+  string vault_id = 1;
+  string name = 2;
+  string color = 3;
+  HomeVaultState state = 4;
+  uint32 originals_withheld = 5;
+}
+
+// A vault, finished for the lockup and the switcher. `name` is finished
+// ("Unnamed vault" when blank).
+message HomeVault {
+  string vault_id = 1;
+  string name = 2;
+  string color = 3;
+  HomeVaultState state = 4;
+  // The second line: how the vault stands ("Backed up"), or a frozen vault's.
+  string state_line = 5;
+  // Originals the phone is holding back, and the sentence saying so.
+  uint32 originals_withheld = 6;
+  string originals_line = 7;
+  // The one-letter mark.
+  string initial = 8;
+  string accessibility_label = 9;
+}
+
+// The backup line under the vault's name, finished by the backup lane's reader
+// and told to Home as is.
+message HomeBackupLine {
+  string status = 1;
+  HomeTone tone = 2;
+  string accessibility_label = 3;
+}
+
+// A vault the member is asked to delete or rename: the sheet's second step.
+message HomeVaultAsk {
+  oneof kind {
+    Forget forget = 1;
+    Rename rename = 2;
+  }
+  message Forget {
+    string vault_id = 1;
+    string title = 2;
+    string body = 3;
+    string confirm_label = 4;
+    string cancel_label = 5;
+  }
+  message Rename {
+    string vault_id = 1;
+    string title = 2;
+    string field_label = 3;
+    string name = 4;
+    string save_label = 5;
+    bool can_save = 6;
+    // Set after a rename the shelf refused.
+    string failure = 7;
+  }
+}
+
+message HomeVaultSheet {
+  string title = 1;
+  // "This phone has one vault." when it has one.
+  string one_line = 2;
+  repeated HomeVault vaults = 3;
+  string active_vault_id = 4;
+  string current_label = 5;
+  string make_label = 6;
+  string make_spoken = 7;
+  string restore_label = 8;
+  string forget_label = 9;
+  string rename_label = 10;
+  optional HomeVaultAsk ask = 11;
+  // The last outcome of a make or a restore, in the member's words.
+  string status_line = 12;
+}
+
+// THE LOCKUP AND THE KEYS BESIDE IT.
+message HomeBar {
+  optional HomeVault vault = 1;
+  optional HomeBackupLine backup = 2;
+  // "Search everything": the field Home's search opens.
+  string search_label = 3;
+  // Where the search key goes.
+  Route search_route = 8;
+  // The appearance key: the glyph and the words of the switch it makes.
+  string appearance_icon = 4;
+  string appearance_label = 5;
+  string switch_spoken = 6;
+  string backup_open_spoken = 7;
+}
+
+// The member's light/dark choice: follow the phone, or hold one.
+enum HomeScheme {
+  HOME_SCHEME_UNSPECIFIED = 0;
+  HOME_SCHEME_SYSTEM = 1;
+  HOME_SCHEME_LIGHT = 2;
+  HOME_SCHEME_DARK = 3;
+}
+
+message HomeState {
+  HomeBar bar = 1;
+  optional HomeStatus status = 2;
+  oneof content {
+    Loading loading = 3;
+    // The device holds no vault, or the read failed: Home says which and does
+    // not draw empty tiles.
+    Failure failure = 4;
+    HomeData data = 5;
+  }
+  optional HomeVaultSheet sheet = 6;
+  HomeScheme scheme = 7;
+  // "Loading".
+  string loading_label = 8;
+}
+
+message HomeEvent {
+  oneof kind {
+    BackupPressed backup = 3;
+    StatusPressed status = 4;
+    AppearancePressed appearance = 5;
+    VaultPressed vault = 6;
+    VaultPicked vault_picked = 7;
+    SheetClosed sheet_closed = 8;
+    // Home is on screen again (the shell sends it when a cover is popped): the
+    // Locker's open state and any tile may have moved without a table changing.
+    Shown shown = 16;
+    MakePressed make = 9;
+    RestorePressed restore = 10;
+    ForgetAsked forget_asked = 11;
+    RenameAsked rename_asked = 12;
+    RenameTyped rename_typed = 13;
+    AskConfirmed ask_confirmed = 14;
+    AskDismissed ask_dismissed = 15;
+    // ---- told by the shell ----
+    VaultsTold vaults_told = 20;
+    BackupLineTold backup_told = 21;
+    StatusTold status_told = 22;
+    OutcomeTold outcome_told = 23;
+    // Whether the phone itself is dark right now: what "follow the phone" means.
+    // The shell sends it when Home opens and whenever the phone's scheme moves.
+    PhoneSchemeTold phone_scheme_told = 24;
+  }
+
+  message BackupPressed {}
+  message StatusPressed {}
+  message AppearancePressed {}
+  message VaultPressed {}
+  message VaultPicked { string vault_id = 1; }
+  message SheetClosed {}
+  message Shown {}
+  message MakePressed {}
+  message RestorePressed {}
+  message ForgetAsked { string vault_id = 1; }
+  message RenameAsked { string vault_id = 1; }
+  message RenameTyped { string name = 1; }
+  message AskConfirmed {}
+  message AskDismissed {}
+
+  message VaultsTold {
+    // The one in front, and the roster in the shelf's order.
+    optional ShellVault vault = 1;
+    repeated ShellVault vaults = 2;
+    // Whether the device holds no vault at all.
+    bool none = 3;
+  }
+  message PhoneSchemeTold { bool dark = 1; }
+  message BackupLineTold { optional HomeBackupLine line = 1; }
+  message StatusTold { optional HomeStatus status = 1; }
+  // How a make, a restore, a rename or a forget came out, in the member's words.
+  message OutcomeTold {
+    string status_line = 1;
+    bool rename_failed = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// What Home asks the shell to do with the vaults the phone holds. Rust decides
+// which and when; the shelf (the files, the keys) is the shell's.
+// ---------------------------------------------------------------------------
+message VaultCommand {
+  oneof kind {
+    string switch_to = 1;
+    bool make = 2;
+    bool restore = 3;
+    string forget = 4;
+    Rename rename = 5;
+    // Open the backup tab, the transfer rules or the notifications settings.
+    HomeStatus.Destination open = 6;
+  }
+  message Rename {
+    string vault_id = 1;
+    string name = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The band, and the one navigation Rust asks of itself
+// ---------------------------------------------------------------------------
+
+// THE BAND (DESIGN.md's invariant 1): one strip at the foot of every tab root,
+// never app-themed, frame destinations only. Which places it holds, in what
+// order, their words and which is lit are Rust's, from the tabs that exist; the
+// shell draws it under a tab's root and presses select a tab.
+message ShellBand {
+  repeated ShellBandTab tabs = 1;
+}
+
+message ShellBandTab {
+  // The runtime tab this place selects (`home`, `chat`, `backup`).
+  string tab = 1;
+  string label = 2;
+  // What a screen reader says: the label, and "current place" when lit.
+  string spoken = 3;
+  string icon_key = 4;
+  bool selected = 5;
+}
+
+// Ask the runtime to select a tab (it moves the selection itself and the shell
+// hears the new `Navigation`); nothing is performed on the platform.
+message SelectTab {
+  string tab = 1;
+}

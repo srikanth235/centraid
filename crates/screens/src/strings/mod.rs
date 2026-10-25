@@ -130,6 +130,7 @@ pub mod agenda_home;
 pub mod agenda_todo;
 pub mod docs;
 pub mod health;
+pub mod home;
 pub mod locker;
 pub mod money;
 pub mod notes;

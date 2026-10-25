@@ -19,6 +19,7 @@ pub mod proof;
 pub mod registry;
 pub mod runtime;
 pub mod screen;
+pub mod shell;
 pub mod strings;
 pub mod testing;
 
@@ -26,14 +27,16 @@ pub use registry::Registry;
 pub use runtime::Runtime;
 pub use screen::{Ctx, Environment, Screen};
 
-/// The runtime the shells attach today: the proof screen on one tab and
-/// Agenda's screens on another. The shell lane replaces the roots with the
-/// real ones as it ports Home and the other apps.
+/// The runtime the shells attach: every app's screens and the shell's own, and
+/// one tab, `home`, rooted at Home (`shell`). An app opens as a page pushed on
+/// that tab, so back returns to Home; the chat and the backup add their own tabs
+/// beside it. The band follows the tabs that exist.
 #[must_use]
 pub fn standard() -> Runtime {
     Runtime::new(
         Registry::default()
             .with(proof::NAME, proof::build)
+            .merge(shell::registry())
             .merge(agenda::registry())
             .merge(locker::registry())
             .merge(money::registry())
@@ -42,21 +45,9 @@ pub fn standard() -> Runtime {
             .merge(notes::registry())
             .merge(people::registry())
             .merge(photos::registry()),
-        vec![
-            ("proof".to_owned(), proof::route()),
-            (
-                agenda::TAB.to_owned(),
-                agenda::routes::home(centraid_api_proto::core_v1::AgendaDestination::Day, ""),
-            ),
-            (
-                photos::TAB.to_owned(),
-                photos::routes::home(
-                    centraid_api_proto::core_v1::PhotosDestination::Library,
-                    None,
-                ),
-            ),
-        ],
+        vec![(shell::TAB.to_owned(), shell::routes::home())],
     )
+    .with_band(shell::band::view)
 }
 
 /// Attach [`standard`] to a core. `centraid_open` calls this.

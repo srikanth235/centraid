@@ -77,6 +77,10 @@ message Route {
     PeopleEditorRoute people_editor = 702;
     // ---- the kit (900-999) ----
     TrashRoute trash = 900;
+    // ---- the shell (1000-1999): Home 1000-1299 ----
+    HomeRoute home = 1000;
+    HomeSearchRoute home_search = 1001;
+    ShellAskRoute ask = 1002;
   }
 }
 
@@ -505,4 +509,20 @@ message MoneyTargetRoute {
 // from (search, recurring, accounts, categories, rules, import).
 message MoneyPageRoute {
   string parent = 1;
+}
+
+// ---- the shell (1000-1999): Home 1000-1299 ----
+
+// Home takes no arguments: it is the root of the `home` tab.
+message HomeRoute {}
+
+// Home's search takes no arguments.
+message HomeSearchRoute {}
+
+// What a tap on a search's Ask row opens: the assistant, asking `question` in
+// `scope` (an app's id, or empty for every app). The chat lane registers the
+// screen that takes it.
+message ShellAskRoute {
+  string question = 1;
+  string scope = 2;
 }
