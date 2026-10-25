@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 49] = [
+const PROTOS: [&str; 51] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/command.proto",
@@ -107,6 +107,9 @@ const PROTOS: [&str; 49] = [
     "proto/centraid/core/v1/pair_screens.proto",
     "proto/centraid/core/v1/backup_screens.proto",
     "proto/centraid/core/v1/passes_screens.proto",
+    // The shell's own screens (#1135, lane H1): Home and its search.
+    "proto/centraid/core/v1/shell_home_screens.proto",
+    "proto/centraid/core/v1/shell_search_screens.proto",
     "proto/centraid/core/v1/screens.proto",
     // The on-device chat: a session, a question and a stream of events, over
     // reads an app already answers. Its own file because a turn is neither a
@@ -155,6 +158,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.MoneyCategoriesState.content.data")
         .boxed(".centraid.core.v1.MoneyAccountsState.content.data")
         .boxed(".centraid.core.v1.MoneyRulesState.content.data")
+        // The shell's Home and its search (#1135, lane H1): the answer is the
+        // whole screen.
+        .boxed(".centraid.core.v1.HomeState.content.data")
+        .boxed(".centraid.core.v1.HomeSearchState.content.data")
+        .boxed(".centraid.core.v1.ViewState.kind.home")
+        .boxed(".centraid.core.v1.ViewState.kind.home_search")
         // Home is by far the largest view state.
         .boxed(".centraid.core.v1.ViewState.kind.agenda_home")
         // Photos' home carries the library, Collections and Search in one state.

@@ -210,6 +210,8 @@ pub(super) struct Chat {
     pub card_gone: bool,
     pub awaiting: Vec<Await>,
     pub waiting: Option<Waiting>,
+    /// A stored thread to open once the model is ready (`chat.thread`): its id and title.
+    pub reopen: Option<(String, String)>,
     /// The card whose confirm is held for the owner check.
     pub unlocking: Option<String>,
     /// Invoke-key sequence for this screen's writes.
@@ -249,6 +251,7 @@ impl Default for Chat {
             card_gone: false,
             awaiting: Vec::new(),
             waiting: None,
+            reopen: None,
             unlocking: None,
             seq: crate::kit::act::fresh(),
         }
@@ -271,6 +274,14 @@ impl Chat {
             waiting: (!question.trim().is_empty()).then(|| Waiting {
                 question: question.trim().to_owned(),
             }),
+            ..Self::default()
+        }
+    }
+
+    /// A chat opened on a stored thread: it opens once the model is ready.
+    pub fn reopening(thread_id: &str, title: &str) -> Self {
+        Self {
+            reopen: (!thread_id.is_empty()).then(|| (thread_id.to_owned(), title.to_owned())),
             ..Self::default()
         }
     }
@@ -379,7 +390,7 @@ impl Chat {
         let untouched = self.messages.is_empty() && self.thread_id.is_empty();
         // A chat made by a search's Ask already has its scope: the shell's first `opened` only
         // starts it.
-        let asked = if !self.opened && self.waiting.is_some() {
+        let asked = if !self.opened && (self.waiting.is_some() || self.reopen.is_some()) {
             self.scope.clone()
         } else {
             super::scope_of(&opened.app)
@@ -403,9 +414,11 @@ impl Chat {
         let models_dir = std::mem::take(&mut self.models_dir);
         let vault_name = std::mem::take(&mut self.vault_name);
         let waiting = self.waiting.take();
+        let reopen = self.reopen.take();
         *self = Self {
             opened: true,
             waiting,
+            reopen,
             scope: asked,
             models_dir,
             vault_name,
@@ -535,6 +548,9 @@ impl Chat {
 
     /// An Ask that arrived before the chat could take it is put now.
     fn ask_waiting(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        if let Some((thread, title)) = self.reopen.take() {
+            return self.thread_opened(&thread, &title, ctx);
+        }
         match self.waiting.take() {
             Some(waiting) if self.can_ask() => self.ask(&waiting.question, false, ctx),
             Some(waiting) => {

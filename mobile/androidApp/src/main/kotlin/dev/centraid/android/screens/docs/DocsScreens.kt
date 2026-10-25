@@ -334,7 +334,7 @@ internal fun DocsDriveScreen(
                 }
                 if (chips.isNotEmpty()) RoomChipRow("docs", chips)
                 Box(Modifier.weight(1f)) { DriveBody(state, onEvent, onOpen) }
-                SearchAskRow(state.search?.ask_row)
+                SearchAskRow(state.search?.ask_row, onOpen)
             }
         }
         PushedPage(
@@ -373,7 +373,7 @@ internal fun DocsDriveScreen(
                 Column(Modifier.fillMaxSize()) {
                     Box(Modifier.weight(1f)) { DriveBody(state, onEvent, onOpen) }
                     // THE ASK ROW closes a search's answer (#1097).
-                    SearchAskRow(state.search?.ask_row)
+                    SearchAskRow(state.search?.ask_row, onOpen)
                 }
             },
         )

@@ -131,6 +131,7 @@ pub mod agenda_todo;
 pub mod chat;
 pub mod docs;
 pub mod health;
+pub mod home;
 pub mod imports;
 pub mod locker;
 pub mod money;

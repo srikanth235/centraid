@@ -79,9 +79,12 @@ message Route {
     TrashRoute trash = 900;
     // ---- the shell: chat (1600-1699) ----
     ChatRoute chat = 1600;
+    ChatThreadRoute chat_thread = 1601;
     // ---- the shell: phone imports (1700-1899) ----
     ImportsRoute imports = 1700;
-    // ---- the shell (1000-1999): search's Ask (H1's arm, byte-identical) ----
+    // ---- the shell (1000-1999): Home 1000-1299 ----
+    HomeRoute home = 1000;
+    HomeSearchRoute home_search = 1001;
     ShellAskRoute ask = 1002;
   }
 }
@@ -523,6 +526,13 @@ message MoneyPageRoute {
 // `chat.home`: no arguments. The Chat tab's root.
 message ChatRoute {}
 
+// `chat.thread`: a stored chat opened as a page (a search hit on a conversation). The
+// header reads `title` until the thread is read.
+message ChatThreadRoute {
+  string thread_id = 1;
+  string title = 2;
+}
+
 // `imports.camera_roll`, `imports.files`, `imports.made`: the phone imports'
 // headless services, each serving one vault. The camera roll's cursor is kept per
 // vault (a photograph offered to two vaults is two imports).
@@ -530,8 +540,17 @@ message ImportsRoute {
   string vault_id = 1;
 }
 
-// `chat.ask`: a search's Ask hands the term to the assistant. The chat opens with
-// `question` put to it, in `scope` (an app id, or empty for every app).
+// ---- the shell (1000-1999): Home 1000-1299 ----
+
+// Home takes no arguments: it is the root of the `home` tab.
+message HomeRoute {}
+
+// Home's search takes no arguments.
+message HomeSearchRoute {}
+
+// What a tap on a search's Ask row opens: the assistant, asking `question` in
+// `scope` (an app's id, or empty for every app). The chat lane registers the
+// screen that takes it.
 message ShellAskRoute {
   string question = 1;
   string scope = 2;

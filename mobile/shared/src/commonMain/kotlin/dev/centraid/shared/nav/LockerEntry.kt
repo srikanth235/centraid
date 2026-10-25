@@ -11,7 +11,6 @@ import centraid.core.v1.Route
 import dev.centraid.shared.custody.OwnKeyFiling
 import dev.centraid.shared.custody.VaultSecrets
 import dev.centraid.shared.platform.platformServices
-import dev.centraid.shared.shell.HomeReads
 import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

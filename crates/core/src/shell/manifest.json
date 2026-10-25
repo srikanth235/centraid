@@ -8,13 +8,22 @@
     {
       "name": "chats",
       "kind": "chat_thread",
-      "figures": ["threads", "corrected"],
+      "figures": [
+        "threads",
+        "corrected"
+      ],
       "description": "The chat drawer's list, newest activity first; with a term, the chats it finds by title and by the member's own words, best first, with the words it corrected a typo to.",
       "input": {
         "type": "object",
         "properties": {
-          "term": { "type": "string" },
-          "limit": { "type": "integer", "minimum": 1, "maximum": 500 }
+          "term": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
         },
         "additionalProperties": false
       }
@@ -22,42 +31,99 @@
     {
       "name": "chat",
       "kind": "chat_thread",
-      "figures": ["found", "thread", "messages"],
+      "figures": [
+        "found",
+        "thread",
+        "messages"
+      ],
       "description": "One stored chat and its messages, oldest first, each with its cards and attachments as they were said.",
       "input": {
         "type": "object",
         "properties": {
-          "thread_id": { "type": "string", "minLength": 1 }
+          "thread_id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["thread_id"],
+        "required": [
+          "thread_id"
+        ],
         "additionalProperties": false
       }
     },
     {
       "name": "chat-card",
       "kind": "chat_thread",
-      "figures": ["exists"],
+      "figures": [
+        "exists"
+      ],
       "description": "Whether the row a stored card names is still in the vault.",
       "input": {
         "type": "object",
         "properties": {
-          "app": { "type": "string", "minLength": 1 },
-          "entity": { "type": "string", "minLength": 1 },
-          "id": { "type": "string", "minLength": 1 }
+          "app": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entity": {
+            "type": "string",
+            "minLength": 1
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["app", "entity", "id"],
+        "required": [
+          "app",
+          "entity",
+          "id"
+        ],
         "additionalProperties": false
       }
     },
     {
       "name": "files-followed",
       "kind": "followed_folder",
-      "figures": ["folders"],
+      "figures": [
+        "folders"
+      ],
       "description": "(imports, lane I) The folders the vault follows, with the documents each still holds and each file's last stated stat, so a rescan of an unchanged folder reads no bytes.",
       "input": {
         "type": "object",
         "properties": {},
         "additionalProperties": false
+      }
+    },
+    {
+      "name": "search",
+      "kind": "search_hit",
+      "figures": [
+        "matches"
+      ],
+      "description": "Home's vault search: every searchable app's rows for one term in one answer (notes, people, agenda, tasks, photos, docs, Locker items by their plain text, and the named containers and chat threads), at most eight of each kind, under the owner. Blank answers no hits. `corrected` names the words searched when the typed ones found little and a correction added rows.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "term"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "hits": {
+            "type": "array"
+          },
+          "corrected": {
+            "type": "string"
+          }
+        }
       }
     }
   ],
@@ -67,7 +133,9 @@
       "verb": "edit",
       "kind": "chat_thread",
       "inverse": null,
-      "sealed": ["title"],
+      "sealed": [
+        "title"
+      ],
       "command": "thread.rename",
       "phrasings": [
         "rename this chat",
@@ -79,10 +147,19 @@
       "input": {
         "type": "object",
         "properties": {
-          "thread_id": { "type": "string", "minLength": 1 },
-          "title": { "type": "string", "minLength": 1 }
+          "thread_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["thread_id", "title"],
+        "required": [
+          "thread_id",
+          "title"
+        ],
         "additionalProperties": false
       }
     },
@@ -103,9 +180,14 @@
       "input": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       }
     },
@@ -151,18 +233,42 @@
           "origin": {
             "type": "object",
             "properties": {
-              "ref": { "type": "string" },
-              "label": { "type": "string" },
-              "device_id": { "type": ["string", "null"] },
-              "fills": { "type": ["string", "null"] }
+              "ref": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "device_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "fills": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
             },
-            "required": ["ref", "label"],
+            "required": [
+              "ref",
+              "label"
+            ],
             "additionalProperties": false
           },
-          "records": { "type": "array" },
-          "complete": { "type": "boolean" }
+          "records": {
+            "type": "array"
+          },
+          "complete": {
+            "type": "boolean"
+          }
         },
-        "required": ["origin", "records"],
+        "required": [
+          "origin",
+          "records"
+        ],
         "additionalProperties": false
       }
     },
@@ -183,10 +289,20 @@
       "input": {
         "type": "object",
         "properties": {
-          "hash": { "type": "string", "minLength": 64, "maxLength": 64 },
-          "size": { "type": "integer", "minimum": 0 }
+          "hash": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          }
         },
-        "required": ["hash", "size"],
+        "required": [
+          "hash",
+          "size"
+        ],
         "additionalProperties": false
       }
     },
@@ -207,10 +323,21 @@
       "input": {
         "type": "object",
         "properties": {
-          "system": { "type": "string", "enum": ["files"] },
-          "ref": { "type": "string", "minLength": 1 }
+          "system": {
+            "type": "string",
+            "enum": [
+              "files"
+            ]
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["system", "ref"],
+        "required": [
+          "system",
+          "ref"
+        ],
         "additionalProperties": false
       }
     }

@@ -82,7 +82,7 @@ internal fun PhotosSearchScreen(
                     Box(Modifier.fillMaxWidth().padding(top = 160.dp).testTag("photos-search-no-match")) {
                         EmptyStateView(empty.toKit(), onAction = null)
                     }
-                    SearchAskRow(search.ask)
+                    SearchAskRow(search.ask, onOpen)
                 } else {
                     PhotoCellsGrid(
                         cells = hits.tiles,
@@ -103,7 +103,7 @@ internal fun PhotosSearchScreen(
                                 HitsHead(hits.doors, hits.matched_label, onOpen)
                             }
                             // THE ASK ROW closes the answer (#1097).
-                            item(span = { GridItemSpan(maxLineSpan) }) { SearchAskRow(search.ask) }
+                            item(span = { GridItemSpan(maxLineSpan) }) { SearchAskRow(search.ask, onOpen) }
                         },
                     )
                 }

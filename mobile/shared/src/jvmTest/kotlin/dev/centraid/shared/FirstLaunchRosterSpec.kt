@@ -35,6 +35,20 @@ class FirstLaunchRosterSpec : StringSpec({
         FirstLaunch.APPS shouldContainExactly SpringboardPolicy.SPRINGBOARD_ORDER
     }
 
+    "and that order is Rust's: the copy here is held to `shell/policy.rs`'s ORDER" {
+        // THE TRUTH is the Rust policy that grades and packs the springboard; the
+        // gate (custody's lane) lists the same house from this copy.
+        val repositoryRoot = File(
+            System.getProperty("centraid.repositoryRoot")
+                ?: error("centraid.repositoryRoot is unset; see mobile/shared/build.gradle.kts"),
+        )
+        val policy = repositoryRoot.resolve("crates/screens/src/shell/policy.rs").readText()
+        val order = Regex("""pub const ORDER: \[&str; \d+] = \[(.*?)\];""", RegexOption.DOT_MATCHES_ALL)
+            .find(policy)!!.groupValues[1]
+        val rust = Regex(""""(\w+)"""").findAll(order).map { it.groupValues[1] }.toList()
+        SpringboardPolicy.SPRINGBOARD_ORDER shouldContainExactly rust
+    }
+
     "every app in the catalogue is in the house, Money and Health with them" {
         FirstLaunch.APPS.toSet() shouldBe CentraidCatalog.apps.map { it.id }.toSet()
         FirstLaunch.APPS shouldContainAll listOf("money", "health")

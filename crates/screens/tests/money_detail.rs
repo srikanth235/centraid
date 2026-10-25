@@ -445,6 +445,7 @@ fn a_term_that_matches_nothing_says_so_and_a_clear_goes_back_to_resting() {
             label: "Ask about “zzqqxx”".into(),
             question: "Find zzqqxx".into(),
             scope: "money".into(),
+            route: Some(centraid_screens::chat::routes::ask("Find zzqqxx", "money")),
         })
     );
     let empty = data.empty.expect("an empty state");

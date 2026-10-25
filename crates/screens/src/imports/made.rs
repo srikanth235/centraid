@@ -20,9 +20,9 @@ use wire::screen_event::Kind as E;
 
 use super::{effect, reminders};
 use crate::agenda::calendar::{self, CalendarFollow};
-use crate::kit::rows;
 use crate::people::contacts::{self, ContactsFollow};
 use crate::screen::{Ctx, Screen};
+use crate::shell::row_routes as rows;
 use crate::strings::{Locale, fill, imports as words};
 
 #[must_use]

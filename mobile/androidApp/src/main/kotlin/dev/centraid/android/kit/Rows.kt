@@ -43,7 +43,6 @@ import centraid.screen.v1.SectionHead
 import centraid.screen.v1.StatusChip
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
-import dev.centraid.shared.kit.TypedText
 
 /**
  * THE ONE ROW SHAPE (hand-off v17: "one row shape per app reused by every list

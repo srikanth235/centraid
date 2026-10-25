@@ -503,6 +503,7 @@ fn search_is_a_field_marks_matches_and_close_restores_the_library() {
             label: "Ask about “milk”".into(),
             question: "Find milk".into(),
             scope: "notes".into(),
+            route: Some(centraid_screens::chat::routes::ask("Find milk", "notes")),
         })
     );
     // Nothing found: the sentence, and Ask still offered.

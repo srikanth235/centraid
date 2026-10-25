@@ -25,22 +25,37 @@ final class ChatModel: ObservableObject {
 
     private weak var store: ScreenStore?
     private var subscription: AnyCancellable?
+    /// The instance of a chat PAGE (`chat.ask`, `chat.thread`), or nil for the tab's root.
+    private let pageInstance: UInt64?
 
-    init() {
+    /// Every live chat, so the one model download the shell performs is reported to each: a page
+    /// opened with no model on the phone draws the same progress as the tab.
+    private static let live = NSHashTable<ChatModel>.weakObjects()
+
+    /// The Chat tab's model (`page` nil), which also wires the download's callbacks, or a chat
+    /// page's, which only listens.
+    init(page: UInt64? = nil) {
+        pageInstance = page
+        Self.live.add(self)
+        guard page == nil else { return }
         AttachmentFiles.sweep()
         let downloader = ChatModelDownloader.shared
-        downloader.onProgress = { [weak self] vision, done, total in
-            self?.send(.downloadProgress(.with {
-                $0.doneBytes = UInt64(max(done, 0))
-                $0.totalBytes = UInt64(max(total, 0))
-                $0.vision = vision
-            }))
+        downloader.onProgress = { vision, done, total in
+            for model in ChatModel.live.allObjects {
+                model.send(.downloadProgress(.with {
+                    $0.doneBytes = UInt64(max(done, 0))
+                    $0.totalBytes = UInt64(max(total, 0))
+                    $0.vision = vision
+                }))
+            }
         }
-        downloader.onFinished = { [weak self] vision, ok in
-            self?.send(.downloadFinished(.with {
-                $0.ok = ok
-                $0.vision = vision
-            }))
+        downloader.onFinished = { vision, ok in
+            for model in ChatModel.live.allObjects {
+                model.send(.downloadFinished(.with {
+                    $0.ok = ok
+                    $0.vision = vision
+                }))
+            }
         }
         // A transfer that finished while the app was away is delivered to the
         // session's delegate, which has to exist to hear it.
@@ -61,9 +76,9 @@ final class ChatModel: ObservableObject {
         if let instance, case .chat(let state)? = store.views[instance]?.kind { self.state = state }
     }
 
-    /// The chat tab's root instance, once Rust has opened it.
+    /// The chat tab's root instance, once Rust has opened it, or this page's.
     private var instance: UInt64? {
-        store?.entries(of: "chat").first?.instance
+        pageInstance ?? store?.entries(of: "chat").first?.instance
     }
 
     /// Send one gesture to the chat.
@@ -84,16 +99,12 @@ final class ChatModel: ObservableObject {
 
     // MARK: Intents
 
-    /// THE TAB APPEARED, scoped to `app` or to everything (empty), under the foreground vault's name.
-    /// `scopeChosen` is the composer's menu, which starts a new chat when the scope differs.
-    func open(
-        app: String,
-        vaultName: String,
-        scopeChosen: Bool = false,
-        asking question: String? = nil,
-        thread: String? = nil,
-        title: String = ""
-    ) {
+    /// THE TAB (or a chat page) APPEARED, scoped to `app` or to everything (empty), under the
+    /// foreground vault's name. `scopeChosen` is the composer's menu, which starts a new chat when
+    /// the scope differs. A page made by a search's Ask or a found conversation (`chat.ask`,
+    /// `chat.thread`) already holds its scope, its question or its thread; this first event only
+    /// names the models directory and starts it.
+    func open(app: String, vaultName: String, scopeChosen: Bool = false) {
         opened = true
         ChatModelStore.prepareDirectory()
         send(.opened(.with {
@@ -102,21 +113,8 @@ final class ChatModel: ObservableObject {
             $0.scopeChosen = scopeChosen
             $0.modelsDir = ChatModelStore.directory.path
         }))
-        // A search's Ask: Rust waits for the chat to be ready, then asks once.
-        if let question {
-            send(.asked(.with {
-                $0.scope = app
-                $0.question = question
-            }))
-        }
-        if let thread {
-            send(.threadOpened(.with {
-                $0.threadID = thread
-                $0.title = title
-            }))
-        }
         // A model that was mid-download when the app was killed is still arriving: say so, so the
-        // tab draws its progress and not the offer.
+        // chat draws its progress and not the offer.
         ChatModelDownloader.shared.reportRunning()
     }
 

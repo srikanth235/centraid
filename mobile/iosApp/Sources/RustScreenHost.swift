@@ -9,7 +9,7 @@ import SwiftUI
 // the view below, which switches on `ViewState.kind`. The views add no copy,
 // format nothing, count nothing and start no timer; they send `ScreenEvent`s.
 //
-// INTERIM HOSTING: the shell's `path` still holds the back stack. An entry
+// THE STACK: Rust holds one (tab `home`, rooted at Home); the shell's `path` mirrors it. An entry
 // pushed onto it sends `NavPush` (`ShellModel.openRust`), and leaving it by any
 // route sends `NavPopped` (`ShellModel.rustPopped`). The shell lane replaces
 // this with the stack Rust holds (`ProofStackView`).
@@ -18,11 +18,12 @@ enum RustScreens {
     /// The screen id the shared side spells a Rust route under (`ScreenOpening.screenId`);
     /// its event is the encoded `centraid.core.v1.Route`.
     static let id = ScreenIds.shared.RUST_SCREEN
-    /// The tab Rust keeps a route's screens' stack under: an app's screens live
-    /// under that app (`photos.` under `photos`), the rest under Agenda's.
-    static func tab(for route: Centraid_Core_V1_Route) -> String {
-        route.screen.hasPrefix("photos.") ? "photos" : "agenda"
-    }
+    /// The tab Home is the root of. Rust owns the stack: every page, whichever
+    /// app's, is pushed on this tab, so back returns to Home.
+    static let homeTab = BandPolicy.shared.PLACE_HOME
+
+    /// The tab Rust keeps a route's screens' stack under: always Home's.
+    static func tab(for route: Centraid_Core_V1_Route) -> String { homeTab }
 }
 
 /// ONE PUSH OF A RUST ROUTE: the route Rust built and a token unique to the
@@ -75,6 +76,14 @@ private struct RustScreenView: View {
     var body: some View {
         let open: (Centraid_Core_V1_Route) -> Void = { shell.open($0) }
         switch store.views[instance]?.kind {
+        // HOME'S SEARCH (#1135, lane H1): a page pushed over Home.
+        case .homeSearch(let state)?:
+            ShellSearchView(
+                state: state,
+                send: { store.send(instance, .homeSearch($0)) },
+                open: open,
+                onCancel: pop
+            )
         case .agendaHome(let state)?:
             AgendaHomeView(
                 state: state,
@@ -417,8 +426,55 @@ private struct RustScreenView: View {
                 },
                 onBack: pop
             )
+        // THE CHAT as a page (#1135, lane I): a search's Ask (`chat.ask`) or a found conversation
+        // (`chat.thread`). The tab's root draws the same state through `HomeView`.
+        case .chat?:
+            ChatPageView(shell: shell, store: store, instance: instance, onBack: pop, open: open)
+        // HOME is the root of the `home` tab, drawn by `HomeView`, never pushed.
         default:
             BarePaper()
+        }
+    }
+}
+
+/// A chat page: its own `ChatModel` over this instance, so the page and the tab hold their own
+/// thread. Rust waits for the first `opened` (it names the models directory) before it starts.
+private struct ChatPageView: View {
+    let shell: ShellModel
+    let store: ScreenStore
+    let instance: UInt64
+    let onBack: () -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
+
+    @StateObject private var model: ChatModel
+    @State private var typing = false
+
+    init(
+        shell: ShellModel,
+        store: ScreenStore,
+        instance: UInt64,
+        onBack: @escaping () -> Void,
+        open: @escaping (Centraid_Core_V1_Route) -> Void
+    ) {
+        self.shell = shell
+        self.store = store
+        self.instance = instance
+        self.onBack = onBack
+        self.open = open
+        _model = StateObject(wrappedValue: ChatModel(page: instance))
+    }
+
+    var body: some View {
+        ChatView(
+            chat: model,
+            typing: $typing,
+            onOpenRoute: open,
+            onSetScope: { model.open(app: $0, vaultName: shell.foregroundVaultName, scopeChosen: true) },
+            onBack: onBack
+        )
+        .onAppear {
+            model.attach(store: store)
+            if !model.opened { model.open(app: "", vaultName: shell.foregroundVaultName) }
         }
     }
 }

@@ -5,8 +5,8 @@ use wire::assist_request::Kind as Ask;
 use wire::chat_state::Phase;
 
 use super::model::{Await, Chat, Fail, Msg, Pending, Proposal, Source, Stage, Step, effect};
-use crate::kit::rows::{self, RowRef};
 use crate::screen::Ctx;
+use crate::shell::row_routes::{self, RowRef};
 use crate::strings::chat as words;
 
 impl Chat {
@@ -544,15 +544,15 @@ impl Chat {
             title: tapped.title.clone(),
             qualifier: tapped.qualifier.clone(),
         };
-        // A conversation opens in the Chat tab: no page to push.
-        if rows::is_thread(&row) {
+        // A conversation opens in this chat: no page to push.
+        if row.app == "chat" && row.entity == "thread" {
             return self.thread_opened(&row.id, &row.title, ctx);
         }
         self.card_gone = !self.row_live(&row, ctx);
         if self.card_gone {
             return Vec::new();
         }
-        let neighbours: Vec<String> = self
+        let among: Vec<RowRef> = self
             .messages
             .iter()
             .find(|message| message.id == message_id)
@@ -560,12 +560,11 @@ impl Chat {
                 message
                     .cards
                     .iter()
-                    .filter(|card| card.app == "photos" && card.entity == "photo")
-                    .map(|card| card.id.clone())
+                    .map(|card| RowRef::new(&card.app, &card.entity, &card.id, &card.title))
                     .collect()
             })
             .unwrap_or_default();
-        match rows::route_of(&row, &words::title(ctx.locale()), &neighbours) {
+        match row_routes::route(&row, &words::title(ctx.locale()), &among) {
             Some(route) => vec![effect(wire::effect::Kind::OpenRoute(wire::OpenRoute {
                 route: Some(route),
             }))],
@@ -576,7 +575,7 @@ impl Chat {
     /// Whether the row a card names is still in the vault. True when the core would not say, and
     /// for a card that names no row (a member action, an export).
     fn row_live(&self, row: &RowRef, ctx: &Ctx) -> bool {
-        if row.id.is_empty() || rows::MemberAction::parse(row).is_some() {
+        if row.id.is_empty() || is_member_action(row) {
             return true;
         }
         let asked = crate::catalog::load::shell::ChatCard {
@@ -690,4 +689,14 @@ pub(super) fn stored_card(card: &wire::ChatStoredCard) -> wire::ChatCard {
 /// An app id as a member reads it: the name of the app it opens in.
 pub(super) fn app_name(id: &str) -> String {
     centraid_assist::App::from_id(id).map_or_else(|| id.to_owned(), |app| app.display().to_owned())
+}
+
+/// A Locker card that asks the member for a secret action (`reveal:password`, `code:otp_seed`,
+/// `edit_secret:cvv`, `export:`): it names no row to look for.
+fn is_member_action(row: &RowRef) -> bool {
+    row.app == "locker"
+        && row.entity == "locker_item"
+        && ["reveal:", "code:", "edit_secret:", "export:"]
+            .iter()
+            .any(|word| row.qualifier.starts_with(word))
 }

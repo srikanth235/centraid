@@ -8,7 +8,7 @@ import CentraidShared
 /// THE BAND — invariant 1 (#1020, wave A; v0 `screens/home/HomeBand.tsx`).
 ///
 /// One band, never app-themed, never scrolled away, frame destinations only.
-/// The shared `BandPolicy` decides which destinations and in what order; this
+/// Rust (`Navigation.band`) decides which destinations and in what order; this
 /// file draws them and names the one that was pressed. Where a press GOES is
 /// the navigator's, which is why nothing here routes.
 ///
@@ -22,39 +22,36 @@ import CentraidShared
 /// so the band is native-stack chrome drawn at the foot of Home — a tab bar
 /// would make every app a peer of Home and leave nowhere for a cover to come
 /// from.
+///
+/// One place in the band, as Rust worded it (`ShellBandTab`) or, for the two
+/// places this shell still hosts itself, as `HomeView` words them for now.
+struct BandPlace: Hashable {
+    let id: String
+    let label: String
+    let spoken: String
+    let iconKey: String
+    let selected: Bool
+}
+
 struct HomeBand: View {
-    let active: String
+    let places: [BandPlace]
     let onSelect: (String) -> Void
 
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(BandDestinations.tabs, id: \.id) { place in
+            ForEach(places, id: \.id) { place in
                 BandTab(
                     iconKey: place.iconKey,
-                    label: place.short,
-                    // SPEAK WHAT IS PAINTED. v0's band once spoke one noun for
-                    // "Needs you" and painted another, so two members got two
-                    // names for one place.
-                    spoken: place.short + (place.id == active ? ", " + SharedCopy.shared.BAND_CURRENT_SPOKEN : ""),
-                    selected: place.id == active,
+                    label: place.label,
+                    // SPEAK WHAT IS PAINTED, and which place is the current one.
+                    spoken: place.spoken,
+                    selected: place.selected,
                     identifier: "home-band-\(place.id)",
                     onPress: { onSelect(place.id) }
                 )
             }
-            // BACKUP, the band's last place: a tab like Chat, drawn in place of
-            // the springboard — where the backup stands, the backup devices
-            // and the 24 words — so a member never hunts for the one thing
-            // that brings the vault back. Every app is a tile on Home.
-            BandTab(
-                iconKey: "Backup",
-                label: HomeWords.shared.BAND_BACKUP,
-                spoken: HomeWords.shared.BAND_BACKUP_SPOKEN + (active == BandPolicy.shared.PLACE_BACKUP ? ", " + SharedCopy.shared.BAND_CURRENT_SPOKEN : ""),
-                selected: active == BandPolicy.shared.PLACE_BACKUP,
-                identifier: "home-band-backup",
-                onPress: { onSelect(BandPolicy.shared.PLACE_BACKUP) }
-            )
         }
         .padding(BandMetrics.platePad)
         // THE BAND FLOATS (§G), never a flush bar. Its ground is the page's
@@ -427,41 +424,5 @@ enum BandMetrics {
         #else
         return floor
         #endif
-    }
-}
-
-/// The band's destinations, READ FROM THE SHARED POLICY.
-///
-/// `BandPolicy.PLACES` is the one table — Home pinned by law, the next four
-/// pinned places in table order, `gateway` reachable by link and never by band,
-/// a sixth overflowing into More. Restating those ten rows here would be a
-/// second table for one band, and the two would disagree the first time a name
-/// changed; this reads the same rows Compose reads.
-enum BandDestinations {
-    struct Place {
-        let id: String
-        let short: String
-        let iconKey: String
-    }
-
-    static var tabs: [Place] {
-        var places = BandPolicy.shared.bandTabs(pins: BandPolicy.shared.DEFAULT_PINS).map {
-            // `short_`, not `short`: Kotlin/Native suffixes a name that
-            // collides with an Objective-C keyword, and `short` is a C type.
-            Place(id: $0.id, short: $0.short_, iconKey: $0.iconKey)
-        }
-        // CHAT IS THE BAND'S SECOND PLACE, BETWEEN HOME AND MORE. It is added
-        // here and not to `BandPolicy.PLACES` because the on-device chat has
-        // only this shell so far: a shared policy row would draw a Chat tab on
-        // Android that opens nothing, which is a control that lies. When
-        // Android ships chat the row moves into the policy and this line goes.
-        //
-        // ITS MARK IS THE ASSISTANT'S, NOT A SPEECH BUBBLE: the chat is the
-        // on-device assistant, and `Sparkle` is the design system's `ask`
-        // concept (`ICON_CONCEPTS`), so the tab and every ask key agree.
-        if let home = places.firstIndex(where: { $0.id == BandPolicy.shared.PLACE_HOME }) {
-            places.insert(Place(id: BandPolicy.shared.PLACE_CHAT, short: ChatCopy.shared.TAB_LABEL, iconKey: "Sparkle"), at: home + 1)
-        }
-        return places
     }
 }

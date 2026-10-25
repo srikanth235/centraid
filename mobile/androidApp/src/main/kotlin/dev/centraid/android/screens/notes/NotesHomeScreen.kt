@@ -133,7 +133,7 @@ public fun NotesHomeScreen(
                 }
                 items(results.rows, key = { "s-" + it.note_id }) { row -> NoteRow(row, "", onOpen, onEvent) }
                 // THE ASK ROW closes the answer, whether or not anything matched (#1097).
-                item(key = "ask") { SearchAskRow(search.ask) }
+                item(key = "ask") { SearchAskRow(search.ask, onOpen) }
             }
         } else {
             ReadStateView(

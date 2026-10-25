@@ -237,15 +237,18 @@ struct SearchAskRow: View {
     let ask: Centraid_Screen_V1_SearchAsk
     /// Home records the search as a recent one when its row is pressed.
     var onAsk: (() -> Void)? = nil
+    /// A view whose state carries the Ask's finished route (Home's search) pushes it itself and
+    /// needs no door; every other search hands the row to the shell's.
+    var handoff: (() -> Void)? = nil
 
     @Environment(\.askChat) private var askChat
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        if let askChat {
+        if let press = handoff ?? askChat.map({ door in { door(ask) } }) {
             Button {
                 onAsk?()
-                askChat(ask)
+                press()
             } label: {
                 Text(ask.label)
                     .centraidType("smallStrong")

@@ -62,13 +62,19 @@ pub const HOME: &str = "chat.home";
 /// A search's Ask opened as a page of its own: the same chat, with the question waiting.
 pub const ASK: &str = "chat.ask";
 
+/// A stored chat opened as a page of its own (a search hit on a conversation).
+pub const THREAD: &str = "chat.thread";
+
 /// The tab the chat is the root of.
 pub const TAB: &str = "chat";
 
 /// The chat's screen.
 #[must_use]
 pub fn registry() -> Registry {
-    Registry::default().with(HOME, build).with(ASK, build_ask)
+    Registry::default()
+        .with(HOME, build)
+        .with(ASK, build_ask)
+        .with(THREAD, build_thread)
 }
 
 fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
@@ -76,6 +82,15 @@ fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         let chat: Box<dyn Screen> = Box::new(Chat::default());
         chat
     })
+}
+
+/// `chat.thread`: the stored chat opens once the shell's first `opened` event has told it where
+/// the models are.
+fn build_thread(route: &wire::Route) -> Option<Box<dyn Screen>> {
+    let Some(wire::route::Args::ChatThread(thread)) = &route.args else {
+        return None;
+    };
+    Some(Box::new(Chat::reopening(&thread.thread_id, &thread.title)))
 }
 
 /// `chat.ask`: a chat in the asked scope with the question waiting; the shell's `opened` event
@@ -90,6 +105,18 @@ fn build_ask(route: &wire::Route) -> Option<Box<dyn Screen>> {
 /// The routes the chat hands to a shell.
 pub mod routes {
     use super::{HOME, wire};
+
+    /// A stored chat as a page.
+    #[must_use]
+    pub fn thread(thread_id: &str, title: &str) -> wire::Route {
+        wire::Route {
+            screen: super::THREAD.to_owned(),
+            args: Some(wire::route::Args::ChatThread(wire::ChatThreadRoute {
+                thread_id: thread_id.to_owned(),
+                title: title.to_owned(),
+            })),
+        }
+    }
 
     /// A search's Ask as a page: `question` put to a chat in `scope`.
     #[must_use]

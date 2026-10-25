@@ -3,6 +3,7 @@ package dev.centraid.core
 import centraid.core.v1.CounterCopyTapped
 import centraid.core.v1.CounterEvent
 import centraid.core.v1.NavEvent
+import centraid.core.v1.NavPopped
 import centraid.core.v1.NavPush
 import centraid.core.v1.Navigation
 import centraid.core.v1.Route
@@ -30,7 +31,7 @@ import kotlinx.coroutines.withTimeout
  */
 class ScreensRoundTripSpec : StringSpec({
 
-    "the runtime opens its three tabs, proof, agenda and photos, each with its root" {
+    "the runtime opens its one tab, home, rooted at Home, framed by a band" {
         val core = openRealCore()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         try {
@@ -39,10 +40,16 @@ class ScreensRoundTripSpec : StringSpec({
             screens.attach()
             screens.start()
             val navigation = screens.navigation.value!!
-            navigation.tabs.map { it.tab } shouldBe listOf("proof", "agenda", "photos")
-            navigation.tabs.forEach { it.entries.size shouldBe 1 }
-            navigation.tab("agenda").entries.single().route!!.screen shouldBe "agenda.home"
-            navigation.tab("photos").entries.single().route!!.screen shouldBe "photos.home"
+            navigation.tabs.map { it.tab } shouldBe listOf("home")
+            navigation.selected_tab shouldBe "home"
+            val root = navigation.tab("home").entries.single()
+            root.route!!.screen shouldBe "home.springboard"
+            // The band is Rust's: only the places whose tabs exist, Home lit.
+            navigation.band!!.tabs.map { it.tab to it.selected } shouldBe listOf("home" to true)
+            // Home's tiles are read in the springboard's order, through the apps' own queries.
+            val home = screens.views.value[root.instance]!!.home!!
+            home.data_!!.tiles.map { it.app_id } shouldBe
+                listOf("photos", "docs", "agenda", "notes", "money", "health", "people", "locker")
         } finally {
             scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
             core.close()
@@ -58,8 +65,8 @@ class ScreensRoundTripSpec : StringSpec({
             screens.attach()
             (screens.start() as CoreOutcome.Answered)
 
-            val stack = screens.navigation.value!!.tab("proof").entries
-            val view = screens.views.value[stack.single().instance]!!.counter!!
+            val opened = pushProof(screens)
+            val view = screens.views.value[opened]!!.counter!!
             view.title shouldBe "Upcoming"
             val data = view.data_!!
             data.count_label shouldContain "upcoming event"
@@ -78,7 +85,7 @@ class ScreensRoundTripSpec : StringSpec({
             val screens = Screens(core, scope)
             screens.attach()
             screens.start()
-            val root = screens.navigation.value!!.tab("proof").entries.single().instance
+            val root = pushProof(screens)
 
             screens.send(
                 root,
@@ -93,17 +100,18 @@ class ScreensRoundTripSpec : StringSpec({
         }
     }
 
-    "the stack is Rust's: a push adds an entry the shell only draws" {
+    "the stack is Rust's: a push adds an entry the shell only draws, and a pop takes it off" {
         val core = openRealCore()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         try {
             core.startReader()
             val screens = Screens(core, scope)
             screens.start()
-            screens.navigate(
-                NavEvent(push = NavPush(tab = "proof", route = Route(screen = "proof.counter"))),
-            )
-            screens.navigation.value!!.tab("proof").entries.size shouldBe 2
+            screens.navigation.value!!.tab("home").entries.size shouldBe 1
+            val pushed = pushProof(screens)
+            screens.navigation.value!!.tab("home").entries.size shouldBe 2
+            screens.navigate(NavEvent(popped = NavPopped(tab = "home", instance = pushed)))
+            screens.navigation.value!!.tab("home").entries.size shouldBe 1
         } finally {
             scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
             core.close()
@@ -112,5 +120,13 @@ class ScreensRoundTripSpec : StringSpec({
 }) {
     private companion object {
         fun Navigation.tab(name: String): TabStack = tabs.single { it.tab == name }
+
+        /** Push the proof screen onto Home's tab as a tapped row would; its instance. */
+        suspend fun pushProof(screens: Screens): Long {
+            screens.navigate(
+                NavEvent(push = NavPush(tab = "home", route = Route(screen = "proof.counter"))),
+            )
+            return screens.navigation.value!!.tab("home").entries.last().instance
+        }
     }
 }

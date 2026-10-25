@@ -38,6 +38,7 @@ import centraid.core.v1.KeychainOp
 import centraid.core.v1.KeychainValue
 import centraid.core.v1.OriginalFetched
 import centraid.core.v1.PhoneChanged
+import centraid.core.v1.VaultCommand
 import centraid.core.v1.Route
 import dev.centraid.android.screens.PhotoHandOff
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
@@ -79,6 +80,9 @@ import okio.ByteString
  * [docs] performs Docs' `PickFile`, `FollowFolder` and `StopFollowing` (the pickers, the
  * camera, the follower's grant); [openRoute] is `OpenRoute`: a page Rust asked the shell to push.
  * [health] answers `HealthRead` (Health Connect, read only). Either is null where the host has none, and the effect is answered `failed`.
+ *
+ * ONE PERFORMER FOR THE ONE RUNTIME (#1135): every screen is on Rust's `home` tab over a single
+ * [Screens], so every effect is performed here exactly once. [vaultCommand] is Home's `VaultCommand`.
  */
 @Composable
 internal fun PerformScreenEffects(
@@ -86,14 +90,12 @@ internal fun PerformScreenEffects(
     phone: AndroidPhoneFollow?,
     /** Photos' device half: the camera roll, free up space and an original from the gateway. */
     photos: PhotosDevice? = null,
-    /** This app's tab: when set, only its instances' effects are performed here (two apps share one core). */
-    tab: String? = null,
     onAnnounce: (String) -> Unit = {},
     docs: DocsPickers? = null,
     health: AndroidHealth? = null,
     openRoute: ((Route) -> Unit)? = null,
-    /** A second tab whose instances' effects are also performed here (the Chat tab shares Agenda's runtime). */
-    alsoTab: String? = null,
+    /** What Home asks of the shelf (`VaultCommand`): switch, make, restore, forget, rename, open a settings door. */
+    vaultCommand: ((VaultCommand) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -118,15 +120,6 @@ internal fun PerformScreenEffects(
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> photoDoor.picked(uri) }
     LaunchedEffect(screens) {
         screens.effects.collect { request ->
-            // TWO APPS' RUNTIMES SHARE ONE CORE, so each hears every push: an effect for
-            // another app's screen is that app's performer's to answer.
-            val mine = { name: String ->
-                screens.navigation.value?.tabs?.firstOrNull { it.tab == name }
-                    ?.entries?.any { it.instance == request.instance } == true
-            }
-            if (tab != null && !mine(tab) && (alsoTab == null || !mine(alsoTab))) {
-                return@collect
-            }
             // ONE COROUTINE PER EFFECT: a permission dialog waits for the member
             // without holding up the keychain read behind it.
             launch {
@@ -139,6 +132,14 @@ internal fun PerformScreenEffects(
                 } else if (effect?.pick_library_photo != null) {
                     ChatEffects.pickLibraryPhoto(context, photoDoor) {
                         photoPicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    }
+                } else if (effect?.vault_command != null) {
+                    // HOME'S REQUEST OF THE SHELF (the shelf, the files and the keys are this shell's).
+                    if (vaultCommand == null) {
+                        failed("no shelf to ask")
+                    } else {
+                        vaultCommand(effect.vault_command!!)
+                        EffectResult(done = EffectDone())
                     }
                 } else if (effect?.health_read != null) {
                     health?.snapshot(effect.health_read!!) { healthLauncher?.launch(it) }

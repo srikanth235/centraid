@@ -5937,5 +5937,25 @@ pub mod load {
                 value.request()
             }
         }
+
+        /// Home's vault search: every searchable app's rows for one term in one answer (notes, people, agenda, tasks, photos, docs, Locker items by their plain text, and the named containers and chat threads), at most eight of each kind, under the owner. Blank answers no hits. `corrected` names the words searched when the typed ones found little and a correction added rows.
+        #[derive(Clone, Debug, Default)]
+        pub struct Search {
+            pub term: String,
+        }
+        impl Search {
+            pub const NAME: &str = "search";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("term".to_owned(), text(self.term));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Search> for wire::LoadRequest {
+            fn from(value: Search) -> Self {
+                value.request()
+            }
+        }
     }
 }

@@ -74,6 +74,8 @@ pub mod originals;
 /// `phone.proto`.
 pub mod phone;
 pub mod screens;
+/// THE SHELL'S OWN CATALOGUE (#1135): the reads that are no one app's, named in
+/// one manifest beside the eight apps' and served by `load` the same way.
 pub mod shell;
 pub mod stage;
 /// THE STARTER ROWS a member's first vault is founded with: ordinary rows of

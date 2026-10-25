@@ -61,7 +61,7 @@ pub fn run(root: &Path, check: bool) -> Result<()> {
     std::fs::write(&path, wanted).with_context(|| format!("writing {}", path.display()))
 }
 
-/// The file's text, from the manifests under `crates/apps`.
+/// The file's text, from the manifests under `crates/apps` and the shell's.
 ///
 /// # Errors
 /// An unreadable or malformed manifest.
@@ -76,9 +76,8 @@ pub fn generate(root: &Path) -> Result<String> {
             apps.push(json);
         }
     }
-    // The shell's own catalogue (`crates/core/src/shell/manifest.json`) is spelled the same way:
-    // `act::shell::..` and `load::shell::..`. It is not one of the eight apps.
-    let shell = root.join(SHELL_MANIFEST);
+    // The shell's own catalogue is no app, and its queries are `load::shell::*`.
+    let shell = root.join("crates/core/src/shell/manifest.json");
     let json: Value = serde_json::from_str(&std::fs::read_to_string(&shell)?)
         .with_context(|| format!("parsing {}", shell.display()))?;
     apps.push(json);

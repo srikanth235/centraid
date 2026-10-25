@@ -47,6 +47,8 @@ import "centraid/core/v1/money_screens.proto";
 import "centraid/core/v1/notes_screens.proto";
 import "centraid/core/v1/people_screens.proto";
 import "centraid/core/v1/route.proto";
+import "centraid/core/v1/shell_home_screens.proto";
+import "centraid/core/v1/shell_search_screens.proto";
 
 // ---------------------------------------------------------------------------
 // The door
@@ -136,6 +138,9 @@ message Navigation {
   repeated TabStack tabs = 2;
   // Monotonic: a renderer drops a navigation older than the one it drew.
   uint64 revision = 3;
+  // THE BAND (#1135): the places a tab root is framed by, Rust's to word and to
+  // light. A shell draws it under a tab's root and sends `select_tab` for a press.
+  ShellBand band = 4;
 }
 
 message TabStack {
@@ -277,6 +282,9 @@ message ScreenEvent {
     ImportsCameraRollEvent imports_camera_roll = 1700;
     ImportsFilesEvent imports_files = 1701;
     ImportsMadeEvent imports_made = 1702;
+    // ---- the shell (1000-1999): Home 1000-1299 ----
+    HomeEvent home = 1000;
+    HomeSearchEvent home_search = 1001;
   }
 }
 
@@ -364,6 +372,9 @@ message ViewState {
     ImportsCameraRollState imports_camera_roll = 1700;
     ImportsFilesState imports_files = 1701;
     ImportsMadeState imports_made = 1702;
+    // ---- the shell (1000-1999): Home 1000-1299 ----
+    HomeState home = 1000;
+    HomeSearchState home_search = 1001;
   }
 }
 
@@ -435,6 +446,12 @@ message Effect {
     // ---- vault plumbing (1300-1399, lane H2): plumbing_screens.proto ----
     SecretBatch secrets = 1300;
     SyncedSecretsProbe synced_probe = 1302;
+    // ---- the shell (1000-1999) ----
+    // Home asks the shell to act on the vaults the phone holds.
+    VaultCommand vault_command = 1000;
+    // Select a tab: the runtime performs it itself (the shell hears the new
+    // `Navigation`), so no destination is ever named in Swift or Kotlin.
+    SelectTab select_tab = 1001;
   }
 }
 

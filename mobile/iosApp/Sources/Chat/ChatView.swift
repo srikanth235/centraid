@@ -45,6 +45,8 @@ struct ChatView: View {
     let onOpenRoute: (Centraid_Core_V1_Route) -> Void
     /// A scope chosen from the composer's menu: an app id, or empty for every app.
     let onSetScope: (String) -> Void
+    /// Set on a chat PAGE (`chat.ask`, `chat.thread`): the control that pops it. The tab has none.
+    var onBack: (() -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -72,6 +74,7 @@ struct ChatView: View {
             VStack(alignment: .leading, spacing: 0) {
                 ChatHeader(
                     state: state,
+                    onBack: onBack,
                     onDrawer: {
                         focused = false
                         chat.toggleDrawer(true)
@@ -343,6 +346,7 @@ private struct DeleteTarget: Identifiable {
 /// element.
 private struct ChatHeader: View {
     let state: Centraid_Core_V1_ChatState
+    let onBack: (() -> Void)?
     let onDrawer: () -> Void
     let onNewChat: () -> Void
     let onRename: () -> Void
@@ -353,6 +357,14 @@ private struct ChatHeader: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 4) {
+            if let onBack {
+                KitIconKey(
+                    iconKey: "ChevronLeft",
+                    label: state.closeLabel,
+                    identifier: "chat-back",
+                    action: onBack
+                )
+            }
             KitIconKey(
                 iconKey: "Menu",
                 label: state.drawerLabel,

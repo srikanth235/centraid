@@ -11,7 +11,6 @@ import dev.centraid.shared.custody.DevSeed
 import dev.centraid.shared.nav.AppHomes
 import dev.centraid.shared.platform.BackgroundTasks
 import dev.centraid.shared.platform.PlatformServices
-import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.sync.BackupReading
 import dev.centraid.shared.sync.BackupStatusStore
@@ -58,46 +57,39 @@ import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
 /**
- * HOME, WIRED TO A REAL VAULT — AND TO THE OTHERS THE DEVICE HOLDS
- * (#1020, wave A).
+ * THE SHELF, WIRED TO THE VAULTS THE DEVICE HOLDS (#1020; #1135).
  *
- * One object holding the things a live screen needs and both shells were
- * assembling separately: the [ScreenHost] that reduces, the [CentraidCore] that
- * reads, the [HomeRuntime] that carries effects from the first to the second,
- * and the roster that says which other vaults a switch could point at. It lives
- * in `commonMain` because the wiring is identical on both sides and a shell
- * that assembled it itself would be a second chance to assemble it differently
- * — Android's Home drew an empty page for exactly that reason, having never
- * sent `Opened` at all.
+ * One object holding what a live shell needs and both shells were assembling
+ * separately: the [Shelf] (every vault file this phone holds, and the core in
+ * front), the [ChangeStream] that feeds the screens what arrives, the backup
+ * pass and its status, and the job of pointing all of them at whichever core the
+ * shelf has in front. It lives in `commonMain` because the wiring is identical on
+ * both sides and a shell that assembled it itself would be a second chance to
+ * assemble it differently.
+ *
+ * ## Home is Rust's; this tells it the facts only the shelf knows
+ *
+ * The springboard, its tiles, the lockup's words and the switcher are
+ * `crates/screens/src/shell`. [state] carries the facts they are made from (the
+ * roster, the vault in front, the backup line, a stranded write's ribbon and the
+ * seat), which a shell forwards to Rust Home as events. [switchVault] is the one
+ * thing Home asks back.
  *
  * ## A VIEW OVER THE SHELF'S FOREGROUND HOLDING (#1025 S7-9)
  *
- * This used to own the set of vaults itself: it took a `pathsById` map from a
- * one-shot survey, held the pairing store, held a `link` it moved by hand, and
- * pairing rode its LIVE core — which destroyed the vault that core was open on.
- * [Shelf] owns all of that now. What is left here is the part that was always
- * this object's: a [ScreenHost] that reduces, a [HomeRuntime] that serves its
- * effects, a [ChangeStream] that feeds it what arrives, and the job of pointing
- * all three at whichever core the shelf has in front.
+ * [Shelf] owns the set of vaults. What is left here is the part that was always
+ * this object's: a [ScreenHost] that holds the facts, a [ChangeStream] that feeds
+ * the screens what arrives, and the job of pointing at the core the shelf has in
+ * front.
  *
  * **A switch is a REBIND and not a reopen of this session.** [rebind]
- * re-points the change reader and publishes the new lockup; [HomeRuntime]
- * already reads the core through a supplier (R-HOME-2), so it keeps collecting
- * — cancelling it raced the switch's `ReadPage` against a `SharedFlow` with
- * `replay = 0` and left every tile LOADING forever (#1025 live-home). App
- * screens stay attached the same way. Since D-1025-S7-13 / D-1025-S7-17 every
- * held vault's core stays open; a switch is a pointer move on the shelf.
+ * re-points the change reader and publishes the new lockup. App screens stay
+ * attached the same way. Since D-1025-S7-13 / D-1025-S7-17 every held vault's core
+ * stays open; a switch is a pointer move on the shelf.
  *
- * **The order in [open] is load-bearing.** The runtime collects effects BEFORE
- * `Opened` is sent, because `ScreenHost` buffers only `EFFECT_BUFFER` of them
- * and the read Home asks for on open is the first one emitted. A runner
- * attached afterwards would miss it and every tile would sit `LOADING` for ever.
- *
- * **A core that will not open is not a crash.** The screen still runs; the
- * seat says it is waiting for a vault and Home takes its `failure` branch
- * ("No vault is open on this device.") rather than seeding `LOADING` tiles no
- * read will ever answer — the alternative is an app that will not start
- * because a file is missing, or one that spins for ever.
+ * **A core that will not open is not a crash.** The seat says it is waiting for a
+ * vault and Home takes its failure branch ("No vault is open.") rather than an
+ * app that will not start because a file is missing, or one that spins for ever.
  */
 public class HomeSession private constructor(
     private val scope: CoroutineScope,
@@ -108,7 +100,6 @@ public class HomeSession private constructor(
      * one. See [Shelf].
      */
     public val shelf: Shelf,
-    private var runtime: Job?,
     /**
      * The one consumer of the core's change stream (#1025 S5).
      *
@@ -367,10 +358,6 @@ public class HomeSession private constructor(
     /** Rust's screens, for a shell that cannot open a core of its own (SwiftUI). See [ScreenTransport]. */
     public val screenTransport: ScreenTransport = ScreenTransport({ core }, scope)
 
-    public fun send(event: HomeEvent) {
-        scope.launch { host.send(event) }
-    }
-
     /**
      * THE SCOPE A SCREEN'S LAST WRITE RUNS ON. A bridge's `leave()` sends the
      * screen's `Left` event here rather than on its own scope, so releasing the
@@ -489,7 +476,7 @@ public class HomeSession private constructor(
      *   land — a person row is a `entity` name and a `media_face_region`
      *   count, and neither half is a row. Then the fan-out belongs in the
      *   bridge, which folds both answers and sends ONE event, exactly as
-     *   `HomeRuntime` fans out seven reads per app. There is no third option:
+     *   the old Home fanned out seven reads per app. There is no third option:
      *   a screen's `content` is a protobuf `oneof`, so Wire REFUSES a state
      *   with `loading` and `data` both set, and there is nowhere to park the
      *   first answer while the second is in flight.
@@ -760,17 +747,7 @@ public class HomeSession private constructor(
     }
 
     /**
-     * POINT THE CHANGE READER AT WHATEVER IS IN FRONT, and make sure the
-     * Home effect runner is collecting (R-HOME-1, #1025 live-home).
-     *
-     * [HomeRuntime] takes the core as a SUPPLIER — `{ core }`, read at each
-     * page — so a switch that moves the shelf's foreground is picked up by the
-     * next tile read without tearing the collector down. Cancelling it on
-     * every identity change was the live bug: `start()` schedules `collect`
-     * asynchronously, `publishLockup` then emits `ReadPage` into a
-     * `SharedFlow` with `replay = 0`, and every tile stayed LOADING forever
-     * while Photos (already collecting through the same supplier pattern)
-     * drew.
+     * POINT THE CHANGE READER AT WHATEVER IS IN FRONT (R-HOME-1, #1025 live-home).
      *
      * The change reader IS per CORE and restarts here (#1025 S7-13):
      * `CentraidCore.startReader` is idempotent and its job lives on the
@@ -791,20 +768,6 @@ public class HomeSession private constructor(
         changeReader?.cancelAndJoin()
         changeReader = null
         bound = open
-        when {
-            open == null -> {
-                runtime?.cancelAndJoin()
-                runtime = null
-            }
-            runtime == null -> {
-                runtime = HomeRuntime(
-                    core = { core },
-                    host = host,
-                    scope = scope,
-                    clock = services.clock,
-                ).start()
-            }
-        }
         if (open != null) {
             changeReader = changes.start(open, scope)
         }
@@ -863,23 +826,6 @@ public class HomeSession private constructor(
     }
 
     /**
-     * Serve the effects this session owns, rather than the ones a core serves.
-     *
-     * [HomeRuntime] turns `ReadPage` into a read; a `SwitchVault` is not a read
-     * at all — it is the shelf's foreground — so it is served here, by the
-     * object that owns the binding. Two collectors on one `SharedFlow`
-     * each see every effect and each ignores what is not theirs.
-     */
-    private fun serveSwitches(): Job = scope.launch {
-        host.effects.collect { effect ->
-            when (effect) {
-                is ScreenEffect.SwitchVault -> switchTo(effect.vaultId)
-                else -> Unit
-            }
-        }
-    }
-
-    /**
      * THE ROSTER, FORWARDED AS IT MOVES (#1025 S7-9).
      *
      * One collector on [Shelf.roster] for the life of the session. It replaces
@@ -908,18 +854,14 @@ public class HomeSession private constructor(
     /**
      * RE-POINT THE WHOLE APP AT ANOTHER VAULT.
      *
-     * An id with no holding, or a file that will not open, leaves the session
-     * on the vault it was on — [Shelf.bringToFront] answers null and reopens
-     * what was there. That is the honest outcome: the member is still reading
-     * something real.
+     * Home asks for this by id (the switcher's pick) and never names a file. An
+     * id with no holding, or a file that will not open, leaves the session on the
+     * vault it was on: [Shelf.bringToFront] answers null and reopens what was
+     * there, which is the honest outcome, since the member is still reading
+     * something real. The new lockup is what tells Rust Home to read again.
      */
-    private suspend fun switchTo(vaultId: String) {
+    public suspend fun switchVault(vaultId: String) {
         shelf.bringToFront(vaultId)
-        // THE LOCKUP IS WHAT STARTS THE RELOAD: the machine sees a vault whose
-        // id differs from the one it is holding, throws away every tile it read
-        // out of the old vault, and asks for the new one's — which the
-        // supplier-backed runtime already collecting serves against the
-        // foreground core (R-HOME-1).
         rebind()
     }
 
@@ -944,14 +886,9 @@ public class HomeSession private constructor(
          * 1. [Shelf.load] runs FIRST: it opens each file in turn and asks it
          *    which vault it is. It ends holding every vault's core, and the
          *    foreground one is what everything below binds to.
-         * 2. The runtime collects effects BEFORE `Opened` is sent, because
-         *    `ScreenHost` buffers only `EFFECT_BUFFER` of them and the read
-         *    Home asks for on open is the first one emitted. A runner attached
-         *    afterwards would miss it and every tile would sit `LOADING` for
-         *    ever.
-         * 3. The change stream starts with the runtime and not later, because
-         *    a screen attached after the first rows land would show a
-         *    springboard of the counts the vault had before them.
+         * 2. The change stream starts with the first rebind and not later,
+         *    because a screen attached after the first rows land would show the
+         *    counts the vault had before them.
          */
         public suspend fun open(
             vaultDir: String,
@@ -971,7 +908,6 @@ public class HomeSession private constructor(
                 host = host,
                 services = services,
                 shelf = shelf,
-                runtime = null,
                 changes = ChangeStream(),
                 changeReader = null,
             )
@@ -984,7 +920,6 @@ public class HomeSession private constructor(
             // THE RADIO MOVED: a link that came back, or Wi-Fi after cellular,
             // is when withheld originals can go. Debounced on its own clock.
             services.networkStatus.onChange { reading -> scope.launch { session.drain.onConnectivity(reading) } }
-            session.serveSwitches()
             // THE ROSTER COLLECTOR BEFORE THE REBIND, so the roster the shelf
             // is already holding reaches Home rather than being the one value
             // that arrives only on the next change.
@@ -998,7 +933,6 @@ public class HomeSession private constructor(
                 }
             }
             session.rebind()
-            host.send(HomeEvent(opened = HomeEvent.Opened()))
             // THE ONE LAUNCH REGISTRATION, here and nowhere else in commonMain
             // (`BackgroundSchedulingSpec`): both shells open a session at
             // launch, and a background window the OS never registered is a

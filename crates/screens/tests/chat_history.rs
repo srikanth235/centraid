@@ -687,3 +687,39 @@ fn a_search_asks_as_a_page_of_its_own_and_the_question_is_put_once_the_chat_is_r
     }
     panic!("the asked question was never put");
 }
+
+#[test]
+fn a_conversation_found_by_search_opens_as_a_chat_page_with_its_messages() {
+    let mut chat = with_history(&["gym membership question"]);
+    let thread = chat.state().thread_id.clone();
+    chat.driver
+        .handle
+        .assist()
+        .host()
+        .install(script(&read_tasks()));
+    let id = chat.driver.push(
+        centraid_screens::chat::TAB,
+        centraid_screens::chat::routes::thread(&thread, "gym membership question"),
+    );
+    chat.driver.send(
+        id,
+        wire::screen_event::Kind::Chat(wire::ChatEvent {
+            kind: Some(C::Opened(wire::chat_event::Opened {
+                models_dir: "/nowhere/models".to_owned(),
+                ..Default::default()
+            })),
+        }),
+    );
+    for _ in 0..200 {
+        chat.driver.pump(std::time::Duration::from_millis(40));
+        let Some(wire::view_state::Kind::Chat(state)) = &chat.driver.view(id).kind else {
+            panic!()
+        };
+        if state.messages.len() == 2 {
+            assert_eq!(state.title, "gym membership question");
+            assert_eq!(state.thread_id, thread);
+            return;
+        }
+    }
+    panic!("the stored chat never opened");
+}

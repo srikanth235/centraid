@@ -555,7 +555,7 @@ internal fun MoneySearchScreen(
                     if (search.rows.isEmpty() && empty != null) {
                         androidx.compose.foundation.layout.Column {
                             EmptyStateView(empty.toKit(), onAction = null)
-                            SearchAskRow(search.ask)
+                            SearchAskRow(search.ask, onOpen)
                         }
                     } else {
                         LazyColumn {
@@ -564,7 +564,7 @@ internal fun MoneySearchScreen(
                                 MoneyRowView(row) { row.route?.let(onOpen) }
                             }
                             // THE ASK ROW closes the answer (#1097).
-                            item(key = "ask") { SearchAskRow(search.ask) }
+                            item(key = "ask") { SearchAskRow(search.ask, onOpen) }
                         }
                     }
                 }

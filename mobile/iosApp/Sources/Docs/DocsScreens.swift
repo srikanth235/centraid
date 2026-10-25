@@ -5,10 +5,8 @@ import CentraidShared
 /// DOCS, REGISTERED (K5; #1135). Its screens are Rust's (`crates/screens`,
 /// module `docs`): the drive, a folder's page, a document, its version history,
 /// its editor and its trash have no bridge, port or route parameter to register.
-/// A tile, a search hit, a chat card or a row arrives as a Rust `Route` (the
-/// shared side's `DocsEntry`, or a row's own `route`), spelled as a
-/// `ScreenOpening` under `RustScreens.id`, and `AppRegistry.present` pushes it as
-/// a `.rust` entry that `RustScreenHost` draws from `ScreenStore`.
+/// A tile, a search hit, a chat card or a row arrives as a Rust `Route` that
+/// `ShellModel.open` pushes; `RustScreenHost` draws it from `ScreenStore`.
 ///
 /// What stays here is the platform's half of two effects: the file picker, the
 /// scanner and the stage door (`PickFile`, `DocsFiles`), and the folder picker
@@ -37,7 +35,6 @@ enum DocsScreens: AppScreens {
         ))
     }
 
-    static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { .home(of: appID) }
 
     /// THE FILE PICKER, THE SCANNER AND THE FOLDER PICKER, at the root: a pick
     /// can be asked for wherever the member is.

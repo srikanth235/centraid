@@ -1,6 +1,5 @@
 package dev.centraid.shared.shell
 
-import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.HomeState
 import dev.centraid.shared.custody.DevSeed
 import dev.centraid.shared.platform.platformServices
@@ -167,18 +166,6 @@ public class HomeBridge {
     }
 
     /**
-     * Forward one encoded event.
-     *
-     * Not `suspend`: a SwiftUI button cannot await, and a view that could await
-     * a reducer would be a view holding the main thread while a screen thinks.
-     * The launch is what keeps `send`'s ordering — one coroutine, one queue —
-     * without the caller knowing there is one.
-     */
-    public fun send(event: ByteArray) {
-        session?.send(HomeEvent.ADAPTER.decode(event))
-    }
-
-    /**
      * THIS VAULT MOVED TO THE MEMBER'S OTHER PHONE (#1029 F1).
      *
      * Not `suspend`, for the same reason [send] is not. See
@@ -330,6 +317,16 @@ public class HomeBridge {
     }
 
     /** Rename a vault; [onDone] says whether the name took. */
+    /**
+     * RE-POINT THE WHOLE APP AT ANOTHER VAULT: Home's switcher pick. The shelf
+     * brings the vault to the front and the session publishes its lockup, which
+     * is what tells Rust Home to read again.
+     */
+    public fun switchVault(vaultId: String) {
+        val session = this.session ?: return
+        scope.launch { session.switchVault(vaultId) }
+    }
+
     public fun renameVault(vaultId: String, name: String, onDone: (Boolean) -> Unit) {
         val session = this.session ?: return onDone(false)
         scope.launch { onDone(session.renameVault(vaultId, name)) }
@@ -387,33 +384,6 @@ public class HomeBridge {
      */
     public fun transferRuleChoices(): List<TransferRuleChoice> =
         TransferRule.entries.map { TransferRuleChoice(it.stored, it.sentence) }
-
-    /**
-     * THE MEMBER'S APPEARANCE (R-CHROME-7), as the word the store holds — the
-     * same shape as [transferRule], for the same reason: a Swift `switch`
-     * cannot be exhaustive over an exported Kotlin enum.
-     */
-    public fun appearance(onAppearance: (String) -> Unit) {
-        scope.launch { onAppearance(Appearance.read(platformServices().secureStore).stored) }
-    }
-
-    /**
-     * THE HEADER KEY'S TAP: [Appearance.toggled] against what the phone
-     * itself shows, written, and answered as what the store then holds.
-     */
-    public fun toggleAppearance(current: String, phoneDark: Boolean, onAppearance: (String) -> Unit) {
-        scope.launch {
-            val store = platformServices().secureStore
-            Appearance.write(store, Appearance.of(current).toggled(phoneDark))
-            onAppearance(Appearance.read(store).stored)
-        }
-    }
-
-    /** The scheme [stored] holds the window to: dark, light, or null to follow the phone. */
-    public fun appearanceHeldDark(stored: String): Boolean? = Appearance.of(stored).held
-
-    /** The key as drawn on a screen that is [dark]: where a tap goes. */
-    public fun appearanceKey(dark: Boolean): AppearanceKey = Appearance.key(dark)
 
     /** The current state, for a view that needs one before it subscribes. */
     public fun current(): ByteArray =

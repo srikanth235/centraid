@@ -28,6 +28,7 @@ pub fn offer(locale: Locale, term: &str, scope: &str) -> wire::SearchAsk {
         label: ask_label(locale, term),
         question: question(locale, term),
         scope: scope.to_owned(),
+        route: Some(crate::chat::routes::ask(&question(locale, term), scope)),
     }
 }
 
