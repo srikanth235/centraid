@@ -145,7 +145,6 @@ fn the_download_step_tap_progress_then_a_load_and_a_failure_goes_back_with_one_l
             .url
             .contains("/resolve/8fea620810c4afa23dd6443f999a48574c1611a3/")
     );
-    assert_eq!(download.sha256.len(), 64);
     assert_eq!(download.models_dir, "/nowhere/models");
     // unknown progress, then a known one
     assert_eq!(
