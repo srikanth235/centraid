@@ -141,6 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.PhotosLightboxState.content.photo")
         .boxed(".centraid.core.v1.ViewState.kind.photos_lightbox")
         .boxed(".centraid.core.v1.ViewState.kind.chat")
+        .boxed(".centraid.core.v1.MoneySearchState.content.data")
         .boxed(".centraid.core.v1.AgendaHomeState.content.data")
         .boxed(".centraid.core.v1.AgendaEventState.content.data")
         .boxed(".centraid.core.v1.AgendaEditorState.content.data")

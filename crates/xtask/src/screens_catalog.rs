@@ -34,9 +34,6 @@ use serde_json::Value;
 /// Where the generated file lives, relative to the repository root.
 pub const OUTPUT: &str = "crates/screens/src/catalog.rs";
 
-/// The shell's manifest, relative to the repository root.
-const SHELL_MANIFEST: &str = "crates/core/src/shell/manifest.json";
-
 /// Write the file, or with `check` compare it to the committed one.
 ///
 /// # Errors
