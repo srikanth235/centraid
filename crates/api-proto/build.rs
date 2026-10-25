@@ -115,8 +115,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .out_dir(&out)
         // Boxed where one oneof arm dwarfs its siblings, so a small message
         // does not carry the largest arm's size inline (`large_enum_variant`).
-        .boxed(".centraid.screen.v1.PhotoLightboxState.content.detail")
-        .boxed(".centraid.screen.v1.PhotoLightboxEvent.kind.data")
         // Every app screen's `data` arm: the answer is the whole screen, and
         // its siblings (loading, empty, refused) are a line or two each.
         .boxed(".centraid.core.v1.PhotosDuplicatesState.content.data")
