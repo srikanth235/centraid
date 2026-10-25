@@ -505,3 +505,33 @@ fn threads_list_newest_activity_first() {
     w.turn(Some(&a), "more", answered("m"));
     assert_eq!(order(&w.scratch.vault), [a, b]);
 }
+
+/// ONE APP IS ONE WORD (#1128, principle 6 of the model): no app word is in the vault's DDL. A
+/// thread's `scope` is a bare column the `thread.save_turn` command holds to the roster, never a
+/// CHECK; the chat screen's scope list is the same roster (`crates/screens/tests/chat_model.rs`).
+#[test]
+fn the_ddl_holds_no_app_word_and_a_threads_scope_is_a_bare_column() {
+    let ddl_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../contracts/schema/vault-ddl.sql");
+    let ddl = std::fs::read_to_string(ddl_path).expect("the vault DDL");
+    let thread = ddl
+        .split("CREATE TABLE thread (")
+        .nth(1)
+        .and_then(|rest| rest.split(") STRICT;").next())
+        .expect("the thread table");
+    assert!(thread.contains("scope TEXT,") && !thread.contains("CHECK"));
+    // `health` is also the word of a phone store a followed origin names (`follow.system`); it is
+    // the one roster word the DDL spells, as a store and never as an app.
+    let outside_stores: String = ddl
+        .lines()
+        .filter(|line| !line.contains("system IN ("))
+        .collect::<Vec<_>>()
+        .join("\n");
+    for app in centraid_vault::roster::APPS {
+        assert!(
+            !outside_stores.contains(&format!("'{}'", app.id)),
+            "{}",
+            app.id
+        );
+    }
+}

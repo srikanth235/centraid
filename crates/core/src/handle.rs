@@ -697,10 +697,11 @@ impl HandleState {
                             }
                         }
                         // THE ASSISTANT'S STREAM goes to the screens that listen (the chat)
-                        // and is swallowed: a shell with a runtime draws the turn from the view
-                        // state it pushes.
+                        // and on to the shell too, like a change: the stream is part of the ABI,
+                        // and a shell with a runtime simply ignores it.
                         (Some(wire::event::Kind::Assist(assist)), Some(host)) => {
                             host.assist(self, assist);
+                            return Ok(Some(event));
                         }
                         (Some(wire::event::Kind::Change(change)), Some(host)) => {
                             host.changed(self, std::slice::from_ref(&change.table));
