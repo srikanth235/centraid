@@ -78,7 +78,7 @@ fn the_trash_lists_deleted_tasks_with_the_day_they_were_deleted() {
     );
     assert_eq!(row.restore_label, "Restore");
     assert_eq!(row.purge_label, "Delete forever");
-    assert_eq!(row.icon_key, "CheckSquare");
+    assert_eq!(row.icon_key, "Todo");
     // Nothing empties it: no Empty trash.
     assert_eq!(data.empty_label, "");
 }
