@@ -29,6 +29,7 @@ package centraid.core.v1;
 
 import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/assist.proto";
+import "centraid/core/v1/chat_screens.proto";
 import "centraid/core/v1/docs_screens.proto";
 import "centraid/core/v1/health_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
@@ -246,6 +247,8 @@ message ScreenEvent {
     PeopleEditorEvent people_editor = 702;
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
+    // ---- the shell (1000-1999): chat (1600-1699) ----
+    ChatEvent chat = 1600;
   }
 }
 
@@ -327,6 +330,8 @@ message ViewState {
     PeopleEditorState people_editor = 702;
     // ---- the kit (900-999) ----
     TrashView trash = 900;
+    // ---- the shell (1000-1999): chat (1600-1699) ----
+    ChatState chat = 1600;
   }
 }
 
@@ -386,6 +391,9 @@ message Effect {
     PickFile pick_file = 200;
     FollowFolder follow_folder = 201;
     StopFollowing stop_following = 202;
+    // ---- the shell (1000-1999): chat (1600-1699) ----
+    ModelDownload model_download = 1600;
+    PickLibraryPhoto pick_library_photo = 1601;
   }
 }
 
@@ -749,6 +757,8 @@ message EffectResult {
     FilePicked file_picked = 200;
     FileProgress file_progress = 201;
     FolderFollowed folder_followed = 202;
+    // ---- the shell (1000-1999): chat (1600-1699) ----
+    LibraryPhotoPicked library_photo_picked = 1600;
   }
 }
 

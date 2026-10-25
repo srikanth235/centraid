@@ -77,6 +77,8 @@ message Route {
     PeopleEditorRoute people_editor = 702;
     // ---- the kit (900-999) ----
     TrashRoute trash = 900;
+    // ---- the shell: chat (1600-1699) ----
+    ChatRoute chat = 1600;
   }
 }
 
@@ -506,3 +508,10 @@ message MoneyTargetRoute {
 message MoneyPageRoute {
   string parent = 1;
 }
+
+// ---------------------------------------------------------------------------
+// The shell (1600-1999): chat
+// ---------------------------------------------------------------------------
+
+// `chat.home`: no arguments. The Chat tab's root.
+message ChatRoute {}
