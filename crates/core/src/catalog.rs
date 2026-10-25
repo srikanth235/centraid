@@ -128,6 +128,28 @@ mod tests {
         assert_eq!(actions, 153, "the eight manifests declare 153 actions");
     }
 
+    #[test]
+    fn the_shell_is_addressable_and_is_not_one_of_the_eight_apps() {
+        assert!(app("shell").is_some());
+        assert!(APPS.iter().all(|app| app.id != "shell"));
+        let shell = SHELL.manifest();
+        assert_eq!(shell.id, "shell");
+        for action in &shell.actions {
+            assert!(
+                SHELL.command_of(&action.name).is_some(),
+                "shell.{} has no command in its action table",
+                action.name
+            );
+        }
+        for row in crate::shell::ACTIONS {
+            assert!(
+                shell.action(row.action).is_some(),
+                "{} is not declared",
+                row.action
+            );
+        }
+    }
+
     /// THERE IS NO `tasks` APP (#1128, the owner's ruling): Tasks were folded into Agenda, so no
     /// app id, manifest id, crate or query namespace is `tasks`. `task` stays what it is: a vault
     /// entity kind and a chat kind.

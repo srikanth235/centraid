@@ -31,7 +31,7 @@ import kotlinx.coroutines.withTimeout
  */
 class ScreensRoundTripSpec : StringSpec({
 
-    "the runtime opens its one tab, home, rooted at Home, framed by a band" {
+    "the runtime opens home and chat, Home selected and rooted at Home, framed by a band" {
         val core = openRealCore()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         try {
@@ -40,12 +40,12 @@ class ScreensRoundTripSpec : StringSpec({
             screens.attach()
             screens.start()
             val navigation = screens.navigation.value!!
-            navigation.tabs.map { it.tab } shouldBe listOf("home")
+            navigation.tabs.map { it.tab } shouldBe listOf("home", "chat")
             navigation.selected_tab shouldBe "home"
             val root = navigation.tab("home").entries.single()
             root.route!!.screen shouldBe "home.springboard"
             // The band is Rust's: only the places whose tabs exist, Home lit.
-            navigation.band!!.tabs.map { it.tab to it.selected } shouldBe listOf("home" to true)
+            navigation.band!!.tabs.map { it.tab to it.selected } shouldBe listOf("home" to true, "chat" to false)
             // Home's tiles are read in the springboard's order, through the apps' own queries.
             val home = screens.views.value[root.instance]!!.home!!
             home.data_!!.tiles.map { it.app_id } shouldBe

@@ -450,16 +450,29 @@ mod tests {
 
     #[test]
     fn a_hit_with_no_page_to_open_is_not_offered_and_does_not_count() {
-        // A conversation has no page until the chat registers one.
         let answer = data(vec![
-            hit("thread", "c1", "Cabin planning", "chat"),
+            hit("thing", "c1", "Cabin planning", "nowhere"),
             hit("note", "n1", "Cabin list", "notes"),
         ]);
         assert_eq!(answer.groups.len(), 1);
         assert_eq!(answer.groups[0].app_id, "notes");
-        let only_chat = data(vec![hit("thread", "c1", "Cabin planning", "chat")]);
-        assert!(only_chat.groups.is_empty());
-        assert_eq!(only_chat.empty.unwrap().headline, "No matches");
+        let only = data(vec![hit("thing", "c1", "Cabin planning", "nowhere")]);
+        assert!(only.groups.is_empty());
+        assert_eq!(only.empty.unwrap().headline, "No matches");
+    }
+
+    #[test]
+    fn a_conversation_opens_as_a_chat_page() {
+        let answer = data(vec![hit("thread", "c1", "Cabin planning", "chat")]);
+        assert_eq!(answer.groups.len(), 1);
+        assert_eq!(answer.groups[0].app_id, "chat");
+        assert_eq!(
+            answer.groups[0].rows[0]
+                .route
+                .as_ref()
+                .map(|route| route.screen.as_str()),
+            Some(crate::chat::THREAD)
+        );
     }
 
     #[test]

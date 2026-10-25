@@ -100,7 +100,7 @@ struct CentraidApp: App {
                         // swap a new task (`NavigationAndMountSpec`).
                         .task(id: route) { shell.opened(route) }
                         // THE ASSISTANT'S DOOR for a search's Ask row (#1097, R-1097-30, #1135).
-                        .environment(\.askChat, { shell.askChat($0.question, scope: $0.scope) })
+                        .environment(\.askChat, { shell.askChat($0) })
                         // THE IMPORT'S LINE on every route, at the foot (DESIGN.md's
                         // one status line): above the app's band where the page
                         // has one, at the page's own foot where it does not.

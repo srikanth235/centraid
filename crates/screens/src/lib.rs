@@ -7,10 +7,12 @@
 pub mod agenda;
 pub mod backup;
 pub mod catalog;
+pub mod chat;
 pub mod custody;
 pub mod docs;
 pub mod field;
 pub mod health;
+pub mod imports;
 pub mod kit;
 pub mod locker;
 pub mod money;
@@ -65,6 +67,8 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
             .merge(notes::registry())
             .merge(people::registry())
             .merge(photos::registry())
+            .merge(imports::registry())
+            .merge(chat::registry())
             .merge(custody::registry_with(&secrets, &keeper))
             .merge(pairing::registry(&secrets))
             .merge(backup::registry(&secrets))
@@ -73,10 +77,22 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
         vec![
             (shell::TAB.to_owned(), shell::routes::home()),
             (shell::band::BACKUP.to_owned(), backup::routes::home()),
+            (chat::TAB.to_owned(), chat::routes::home()),
         ],
     )
     .with_band(shell::band::view)
-    .with_services([passes::services(), custody::services(), vault::services()].concat());
+    .with_services(
+        [
+            passes::services(),
+            custody::services(),
+            vault::services(),
+            imports::roots()
+                .into_iter()
+                .map(|(_, route)| route)
+                .collect(),
+        ]
+        .concat(),
+    );
     (runtime, shelf)
 }
 

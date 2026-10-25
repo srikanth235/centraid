@@ -92,6 +92,8 @@ pub fn route(row: &RowRef, parent: &str, among: &[RowRef]) -> Option<wire::Route
         ("money", "transaction") => Some(money::routes::transaction(id, parent)),
         ("health", "workout") => Some(health::routes::workout(id, parent)),
         ("locker", "locker_item") => Some(locker_item(row, parent)),
+        // A conversation opens as a chat page (the chat's `chat.thread`).
+        ("chat", "thread") => Some(crate::chat::routes::thread(id, title)),
         // A kind with no page of its own opens its app. Locker is the exception: a
         // row it does not name is not a reason to open the vault's secrets.
         ("locker", _) => None,
@@ -146,7 +148,7 @@ mod tests {
         assert_eq!(open("health", "workout"), health::WORKOUT);
         // A kind with no page of its own opens the app.
         assert_eq!(open("agenda", "nonsense"), agenda::HOME);
-        assert_eq!(open("chat", "thread"), "");
+        assert_eq!(open("chat", "thread"), crate::chat::THREAD);
     }
 
     #[test]

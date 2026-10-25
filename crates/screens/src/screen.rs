@@ -33,6 +33,12 @@ pub trait Screen: Send {
     fn hears(&self, _topic: &str) -> bool {
         false
     }
+
+    /// Whether the assistant's stream is for this screen (`ScreenEvent.assist`): only the chat
+    /// says yes, so a token does not wake every open screen.
+    fn hears_assist(&self) -> bool {
+        false
+    }
 }
 
 /// The device's locale and zone, as the shell last reported them.
@@ -77,6 +83,8 @@ pub(crate) struct Done {
     /// Events for every open screen registered under a name, see
     /// [`Ctx::tell_screen`].
     pub tells: Vec<(String, wire::ScreenEvent)>,
+    /// Events for other open screens, by registered name (`Ctx::post`).
+    pub posts: Vec<(String, wire::ScreenEvent)>,
 }
 
 /// A screen's door to the core, the catalog and the clock.
@@ -219,6 +227,25 @@ impl<'a> Ctx<'a> {
     /// ordinary update: instances closed, new views, a new navigation.
     pub fn switch_vault(&self, vault_id: &str) {
         self.done.borrow_mut().switch = Some(vault_id.to_owned());
+    }
+
+    /// One bounded assistant call (status, start, suggest, cancel, clear, confirm, dismiss,
+    /// documents). A load or a send blocks for seconds: make those from [`Self::off_thread`].
+    ///
+    /// # Errors
+    /// Whatever the core refuses with.
+    pub fn assist(&self, request: &wire::AssistRequest) -> Result<wire::AssistResponse> {
+        self.core.assist(request)
+    }
+
+    /// Hand `event` to every open screen registered as `screen` (a picker returning its pick to
+    /// the page that asked for it). Delivered after this update, in the same re-render; an
+    /// instance cannot post to itself.
+    pub fn post(&self, screen: &str, event: wire::ScreenEvent) {
+        self.done
+            .borrow_mut()
+            .posts
+            .push((screen.to_owned(), event));
     }
 
     /// The locale every string is made in.

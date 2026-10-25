@@ -220,7 +220,7 @@ public fun HomeScreen(
  * that tab; the Home place pressed on the native Backup tab returns to Home.
  */
 @Composable
-private fun Band(
+internal fun Band(
     band: ShellBand?,
     runtimeTabs: Set<String>,
     backupShown: Boolean,
@@ -520,9 +520,7 @@ private fun StatusRibbon(
             .padding(horizontal = PAGE_MARGIN)
             .testTag("home-status")
             .semantics {
-                contentDescription =
-                    listOf(status.copy, status.action).filter { it.isNotEmpty() }
-                        .joinToString(". ")
+                contentDescription = status.accessibility_label
             },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),

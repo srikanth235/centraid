@@ -1,5 +1,6 @@
 package dev.centraid.android.screens
 
+import dev.centraid.android.kit.SearchAskRow
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -210,6 +211,8 @@ public fun AgendaHomeScreen(
                         }
                     }
                 }
+                // THE ASK ROW closes a search's answer (#1097); the state holds one only while it is drawn.
+                SearchAskRow(state.search_ask_row, onOpen)
                 // THE TASK WRITE'S STATUS LINE ("Task done", Undo) docks under whichever place's list.
                 StatusLine(state.status?.toKit(), actTag = "agenda-status-action") {
                     onEvent(AgendaHomeEvent(status_acted = AgendaHomeEvent.StatusActed()))

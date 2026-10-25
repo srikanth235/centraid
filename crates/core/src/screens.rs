@@ -135,6 +135,19 @@ pub trait ScreenCtx {
         })
     }
 
+    /// One BOUNDED assistant call (status, start, suggest, cancel, clear, confirm, dismiss,
+    /// documents), made inline. A load or a send blocks for seconds and runs from a job
+    /// ([`ScreenCtx::off_thread`]) instead. A door with no assistant says so.
+    ///
+    /// # Errors
+    /// Whatever the call refuses with.
+    fn assist(&self, request: &wire::AssistRequest) -> Result<wire::AssistResponse> {
+        let _ = request;
+        Err(crate::error::CoreError::Unsupported {
+            type_url: "assist".to_owned(),
+        })
+    }
+
     /// Run `work` on its own thread with a handle to this core, and when it is
     /// done tell the runtime ([`ScreenHost::job_done`], from `next_event`).
     /// `job` is the runtime's own number for it. For a door that waits on a
@@ -178,6 +191,11 @@ pub trait ScreenHost: Send + Sync {
 
     /// A [`ScreenCtx::off_thread`] job finished with `bytes`.
     fn job_done(&self, ctx: &dyn ScreenCtx, job: u64, bytes: Vec<u8>);
+
+    /// The assistant's running turn said something: tell the screens that listen.
+    fn assist(&self, ctx: &dyn ScreenCtx, event: &wire::AssistEvent) {
+        let _ = (ctx, event);
+    }
 }
 
 impl ScreenCtx for HandleState {
@@ -231,6 +249,22 @@ impl ScreenCtx for HandleState {
 
     fn vaults(&self) -> Option<std::sync::Arc<dyn crate::vaults::Vaults>> {
         HandleState::vaults(self).cloned()
+    }
+
+    fn assist(&self, request: &wire::AssistRequest) -> Result<wire::AssistResponse> {
+        match HandleState::call(
+            self,
+            &wire::Request {
+                kind: Some(wire::request::Kind::Assist(request.clone())),
+            },
+        )?
+        .kind
+        {
+            Some(wire::response::Kind::Assist(answer)) => Ok(answer),
+            _ => Err(crate::error::CoreError::Unsupported {
+                type_url: "assist".to_owned(),
+            }),
+        }
     }
 
     fn off_thread(&self, job: u64, work: OffThreadWork) {

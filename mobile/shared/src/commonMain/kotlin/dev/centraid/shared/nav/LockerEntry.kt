@@ -8,20 +8,13 @@ import centraid.core.v1.LockerHomeRoute
 import centraid.core.v1.LockerItemRoute
 import centraid.core.v1.LockerLockRoute
 import centraid.core.v1.Route
-import dev.centraid.shared.chat.ChatSlots
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * WHERE THE SHELL ENTERS LOCKER FROM OUTSIDE IT (#1135): Home's tile, a chat card,
  * search. Inside Locker a row carries the `Route` Rust built; these are the only
  * routes the shell spells, because the caller holds an id and no row.
  *
- * It also keeps the one thing that still reaches Locker from KMP until chat is
- * Rust's: chat's confirm card asks for the key ([ChatSlots.unlockLocker]), which
- * pushes Rust's wall page and waits for it. (Home's tile asks the core's session
- * itself, `shell/tiles.rs`.)
  * The session is the core's and the wall is Rust's; this only mirrors one fact
  * the shell hears: Rust announced an unlock, a Locker view carried a wall, or the
  * app left the foreground.
@@ -35,12 +28,7 @@ public object LockerEntry {
     private const val EXPORT: String = "locker.export"
     private const val LOCK: String = "locker.lock"
 
-    private const val UNLOCK_WAIT_MS: Long = 120_000L
-
     private val open = MutableStateFlow(false)
-
-    /** Set by the shell: push [lock] on its stack. Unset, a card that needs the key stays sealed. */
-    public var pushLock: (() -> Unit)? = null
 
     private fun route(screenId: String): Route = Route(screen = screenId)
 
@@ -79,17 +67,5 @@ public object LockerEntry {
      */
     public fun unlocked() {
         open.value = true
-    }
-
-    /** Fill chat's slot. Called once at launch. */
-    public fun install() {
-        ChatSlots.unlockLocker = {
-            if (open.value) {
-                true
-            } else {
-                pushLock?.invoke()
-                withTimeoutOrNull(UNLOCK_WAIT_MS) { open.first { it } } ?: false
-            }
-        }
     }
 }

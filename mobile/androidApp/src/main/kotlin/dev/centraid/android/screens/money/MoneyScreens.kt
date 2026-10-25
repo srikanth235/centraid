@@ -1,5 +1,6 @@
 package dev.centraid.android.screens.money
 
+import dev.centraid.android.kit.SearchAskRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -552,13 +553,18 @@ internal fun MoneySearchScreen(
                 ) { search ->
                     val empty = search.empty
                     if (search.rows.isEmpty() && empty != null) {
-                        EmptyStateView(empty.toKit(), onAction = null)
+                        androidx.compose.foundation.layout.Column {
+                            EmptyStateView(empty.toKit(), onAction = null)
+                            SearchAskRow(search.ask, onOpen)
+                        }
                     } else {
                         LazyColumn {
                             item(key = "count") { StatusLine(search.count_label) }
                             items(search.rows, key = { "t-${it.txn_id}" }) { row ->
                                 MoneyRowView(row) { row.route?.let(onOpen) }
                             }
+                            // THE ASK ROW closes the answer (#1097).
+                            item(key = "ask") { SearchAskRow(search.ask, onOpen) }
                         }
                     }
                 }

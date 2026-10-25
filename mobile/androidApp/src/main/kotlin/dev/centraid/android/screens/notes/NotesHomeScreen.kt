@@ -1,5 +1,6 @@
 package dev.centraid.android.screens.notes
 
+import dev.centraid.android.kit.SearchAskRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -131,6 +132,8 @@ public fun NotesHomeScreen(
                     SearchContainerRow(container, onOpen = onOpen)
                 }
                 items(results.rows, key = { "s-" + it.note_id }) { row -> NoteRow(row, "", onOpen, onEvent) }
+                // THE ASK ROW closes the answer, whether or not anything matched (#1097).
+                item(key = "ask") { SearchAskRow(search.ask, onOpen) }
             }
         } else {
             ReadStateView(

@@ -316,15 +316,6 @@ final class ShellModel: ObservableObject {
                 break
             }
         }
-        LockerEntry.shared.install()
-        LockerEntry.shared.pushLock = { [weak self] in
-            Task { @MainActor in
-                var route = Centraid_Core_V1_Route()
-                route.screen = "locker.lock"
-                route.lockerLock = Centraid_Core_V1_LockerLockRoute()
-                self?.open(route)
-            }
-        }
         Task {
             await store.start()
             store.reportEnvironment()
@@ -397,7 +388,7 @@ final class ShellModel: ObservableObject {
                 ],
                 ask: { [weak self] question in DispatchQueue.main.async { self?.followQuestion = question } }
             )
-            self.chat.attach(session: session)
+            if let screens = self.screens { self.chat.attach(store: screens) }
             // THE PINS, NOW THAT THE CORE CAN ANSWER `pins` (#1080).
             self.refreshUploadPins()
         }
@@ -555,49 +546,40 @@ final class ShellModel: ObservableObject {
     // MARK: Chat
 
     /// THE CHAT TAB WAS PRESSED. It opens scoped to the app the member last
-    /// had open — but only onto an empty thread: a conversation in progress is
+    /// had open, but only onto an empty thread: a conversation in progress is
     /// never re-scoped by a glance at an app.
-    func openChatTab(asking question: String? = nil, thread: String? = nil, title: String = "") {
+    func openChatTab() {
         tab = .chat
         if !lastVisitedApp.isEmpty, chat.state.messages.isEmpty {
             chatScope = lastVisitedApp
         }
         lastVisitedApp = ""
-        chat.open(app: chatScope, vaultName: foregroundVaultName, asking: question, thread: thread, title: title)
+        chat.open(app: chatScope, vaultName: foregroundVaultName)
     }
 
     /// The foreground vault's name, for the chat's header.
     var foregroundVaultName: String {
-        (try? Centraid_Screen_V1_HomeState(serializedBytes: homeState))?.vault.vaultName ?? ""
+        if let screens, let home = screens.homeInstance.flatMap({ screens.views[$0] })?.homeState {
+            return home.bar.vault.name
+        }
+        return (try? Centraid_Screen_V1_HomeState(serializedBytes: homeState))?.vault.vaultName ?? ""
     }
 
-    /// ASK THE ASSISTANT, from a search's Ask row (#1097, #1135): back to Home's
-    /// root, the Chat tab scoped to the app the member searched from (`scope`,
-    /// the machine's; empty is every app), and the question sent when the chat
-    /// is ready. The router's act and not a view's: the view only reports the
-    /// intent, and the words are the machine's. The scope is the member's explicit
-    /// choice, as the composer's menu is (`setChatScope`): it replaces the one
-    /// the chat had, and the machine's `Opened` rule starts a new thread when it
-    /// differs.
-    func askChat(_ question: String, scope: String) {
-        let line = question.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// ASK THE ASSISTANT, from an app's search Ask row (#1097, #1135): a page of the chat
+    /// (`chat.ask`) pushed over the stack, scoped to the app the member searched from (`scope`,
+    /// empty is every app) with the question waiting for the model. Home's own search carries the
+    /// finished route in its view state (`ask_route`) and pushes that. TRANSITIONAL: the app
+    /// searches' view states hold the `SearchAsk` and not yet its route.
+    func askChat(_ ask: Centraid_Screen_V1_SearchAsk) {
+        let line = ask.question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !line.isEmpty else { return }
-        path.removeAll()
-        chatScope = scope
-        lastVisitedApp = ""
-        openChatTab(asking: line)
-    }
-
-    /// OPEN ONE PAST CHAT, from a screen that found it (Home's search, #1097,
-    /// R-1097-24): back to Home's root, the Chat tab, and that thread opened.
-    /// The router's act and not a view's, and the twin of `askChat`: the view
-    /// reports the intent, the shell switches the tab. `title` is the hit's, so
-    /// a chat older than the drawer's list still has its name in the header at
-    /// once.
-    func openChatThread(_ id: String, title: String) {
-        guard !id.isEmpty else { return }
-        path.removeAll()
-        openChatTab(thread: id, title: title)
+        var route = Centraid_Core_V1_Route()
+        route.screen = "chat.ask"
+        route.ask = .with {
+            $0.question = line
+            $0.scope = ask.scope
+        }
+        open(route)
     }
 
     func openHomeTab() {
@@ -626,21 +608,11 @@ final class ShellModel: ObservableObject {
         backupEntry = RustEntry.make(ShellModel.backupRoute)
     }
 
-    /// A RESULT CARD WAS TAPPED: push the real row's route over the thread.
-    func openChatCard(
-        _ card: Centraid_Screen_V1_ChatCard,
-        among cards: [Centraid_Screen_V1_ChatCard]
-    ) {
-        guard let route = ChatRouting.route(for: card, among: cards) else { return }
-        path.append(route)
-    }
-
     /// Remember the scope a route gives the Chat tab.
     private func noteVisit(_ route: Route) {
-        guard let app = ChatRouting.app(of: route) else { return }
-        let scope = ChatRouting.scope(of: app)
-        guard !scope.isEmpty else { return }
-        lastVisitedApp = scope
+        guard let app = ChatRouting.app(of: route), app != BandPolicy.shared.PLACE_CHAT else { return }
+        // Rust keeps the ids that are chat scopes and opens every app's otherwise (`chat::scope_of`).
+        lastVisitedApp = app
     }
 
     // MARK: The 24 words (#1047 E2)

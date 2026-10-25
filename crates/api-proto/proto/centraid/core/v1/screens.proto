@@ -28,6 +28,9 @@ syntax = "proto3";
 package centraid.core.v1;
 
 import "centraid/core/v1/agenda_screens.proto";
+import "centraid/core/v1/assist.proto";
+import "centraid/core/v1/chat_screens.proto";
+import "centraid/core/v1/imports_screens.proto";
 import "centraid/core/v1/backup_screens.proto";
 import "centraid/core/v1/custody_screens.proto";
 import "centraid/core/v1/pair_screens.proto";
@@ -225,6 +228,10 @@ message ScreenEvent {
     // what the member typed (an autosave's pending edit); a shell never sends
     // it, and only its `act`s survive: the view is no longer drawn.
     Left left = 6;
+    // RUNTIME-ORIGINATED: the assistant's running turn said something (a token,
+    // the cards, the answer). Only a screen that opts in (`hears_assist`, the
+    // chat) hears it; a shell never sends it.
+    AssistEvent assist = 11;
     CounterEvent counter = 10;
     // RUNTIME-ORIGINATED: a screen asked the shell to act on a topic
     // (`Announce`), and every open screen, services included, hears it.
@@ -305,6 +312,12 @@ message ScreenEvent {
     VaultCommand vault_commanded = 1561;
     // RUNTIME-ORIGINATED, to services only: a screen was opened.
     ScreenOpened screen_opened = 1562;
+    // ---- the shell (1000-1999): chat (1600-1699) ----
+    ChatEvent chat = 1600;
+    // ---- the shell: phone imports (1700-1899) ----
+    ImportsCameraRollEvent imports_camera_roll = 1700;
+    ImportsFilesEvent imports_files = 1701;
+    ImportsMadeEvent imports_made = 1702;
     // ---- the shell (1000-1999): Home 1000-1299 ----
     HomeEvent home = 1000;
     HomeSearchEvent home_search = 1001;
@@ -404,6 +417,12 @@ message ViewState {
     TrashView trash = 900;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeState backup_home = 1450;
+    // ---- the shell (1000-1999): chat (1600-1699) ----
+    ChatState chat = 1600;
+    // ---- the shell: phone imports (1700-1899) ----
+    ImportsCameraRollState imports_camera_roll = 1700;
+    ImportsFilesState imports_files = 1701;
+    ImportsMadeState imports_made = 1702;
     // ---- the shell (1000-1999): Home 1000-1299 ----
     HomeState home = 1000;
     HomeSearchState home_search = 1001;
@@ -477,6 +496,18 @@ message Effect {
     LongRun long_run = 1372;
     UploadsOp uploads = 1373;
     StreamFromLibrary stream_from_library = 1374;
+    // ---- the shell (1000-1999): chat (1600-1699) ----
+    ModelDownload model_download = 1600;
+    PickLibraryPhoto pick_library_photo = 1601;
+    // ---- the shell: phone imports (1700-1899) ----
+    LibraryPermission library_permission = 1700;
+    RollPage roll_page = 1701;
+    LinkRead link_read = 1702;
+    LibraryStage library_stage = 1703;
+    LibraryDerivatives library_derivatives = 1704;
+    FoldersRead folders_read = 1705;
+    StageFolderFile stage_folder_file = 1706;
+    RemindersRead reminders_read = 1707;
     // ---- the shell (1000-1999) ----
     // Home asks the shell to act on the vaults the phone holds.
     VaultCommand vault_command = 1000;
@@ -848,6 +879,16 @@ message EffectResult {
     // ---- pairing (1340-1349, lane H2) ----
     CodeScanned code_scanned = 1340;
     GatewaysSighted gateways_sighted = 1341;
+    // ---- the shell (1000-1999): chat (1600-1699) ----
+    LibraryPhotoPicked library_photo_picked = 1600;
+    // ---- the shell: phone imports (1700-1899) ----
+    LibraryPermissionRead library_permission_read = 1700;
+    RollPaged roll_paged = 1701;
+    LinkReading link_reading = 1702;
+    LibraryStaged library_staged = 1703;
+    FoldersListing folders_listing = 1705;
+    FolderFileStaged folder_file_staged = 1706;
+    RemindersSnapshot reminders_snapshot = 1707;
     // ---- vault plumbing (1300-1399, lane H2) ----
     SecretBatched secrets = 1300;
     SyncedSecretsStatus synced_status = 1302;

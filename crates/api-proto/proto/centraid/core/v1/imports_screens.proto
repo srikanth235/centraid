@@ -1,0 +1,383 @@
+// THE PHONE IMPORTS (#1135, lane I): the camera roll going in, a followed folder,
+// the made vault's one-tap imports. Three headless SERVICE screens, opened by the
+// shell once per foreground vault (a hidden root, never drawn): every decision is
+// Rust's, and the shell performs the platform work as the effects below and
+// answers them. Arms in 1700-1899 of the shell's range.
+//
+//   imports.camera_roll  the walk of the OS photo library, the grant, the cursor,
+//                        the bytes a pass asked for again (`LibraryFeed`)
+//   imports.files        a followed folder: the settle gate, the listing, the
+//                        stat pre-check, `follow.files`
+//   imports.made         what a made vault brings in: contacts, calendar,
+//                        reminders, one line saying what came in
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/photos_home_screens.proto";
+import "centraid/core/v1/route.proto";
+
+// ---------------------------------------------------------------------------
+// The camera roll
+// ---------------------------------------------------------------------------
+
+message ImportsCameraRollEvent {
+  // The vault the roll is offered to: the cursor is kept per vault (a photograph offered to two
+  // vaults is two imports). Every event carries it; empty keeps the last one told.
+  string vault_id = 10;
+  oneof kind {
+    // The Photos screen's `CameraRoll` effect, relayed: the shell turns the effect
+    // into this event (it owns the OS prompt and the roll).
+    Requested requested = 1;
+    // The OS photo library changed while the app is on screen: a nudge to walk.
+    LibraryChanged library_changed = 2;
+    // The app came forward or a session pass began (`ShelfDrain.installWalk`): walk
+    // the roll now.
+    Walk walk = 3;
+    // The core named bytes it wants again (`DrainResponse.need_bytes`): feed them.
+    BytesNeeded bytes_needed = 4;
+  }
+
+  message Requested {
+    Action action = 1;
+    enum Action {
+      ACTION_UNSPECIFIED = 0;
+      ACTION_ASK_PERMISSION = 1;
+      ACTION_IMPORT_NOW = 2;
+      // A Photos home opened (`PhotosDevice.opened()`): read the grant again, never ask, so a grant
+      // that landed after the session attached (Settings, a launch prompt) is on state before the
+      // member-visible frame.
+      ACTION_READ_PERMISSION = 3;
+    }
+  }
+
+  message LibraryChanged {}
+
+  message Walk {}
+
+  message BytesNeeded {
+    repeated NeededBytes needs = 1;
+  }
+}
+
+// ONE ITEM THE CORE ASKED FOR AGAIN, by the library reference it was staged under.
+message NeededBytes {
+  string os_ref = 1;
+  string media_type = 2;
+  uint64 size = 3;
+  // The BLAKE3 the staged bytes must match, 64 hex characters.
+  string content_hash = 4;
+}
+
+// What the shell draws of the roll: nothing, and what it forwards. The shell sends
+// `PhotosPermissionChanged` and `PhotosBackupChanged` to every open Photos home with
+// `permission` and `backup` whenever they change (and once when a home opens).
+message ImportsCameraRollState {
+  PhotosMediaPermission permission = 1;
+  PhotosBackupChanged backup = 2;
+  // A pass imported something and the walk has ended: the shell moves what was just
+  // staged now (`ShelfDrain.afterImport`). Counts the imports so far; a change is a
+  // fresh nudge.
+  uint32 imported_total = 3;
+  // How many of the last `BytesNeeded` landed under the hash asked for (0 before the
+  // first), counted per round; the shell reads it after it sent the needs.
+  uint32 fed_last_round = 4;
+  uint32 fed_rounds = 5;
+}
+
+// ---------------------------------------------------------------------------
+// A followed folder
+// ---------------------------------------------------------------------------
+
+message ImportsFilesEvent {
+  oneof kind {
+    // The folder store may have changed, or the app came forward: follow soon.
+    Requested requested = 1;
+    // The member picked a folder (the shell's `FolderFollowed` answer, relayed): the
+    // vault follows it.
+    FolderFollowed folder_followed = 2;
+    // The member stopped following (the shell's `StopFollowing`, relayed).
+    FolderStopped folder_stopped = 3;
+  }
+
+  message Requested {}
+
+  message FolderFollowed {
+    string origin = 1;
+    string name = 2;
+  }
+
+  message FolderStopped {
+    string origin = 1;
+  }
+}
+
+// What the Docs drive's followed sheet lists: the shell sends it to the drive as
+// `FollowedChanged` whenever this changes.
+message ImportsFilesState {
+  repeated ImportsFollowedFolder followed = 1;
+  // A refused pick's sentence, empty when there is none.
+  string refusal = 2;
+  // A pass is running.
+  bool running = 3;
+}
+
+message ImportsFollowedFolder {
+  string origin_id = 1;
+  string name = 2;
+  uint32 documents = 3;
+}
+
+// What the vault holds of followed folders: the shell query `files-followed`.
+message ImportsFilesHeld {
+  repeated ImportsHeldFolder folders = 1;
+}
+
+message ImportsHeldFolder {
+  // The vault's origin id and the shell's origin (`folder:<uuid>`).
+  string origin_id = 1;
+  string origin_ref = 2;
+  string label = 3;
+  // Documents that still follow a file of this folder.
+  uint32 documents = 4;
+  // Each followed file's last stated stat (`<size>:<modified ms>`), by path.
+  repeated ImportsHeldFile files = 5;
+}
+
+message ImportsHeldFile {
+  string path = 1;
+  string stat = 2;
+}
+
+// ---------------------------------------------------------------------------
+// A made vault's imports
+// ---------------------------------------------------------------------------
+
+message ImportsMadeEvent {
+  oneof kind {
+    // The vault was just made: ask for photo access once, then run the imports in
+    // turn. `reminders` is false where the phone has no reminders source (Android).
+    Made made = 1;
+  }
+
+  message Made {
+    bool reminders = 1;
+  }
+}
+
+message ImportsMadeState {
+  // One fragment saying what came in ("6 people, 12 events imported"), empty when
+  // nothing did.
+  string summary = 1;
+  // "Open People" and its route: the line's one action, for the first import that
+  // brought anything in.
+  string open_label = 2;
+  Route open_route = 3;
+  // An import is running.
+  bool running = 4;
+  // Every import has run: the shell closes the service.
+  bool finished = 5;
+}
+
+// ---------------------------------------------------------------------------
+// Platform work (effects)
+// ---------------------------------------------------------------------------
+
+// Read the OS photo grant (`ask` false: never prompts) or show the OS prompt
+// (`ask` true, the member's tap) and answer `LibraryPermissionRead`.
+message LibraryPermission {
+  bool ask = 1;
+}
+
+message LibraryPermissionRead {
+  PhotosMediaPermission permission = 1;
+}
+
+// The next page of the library after `cursor` (empty: the start). The cursor is the
+// shell's own; Rust keeps it in the keychain between passes. Answer `RollPaged`.
+message RollPage {
+  string cursor = 1;
+  uint32 limit = 2;
+}
+
+message RollPaged {
+  repeated RollAsset assets = 1;
+  // The page's own cursor, minted by the platform, or empty.
+  string next_cursor = 2;
+  bool exhausted = 3;
+}
+
+// One asset of the roll.
+message RollAsset {
+  // The cursor to keep once this asset has been offered whole.
+  string after = 1;
+  Kind kind = 2;
+  // RFC 3339 capture time, empty when unknown, and the capture zone's offset.
+  string captured_at = 3;
+  int32 captured_utc_offset_minutes = 4;
+  // The capture group a burst or a Live Photo shares, empty when none.
+  string capture_group = 5;
+  // The item was edited in place (Android): the library reports it changed after it
+  // was walked.
+  bool changed_in_place = 6;
+  repeated RollResource resources = 7;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_PHOTO = 1;
+    KIND_VIDEO = 2;
+  }
+}
+
+message RollResource {
+  string ref = 1;
+  Role role = 2;
+
+  enum Role {
+    ROLE_UNSPECIFIED = 0;
+    // The bytes the library currently holds (the edit's render when edited).
+    ROLE_ORIGINAL = 1;
+    // The camera's own bytes of an edited asset (iOS).
+    ROLE_CAMERA_ORIGINAL = 2;
+    // A Live Photo's movie.
+    ROLE_PAIRED_VIDEO = 3;
+  }
+}
+
+// How the phone is connected now, and the member's transfer rule. Answer
+// `LinkReading`. Rust decides whether an original that lives only in iCloud may be
+// downloaded.
+message LinkRead {}
+
+message LinkReading {
+  bool online = 1;
+  bool metered = 2;
+  // The platform refused to say: counts as expensive.
+  bool platform_refused = 3;
+  Rule rule = 4;
+
+  enum Rule {
+    RULE_UNSPECIFIED = 0;
+    RULE_WIFI_ONLY = 1;
+    RULE_WIFI_AND_CELLULAR_PHOTOS = 2;
+    RULE_MANUAL = 3;
+  }
+}
+
+// OPEN ONE RESOURCE FROM THE LIBRARY AND STREAM IT THROUGH THE STAGE DOOR, with
+// `source = OS_LIBRARY` and its `ref` as `os_ref` (no second copy: the core hashes
+// and, when a gateway is paired and the spool has room, seals in the same stream).
+// `allow_network` lets an original that lives only in iCloud be downloaded. When
+// `changed_in_place`, BEFORE staging the shell asks the core which asset the ref was
+// last backed up as (`library_assets`) and answers it as `prior_*`. Answer
+// `LibraryStaged`.
+message LibraryStage {
+  string ref = 1;
+  bool allow_network = 2;
+  bool changed_in_place = 3;
+  // For bytes the core asked for again (`NeededBytes`): the media type and the length the
+  // core named them with. Empty / 0 for a walk, which states neither (the library does not
+  // always say how long an item is before it is read).
+  string media_type = 4;
+  uint64 byte_size = 5;
+}
+
+message LibraryStaged {
+  Outcome outcome = 1;
+  // For FAILED or REFUSED: a sentence for the member.
+  string sentence = 2;
+  string media_type = 3;
+  // The core's answer: the hash it named (64 hex), the bytes it counted, whether it
+  // already held them, and the derivative tiers (`thumb`, `preview`) it holds.
+  string content_hash = 4;
+  uint64 byte_size = 5;
+  bool already_held = 6;
+  repeated string derivatives_held = 7;
+  // The asset and bytes the vault last filed the ref as, when asked and found.
+  string prior_asset_id = 8;
+  string prior_content_hash = 9;
+
+  enum Outcome {
+    OUTCOME_UNSPECIFIED = 0;
+    OUTCOME_READY = 1;
+    // Only in iCloud and `allow_network` was false.
+    OUTCOME_IN_CLOUD = 2;
+    // The library no longer produces it (removed, outside a limited selection).
+    OUTCOME_GONE = 3;
+    // The stream failed part-way or the core refused the stage: `sentence` says why.
+    OUTCOME_FAILED = 4;
+  }
+}
+
+// RENDER the thumbnail and preview of the original `ref` names as the platform draws
+// them (the current edit) and stage each with `for_hash` and the tier. A tier that
+// fails costs nothing but itself. Answer `EffectDone`.
+message LibraryDerivatives {
+  string ref = 1;
+  string for_hash = 2;
+  // The tiers to render (`thumb`, `preview`), those the core does not hold.
+  repeated string tiers = 3;
+}
+
+// Read the folders the vault follows (`origins`, `folder:<uuid>`) and answer
+// `FoldersRead`: a listing only, no bytes. Never opens a picker. A folder the shell
+// has no access to any more is left out of `folders`.
+message FoldersRead {
+  repeated string origins = 1;
+}
+
+message FoldersListing {
+  // False when the shell cannot read at all, or a listing failed part-way.
+  bool complete = 1;
+  // This install's id, minted once and kept off the vault.
+  string device_id = 2;
+  repeated FolderListed folders = 3;
+}
+
+message FolderListed {
+  string origin = 1;
+  string label = 2;
+  repeated FolderFile files = 3;
+}
+
+message FolderFile {
+  // Relative to the folder, `/`-separated.
+  string path = 1;
+  uint64 size = 2;
+  int64 modified_ms = 3;
+  // The OS's name for its type, or empty.
+  string media_type = 4;
+}
+
+// Stream one followed file through the stage door and answer `FolderFileStaged`.
+message StageFolderFile {
+  string origin = 1;
+  string path = 2;
+  string media_type = 3;
+}
+
+message FolderFileStaged {
+  // False when the file would not open or read, or the core refused.
+  bool ok = 1;
+  string content_hash = 2;
+  uint64 byte_size = 3;
+}
+
+// Read the open reminders (iOS EventKit) and answer `RemindersSnapshot`. `ask_permission`
+// is the made vault's own prompt.
+message RemindersRead {
+  bool ask_permission = 1;
+}
+
+message RemindersSnapshot {
+  repeated PhoneReminder reminders = 1;
+}
+
+// One OPEN reminder: a completed one is never handed over.
+message PhoneReminder {
+  string title = 1;
+  string notes = 2;
+  // `YYYY-MM-DD` or empty.
+  string due = 3;
+}

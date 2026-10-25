@@ -55,10 +55,9 @@ private struct HomeRoot: View {
         store.homeInstance.flatMap { store.views[$0] }?.homeState
     }
 
-    /// THE BAND'S PLACES: Rust's (`Navigation.band`), plus TRANSITIONALLY the
-    /// Chat and Backup places this shell still hosts itself. Lanes I and H2
-    /// register those as Rust tabs, after which Rust's band carries them and
-    /// the two inserts below are deleted.
+    /// THE BAND'S PLACES: Rust's (`Navigation.band`, which carries the Chat place now that the
+    /// `chat` tab is registered), plus TRANSITIONALLY the Backup place this shell still hosts
+    /// itself. Lane H2 registers it as a Rust tab, after which the insert below is deleted.
     private var places: [BandPlace] {
         let active = shell.tab == .chat ? BandPolicy.shared.PLACE_CHAT : shell.tab == .backup ? BandPolicy.shared.PLACE_BACKUP : BandPolicy.shared.PLACE_HOME
         var places = (store.navigation?.band.tabs ?? []).map { tab in
@@ -68,18 +67,6 @@ private struct HomeRoot: View {
                 spoken: tab.tab == active ? tab.spoken : tab.label,
                 iconKey: tab.iconKey,
                 selected: tab.tab == active
-            )
-        }
-        if !places.contains(where: { $0.id == BandPolicy.shared.PLACE_CHAT }) {
-            places.insert(
-                BandPlace(
-                    id: BandPolicy.shared.PLACE_CHAT,
-                    label: ChatCopy.shared.TAB_LABEL,
-                    spoken: ChatCopy.shared.TAB_LABEL + (active == BandPolicy.shared.PLACE_CHAT ? ", " + SharedCopy.shared.BAND_CURRENT_SPOKEN : ""),
-                    iconKey: "Sparkle",
-                    selected: active == BandPolicy.shared.PLACE_CHAT
-                ),
-                at: min(1, places.count)
             )
         }
         if !places.contains(where: { $0.id == BandPolicy.shared.PLACE_BACKUP }) {
@@ -105,7 +92,7 @@ private struct HomeRoot: View {
                 ChatView(
                     chat: shell.chat,
                     typing: $chatTyping,
-                    onOpenCard: { card, among in shell.openChatCard(card, among: among) },
+                    onOpenRoute: { shell.open($0) },
                     onSetScope: { shell.setChatScope($0) }
                 )
             } else if shell.tab == .backup {
@@ -320,9 +307,7 @@ private struct StatusRibbon: View {
         .accessibilityIdentifier("home-status")
         .accessibilityElement(children: hasDoor ? .contain : .combine)
         .accessibilityLabel(
-            hasDoor
-                ? status.copy
-                : [status.copy, status.action].filter { !$0.isEmpty }.joined(separator: ". ")
+            hasDoor ? status.copy : status.accessibilityLabel
         )
     }
 }
@@ -1058,7 +1043,7 @@ private struct VaultSheet: View {
             // MAKING AND RESTORING A VAULT LIVE HERE (R-ONBOARD-11), in the same
             // list, so a long roster scrolls them with it.
             Section {
-                switcherAction(sheet.makeLabel, icon: "Plus", id: "vault-found-button") {
+                switcherAction(sheet.makeLabel, spoken: sheet.makeSpoken, icon: "Plus", id: "vault-found-button") {
                     store.sendHome(.make(.init()))
                 }
                 switcherAction(sheet.restoreLabel, icon: "Refresh", id: "vault-restore-button") {
@@ -1130,7 +1115,7 @@ private struct VaultSheet: View {
     }
 
     /// One of the switcher's two acts: a mark and a label, a full-width row.
-    private func switcherAction(_ label: String, icon: String, id: String, action: @escaping () -> Void) -> some View {
+    private func switcherAction(_ label: String, spoken: String = "", icon: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
                 CentraidIconView(iconKey: icon, tint: Theme.color("text", scheme), size: 18)
@@ -1148,6 +1133,7 @@ private struct VaultSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(spoken.isEmpty ? label : spoken)
         .accessibilityIdentifier(id)
     }
 }

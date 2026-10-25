@@ -18,6 +18,8 @@ centraid-core = { path = "../core" }
 # The folder walk: a document's path, a folder page's crumbs and a Move sheet's labels are
 # the docs crate's one `folder_path` (#1135).
 centraid-apps-docs = { path = "../apps/docs" }
+# The chat's scopes are the assistant's apps (`App::ALL`) and a scope's name is the app's own.
+centraid-assist = { path = "../assist" }
 prost.workspace = true
 serde_json.workspace = true
 # THE ONE PARTY HUE WHEEL: a project and a calendar are drawn in the hue their id lands on.

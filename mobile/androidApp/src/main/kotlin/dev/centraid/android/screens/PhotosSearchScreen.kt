@@ -1,5 +1,6 @@
 package dev.centraid.android.screens
 
+import dev.centraid.android.kit.SearchAskRow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -81,6 +82,7 @@ internal fun PhotosSearchScreen(
                     Box(Modifier.fillMaxWidth().padding(top = 160.dp).testTag("photos-search-no-match")) {
                         EmptyStateView(empty.toKit(), onAction = null)
                     }
+                    SearchAskRow(search.ask, onOpen)
                 } else {
                     PhotoCellsGrid(
                         cells = hits.tiles,
@@ -100,6 +102,8 @@ internal fun PhotosSearchScreen(
                             item(span = { GridItemSpan(maxLineSpan) }) {
                                 HitsHead(hits.doors, hits.matched_label, onOpen)
                             }
+                            // THE ASK ROW closes the answer (#1097).
+                            item(span = { GridItemSpan(maxLineSpan) }) { SearchAskRow(search.ask, onOpen) }
                         },
                     )
                 }

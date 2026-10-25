@@ -142,6 +142,20 @@ pub mod routes {
         )
     }
 
+    /// The picker that chooses ONE photograph for the chat to attach; the pick goes back to
+    /// `chat.home` as an `Attached` event.
+    #[must_use]
+    pub fn attach_picker() -> wire::Route {
+        route(
+            PICKER,
+            wire::route::Args::PhotosPicker(wire::PhotosPickerRoute {
+                purpose: wire::PhotosPickerPurpose::Attach as i32,
+                album_id: String::new(),
+                album_name: String::new(),
+            }),
+        )
+    }
+
     #[must_use]
     pub fn places() -> wire::Route {
         route(

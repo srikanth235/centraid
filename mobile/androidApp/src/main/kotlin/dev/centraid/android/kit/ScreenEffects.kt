@@ -104,6 +104,8 @@ internal fun PerformScreenEffects(
     openRoute: ((Route) -> Unit)? = null,
     /** Whether the platform took a background window, as the session last registered it; null before it says. */
     backgroundRegistered: (() -> Boolean?)? = null,
+    /** What Home asks of the shelf (`VaultCommand`): switch, make, restore, forget, rename, open a settings door. */
+    vaultCommand: ((VaultCommand) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -126,6 +128,9 @@ internal fun PerformScreenEffects(
     // PAIRING'S SCAN (`ScanCode`): the camera, or the photo picker on a phone with none.
     val scanDoor = remember { CodeScanDoor() }
     scanDoor.Host()
+    // THE CHAT'S PHOTO LIBRARY: the system photo picker, one image, one prompt out at a time.
+    val photoDoor = remember { ChatEffects.PhotoDoor() }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> photoDoor.picked(uri) }
     LaunchedEffect(screens) {
         screens.effects.collect { request ->
             // ONE COROUTINE PER EFFECT: a permission dialog waits for the member
@@ -139,6 +144,21 @@ internal fun PerformScreenEffects(
                     val registered = backgroundRegistered?.invoke()
                     if (registered == null) failed("not performed by this shell")
                     else EffectResult(background_status = BackgroundStatus(registered = registered))
+                } else if (effect?.model_download != null) {
+                    // THE CHAT'S MODEL (and the photo reader): the only thing Centraid fetches.
+                    ChatEffects.download(screens, request, effect.model_download!!)
+                } else if (effect?.pick_library_photo != null) {
+                    ChatEffects.pickLibraryPhoto(context, photoDoor) {
+                        photoPicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    }
+                } else if (effect?.vault_command != null) {
+                    // HOME'S REQUEST OF THE SHELF (the shelf, the files and the keys are this shell's).
+                    if (vaultCommand == null) {
+                        failed("no shelf to ask")
+                    } else {
+                        vaultCommand(effect.vault_command!!)
+                        EffectResult(done = EffectDone())
+                    }
                 } else if (effect?.health_read != null) {
                     health?.snapshot(effect.health_read!!) { healthLauncher?.launch(it) }
                         ?: failed("not performed by this shell")

@@ -54,6 +54,7 @@ import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
+import dev.centraid.android.kit.SearchAskRow
 import dev.centraid.android.kit.SearchContainerRow
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.screenContentOf
@@ -72,9 +73,9 @@ import dev.centraid.design.CentraidCatalog
  * row opens arrive finished in [HomeSearchState]; a tap sends `committed` (the
  * term becomes a recent search) and then pushes the route the row carried.
  *
- * TRANSITIONAL (lane I registers the Rust `chat.ask` screen): Android has no
- * Chat tab, so the answer's Ask row (`data.ask`, `data.ask_route`) is not drawn
- * here, as before. A hit with no page to open is not in the answer at all.
+ * THE ASK ROW (`data.ask`, with its finished `data.ask_route`) closes the answer and is the
+ * empty state's one action: a tap pushes the `chat.ask` page like any row's route. A hit with no
+ * page to open is not in the answer at all.
  */
 @Composable
 internal fun HomeSearchScreen(
@@ -143,10 +144,13 @@ internal fun HomeSearchScreen(
                 }
                 is HomeSearchData -> {
                     val empty = found.empty
-                    // NOTHING MATCHED: the empty state's one action asks the
-                    // assistant about the term, and the Chat tab is iOS's alone
-                    // (Android has no Chat), so it draws without it.
-                    if (empty != null) EmptyStateView(empty.toKit(), onAction = null) else Groups(found, onEvent, onOpen)
+                    // NOTHING MATCHED: the empty state's one action asks the assistant about the term.
+                    val ask = found.ask_route
+                    if (empty != null) {
+                        EmptyStateView(empty.toKit(), onAction = ask?.let { route -> { onOpen(route) } })
+                    } else {
+                        Groups(found, onEvent, onOpen)
+                    }
                 }
             }
         }
@@ -203,6 +207,7 @@ private fun Groups(
                 HitRow(row) { open(row.route) }
             }
         }
+        item(key = "ask") { SearchAskRow(data.ask, onOpen, route = data.ask_route) }
         item { Spacer(Modifier.height(16.dp)) }
     }
 }

@@ -46,6 +46,7 @@ import "centraid/core/v1/money.proto";
 import "centraid/core/v1/notes.proto";
 import "centraid/core/v1/people.proto";
 import "centraid/core/v1/photos.proto";
+import "centraid/core/v1/imports_screens.proto";
 import "centraid/core/v1/tasks.proto";
 import "centraid/core/v1/vault_screens.proto";
 import "centraid/core/v1/vault_search.proto";
@@ -221,6 +222,8 @@ message AppQueryResponse {
     // The vaults this phone holds: `shell.holdings` (1540-1599 are the shelf's;
     // see `vault_screens.proto`).
     Holdings holdings = 1540;
+    // The shell's own answers (lane I: the followed folders a vault holds).
+    ImportsFilesHeld imports_files_held = 1700;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }

@@ -85,6 +85,9 @@ message SearchAsk {
   string label = 1;
   string question = 2;
   string scope = 3;
+  // The page a tap opens: `chat.ask`, the assistant asking `question` in `scope`. A
+  // shell pushes it; it builds no route of its own.
+  Route route = 4;
 }
 
 // A CONTAINER AS A SEARCH RESULT (#1097, R-1097-19..21): one notebook, album,

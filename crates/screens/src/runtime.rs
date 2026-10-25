@@ -319,6 +319,19 @@ impl Runtime {
                 }
             }
         }
+        // WHAT THIS SCREEN HANDED TO OTHERS (a picker's pick): delivered now, so one re-render
+        // carries both screens' views.
+        for (screen, post) in done.posts {
+            let targets: Vec<u64> = state
+                .instances
+                .iter()
+                .filter(|(other, instance)| **other != id && instance.route.screen == screen)
+                .map(|(other, _)| *other)
+                .collect();
+            for target in targets {
+                Self::dispatch(state, core, target, post.clone(), out);
+            }
+        }
         for (tag, work) in done.jobs {
             let job = state.next_job;
             state.next_job += 1;
@@ -801,6 +814,31 @@ impl ScreenHost for Runtime {
             &mut out,
         );
         self.settle(&mut state, core, &mut out);
+        if !Self::empty(&out) {
+            core.push(out);
+        }
+    }
+
+    fn assist(&self, core: &dyn ScreenCtx, event: &wire::AssistEvent) {
+        let mut state = self.lock();
+        let mut out = wire::ScreenUpdate::default();
+        let ids: Vec<u64> = state
+            .instances
+            .iter()
+            .filter(|(_, instance)| instance.screen.hears_assist())
+            .map(|(id, _)| *id)
+            .collect();
+        for id in ids {
+            Self::dispatch(
+                &mut state,
+                core,
+                id,
+                wire::ScreenEvent {
+                    kind: Some(wire::screen_event::Kind::Assist(event.clone())),
+                },
+                &mut out,
+            );
+        }
         if !Self::empty(&out) {
             core.push(out);
         }

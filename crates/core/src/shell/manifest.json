@@ -24,8 +24,14 @@
       "input": {
         "type": "object",
         "properties": {
-          "term": { "type": "string" },
-          "limit": { "type": "integer", "minimum": 1, "maximum": 500 }
+          "term": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
         },
         "additionalProperties": false
       }
@@ -38,7 +44,10 @@
       "input": {
         "type": "object",
         "properties": {
-          "thread_id": { "type": "string", "minLength": 1 }
+          "thread_id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "required": ["thread_id"],
         "additionalProperties": false
@@ -52,9 +61,18 @@
       "input": {
         "type": "object",
         "properties": {
-          "app": { "type": "string", "minLength": 1 },
-          "entity": { "type": "string", "minLength": 1 },
-          "id": { "type": "string", "minLength": 1 }
+          "app": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entity": {
+            "type": "string",
+            "minLength": 1
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "required": ["app", "entity", "id"],
         "additionalProperties": false
@@ -139,8 +157,14 @@
       "input": {
         "type": "object",
         "properties": {
-          "thread_id": { "type": "string", "minLength": 1 },
-          "title": { "type": "string", "minLength": 1 }
+          "thread_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "required": ["thread_id", "title"],
         "additionalProperties": false
@@ -163,7 +187,10 @@
       "input": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "required": ["id"],
         "additionalProperties": false
@@ -211,16 +238,28 @@
           "origin": {
             "type": "object",
             "properties": {
-              "ref": { "type": "string" },
-              "label": { "type": "string" },
-              "device_id": { "type": ["string", "null"] },
-              "fills": { "type": ["string", "null"] }
+              "ref": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "device_id": {
+                "type": ["string", "null"]
+              },
+              "fills": {
+                "type": ["string", "null"]
+              }
             },
             "required": ["ref", "label"],
             "additionalProperties": false
           },
-          "records": { "type": "array" },
-          "complete": { "type": "boolean" }
+          "records": {
+            "type": "array"
+          },
+          "complete": {
+            "type": "boolean"
+          }
         },
         "required": ["origin", "records"],
         "additionalProperties": false
@@ -243,8 +282,15 @@
       "input": {
         "type": "object",
         "properties": {
-          "hash": { "type": "string", "minLength": 64, "maxLength": 64 },
-          "size": { "type": "integer", "minimum": 0 }
+          "hash": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          }
         },
         "required": ["hash", "size"],
         "additionalProperties": false
@@ -267,8 +313,14 @@
       "input": {
         "type": "object",
         "properties": {
-          "system": { "type": "string", "enum": ["files"] },
-          "ref": { "type": "string", "minLength": 1 }
+          "system": {
+            "type": "string",
+            "enum": ["files"]
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "required": ["system", "ref"],
         "additionalProperties": false

@@ -83,6 +83,11 @@ message Route {
     TrashRoute trash = 900;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeRoute backup_home = 1450;
+    // ---- the shell: chat (1600-1699) ----
+    ChatRoute chat = 1600;
+    ChatThreadRoute chat_thread = 1601;
+    // ---- the shell: phone imports (1700-1899) ----
+    ImportsRoute imports = 1700;
     // ---- the shell (1000-1999): Home 1000-1299 ----
     HomeRoute home = 1000;
     HomeSearchRoute home_search = 1001;
@@ -244,6 +249,9 @@ enum PhotosPickerPurpose {
   PHOTOS_PICKER_PURPOSE_UNSPECIFIED = 0;
   // Photographs to put into the album `album_id` names.
   PHOTOS_PICKER_PURPOSE_ADD_TO_ALBUM = 1;
+  // One photograph to attach to a chat question. The pick goes back to the chat
+  // screen (`chat.home`) as `ChatEvent.Attached`; no `album_id`.
+  PHOTOS_PICKER_PURPOSE_ATTACH = 2;
 }
 
 // `photos.home`: lands on `destination` (the library when unspecified); a
@@ -559,6 +567,27 @@ message MoneyTargetRoute {
 // from (search, recurring, accounts, categories, rules, import).
 message MoneyPageRoute {
   string parent = 1;
+}
+
+// ---------------------------------------------------------------------------
+// The shell (1600-1999): chat
+// ---------------------------------------------------------------------------
+
+// `chat.home`: no arguments. The Chat tab's root.
+message ChatRoute {}
+
+// `chat.thread`: a stored chat opened as a page (a search hit on a conversation). The
+// header reads `title` until the thread is read.
+message ChatThreadRoute {
+  string thread_id = 1;
+  string title = 2;
+}
+
+// `imports.camera_roll`, `imports.files`, `imports.made`: the phone imports'
+// headless services, each serving one vault. The camera roll's cursor is kept per
+// vault (a photograph offered to two vaults is two imports).
+message ImportsRoute {
+  string vault_id = 1;
 }
 
 // ---- the shell (1000-1999): Home 1000-1299 ----

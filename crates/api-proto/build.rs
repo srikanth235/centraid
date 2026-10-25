@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 50] = [
+const PROTOS: [&str; 52] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/command.proto",
@@ -96,6 +96,10 @@ const PROTOS: [&str; 50] = [
     "proto/centraid/core/v1/health_screens.proto",
     "proto/centraid/core/v1/notes_screens.proto",
     "proto/centraid/core/v1/people_screens.proto",
+    // The chat screen (#1135, lane I): the shell's 1600-1699 arms.
+    "proto/centraid/core/v1/chat_screens.proto",
+    // The phone imports (#1135, lane I): the shell's 1700-1899 arms.
+    "proto/centraid/core/v1/imports_screens.proto",
     // Vault plumbing (#1135, lane H2): the generic secret/core-call effects and
     // the custody, pairing, backup and pass screens that speak them.
     "proto/centraid/core/v1/plumbing_screens.proto",
@@ -139,6 +143,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.PhotosEditorState.content.data")
         .boxed(".centraid.core.v1.PhotosLightboxState.content.photo")
         .boxed(".centraid.core.v1.ViewState.kind.photos_lightbox")
+        .boxed(".centraid.core.v1.ViewState.kind.chat")
+        .boxed(".centraid.core.v1.MoneySearchState.content.data")
         .boxed(".centraid.core.v1.AgendaHomeState.content.data")
         .boxed(".centraid.core.v1.AgendaEventState.content.data")
         .boxed(".centraid.core.v1.AgendaEditorState.content.data")

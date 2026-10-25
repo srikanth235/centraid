@@ -19,17 +19,20 @@ struct ReadStateView<Value, Skeleton: View, Content: View>: View {
     let content: ScreenContent<Value>
     let skeleton: () -> Skeleton
     let onRetry: (() -> Void)?
+    let retryLabel: String
     let data: (Value) -> Content
 
     init(
         content: ScreenContent<Value>,
         @ViewBuilder skeleton: @escaping () -> Skeleton,
         onRetry: (() -> Void)?,
+        retryLabel: String = KitWords.shared.RETRY,
         @ViewBuilder data: @escaping (Value) -> Content
     ) {
         self.content = content
         self.skeleton = skeleton
         self.onRetry = onRetry
+        self.retryLabel = retryLabel
         self.data = data
     }
 
@@ -38,7 +41,7 @@ struct ReadStateView<Value, Skeleton: View, Content: View>: View {
         case .loading:
             skeleton()
         case let .failure(sentence, remedy):
-            FailureView(sentence: sentence, remedy: remedy, onRetry: onRetry)
+            FailureView(sentence: sentence, remedy: remedy, retryLabel: retryLabel, onRetry: onRetry)
         case let .denied(denied):
             DeniedGate(denied)
         case let .data(value):
@@ -53,12 +56,14 @@ extension ReadStateView where Skeleton == RowSkeleton {
         content: ScreenContent<Value>,
         loadingLabel: String = KitWords.shared.OPENING,
         onRetry: (() -> Void)?,
+        retryLabel: String = KitWords.shared.RETRY,
         @ViewBuilder data: @escaping (Value) -> Content
     ) {
         self.init(
             content: content,
             skeleton: { RowSkeleton(label: loadingLabel) },
             onRetry: onRetry,
+            retryLabel: retryLabel,
             data: data
         )
     }
@@ -237,15 +242,18 @@ struct SearchAskRow: View {
     let ask: Centraid_Screen_V1_SearchAsk
     /// Home records the search as a recent one when its row is pressed.
     var onAsk: (() -> Void)? = nil
+    /// A view whose state carries the Ask's finished route (Home's search) pushes it itself and
+    /// needs no door; every other search hands the row to the shell's.
+    var handoff: (() -> Void)? = nil
 
     @Environment(\.askChat) private var askChat
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        if let askChat {
+        if let press = handoff ?? askChat.map({ door in { door(ask) } }) {
             Button {
                 onAsk?()
-                askChat(ask)
+                press()
             } label: {
                 Text(ask.label)
                     .centraidType("smallStrong")

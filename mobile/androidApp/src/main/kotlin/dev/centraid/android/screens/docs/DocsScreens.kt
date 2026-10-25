@@ -1,5 +1,6 @@
 package dev.centraid.android.screens.docs
 
+import dev.centraid.android.kit.SearchAskRow
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -333,6 +334,7 @@ internal fun DocsDriveScreen(
                 }
                 if (chips.isNotEmpty()) RoomChipRow("docs", chips)
                 Box(Modifier.weight(1f)) { DriveBody(state, onEvent, onOpen) }
+                SearchAskRow(state.search?.ask_row, onOpen)
             }
         }
         PushedPage(
@@ -367,7 +369,13 @@ internal fun DocsDriveScreen(
                     onHome = onHome,
                 )
             },
-            content = { DriveBody(state, onEvent, onOpen) },
+            content = {
+                Column(Modifier.fillMaxSize()) {
+                    Box(Modifier.weight(1f)) { DriveBody(state, onEvent, onOpen) }
+                    // THE ASK ROW closes a search's answer (#1097).
+                    SearchAskRow(state.search?.ask_row, onOpen)
+                }
+            },
         )
     }
     DocsSheetView(

@@ -1,5 +1,6 @@
 package dev.centraid.android.screens.people
 
+import dev.centraid.android.kit.SearchAskRow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -147,6 +148,8 @@ public fun PeopleHomeScreen(
                     item(key = "empty") { EmptyStateView(empty.toKit(), onAction = null) }
                 }
                 items(results.rows, key = { "s-" + it.party_id }) { row -> PersonRow(row, onOpen, onEvent) }
+                // THE ASK ROW closes the answer, whether or not anything matched (#1097).
+                item(key = "ask") { SearchAskRow(search.ask, onOpen) }
             }
         } else {
             ReadStateView(

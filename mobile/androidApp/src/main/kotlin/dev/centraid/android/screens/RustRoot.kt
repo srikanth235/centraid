@@ -22,17 +22,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import centraid.core.v1.ChatEvent
 import centraid.core.v1.DocsDriveEvent
 import centraid.core.v1.DocsFollowed
 import centraid.core.v1.DocsPermission
-import centraid.core.v1.HealthConnectRoute
 import centraid.core.v1.HomeBackupLine
 import centraid.core.v1.HomeEvent
 import centraid.core.v1.HomeScheme
 import centraid.core.v1.HomeStatus
 import centraid.core.v1.HomeTone
 import centraid.core.v1.HomeVaultState
-import centraid.core.v1.LockerLockRoute
 import centraid.core.v1.LockerWallEvent
 import centraid.core.v1.NavEvent
 import centraid.core.v1.NavPopToRoot
@@ -57,6 +56,7 @@ import dev.centraid.android.screens.agenda.TodoCatchUpScreen
 import dev.centraid.android.screens.agenda.TodoDetailScreen
 import dev.centraid.android.screens.agenda.TodoListScreen
 import dev.centraid.android.screens.agenda.TodoProjectScreen
+import dev.centraid.android.screens.chat.ChatScreen
 import dev.centraid.android.screens.docs.DocsDocumentScreen
 import dev.centraid.android.screens.docs.DocsDriveScreen
 import dev.centraid.android.screens.docs.DocsEditorScreen
@@ -137,9 +137,14 @@ import centraid.screen.v1.HomeStatus as ShelfStatus
  * progress reach Photos' home as events, and what the screen asks of the roll
  * comes back as effects.
  *
- * TRANSITIONAL (lanes I and H2): chat and the Backup tab are still hosted natively
- * beside this root by `MainActivity`; they join it as Rust tabs and that hosting
- * is deleted.
+ * THE CHAT IS A RUST TAB (#1135, lane I): `chat.home` is the root of the `chat` tab, which the
+ * band selects like any place Rust owns. While it is the selected tab this root draws ITS stack
+ * (the chat, over the band; a page a card opens is pushed on the chat's own stack, so back lands
+ * in the chat), and a search's Ask or a found conversation is a `chat.ask` / `chat.thread` page
+ * drawn by the same [ChatScreen].
+ *
+ * TRANSITIONAL (lane H2): the Backup tab is still hosted natively beside this root by
+ * `MainActivity`; it joins it as a Rust tab and that hosting is deleted.
  */
 internal class RustRoot(
     private val phone: AndroidPhoneFollow,
@@ -166,6 +171,9 @@ internal class RustRoot(
     private var grant: PhotosHomeEvent? = null
     private var progress: PhotosHomeEvent? = null
     private val told = mutableSetOf<Long>()
+
+    /** The app whose page the member last had open: the chat's scope while it has nothing to lose. */
+    private var lastApp: String = ""
 
     fun attach(session: HomeSession, scope: CoroutineScope) {
         this.session = session
@@ -206,21 +214,43 @@ internal class RustRoot(
 
     // -- navigation: Rust's, reported ------------------------------------------
 
-    /** Push the route a row, a tile or the search key carried. */
+    /** The tab the member is in: the one Rust has selected, else Home's. */
+    private fun activeTab(): String {
+        val nav = screens?.navigation?.value ?: return TAB
+        return nav.selected_tab.takeIf { selected -> nav.tabs.any { it.tab == selected } } ?: TAB
+    }
+
+    /** The tab whose stack holds `instance`. */
+    private fun tabOf(instance: Long): String =
+        screens?.navigation?.value?.tabs?.firstOrNull { tab -> tab.entries.any { it.instance == instance } }?.tab ?: TAB
+
+    /** Push the route a row, a tile or the search key carried, on the stack the member is in. */
     fun push(route: Route) {
         val runtime = screens ?: return
-        scope?.launch { runtime.navigate(NavEvent(push = NavPush(tab = TAB, route = route))) }
+        val tab = activeTab()
+        scope?.launch { runtime.navigate(NavEvent(push = NavPush(tab = tab, route = route))) }
+    }
+
+    /** Tell Home's root something the phone asked for; Home answers with the route to push. */
+    private fun tellHome(event: HomeEvent) {
+        val runtime = screens ?: return
+        scope?.launch {
+            val root = runtime.navigation.value?.tabs?.firstOrNull { it.tab == TAB }?.entries?.firstOrNull()?.instance ?: return@launch
+            runtime.send(root, ScreenEvent(home = event))
+        }
     }
 
     private fun pop(instance: Long) {
         val runtime = screens ?: return
-        scope?.launch { runtime.navigate(NavEvent(popped = NavPopped(tab = TAB, instance = instance))) }
+        val tab = tabOf(instance)
+        scope?.launch { runtime.navigate(NavEvent(popped = NavPopped(tab = tab, instance = instance))) }
     }
 
-    /** Back to Home: every page above the root goes. */
+    /** Back to the tab's root (Home, or the chat): every page above it goes. */
     fun popToRoot() {
         val runtime = screens ?: return
-        scope?.launch { runtime.navigate(NavEvent(pop_to_root = NavPopToRoot(tab = TAB))) }
+        val tab = activeTab()
+        scope?.launch { runtime.navigate(NavEvent(pop_to_root = NavPopToRoot(tab = tab))) }
     }
 
     private fun select(tab: String) {
@@ -287,13 +317,23 @@ internal class RustRoot(
         Globals(runtime)
         val navigation by runtime.navigation.collectAsState()
         val views by runtime.views.collectAsState()
-        val entries = navigation?.tabs?.firstOrNull { it.tab == TAB }?.entries.orEmpty()
+        // THE TAB THE MEMBER IS IN: Rust's selection. Home's stack is the default and the floor.
+        val tab = activeTab().let { selected -> if (navigation?.tabs.orEmpty().any { it.tab == selected }) selected else TAB }
+        val inChat = tab == CHAT_TAB
+        val entries = navigation?.tabs?.firstOrNull { it.tab == tab }?.entries.orEmpty()
         val top = entries.lastOrNull()
         val root = entries.firstOrNull()
         if (top == null || root == null) {
             Box(Modifier.fillMaxSize().background(centraidColor("bg")))
             return
         }
+        // THE APP THE MEMBER LAST HAD OPEN scopes the chat while it has nothing to lose.
+        if (!inChat) {
+            top.route?.screen?.substringBefore('.')?.takeIf { it in CHAT_SCOPES }?.let { lastApp = it }
+        }
+        // THE BACKUP TAB (still native) is Home's: choosing the chat from it leaves it, and the
+        // backup's own door brings Home back under it.
+        LaunchedEffect(inChat) { if (inChat && backupShown) onOpenHome() }
         // BACK IS RUST'S STACK, AND A BAND IS NOT A STEP IN IT. DISABLED AT HOME, so the
         // floor keeps the platform's own meaning: back out of the app. Photos' Collections
         // and Search are places of ONE Rust screen, so back returns it to its library first.
@@ -314,19 +354,21 @@ internal class RustRoot(
             }
         }
         // WHAT HOME NEEDS TO BE TOLD THE PHONE DOES: its own scheme, once it is open and when it moves.
-        LaunchedEffect(root.instance, phoneDark) {
+        val homeRoot = runtime.navigation.value?.tabs?.firstOrNull { it.tab == TAB }?.entries?.firstOrNull()?.instance
+        LaunchedEffect(homeRoot, phoneDark) {
+            val target = homeRoot ?: return@LaunchedEffect
             runtime.send(
-                root.instance,
+                target,
                 ScreenEvent(home = HomeEvent(phone_scheme_told = HomeEvent.PhoneSchemeTold(dark = phoneDark))),
             )
         }
         // HOME IS ON SCREEN AGAIN after a cover was popped: the Locker's state and any tile may have
         // moved without a table changing.
-        val atRoot = top.instance == root.instance
+        val atRoot = top.instance == root.instance && !inChat
         var cover by remember { mutableStateOf(false) }
         LaunchedEffect(atRoot) {
             if (atRoot && cover) {
-                runtime.send(root.instance, ScreenEvent(home = HomeEvent(shown = HomeEvent.Shown())))
+                homeRoot?.let { runtime.send(it, ScreenEvent(home = HomeEvent(shown = HomeEvent.Shown()))) }
             }
             cover = !atRoot
         }
@@ -351,6 +393,22 @@ internal class RustRoot(
             )
             return
         }
+        if (inChat && top.instance == root.instance) {
+            // THE CHAT'S ROOT, over the band: a place Rust owns, drawn like Home's.
+            androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+                Box(Modifier.weight(1f)) { Page(runtime, view, top.instance) }
+                Band(
+                    navigation?.band,
+                    navigation?.tabs.orEmpty().map { it.tab }.toSet(),
+                    backupShown,
+                    // THE BACKUP'S DOOR is native: Home first, so the band lights the right place.
+                    { select(TAB); onOpenBackup() },
+                    { select(TAB); onOpenHome() },
+                    ::select,
+                )
+            }
+            return
+        }
         Page(runtime, view, top.instance)
     }
 
@@ -366,7 +424,7 @@ internal class RustRoot(
         if (HealthRationale.requested) {
             LaunchedEffect(Unit) {
                 HealthRationale.requested = false
-                push(Route(screen = "health.connect", health_connect = HealthConnectRoute(parent = "")))
+                tellHome(HomeEvent(entry_asked = HomeEvent.EntryAsked(entry = HomeEvent.EntryAsked.Entry.ENTRY_HEALTH_CONNECT)))
             }
         }
         // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED, and when Home's tile learns the Locker is open.
@@ -419,9 +477,6 @@ internal class RustRoot(
             next.environment(Locale.getDefault().toLanguageTag(), TimeZone.getDefault().id)
             next.start()
             next.navigate(NavEvent(pop_to_root = NavPopToRoot(tab = TAB)))
-            // ENTERING LOCKER FROM CHAT'S KEY SLOT: the one place a lock page is pushed.
-            LockerEntry.install()
-            LockerEntry.pushLock = { home.launch { push(Route(screen = "locker.lock", locker_lock = LockerLockRoute())) } }
         }
         // A PHOTOS HOME THAT OPENS LATER IS TOLD WHAT THE ROLL ALREADY SAID.
         home.launch {
@@ -471,6 +526,32 @@ internal class RustRoot(
                 lastRibbon = status
                 runtime.send(root, ScreenEvent(home = HomeEvent(status_told = HomeEvent.StatusTold(status = status))))
             }
+        }
+    }
+
+    /** The vault's name, from Home's bar, for the chat's header. */
+    private fun vaultName(runtime: Screens): String {
+        val nav = runtime.navigation.value ?: return ""
+        val root = nav.tabs.firstOrNull { it.tab == TAB }?.entries?.firstOrNull()?.instance ?: return ""
+        return runtime.views.value[root]?.home?.bar?.vault?.name.orEmpty()
+    }
+
+    /** The shell's first words to a chat instance: where models live, the vault's name and the scope. */
+    private fun openChat(runtime: Screens, instance: Long, app: String, chosen: Boolean, context: Context) {
+        scope?.launch {
+            runtime.send(
+                instance,
+                ScreenEvent(
+                    chat = ChatEvent(
+                        opened = ChatEvent.Opened(
+                            app = app,
+                            vault_name = vaultName(runtime),
+                            scope_chosen = chosen,
+                            models_dir = java.io.File(context.filesDir, "models").path,
+                        ),
+                    ),
+                ),
+            )
         }
     }
 
@@ -544,8 +625,25 @@ internal class RustRoot(
         val photosDuplicates = view.photos_duplicates
         val photosReview = view.photos_duplicate_review
         val homeSearch = view.home_search
+        val chat = view.chat
 
         when {
+            // THE CHAT (#1135, lane I): the tab's root, or a `chat.ask` / `chat.thread` page. The
+            // shell's first event tells it where models live; a tab root also gets the scope of
+            // the app the member last had open each time it is shown.
+            chat != null -> {
+                val atTabRoot = navigationRootIs(runtime, instance)
+                LaunchedEffect(instance, if (atTabRoot) lastApp else "") {
+                    openChat(runtime, instance, if (atTabRoot) lastApp else "", false, context)
+                }
+                ChatScreen(
+                    state = chat,
+                    onEvent = { event -> send(ScreenEvent(chat = event)) },
+                    onOpenRoute = open,
+                    // A SCOPE CHOSEN from the composer's menu starts a new chat in it.
+                    onScope = { chosen -> openChat(runtime, instance, chosen, true, context) },
+                )
+            }
             home != null -> AgendaHomeScreen(
                 state = home,
                 onEvent = { send(ScreenEvent(agenda_home = it)) },
@@ -827,6 +925,10 @@ internal class RustRoot(
         }
     }
 
+    /** Whether `instance` is the root of the chat tab (the tab, not a `chat.ask` page above it). */
+    private fun navigationRootIs(runtime: Screens, instance: Long): Boolean =
+        runtime.navigation.value?.tabs?.firstOrNull { it.tab == CHAT_TAB }?.entries?.firstOrNull()?.instance == instance
+
     /** The permission and the followed list Docs' drive shows, reported once per page. */
     @Composable
     private fun DocsReports(instance: Long, send: (ScreenEvent) -> Unit) {
@@ -855,6 +957,12 @@ internal class RustRoot(
     private companion object {
         /** Rust's one tab for every page this root draws: Home is its root and an app opens on it. */
         const val TAB = "home"
+
+        /** The chat's tab in Rust's runtime (`chat::TAB`); its root is `chat.home`. */
+        const val CHAT_TAB = "chat"
+
+        /** The apps a chat can be scoped to (`chat::scopable_apps`), by the prefix of their screens. */
+        val CHAT_SCOPES = setOf("agenda", "docs", "health", "locker", "money", "notes", "people", "photos")
     }
 }
 

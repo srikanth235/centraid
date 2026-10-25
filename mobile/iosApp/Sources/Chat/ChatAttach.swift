@@ -3,8 +3,6 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-import CentraidShared
-
 // THE CHAT'S ATTACH PICKERS: two sources, one chip.
 //
 // "Photo library" is the system's PHPickerViewController, which runs out of
@@ -85,42 +83,63 @@ enum LibraryPhoto {
 
 // MARK: - The system picker
 
-/// PHPickerViewController, for exactly one image. It needs no permission: the
-/// picker is the system's, and the app is handed only what the member picks.
-struct LibraryPhotoPicker: UIViewControllerRepresentable {
-    /// The picked image's bytes (whatever format the library holds), or nil
-    /// when the pick would not load. Not called when the member cancels.
-    let onPicked: (Data?) -> Void
+/// `PickLibraryPhoto`: PHPickerViewController for exactly one image, over the frontmost screen. It
+/// needs no permission: the picker is the system's, and the app is handed only what the member picks.
+@MainActor
+enum LibraryPhotoPerformer {
+    private static var holders: [Holder] = []
 
-    func makeUIViewController(context: Context) -> PHPickerViewController {
+    static func pick(_ done: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void) {
         var configuration = PHPickerConfiguration(photoLibrary: .shared())
         configuration.filter = .images
         configuration.selectionLimit = 1
         configuration.preferredAssetRepresentationMode = .compatible
         let picker = PHPickerViewController(configuration: configuration)
-        picker.delegate = context.coordinator
-        return picker
+        let holder = Holder(done)
+        holder.onFinish = { holders.removeAll { $0 === holder } }
+        holders.append(holder)
+        picker.delegate = holder
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
+            var top = scene.windows.first(where: \.isKeyWindow)?.rootViewController
+        else {
+            holder.finish(cancelled: true, unreadable: false, picked: nil)
+            return
+        }
+        while let next = top.presentedViewController { top = next }
+        top.present(picker, animated: true)
     }
 
-    func updateUIViewController(_ controller: PHPickerViewController, context: Context) {}
+    final class Holder: NSObject, PHPickerViewControllerDelegate {
+        private let done: (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
+        var onFinish: () -> Void = {}
 
-    func makeCoordinator() -> Coordinator { Coordinator(onPicked: onPicked) }
+        init(_ done: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void) { self.done = done }
 
-    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
-        let onPicked: (Data?) -> Void
-
-        init(onPicked: @escaping (Data?) -> Void) {
-            self.onPicked = onPicked
+        func finish(cancelled: Bool, unreadable: Bool, picked: LibraryPhoto.Prepared?) {
+            var result = Centraid_Core_V1_LibraryPhotoPicked()
+            result.cancelled = cancelled
+            result.unreadable = unreadable
+            if let picked {
+                result.content = picked.jpeg
+                result.mime = "image/jpeg"
+                result.thumbnailPath = picked.thumbnail
+            }
+            done(.libraryPhotoPicked(result))
+            onFinish()
         }
 
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            picker.dismiss(animated: true)
             guard let provider = results.first?.itemProvider else {
-                picker.dismiss(animated: true)
+                finish(cancelled: true, unreadable: false, picked: nil)
                 return
             }
-            picker.dismiss(animated: true)
-            provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { [onPicked] data, _ in
-                DispatchQueue.main.async { onPicked(data) }
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { [weak self] data, _ in
+                // HEIC to JPEG, bounded and upright, off the main thread.
+                let prepared = data.flatMap { LibraryPhoto.prepare($0) }
+                DispatchQueue.main.async {
+                    self?.finish(cancelled: false, unreadable: prepared == nil, picked: prepared)
+                }
             }
         }
     }
@@ -128,28 +147,28 @@ struct LibraryPhotoPicker: UIViewControllerRepresentable {
 
 // MARK: - Vault documents
 
-/// THE VAULT'S TEXT DOCUMENTS, newest edit first. A PDF is not listed: the
-/// core lists only what an attach would not refuse.
+/// THE VAULT'S TEXT DOCUMENTS, newest edit first, as `ChatState.document_sheet` lists them. A PDF
+/// is not listed: the core lists only what an attach would not refuse.
 struct ChatDocumentSheet: View {
-    @ObservedObject var chat: ChatModel
+    let sheet: Centraid_Core_V1_ChatDocumentSheet
+    let closeLabel: String
     let onPicked: (_ docID: String, _ title: String) -> Void
+    let onClose: () -> Void
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                if !chat.documentsLoaded {
+                if !sheet.loaded {
                     RowSkeleton(rows: 6).padding(.top, 24)
-                } else if chat.documents.isEmpty {
-                    ScreenEmptyView(sentence: ChatCopy.shared.ATTACH_NO_DOCUMENTS)
+                } else if sheet.rows.isEmpty {
+                    ScreenEmptyView(sentence: sheet.emptyLine)
                         .padding(.top, 24)
                 } else {
                     LazyVStack(spacing: 0) {
-                        ForEach(Array(chat.documents.enumerated()), id: \.element.docID) { index, document in
+                        ForEach(Array(sheet.rows.enumerated()), id: \.element.docID) { index, document in
                             Button {
                                 onPicked(document.docID, document.title)
-                                dismiss()
                             } label: {
                                 HStack(spacing: 12) {
                                     CentraidIconView(iconKey: "FileText", tint: Theme.color("textSoft", scheme), size: 20)
@@ -159,7 +178,7 @@ struct ChatDocumentSheet: View {
                                             .foregroundStyle(Theme.color("text", scheme))
                                             .lineLimit(2)
                                             .multilineTextAlignment(.leading)
-                                        Text(verbatim: String(document.updatedAt.prefix(10)))
+                                        Text(verbatim: document.subtitle)
                                             .centraidType("mono")
                                             .foregroundStyle(Theme.color("textFaint", scheme))
                                     }
@@ -179,19 +198,18 @@ struct ChatDocumentSheet: View {
                 }
             }
             .contentMargins(.horizontal, CentraidGeometry.pageMargin, for: .scrollContent)
-            .navigationTitle(ChatCopy.shared.ATTACH_PICK_DOCUMENT)
+            .navigationTitle(sheet.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
+                    Button(action: onClose) {
                         CentraidIconView(iconKey: "X", tint: Theme.color("text", scheme), size: 18)
                     }
-                    .accessibilityLabel(ChatCopy.shared.CLOSE)
+                    .accessibilityLabel(closeLabel)
                     .accessibilityIdentifier("chat-attach-close")
                 }
             }
         }
-        .onAppear { chat.loadDocuments() }
         .accessibilityIdentifier("chat-documents")
     }
 }

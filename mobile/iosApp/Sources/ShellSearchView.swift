@@ -17,9 +17,6 @@ struct ShellSearchView: View {
     let send: (Centraid_Core_V1_HomeSearchEvent) -> Void
     /// Push the route a row, a container or the Ask carries.
     let open: (Centraid_Core_V1_Route) -> Void
-    /// The Ask row's hand-off to the assistant. TRANSITIONAL: the chat lane
-    /// registers the Rust `chat.ask` screen and this becomes `open(ask_route)`.
-    let ask: (String, String) -> Void
     let onCancel: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -93,7 +90,8 @@ struct ShellSearchView: View {
             ReadStateView(
                 content: content,
                 loadingLabel: state.chrome.loading,
-                onRetry: { send(event { $0.refreshed = .init() }) }
+                onRetry: { send(event { $0.refreshed = .init() }) },
+                retryLabel: state.chrome.retry
             ) { found in
                 switch found {
                 case let .resting(resting):
@@ -121,9 +119,9 @@ struct ShellSearchView: View {
     @ViewBuilder
     private func askRow(_ results: Centraid_Core_V1_HomeSearchData) -> some View {
         if results.hasAsk {
-            SearchAskRow(ask: results.ask.legacy) {
-                send(event { $0.committed = .init() })
-                ask(results.ask.question, results.ask.scope)
+            // The Ask's finished route (`chat.ask`) is pushed like any row.
+            SearchAskRow(ask: results.ask.legacy, onAsk: { send(event { $0.committed = .init() }) }) {
+                if results.hasAskRoute { open(results.askRoute) }
             }
         }
     }

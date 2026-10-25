@@ -461,6 +461,15 @@ final class ScreenStore: ObservableObject {
             DocsFollow.shared.stop(stop.origin) { outcome in
                 Task { @MainActor [weak self] in self?.answer(request, outcome) }
             }
+        // THE MODEL'S (OR THE PHOTO READER'S) DOWNLOAD: the shell owns the transfer, and the chat
+        // hears progress and the end as events (`ChatModel`).
+        case .modelDownload(let download)?:
+            ChatModelDownloader.shared.start(ChatAsset(download))
+            answer(request, .done(Centraid_Core_V1_EffectDone()))
+        #if os(iOS)
+        case .pickLibraryPhoto?:
+            LibraryPhotoPerformer.pick { [weak self] outcome in self?.answer(request, outcome) }
+        #endif
         default:
             // Platform work this build does not perform yet: say so, by value.
             answer(request, .failed(Self.failure("not performed by this shell")))

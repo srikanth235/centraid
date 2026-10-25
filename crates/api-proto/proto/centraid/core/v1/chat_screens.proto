@@ -1,0 +1,448 @@
+// THE CHAT SCREEN (#1135, lane I): the on-device assistant as a Rust screen. The
+// thread, the composer, the scope, the confirm cards and the drawer of past chats
+// are decided in `crates/screens/src/chat`; SwiftUI and Compose draw `ChatState`
+// and send `ChatEvent`s. The turn itself is the core's (`assist.proto`): this
+// screen never re-implements a decision the assistant makes.
+//
+// `chat` is a tab on the bottom bar, not an app, and a chat opened from an app is
+// the same screen with `scope_app` set.
+//
+// THE ANSWER IS CARDS. A reply is one short line of model text and the rows it
+// found, each a reference (`ChatCard`) that the app's own tile draws. A tap on a
+// card is a `CardTapped` event: Rust asks whether the row is still there and
+// answers with an `OpenRoute` effect (the page) or `card_gone_line`.
+//
+// THE MODEL FILE IS A STEP, NOT A SCREEN. Until a model is on the phone the phase is
+// `PHASE_NEEDS_MODEL` and `model_step` carries the sentence, the size and the
+// action; the shell owns the download (the only thing Centraid ever fetches) and
+// reports its progress as events.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/route.proto";
+
+message ChatState {
+  Phase phase = 1;
+  // THE HEADER'S CENTRE: the open chat's title, or "New chat" while there is none
+  // yet; and the line under it, "<vault name> · on this phone".
+  string title = 2;
+  string subtitle = 3;
+  // The app the chat was opened from, or empty (every app).
+  string scope_app = 4;
+  repeated ChatMessage messages = 5;
+  // One sentence, present only while the thread is empty and the model ready.
+  string empty_line = 6;
+  // Up to three questions this vault can answer; a tap is a `Sent` carrying the text.
+  repeated string suggestions = 7;
+  // A turn is running. The composer offers Stop instead of Send.
+  bool streaming = 8;
+  // "Looking in Notes" while a read runs, empty otherwise.
+  string activity = 9;
+  // One line about the last failure, empty when there is none.
+  string error = 10;
+  // The download, load and unavailable steps. Present in every phase but READY.
+  ChatModelStep model_step = 11;
+  string composer_placeholder = 12;
+  string send_label = 13;
+  string stop_label = 14;
+  string new_chat_label = 15;
+  string retry_label = 16;
+  string copy_label = 17;
+  // The last turn is over and can be asked again.
+  bool can_retry = 18;
+  // The thread has something in it: New chat is drawn.
+  bool can_new_chat = 19;
+  // What waits in the composer, oldest first.
+  repeated ChatAttachment pending = 20;
+  // The attach control is drawn.
+  bool can_attach = 21;
+  string attach_label = 22;
+  string attach_vault_photo_label = 23;
+  string attach_library_photo_label = 24;
+  string attach_document_label = 25;
+  string remove_attachment_label = 26;
+  // The photo reader's own step, drawn above the composer.
+  ChatModelStep vision_step = 27;
+  // The composer cannot send until the photo reader is fetched or the photo removed.
+  bool vision_blocked = 28;
+  bool drawer_open = 29;
+  // Past chats, newest activity first, or the chats a search found.
+  repeated ChatThreadItem threads = 30;
+  string threads_empty_line = 31;
+  // The stored chat this thread is saved in, or empty.
+  string thread_id = 32;
+  // The header menu offers Rename and Delete.
+  bool can_manage_thread = 33;
+  string drawer_label = 34;
+  string menu_label = 35;
+  string rename_label = 36;
+  string delete_label = 37;
+  string delete_all_label = 38;
+  string cancel_label = 39;
+  string save_label = 40;
+  string rename_title = 41;
+  string delete_title = 42;
+  string delete_body = 43;
+  string delete_all_title = 44;
+  string delete_all_body = 45;
+  // "This item is gone." after a tap on a card whose row was deleted since.
+  string card_gone_line = 46;
+  string current_label = 47;
+  ChatDrawerSearch drawer_search = 48;
+  string drawer_search_placeholder = 49;
+  bool can_delete_all = 50;
+  // THE ATTACH SOURCES. "Photo from vault" pushes this route (Photos' picker, purpose
+  // `attach`); the pick comes back to this screen as an `Attached` event. Empty
+  // when no photo can be attached.
+  Route attach_photo_route = 51;
+  // The vault's text documents, listed while the document sheet is open.
+  ChatDocumentSheet document_sheet = 52;
+  string attach_pick_photo_title = 53;
+  string close_label = 54;
+  // "Copied", said beside a message after Copy.
+  string copied_label = 55;
+  // The composer's scope menu: "All apps", its accessibility label, and the eight
+  // scopable apps in menu order with the name each reads as.
+  string scope_all_label = 56;
+  string scope_label = 57;
+  repeated ChatScopeOption scopes = 58;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_CHECKING = 1;
+    PHASE_NEEDS_MODEL = 2;
+    PHASE_DOWNLOADING = 3;
+    PHASE_LOADING = 4;
+    PHASE_READY = 5;
+    PHASE_UNAVAILABLE = 6;
+  }
+}
+
+message ChatScopeOption {
+  string app = 1;
+  string name = 2;
+}
+
+message ChatDrawerSearch {
+  bool open = 1;
+  string term = 2;
+  // The words the answer corrected the term to, and the line that says so.
+  string corrected = 3;
+  string corrected_label = 4;
+}
+
+message ChatDocumentSheet {
+  bool open = 1;
+  string title = 2;
+  string empty_line = 3;
+  repeated ChatDocumentRow rows = 4;
+  // False while the list is being read.
+  bool loaded = 5;
+}
+
+message ChatDocumentRow {
+  string doc_id = 1;
+  string title = 2;
+  // The document's last edit, as a date.
+  string subtitle = 3;
+}
+
+message ChatThreadItem {
+  string thread_id = 1;
+  string title = 2;
+  // "5 min ago", "Yesterday": when the chat last moved.
+  string ago = 3;
+  bool current = 4;
+  string accessibility_label = 5;
+}
+
+message ChatModelStep {
+  string size_line = 1;
+  string note_line = 2;
+  string action_label = 3;
+  bool progress_known = 4;
+  float progress = 5;
+  string status_line = 6;
+}
+
+message ChatMessage {
+  // Monotonic within a chat. The view's diffing key and the argument of `Copied`.
+  uint64 id = 1;
+  Role role = 2;
+  string text = 3;
+  repeated ChatCard cards = 4;
+  bool streaming = 5;
+  bool stopped = 6;
+  string accessibility_label = 7;
+  repeated ChatAttachment attachments = 8;
+  string note = 9;
+  // The write this answer proposes, drawn as a confirm card under the line.
+  ChatPending pending = 10;
+
+  enum Role {
+    ROLE_UNSPECIFIED = 0;
+    ROLE_USER = 1;
+    ROLE_ASSISTANT = 2;
+  }
+}
+
+// A WRITE THE MODEL PROPOSED, as the confirm card under its answer (#1088). The
+// lines are the core's, composed from the rows the write changes. It settles once.
+message ChatPending {
+  string pending_id = 1;
+  State state = 2;
+  repeated ChatPendingStep steps = 3;
+  string more_line = 4;
+  string confirm_label = 5;
+  string cancel_label = 6;
+  bool destructive = 7;
+  string settled_line = 8;
+  string accessibility_label = 9;
+
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    STATE_WAITING = 1;
+    STATE_WORKING = 2;
+    STATE_APPLIED = 3;
+    STATE_NOT_DONE = 4;
+    STATE_STALE = 5;
+    STATE_INERT = 6;
+  }
+}
+
+message ChatPendingStep {
+  string summary = 1;
+  bool destructive = 2;
+}
+
+message ChatAttachment {
+  uint64 id = 1;
+  Kind kind = 2;
+  string label = 3;
+  // A file the shell draws as the chip's thumbnail (a library photo), or empty.
+  string thumbnail_path = 4;
+  // A vault photo's id, so the chip draws the vault's own thumbnail; empty otherwise.
+  string asset_id = 5;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_PHOTO = 1;
+    KIND_DOCUMENT = 2;
+  }
+}
+
+// A REFERENCE TO ONE REAL ROW. The app's own tile draws it; a shell with none draws
+// the title, subtitle and meta.
+message ChatCard {
+  string app = 1;
+  string entity = 2;
+  string id = 3;
+  string qualifier = 4;
+  string title = 5;
+  string subtitle = 6;
+  string meta = 7;
+}
+
+message ChatEvent {
+  oneof kind {
+    Opened opened = 1;
+    Sent sent = 2;
+    Stopped stopped = 3;
+    Regenerated regenerated = 4;
+    NewChat new_chat = 5;
+    Copied copied = 6;
+    DownloadTapped download = 7;
+    DownloadProgress download_progress = 8;
+    DownloadFinished download_finished = 9;
+    Attached attached = 10;
+    AttachmentRemoved attachment_removed = 11;
+    DrawerToggled drawer = 13;
+    ThreadOpened thread_opened = 14;
+    ThreadRenamed thread_renamed = 15;
+    ThreadDeleted thread_deleted = 16;
+    AllThreadsDeleted all_threads_deleted = 17;
+    PendingConfirmed pending_confirmed = 18;
+    PendingCancelled pending_cancelled = 19;
+    DrawerSearchOpened drawer_search_opened = 20;
+    DrawerSearchTerm drawer_search_term = 21;
+    DrawerSearchClosed drawer_search_closed = 22;
+    // A search's Ask row: the shell selects the Chat tab and sends this.
+    Asked asked = 23;
+    CardTapped card_tapped = 24;
+    LibraryPhotoTapped library_photo_tapped = 25;
+    DocumentsOpened documents_opened = 26;
+    DocumentsClosed documents_closed = 27;
+  }
+  reserved 12;
+
+  // The tab appeared. `app` scopes the chat to the app it was opened from.
+  message Opened {
+    string app = 1;
+    reserved 2, 5, 6;
+    // The foreground vault's name, for the header's second line.
+    string vault_name = 3;
+    // The member CHOSE this scope from the composer's menu, so a different one starts a new chat.
+    bool scope_chosen = 4;
+    // The directory the shell keeps downloaded models in (its application-support
+    // `models/`). Rust names the files in it.
+    string models_dir = 7;
+  }
+
+  message Sent {
+    string text = 1;
+  }
+
+  message Stopped {}
+
+  message Regenerated {}
+
+  message NewChat {}
+
+  // Put a message's text on the clipboard (Rust sends the effect).
+  message Copied {
+    uint64 message_id = 1;
+  }
+
+  message DownloadTapped {
+    // The photo reader's step and not the model's.
+    bool vision = 1;
+  }
+
+  message DownloadProgress {
+    uint64 done_bytes = 1;
+    uint64 total_bytes = 2;
+    bool vision = 3;
+  }
+
+  message DownloadFinished {
+    bool ok = 1;
+    bool vision = 2;
+  }
+
+  // The member chose something to attach.
+  message Attached {
+    oneof source {
+      VaultPhoto vault_photo = 1;
+      LibraryPhoto library_photo = 2;
+      VaultDocument vault_document = 3;
+    }
+    string label = 4;
+    string thumbnail_path = 5;
+  }
+
+  message VaultPhoto {
+    string asset_id = 1;
+  }
+
+  message LibraryPhoto {
+    bytes content = 1;
+    string mime = 2;
+  }
+
+  message VaultDocument {
+    string doc_id = 1;
+  }
+
+  message AttachmentRemoved {
+    uint64 id = 1;
+  }
+
+  message DrawerToggled {
+    bool opened = 1;
+  }
+
+  message ThreadOpened {
+    string thread_id = 1;
+    // The title the shell already has (a thread found by search), for the header
+    // until the thread is read.
+    string title = 2;
+  }
+
+  message ThreadRenamed {
+    string thread_id = 1;
+    string title = 2;
+  }
+
+  message ThreadDeleted {
+    string thread_id = 1;
+  }
+
+  message AllThreadsDeleted {}
+
+  message PendingConfirmed {
+    string pending_id = 1;
+  }
+
+  message PendingCancelled {
+    string pending_id = 1;
+  }
+
+  message DrawerSearchOpened {}
+
+  message DrawerSearchTerm {
+    string term = 1;
+  }
+
+  message DrawerSearchClosed {}
+
+  // A search's Ask row (`SearchAsk`): open a chat in `scope` (an app id, or empty
+  // for every app) and ask `question`. The chat waits for its model to be ready
+  // and asks once it can; with no model it shows its download step instead.
+  message Asked {
+    string scope = 1;
+    string question = 2;
+  }
+
+  // A card in message `message_id` was tapped (`index` in its cards).
+  message CardTapped {
+    uint64 message_id = 1;
+    uint32 index = 2;
+  }
+
+  // "Photo library" was chosen: Rust asks the shell for the system picker.
+  message LibraryPhotoTapped {}
+
+  message DocumentsOpened {}
+
+  message DocumentsClosed {}
+}
+
+// ---------------------------------------------------------------------------
+// The chat's platform work (effects)
+// ---------------------------------------------------------------------------
+
+// START (OR RESUME) THE SHELL'S DOWNLOAD of the assistant's model, or with `vision`
+// of the photo reader's projector, to the directory `ChatEvent.Opened` named. The
+// shell owns the transfer, the only thing Centraid ever fetches. It answers
+// `EffectDone` at once and reports the transfer as `ChatEvent.DownloadProgress`
+// and `DownloadFinished` events to the chat instance.
+message ModelDownload {
+  bool vision = 1;
+  // The file to fetch and how to know it arrived whole: the shell downloads `url`
+  // into `models_dir/file_name`, hashes what arrived and keeps it only when the
+  // digest is `sha256` (lowercase hex); anything else is deleted and reported as
+  // `DownloadFinished{ok: false}`.
+  string url = 2;
+  string file_name = 3;
+  string sha256 = 4;
+  uint64 bytes = 5;
+  string models_dir = 6;
+}
+
+// Let the member choose ONE image from the photo library (the system picker, which
+// needs no permission) and answer `LibraryPhotoPicked`. The shell converts what the
+// library holds (HEIC) to JPEG, bounds it to 1024 pixels on the long edge and
+// writes a small thumbnail to a temporary file it sweeps with the chat.
+message PickLibraryPhoto {}
+
+message LibraryPhotoPicked {
+  // The member dismissed the picker.
+  bool cancelled = 1;
+  // The pick would not load; nothing is attached.
+  bool unreadable = 2;
+  bytes content = 3;
+  string mime = 4;
+  string thumbnail_path = 5;
+}

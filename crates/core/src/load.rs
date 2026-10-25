@@ -535,6 +535,33 @@ fn read(
                 tz,
             },
         )?,
+        // ---- the shell's own catalogue (`shell/manifest.json`) ----
+        // imports (lane I): the folders the vault follows, with each file's last stat
+        ("shell", "files-followed") => app_query::imports::files_followed(door)?,
+        // chat (lane I): the drawer's list or search, one stored chat, and a card's liveness
+        ("shell", "chats") => app_query::chat::threads(
+            vault,
+            door,
+            &wire::ChatThreadsRequest {
+                limit: p.limit(0),
+                term: p.text("term")?,
+            },
+        )?,
+        ("shell", "chat") => app_query::chat::thread(
+            vault,
+            &wire::ChatThreadRequest {
+                thread_id: p.text("thread_id")?,
+            },
+        )?,
+        ("shell", "chat-card") => app_query::chat::card(
+            vault,
+            &wire::ChatCardRequest {
+                app: p.text("app")?,
+                entity: p.text("entity")?,
+                id: p.text("id")?,
+            },
+        )?,
+
         ("people", "trash") => {
             app_query::people::trash(vault, door, &wire::PeopleTrashRequest { tz })?
         }
@@ -894,9 +921,10 @@ mod tests {
     }
 
     /// THE SHELL'S CATALOGUE is served by `load` and by nothing else: it answers its
-    /// search, and refuses a name it does not declare.
+    /// search, refuses a name it does not declare, and is no app (its few actions are `act`'s, through
+    /// the shell's own table).
     #[test]
-    fn the_shell_catalogue_answers_the_vault_search() {
+    fn the_shell_catalogue_answers_the_vault_search_and_is_no_app() {
         let (dir, vault) = founded();
         let mut request = ask("shell", "search");
         request.params.insert(
@@ -912,8 +940,9 @@ mod tests {
         ));
         assert!(load(&vault, &ask("shell", "no-such")).is_err());
         assert!(
-            catalog::app("shell").is_some(),
-            "the shell is an app of the catalogue: its ledger actions run through `act`"
+            catalog::APPS.iter().all(|app| app.id != "shell"),
+            "the shell is not one of the eight apps (its chat and import actions are `act`'s, \
+             through its own action table)"
         );
         let _ = std::fs::remove_dir_all(dir);
     }
