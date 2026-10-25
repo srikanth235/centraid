@@ -10,15 +10,21 @@ package dev.centraid.design
 
 public object KitWords {
     public const val BACK: String = "Back"
+    public const val BAND_CURRENT: String = "current place"
+    public const val BAND_HOME: String = "Home"
+    public const val BAND_MORE: String = "More"
     public const val CANCEL: String = "Cancel"
     public const val CLOSE_SEARCH: String = "Close search"
     public const val DISMISS: String = "Dismiss"
     public const val DONE: String = "Done"
     public const val LOADING_MORE: String = "Loading more"
+    public const val OPEN: String = "Open"
     public const val OPENING: String = "Opening"
     public const val PENDING: String = "Saving"
     public const val RETRY: String = "Try again"
+    public const val SAVE: String = "Save"
     public const val SEARCH: String = "Search"
+    public const val SELECT: String = "Select"
     public const val SHOW_MORE: String = "Show more"
 
     /** A pushed page's back control, spoken: "Back to People"; "Back" with no parent. */

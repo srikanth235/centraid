@@ -10,15 +10,21 @@ import Foundation
 
 public enum KitWords {
     public static let BACK = "Back"
+    public static let BAND_CURRENT = "current place"
+    public static let BAND_HOME = "Home"
+    public static let BAND_MORE = "More"
     public static let CANCEL = "Cancel"
     public static let CLOSE_SEARCH = "Close search"
     public static let DISMISS = "Dismiss"
     public static let DONE = "Done"
     public static let LOADING_MORE = "Loading more"
+    public static let OPEN = "Open"
     public static let OPENING = "Opening"
     public static let PENDING = "Saving"
     public static let RETRY = "Try again"
+    public static let SAVE = "Save"
     public static let SEARCH = "Search"
+    public static let SELECT = "Select"
     public static let SHOW_MORE = "Show more"
 
     /// A pushed page's back control, spoken: "Back to People"; "Back" with no parent.

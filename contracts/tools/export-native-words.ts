@@ -26,6 +26,14 @@ import { KOTLIN_DESIGN_DIR } from "./export-native-catalog.ts";
 /** The Rust catalogue the words are read from. */
 export const WORDS_SOURCE = "crates/screens/src/strings/shared.rs";
 
+/**
+ * A word the kit shares with one screen's own catalogue is read from there,
+ * as `<module>::<key>`, rather than spelled twice in Rust.
+ */
+const OTHER_SOURCES: Readonly<Record<string, string>> = {
+  home: "crates/screens/src/strings/home.rs",
+};
+
 /** Where the two tables are written. */
 export const KOTLIN_WORDS = `${KOTLIN_DESIGN_DIR}/Words.kt`;
 export const SWIFT_WORDS = "mobile/iosApp/Design/Words.swift";
@@ -36,15 +44,21 @@ export const SWIFT_WORDS = "mobile/iosApp/Design/Words.swift";
  */
 const CONSTANTS: Readonly<Record<string, string>> = {
   BACK: "back",
+  BAND_CURRENT: "home::band_current_spoken",
+  BAND_HOME: "kit_band_home",
+  BAND_MORE: "kit_band_more",
   CANCEL: "kit_cancel",
   CLOSE_SEARCH: "kit_close_search",
   DISMISS: "kit_dismiss",
   DONE: "kit_done",
   LOADING_MORE: "kit_loading_more",
+  OPEN: "kit_open",
   OPENING: "kit_opening",
   PENDING: "kit_pending",
   RETRY: "kit_retry",
+  SAVE: "kit_save",
   SEARCH: "kit_search",
+  SELECT: "kit_select",
   SHOW_MORE: "kit_show_more",
 };
 
@@ -83,7 +97,10 @@ function unescapeRust(body: string, key: string): string {
 }
 
 /** Every `plain key = ("one", "other");` row of a catalogue file, by key. */
-export function readCatalog(source: string): Map<string, string> {
+export function readCatalog(
+  source: string,
+  strict = true
+): Map<string, string> {
   const literal = String.raw`"((?:[^"\\]|\\.)*)"`;
   const row = new RegExp(
     String.raw`^\s*(plain|counted)\s+([a-z0-9_]+)\s*=\s*\(\s*${literal}\s*,\s*${literal}\s*\)\s*;\s*$`,
@@ -104,6 +121,9 @@ export function readCatalog(source: string): Map<string, string> {
     if (/^\s*(?:\/\/.*)?$/u.test(line)) continue;
     const match = row.exec(line);
     if (match === null) {
+      // A row split over lines is skipped in a file read for one word; the
+      // word's lookup throws if it was that row.
+      if (!strict) continue;
       throw new Error(
         `export-native-words: a catalogue row this reader cannot parse: ${line.trim()}`
       );
@@ -158,9 +178,20 @@ export function emitNativeWords(repositoryRoot: string): { words: number } {
   const words = readCatalog(
     readFileSync(path.join(repositoryRoot, WORDS_SOURCE), "utf8")
   );
-  const constants = Object.entries(CONSTANTS).map(
-    ([name, key]) => [name, lookup(words, key)] as const
+  const others = new Map(
+    Object.entries(OTHER_SOURCES).map(([module, file]) => [
+      module,
+      readCatalog(readFileSync(path.join(repositoryRoot, file), "utf8"), false),
+    ])
   );
+  const constants = Object.entries(CONSTANTS).map(([name, key]) => {
+    const [module, own] = key.includes("::") ? key.split("::") : ["", key];
+    const table = module === "" ? words : others.get(module);
+    if (table === undefined) {
+      throw new Error(`export-native-words: no catalogue named ${module}`);
+    }
+    return [name, lookup(table, own ?? key)] as const;
+  });
   const backTo = lookup(words, TEMPLATES.backTo.key);
   slotted(backTo, TEMPLATES.backTo.slot, TEMPLATES.backTo.key);
   const corrected = lookup(words, TEMPLATES.searchCorrected.key);

@@ -242,7 +242,15 @@ describe("the emitted kit words", () => {
   test("both shells hold the same words, each one the Rust catalogue's", () => {
     expect(kotlin.size).toBeGreaterThanOrEqual(10);
     expect(swift).toStrictEqual(kotlin);
-    for (const [name, text] of kotlin) {
+    // BAND_CURRENT is Home's own word, read from `strings/home.rs` rather
+    // than spelled twice in Rust.
+    const home = read("crates/screens/src/strings/home.rs");
+    expect(home).toContain(
+      `plain band_current_spoken = ("${kotlin.get("BAND_CURRENT") ?? ""}",`
+    );
+    for (const [name, text] of [...kotlin].filter(
+      ([word]) => word !== "BAND_CURRENT"
+    )) {
       const key = name === "BACK" ? "back" : `kit_${name.toLowerCase()}`;
       expect(rust.get(key), `${name} ← strings::shared::${key}`).toBe(text);
     }
