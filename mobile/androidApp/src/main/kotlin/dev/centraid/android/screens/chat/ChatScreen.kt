@@ -93,9 +93,19 @@ internal fun ChatScreen(
     state: ChatState,
     onEvent: (ChatEvent) -> Unit,
     onOpenRoute: (Route) -> Unit,
+    /** The member chose a scope from the composer's menu: the chat starts in it. */
+    onScope: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var draft by remember { mutableStateOf("") }
+    // The message whose Copy was just pressed: its button says `copied_label` for a moment.
+    var copied by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(copied) {
+        if (copied != null) {
+            kotlinx.coroutines.delay(1500)
+            copied = null
+        }
+    }
     // The chat being renamed: its id and the title the field starts from.
     var renaming by remember { mutableStateOf<Pair<String, String>?>(null) }
     var deleting by remember { mutableStateOf<String?>(null) }
@@ -111,7 +121,7 @@ internal fun ChatScreen(
             )
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (state.phase == ChatState.Phase.PHASE_READY) {
-                    ChatThread(state, onEvent, onOpenRoute, onSuggest = {
+                    ChatThread(state, onEvent, copied, onCopied = { copied = it }, onSuggest = {
                         onEvent(ChatEvent(sent = ChatEvent.Sent(text = it)))
                     })
                 } else {
@@ -133,6 +143,7 @@ internal fun ChatScreen(
                     },
                     onEvent = onEvent,
                     onOpenRoute = onOpenRoute,
+                    onScope = onScope,
                 )
             }
         }
@@ -295,7 +306,8 @@ private fun ChatHeader(
 private fun ChatThread(
     state: ChatState,
     onEvent: (ChatEvent) -> Unit,
-    onOpenRoute: (Route) -> Unit,
+    copied: Long?,
+    onCopied: (Long) -> Unit,
     onSuggest: (String) -> Unit,
 ) {
     val list = rememberLazyListState()
@@ -342,6 +354,8 @@ private fun ChatThread(
                 message,
                 state,
                 isLast = index == state.messages.lastIndex,
+                copied = copied == message.id,
+                onCopied = { onCopied(message.id) },
                 onEvent = onEvent,
             )
         }
@@ -404,6 +418,8 @@ private fun MessageRow(
     message: ChatMessage,
     state: ChatState,
     isLast: Boolean,
+    copied: Boolean,
+    onCopied: () -> Unit,
     onEvent: (ChatEvent) -> Unit,
 ) {
     if (message.role == ChatMessage.Role.ROLE_USER) {
@@ -452,7 +468,8 @@ private fun MessageRow(
         if (!message.streaming && (message.text.isNotEmpty() || message.cards.isNotEmpty())) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (message.text.isNotEmpty()) {
-                    ActionButton("Copy", state.copy_label, "chat-copy") {
+                    ActionButton("Copy", if (copied) state.copied_label.ifEmpty { state.copy_label } else state.copy_label, "chat-copy") {
+                        onCopied()
                         onEvent(ChatEvent(copied = ChatEvent.Copied(message_id = message.id)))
                     }
                 }
@@ -567,6 +584,7 @@ private fun ChatComposer(
     onSend: () -> Unit,
     onEvent: (ChatEvent) -> Unit,
     onOpenRoute: (Route) -> Unit,
+    onScope: (String) -> Unit,
 ) {
     var attachMenu by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(KitGeometry.RADIUS * 2)
@@ -574,6 +592,8 @@ private fun ChatComposer(
         Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        // THE SCOPE PILL: which app this chat reads. Choosing starts a chat in that scope.
+        if (state.scopes.isNotEmpty() && state.messages.isEmpty()) ScopePill(state, onScope)
         if (state.pending.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 state.pending.forEach { chip ->
@@ -641,6 +661,46 @@ private fun ChatComposer(
             } else {
                 val ready = draft.isNotBlank() && !state.vision_blocked
                 SendKey("PaperPlaneTilt", state.send_label, filled = ready, tag = "chat-send", enabled = ready, onClick = onSend)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScopePill(state: ChatState, onScope: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val name = state.scopes.firstOrNull { it.app == state.scope_app }?.name ?: state.scope_all_label
+    Box {
+        Row(
+            Modifier
+                .heightIn(min = 32.dp)
+                .clip(CircleShape)
+                .border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), CircleShape)
+                .clickable { open = true }
+                .padding(horizontal = 12.dp)
+                .testTag("chat-scope")
+                .semantics {
+                    contentDescription = state.scope_label + ", " + name
+                    role = Role.Button
+                },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(name, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 1)
+            CentraidIcon("ChevronDown", tint = centraidColor("textSoft"), size = 14.dp)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = centraidColor("bgElev")) {
+            DropdownMenuItem(
+                text = { Text(state.scope_all_label, style = centraidType("body"), color = centraidColor("text")) },
+                onClick = { open = false; onScope("") },
+                modifier = Modifier.testTag("chat-scope-all"),
+            )
+            state.scopes.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.name, style = centraidType("body"), color = centraidColor("text")) },
+                    onClick = { open = false; onScope(option.app) },
+                    modifier = Modifier.testTag("chat-scope-${option.app}"),
+                )
             }
         }
     }

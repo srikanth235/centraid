@@ -258,6 +258,19 @@ internal class AgendaRoutes(
             state = state,
             onEvent = send,
             onOpenRoute = { route -> nav.push(Destination.RustScreen(route)) },
+            // A SCOPE CHOSEN from the composer's menu starts a new chat in it.
+            onScope = { chosen ->
+                send(
+                    ChatEvent(
+                        opened = ChatEvent.Opened(
+                            app = chosen,
+                            scope_chosen = true,
+                            vault_name = vaultName,
+                            models_dir = java.io.File(context.filesDir, "models").path,
+                        ),
+                    ),
+                )
+            },
         )
     }
 
