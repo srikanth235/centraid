@@ -134,7 +134,7 @@ pub fn home_data(d: &Driver, id: u64) -> wire::LockerHomeData {
 
 pub fn item(d: &Driver, id: u64) -> wire::LockerItemState {
     match &d.view(id).kind {
-        Some(wire::view_state::Kind::LockerItem(item)) => item.clone(),
+        Some(wire::view_state::Kind::LockerItem(item)) => (**item).clone(),
         other => panic!("not an item: {other:?}"),
     }
 }

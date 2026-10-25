@@ -1663,35 +1663,37 @@ impl Screen for Item {
             }
         });
         wire::ViewState {
-            kind: Some(wire::view_state::Kind::LockerItem(wire::LockerItemState {
-                wall: self.wall.view(locale),
-                secure: open,
-                item_id: self.route.item_id.clone(),
-                content,
-                confirm: self.confirm(locale),
-                status,
-                chrome: Some(wire::LockerItemChrome {
-                    title: item.map(|item| item.title.clone()).unwrap_or_default(),
-                    back_label: if self.route.parent.is_empty() {
-                        words::app_name(locale)
-                    } else {
-                        self.route.parent.clone()
-                    },
-                    edit_label: if item.is_some_and(|item| !item.trashed) {
-                        words::edit(locale)
-                    } else {
-                        String::new()
-                    },
-                    edit_route: item
-                        .filter(|item| !item.trashed)
-                        .map(|item| routes::edit(&item.item_id)),
-                    retry: words::retry(locale),
-                }),
-                memo: self.memo_sheet(locale),
-                field_sheet: self.field_sheet(locale),
-                passkey_name: self.passkey_sheet(locale),
-                finished: false,
-            })),
+            kind: Some(wire::view_state::Kind::LockerItem(Box::new(
+                wire::LockerItemState {
+                    wall: self.wall.view(locale),
+                    secure: open,
+                    item_id: self.route.item_id.clone(),
+                    content,
+                    confirm: self.confirm(locale),
+                    status,
+                    chrome: Some(wire::LockerItemChrome {
+                        title: item.map(|item| item.title.clone()).unwrap_or_default(),
+                        back_label: if self.route.parent.is_empty() {
+                            words::app_name(locale)
+                        } else {
+                            self.route.parent.clone()
+                        },
+                        edit_label: if item.is_some_and(|item| !item.trashed) {
+                            words::edit(locale)
+                        } else {
+                            String::new()
+                        },
+                        edit_route: item
+                            .filter(|item| !item.trashed)
+                            .map(|item| routes::edit(&item.item_id)),
+                        retry: words::retry(locale),
+                    }),
+                    memo: self.memo_sheet(locale),
+                    field_sheet: self.field_sheet(locale),
+                    passkey_name: self.passkey_sheet(locale),
+                    finished: false,
+                },
+            ))),
             ..wire::ViewState::default()
         }
     }
