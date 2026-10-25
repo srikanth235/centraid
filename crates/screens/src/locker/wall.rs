@@ -463,6 +463,8 @@ impl Wall {
                 String::new()
             },
             accessibility_label,
+            words_route: (unavailable && !self.keyed)
+                .then(crate::custody::routes::rekey_for_locker),
         })
     }
 }

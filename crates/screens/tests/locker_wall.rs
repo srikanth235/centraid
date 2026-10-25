@@ -68,6 +68,11 @@ fn a_core_without_keys_says_so_before_any_prompt() {
     assert_eq!(wall.phase, wire::locker_wall::Phase::Unavailable as i32);
     assert_eq!(wall.title, "Locker needs your recovery key");
     assert_eq!(wall.words_label, "Enter your recovery key");
+    // The control's page is Rust's to name: words.enter, a re-key from Locker.
+    assert_eq!(
+        wall.words_route,
+        Some(centraid_screens::custody::routes::rekey_for_locker())
+    );
 }
 
 #[test]

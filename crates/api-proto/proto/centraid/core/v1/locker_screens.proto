@@ -41,10 +41,12 @@ message LockerWall {
   string unlock_label = 4;
   // The sentence a FAILED or UNAVAILABLE phase says; empty otherwise.
   string notice = 5;
-  // UNAVAILABLE on a core with no keys: "Enter your 24 words". The shell opens
-  // its custody flow (words.enter for a re-key) when it is tapped; no event.
+  // UNAVAILABLE on a core with no keys: "Enter your 24 words". The shell pushes
+  // `words_route` (words.enter for a re-key) when it is tapped; no event.
   string words_label = 6;
   string accessibility_label = 7;
+  // Set with `words_label`: the page the words control opens.
+  optional Route words_route = 8;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
