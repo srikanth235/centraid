@@ -11,8 +11,10 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_core::Result;
 use centraid_core::screens::ScreenCtx;
+use centraid_core::screens::VaultRequest;
+use centraid_core::{Handle, Result};
+use prost::Message;
 
 use crate::strings::Locale;
 
@@ -61,6 +63,7 @@ pub(crate) enum TimerOp {
 pub(crate) struct Done {
     pub tables: BTreeSet<String>,
     pub timers: Vec<TimerOp>,
+    pub jobs: Vec<(String, centraid_core::screens::OffThreadWork)>,
 }
 
 /// A screen's door to the core, the catalog and the clock.
@@ -134,15 +137,43 @@ impl<'a> Ctx<'a> {
         self.core.locker(request)
     }
 
-    /// Any other core door that is not a read or a write of an app's rows
-    /// (`phrase`, `found`, `backup_status`, ...). One that waits on a gateway
-    /// is not called here: it is the shell's `CoreCall` effect, so this
-    /// runtime's lock is never held across a network wait.
+    /// A vault lifecycle door that is quick (the 24 words, founding a vault).
+    /// The type limits it to `vault.proto` and `phone.proto` requests.
     ///
     /// # Errors
     /// Whatever the door refuses with.
-    pub fn door(&self, request: &wire::Request) -> Result<wire::Response> {
-        self.core.door(request)
+    pub fn vault(&self, request: VaultRequest) -> Result<wire::Response> {
+        self.core.vault(request)
+    }
+
+    /// Run `job` on a worker thread with its own handle to the core, off the
+    /// runtime's lock, and answer this screen with
+    /// [`wire::OffThreadDone`] `{ tag, bytes }` when it is done, the way a timer
+    /// is delivered. A screen popped meanwhile never hears it.
+    pub fn off_thread(&self, tag: &str, job: impl FnOnce(&Handle) -> Vec<u8> + Send + 'static) {
+        self.done
+            .borrow_mut()
+            .jobs
+            .push((tag.to_owned(), Box::new(job)));
+    }
+
+    /// [`Self::off_thread`] over one slow vault door (a pass, a pairing, a
+    /// restore): the answer is a [`wire::VaultCalled`] — the core's encoded
+    /// `Response`, or its typed refusal.
+    pub fn vault_async(&self, tag: &str, request: VaultRequest) {
+        self.off_thread(tag, move |handle| {
+            let called = match handle.call(&request.into_request()) {
+                Ok(response) => wire::VaultCalled {
+                    response: response.encode_to_vec(),
+                    error: None,
+                },
+                Err(refusal) => wire::VaultCalled {
+                    response: Vec::new(),
+                    error: Some(refusal.to_wire()),
+                },
+            };
+            called.encode_to_vec()
+        });
     }
 
     /// The locale every string is made in.
