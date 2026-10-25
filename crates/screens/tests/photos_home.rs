@@ -51,6 +51,15 @@ fn rig() -> Rig {
     rig_at(Dest::Library, None)
 }
 
+/// A rig over a vault opened with its keys, as a phone's is: the core's backup
+/// doors (`fetch_original`, `releasable`) answer only a keyed vault.
+fn keyed_rig() -> Rig {
+    let mut d = Driver::keyed(photos::runtime());
+    d.start();
+    let id = d.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
+    Rig { d, id }
+}
+
 impl Rig {
     fn state(&self) -> &wire::PhotosHomeState {
         match &self.d.view(self.id).kind {
@@ -1225,7 +1234,7 @@ fn pump_until(r: &mut Rig, done: impl Fn(&Rig) -> bool) {
 
 #[test]
 fn a_tapped_download_asks_the_core_off_the_lock_and_says_why_it_did_not_land() {
-    let mut r = rig();
+    let mut r = keyed_rig();
     let a = r.photo("fetch a", Some("2026-07-01T10:00:00Z"), None);
     r.send(H::Refreshed(wire::PhotosRefreshed {}));
     assert!(!r.tile(&a).content_id.is_empty());
@@ -1286,7 +1295,7 @@ fn free_up_row(r: &Rig) -> Option<wire::PhotosFreeUpRow> {
 
 #[test]
 fn the_more_sheet_counts_off_the_lock_through_the_core_and_asks_the_shell_nothing() {
-    let mut r = rig();
+    let mut r = keyed_rig();
     environment(&mut r, true);
     let update = r.send(H::Band("more".to_owned()));
     assert!(update.effects.is_empty(), "{:?}", update.effects);

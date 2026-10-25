@@ -13,7 +13,7 @@
 //! | [`claim`] | what a sentence may claim about backup, and what a pass is told in words |
 //!
 //! **"Free up space" is Photos'**: the count, the verb and its sentences are
-//! `photos::keep_originals::FreeUpRow` over the `FreeUpSpace` effect, so this
+//! `photos::keep_originals::FreeUpRow` over `photos::free_up`, so this
 //! screen carries no second copy of them.
 //!
 //! **"Back up now" asks for a pass; it does not schedule one.** When a pass runs,

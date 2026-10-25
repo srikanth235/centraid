@@ -41,6 +41,7 @@ pub mod duplicate_review;
 pub mod duplicates;
 pub mod editor;
 pub mod fetch;
+pub mod free_up;
 pub mod home;
 pub mod keep_originals;
 pub mod lightbox;
@@ -58,6 +59,27 @@ pub const LIGHTBOX: &str = "photos.lightbox";
 pub const EDITOR: &str = "photos.editor";
 pub const DUPLICATES: &str = "photos.duplicates";
 pub const DUPLICATE_REVIEW: &str = "photos.duplicate_review";
+
+/// A copy of the originals `photo_ids` for the platform (`ExportOriginals`),
+/// with the words the shell names it by: the share sheet's title and the stems
+/// of the files it writes (`<stem> <n>.<ext>`).
+#[must_use]
+pub fn export_originals(
+    locale: crate::strings::Locale,
+    photo_ids: Vec<String>,
+    mode: wire::export_originals::Mode,
+    keep_location: bool,
+) -> wire::ExportOriginals {
+    use crate::strings::photos as words;
+    wire::ExportOriginals {
+        photo_ids,
+        mode: mode as i32,
+        keep_location,
+        chooser_title: words::photos_send_copy(locale),
+        photo_stem: words::photograph(locale),
+        video_stem: words::photos_cell_video(locale),
+    }
+}
 
 /// The tab Photos' home is the root of.
 pub const TAB: &str = "photos";

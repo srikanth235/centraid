@@ -305,9 +305,11 @@ message ScreenEvent {
     // ---- passes (1500-1599): passes_screens.proto ----
     // RUNTIME-ORIGINATED from `ScreenRequest.shell_fact`.
     ShellFact shell_fact = 1500;
-    // RUNTIME-ORIGINATED: another screen called `Ctx::signal`; only a screen
-    // that `hears` the topic is sent it.
+    // RUNTIME-ORIGINATED: another screen called `Ctx::post` with it (the pass
+    // conductor's wake, to the pass and vault services).
     Signalled signalled = 1501;
+    // RUNTIME-ORIGINATED: the camera-roll service's report to the pass service.
+    RollReported roll_reported = 1502;
     // ---- the vault shelf (1560-1599, lane H2): vault_screens.proto ----
     // RUNTIME-ORIGINATED from `ScreenRequest.memory_warning`.
     MemoryWarning memory_warning = 1560;
@@ -469,10 +471,8 @@ message Effect {
     // Tell the shell something happened it may act on (a Locker unlock).
     Announce announce = 17;
     // ---- photos (#1135, lane D) ----
-    FetchOriginal fetch_original = 21;
     ExportOriginals export_originals = 22;
     CameraRoll camera_roll = 23;
-    FreeUpSpace free_up_space = 24;
     RenderEdit render_edit = 25;
     ReadCamera read_camera = 26;
     LibraryDelete library_delete = 27;
@@ -500,7 +500,6 @@ message Effect {
     PassWindowDone pass_window_done = 1371;
     LongRun long_run = 1372;
     UploadsOp uploads = 1373;
-    StreamFromLibrary stream_from_library = 1374;
     // ---- the shell (1000-1999): chat (1600-1699) ----
     ModelDownload model_download = 1600;
     PickLibraryPhoto pick_library_photo = 1601;
@@ -520,6 +519,11 @@ message Effect {
     // `Navigation`), so no destination is ever named in Swift or Kotlin.
     SelectTab select_tab = 1001;
   }
+  // `FetchOriginal` and `FreeUpSpace`: Rust calls the core's `fetch_original`,
+  // `census`, `releasable` and `released` itself and asks the shell only
+  // `LibraryDelete`. `StreamFromLibrary`: the camera roll serves the bytes a
+  // pass asks for again.
+  reserved 21, 24, 1374;
 }
 
 message ClipboardSet {
@@ -651,35 +655,6 @@ message PhoneWatch {
 // `strings::photos_home`); the shell reports what happened as a closed enum.
 // ---------------------------------------------------------------------------
 
-// BRING ONE ORIGINAL BACK from a paired gateway by its content hash (#1080): the
-// shell sends the core's `fetch_original` request and answers
-// `OriginalFetched`. A shell with no core answers `EffectFailed`.
-message FetchOriginal {
-  // The bytes' hash as 64 hex characters (`PhotoTile.content_id`).
-  string content_hash = 1;
-}
-
-// How a fetch ended: the core's `FetchOutcome`, restated here so a screen's wire
-// does not import the backup plane's.
-enum OriginalFetchOutcome {
-  ORIGINAL_FETCH_OUTCOME_UNSPECIFIED = 0;
-  ORIGINAL_FETCH_OUTCOME_LANDED = 1;
-  ORIGINAL_FETCH_OUTCOME_ALREADY_HELD = 2;
-  ORIGINAL_FETCH_OUTCOME_UNREACHABLE = 3;
-  ORIGINAL_FETCH_OUTCOME_NOT_IN_BACKUP = 4;
-  ORIGINAL_FETCH_OUTCOME_UNTRUSTED = 5;
-  ORIGINAL_FETCH_OUTCOME_DAMAGED = 6;
-}
-
-message OriginalFetched {
-  OriginalFetchOutcome outcome = 1;
-  // The file in the app's own store when there is one; empty otherwise.
-  string path = 2;
-  // The hash that was asked for, echoed, so a screen with several fetches in
-  // flight knows which one this answers.
-  string content_hash = 3;
-}
-
 // HAND THE ORIGINALS OF A PICK TO THE PLATFORM: its share sheet (`MODE_SEND`) or
 // this device's own photo library (`MODE_SAVE`). The shell finds each original
 // on this phone, takes the location out of the file unless `keep_location`
@@ -689,6 +664,12 @@ message ExportOriginals {
   repeated string photo_ids = 1;
   Mode mode = 2;
   bool keep_location = 3;
+  // The share sheet's title ("Send a copy").
+  string chooser_title = 4;
+  // The stems the copied files are named by, `<stem> <n>.<ext>`: a
+  // photograph's ("Photo") and a video's ("Video").
+  string photo_stem = 5;
+  string video_stem = 6;
 
   enum Mode {
     MODE_UNSPECIFIED = 0;
@@ -736,37 +717,42 @@ message CameraRoll {
   }
 }
 
-// FREE UP SPACE (#1080 A19, A20): count what this phone holds that a gateway
-// also holds, or free it behind the system's own confirmation. Either way the
-// shell answers `FreeUpFacts`; the sentences are Rust's.
-message FreeUpSpace {
-  Action action = 1;
-
-  enum Action {
-    ACTION_UNSPECIFIED = 0;
-    ACTION_COUNT = 1;
-    ACTION_FREE = 2;
-  }
-}
-
 // DELETE ORIGINALS FROM THE PHONE'S PHOTO LIBRARY, behind the platform's own
-// confirmation (#1080 A19, A20).
+// confirmation (#1080 A19, A20): iOS `PHAssetChangeRequest.deleteAssets`,
+// Android `MediaStore.createDeleteRequest`. Rust chose the items: originals the
+// core's `releasable` named, each whole on a gateway. The shell deletes the
+// assets named by `os_ref` and answers `LibraryDeleted` with the hashes of the
+// items whose asset is gone; Rust tells the core (`released`). A dismissed
+// confirmation is `declined`; a refusal is the platform's own words in `error`.
 message LibraryDelete {
   repeated LibraryDeleteItem items = 1;
 }
 
 message LibraryDeleteItem {
+  // The library's identifier (`Releasable.os_ref`).
   string os_ref = 1;
+  // The bytes' hash as 64 hex characters, echoed in `LibraryDeleted`.
   string content_hash = 2;
+  // What the vault reads the bytes as, so a shell picks the library's
+  // collection to delete from.
   string media_type = 3;
+  // The bytes the core backed up (`Releasable.size`). A library item whose
+  // current size differs was edited in place since (Android), and is not
+  // deleted: the edit is not what the gateway holds.
+  uint64 size = 4;
 }
 
 message LibraryDeleted {
+  // The `content_hash` of every item whose asset the platform deleted.
   repeated string deleted_hashes = 1;
   bool declined = 2;
   string error = 3;
 }
 
+// WHAT RUST KNOWS ABOUT FREEING SPACE, as `photos::free_up` assembles it from
+// the core's census and `releasable` and the platform's last `LibraryDeleted`.
+// Never on the wire between a shell and Rust: it is the record the row's
+// sentences are made from (`photos::keep_originals`).
 message FreeUpFacts {
   // The platform can delete from its library behind the system's own
   // confirmation. False draws no row at all.
@@ -889,9 +875,7 @@ message EffectResult {
     BytesPicked bytes_picked = 9;
     OwnerChecked owner_checked = 10;
     // ---- photos (#1135, lane D) ----
-    OriginalFetched original_fetched = 11;
     OriginalsExported originals_exported = 12;
-    FreeUpFacts free_up_facts = 13;
     EditRendered edit_rendered = 14;
     CameraRead camera_read = 15;
     ContactsSnapshot contacts = 16;
@@ -921,9 +905,11 @@ message EffectResult {
     // ---- passes (1370-1399, lane H2) ----
     WindowsScheduled windows_scheduled = 1370;
     UploadsState uploads_state = 1371;
-    LibraryStreamed library_streamed = 1372;
     PassNoted pass_noted = 1373;
   }
+  // `OriginalFetched` and `FreeUpFacts`: the fetch and the count are Rust's.
+  // `LibraryStreamed`: the camera roll reports to the pass service itself.
+  reserved 11, 13, 1372;
 }
 
 message EffectDone {}

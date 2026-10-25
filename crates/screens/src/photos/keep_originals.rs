@@ -4,10 +4,10 @@
 //! this phone's keep list, and the More sheet's row, which says what freeing
 //! space would reclaim and does it.
 //!
-//! The doors themselves (the census, `releasable`, `released`, the system's
-//! delete confirmation) are the shell's: it counts and frees as a
-//! [`wire::FreeUpSpace`] effect and reports [`wire::FreeUpFacts`]. What a member
-//! reads about them is derived once, here.
+//! The doors themselves are the core's (the census, `releasable`, `released`,
+//! called by `photos::free_up`) and the platform's (the system's delete
+//! confirmation, the `LibraryDelete` effect); what they came to is a
+//! [`wire::FreeUpFacts`]. What a member reads about them is derived once, here.
 //!
 //! "Free up space" is a verb only where a gateway holds an original whole (the
 //! core's `releasable` door) and the phone can delete behind the system's own

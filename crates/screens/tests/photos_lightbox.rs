@@ -757,7 +757,9 @@ fn a_slideshow_needs_somewhere_to_go_wraps_at_the_end_and_leaving_keeps_the_phot
 #[test]
 fn a_tap_paints_the_original_fetching_before_the_bytes_move_and_a_failure_stops_it_with_a_sentence()
 {
-    let mut d = driver();
+    // KEYED, as a phone's vault is: the core's backup doors answer only a keyed vault.
+    let mut d = Driver::keyed(photos::runtime());
+    d.start();
     let id = photo(
         &d,
         Shot {
@@ -827,11 +829,7 @@ fn a_fetch_that_landed_re_reads_so_the_original_is_drawn() {
         "The original is on this phone."
     );
     send(&mut d, at, ev::Kind::FetchOriginal(ev::FetchTapped {}));
-    assert!(
-        !effects_of(&mut d)
-            .iter()
-            .any(|e| matches!(e, wire::effect::Kind::FetchOriginal(_)))
-    );
+    assert!(!photo_of(&view(&d, at)).fetching);
 }
 
 fn export_of(effects: Vec<wire::effect::Kind>) -> wire::ExportOriginals {

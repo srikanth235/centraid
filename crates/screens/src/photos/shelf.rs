@@ -454,7 +454,7 @@ impl Shelf {
 
     /// Hand the pick's originals to the platform: its share sheet or this
     /// device's photos. The shell finds the files and takes the place out.
-    fn copy(&mut self, mode: Mode, keep_location: bool) -> Vec<wire::Effect> {
+    fn copy(&mut self, mode: Mode, keep_location: bool, ctx: &Ctx) -> Vec<wire::Effect> {
         self.prompt = Prompt::None;
         self.notice.clear();
         let ids = self.selection.picked().to_vec();
@@ -463,11 +463,9 @@ impl Shelf {
         }
         self.copying = Some(mode);
         vec![wire::Effect {
-            kind: Some(wire::effect::Kind::ExportOriginals(wire::ExportOriginals {
-                photo_ids: ids,
-                mode: mode as i32,
-                keep_location,
-            })),
+            kind: Some(wire::effect::Kind::ExportOriginals(
+                super::export_originals(ctx.locale(), ids, mode, keep_location),
+            )),
         }]
     }
 
@@ -491,12 +489,12 @@ impl Shelf {
             }
             Some(E::PromptDismissed(_)) => self.prompt = Prompt::None,
             Some(E::PromptConfirmed(_)) => self.confirmed(ctx),
-            Some(E::LocationChosen(chosen)) => return self.copy(Mode::Send, chosen.exact),
+            Some(E::LocationChosen(chosen)) => return self.copy(Mode::Send, chosen.exact, ctx),
             Some(E::AlbumRenamed(renamed)) => self.rename_album(&renamed.title, ctx),
             Some(E::CoverChosen(_)) => self.choose_cover(ctx),
             Some(E::KeepToggled(toggled)) => self.toggle_keep(toggled.keep, ctx),
             Some(E::AlbumRestored(_)) => self.restore_album(ctx),
-            Some(E::Download(_)) => return self.copy(Mode::Save, true),
+            Some(E::Download(_)) => return self.copy(Mode::Save, true, ctx),
             None => {}
         }
         Vec::new()

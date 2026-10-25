@@ -47,7 +47,7 @@ use super::album_choice::{AlbumChoice, Outcome as ChoiceOutcome};
 use super::cells::{self, Link};
 use super::keep_originals::FreeUpRow;
 use super::selection::{Drain, Offer, Outcome, Selection, Verb, Wording};
-use super::{fetch, routes};
+use super::{fetch, free_up, routes};
 use crate::kit::civil;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, photos as words, photos_home as sentences};
@@ -80,6 +80,8 @@ struct Home {
     fetching: Vec<String>,
     roll: Roll,
     free_up: FreeUpRow,
+    /// What the platform was asked to delete, until it answers.
+    deleting: Vec<wire::Releasable>,
     status: Option<wire::StatusLine>,
 }
 
@@ -113,6 +115,7 @@ impl Home {
             fetching: Vec::new(),
             roll: Roll::default(),
             free_up: FreeUpRow::default(),
+            deleting: Vec::new(),
             status: None,
         }
     }
@@ -230,7 +233,7 @@ impl Home {
             H::Band(key) => match key.as_str() {
                 chrome::BAND_LIBRARY => self.move_to(Dest::Library, ctx),
                 chrome::BAND_COLLECTIONS => self.move_to(Dest::Collections, ctx),
-                chrome::BAND_MORE => return self.open_sheet(Sheet::More),
+                chrome::BAND_MORE => return self.open_sheet(Sheet::More, ctx),
                 _ => {}
             },
             H::Destination(destination) => {
@@ -309,7 +312,7 @@ impl Home {
                 effects.extend(Vec::new());
                 return effects;
             }
-            H::OriginalRequested(photo_id) => return self.request_original(&photo_id),
+            H::OriginalRequested(photo_id) => self.request_original(&photo_id, ctx),
             H::SearchOpened(_) => self.move_to(Dest::Search, ctx),
             H::SearchTerm(term) => {
                 self.sheet = Sheet::None;
@@ -323,7 +326,7 @@ impl Home {
                 match sheet {
                     Sheet::Unspecified => {}
                     Sheet::None => self.sheet = Sheet::None,
-                    other => return self.open_sheet(other),
+                    other => return self.open_sheet(other, ctx),
                 }
             }
             H::SectionToggled(section) => self.collections.toggle(&section),
@@ -384,7 +387,7 @@ impl Home {
             H::FreeUpTapped(_) => {
                 if let Some(row) = self.free_up.tapped() {
                     self.free_up = row;
-                    return vec![free_up(wire::free_up_space::Action::Free)];
+                    free_up::list(ctx);
                 }
             }
             H::CopyAsked(_) => {
@@ -397,11 +400,14 @@ impl Home {
                     self.sheet = Sheet::None;
                     self.status = None;
                     return vec![wire::Effect {
-                        kind: Some(wire::effect::Kind::ExportOriginals(wire::ExportOriginals {
-                            photo_ids: self.selection.picked().to_vec(),
-                            mode: wire::export_originals::Mode::Send as i32,
-                            keep_location: chosen.keep_location,
-                        })),
+                        kind: Some(wire::effect::Kind::ExportOriginals(
+                            super::export_originals(
+                                locale,
+                                self.selection.picked().to_vec(),
+                                wire::export_originals::Mode::Send,
+                                chosen.keep_location,
+                            ),
+                        )),
                     }];
                 }
             }
@@ -418,12 +424,13 @@ impl Home {
         self.grain = grain;
     }
 
-    fn open_sheet(&mut self, sheet: Sheet) -> Vec<wire::Effect> {
+    fn open_sheet(&mut self, sheet: Sheet, ctx: &Ctx) -> Vec<wire::Effect> {
         self.sheet = sheet;
         // THE ROW IS COUNTED WHEN THE SHEET OPENS: a count is only as fresh as
         // the last import, and a census lists the whole content store.
         if sheet == Sheet::More {
-            return vec![free_up(wire::free_up_space::Action::Count)];
+            let facts = free_up::count(ctx, free_up::Last::default());
+            self.counted(facts, ctx.locale());
         }
         Vec::new()
     }
@@ -444,7 +451,7 @@ impl Home {
         }
     }
 
-    fn request_original(&mut self, photo_id: &str) -> Vec<wire::Effect> {
+    fn request_original(&mut self, photo_id: &str, ctx: &Ctx) {
         let Some(hash) = self
             .library
             .cells
@@ -454,38 +461,68 @@ impl Home {
             .map(|cell| cell.content_id.clone())
             .filter(|hash| !hash.is_empty())
         else {
-            return Vec::new();
+            return;
         };
         if self.fetching.contains(&hash) {
-            return Vec::new();
+            return;
         }
         // The cell goes to FETCHING HERE and not when the answer comes back: the
         // round trip is the whole duration a member is waiting through.
-        self.fetching.push(hash.clone());
-        self.status = None;
-        vec![fetch::effect(&hash)]
+        if fetch::start(ctx, &hash) {
+            self.fetching.push(hash);
+            self.status = None;
+        }
+    }
+
+    /// A job came back: a fetch, or a step of freeing space.
+    fn on_job(&mut self, done: &wire::OffThreadDone, ctx: &Ctx) -> Vec<wire::Effect> {
+        let locale = ctx.locale();
+        if let Some(fetched) = fetch::answered(done) {
+            self.fetching.retain(|hash| *hash != fetched.content_hash);
+            match fetch::settle(locale, &fetched) {
+                // THE BYTES ARE ON THIS PHONE NOW: a read draws the original.
+                Ok(()) => self.read(ctx),
+                Err(sentence) => self.status = Some(refused(sentence)),
+            }
+            return Vec::new();
+        }
+        match free_up::answered(done) {
+            Some(free_up::Answered::Counted(facts)) => {
+                self.free_up = FreeUpRow::from_facts(locale, &facts);
+            }
+            Some(free_up::Answered::Listed(listed)) => match free_up::deletable(listed) {
+                Ok(items) => {
+                    let effect = free_up::delete_effect(&items);
+                    self.deleting = items;
+                    return vec![effect];
+                }
+                Err(last) => self.counted(free_up::count(ctx, last), locale),
+            },
+            None => {}
+        }
+        Vec::new()
+    }
+
+    /// A count that answered at once (a platform that cannot delete); one that
+    /// runs off the lock lands in [`Self::on_job`].
+    fn counted(&mut self, facts: Option<wire::FreeUpFacts>, locale: Locale) {
+        if let Some(facts) = facts {
+            self.free_up = FreeUpRow::from_facts(locale, &facts);
+        }
     }
 
     fn on_effect(&mut self, result: &wire::EffectResult, ctx: &Ctx) {
         use wire::effect_result::Outcome as O;
         let locale = ctx.locale();
         match &result.outcome {
-            Some(O::OriginalFetched(fetched)) => {
-                self.fetching.retain(|hash| *hash != fetched.content_hash);
-                match fetch::settle(locale, result) {
-                    // THE BYTES ARE ON THIS PHONE NOW: a read draws the original.
-                    Ok(()) => self.read(ctx),
-                    Err(sentence) => self.status = Some(refused(sentence)),
-                }
-            }
-            Some(O::Failed(_)) => {
-                if !self.fetching.is_empty() {
-                    self.fetching.clear();
-                    self.status = Some(refused(fetch::no_answer(locale)));
-                }
+            // THE PLATFORM DELETED WHAT IT WAS ASKED TO (or did not): the core is
+            // told exactly what went, and the row counted again saying so.
+            Some(outcome @ (O::LibraryDeleted(_) | O::Failed(_))) if !self.deleting.is_empty() => {
+                let items = std::mem::take(&mut self.deleting);
+                let (freed, last) = free_up::gone(&items, outcome);
+                self.counted(free_up::released(ctx, freed, last), locale);
             }
             Some(O::OriginalsExported(exported)) => self.exported(locale, exported),
-            Some(O::FreeUpFacts(facts)) => self.free_up = FreeUpRow::from_facts(locale, facts),
             Some(O::Keychain(value)) if value.found => {
                 if let Ok(rung) = String::from_utf8_lossy(&value.value).trim().parse::<u32>() {
                     self.rung = layout::clamp_rung(rung);
@@ -787,14 +824,6 @@ fn camera_roll(action: wire::camera_roll::Action) -> wire::Effect {
     }
 }
 
-fn free_up(action: wire::free_up_space::Action) -> wire::Effect {
-    wire::Effect {
-        kind: Some(wire::effect::Kind::FreeUpSpace(wire::FreeUpSpace {
-            action: action as i32,
-        })),
-    }
-}
-
 impl Screen for Home {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
@@ -813,6 +842,7 @@ impl Screen for Home {
             }
             Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => self.read(ctx),
             Some(E::EffectResult(result)) => self.on_effect(&result, ctx),
+            Some(E::OffThreadDone(done)) => return self.on_job(&done, ctx),
             Some(E::PhotosHome(home)) => {
                 if let Some(kind) = home.kind {
                     return self.on_event(kind, ctx);

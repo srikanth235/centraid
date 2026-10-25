@@ -21,9 +21,10 @@
 //! ## Platform work
 //!
 //! The original's file comes from `Ctx::content_urls`; the pixels, the share
-//! sheet and the library save are effects (`FetchOriginal`, `ExportOriginals`,
-//! `ReadCamera`), answered by `EffectResult`. A fetch that landed re-reads, so
-//! the next read serves the original; one that did not names why.
+//! sheet and the library save are effects (`ExportOriginals`, `ReadCamera`),
+//! answered by `EffectResult`; the original back from a gateway is the core's
+//! `fetch_original`, asked off the lock (`fetch::start`). A fetch that landed
+//! re-reads, so the next read serves the original; one that did not names why.
 //!
 //! Dropped with the Kotlin machine: the seat, the six read legs and their
 //! amendment merge (one `photos.photo` answer holds the photograph), the
@@ -142,7 +143,6 @@ struct Located {
 
 /// An effect asked and not yet answered.
 enum Pending {
-    Fetch,
     Export { save: bool, precision: Precision },
     Camera(String),
 }
@@ -520,7 +520,7 @@ impl Lightbox {
             }
             V::Download => {
                 self.sheet = Sheet::None;
-                return self.export(true, Precision::Exact);
+                return self.export(true, Precision::Exact, ctx);
             }
             V::Unspecified => {}
         }
@@ -558,24 +558,42 @@ impl Lightbox {
 
     // ---- platform work ----
 
-    fn fetch(&mut self) -> Vec<wire::Effect> {
+    fn fetch(&mut self, ctx: &Ctx) {
         let Some(detail) = self.detail() else {
-            return Vec::new();
+            return;
         };
         let hash = detail.cell.content_id.clone();
         if detail.cell.original_held || hash.is_empty() || self.fetching {
-            return Vec::new();
+            return;
         }
         // The state goes to fetching HERE and not when the answer comes back: the
         // round trip is the whole wait, and an affordance that stays un-pressed
         // until it finishes is one a member taps again.
-        self.fetching = true;
-        self.status = None;
-        self.pending.push_back(Pending::Fetch);
-        vec![fetch::effect(&hash)]
+        if fetch::start(ctx, &hash) {
+            self.fetching = true;
+            self.status = None;
+        }
     }
 
-    fn export(&mut self, save: bool, precision: Precision) -> Vec<wire::Effect> {
+    /// The core answered a fetch (`fetch::start`).
+    fn fetched(&mut self, done: &wire::OffThreadDone, ctx: &Ctx) -> Vec<wire::Effect> {
+        let Some(fetched) = fetch::answered(done) else {
+            return Vec::new();
+        };
+        if !self.fetching {
+            return Vec::new();
+        }
+        self.fetching = false;
+        match fetch::settle(ctx.locale(), &fetched) {
+            Ok(()) => self.reload(ctx),
+            Err(sentence) => {
+                self.refuse(sentence);
+                Vec::new()
+            }
+        }
+    }
+
+    fn export(&mut self, save: bool, precision: Precision, ctx: &Ctx) -> Vec<wire::Effect> {
         let Some(detail) = self.detail() else {
             return Vec::new();
         };
@@ -583,15 +601,16 @@ impl Lightbox {
         self.status = None;
         self.pending.push_back(Pending::Export { save, precision });
         vec![effect(wire::effect::Kind::ExportOriginals(
-            wire::ExportOriginals {
-                photo_ids: vec![id],
-                mode: if save {
+            super::export_originals(
+                ctx.locale(),
+                vec![id],
+                if save {
                     wire::export_originals::Mode::Save
                 } else {
                     wire::export_originals::Mode::Send
-                } as i32,
-                keep_location: precision == Precision::Exact,
-            },
+                },
+                precision == Precision::Exact,
+            ),
         ))]
     }
 
@@ -601,7 +620,6 @@ impl Lightbox {
         // Results are matched by what they are; a bare failure belongs to the
         // oldest thing asked.
         let wanted = |pending: &Pending| match &result.outcome {
-            Some(O::OriginalFetched(_)) => matches!(pending, Pending::Fetch),
             Some(O::OriginalsExported(_)) => matches!(pending, Pending::Export { .. }),
             Some(O::CameraRead(_)) => matches!(pending, Pending::Camera(_)),
             _ => true,
@@ -610,7 +628,7 @@ impl Lightbox {
         // fetch or an export before the camera read nobody asked for.
         let bare = !matches!(
             &result.outcome,
-            Some(O::OriginalFetched(_) | O::OriginalsExported(_) | O::CameraRead(_))
+            Some(O::OriginalsExported(_) | O::CameraRead(_))
         );
         let at = if bare {
             self.pending
@@ -627,13 +645,6 @@ impl Lightbox {
             return Vec::new();
         };
         match pending {
-            Pending::Fetch => {
-                self.fetching = false;
-                match fetch::settle(locale, result) {
-                    Ok(()) => return self.reload(ctx),
-                    Err(sentence) => self.refuse(sentence),
-                }
-            }
             Pending::Export { save, precision } => {
                 let sentence = export_sentence(locale, result, save, precision);
                 match sentence {
@@ -1049,6 +1060,7 @@ impl Screen for Lightbox {
                 return self.reload(ctx);
             }
             Some(E::EffectResult(result)) => return self.effect_result(&result, ctx),
+            Some(E::OffThreadDone(done)) => return self.fetched(&done, ctx),
             Some(E::TimerFired(fired)) if fired.timer == SLIDESHOW_TIMER => {
                 // IT WRAPS AT THE END OF THE SHELF: a slideshow is a loop until Leave.
                 if self.slideshow
@@ -1103,9 +1115,10 @@ impl Screen for Lightbox {
                             } else {
                                 Precision::None
                             },
+                            ctx,
                         );
                     }
-                    K::FetchOriginal(_) => return self.fetch(),
+                    K::FetchOriginal(_) => self.fetch(ctx),
                     K::Caption(typed) => {
                         // Trimmed, and a caption identical to the one on screen is
                         // not a write: a field that lost focus unchanged would
