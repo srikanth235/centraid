@@ -57,8 +57,9 @@ internal object AppSession {
         /**
          * The app came forward or left (the activity's start and stop). The runtime tells every open
          * screen and service (the Locker relocks on leaving; the pass service decides whether coming
-         * back is worth a pass); coming forward also reports the locale and zone again, walks the
-         * camera roll, asks the followed folders and tells every phone-store watch.
+         * back is worth a pass, the imports whether to walk and follow); coming forward also reports
+         * the locale and zone again and tells every phone-store watch, and MediaStore is watched
+         * while the app is in view.
          */
         suspend fun foreground(on: Boolean) {
             if (on) AppSession.environment(screens)
@@ -155,7 +156,6 @@ internal object AppSession {
         val effects = ShellEffects(context, core, screens, scope)
         val imports = ImportsRelay(context, screens, scope)
         val open = Open(core, screens, scope, effects, imports)
-        effects.imports = imports
         // THE PERFORMER FIRST: the roots' first effects (the secrets the shelf reads at launch)
         // must find it collecting.
         effects.start()

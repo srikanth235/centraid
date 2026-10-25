@@ -92,9 +92,12 @@ import dev.centraid.android.screens.photos.PhotosLightboxScreen
 import dev.centraid.android.screens.photos.PhotosShelfFamilyScreen
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.core.Screens
-import centraid.core.v1.ImportsCameraRollEvent
 import dev.centraid.android.backup.MediaStoreDeleter
+import androidx.compose.runtime.CompositionLocalProvider
 import dev.centraid.android.kit.HostScreenEffects
+import dev.centraid.android.kit.KitWords
+import dev.centraid.android.kit.LocalShellLine
+import dev.centraid.android.kit.ShellBanner
 import dev.centraid.android.session.AppSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -126,10 +129,7 @@ internal class RustRoot(
     /** The runtime, or null before the session opened. Read by composition. */
     private var screens: Screens? by mutableStateOf(null)
 
-    private val docsFiles = DocsFiles(
-        core = { session?.core },
-        relay = { event -> session?.imports?.files(event) },
-    )
+    private val docsFiles = DocsFiles(core = { session?.core })
 
     /** The app whose page the member last had open: the chat's scope while it has nothing to lose. */
     private var lastApp: String = ""
@@ -220,9 +220,42 @@ internal class RustRoot(
 
     // -- the root ---------------------------------------------------------------
 
-    /** THE TOP OF RUST'S STACK, and the platform work around it. */
+    /**
+     * THE TOP OF RUST'S STACK, and the platform work around it. A made vault's imports say what came
+     * in as the one status line above the band (`imports.made`'s view), until the member closes it or
+     * takes its action.
+     */
     @Composable
     fun Content(phoneDark: Boolean) {
+        val runtime = screens
+        val views = runtime?.views?.collectAsState()?.value.orEmpty()
+        val navigation = runtime?.navigation?.collectAsState()?.value
+        val madeRoot = navigation?.tabs?.firstOrNull { it.tab == MADE_TAB }?.entries?.firstOrNull()?.instance
+        val made = madeRoot?.let { views[it]?.imports_made }
+        var closed by remember { mutableStateOf("") }
+        val sentence = made?.summary.orEmpty().takeIf { it != closed }.orEmpty()
+        val line: (@Composable () -> Unit)? = if (sentence.isEmpty()) {
+            null
+        } else {
+            {
+                ShellBanner(
+                    sentence = sentence,
+                    actionLabel = made?.open_label.orEmpty(),
+                    closeLabel = if (made?.running == true) "" else KitWords.DISMISS,
+                    tag = "imports-made",
+                    onAct = {
+                        closed = sentence
+                        made?.open_route?.let(::push)
+                    },
+                    onClose = { closed = sentence },
+                )
+            }
+        }
+        CompositionLocalProvider(LocalShellLine provides line) { Body(phoneDark) }
+    }
+
+    @Composable
+    private fun Body(phoneDark: Boolean) {
         val runtime = screens
         if (runtime == null) {
             Box(Modifier.fillMaxSize().background(centraidColor("bg")))
@@ -603,7 +636,7 @@ internal class RustRoot(
                 onBack = back,
             )
             drive != null -> {
-                // WHAT THE OS LETS DOCS OFFER, and the folders followed, reported as state.
+                // WHAT THE OS LETS DOCS OFFER, reported as state.
                 DocsReports(instance, send)
                 DocsDriveScreen(
                     state = drive,
@@ -693,13 +726,6 @@ internal class RustRoot(
                 onEvent = { send(ScreenEvent(photos_home = it)) },
                 onOpen = open,
                 onHome = toHome,
-                onResume = {
-                    session?.imports?.roll(
-                        ImportsCameraRollEvent(
-                            requested = ImportsCameraRollEvent.Requested(action = ImportsCameraRollEvent.Requested.Action.ACTION_READ_PERMISSION),
-                        ),
-                    )
-                },
             )
             photosLightbox != null -> {
                 // A deleted-for-good photograph leaves its own room.
@@ -778,7 +804,7 @@ internal class RustRoot(
     private fun navigationRootIs(runtime: Screens, instance: Long): Boolean =
         runtime.navigation.value?.tabs?.firstOrNull { it.tab == CHAT_TAB }?.entries?.firstOrNull()?.instance == instance
 
-    /** The permission and the followed list Docs' drive shows, reported once per page. */
+    /** What the OS lets Docs' Add sheet offer (the files picker, the camera), reported once per page. */
     @Composable
     private fun DocsReports(instance: Long, send: (ScreenEvent) -> Unit) {
         val context = LocalContext.current
@@ -802,6 +828,9 @@ internal class RustRoot(
     private companion object {
         /** Rust's one tab for every page this root draws: Home is its root and an app opens on it. */
         const val TAB = "home"
+
+        /** The made vault's imports: its view is the one status line. */
+        const val MADE_TAB = "imports-made"
 
         /** The hidden tabs the phone imports' services are the roots of: never drawn, never selected here. */
         const val HIDDEN = "imports-"

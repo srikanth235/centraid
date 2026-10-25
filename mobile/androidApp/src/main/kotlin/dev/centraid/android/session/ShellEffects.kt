@@ -23,7 +23,6 @@ import centraid.core.v1.EffectRequest
 import centraid.core.v1.EffectResult
 import centraid.core.v1.HomeStatus
 import centraid.core.v1.ImportSource
-import centraid.core.v1.ImportsCameraRollEvent
 import centraid.core.v1.KeychainOp
 import centraid.core.v1.KeychainValue
 import centraid.core.v1.LibraryPermissionRead
@@ -92,9 +91,6 @@ internal class ShellEffects(
     /** The activity's half, while one is up. */
     @Volatile var ui: UiHost? = null
 
-    /** The phone imports' relays; set once by the session. */
-    lateinit var imports: ImportsRelay
-
     val watchers = PhoneWatchers(context)
 
     private val queues = ConcurrentHashMap<Long, Channel<EffectRequest>>()
@@ -153,7 +149,7 @@ internal class ShellEffects(
             // Android moves a pass's parts inside the pass; only iOS's session carries them suspended.
             effect.uploads != null -> failed("the OS carries no uploads on this platform")
             // ---- the phone imports (`crates/screens/src/imports`) ------------------------------
-            effect.camera_roll != null -> cameraRoll(request, effect.camera_roll!!)
+            effect.camera_roll != null -> cameraRoll(effect.camera_roll!!)
             effect.library_permission != null -> {
                 if (effect.library_permission!!.ask) ui?.askMedia()
                 EffectResult(library_permission_read = LibraryPermissionRead(permission = LibraryRoll.permission(context)))
@@ -263,42 +259,25 @@ internal class ShellEffects(
     }
 
     /**
-     * THE CAMERA ROLL'S REMEDIES (D-1025-S7-75), which one and its words being Rust's. Photos' ask
-     * and import go to the camera-roll service as `Requested`, which reads the grant and prompts
-     * itself; the made vault's ask shows the prompt here and then lets the roll walk; settings is
-     * this app's own page there.
+     * THE PLATFORM'S OWN PHOTO PAGES (D-1025-S7-75): this app's page in Settings, and Android 14's
+     * selected-photos grant, edited by asking again. Which one, and its words, are Rust's; the prompt
+     * and a walk are the camera roll's own (`LibraryPermission`).
      */
-    private suspend fun cameraRoll(request: EffectRequest, roll: CameraRoll): EffectResult {
-        val requested = { action: ImportsCameraRollEvent.Requested.Action ->
-            imports.roll(ImportsCameraRollEvent(requested = ImportsCameraRollEvent.Requested(action = action)))
+    private suspend fun cameraRoll(roll: CameraRoll): EffectResult = when (roll.action) {
+        CameraRoll.Action.ACTION_OPEN_SETTINGS -> start(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+        )
+        CameraRoll.Action.ACTION_MANAGE_SELECTION -> {
+            ui?.askMedia()
+            EffectResult(done = EffectDone())
         }
-        when (roll.action) {
-            CameraRoll.Action.ACTION_ASK_PERMISSION, CameraRoll.Action.ACTION_MANAGE_SELECTION ->
-                if (imports.isMade(request.instance)) {
-                    ui?.askMedia()
-                    imports.roll(ImportsCameraRollEvent(walk = ImportsCameraRollEvent.Walk()))
-                } else {
-                    requested(ImportsCameraRollEvent.Requested.Action.ACTION_ASK_PERMISSION)
-                }
-            CameraRoll.Action.ACTION_IMPORT_NOW -> requested(ImportsCameraRollEvent.Requested.Action.ACTION_IMPORT_NOW)
-            CameraRoll.Action.ACTION_OPEN_SETTINGS -> return start(
-                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
-            )
-            CameraRoll.Action.ACTION_UNSPECIFIED -> return failed("no camera roll action")
-        }
-        return EffectResult(done = EffectDone())
+        else -> failed("no camera roll action")
     }
 
-    /** The link as the platform gives it now, and the member's rule as the device store holds it. */
+    /** The link as the platform gives it now; the member's rule is Rust's to read. */
     private fun linkReading(): LinkReading {
         val link = LinkFacts.read(context)
-        val rule = when (SecretStores.read(context, RULE_KEY)) {
-            "wifi-and-cellular-photos" -> LinkReading.Rule.RULE_WIFI_AND_CELLULAR_PHOTOS
-            "manual" -> LinkReading.Rule.RULE_MANUAL
-            "wifi-only" -> LinkReading.Rule.RULE_WIFI_ONLY
-            else -> LinkReading.Rule.RULE_UNSPECIFIED
-        }
-        return LinkReading(online = link.online, metered = link.metered, platform_refused = !link.metered_known, rule = rule)
+        return LinkReading(online = link.online, metered = link.metered, platform_refused = !link.metered_known)
     }
 
     /** THE KEYCHAIN IS THE DEVICE STORE. A value is UTF-8 text; an empty set, like a delete, removes it. */
@@ -345,8 +324,4 @@ internal class ShellEffects(
 
     private fun failed(reason: String) = EffectResult(failed = EffectFailed(reason = reason))
 
-    private companion object {
-        /** The member's transfer rule in the device store (`passes::rule::KEY`). */
-        const val RULE_KEY = "transfer-rule"
-    }
 }

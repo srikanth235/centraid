@@ -46,8 +46,7 @@ import androidx.compose.runtime.remember
  * on a destination.
  *
  * Every tap is a [PhotosHomeEvent]; a row that opens a page carries the [Route]
- * Rust built, handed to [onOpen]. The camera roll is the shell's: [onResume] asks
- * it to read the grant again when the member comes back from Settings.
+ * Rust built, handed to [onOpen].
  */
 @Composable
 internal fun PhotosHomeScreen(
@@ -55,7 +54,6 @@ internal fun PhotosHomeScreen(
     onEvent: (PhotosHomeEvent) -> Unit,
     onOpen: (Route) -> Unit,
     onHome: () -> Unit,
-    onResume: () -> Unit,
 ) {
     val chrome = state.chrome ?: PhotosHomeChrome()
     val selection = state.selection ?: PhotosSelection()
@@ -150,7 +148,7 @@ internal fun PhotosHomeScreen(
                     PhotosSearchScreen(searchState, onEvent, onOpen)
                 }
                 collectionsState != null -> PhotosCollectionsScreen(state, collectionsState, onEvent, onOpen)
-                library != null -> PhotosLibraryBody(state, library, onEvent, onOpen, onResume)
+                library != null -> PhotosLibraryBody(state, library, onEvent, onOpen)
                 else -> Box(Modifier.fillMaxWidth())
             }
         }

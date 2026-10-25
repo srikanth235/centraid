@@ -103,7 +103,6 @@ internal fun PhotosLibraryBody(
     library: PhotosLibrary,
     onEvent: (PhotosHomeEvent) -> Unit,
     onOpen: (Route) -> Unit,
-    onResume: () -> Unit,
 ) {
     val selection = state.selection ?: PhotosSelection()
     val selected = remember(selection.selected_ids) { selection.selected_ids.toSet() }
@@ -135,14 +134,9 @@ internal fun PhotosLibraryBody(
             val top: @Composable () -> Unit = {
                 val banner = state.import_banner
                 if (banner != null) {
+                    // Coming back from Settings is the app coming forward: the camera roll reads
+                    // the grant again on `Lifecycle`.
                     BackupBanner(banner, onEvent)
-                    // WHAT BROUGHT THE MEMBER BACK FROM SETTINGS: the grant is read again.
-                    if (banner.remedy != PhotosHomeImportBanner.Remedy.REMEDY_UNSPECIFIED) {
-                        LifecycleResumeEffect(banner.remedy) {
-                            onResume()
-                            onPauseOrDispose {}
-                        }
-                    }
                 }
             }
             val loading = library.loading

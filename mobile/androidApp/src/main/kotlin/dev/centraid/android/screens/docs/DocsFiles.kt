@@ -25,7 +25,6 @@ import centraid.core.v1.FilePicked
 import centraid.core.v1.FileProgress
 import centraid.core.v1.FolderFollowed
 import centraid.core.v1.PickFile
-import centraid.core.v1.ImportsFilesEvent
 import dev.centraid.android.session.Stage
 import dev.centraid.core.CentraidCore
 import kotlinx.coroutines.CoroutineScope
@@ -36,13 +35,10 @@ import java.io.File
 
 /**
  * WHAT DOCS' EFFECTS NEED FROM THE SESSION (#1135): the core a picked file streams into (the vault
- * in front, through the front's stage door) and the follow service a picked or dropped folder is
- * relayed to (`imports.files`: the vault's half of following is Rust's).
+ * in front, through the front's stage door). The vault's half of following a folder is Rust's
+ * (the drive tells `imports.files` itself).
  */
-internal class DocsFiles(
-    val core: () -> CentraidCore?,
-    val relay: (ImportsFilesEvent) -> Unit,
-)
+internal class DocsFiles(val core: () -> CentraidCore?)
 
 /**
  * THE PLATFORM'S HALF OF `PickFile`, `FollowFolder` AND `StopFollowing` (#1047 R-1047-Q4,
@@ -200,28 +196,23 @@ internal class DocsPickers(
 
     /**
      * The folder picker returned [tree]: the shell mints the origin, keeps the grant under it and
-     * answers `FolderFollowed`; the vault's half is `imports.files`', which hears the same answer. A
-     * pick of a folder already followed is a pass and no more.
+     * answers `FolderFollowed`; the vault's half is Rust's. A folder already followed is no second
+     * origin.
      */
     fun treePicked(tree: Uri?) {
         if (tree == null) return done()
-        if (FolderAccess.following(context, tree) != null) {
-            files.relay(ImportsFilesEvent(requested = ImportsFilesEvent.Requested()))
-            return done()
-        }
+        if (FolderAccess.following(context, tree) != null) return done()
         val origin = "folder:" + java.util.UUID.randomUUID().toString()
         if (!FolderAccess.remember(context, origin, tree)) return fail("the folder could not be followed")
         val name = FolderAccess.name(context, tree).ifEmpty { tree.lastPathSegment.orEmpty() }
         answer?.invoke(EffectResult(folder_followed = FolderFollowed(origin = origin, name = name)))
         answer = null
-        files.relay(ImportsFilesEvent(folder_followed = ImportsFilesEvent.FolderFollowed(origin = origin, name = name)))
     }
 
     /** "Stop following": the grant goes, and the vault forgets the links (`imports.files`; every document stays). */
     fun stop(origin: String, answer: (EffectResult) -> Unit) {
         FolderAccess.forget(context, origin)
         answer(EffectResult(done = EffectDone()))
-        files.relay(ImportsFilesEvent(folder_stopped = ImportsFilesEvent.FolderStopped(origin = origin)))
     }
 
     private fun done() {
