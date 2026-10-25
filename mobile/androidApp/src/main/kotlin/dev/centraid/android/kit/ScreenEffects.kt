@@ -45,8 +45,11 @@ import centraid.core.v1.ImportSource
 import centraid.core.v1.KeychainOp
 import centraid.core.v1.KeychainValue
 import centraid.core.v1.OriginalFetched
+import centraid.core.v1.PassNoted
 import centraid.core.v1.PhoneChanged
 import centraid.core.v1.Route
+import dev.centraid.android.backup.BackupNow
+import dev.centraid.android.backup.PassWork
 import dev.centraid.android.screens.PhotoHandOff
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
 import android.provider.OpenableColumns
@@ -228,6 +231,23 @@ private suspend fun perform(
             start(context, Intent(Intent.ACTION_VIEW, Uri.parse(effect.open_url!!.url)), done)
         effect.keychain != null -> keychain(effect.keychain!!)
         // A DOOR THAT WAITS ON A GATEWAY (a pass, a pairing, a restore) runs here, off Rust's lock.
+        // THE PASS SCHEDULER (#1135, `passes`): Rust decides which windows exist, when a pass ran
+        // and what is carried; this performs and answers.
+        effect.schedule_windows != null ->
+            EffectResult(windows_scheduled = PassWork.schedule(context, effect.schedule_windows!!.windows))
+        effect.pass_window_done != null -> {
+            PassWork.windowDone(effect.pass_window_done!!.window, effect.pass_window_done!!.drained)
+            EffectResult(pass_noted = PassNoted())
+        }
+        effect.long_run != null -> {
+            // "Back up now": the user-initiated job (or the `dataSync` service) that keeps the process alive.
+            if (effect.long_run!!.start) BackupNow.start(context) else BackupNow.stop(context)
+            EffectResult(pass_noted = PassNoted())
+        }
+        // Android moves a pass's parts in the pass itself; only iOS's session carries them suspended.
+        effect.uploads != null -> failed("the OS carries no uploads on this platform")
+        // The roll's second stream is the camera roll's (lane I).
+        effect.stream_from_library != null -> failed("not performed by this shell")
         effect.core_call != null -> coreCall(core, effect.core_call!!)
         // THE ORIGINALS OF A PICK, to the share sheet or this phone's photos.
         effect.export_originals != null ->
@@ -498,6 +518,9 @@ private suspend fun coreCall(core: CentraidCore, call: CoreCall): EffectResult {
         }
     }
 }
+
+/** [coreCall] for the headless pass host, which performs no other effect that needs the UI. */
+internal suspend fun coreCallFor(core: CentraidCore, call: CoreCall): EffectResult = coreCall(core, call)
 
 /** The platform hands one effect may need, so [perform] keeps one parameter for them. */
 private class Doors(

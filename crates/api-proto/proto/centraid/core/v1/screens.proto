@@ -64,6 +64,11 @@ message ScreenRequest {
     // The app went to the background or came back. The runtime tells every open
     // screen (`AppLifecycle`): a Locker relocks the instant it leaves.
     AppLifecycle lifecycle = 5;
+    // A fact the shell reports about the phone: the link, a background window
+    // the OS granted, the vaults held, a finished import or restore, an upload
+    // the OS finished (`passes_screens.proto`). The runtime hands it to every
+    // open screen and service as `ScreenEvent.shell_fact`.
+    ShellFact shell_fact = 1500;
   }
 }
 
@@ -246,6 +251,12 @@ message ScreenEvent {
     PeopleEditorEvent people_editor = 702;
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
+    // ---- passes (1500-1599): passes_screens.proto ----
+    // RUNTIME-ORIGINATED from `ScreenRequest.shell_fact`.
+    ShellFact shell_fact = 1500;
+    // RUNTIME-ORIGINATED: another screen called `Ctx::signal`; only a screen
+    // that `hears` the topic is sent it.
+    Signalled signalled = 1501;
   }
 }
 
@@ -387,6 +398,12 @@ message Effect {
     SecretBatch secrets = 1300;
     CoreCall core_call = 1301;
     SyncedSecretsProbe synced_probe = 1302;
+    // ---- passes (1370-1399, lane H2): passes_screens.proto ----
+    ScheduleWindows schedule_windows = 1370;
+    PassWindowDone pass_window_done = 1371;
+    LongRun long_run = 1372;
+    UploadsOp uploads = 1373;
+    StreamFromLibrary stream_from_library = 1374;
   }
 }
 
@@ -753,6 +770,11 @@ message EffectResult {
     SecretBatched secrets = 1300;
     CoreCalled core_called = 1301;
     SyncedSecretsStatus synced_status = 1302;
+    // ---- passes (1370-1399, lane H2) ----
+    WindowsScheduled windows_scheduled = 1370;
+    UploadsState uploads_state = 1371;
+    LibraryStreamed library_streamed = 1372;
+    PassNoted pass_noted = 1373;
   }
 }
 

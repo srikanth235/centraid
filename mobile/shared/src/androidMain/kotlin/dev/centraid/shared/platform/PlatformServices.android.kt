@@ -75,7 +75,7 @@ public object AndroidPlatform {
 public class AndroidPlatformServices(context: Context) : PlatformServices {
     override val secureStore: SecureStore = AndroidSecureStore(context)
     override val syncedSecrets: SyncedSecrets = AndroidSyncedSecrets(context)
-    override val backgroundTasks: BackgroundTasks = AndroidBackgroundTasks(context, secureStore)
+    override val backgroundTasks: BackgroundTasks = AndroidBackgroundTasks()
     override val networkStatus: NetworkStatus = AndroidNetworkStatus(context)
     override val powerAndLink: PowerAndLink = AndroidPowerAndLink(context)
     override val mediaLibrary: MediaLibrary = AndroidMediaLibrary(context)

@@ -200,8 +200,8 @@ public class MainActivity : FragmentActivity() {
     // `HomeSession.foreground()` and `leftTheForeground()`: catch every
     // holding up and hold the foreground one's log stream open while the member
     // is looking, close it when they leave. That shape left with the gateway;
-    // what arriving and leaving do now is the backup's (#1080): `onResume`
-    // runs a pass and `onStop` a pass with a snapshot, below.
+    // what arriving and leaving do now is the backup's (#1080), and it is
+    // Rust's: the lifecycle is reported to the runtime (`AgendaRoutes`).
 
     /**
      * THE PHONE IS FOLLOWED WHILE THE APP IS IN VIEW (#1127): see [AndroidPhoneFollow]. Health's
@@ -214,47 +214,14 @@ public class MainActivity : FragmentActivity() {
     }
 
     /**
-     * THE FOREGROUND TRIGGER (#1029 W18-6).
-     *
-     * `onResume` came back, and it is not what it was. It used to run
-     * `HomeSession.foreground()` — catch every holding up and hold the
-     * foreground one's log stream open — and that whole shape left with the
-     * gateway. What it does now is the amendment's foreground half: the phone
-     * drains **while the member is in the app**, not only in the windows
-     * WorkManager grants.
-     *
-     * Fire-and-forget on the IO dispatcher. `ShelfDrain` refuses a second pass
-     * while one runs, so a rotation or a permission dialog costs nothing.
-     */
-    override fun onResume() {
-        super.onResume()
-        val open = session ?: return
-        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { open.drain.onBecameActive() }
-    }
-
-    /**
-     * THE APP LEFT THE SCREEN (#1080): a pass that takes a snapshot now, as
-     * iOS's `wentToBackground` runs `enteredBackground`, so what the member
-     * just wrote is backed up rather than waiting for the hour after the last
-     * one. Without it, nothing on Android ever asked for that snapshot.
-     *
-     * A ROTATION IS NOT LEAVING: the activity stops and starts again with the
-     * member still looking, so a configuration change runs nothing.
-     *
-     * Android may freeze or end the process while this pass runs, and the
-     * laptop may be asleep. Neither loses the snapshot: the core keeps the
-     * request in the ledger the moment the pass begins, and the next pass
-     * that reaches a gateway — a WorkManager window — takes it.
+     * THE FOREGROUND AND BACKGROUND PASSES ARE RUST'S: `AgendaRoutes` reports the lifecycle to
+     * the runtime, and the pass scheduler decides that coming back or leaving is worth a pass
+     * (`crates/screens/src/passes`). The activity runs none.
      */
     override fun onStop() {
         super.onStop()
         // EVERY STOP, a rotation's too: this activity's observers must not outlive it.
         phoneFollow.stop()
-        if (isChangingConfigurations) return
-        val open = session ?: return
-        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-            open.drain.enteredBackground(BACKGROUND_PASS_MS)
-        }
     }
 
     override fun onTrimMemory(level: Int) {
@@ -378,12 +345,6 @@ public class MainActivity : FragmentActivity() {
                         phoneFollow.attach(opened)
                         opened.installLibraryDeleter(libraryDeleter)
                         value = opened
-                        // AND THE FIRST FOREGROUND PASS, which `onResume` would
-                        // otherwise miss: the activity resumed before the session
-                        // existed. LAUNCHED, NOT AWAITED (#1080): a pass now takes
-                        // a snapshot and seals what is new, and Home does not wait
-                        // for a backup to draw.
-                        launch { opened.drain.onBecameActive() }
                         kotlinx.coroutines.awaitCancellation()
                     } finally {
                         session = null
@@ -689,12 +650,5 @@ public class MainActivity : FragmentActivity() {
     private companion object {
         /** The launch extra a debug build reads its demo seed from. See `DevSeed`. */
         const val DEV_SEED_EXTRA: String = "dev.centraid.DEV_SEED"
-
-        /**
-         * The leaving pass's deadline, as iOS's `backgroundPassSeconds`: a
-         * stopped app is cached and soon frozen, so the pass finishes its
-         * part well inside that rather than counting on the process.
-         */
-        const val BACKGROUND_PASS_MS: Long = 20_000L
     }
 }

@@ -1,6 +1,209 @@
-// PASSES (#1135, lane H2): this file's messages are the lane worker's. See
-// `plumbing_screens.proto` for the arm ranges.
+// PASSES (#1135, lane H2): when a backup pass runs, under which rule and on
+// which link, and what the shell is asked to schedule. The pass itself is the
+// core's `drain` (`phone.proto`); everything that decides WHEN is Rust
+// (`crates/screens/src/passes`). Arms: ScreenEvent 1500-1501, effects and
+// results 1370-1374.
 
 syntax = "proto3";
 
 package centraid.core.v1;
+
+import "centraid/core/v1/phone.proto";
+
+// ---------------------------------------------------------------------------
+// Facts the shell reports (ScreenRequest 1500 / ScreenEvent 1500)
+// ---------------------------------------------------------------------------
+
+message ShellFact {
+  oneof fact {
+    LinkChanged link = 1;
+    WindowGranted window = 2;
+    WindowExpired expired = 3;
+    VaultsHeld held = 4;
+    PassAsked asked = 5;
+    UploadSettled settled = 6;
+    UploadsDrained drained = 7;
+  }
+}
+
+// What the platform said about the radio and the charger, at launch and on every
+// change (NWPathMonitor, ConnectivityManager's callback, the battery
+// broadcast). **A reading the platform would not give is `*_known: false`, and
+// Rust reads it as the expensive answer** (metered, not charging); a shell
+// never guesses on its own.
+message LinkChanged {
+  // A path that is satisfied. Only an online link is worth a pass.
+  bool online = 1;
+  bool metered = 2;
+  bool charging = 3;
+  bool metered_known = 4;
+  bool charging_known = 5;
+}
+
+// The OS granted a background window: a WorkManager worker started, or a
+// BGTask launched. `window` is the `Window.name` that was scheduled; the pass
+// runs inside `deadline_ms` and Rust answers with `PassWindowDone` when it
+// ends.
+message WindowGranted {
+  string window = 1;
+  // The budget of this window, in milliseconds from now.
+  uint64 deadline_ms = 2;
+}
+
+// The OS took a window back (BGTask's expiration handler, WorkManager's stop).
+// The pass stops at its next part boundary on its own deadline; this only lets
+// Rust forget the window.
+message WindowExpired {
+  string window = 1;
+}
+
+// The vaults this phone holds, foreground first, sent whenever the roster
+// moves. A vault that rests (no open core) or is frozen (moved to another
+// phone) is held but not drainable.
+message VaultsHeld {
+  repeated Held vaults = 1;
+}
+
+message Held {
+  string vault_id = 1;
+  bool drainable = 2;
+}
+
+// Something other than a timer or a table asked for a pass.
+message PassAsked {
+  enum Ask {
+    ASK_UNSPECIFIED = 0;
+    // The session opened: the first pass of a launch.
+    ASK_SESSION_OPENED = 1;
+    // A camera-roll pass imported something.
+    ASK_IMPORT_FINISHED = 2;
+    // A restore laid a vault down: its first snapshot, now.
+    ASK_RESTORE_FINISHED = 3;
+    // The member's "Back up now".
+    ASK_BACK_UP_NOW = 4;
+    // The transfer rule or "Include videos" changed: windows are asked for
+    // again under the new constraints and the OS's queued uploads let go.
+    ASK_RULE_CHANGED = 5;
+  }
+  Ask ask = 1;
+}
+
+// One upload the OS ran while the app was suspended finished
+// (`URLSession`'s task delegate). `http_status` is 0 when no response arrived.
+message UploadSettled {
+  string name = 1;
+  uint32 http_status = 2;
+  string error = 3;
+  string gateway_id = 4;
+  string vault_id = 5;
+}
+
+// The OS delivered every event for the upload session
+// (`urlSessionDidFinishEvents`): hand the next batch off before iOS suspends
+// the app again.
+message UploadsDrained {}
+
+// Another screen asked, by topic, that the screens listening hear about it.
+message Signalled {
+  string topic = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Effects (1370-1374) and their results
+// ---------------------------------------------------------------------------
+
+enum WindowLink {
+  WINDOW_LINK_UNSPECIFIED = 0;
+  // Any connected network.
+  WINDOW_LINK_CONNECTED = 1;
+  // A network the member is not paying for.
+  WINDOW_LINK_UNMETERED = 2;
+}
+
+// One background window the shell is asked to keep scheduled.
+message Window {
+  // The window's stable name (`centraid-sync-pass`, ...): kept across builds so
+  // a rename does not orphan what a shipped build scheduled.
+  string name = 1;
+  WindowLink link = 2;
+  bool requires_charging = 3;
+  // The period of a periodic window; zero for a one-off.
+  uint32 period_minutes = 4;
+}
+
+// Keep exactly these windows scheduled, replacing what the shell scheduled
+// before under the same names. Idempotent; sent at launch, on a rule change,
+// on every background entry and at the end of every pass (a BGTaskRequest is
+// one-shot). iOS maps a window that requires charging to a processing request
+// (network and power) and the others to an app-refresh request; a one-off has
+// no earliest date. Android maps a periodic window to periodic work and a
+// one-off to an expedited one-time request.
+message ScheduleWindows {
+  repeated Window windows = 1;
+}
+
+message WindowsScheduled {
+  // The names the platform took, and the ones it refused.
+  repeated string taken = 1;
+  repeated string refused = 2;
+  // The platform's own words for a log; never shown as they are.
+  string refusal = 3;
+}
+
+// The pass a granted window started has ended. The shell completes the task
+// (BGTask `setTaskCompleted`, once) or returns the worker's result.
+message PassWindowDone {
+  string window = 1;
+  // Every held vault's spool was emptied: success. Anything else is a retry.
+  bool drained = 2;
+}
+
+// A long run the member asked for ("Back up now") or a backlog is starting or
+// ended. Android runs it as a long-running job with a notification; iOS keeps
+// the screen awake. Idempotent both ways.
+message LongRun {
+  bool start = 1;
+}
+
+// The answer to an effect that asks nothing back (`PassWindowDone`, `LongRun`,
+// `UploadsOp` enqueue and cancel). Its own message so a bare `EffectDone` always
+// means the camera-roll walk ended: the pass service tells its effects apart by
+// what they answer.
+message PassNoted {}
+
+// The OS-owned uploads (iOS's background URLSession). `pending` answers
+// `UploadsState`; `enqueue` and `cancel_all` answer `PassNoted`.
+message UploadsOp {
+  oneof op {
+    // Answer how many tasks the OS holds that have not finished.
+    UploadsPending pending = 1;
+    // Hand these whole requests to the OS.
+    UploadsEnqueue enqueue = 2;
+    // Let go of every task; the core requeues what it never saw settled.
+    UploadsCancelAll cancel_all = 3;
+  }
+}
+
+message UploadsPending {}
+
+message UploadsEnqueue {
+  repeated HandoffPart parts = 1;
+}
+
+message UploadsCancelAll {}
+
+message UploadsState {
+  uint32 pending = 1;
+}
+
+// Stream the items the core asked for (`DrainResponse.need_bytes`) from the OS
+// photo library into that vault's core through the stage door, then answer how
+// many landed.
+message StreamFromLibrary {
+  string vault_id = 1;
+  repeated NeedBytes needs = 2;
+}
+
+message LibraryStreamed {
+  uint32 landed = 1;
+}

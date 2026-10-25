@@ -24,7 +24,7 @@ struct CentraidApp: App {
     /// app switcher must not show a member's rows in a snapshot the OS keeps.
     /// And the two BACKUP occasions: arriving runs a pass, and leaving arms the
     /// background windows and runs one more under the grace iOS gives a
-    /// leaving app (`ShellModel.becameActive`, `ShellModel.wentToBackground`).
+    /// leaving app (`ShellModel.becameActive`; the background pass is Rust's, from `AppLifecycle`).
     @Environment(\.scenePhase) private var scenePhase
 
     /// REGISTER THE BACKGROUND HANDLERS BEFORE ANYTHING SUBMITS ONE (#1029 W18-1).
@@ -155,11 +155,8 @@ struct CentraidApp: App {
                 case .active:
                     shell.unmask()
                     shell.screens?.lifecycle(foreground: true)
-                    // AND DRAIN. The amendment's foreground half (#1029 W18-6):
-                    // the phone backs up while the member is in the app, not
-                    // only in the windows iOS grants. `ShelfDrain` refuses a
-                    // second pass while one runs, so an `inactive` → `active`
-                    // flicker costs nothing.
+                    // AND DOCS FOLLOWS THE PHONE. The foreground pass is Rust's:
+                    // the lifecycle above is what the pass scheduler hears.
                     shell.becameActive()
                 // `.background` ONLY, never `.inactive` (R-1047-L1's rule for
                 // the lock, applied to the mask): the Locker's own Face ID
@@ -175,11 +172,6 @@ struct CentraidApp: App {
                     LockerEntry.shared.setOpen(opened: false)
                     // words.show drops its words on leaving (#1047 E5).
                     shell.leftForeground()
-                    // AND ARM THE NIGHT (#1080): resubmit both background
-                    // windows and run one pass under the background task's
-                    // grace, so what it seals is handed to the OS to carry
-                    // while the app is suspended.
-                    shell.wentToBackground()
                 case .inactive:
                     break
                 @unknown default:
