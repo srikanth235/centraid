@@ -218,7 +218,7 @@ impl Backup {
         }
     }
 
-    fn secrets_answered(&mut self, batched: &wire::SecretBatched) -> Vec<wire::Effect> {
+    fn secrets_answered(&mut self, batched: &wire::SecretBatched, ctx: &Ctx) -> Vec<wire::Effect> {
         let Some((job, ops)) = self.in_flight.take() else {
             return Vec::new();
         };
@@ -237,6 +237,19 @@ impl Backup {
             Job::Rule(_) | Job::Videos => {
                 // Written as the member set it; a store that refused leaves the
                 // value on screen until the next load says what it holds.
+                //
+                // THE PASS SERVICE READS THE SAME CACHE, so it is folded in
+                // before it is told. A rule that stuck is a new constraint on
+                // every window the OS holds: the service asks for them again
+                // and decides a pass, in this call, with no help from the
+                // shell. "Include videos" is read at the next pass and needs no
+                // ask.
+                self.secrets.absorb(&ops, answers);
+                if matches!(job, Job::Rule(_)) && answers.iter().all(|answer| answer.ok) {
+                    self.secrets
+                        .conductor()
+                        .ask(ctx, wire::pass_asked::Ask::RuleChanged);
+                }
             }
             Job::Seed {
                 write,
@@ -406,10 +419,10 @@ impl Backup {
         self.read(ctx);
     }
 
-    fn on_result(&mut self, result: wire::EffectResult) -> Vec<wire::Effect> {
+    fn on_result(&mut self, result: wire::EffectResult, ctx: &Ctx) -> Vec<wire::Effect> {
         use wire::effect_result::Outcome as O;
         match result.outcome {
-            Some(O::Secrets(batched)) => self.secrets_answered(&batched),
+            Some(O::Secrets(batched)) => self.secrets_answered(&batched, ctx),
             Some(O::SyncedStatus(status)) => {
                 self.synced = Some(status);
                 Vec::new()
@@ -423,7 +436,7 @@ impl Backup {
             // that will not answer. (The batch answers short, and `absorb` takes that
             // as a failed batch and changes nothing.)
             Some(O::Failed(_)) if matches!(self.in_flight, Some((Job::Load, _))) => {
-                self.secrets_answered(&wire::SecretBatched::default())
+                self.secrets_answered(&wire::SecretBatched::default(), ctx)
             }
             // A probe the shell could not perform is an answer of "unknown": the
             // key line says it cannot tell, and no background notice is drawn.
@@ -654,7 +667,7 @@ impl Screen for Backup {
             // have been turned off meanwhile, and the key is read from the stores
             // each time.
             Some(E::Lifecycle(lifecycle)) if lifecycle.foreground => self.open(ctx),
-            Some(E::EffectResult(result)) => self.on_result(result),
+            Some(E::EffectResult(result)) => self.on_result(result, ctx),
             Some(E::OffThreadDone(done)) => {
                 self.job_done(&done, ctx);
                 Vec::new()
