@@ -6,7 +6,7 @@
 
 ## Durable path and at-rest decision
 
-A device's vault files live in the app's own data directory — Android's `filesDir`, iOS's Documents directory (`ShellModel.vaultDirectory`) — and the directory is the roster: every `<name>/vault.db` in it is a vault this device holds, one directory per vault so each has its own backup home ([R-1047-E8](decisions.md#backup-and-the-gateway)); a new one is founded in `centraid-vault-<random>/vault.db` (`Shelf`, `mobile/shared/.../shell/Shelf.kt`). Beside each `vault.db`:
+A device's vault files live in the app's own data directory — Android's `filesDir`, iOS's Documents directory (`ShellModel.vaultDirectory`) — and the directory is the roster: every `<name>/vault.db` in it is a vault this device holds, one directory per vault so each has its own backup home ([R-1047-E8](decisions.md#backup-and-the-gateway)); a new one is founded in `centraid-vault-<random>/vault.db` (`vault::Shelf`, `crates/screens/src/vault`: the shell hands the core this directory and Rust holds the vaults, see [screens.md](screens.md#the-vaults-and-the-vault-in-front)). Beside each `vault.db`:
 
 | Path | What it holds | Lose it and |
 | --- | --- | --- |

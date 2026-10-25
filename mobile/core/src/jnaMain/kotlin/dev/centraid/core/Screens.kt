@@ -5,6 +5,7 @@ import centraid.core.v1.EffectRequest
 import centraid.core.v1.EffectResult
 import centraid.core.v1.Envelope
 import centraid.core.v1.Environment
+import centraid.core.v1.MemoryWarning
 import centraid.core.v1.InstanceEvent
 import centraid.core.v1.NavEvent
 import centraid.core.v1.Navigation
@@ -95,6 +96,13 @@ public class Screens(
      */
     public suspend fun shellFact(fact: ShellFact): CoreOutcome<Unit> =
         request(ScreenRequest(shell_fact = fact))
+
+    /**
+     * The operating system is asking for memory back (iOS `didReceiveMemoryWarning`,
+     * Android `onTrimMemory`): the shelf closes every vault's core but the one in front.
+     */
+    public suspend fun memoryWarning(): CoreOutcome<Unit> =
+        request(ScreenRequest(memory_warning = MemoryWarning()))
 
     /** Answer an effect the shell performed. */
     public suspend fun answer(effect: EffectRequest, result: EffectResult): CoreOutcome<Unit> =

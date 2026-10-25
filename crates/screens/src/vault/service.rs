@@ -113,9 +113,9 @@ struct Service {
 
 impl Service {
     /// Send `ops` now, or after the batch in flight.
-    fn send(&mut self, ops: Vec<wire::SecretOp>, then: Then) -> Vec<wire::Effect> {
+    fn send(&mut self, ops: Vec<wire::SecretOp>, then: Then, ctx: &Ctx) -> Vec<wire::Effect> {
         if ops.is_empty() {
-            return self.proceed(then);
+            return self.proceed(then, ctx);
         }
         if self.in_flight.is_some() {
             self.waiting.push_back((ops, then));
@@ -126,57 +126,63 @@ impl Service {
     }
 
     /// The next step of the launch.
-    fn proceed(&mut self, then: Then) -> Vec<wire::Effect> {
+    fn proceed(&mut self, then: Then, ctx: &Ctx) -> Vec<wire::Effect> {
         match then {
             Then::AfterRead => {
                 if let Some(seed) = self.shelf.dev_seed() {
                     let seed = seed.trim().to_ascii_lowercase();
                     if secrets::is_seed(&seed) && self.secrets.seed().is_none() {
                         let ops = VaultSecrets::remember_seed(&seed, false).first();
-                        return self.send(ops, Then::Survey);
+                        return self.send(ops, Then::Survey, ctx);
                     }
                 }
-                self.proceed(Then::Survey)
+                self.proceed(Then::Survey, ctx)
             }
             Then::Survey => {
                 let owed = self.shelf.survey();
-                self.send(owed, Then::Hydrate)
+                self.send(owed, Then::Hydrate, ctx)
             }
             Then::Hydrate => {
                 let ids = self.shelf.surveyed_ids();
                 let ops = VaultSecrets::hydrate_ops(&ids);
-                self.send(ops, Then::Open)
+                self.send(ops, Then::Open, ctx)
             }
             Then::Open => {
                 self.shelf.open_all();
                 self.launch = Launch::Ready;
+                // THE SESSION IS OPEN: the first pass of a launch. The vaults a
+                // pass runs on are the ones just opened, so it is asked here and
+                // not when the app starts.
+                self.secrets
+                    .conductor()
+                    .ask(ctx, wire::pass_asked::Ask::SessionOpened);
                 Vec::new()
             }
             Then::Nothing => Vec::new(),
         }
     }
 
-    fn begin(&mut self) -> Vec<wire::Effect> {
+    fn begin(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         if self.shelf.dir().is_none() || self.shelf.loaded() || self.launch != Launch::Idle {
             return Vec::new();
         }
         self.launch = Launch::Waiting;
         if self.secrets.loaded() {
-            return self.proceed(Then::AfterRead);
+            return self.proceed(Then::AfterRead, ctx);
         }
-        self.send(VaultSecrets::load_ops(), Then::AfterRead)
+        self.send(VaultSecrets::load_ops(), Then::AfterRead, ctx)
     }
 
-    fn answered(&mut self, batched: &wire::SecretBatched) -> Vec<wire::Effect> {
+    fn answered(&mut self, batched: &wire::SecretBatched, ctx: &Ctx) -> Vec<wire::Effect> {
         let Some((ops, then)) = self.in_flight.take() else {
             return Vec::new();
         };
         self.secrets.absorb(&ops, &batched.answers);
-        let mut effects = self.proceed(then);
+        let mut effects = self.proceed(then, ctx);
         if self.in_flight.is_none()
             && let Some((ops, then)) = self.waiting.pop_front()
         {
-            effects.extend(self.send(ops, then));
+            effects.extend(self.send(ops, then, ctx));
         }
         effects
     }
@@ -310,7 +316,7 @@ impl Service {
             Some(C::Forget(vault_id)) => {
                 let forgotten = self.shelf.forget(&vault_id);
                 Self::outcome(ctx, "", false);
-                self.send(forgotten.writes, Then::Nothing)
+                self.send(forgotten.writes, Then::Nothing, ctx)
             }
             Some(C::Rename(rename)) => {
                 let renamed = self.shelf.rename(&rename.vault_id, &rename.name);
@@ -325,12 +331,12 @@ impl Service {
 impl Screen for Service {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
-            Some(E::Appeared(_)) => self.begin(),
+            Some(E::Appeared(_)) => self.begin(ctx),
             Some(E::EffectResult(result)) => {
                 let Some(wire::effect_result::Outcome::Secrets(batched)) = result.outcome else {
                     return Vec::new();
                 };
-                self.answered(&batched)
+                self.answered(&batched, ctx)
             }
             Some(E::ScreenOpened(opened)) => {
                 if opened.screen == HOME {
@@ -344,6 +350,12 @@ impl Screen for Service {
                     .iter()
                     .any(|table| table == centraid_core::vaults::SHELF_TABLE)
                 {
+                    // A RESTORE LAID A VAULT DOWN: its first snapshot, now.
+                    if self.shelf.take_restored() {
+                        self.secrets
+                            .conductor()
+                            .ask(ctx, wire::pass_asked::Ask::RestoreFinished);
+                    }
                     self.tell_home(ctx);
                 }
                 Vec::new()
@@ -366,7 +378,7 @@ impl Screen for Service {
                     return Vec::new();
                 }
                 let owed = self.shelf.settle();
-                self.send(owed, Then::Nothing)
+                self.send(owed, Then::Nothing, ctx)
             }
             _ => Vec::new(),
         }

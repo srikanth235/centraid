@@ -271,3 +271,44 @@ fn the_backup_line_under_the_vault_is_the_backup_lanes_reading_of_it() {
         wire::HomeVaultState::Frozen as i32
     );
 }
+
+#[test]
+fn a_launch_asks_for_the_first_pass_on_the_vaults_it_opened_and_a_restore_for_its_first_snapshot() {
+    let dir = scratch();
+    let a = lay_down(&dir, "a", "Alpha");
+    let mut phone = Phone::standard(&dir);
+    launched(&mut phone);
+    let drained = |phone: &Phone| {
+        phone
+            .secrets
+            .conductor()
+            .take_issued()
+            .into_iter()
+            .filter(|(_, request)| matches!(request.kind, Some(wire::request::Kind::Drain(_))))
+            .count()
+    };
+    // The pass service ran the pass the shelf asked for, on the vault it opened.
+    assert!(
+        drained(&phone) >= 1,
+        "no pass was asked for after the launch"
+    );
+    let _ = a;
+
+    // A restore laid a vault down: its first snapshot, now.
+    let restored = lay_down(&dir, "restored", "Restored");
+    let path = dir.join("restored").join("vault.db");
+    let adopted = phone
+        .shelf
+        .adopt_restored(&[centraid_screens::vault::Restored {
+            path: path.to_string_lossy().into_owned(),
+            index: 0,
+            own: None,
+        }]);
+    assert_eq!(adopted.value, 1);
+    phone.driver.pump(Duration::from_millis(800));
+    assert!(
+        drained(&phone) >= 1,
+        "no pass was asked for after the restore"
+    );
+    let _ = restored;
+}

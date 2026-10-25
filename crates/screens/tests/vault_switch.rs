@@ -18,6 +18,7 @@ use centraid_screens::people::{self, routes};
 use centraid_screens::vault;
 use centraid_screens::{Ctx, Registry, Runtime, Screen};
 use people_support::{names, roster_data};
+use prost::Message as _;
 use vault_support::*;
 use wire::screen_event::Kind as E;
 
@@ -128,10 +129,35 @@ fn who(handle: &centraid_core::Handle) -> String {
 impl Screen for Probe {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
-            Some(E::EnvironmentChanged(_)) => ctx.off_thread("who", |handle| {
-                std::thread::sleep(Duration::from_millis(400));
-                who(handle).into_bytes()
-            }),
+            Some(E::EnvironmentChanged(_)) => {
+                // BOUND WHEN ASKED: the core of the vault in front now.
+                let bound = ctx.vaults().and_then(|vaults| vaults.foreground_core());
+                ctx.off_thread("who", move |_| {
+                    std::thread::sleep(Duration::from_millis(400));
+                    bound
+                        .as_ref()
+                        .map_or_else(|| "none".to_owned(), who)
+                        .into_bytes()
+                });
+            }
+            // A DOOR ASKED OF THE VAULT IN FRONT: founding into a file that
+            // already holds a vault is refused by name, and the refusal names the
+            // vault the door ran on.
+            Some(E::Lifecycle(_)) => ctx.vault_async(
+                "found",
+                centraid_core::screens::VaultRequest::Found(wire::FoundRequest {
+                    display_name: "Again".to_owned(),
+                    ..Default::default()
+                }),
+            ),
+            Some(E::OffThreadDone(done)) if done.tag == "found" => {
+                let called = wire::VaultCalled::decode(done.bytes.as_slice()).expect("a call");
+                self.seen
+                    .lock()
+                    .expect("seen")
+                    .jobs
+                    .push(called.error.map(|error| error.detail).unwrap_or_default());
+            }
             Some(E::OffThreadDone(done)) => self
                 .seen
                 .lock()
@@ -412,6 +438,22 @@ fn a_job_started_on_one_vault_finishes_on_it_after_a_switch_and_a_service_outliv
     // The service was not closed by the switch, and heard its job answer from
     // the vault it was asked on.
     assert_eq!(seen.lock().expect("seen").jobs, [a]);
+}
+
+#[test]
+fn a_door_asked_of_the_vault_in_front_runs_on_it_even_when_the_call_is_made_after_a_switch() {
+    let (mut phone, a, b, seen, _dir) = two_vaults();
+    // The service asks `found` of the vault in front (A); the job is bound then.
+    phone
+        .driver
+        .call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
+            foreground: true,
+        }));
+    ask_switch(&mut phone, &b);
+    phone.driver.pump(Duration::from_secs(2));
+    let jobs = seen.lock().expect("seen").jobs.clone();
+    assert_eq!(jobs.len(), 1, "{jobs:?}");
+    assert!(jobs[0].contains(&a) && !jobs[0].contains(&b), "{jobs:?}");
 }
 
 #[test]

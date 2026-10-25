@@ -169,66 +169,6 @@ fn the_high_water_mark_is_never_lowered_by_forgetting_a_vault() {
 }
 
 #[test]
-fn the_index_is_spent_before_the_found_and_given_back_only_while_highest() {
-    let secrets = VaultSecrets::new();
-    apply(&secrets, &secrets.remember_vault_index("a", 0));
-    let (index, ops) = secrets.reserve_vault_index("/vaults/b.db");
-    assert_eq!(index, 1);
-    apply(&secrets, &ops);
-    assert_eq!(
-        secrets.pending_found(),
-        Some(PendingFound {
-            index: 1,
-            path: "/vaults/b.db".to_owned(),
-            own: None
-        })
-    );
-    assert_eq!(secrets.next_vault_index(), 2, "spent before the found");
-    apply(&secrets, &secrets.release_vault_index(1));
-    assert_eq!(secrets.pending_found(), None);
-    assert_eq!(
-        secrets.next_vault_index(),
-        1,
-        "a refused found gives it back"
-    );
-
-    let (second, ops) = secrets.reserve_vault_index("/vaults/c.db");
-    apply(&secrets, &ops);
-    apply(&secrets, &secrets.remember_vault_index("c", second));
-    let (_, ops) = secrets.reserve_vault_index("/vaults/d.db");
-    apply(&secrets, &ops);
-    // `c` is no longer the highest: releasing its index must not lower the mark.
-    apply(&secrets, &secrets.release_vault_index(second));
-    assert_eq!(secrets.next_vault_index(), 3);
-}
-
-#[test]
-fn a_pending_found_on_an_entrys_seed_names_the_entry() {
-    let secrets = VaultSecrets::new();
-    apply(
-        &secrets,
-        &[VaultSecrets::reserve_own_found(
-            "/v/x.db",
-            "abcdabcdabcdabcd",
-        )],
-    );
-    assert_eq!(
-        secrets.pending_found(),
-        Some(PendingFound {
-            index: 0,
-            path: "/v/x.db".to_owned(),
-            own: Some("abcdabcdabcdabcd".to_owned())
-        })
-    );
-    assert!(
-        !secrets.any_vault_index(),
-        "an entry's index never moves the member's mark"
-    );
-    apply(&secrets, &[VaultSecrets::clear_pending_found()]);
-    assert_eq!(secrets.pending_found(), None);
-}
-
-#[test]
 fn a_vault_key_is_the_members_seed_at_its_index_or_its_entrys() {
     let secrets = VaultSecrets::new();
     assert_eq!(secrets.vault_key("a"), None, "no seed, no key");

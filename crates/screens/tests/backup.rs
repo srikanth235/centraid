@@ -18,7 +18,7 @@ fn open() -> (Driver, FakeShell, u64) {
         zone: "UTC".to_owned(),
         platform: "ios".to_owned(),
     }));
-    let instance = driver.push("agenda", routes::home());
+    let instance = driver.push("home", routes::home());
     (driver, FakeShell::default(), instance)
 }
 
@@ -47,10 +47,12 @@ fn the_backup_screen_is_registered_and_loads_until_the_phones_settings_are_read(
         .effects
         .iter()
         .position(|request| {
-            matches!(
-                request.effect.as_ref().and_then(|e| e.kind.as_ref()),
-                Some(wire::effect::Kind::BackgroundProbe(_))
-            )
+            // The `backup` tab's own root asks too: this is the pushed page's.
+            request.instance == instance
+                && matches!(
+                    request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+                    Some(wire::effect::Kind::BackgroundProbe(_))
+                )
         })
         .expect("the screen asks whether the platform will wake Centraid");
     let asked = driver.effects.remove(background);
@@ -130,8 +132,8 @@ fn the_rule_the_member_chose_is_kept_by_the_shell_and_comes_back() {
         Some("excluded")
     );
     // Closed and opened again, it reads them back.
-    driver.pop("agenda", instance);
-    let again = driver.push("agenda", routes::home());
+    driver.pop("home", instance);
+    let again = driver.push("home", routes::home());
     driver.serve(&mut shell);
     let data = data(&driver, again);
     assert!(data.rule_choices[2].picked && !data.include_videos);
@@ -142,7 +144,7 @@ fn a_pushed_backup_page_pops_and_its_timers_die_with_it() {
     let (mut driver, mut shell, instance) = open();
     driver.serve(&mut shell);
     assert_eq!(backup::HOME, "backup.home");
-    let update = driver.pop("agenda", instance);
+    let update = driver.pop("home", instance);
     assert!(update.closed.contains(&instance));
     // A change the screen no longer reads is not heard by anything.
     assert_eq!(driver.pump(std::time::Duration::from_millis(60)), 0);

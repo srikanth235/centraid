@@ -234,11 +234,11 @@ impl ScreenCtx for HandleState {
     }
 
     fn off_thread(&self, job: u64, work: OffThreadWork) {
-        // THE JOB IS BOUND TO THE VAULT IN FRONT WHEN IT IS ASKED FOR. It runs
-        // after the screen is gone from the lock and may outlast a switch: a
-        // pass started on one vault must finish on that vault, not on whichever
-        // is in front when its door is called.
-        let Some(handle) = self.foreground_if_shelved().or_else(|| Handle::of(self)) else {
+        // THE JOB GETS THE FRONT: a call on it goes to the vault in front when
+        // the call is MADE, except the words and a restore, which are the
+        // front's own. A job that must finish on the vault it began on binds its
+        // core when it is asked (`Ctx::vault_async`, `ScreenCtx::vaults`).
+        let Some(handle) = Handle::of(self) else {
             return;
         };
         let events = self.events();

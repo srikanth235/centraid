@@ -138,6 +138,9 @@ struct Inner {
     /// What the last vault made says, once, for Home's status line: taken by
     /// [`Shelf::take_outcome`].
     outcome: Option<String>,
+    /// A restore laid a vault down, and nobody has asked for its first snapshot
+    /// yet: taken by [`Shelf::take_restored`].
+    restored: bool,
 }
 
 /// What the shelf needs from the core that fronts it.
@@ -418,6 +421,12 @@ impl Shelf {
             .iter()
             .map(|surveyed| surveyed.vault_id.clone())
             .collect()
+    }
+
+    /// Whether a restore laid a vault down since this was last asked: the pass
+    /// service is owed an ask for its first snapshot.
+    pub fn take_restored(&self) -> bool {
+        std::mem::take(&mut self.lock().restored)
     }
 
     /// What making a vault says, once: "{name} is on this phone, and your
@@ -793,6 +802,7 @@ impl Shelf {
             }
             added += 1;
         }
+        inner.restored |= added > 0;
         drop(inner);
         if added > 0 {
             self.announce();

@@ -174,7 +174,19 @@ impl<'a> Ctx<'a> {
     /// restore): the answer is a [`wire::VaultCalled`] — the core's encoded
     /// `Response`, or its typed refusal.
     pub fn vault_async(&self, tag: &str, request: VaultRequest) {
-        self.off_thread(tag, move |handle| {
+        // BOUND TO THE VAULT IN FRONT WHEN IT IS ASKED FOR: a pass or a pairing
+        // started on one vault finishes on it, whatever is in front when its
+        // door is called. The words and a restore are the front's own (a restore
+        // lays vaults down beside the front's file, not inside a vault's).
+        let bound = match request {
+            VaultRequest::Phrase(_) | VaultRequest::Restore(_) => None,
+            _ => self
+                .core
+                .vaults()
+                .and_then(|vaults| vaults.foreground_core()),
+        };
+        self.off_thread(tag, move |front| {
+            let handle = bound.as_ref().unwrap_or(front);
             let called = match handle.call(&request.into_request()) {
                 Ok(response) => wire::VaultCalled {
                     response: response.encode_to_vec(),
