@@ -81,9 +81,7 @@ pub fn generate(root: &Path) -> Result<String> {
     // `act`.
     let shell = root.join(SHELL_MANIFEST);
     let body = std::fs::read_to_string(&shell)?;
-    apps.push(
-        serde_json::from_str(&body).with_context(|| format!("parsing {}", shell.display()))?,
-    );
+    apps.push(serde_json::from_str(&body).with_context(|| format!("parsing {}", shell.display()))?);
     apps.sort_by(|a, b| text(a, "id").cmp(text(b, "id")));
 
     let mut out = String::from(HEADER);

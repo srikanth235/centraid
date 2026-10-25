@@ -292,7 +292,9 @@ impl Backup {
             kind: Some(wire::effect::Kind::SyncedProbe(wire::SyncedSecretsProbe {})),
         });
         effects.push(wire::Effect {
-            kind: Some(wire::effect::Kind::BackgroundProbe(wire::BackgroundProbe {})),
+            kind: Some(wire::effect::Kind::BackgroundProbe(
+                wire::BackgroundProbe {},
+            )),
         });
         effects
     }
@@ -323,7 +325,10 @@ impl Backup {
             return Vec::new();
         }
         self.notice = Notice::None;
-        ctx.vault_async(&doors::forget_tag(gateway_id), doors::forget_request(gateway_id));
+        ctx.vault_async(
+            &doors::forget_tag(gateway_id),
+            doors::forget_request(gateway_id),
+        );
         Vec::new()
     }
 
@@ -413,6 +418,13 @@ impl Backup {
                 self.registered = Some(status.registered);
                 Vec::new()
             }
+            // A SHELL THAT COULD NOT GIVE THE PHONE'S SETTINGS gives the defaults, which
+            // are the conservative ones: the page must not wait for ever on a store
+            // that will not answer. (The batch answers short, and `absorb` takes that
+            // as a failed batch and changes nothing.)
+            Some(O::Failed(_)) if matches!(self.in_flight, Some((Job::Load, _))) => {
+                self.secrets_answered(&wire::SecretBatched::default())
+            }
             // A probe the shell could not perform is an answer of "unknown": the
             // key line says it cannot tell, and no background notice is drawn.
             _ => Vec::new(),
@@ -432,7 +444,11 @@ impl Backup {
             .collect()
     }
 
-    fn destination_row(&self, locale: Locale, destination: &Destination) -> wire::BackupDestinationRow {
+    fn destination_row(
+        &self,
+        locale: Locale,
+        destination: &Destination,
+    ) -> wire::BackupDestinationRow {
         let label = if destination.label.trim().is_empty() {
             words::backup_unnamed(locale)
         } else {
@@ -526,7 +542,10 @@ impl Backup {
                     if key.place.is_empty() {
                         String::new()
                     } else if key.synced {
-                        fill(&words::backup_key_sync_off(locale), &[("place", &key.place)])
+                        fill(
+                            &words::backup_key_sync_off(locale),
+                            &[("place", &key.place)],
+                        )
                     } else {
                         fill(&words::backup_key_sync_on(locale), &[("place", &key.place)])
                     },
@@ -650,7 +669,7 @@ impl Screen for Backup {
         } else if self.standing.is_none() || !self.settled {
             wire::backup_home_state::Body::Loading(wire::Loading { first_load: true })
         } else {
-            wire::backup_home_state::Body::Data(self.data(ctx))
+            wire::backup_home_state::Body::Data(Box::new(self.data(ctx)))
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::BackupHome(wire::BackupHomeState {

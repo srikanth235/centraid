@@ -137,7 +137,11 @@ pub fn line(
             &[("when", &when)],
         ),
         detail,
-        tone: if attention { Tone::Attention } else { Tone::Quiet } as i32,
+        tone: if attention {
+            Tone::Attention
+        } else {
+            Tone::Quiet
+        } as i32,
         ..Default::default()
     })
 }
@@ -216,8 +220,8 @@ fn waiting_words(locale: Locale, reason: wire::WaitReason) -> String {
 /// The row's reason carries the core's own number, so a shell reading either
 /// sees one value.
 fn row_reason(reason: wire::WaitReason) -> wire::backup_waiting_row::Reason {
-    use wire::backup_waiting_row::Reason as W;
     use wire::WaitReason as R;
+    use wire::backup_waiting_row::Reason as W;
     match reason {
         R::Unspecified => W::Unspecified,
         R::Wifi => W::Wifi,

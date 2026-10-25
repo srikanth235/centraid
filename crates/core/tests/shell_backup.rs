@@ -56,7 +56,10 @@ fn the_query_reads_the_ledger_the_door_reads_and_names_what_moves_it() {
     let status = answer.status.expect("a reading");
     assert!(status.destinations.is_empty());
     assert_eq!(status, self::status(&phone));
-    assert!(answer.now_ms > 1_700_000_000_000, "this phone's clock is stamped");
+    assert!(
+        answer.now_ms > 1_700_000_000_000,
+        "this phone's clock is stamped"
+    );
     // THE LEDGER'S PSEUDO-TABLE AND THE CONTENT THE COUNTS ARE MADE OF, sorted.
     assert_eq!(tables, vec!["backup".to_owned(), "blob".to_owned()]);
 
@@ -96,7 +99,14 @@ fn a_door_that_moves_the_ledger_announces_it_and_one_that_only_reads_does_not() 
     };
     assert!(forgot.forgotten);
     assert!(changed(&phone).contains("backup"), "a forget");
-    assert!(query(&phone).0.status.expect("a reading").destinations.is_empty());
+    assert!(
+        query(&phone)
+            .0
+            .status
+            .expect("a reading")
+            .destinations
+            .is_empty()
+    );
 }
 
 #[test]

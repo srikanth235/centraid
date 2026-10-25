@@ -4318,6 +4318,138 @@ pub mod act {
             }
         }
     }
+
+    pub mod shell {
+        use super::*;
+        pub const APP: &str = "shell";
+
+        /// Rename a stored chat through thread.rename.
+        #[derive(Clone, Debug, Default)]
+        pub struct RenameChat {
+            pub thread_id: String,
+            pub title: String,
+        }
+        impl RenameChat {
+            pub const NAME: &str = "rename-chat";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("thread_id".to_owned(), text(self.thread_id));
+                map.insert("title".to_owned(), text(self.title));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<RenameChat> for wire::ActRequest {
+            fn from(value: RenameChat) -> Self {
+                value.request()
+            }
+        }
+
+        /// Delete one stored chat with its messages for good through entity.purge: a chat has no trash.
+        #[derive(Clone, Debug, Default)]
+        pub struct DeleteChat {
+            pub chat_thread_id: String,
+        }
+        impl DeleteChat {
+            pub const NAME: &str = "delete-chat";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.chat_thread_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<DeleteChat> for wire::ActRequest {
+            fn from(value: DeleteChat) -> Self {
+                value.request()
+            }
+        }
+
+        /// Delete every stored chat in this vault for good through thread.clear.
+        #[derive(Clone, Debug, Default)]
+        pub struct ClearChats {
+        }
+        impl ClearChats {
+            pub const NAME: &str = "clear-chats";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ClearChats> for wire::ActRequest {
+            fn from(value: ClearChats) -> Self {
+                value.request()
+            }
+        }
+
+        /// (imports, lane I) Follow a folder of the phone's files through follow.files, one folder at a time: a file the vault lacks becomes a document in the folder's own Docs folder, a changed file a new revision, one gone from a complete read goes to the trash if the member never touched it.
+        #[derive(Clone, Debug, Default)]
+        pub struct FollowFiles {
+            pub origin: String,
+            pub records: String,
+            pub complete: Option<bool>,
+        }
+        impl FollowFiles {
+            pub const NAME: &str = "follow-files";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("origin".to_owned(), text(self.origin));
+                map.insert("records".to_owned(), text(self.records));
+                if let Some(it) = self.complete { map.insert("complete".to_owned(), flag(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<FollowFiles> for wire::ActRequest {
+            fn from(value: FollowFiles) -> Self {
+                value.request()
+            }
+        }
+
+        /// (imports, lane I) Name bytes the stage door stored through blob.stage, at the size the core counted, so no stored bytes sit in the vault that nothing names.
+        #[derive(Clone, Debug, Default)]
+        pub struct ClaimBytes {
+            pub hash: String,
+            pub size: i64,
+        }
+        impl ClaimBytes {
+            pub const NAME: &str = "claim-bytes";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("hash".to_owned(), text(self.hash));
+                map.insert("size".to_owned(), whole(self.size));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ClaimBytes> for wire::ActRequest {
+            fn from(value: ClaimBytes) -> Self {
+                value.request()
+            }
+        }
+
+        /// (imports, lane I) Stop following a folder through follow.stop: its sources are forgotten and the origin retired; every document stays.
+        #[derive(Clone, Debug, Default)]
+        pub struct StopFollowingFiles {
+            pub r#ref: String,
+        }
+        impl StopFollowingFiles {
+            pub const NAME: &str = "stop-following-files";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("ref".to_owned(), text(self.r#ref));
+                map.insert("system".to_owned(), text("files"));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<StopFollowingFiles> for wire::ActRequest {
+            fn from(value: StopFollowingFiles) -> Self {
+                value.request()
+            }
+        }
+    }
 }
 
 pub mod load {
@@ -5723,7 +5855,90 @@ pub mod load {
         use super::*;
         pub const APP: &str = "shell";
 
-        /// Where this vault's backup stands, read from the phone's own ledger without dialling anyone: the gateways it is paired with, when one last acknowledged the head (the gateway's clock), how many photos and files are confirmed of how many the vault knows, what waits and why, and this phone's clock for wording. Re-read whenever a pass, a pairing or a forget moves the ledger, or the vault's files change.
+        /// The chat drawer's list, newest activity first; with a term, the chats it finds by title and by the member's own words, best first, with the words it corrected a typo to.
+        #[derive(Clone, Debug, Default)]
+        pub struct Chats {
+            pub limit: u32,
+            pub term: Option<String>,
+        }
+        impl Chats {
+            pub const NAME: &str = "chats";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.term { map.insert("term".to_owned(), text(it)); }
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
+            }
+        }
+        impl From<Chats> for wire::LoadRequest {
+            fn from(value: Chats) -> Self {
+                value.request()
+            }
+        }
+
+        /// One stored chat and its messages, oldest first, each with its cards and attachments as they were said.
+        #[derive(Clone, Debug, Default)]
+        pub struct Chat {
+            pub thread_id: String,
+        }
+        impl Chat {
+            pub const NAME: &str = "chat";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("thread_id".to_owned(), text(self.thread_id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Chat> for wire::LoadRequest {
+            fn from(value: Chat) -> Self {
+                value.request()
+            }
+        }
+
+        /// Whether the row a stored card names is still in the vault.
+        #[derive(Clone, Debug, Default)]
+        pub struct ChatCard {
+            pub app: String,
+            pub entity: String,
+            pub id: String,
+        }
+        impl ChatCard {
+            pub const NAME: &str = "chat-card";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("app".to_owned(), text(self.app));
+                map.insert("entity".to_owned(), text(self.entity));
+                map.insert("id".to_owned(), text(self.id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<ChatCard> for wire::LoadRequest {
+            fn from(value: ChatCard) -> Self {
+                value.request()
+            }
+        }
+
+        /// (imports, lane I) The folders the vault follows, with the documents each still holds and each file's last stated stat, so a rescan of an unchanged folder reads no bytes.
+        #[derive(Clone, Debug, Default)]
+        pub struct FilesFollowed {
+        }
+        impl FilesFollowed {
+            pub const NAME: &str = "files-followed";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<FilesFollowed> for wire::LoadRequest {
+            fn from(value: FilesFollowed) -> Self {
+                value.request()
+            }
+        }
+
+        /// (backup, lane H2) Where this vault's backup stands, read from the phone's own ledger without dialling anyone: the gateways it is paired with, when one last acknowledged the head (the gateway's clock), how many photos and files are confirmed of how many the vault knows, what waits and why, and this phone's clock for wording. Re-read whenever a pass, a pairing or a forget moves the ledger, or the vault's files change.
         #[derive(Clone, Debug, Default)]
         pub struct BackupStatus {
         }

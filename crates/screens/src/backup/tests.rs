@@ -92,7 +92,10 @@ struct Fake {
 
 impl ScreenCtx for Fake {
     fn load(&self, request: &wire::LoadRequest) -> Result<wire::LoadResponse> {
-        assert_eq!((request.app.as_str(), request.query.as_str()), ("shell", "backup-status"));
+        assert_eq!(
+            (request.app.as_str(), request.query.as_str()),
+            ("shell", "backup-status")
+        );
         self.reads.set(self.reads.get() + 1);
         match self.status.borrow().clone() {
             Some(status) => Ok(wire::LoadResponse {
@@ -141,7 +144,9 @@ struct Page {
 impl Page {
     fn over(status: wire::BackupStatusResponse) -> Self {
         let mut shell = FakeShell::default();
-        shell.synced.insert(secrets::SEED_KEY.to_owned(), SEED.to_owned());
+        shell
+            .synced
+            .insert(secrets::SEED_KEY.to_owned(), SEED.to_owned());
         shell.device.insert(
             secrets::LOCAL_WORDS.to_owned(),
             vec!["abandon"; 24].join(" "),
@@ -174,7 +179,9 @@ impl Page {
 
     fn send(&mut self, event: E) {
         let ctx = Ctx::new(&self.fake, &self.env);
-        let effects = self.screen.update(wire::ScreenEvent { kind: Some(event) }, &ctx);
+        let effects = self
+            .screen
+            .update(wire::ScreenEvent { kind: Some(event) }, &ctx);
         let done = ctx.finish();
         for op in done.timers {
             match op {
@@ -250,7 +257,7 @@ impl Page {
 
     fn data(&self) -> wire::BackupHomeData {
         match self.state().body {
-            Some(wire::backup_home_state::Body::Data(data)) => data,
+            Some(wire::backup_home_state::Body::Data(data)) => *data,
             other => panic!("the screen is not ready: {other:?}"),
         }
     }
@@ -317,14 +324,20 @@ fn records_acknowledged_with_items_waiting_say_records_and_say_how_many() {
     assert_eq!(line.sentence, "Records backed up 2 minutes ago.");
     assert_eq!(line.detail, "1,203 of 1,240 photos and files");
     assert_eq!(
-        line.waiting.iter().map(|row| row.reason).collect::<Vec<_>>(),
+        line.waiting
+            .iter()
+            .map(|row| row.reason)
+            .collect::<Vec<_>>(),
         vec![
             wire::backup_waiting_row::Reason::Wifi as i32,
             wire::backup_waiting_row::Reason::Icloud as i32
         ]
     );
     assert_eq!(
-        line.waiting.iter().map(|row| row.sentence.as_str()).collect::<Vec<_>>(),
+        line.waiting
+            .iter()
+            .map(|row| row.sentence.as_str())
+            .collect::<Vec<_>>(),
         vec!["30 waiting for Wi-Fi", "7 waiting in iCloud"]
     );
     assert_eq!(
@@ -345,11 +358,20 @@ fn the_waits_a_member_acts_on_have_rows_of_their_own() {
         false,
     );
     assert_eq!(
-        line.waiting.iter().map(|row| row.sentence.as_str()).collect::<Vec<_>>(),
-        vec!["4 waiting. Tap Back up now.", "2 waiting. Wrong device answered."]
+        line.waiting
+            .iter()
+            .map(|row| row.sentence.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "4 waiting. Tap Back up now.",
+            "2 waiting. Wrong device answered."
+        ]
     );
     // THE ROW'S NUMBERS ARE THE CORE'S, so a shell reading either sees one value.
-    assert_eq!(wire::backup_waiting_row::Reason::Ask as i32, wire::WaitReason::Ask as i32);
+    assert_eq!(
+        wire::backup_waiting_row::Reason::Ask as i32,
+        wire::WaitReason::Ask as i32
+    );
     assert_eq!(
         wire::backup_waiting_row::Reason::Untrusted as i32,
         wire::WaitReason::Untrusted as i32
@@ -373,19 +395,28 @@ fn a_gateway_that_refused_for_room_and_one_that_forgot_this_phone_have_rows_of_t
     let line = lined(
         &wire::BackupStatusResponse {
             content_confirmed: 1_200,
-            waiting: waiting(&[(wire::WaitReason::Refused, 25), (wire::WaitReason::PairAgain, 15)]),
+            waiting: waiting(&[
+                (wire::WaitReason::Refused, 25),
+                (wire::WaitReason::PairAgain, 15),
+            ]),
             ..steady()
         },
         false,
     );
     assert_eq!(
-        line.waiting.iter().map(|row| row.sentence.as_str()).collect::<Vec<_>>(),
+        line.waiting
+            .iter()
+            .map(|row| row.sentence.as_str())
+            .collect::<Vec<_>>(),
         vec![
             "25 waiting. Your backup device is full or refusing.",
             "15 waiting. Pair your backup device again."
         ]
     );
-    assert_eq!(wire::backup_waiting_row::Reason::Refused as i32, wire::WaitReason::Refused as i32);
+    assert_eq!(
+        wire::backup_waiting_row::Reason::Refused as i32,
+        wire::WaitReason::Refused as i32
+    );
     assert_eq!(
         wire::backup_waiting_row::Reason::PairAgain as i32,
         wire::WaitReason::PairAgain as i32
@@ -410,7 +441,8 @@ fn every_gateway_refusing_this_phones_token_reads_pair_again_never_all_backed_up
     // ONE OF TWO REFUSING: the other carries the backup, so the line is the
     // ordinary one and only its tone earns a look.
     let mut half = refused.clone();
-    half.destinations.push(gateway("gw-2", "NAS", None, NOW - MINUTE, NOW - MINUTE));
+    half.destinations
+        .push(gateway("gw-2", "NAS", None, NOW - MINUTE, NOW - MINUTE));
     let line = lined(&half, false);
     assert!(!line.pair_again);
     assert_eq!(line.sentence, "Backed up 2 minutes ago.");
@@ -464,12 +496,15 @@ fn an_old_acknowledgement_or_a_gateway_unreached_for_days_earns_attention() {
     assert_eq!(lined(&unreached, false).tone, Tone::Attention as i32);
     unreached.destinations[0].last_seen_ms = 0;
     assert_eq!(lined(&unreached, false).tone, Tone::Attention as i32);
-    assert!(STALE_MS > 2 * DAY && STALE_MS <= 3 * DAY);
+    assert_eq!(STALE_MS, 3 * DAY);
 }
 
 #[test]
 fn a_vault_the_core_could_not_be_asked_about_draws_no_line_at_all() {
-    assert_eq!(line::line(EN, None, false, NOW), wire::BackupLine::default());
+    assert_eq!(
+        line::line(EN, None, false, NOW),
+        wire::BackupLine::default()
+    );
 }
 
 #[test]
@@ -510,13 +545,23 @@ fn a_moved_vault_freezes_with_what_is_only_here_since_the_last_acknowledgement()
         frozen: true,
         ..steady()
     });
-    assert_eq!(freeze::for_reading(Some(&remembered), None).expect("moved").unacked, 0);
+    assert_eq!(
+        freeze::for_reading(Some(&remembered), None)
+            .expect("moved")
+            .unacked,
+        0
+    );
     // NOTHING EVER ACKNOWLEDGED: the move's own time dates it.
     let never = reading(&wire::BackupStatusResponse {
         acked_at_ms: None,
         ..steady()
     });
-    assert_eq!(freeze::for_reading(Some(&never), Some(NOW)).expect("moved").since_ms, NOW);
+    assert_eq!(
+        freeze::for_reading(Some(&never), Some(NOW))
+            .expect("moved")
+            .since_ms,
+        NOW
+    );
 }
 
 #[test]
@@ -542,7 +587,6 @@ fn the_status_reads_the_ledger_destinations_counts_and_why_the_rest_waits() {
             (wire::WaitReason::Charger, 0),
         ]),
         frozen: true,
-        ..Default::default()
     };
     let read = reading(&wired);
     assert_eq!(read.unconfirmed(), 3);
@@ -617,18 +661,36 @@ fn a_frozen_vault_says_the_changes_are_only_here_and_never_that_they_are_lost() 
 fn a_pass_is_told_in_one_sentence_per_reason_and_a_deadline_is_not_an_error() {
     use wire::DrainStop as S;
     let say = |stopped, pending| claim::stopped_sentence(EN, stopped, pending);
-    assert_eq!(say(S::Empty, 0), "Your backup device has everything that was ready.");
+    assert_eq!(
+        say(S::Empty, 0),
+        "Your backup device has everything that was ready."
+    );
     assert_eq!(say(S::Deadline, 2_000_000), "Still backing up. 2 MB to go.");
-    assert_eq!(say(S::Unreachable, 99), "Backup device didn't answer. Will try again.");
-    assert_eq!(say(S::Untrusted, 99), "That isn't your backup device. Nothing was sent.");
+    assert_eq!(
+        say(S::Unreachable, 99),
+        "Backup device didn't answer. Will try again."
+    );
+    assert_eq!(
+        say(S::Untrusted, 99),
+        "That isn't your backup device. Nothing was sent."
+    );
     assert_eq!(say(S::Refused, 99), words::backup_refused(EN));
     // AN UNKNOWN STOP READS AS UNREACHABLE: "try again" is never a harmful remedy.
     assert_eq!(say(S::Unspecified, 0), say(S::Unreachable, 0));
-    assert_eq!(claim::moved_sentence(EN), "Moved to another phone. This phone is read-only.");
-    let all: Vec<String> = [S::Empty, S::Deadline, S::Unreachable, S::Untrusted, S::Refused]
-        .into_iter()
-        .map(|stopped| say(stopped, 99))
-        .collect();
+    assert_eq!(
+        claim::moved_sentence(EN),
+        "Moved to another phone. This phone is read-only."
+    );
+    let all: Vec<String> = [
+        S::Empty,
+        S::Deadline,
+        S::Unreachable,
+        S::Untrusted,
+        S::Refused,
+    ]
+    .into_iter()
+    .map(|stopped| say(stopped, 99))
+    .collect();
     for (at, sentence) in all.iter().enumerate() {
         assert!(!sentence.to_lowercase().contains("error"), "{sentence}");
         assert!(all.iter().skip(at + 1).all(|other| other != sentence));
@@ -675,47 +737,76 @@ fn a_read_draws_the_line_the_gateways_and_the_controls_every_word_finished() {
         Some(wire::backup_home_state::Body::Loading(_))
     ));
     page.serve();
-    page.shell
-        .device
-        .insert(super::rule::RULE_KEY.to_owned(), "wifi-and-cellular-photos".to_owned());
+    page.shell.device.insert(
+        super::rule::RULE_KEY.to_owned(),
+        "wifi-and-cellular-photos".to_owned(),
+    );
     let mut page = Page::over(both());
-    page.shell
-        .device
-        .insert(super::rule::RULE_KEY.to_owned(), "wifi-and-cellular-photos".to_owned());
+    page.shell.device.insert(
+        super::rule::RULE_KEY.to_owned(),
+        "wifi-and-cellular-photos".to_owned(),
+    );
     page.send(E::Appeared(wire::Appeared {}));
     page.serve();
     let data = page.data();
     assert_eq!(data.title, words::backup_title(EN));
     // THE LINE IS HOME'S LINE, the same value and the same words.
-    assert_eq!(data.line, Some(line::line(EN, Some(&reading(&both())), false, NOW)));
-    assert_eq!(data.line.as_ref().expect("line").sentence, "Backed up 2 minutes ago.");
     assert_eq!(
-        data.destinations.iter().map(|row| row.gateway_id.as_str()).collect::<Vec<_>>(),
+        data.line,
+        Some(line::line(EN, Some(&reading(&both())), false, NOW))
+    );
+    assert_eq!(
+        data.line.as_ref().expect("line").sentence,
+        "Backed up 2 minutes ago."
+    );
+    assert_eq!(
+        data.destinations
+            .iter()
+            .map(|row| row.gateway_id.as_str())
+            .collect::<Vec<_>>(),
         vec!["gw-1", "gw-2"]
     );
     assert_eq!(
-        data.destinations.iter().map(|row| row.label.as_str()).collect::<Vec<_>>(),
+        data.destinations
+            .iter()
+            .map(|row| row.label.as_str())
+            .collect::<Vec<_>>(),
         vec!["Home laptop", "Your backup device"]
     );
     assert_eq!(
-        data.destinations.iter().map(|row| row.detail.as_str()).collect::<Vec<_>>(),
-        vec!["192.168.1.20:7443 · Reached 2 minutes ago", "Not reached yet"]
+        data.destinations
+            .iter()
+            .map(|row| row.detail.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "192.168.1.20:7443 · Reached 2 minutes ago",
+            "Not reached yet"
+        ]
     );
     assert_eq!(
         data.destinations[0].accessibility_label,
         "Home laptop. 192.168.1.20:7443 · Reached 2 minutes ago"
     );
     assert_eq!(data.devices_heading, words::backup_devices_heading(EN));
-    assert_eq!(data.add_destination_label, words::backup_add_destination(EN));
+    assert_eq!(
+        data.add_destination_label,
+        words::backup_add_destination(EN)
+    );
     assert_eq!(data.add_destination, Some(routes::add_destination()));
     assert_eq!(data.forget_label, words::backup_forget(EN));
     assert_eq!(data.rule_label, words::backup_rule_heading(EN));
     assert_eq!(
-        data.rule_choices.iter().map(|choice| choice.stored.as_str()).collect::<Vec<_>>(),
+        data.rule_choices
+            .iter()
+            .map(|choice| choice.stored.as_str())
+            .collect::<Vec<_>>(),
         vec!["wifi-only", "wifi-and-cellular-photos", "manual"]
     );
     assert_eq!(
-        data.rule_choices.iter().map(|choice| choice.picked).collect::<Vec<_>>(),
+        data.rule_choices
+            .iter()
+            .map(|choice| choice.picked)
+            .collect::<Vec<_>>(),
         vec![false, true, false]
     );
     assert_eq!(
@@ -726,17 +817,24 @@ fn a_read_draws_the_line_the_gateways_and_the_controls_every_word_finished() {
     assert_eq!(data.include_videos_label, words::backup_include_videos(EN));
     assert_eq!(data.back_up_now_label, words::backup_now(EN));
     assert!(data.back_up_now_enabled);
-    assert_eq!((data.notice.as_str(), data.background_notice.as_str()), ("", ""));
+    assert_eq!(
+        (data.notice.as_str(), data.background_notice.as_str()),
+        ("", "")
+    );
 }
 
 #[test]
-fn a_gateway_that_refused_this_phones_token_says_to_pair_it_again_where_it_says_when_it_was_reached() {
+fn a_gateway_that_refused_this_phones_token_says_to_pair_it_again_where_it_says_when_it_was_reached()
+ {
     let mut refused = home_laptop();
     refused.pair_again = true;
     let page = Page::open(status(vec![refused.clone(), nas()]));
     let data = page.data();
     assert_eq!(
-        data.destinations.iter().map(|row| row.pair_again).collect::<Vec<_>>(),
+        data.destinations
+            .iter()
+            .map(|row| row.pair_again)
+            .collect::<Vec<_>>(),
         vec![true, false]
     );
     assert_eq!(
@@ -770,12 +868,17 @@ fn battery_saving_is_mentioned_only_once_a_backlog_has_stood_a_day() {
     assert_eq!(stood.battery_label, words::backup_battery_action(EN));
     // Sealed bytes still waiting are a backlog too.
     assert_eq!(
-        Page::open(behind(NOW - 25 * HOUR, 10, 4_096)).data().battery_sentence,
+        Page::open(behind(NOW - 25 * HOUR, 10, 4_096))
+            .data()
+            .battery_sentence,
         words::backup_battery(EN)
     );
     let none = |status: wire::BackupStatusResponse| {
         let data = Page::open(status).data();
-        assert_eq!((data.battery_sentence.as_str(), data.battery_label.as_str()), ("", ""));
+        assert_eq!(
+            (data.battery_sentence.as_str(), data.battery_label.as_str()),
+            ("", "")
+        );
     };
     // A FRESH ACKNOWLEDGEMENT, an old one with nothing behind it, a vault never
     // acknowledged, nothing paired, a frozen vault: none.
@@ -842,7 +945,10 @@ fn a_vault_that_moved_offers_no_forget_no_add_and_a_forget_sent_anyway_asks_noth
     assert!(page.jobs.is_empty());
     let live = Page::open(both()).data();
     assert_eq!(live.forget_label, words::backup_forget(EN));
-    assert_eq!(live.add_destination_label, words::backup_add_destination(EN));
+    assert_eq!(
+        live.add_destination_label,
+        words::backup_add_destination(EN)
+    );
 }
 
 #[test]
@@ -892,7 +998,10 @@ fn a_run_that_ends_is_re_read_because_what_it_moved_is_the_lines_to_say() {
     page.say(wire::backup_home_event::Kind::BackUpNow(
         wire::backup_home_event::BackUpNow {},
     ));
-    assert!(page.timers.contains(&(super::home::PROGRESS_TIMER_NAME.to_owned(), true)));
+    assert!(
+        page.timers
+            .contains(&(super::home::PROGRESS_TIMER_NAME.to_owned(), true))
+    );
     let reads = page.reads();
     page.set_status(both());
     page.answer_job(None);
@@ -901,7 +1010,10 @@ fn a_run_that_ends_is_re_read_because_what_it_moved_is_the_lines_to_say() {
     assert!(!data.backing_up_now);
     assert_eq!(data.progress, "");
     assert_eq!(data.line.expect("line").detail, "All 10 photos and files");
-    assert!(page.timers.contains(&(super::home::PROGRESS_TIMER_NAME.to_owned(), false)));
+    assert!(
+        page.timers
+            .contains(&(super::home::PROGRESS_TIMER_NAME.to_owned(), false))
+    );
 }
 
 #[test]
@@ -923,7 +1035,10 @@ fn a_run_that_is_going_is_re_read_as_it_goes_and_nothing_else_is() {
         timer: super::home::PROGRESS_TIMER_NAME.to_owned(),
     }));
     assert_eq!(page.reads(), reads + 1);
-    assert_eq!(page.timers.last(), Some(&(super::home::PROGRESS_TIMER_NAME.to_owned(), true)));
+    assert_eq!(
+        page.timers.last(),
+        Some(&(super::home::PROGRESS_TIMER_NAME.to_owned(), true))
+    );
     // ANOTHER TIMER is not this one.
     page.send(E::TimerFired(wire::TimerFired {
         timer: "other".to_owned(),
@@ -940,7 +1055,10 @@ fn an_open_screen_re_reads_when_a_pass_it_did_not_start_moves_the_line() {
         content_confirmed: 59,
         ..both()
     });
-    assert_eq!(page.data().line.expect("line").detail, "All 59 photos and files");
+    assert_eq!(
+        page.data().line.expect("line").detail,
+        "All 59 photos and files"
+    );
     page.set_status(wire::BackupStatusResponse {
         content_total: 60,
         content_confirmed: 60,
@@ -951,7 +1069,10 @@ fn an_open_screen_re_reads_when_a_pass_it_did_not_start_moves_the_line() {
         tables: vec!["backup".to_owned()],
     }));
     assert_eq!(page.reads(), reads + 1);
-    assert_eq!(page.data().line.expect("line").detail, "All 60 photos and files");
+    assert_eq!(
+        page.data().line.expect("line").detail,
+        "All 60 photos and files"
+    );
 }
 
 #[test]
@@ -967,7 +1088,9 @@ fn a_read_that_fails_is_a_failure_and_a_refresh_that_fails_keeps_what_was_read()
     assert!(!failure.sentence.is_empty() && !failure.remedy.is_empty());
     // Retry reads again.
     page.set_status(both());
-    page.say(wire::backup_home_event::Kind::Retry(wire::backup_home_event::Retry {}));
+    page.say(wire::backup_home_event::Kind::Retry(
+        wire::backup_home_event::Retry {},
+    ));
     page.serve();
     assert_eq!(page.data().destinations.len(), 2);
     // A refresh that fails keeps the last reading.
@@ -987,7 +1110,10 @@ fn the_rule_and_the_videos_bit_are_written_as_the_member_set_them() {
     // INCLUDED IS STORED AS ABSENCE, so the store holds a key only while the
     // member is spending less than the default.
     assert_eq!(
-        page.shell.device.get(super::rule::INCLUDE_VIDEOS_KEY).map(String::as_str),
+        page.shell
+            .device
+            .get(super::rule::INCLUDE_VIDEOS_KEY)
+            .map(String::as_str),
         Some("excluded")
     );
     page.say(wire::backup_home_event::Kind::RuleChosen(
@@ -997,11 +1123,18 @@ fn the_rule_and_the_videos_bit_are_written_as_the_member_set_them() {
     ));
     page.serve();
     assert_eq!(
-        page.shell.device.get(super::rule::RULE_KEY).map(String::as_str),
+        page.shell
+            .device
+            .get(super::rule::RULE_KEY)
+            .map(String::as_str),
         Some("manual")
     );
     assert_eq!(
-        page.data().rule_choices.iter().map(|choice| choice.picked).collect::<Vec<_>>(),
+        page.data()
+            .rule_choices
+            .iter()
+            .map(|choice| choice.picked)
+            .collect::<Vec<_>>(),
         vec![false, false, true]
     );
     // AN UNKNOWN WORD IS THE DEFAULT, never a throw.
@@ -1016,9 +1149,10 @@ fn the_rule_and_the_videos_bit_are_written_as_the_member_set_them() {
 #[test]
 fn what_this_phone_kept_comes_back_when_the_screen_opens_again() {
     let mut page = Page::over(both());
-    page.shell
-        .device
-        .insert(super::rule::INCLUDE_VIDEOS_KEY.to_owned(), "excluded".to_owned());
+    page.shell.device.insert(
+        super::rule::INCLUDE_VIDEOS_KEY.to_owned(),
+        "excluded".to_owned(),
+    );
     page.shell
         .device
         .insert(super::rule::RULE_KEY.to_owned(), "manual".to_owned());
@@ -1030,11 +1164,14 @@ fn what_this_phone_kept_comes_back_when_the_screen_opens_again() {
 }
 
 #[test]
-fn forgetting_asks_nothing_reaches_only_a_gateway_the_screen_draws_and_says_whether_it_will_refuse_this_phone() {
+fn forgetting_asks_nothing_reaches_only_a_gateway_the_screen_draws_and_says_whether_it_will_refuse_this_phone()
+ {
     let forget = |id: &str| {
-        wire::backup_home_event::Kind::ForgetDestination(wire::backup_home_event::ForgetDestination {
-            gateway_id: id.to_owned(),
-        })
+        wire::backup_home_event::Kind::ForgetDestination(
+            wire::backup_home_event::ForgetDestination {
+                gateway_id: id.to_owned(),
+            },
+        )
     };
     let asked = |page: &Page| page.jobs.clone();
     let mut page = Page::open(both());
@@ -1052,7 +1189,10 @@ fn forgetting_asks_nothing_reaches_only_a_gateway_the_screen_draws_and_says_whet
     page.answer_job(answer(true, true));
     // RE-READ, and the gateway's refusal of this phone said.
     assert_eq!(page.reads(), reads + 1);
-    assert_eq!(page.data().notice, "Forgot Home laptop. It now refuses this phone.");
+    assert_eq!(
+        page.data().notice,
+        "Forgot Home laptop. It now refuses this phone."
+    );
     assert_eq!(page.data().destinations.len(), 1);
 
     // AN UNNAMED GATEWAY is "Your backup device", and NOT TOLD: the token stays
@@ -1072,12 +1212,18 @@ fn forgetting_asks_nothing_reaches_only_a_gateway_the_screen_draws_and_says_whet
     let mut page = Page::open(both());
     page.say(forget("gw-1"));
     page.answer_job(answer(false, false));
-    assert_eq!(page.data().notice, "Couldn't forget Home laptop. Try again.");
+    assert_eq!(
+        page.data().notice,
+        "Couldn't forget Home laptop. Try again."
+    );
     // No answer at all (no core, a refusal) is not forgotten.
     let mut page = Page::open(both());
     page.say(forget("gw-1"));
     page.answer_job(None);
-    assert_eq!(page.data().notice, "Couldn't forget Home laptop. Try again.");
+    assert_eq!(
+        page.data().notice,
+        "Couldn't forget Home laptop. Try again."
+    );
 }
 
 // ---- the recovery key ----------------------------------------------------
@@ -1114,7 +1260,9 @@ fn a_key_in_the_keychain_is_one_quiet_sentence_the_show_control_and_the_way_off_
 fn a_key_on_this_phone_alone_is_a_warning_until_the_member_says_they_saved_a_copy() {
     let mut page = Page::over(both());
     page.shell.synced.remove(secrets::SEED_KEY);
-    page.shell.device.insert(secrets::LOCAL_SEED.to_owned(), SEED.to_owned());
+    page.shell
+        .device
+        .insert(secrets::LOCAL_SEED.to_owned(), SEED.to_owned());
     page.send(E::Appeared(wire::Appeared {}));
     page.serve();
     let data = page.data();
@@ -1125,8 +1273,14 @@ fn a_key_on_this_phone_alone_is_a_warning_until_the_member_says_they_saved_a_cop
 
     let mut saved = Page::over(both());
     saved.shell.synced.remove(secrets::SEED_KEY);
-    saved.shell.device.insert(secrets::LOCAL_SEED.to_owned(), SEED.to_owned());
-    saved.shell.device.insert(secrets::WORDS_SAVED.to_owned(), "1".to_owned());
+    saved
+        .shell
+        .device
+        .insert(secrets::LOCAL_SEED.to_owned(), SEED.to_owned());
+    saved
+        .shell
+        .device
+        .insert(secrets::WORDS_SAVED.to_owned(), "1".to_owned());
     saved.send(E::Appeared(wire::Appeared {}));
     saved.serve();
     let data = saved.data();
@@ -1137,7 +1291,9 @@ fn a_key_on_this_phone_alone_is_a_warning_until_the_member_says_they_saved_a_cop
     let mut none = Page::over(both());
     none.shell.synchronizing = false;
     none.shell.synced.remove(secrets::SEED_KEY);
-    none.shell.device.insert(secrets::LOCAL_SEED.to_owned(), SEED.to_owned());
+    none.shell
+        .device
+        .insert(secrets::LOCAL_SEED.to_owned(), SEED.to_owned());
     none.send(E::Appeared(wire::Appeared {}));
     none.serve();
     assert_eq!(none.data().key_sync_label, "");
@@ -1178,7 +1334,9 @@ fn the_page_has_one_ink_button_and_the_screen_names_it() {
     let alone = |status: wire::BackupStatusResponse, words_here: bool| {
         let mut page = Page::over(status);
         page.shell.synced.remove(secrets::SEED_KEY);
-        page.shell.device.insert(secrets::LOCAL_SEED.to_owned(), SEED.to_owned());
+        page.shell
+            .device
+            .insert(secrets::LOCAL_SEED.to_owned(), SEED.to_owned());
         if !words_here {
             page.shell.device.remove(secrets::LOCAL_WORDS);
         }
@@ -1193,7 +1351,10 @@ fn the_page_has_one_ink_button_and_the_screen_names_it() {
     // NO WORDS HERE, NO SHOW CONTROL: the warning has no button to promote.
     assert_eq!(ink(&alone(both(), false)), I::BackUpNow as i32);
     // WITHOUT A WARNING the page's act is adding a device, then Back up now.
-    assert_eq!(ink(&Page::open(status(Vec::new()))), I::AddDestination as i32);
+    assert_eq!(
+        ink(&Page::open(status(Vec::new()))),
+        I::AddDestination as i32
+    );
     assert_eq!(ink(&Page::open(both())), I::BackUpNow as i32);
     // A VAULT THAT MOVED AND PAIRS NO GATEWAY offers neither add nor Back up now.
     assert_eq!(
@@ -1237,16 +1398,25 @@ fn moving_the_key_asks_only_for_a_real_move_and_says_when_the_keychain_refused()
     // Off the keychain: the seed leaves the synchronised store and stays here.
     page.say(set(false));
     page.serve();
-    assert!(page.shell.synced.get(secrets::SEED_KEY).is_none());
-    assert_eq!(page.shell.device.get(secrets::LOCAL_SEED).map(String::as_str), Some(SEED));
+    assert!(!page.shell.synced.contains_key(secrets::SEED_KEY));
+    assert_eq!(
+        page.shell
+            .device
+            .get(secrets::LOCAL_SEED)
+            .map(String::as_str),
+        Some(SEED)
+    );
     let data = page.data();
     assert!(!data.key_synced && data.notice.is_empty() && data.key_warning);
     assert_eq!(data.key_sync_label, "Save my key in iCloud Keychain");
     // And back in: the device copy goes, so there is one seed and not two.
     page.say(set(true));
     page.serve();
-    assert_eq!(page.shell.synced.get(secrets::SEED_KEY).map(String::as_str), Some(SEED));
-    assert!(page.shell.device.get(secrets::LOCAL_SEED).is_none());
+    assert_eq!(
+        page.shell.synced.get(secrets::SEED_KEY).map(String::as_str),
+        Some(SEED)
+    );
+    assert!(!page.shell.device.contains_key(secrets::LOCAL_SEED));
     assert!(page.data().key_synced);
 
     // A KEYCHAIN THAT REFUSES says so, and the key stays on this phone.
@@ -1267,7 +1437,9 @@ fn a_foreground_return_reads_the_stores_again() {
     assert!(page.data().key_synced);
     // The keychain was turned off elsewhere meanwhile.
     page.shell.synced.remove(secrets::SEED_KEY);
-    page.shell.device.insert(secrets::LOCAL_SEED.to_owned(), SEED.to_owned());
+    page.shell
+        .device
+        .insert(secrets::LOCAL_SEED.to_owned(), SEED.to_owned());
     page.send(E::Lifecycle(wire::AppLifecycle { foreground: true }));
     page.serve();
     assert!(!page.data().key_synced);
@@ -1291,8 +1463,8 @@ fn nothing_the_screen_says_carries_the_words_themselves() {
 
 #[test]
 fn a_pass_is_asked_for_under_the_rule_and_videos_bit_the_screen_shows_by_the_members_own_tap() {
-    use centraid_core::screens::VaultRequest;
     use super::rule::TransferRule;
+    use centraid_core::screens::VaultRequest;
     let drain = |rule, include| match doors::pass_request(rule, include) {
         VaultRequest::Drain(drain) => drain,
         other => panic!("not a pass: {other:?}"),
@@ -1307,7 +1479,10 @@ fn a_pass_is_asked_for_under_the_rule_and_videos_bit_the_screen_shows_by_the_mem
     assert_eq!(wifi.deadline_ms, 0);
     let manual = drain(TransferRule::Manual, false);
     assert_eq!(manual.rule, wire::TransferRule::Manual as i32);
-    assert!(manual.exclude_videos, "include videos off is exclude_videos on");
+    assert!(
+        manual.exclude_videos,
+        "include videos off is exclude_videos on"
+    );
     assert_eq!(
         drain(TransferRule::WifiAndCellularPhotos, true).rule,
         wire::TransferRule::WifiAndCellularPhotos as i32
@@ -1346,4 +1521,39 @@ fn a_forget_names_the_gateway_and_its_answer_finds_it_by_tag() {
             revoked: false
         })
     );
+}
+
+#[test]
+fn a_shell_that_cannot_give_the_phones_settings_gives_the_defaults_and_the_page_still_opens() {
+    let mut page = Page::over(both());
+    page.send(E::Appeared(wire::Appeared {}));
+    let at = page
+        .effects
+        .iter()
+        .position(|effect| matches!(effect.kind, Some(wire::effect::Kind::Secrets(_))))
+        .expect("the stores are asked for");
+    page.effects.remove(at);
+    page.send(E::EffectResult(wire::EffectResult {
+        effect_id: 0,
+        outcome: Some(wire::effect_result::Outcome::Failed(
+            wire::EffectFailed::default(),
+        )),
+    }));
+    let data = page.data();
+    // THE CONSERVATIVE DEFAULTS: Wi-Fi only, videos included, and no key section
+    // for a key nobody could read.
+    assert!(data.rule_choices[0].picked);
+    assert!(data.include_videos);
+    assert_eq!(data.key_heading, "");
+}
+
+#[test]
+fn the_screens_two_hand_offs_are_routes_the_shell_pushes() {
+    assert_eq!(routes::home().screen, "backup.home");
+    assert!(matches!(
+        routes::home().args,
+        Some(wire::route::Args::BackupHome(_))
+    ));
+    assert_eq!(routes::add_destination().screen, "pair.laptop");
+    assert_eq!(routes::show_key().screen, "words.show");
 }

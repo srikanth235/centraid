@@ -26,7 +26,7 @@ fn data(driver: &Driver, instance: u64) -> wire::BackupHomeData {
     match &driver.view(instance).kind {
         Some(wire::view_state::Kind::BackupHome(wire::BackupHomeState {
             body: Some(wire::backup_home_state::Body::Data(data)),
-        })) => data.clone(),
+        })) => (**data).clone(),
         other => panic!("not a ready Backup screen: {other:?}"),
     }
 }
@@ -53,16 +53,22 @@ fn the_backup_screen_is_registered_and_loads_until_the_phones_settings_are_read(
             )
         })
         .expect("the screen asks whether the platform will wake Centraid");
-    assert_eq!(background, 0);
-    driver.answer_effect(wire::effect_result::Outcome::BackgroundStatus(
-        wire::BackgroundStatus { registered: false },
-    ));
+    let asked = driver.effects.remove(background);
+    assert_eq!(asked.instance, instance);
+    driver.send(
+        instance,
+        E::EffectResult(wire::EffectResult {
+            effect_id: asked.effect_id,
+            outcome: Some(wire::effect_result::Outcome::BackgroundStatus(
+                wire::BackgroundStatus { registered: false },
+            )),
+        }),
+    );
     let data = data(&driver, instance);
     assert_eq!(
         data.background_notice,
         "Background App Refresh is off, so Centraid only catches up when you open it."
     );
-    assert!(driver.effects.is_empty());
 }
 
 #[test]
@@ -112,9 +118,15 @@ fn the_rule_the_member_chose_is_kept_by_the_shell_and_comes_back() {
         }),
     );
     driver.serve(&mut shell);
-    assert_eq!(shell.device.get("transfer-rule").map(String::as_str), Some("manual"));
     assert_eq!(
-        shell.device.get("transfer-rule.include-videos").map(String::as_str),
+        shell.device.get("transfer-rule").map(String::as_str),
+        Some("manual")
+    );
+    assert_eq!(
+        shell
+            .device
+            .get("transfer-rule.include-videos")
+            .map(String::as_str),
         Some("excluded")
     );
     // Closed and opened again, it reads them back.

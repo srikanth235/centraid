@@ -49,7 +49,10 @@ pub fn frozen(locale: Locale, unacked: u64, since: &str) -> String {
     if unacked == 0 {
         words::claim_moved_nothing(locale)
     } else {
-        fill(&words::claim_moved_unsent(locale, unacked), &[("since", since)])
+        fill(
+            &words::claim_moved_unsent(locale, unacked),
+            &[("since", since)],
+        )
     }
 }
 

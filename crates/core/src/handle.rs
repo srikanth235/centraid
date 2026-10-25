@@ -597,10 +597,10 @@ impl HandleState {
     pub fn load(&self, request: &wire::LoadRequest) -> Result<wire::LoadResponse> {
         // Some of the shell's reads are the phone's own ledger (the backup's
         // status, the held vaults), not a vault table: they need the handle.
-        if request.app == crate::shell::ID {
-            if let Some(answer) = crate::phone::shell_reads::load(self, request) {
-                return answer;
-            }
+        if request.app == crate::shell::ID
+            && let Some(answer) = crate::phone::shell_reads::load(self, request)
+        {
+            return answer;
         }
         self.with_vault(|vault| crate::load::load(vault, request))
     }

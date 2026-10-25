@@ -63,6 +63,6 @@ pub(crate) fn status(handle: &HandleState) -> Result<wire::LoadResponse> {
                 },
             )),
         }),
-        tables: vec!["blob".to_owned(), TABLE.to_owned()],
+        tables: vec![TABLE.to_owned(), "blob".to_owned()],
     })
 }
