@@ -28,10 +28,6 @@ pub(super) const PAIR_TAG: &str = "pair";
 /// new destination at once.
 pub const ANNOUNCE_PAIRED: &str = "backup.destinations";
 
-/// What the shell is told when the member asks for the words: it opens the
-/// words screen for a re-key in this screen's place.
-pub const ANNOUNCE_REKEY: &str = "pair.rekey";
-
 #[must_use]
 pub fn build(_route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Laptop::default()))
@@ -256,12 +252,16 @@ impl Screen for Laptop {
                 }
                 Some(P::Primary(_)) => self.primary(ctx),
                 Some(P::Secondary(_)) if self.phase != Phase::Pairing => self.finished = true,
-                // `WordsTapped` IS AN INTENT: the shell opens the words screen
-                // for a re-key in this screen's place, so the pairing is done.
-                // It is heard only where the door was drawn.
+                // `WordsTapped` IS AN INTENT: the words screen opens for a re-key
+                // in this screen's place (in pairing's terms), so the pairing is
+                // done. It is heard only where the door was drawn.
                 Some(P::Words(_)) if self.phase == Phase::NeedsWords && self.rekey => {
                     self.finished = true;
-                    return vec![announce(ANNOUNCE_REKEY)];
+                    return vec![wire::Effect {
+                        kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                            route: Some(crate::custody::routes::rekey_for_pairing()),
+                        })),
+                    }];
                 }
                 _ => {}
             },

@@ -82,8 +82,8 @@ message PairLaptopEvent {
     ScanTapped scan = 2;
     Primary primary = 3;
     Secondary secondary = 4;
-    // INTENT: the shell opens the words screen for a re-key. Rust finishes this
-    // screen and announces `pair.rekey`.
+    // INTENT: the words screen opens for a re-key in pairing's terms. Rust
+    // finishes this screen and asks the shell to push the route (`OpenRoute`).
     WordsTapped words = 5;
   }
 
