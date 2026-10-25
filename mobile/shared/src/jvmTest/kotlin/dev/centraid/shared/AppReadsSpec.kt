@@ -3,9 +3,6 @@ package dev.centraid.shared
 import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.ErrorCode
 import centraid.core.v1.PageCursor
-import centraid.core.v1.Row
-import centraid.core.v1.Value
-import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.ReadFailureKind
 import dev.centraid.core.CoreFailure
 import dev.centraid.shared.apps.health.HealthHomeMachine
@@ -22,26 +19,6 @@ import dev.centraid.shared.apps.people.PeoplePersonMachine
 import dev.centraid.shared.apps.people.PeoplePersonReads
 import dev.centraid.shared.apps.people.PeopleTrashMachine
 import dev.centraid.shared.apps.people.PeopleTrashReads
-import centraid.screen.v1.PhotoShelf
-import centraid.screen.v1.PhotoShelfEvent
-import centraid.screen.v1.PhotoLightboxEvent
-import centraid.screen.v1.PhotoPickerEvent
-import centraid.screen.v1.DuplicateReviewEvent
-import dev.centraid.shared.apps.photos.DuplicateReviewMachine
-import dev.centraid.shared.apps.photos.DuplicateClusterMembers
-import dev.centraid.shared.apps.photos.DuplicateReviewReads
-import dev.centraid.shared.apps.photos.DuplicatesMachine
-import dev.centraid.shared.apps.photos.DuplicatesReads
-import dev.centraid.shared.apps.photos.PhotoLightboxMachine
-import dev.centraid.shared.apps.photos.PhotoLightboxReads
-import dev.centraid.shared.apps.photos.PhotoPickerMachine
-import dev.centraid.shared.apps.photos.PhotoPickerReads
-import dev.centraid.shared.apps.photos.PhotoShelfMachine
-import dev.centraid.shared.apps.photos.PhotoShelfReads
-import dev.centraid.shared.apps.photos.PhotosGridMachine
-import dev.centraid.shared.apps.photos.PhotosReads
-import dev.centraid.shared.apps.photos.PlacesMachine
-import dev.centraid.shared.apps.photos.PlacesReads
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.kit.TrashReads
 import dev.centraid.shared.shell.HomeMachine
@@ -74,127 +51,6 @@ import java.io.File
 class AppReadsSpec : StringSpec({
 
     /**
-     * Every screen's reads beside the machine that emits its effects.
-     *
-     * A list and not three copies of one test: the properties below are laws
-     * for every app screen, and a fourth app that got its own hand-written test
-     * would be a fourth chance to leave one out.
-     */
-    val screens: List<Triple<String, ScreenReads<*, *>, ScreenMachine<*, *>>> = listOf(
-        Triple("photos", PhotosReads, PhotosGridMachine),
-        // THE PHOTOS MINIAPP'S OTHER SCREENS (#1029, photos port). Seven of
-        // them are `ScreenReads` and belong here; the ones that are not —
-        // Collections and Search — fan several statements out in their
-        // bridges and fold the answers, because their data case cannot be
-        // CONSTRUCTED from one table (`HomeSession.attachReads`' ruling).
-        // Those are asserted in their own specs, which is where the fold is.
-        Triple("photos.shelf", PhotoShelfReads, PhotoShelfMachine),
-        Triple("photos.picker", PhotoPickerReads, PhotoPickerMachine),
-        Triple("photos.lightbox", PhotoLightboxReads, PhotoLightboxMachine),
-        Triple("photos.places", PlacesReads, PlacesMachine),
-        // THE DUPLICATES SHELF IS AN APP QUERY (`photos.duplicates`, the core's
-        // clustering), and is in `queryScreens`.
-        Triple("photos.duplicate", DuplicateReviewReads, DuplicateReviewMachine),
-    )
-
-    /** The statement each screen makes when it is holding a state that can read. */
-    fun statementOf(name: String) = when (name) {
-        "photos" -> PhotosReads.query(PhotosGridMachine.initial(), null)
-        // A PARAMETERISED SCREEN IS ASKED IN THE STATE IT WOULD REALLY READ IN.
-        // `query` returns null when a screen cannot yet say what to read, so a
-        // shelf asked with no shelf, a lightbox with no asset or a review with
-        // no cluster would answer null and this whole spec would pass over an
-        // empty statement — proving nothing about the screens most likely to
-        // get their projection wrong. Each is driven through its own `Opened`,
-        // which is how the parameter reaches the state in the product.
-        "photos.shelf" -> PhotoShelfReads.query(
-            PhotoShelfMachine.reduce(
-                PhotoShelfMachine.initial(),
-                PhotoShelfEvent(
-                    opened = PhotoShelfEvent.Opened(
-                        shelf = PhotoShelf(
-                            album = PhotoShelf.Album(collection_id = "alb-1", name = "Portugal"),
-                        ),
-                    ),
-                ),
-            ).state,
-            null,
-        )
-        "photos.picker" -> PhotoPickerReads.query(
-            PhotoPickerMachine.reduce(
-                PhotoPickerMachine.initial(),
-                PhotoPickerEvent(
-                    opened = PhotoPickerEvent.Opened(
-                        collection_id = "alb-1",
-                        collection_name = "Portugal",
-                    ),
-                ),
-            ).state,
-            null,
-        )
-        "photos.lightbox" -> PhotoLightboxReads.query(
-            PhotoLightboxMachine.reduce(
-                PhotoLightboxMachine.initial(),
-                PhotoLightboxEvent(opened = PhotoLightboxEvent.Opened(asset_id = "ast-1")),
-            ).state,
-            null,
-        )
-        "photos.places" -> PlacesReads.query(PlacesMachine.initial(), null)
-        else -> {
-            // THE CLUSTER'S MEMBERS ARE THE CORE'S, asked as the screen opens; a
-            // cluster the core did not answer has no members to read.
-            DuplicateClusterMembers.remember("dup-1", listOf("ast-1", "ast-2"))
-            DuplicateReviewReads.query(
-                DuplicateReviewMachine.reduce(
-                    DuplicateReviewMachine.initial(),
-                    DuplicateReviewEvent(
-                        opened = DuplicateReviewEvent.Opened(cluster_id = "dup-1"),
-                    ),
-                ).state,
-                null,
-            )
-        }
-    }
-
-    "every screen's select carries both order columns" {
-        // THE DOOR HAS NO `key_of` CALLBACK, so the cursor is read off the row
-        // by the two columns the ORDER BY names (`statement.ts:43-48`). A
-        // statement that orders by a column it did not project produces a walk
-        // that is not a walk: the second page starts from an empty key and
-        // repeats the first.
-        screens.forEach { (name, _, _) ->
-            val query = statementOf(name).shouldNotBeNull()
-            val order = query.order.shouldNotBeNull()
-            withClue("$name selects ${query.select}") {
-                query.select.contains(order.sort_column) shouldBe true
-                query.select.contains(order.pk_column) shouldBe true
-            }
-        }
-    }
-
-    "every screen reads the table its machine says it re-reads on" {
-        // THE PAIRING, ASSERTED MECHANICALLY. `rowsChanged` is what makes a
-        // screen move when a row arrives from sync, and it is the machine's own
-        // declaration of a table name; the query is where the rows actually
-        // come from. When the two part company nothing fails — the screen
-        // simply stops redrawing on sync, and the symptom is a list that is
-        // right only after a relaunch. So the machine is asked, rather than the
-        // table being re-listed here: a query that moves to another table
-        // without updating `rowsChanged` makes this RED.
-        screens.forEach { (name, reads, machine) ->
-            val query = statementOf(name).shouldNotBeNull()
-            withClue("$name reads ${query.from}") {
-                query.from shouldBe reads.table
-                // The machine answers an event for its own table and null for
-                // any other, which is the only way to ask it what its table is
-                // without it declaring it twice.
-                machine.rowsChanged(reads.table, listOf("k")).shouldNotBeNull()
-                machine.rowsChanged(reads.table + "_other", listOf("k")) shouldBe null
-            }
-        }
-    }
-
-    /**
      * EVERY TABLE IN THE VAULT, from the DDL the vault is built from.
      *
      * The universe the app-query law below is asked over: a machine can only
@@ -223,8 +79,6 @@ class AppReadsSpec : StringSpec({
         Triple("people.person", PeoplePersonReads, PeoplePersonMachine),
         Triple("people.editor", PeopleEditorReads, PeopleEditorMachine),
         Triple("people.trash", PeopleTrashReads, PeopleTrashMachine),
-        // PHOTOS' DUPLICATES (#1135): the core's clustering, asked as an app query.
-        Triple("photos.duplicates", DuplicatesReads, DuplicatesMachine),
         // HEALTH (#1129). Home reads the days, the workouts, their kinds and whether a
         // store is connected; a metric only the days; a workout its activity and kind.
         Triple("health.home", HealthHomeReads, HealthHomeMachine),
@@ -256,103 +110,12 @@ class AppReadsSpec : StringSpec({
         reactsTo(HomeMachine) shouldBe HomeReads.TABLES
     }
 
-    "a photo cell is projected off the columns it selected" {
-        val row = Row(
-            values = listOf(
-                Value(text = "asset-1"),
-                Value(text = "2026-02-03T05:00:00Z"),
-                Value(integer = -480L),
-                Value(text = "video"),
-                Value(text = "group-9"),
-                // THE GRID'S OWN THREE, after the cell's five: the pixel box a
-                // justified row packs from before a byte arrives, and a video's
-                // length. `duration_s` is REAL in the DDL.
-                Value(integer = 4032L),
-                Value(integer = 3024L),
-                Value(real = 12.5),
-                // THE DOOR'S APPENDED COLUMN (D-1025-S7-20): the path of the
-                // bytes this device holds for this row, resolved in the same
-                // statement rather than by a second trip nobody made.
-                Value(text = "/store/data/abc.data"),
-                // AND THE TWO THE HELD STATE IS DERIVED FROM (#1025 S5,
-                // D-1025-S7-62): the original's hash, so a tap can name a blob,
-                // and `original_held` as its OWN column — the thumbnail path
-                // falls back to the original's own bytes on a vault with no
-                // derivative rows, so it cannot stand in for this.
-                Value(text = "a0b1"),
-                Value(integer = 0L),
-            ),
-        )
-        val cell = PhotosReads.arrived(listOf(row), null)
-            .data_.shouldNotBeNull().data_.shouldNotBeNull().cells.single()
-        cell shouldBe PhotoCell(
-            asset_id = "asset-1",
-            captured_at = "2026-02-03T05:00:00Z",
-            captured_utc_offset_minutes = -480,
-            kind = PhotoCell.Kind.KIND_VIDEO,
-            capture_group_id = "group-9",
-            thumbnail_path = "/store/data/abc.data",
-            original_hash = "a0b1",
-            // A THUMBNAIL IS HERE AND THE DEFAULT RULE IS NOT WITHHOLDING THIS
-            // ONE: the read's default link is unmetered, and `WIFI_ONLY` on an
-            // unmetered link admits a video's original. So the cell is waiting
-            // for the bytes rather than for the member — no download arrow.
-            held = PhotoCell.Held.HELD_THUMBNAIL_ONLY,
-            width = 4032,
-            height = 3024,
-            // WHOLE SECONDS, rounded down: the tile prints a length, not a
-            // fraction of one.
-            duration_seconds = 12,
-            // THE CAPTURE-LOCAL DAY, NOT UTC'S. Five in the morning UTC at
-            // eight hours west is the evening before, and the timeline groups
-            // by the day the member lived.
-            day = "2026-02-02",
-        )
-    }
-
-    "a row with no held bytes carries no path, and that is an answer" {
-        // ABSENT HAS MORE THAN ONE CAUSE — the bytes have not reached this
-        // device, or they are a reading no surface may embed (the seat decides
-        // that where the path is produced, so this side cannot be handed one).
-        // Neither is an error and both draw the cell's own empty sentence.
-        val row = Row(
-            values = listOf(
-                Value(text = "asset-2"),
-                Value(text = "2026-02-03T10:00:00Z"),
-                Value(integer = 0L),
-                Value(text = "photo"),
-                Value(text = ""),
-            ),
-        )
-        val cell = PhotosReads.arrived(listOf(row), null)
-            .data_.shouldNotBeNull().data_.shouldNotBeNull().cells.single()
-        cell.thumbnail_path shouldBe null
-        // A ROW WITH NO BOX IS ZERO, never a guess: the view packs it square.
-        cell.width shouldBe 0
-        cell.height shouldBe 0
-    }
-
-    "an unrecognised kind is unspecified, never a photograph" {
-        // The DDL's CHECK admits four values today. A fifth arriving from a
-        // newer gateway must not be drawn as a still image.
-        val row = Row(values = listOf(Value(text = "a"), Value(text = ""), Value(integer = 0L)))
-        val cell = PhotosReads.arrived(listOf(row), null)
-            .data_.shouldNotBeNull().data_.shouldNotBeNull().cells.single()
-        cell.kind shouldBe PhotoCell.Kind.KIND_UNSPECIFIED
-        // An absent capture group is ABSENT, not the empty string: a Live
-        // Photo's pairing is a real id or it is nothing.
-        cell.capture_group_id shouldBe null
-    }
-
     "the cursor pair survives the one string a screen carries" {
         // `PageCursor` IS A PAIR and `next_cursor` is one string, so the two
         // halves are spelled with a separator. A cursor that did not round-trip
         // would be a second page that silently repeats the first.
         //
-        // The separator is the FIXTURES': `ScreenFixtureSpec` asserts that
-        // `photos-shelf/album-selecting`'s `next_cursor` contains a `|`, so that is the
-        // product's written-down spelling and a second one here would make the
-        // fixture a fixture of nothing.
+        // The separator is `|`, the runtime's own spelling.
         val cursor = PageCursor(sort_key = "2026-02-03", pk = "exp-1")
         ScreenRuntime.encodeCursor(cursor) shouldBe "2026-02-03|exp-1"
         ScreenRuntime.decodeCursor(ScreenRuntime.encodeCursor(cursor)) shouldBe cursor

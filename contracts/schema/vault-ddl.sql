@@ -106,6 +106,9 @@ CREATE INDEX message_attachment_by_thumb  ON message_attachment(thumb) WHERE thu
 -- index note_by_notebook on note
 CREATE INDEX note_by_notebook ON note(notebook_id) WHERE notebook_id IS NOT NULL;
 
+-- index photo_by_burst on photo
+CREATE INDEX photo_by_burst       ON photo(burst) WHERE burst IS NOT NULL;
+
 -- index photo_by_edited_from on photo
 CREATE INDEX photo_by_edited_from ON photo(edited_from) WHERE edited_from IS NOT NULL;
 

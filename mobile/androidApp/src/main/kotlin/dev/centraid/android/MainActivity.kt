@@ -476,8 +476,8 @@ public class MainActivity : FragmentActivity() {
                 // screens stand on `stage` edge to edge, as iOS draws them, so
                 // the ground under the system bars follows, and the bars' icons
                 // turn light to be read on it.
-                val onStage = stack.current is Destination.PhotoLightbox ||
-                    stack.current is Destination.PhotoEditor
+                val onStage = (stack.current as? Destination.RustScreen)?.route?.screen in
+                    setOf("photos.lightbox", "photos.editor")
                 val view = LocalView.current
                 val darkScheme = centraidDark()
                 SideEffect {

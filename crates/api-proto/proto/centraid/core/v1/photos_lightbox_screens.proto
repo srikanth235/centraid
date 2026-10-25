@@ -1,0 +1,638 @@
+// PHOTOS' ONE-PHOTOGRAPH SCREENS (#1135, lane D, worker 3): `photos.lightbox`,
+// `photos.editor`, `photos.duplicates` and `photos.duplicate_review`. Arms in
+// `screens.proto`: 804, 805, 806, 807.
+//
+// A SKELETON the lightbox worker fills. Add fields; do not renumber the arms.
+// The cell, the selection bar and the album sheet are `photos_screens.proto`'s.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/photos_screens.proto";
+import "centraid/core/v1/route.proto";
+
+// ---------------------------------------------------------------------------
+// The lightbox: one photograph, its film strip and everything this phone knows
+// ---------------------------------------------------------------------------
+
+// READ THE CAMERA THE ORIGINAL'S HEADER NAMES (#1135): the platform parses the
+// file's EXIF at `path` and answers `CameraRead`; an unreadable header is an
+// empty camera, never a failure.
+message ReadCamera {
+  string path = 1;
+}
+
+message CameraRead {
+  // "Apple iPhone 15 Pro", or empty.
+  string camera = 1;
+}
+
+message PhotosLightboxState {
+  string photo_id = 1;
+  oneof content {
+    Loading loading = 2;
+    Failure failure = 3;
+    Denied denied = 4;
+    PhotosLightboxPhoto photo = 5;
+  }
+  // CHROME IS A STATE, NOT AN ANIMATION: a member who put the bars away and
+  // rotated the phone does not get them back.
+  bool chrome_visible = 6;
+  Sheet sheet = 7;
+  // A mode of this screen: no strip, no info, and one way out.
+  bool slideshow = 8;
+  // "12 of 184, 4 seconds a photo".
+  string slideshow_meta = 9;
+  string slideshow_line = 10;
+  // A refused write, or a receipt ("Sent without location."): beside the
+  // photograph, never instead of it.
+  optional StatusLine status = 11;
+  PhotosAlbumChoice album_choice = 12;
+  repeated PhotosLightboxPlaceChoice place_choices = 13;
+  // The delete-forever question while it is up.
+  optional Confirm confirm = 14;
+  // The photograph is gone (deleted forever): the shell pops.
+  bool dismissed = 15;
+  // The strip: the neighbours around this photograph, in the opening surface's
+  // order. A frame whose cell has not been read yet has no tile.
+  repeated PhotosLightboxFrame film = 16;
+  // The neighbours a pager button moves to; empty at either end.
+  string previous_id = 17;
+  string next_id = 18;
+  // "12 of 184", empty when this photograph is not on the shelf it opened from.
+  string position = 19;
+  // The bottom row, and the More sheet's rows, in draw order.
+  repeated PhotosLightboxVerb toolbar = 20;
+  repeated PhotosLightboxVerb menu = 21;
+  repeated PhotosLightboxShareChoice share_choices = 22;
+  PhotosLightboxWords words = 23;
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    // Everything the vault knows: the facts panel.
+    SHEET_INFO = 2;
+    // What leaves the vault, and in what form. A share is a decision about
+    // bytes, so it is a sheet with a choice and never a direct hand-off.
+    SHEET_SHARE = 3;
+    SHEET_MORE = 4;
+    // "Adjust location": the place picker.
+    SHEET_PLACE = 5;
+  }
+}
+
+message PhotosLightboxPhoto {
+  PhotoTile tile = 1;
+  // The ORIGINAL's file when this phone holds it: the one surface that draws
+  // full-size bytes. Absent makes the thumbnail the fallback, not an error.
+  optional string original_path = 2;
+  // Whether the stage may DRAW `original_path` (a security answer).
+  bool original_embeddable = 3;
+  string original_media_type = 4;
+  // A Live Photo's movie file, once located.
+  optional string live_path = 5;
+  // The stage's one line, for a video the shell has no player on, and for a
+  // video it is playing. Empty when there is nothing to say.
+  string status_line = 6;
+  string status_line_playing = 7;
+  // Where the bytes are, in a sentence that says what fetching costs.
+  string whereabouts = 8;
+  // "Load the original" is offered: the original is not here and can be asked.
+  bool offers_fetch = 9;
+  bool fetching = 10;
+  // `30 July 2026` in the capture's own zone; empty with no capture time.
+  string stamp_date = 11;
+  // `17:42 · Lyme Regis`.
+  string stamp_line = 12;
+  repeated PhotosLightboxFact facts = 13;
+  string caption = 14;
+  repeated PhotosLightboxLabel labels = 15;
+  // "No labels on this photo." while there are none.
+  string labels_line = 16;
+  // WHERE, as words: the member's name for it, "near <city>", or "No place".
+  string place_phrase = 17;
+  bool has_place = 18;
+  // "Copy exact location" is offered (the vault holds a coordinate).
+  bool can_copy_location = 19;
+  bool trashed = 20;
+  // "Deleted · 12 days left" style line for a trashed photograph; empty else.
+  string trash_line = 21;
+  // WHY A WRITE IS REFUSED, or empty when every write is live.
+  string write_refusal = 22;
+  // WHY EDIT IS REFUSED, or empty when it is live.
+  string edit_refusal = 23;
+  // What a stage with nothing to draw says: which of its truthful states it is
+  // in ("Preview no longer on this phone"), never a broken image.
+  string stage_label = 24;
+  // The stage's spoken name for the photograph: its caption, else the noun.
+  string spoken = 25;
+}
+
+message PhotosLightboxFact {
+  string label = 1;
+  string text = 2;
+}
+
+message PhotosLightboxLabel {
+  string tag_id = 1;
+  string label = 2;
+  // "Remove Pier".
+  string remove_label = 3;
+}
+
+message PhotosLightboxFrame {
+  string photo_id = 1;
+  optional PhotoTile tile = 2;
+  bool current = 3;
+  // "Show photo 3 of 184".
+  string accessibility_label = 4;
+}
+
+message PhotosLightboxPlaceChoice {
+  // Empty is "No place": it clears the place.
+  string place_id = 1;
+  string name = 2;
+  bool here = 3;
+}
+
+// ONE VERB: live, or visibly refused with the reason. No verb is enabled
+// without being able to run, and none is disabled without a reason.
+message PhotosLightboxVerb {
+  Kind kind = 1;
+  string label = 2;
+  string icon_key = 3;
+  bool enabled = 4;
+  // The reason, never empty when `enabled` is false.
+  string why = 5;
+  // A toggle that is on (favorited, archived).
+  bool on = 6;
+  bool destructive = 7;
+  // Edit opens the editor: the route the shell pushes.
+  optional Route route = 8;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_SHARE = 1;
+    KIND_FAVORITE = 2;
+    KIND_INFO = 3;
+    KIND_EDIT = 4;
+    KIND_ARCHIVE = 5;
+    KIND_TRASH = 6;
+    KIND_RESTORE = 7;
+    KIND_DELETE_FOREVER = 8;
+    KIND_SLIDESHOW = 9;
+    KIND_ADD_TO_ALBUM = 10;
+    KIND_MAKE_KEY = 11;
+    KIND_ADJUST_LOCATION = 12;
+    KIND_DOWNLOAD = 13;
+    KIND_SEND_COPY = 14;
+  }
+}
+
+// One row of the share sheet: what it is called and what it actually does.
+message PhotosLightboxShareChoice {
+  Precision precision = 1;
+  string label = 2;
+  string detail = 3;
+
+  // The copy leaves with no location in it, or as the camera recorded it.
+  enum Precision {
+    PRECISION_UNSPECIFIED = 0;
+    PRECISION_NONE = 1;
+    PRECISION_EXACT = 2;
+  }
+}
+
+// The lightbox's fixed words, so a view carries no copy.
+message PhotosLightboxWords {
+  string close = 1;
+  string more = 2;
+  string slideshow = 3;
+  string slideshow_leave = 4;
+  string previous = 5;
+  string next = 6;
+  string load_original = 7;
+  string opening = 8;
+  string retry = 9;
+  string caption_label = 10;
+  string caption_placeholder = 11;
+  string labels_title = 12;
+  string add_label_placeholder = 13;
+  string place_title = 14;
+  string add_place = 15;
+  string change = 16;
+  string remove = 17;
+  string copy_location = 18;
+  string share_title = 19;
+  string place_picker_title = 20;
+  string no_place = 21;
+  string no_place_detail = 22;
+  string place_here = 23;
+  string no_places = 24;
+  string info_title = 25;
+  string this_photo = 26;
+  string filmstrip = 27;
+  string play = 28;
+  string pause = 29;
+  string player_position = 30;
+  // "{position} of {duration}": the transport's spoken value, filled by the
+  // player that owns the clock.
+  string player_position_value = 31;
+  string play_live = 32;
+  string live_badge = 33;
+}
+
+message PhotosLightboxEvent {
+  oneof kind {
+    Refreshed refreshed = 1;
+    // A swipe or a strip tap landed on a neighbour. The id and not a delta.
+    Moved moved = 2;
+    ChromeToggled chrome = 3;
+    SheetChanged sheet = 4;
+    // A toolbar or menu verb.
+    VerbTapped verb = 5;
+    PhotosAlbumChoiceEvent album_choice = 6;
+    ShareChosen share = 7;
+    FetchTapped fetch_original = 8;
+    CaptionChanged caption = 9;
+    TagAdded tag_added = 10;
+    TagRemoved tag_removed = 11;
+    PlaceChosen place_chosen = 12;
+    CopyLocationTapped copy_location = 13;
+    SlideshowLeft slideshow_left = 14;
+    Confirmed confirmed = 15;
+    ConfirmDismissed confirm_dismissed = 16;
+  }
+
+  message Refreshed {}
+
+  message Moved {
+    string photo_id = 1;
+  }
+
+  message ChromeToggled {
+    bool visible = 1;
+  }
+
+  message SheetChanged {
+    PhotosLightboxState.Sheet sheet = 1;
+  }
+
+  message VerbTapped {
+    PhotosLightboxVerb.Kind kind = 1;
+  }
+
+  message ShareChosen {
+    PhotosLightboxShareChoice.Precision precision = 1;
+  }
+
+  message FetchTapped {}
+
+  message CaptionChanged {
+    string caption = 1;
+  }
+
+  message TagAdded {
+    string label = 1;
+  }
+
+  message TagRemoved {
+    string tag_id = 1;
+  }
+
+  // An empty id clears the place.
+  message PlaceChosen {
+    string place_id = 1;
+  }
+
+  message CopyLocationTapped {}
+
+  message SlideshowLeft {}
+
+  message Confirmed {}
+
+  message ConfirmDismissed {}
+}
+
+// ---------------------------------------------------------------------------
+// The editor: crop, rotate, straighten, flip
+// ---------------------------------------------------------------------------
+
+// THE EDIT, AS DATA. Every tool is a pure change to this plan, reduced in Rust;
+// nothing is written until "Save new photo", and then it is a NEW photograph
+// (`upload` with `edited_from`): the original is never touched.
+message PhotosEditPlan {
+  // Quarter turns clockwise, 0-3.
+  uint32 quarters = 1;
+  // Whole degrees, 0 to -15 (anticlockwise only, one control).
+  sint32 straighten = 2;
+  Flip flip = 3;
+  Ratio ratio = 4;
+  // In fractions of the rotated frame; never leaves it, never below a tenth.
+  PhotosEditCrop crop = 5;
+
+  // A three-way cycle, one flip per render.
+  enum Flip {
+    FLIP_UNSPECIFIED = 0;
+    FLIP_HORIZONTAL = 1;
+    FLIP_VERTICAL = 2;
+  }
+
+  enum Ratio {
+    RATIO_UNSPECIFIED = 0;
+    RATIO_ORIGINAL = 1;
+    RATIO_SQUARE = 2;
+    RATIO_THREE_TWO = 3;
+  }
+}
+
+message PhotosEditCrop {
+  double x = 1;
+  double y = 2;
+  double w = 3;
+  double h = 4;
+}
+
+// RENDER THE EDIT: the platform's pixel work (#1135). The shell decodes the
+// source original (never a thumbnail), applies `plan` (quarter turns, then the
+// straighten about the centre with the frame grown to fit, then the flip, then
+// the crop rectangle in fractions of that frame, rounded half up and clamped to
+// the bitmap), encodes JPEG at `jpeg_quality_percent`, streams the result
+// through the stage door and answers `EditRendered`. A failure is
+// `EffectFailed`.
+message RenderEdit {
+  // The original's file, as the content door located it.
+  string source_path = 1;
+  PhotosEditPlan plan = 2;
+  uint32 jpeg_quality_percent = 3;
+}
+
+message EditRendered {
+  // The staged bytes' hash, 64 hex characters (`StageHandle.content_hash`).
+  string content_hash = 1;
+  string media_type = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+  // The staged bytes' length (`StageHandle.byte_size`): the upload claims them.
+  uint64 byte_size = 5;
+}
+
+message PhotosEditorState {
+  string photo_id = 1;
+  // "Crop and rotate".
+  string title = 2;
+  oneof content {
+    Loading loading = 3;
+    Failure failure = 4;
+    Denied denied = 5;
+    PhotosEditorData data = 6;
+  }
+  Phase phase = 7;
+  PhotosEditPlan plan = 8;
+  // "Crop Square · rotation +90° · flip ↔", or "Saving new photo".
+  string status_line = 9;
+  // "Straighten −3°".
+  string straighten_label = 10;
+  // "Flip", "Flip ↔", "Flip ↕".
+  string flip_label = 11;
+  // Something to lose: Cancel asks first.
+  bool edited = 12;
+  // Why Save cannot fire, or empty when it can.
+  string save_refusal = 13;
+  // The discard question while it is up.
+  optional Confirm discard = 14;
+  // The last save's refusal, beside the editor and never instead of it.
+  optional Failure save_failure = 15;
+  // Set when the save committed: the shell leaves for the new photograph.
+  optional Route saved_route = 16;
+  // The editor is done (cancelled, discarded or saved): the shell pops.
+  bool dismissed = 17;
+  repeated PhotosEditorRatio ratios = 18;
+  PhotosEditorWords words = 19;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_EDITING = 1;
+    PHASE_SAVING = 2;
+    PHASE_SAVED = 3;
+    PHASE_CLOSED = 4;
+  }
+}
+
+message PhotosEditorData {
+  optional PhotoTile tile = 1;
+  // The original on this phone; empty when it is not here (the stage then draws
+  // the thumbnail and Save is refused).
+  string original_path = 2;
+  // The pixel box, 0 when the vault does not know it.
+  uint32 width = 3;
+  uint32 height = 4;
+  // "from a photo taken 30 July 2026".
+  string meta = 5;
+}
+
+message PhotosEditorRatio {
+  PhotosEditPlan.Ratio ratio = 1;
+  // "Original", "Square", "3 : 2".
+  string label = 2;
+  bool selected = 3;
+}
+
+// The editor's fixed words, so a view carries no copy.
+message PhotosEditorWords {
+  string cancel = 1;
+  string save = 2;
+  string save_explanation = 3;
+  string rotate = 4;
+  string reset = 5;
+  string crop = 6;
+  string crop_hint = 7;
+  string loading = 8;
+  string retry = 9;
+  // The crop area's spoken name and its step equivalents (nothing is reachable
+  // by gesture alone).
+  string crop_area = 10;
+  string crop_left = 11;
+  string crop_right = 12;
+  string crop_up = 13;
+  string crop_down = 14;
+  string crop_larger = 15;
+  string crop_smaller = 16;
+}
+
+message PhotosEditorEvent {
+  oneof kind {
+    Refreshed refreshed = 1;
+    Rotated rotate = 2;
+    Straightened straighten = 3;
+    Flipped flip = 4;
+    RatioChosen ratio = 5;
+    CropMoved crop_moved = 6;
+    CropScaled crop_scaled = 7;
+    Reset reset = 8;
+    Saved save = 9;
+    Cancelled cancel = 10;
+    DiscardAnswered discard = 11;
+  }
+
+  message Refreshed {}
+
+  // A quarter turn resets the crop and the ratio.
+  message Rotated {}
+
+  // One press levels a degree anticlockwise; past the limit returns to level.
+  message Straightened {}
+
+  message Flipped {}
+
+  // `frame_ratio` is the stage's width over its height as the shell measured it
+  // (0 when unknown): the centred crop of the ratio is cut from it.
+  message RatioChosen {
+    PhotosEditPlan.Ratio ratio = 1;
+    double frame_ratio = 2;
+  }
+
+  // In fractions of the frame; the size never changes.
+  message CropMoved {
+    double dx = 1;
+    double dy = 2;
+  }
+
+  // Keeps the aspect: a free eight-handle resize would silently change the ratio.
+  message CropScaled {
+    double factor = 1;
+  }
+
+  message Reset {}
+
+  message Saved {}
+
+  message Cancelled {}
+
+  message DiscardAnswered {
+    bool discard = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Duplicates: the sets, and the decision about one
+// ---------------------------------------------------------------------------
+
+// THE NEAR-DUPLICATE SETS. A list of decisions, not of photographs: each row is
+// the way in to `photos.duplicate_review`. Nothing here deletes anything.
+message PhotosDuplicatesState {
+  // "Duplicates".
+  string title = 1;
+  oneof content {
+    Loading loading = 2;
+    Failure failure = 3;
+    Denied denied = 4;
+    PhotosDuplicatesData data = 5;
+  }
+}
+
+message PhotosDuplicatesData {
+  // Most worth doing first.
+  repeated PhotosDuplicateSet sets = 1;
+  // "3 sets of near-identical photos."; empty with no sets.
+  string lede = 2;
+  // "1.2 MB to reclaim."; empty while any copy's size is unknown.
+  string reclaim = 3;
+  // Set when there are no sets.
+  optional EmptyState empty = 4;
+}
+
+message PhotosDuplicateSet {
+  string cluster_key = 1;
+  // "4 near-identical copies".
+  string headline = 2;
+  // "1.2 MB to reclaim." or "Pick the one to keep.".
+  string subhead = 3;
+  optional PhotoTile cover = 4;
+  // Where a tap goes.
+  Route route = 5;
+  string accessibility_label = 6;
+}
+
+message PhotosDuplicatesEvent {
+  oneof kind {
+    // The failure's "Try again".
+    Refreshed refreshed = 1;
+  }
+
+  message Refreshed {}
+}
+
+// ONE SET, AND THE DECISION THAT TRASHES A MEMBER'S PHOTOGRAPHS. Nothing is kept
+// until the member picks; the suggestion is a remark on a row and never a pick;
+// the others go to the trash and never past it.
+message PhotosDuplicateReviewState {
+  string cluster_key = 1;
+  // "Duplicates".
+  string title = 2;
+  oneof content {
+    Loading loading = 3;
+    Failure failure = 4;
+    Denied denied = 5;
+    PhotosDuplicateReviewData data = 6;
+  }
+  // A refused trash, BESIDE the copies and never instead of them.
+  optional StatusLine status = 7;
+}
+
+message PhotosDuplicateReviewData {
+  repeated PhotosDuplicateMember members = 1;
+  // "Pick the copy to keep." / "The others go to the trash and can be restored."
+  string pick_line = 2;
+  string pick_caption = 3;
+  // "Albums are checked. Favorites are not."
+  string checked_line = 4;
+  // The recommendation, as a recommendation: never written into `keep_photo_id`.
+  string suggested_photo_id = 5;
+  // Empty or the sentence that says why this one.
+  string suggestion_reason = 6;
+  // The member's pick; empty until they choose.
+  string keep_photo_id = 7;
+  // "Trash the other 2 copies"; carries no number until a copy is picked.
+  string resolve_label = 8;
+  bool resolve_enabled = 9;
+  // "Choose the copy to keep first." while nothing is picked.
+  string resolve_hint = 10;
+  // Set when no copy is left in the set.
+  optional EmptyState empty = 11;
+}
+
+message PhotosDuplicateMember {
+  string photo_id = 1;
+  PhotoTile tile = 2;
+  // "4032 × 3024 · 3.1 MB", or "This copy" when neither is known.
+  string facts = 3;
+  // "30 July 2026 17:42", or "No capture time on this copy".
+  string captured = 4;
+  bool in_album = 5;
+  // "In an album" when `in_album`.
+  string in_album_label = 6;
+  bool kept = 7;
+  // The suggestion's reason on the suggested row only.
+  string suggestion = 8;
+  string accessibility_label = 9;
+}
+
+message PhotosDuplicateReviewEvent {
+  oneof kind {
+    Refreshed refreshed = 1;
+    KeepPicked keep = 2;
+    // Trash every copy but the kept one.
+    ResolveTapped resolve = 3;
+  }
+
+  message Refreshed {}
+
+  message KeepPicked {
+    string photo_id = 1;
+  }
+
+  message ResolveTapped {}
+}

@@ -790,6 +790,7 @@ dependencies = [
  "centraid-design",
  "centraid-identity",
  "centraid-ontology",
+ "centraid-vault",
  "prost",
  "rand",
  "serde_json",

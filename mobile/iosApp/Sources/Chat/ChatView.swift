@@ -947,7 +947,6 @@ private struct ChatPendingCard: View {
 
 /// WHAT THE COMPOSER OPENS FROM THE ATTACH MENU.
 private enum ChatAttachSheet: String, Identifiable {
-    case vaultPhoto
     case library
     case document
 
@@ -1050,10 +1049,6 @@ private struct ChatComposerCard: View {
         .animation(reduceMotion ? nil : ChatMotion.state, value: state.hasVisionStep)
         .sheet(item: $sheet) { which in
             switch which {
-            case .vaultPhoto:
-                ChatVaultPhotoSheet(chat: chat) { assetID, thumbnail in
-                    chat.attachVaultPhoto(assetID: assetID, thumbnail: thumbnail)
-                }
             case .document:
                 ChatDocumentSheet(chat: chat) { docID, title in
                     chat.attachDocument(docID: docID, title: title)
@@ -1076,8 +1071,6 @@ private struct ChatComposerCard: View {
     /// A CIRCLE OUTLINED WITH A PLUS: never filled.
     private var attachMenu: some View {
         Menu {
-            Button(state.attachVaultPhotoLabel) { sheet = .vaultPhoto }
-                .accessibilityIdentifier("chat-attach-vault-photo")
             Button(state.attachLibraryPhotoLabel) { sheet = .library }
                 .accessibilityIdentifier("chat-attach-library-photo")
             Button(state.attachDocumentLabel) { sheet = .document }

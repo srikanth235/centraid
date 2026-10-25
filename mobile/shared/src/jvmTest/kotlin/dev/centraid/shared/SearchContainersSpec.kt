@@ -8,13 +8,12 @@ import centraid.core.v1.VaultSearchHit
 import centraid.core.v1.VaultSearchRequest
 import centraid.screen.v1.ChatCard
 import centraid.screen.v1.HomeSearchEvent
-import centraid.screen.v1.PhotoShelf
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.kit.SearchContainers
 import dev.centraid.shared.nav.AgendaEntry
-import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.DocsEntry
 import dev.centraid.shared.nav.NotesEntry
+import dev.centraid.shared.nav.PhotosShelfEntry
 import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.shared.shell.HomeSearchMachine
 import dev.centraid.shared.shell.HomeSearchReads
@@ -100,8 +99,7 @@ class SearchContainersSpec : StringSpec({
             RowRoutes.destination(ChatCard(app = app, entity = entity, id = id, title = title), parent = "Search")
 
         open("notes", "notebook", "nb", "Cabin") shouldBe NotesEntry.home(notebookId = "nb", notebookName = "Cabin")
-        open("photos", "album", "al", "Summer") shouldBe
-            Destination.PhotoShelfRoute(PhotoShelf(album = PhotoShelf.Album(collection_id = "al", name = "Summer")))
+        open("photos", "album", "al", "Summer") shouldBe PhotosShelfEntry.album("al", "Summer")
         open("agenda", "project", "pr", "Garden") shouldBe AgendaEntry.project("pr", "Garden")
         open("docs", "folder", "fo", "Taxes") shouldBe DocsEntry.folder("fo", "Taxes", parent = "Search")
         // A noun the table does not name still opens the app's home.

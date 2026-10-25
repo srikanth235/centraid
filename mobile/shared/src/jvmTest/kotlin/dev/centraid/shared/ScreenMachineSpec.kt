@@ -1,20 +1,13 @@
 package dev.centraid.shared
 
 import app.cash.turbine.test
-import centraid.screen.v1.BackupState
 import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.Loading
-import centraid.screen.v1.MediaPermission
 import centraid.screen.v1.TrashListData
 import centraid.screen.v1.TrashListEvent
 import centraid.screen.v1.TrashRow
-import centraid.screen.v1.PhotoCell
-import centraid.screen.v1.PhotosGridData
-import centraid.screen.v1.PhotosGridEvent
-import centraid.screen.v1.PhotosGridState
 import centraid.screen.v1.TileCount
 import centraid.screen.v1.TileStatus
-import dev.centraid.shared.apps.photos.PhotosGridMachine
 import dev.centraid.shared.kit.TrashMachine
 import dev.centraid.shared.kit.TrashSpec
 import dev.centraid.shared.screen.Reads
@@ -30,7 +23,6 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.string.shouldNotContain
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -121,100 +113,6 @@ class ScreenMachineSpec : StringSpec({
         ).state
         list.reduce(loaded, TrashListEvent(rows_changed = TrashListEvent.RowsChanged(listOf("t-9999")))).effects.shouldBeEmpty()
         list.reduce(loaded, TrashListEvent(rows_changed = TrashListEvent.RowsChanged(listOf("t-0002")))).effects.size shouldBe 1
-    }
-
-    // --- Photos -----------------------------------------------------------
-
-    "photos: a denied media permission does not blank the grid" {
-        val loaded = PhotosGridMachine.reduce(
-            PhotosGridMachine.initial(),
-            PhotosGridEvent(
-                data_ = PhotosGridEvent.DataArrived(
-                    PhotosGridData(cells = listOf(PhotoCell(asset_id = "ast-1"))),
-                ),
-            ),
-        ).state
-        val denied = PhotosGridMachine.reduce(
-            loaded,
-            PhotosGridEvent(
-                permission = PhotosGridEvent.PermissionChanged(
-                    MediaPermission.MEDIA_PERMISSION_DENIED,
-                ),
-            ),
-        ).state
-        denied.data_.shouldNotBeNull().cells.size shouldBe 1
-        denied.failure.shouldBeNull()
-        denied.backup.shouldNotBeNull().paused_reason.contains("Settings").shouldBeTrue()
-    }
-
-    "photos: limited access can still enumerate; denied and restricted cannot" {
-        PhotosGridMachine.canEnumerate(MediaPermission.MEDIA_PERMISSION_LIMITED).shouldBeTrue()
-        PhotosGridMachine.canEnumerate(MediaPermission.MEDIA_PERMISSION_GRANTED).shouldBeTrue()
-        PhotosGridMachine.canEnumerate(MediaPermission.MEDIA_PERMISSION_DENIED).shouldBeFalse()
-        PhotosGridMachine.canEnumerate(MediaPermission.MEDIA_PERMISSION_RESTRICTED).shouldBeFalse()
-        PhotosGridMachine.canEnumerate(MediaPermission.MEDIA_PERMISSION_NOT_ASKED).shouldBeFalse()
-    }
-
-    "photos: low disk parks the grid AND the backup, and asks for no retry" {
-        val parked = PhotosGridMachine.reduce(
-            PhotosGridMachine.initial(),
-            PhotosGridEvent(refused = PhotosGridEvent.ReadRefused(Reads.lowDiskParked())),
-        )
-        parked.state.backup.shouldNotBeNull().phase shouldBe
-            BackupState.Phase.PHASE_PARKED_LOW_DISK
-        parked.state.failure.shouldNotBeNull()
-        parked.effects.shouldBeEmpty()
-    }
-
-    "photos: opening the more sheet cannot change the band" {
-        val opened = PhotosGridMachine.reduce(
-            PhotosGridMachine.initial(),
-            PhotosGridEvent(sheet = PhotosGridEvent.SheetChanged(PhotosGridState.Sheet.SHEET_MORE)),
-        ).state
-        opened.sheet shouldBe PhotosGridState.Sheet.SHEET_MORE
-        opened.destination shouldBe PhotosGridState.Destination.DESTINATION_LIBRARY
-    }
-
-    "photos: asking for permission is one effect, and an answer does not ask again" {
-        PhotosGridMachine.reduce(
-            PhotosGridMachine.initial(),
-            PhotosGridEvent(permission_requested = PhotosGridEvent.PermissionRequested()),
-        ).effects shouldBe listOf(ScreenEffect.RequestMediaPermission)
-
-        PhotosGridMachine.reduce(
-            PhotosGridMachine.initial(),
-            PhotosGridEvent(
-                permission = PhotosGridEvent.PermissionChanged(
-                    MediaPermission.MEDIA_PERMISSION_DENIED,
-                ),
-            ),
-        ).effects.shouldBeEmpty()
-    }
-
-    "photos: an existing grant clears the not-asked reason and never offers an ask" {
-        // R-PHOTOS-1: GRANTED/LIMITED on first paint — shells gate "Allow photo
-        // access" on NOT_ASKED and draw paused_reason beside the banner.
-        val granted = PhotosGridMachine.reduce(
-            PhotosGridMachine.initial(),
-            PhotosGridEvent(
-                permission = PhotosGridEvent.PermissionChanged(
-                    MediaPermission.MEDIA_PERMISSION_GRANTED,
-                ),
-            ),
-        ).state
-        granted.permission shouldBe MediaPermission.MEDIA_PERMISSION_GRANTED
-        granted.backup.shouldNotBeNull().paused_reason shouldBe ""
-
-        val limited = PhotosGridMachine.reduce(
-            PhotosGridMachine.initial(),
-            PhotosGridEvent(
-                permission = PhotosGridEvent.PermissionChanged(
-                    MediaPermission.MEDIA_PERMISSION_LIMITED,
-                ),
-            ),
-        ).state
-        limited.permission shouldBe MediaPermission.MEDIA_PERMISSION_LIMITED
-        limited.backup.shouldNotBeNull().paused_reason.shouldNotContain("needs access")
     }
 
     // --- The host ---------------------------------------------------------

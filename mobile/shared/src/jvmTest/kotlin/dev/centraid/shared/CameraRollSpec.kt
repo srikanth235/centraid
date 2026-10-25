@@ -48,8 +48,8 @@ class CameraRollSpec : StringSpec({
         // happening is worse than either sentence alone.
         //
         // **This asserts the literals rather than reading
-        // `PhotosGridMachine`'s copy**, because that reducer's sentences are
-        // `private` and the file is another slice's this wave. Folding both
+        // Rust's copy**, because those sentences live in
+        // `crates/screens` and a JVM test cannot read them. Folding both
         // into `dev.centraid.design.Copy` is the right end state and is filed
         // in this umbrella's receipt as the follow-up; until then this test is
         // the thing that fails when one of the two is reworded alone.

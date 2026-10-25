@@ -578,21 +578,32 @@ fn read(
         ("photos", "search") => app_query::photos::search(
             vault,
             door,
+            now,
             &wire::PhotosSearchRequest {
                 term: p.text("term")?,
                 limit: p.limit(SEARCH_ROWS),
                 correct: p.flag("correct")?,
             },
         )?,
-        ("photos", "duplicates") => app_query::photos::duplicates(door)?,
-        ("photos", "library") => app_query::photos::library(
+        ("photos", "duplicates") => app_query::photos::duplicates(door, now)?,
+        // The screens' reads: one shelf, one photograph, the collections, the places.
+        ("photos", "shelf") => app_query::photos::shelf(
             door,
             now,
-            &wire::PhotosLibraryRequest {
+            &wire::PhotosShelfRequest {
+                view: en!(p, "view", "PHOTOS_SHELF_VIEW_", wire::PhotosShelfView),
+                id: p.text("id")?,
                 limit: p.limit(0),
-                before: p.opt_text("before")?.unwrap_or_default(),
+                after: p
+                    .after()?
+                    .map(|(sort_key, id)| wire::PhotosCursor { sort_key, id }),
             },
         )?,
+        ("photos", "photo") => {
+            app_query::photos::photo(door, now, &wire::PhotosPhotoRequest { id: p.text("id")? })?
+        }
+        ("photos", "albums") => app_query::photos::albums(door, now)?,
+        ("photos", "places") => app_query::photos::places(door, now)?,
 
         ("money", "spending") => app_query::money::spending(
             vault,

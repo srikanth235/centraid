@@ -482,7 +482,7 @@ public class AndroidMediaLibrary(private val context: Context) : MediaLibrary {
             // changed in place is the one exception**: its own ref is its
             // group, because it is the same file at two versions, which is not
             // a guess — and the group is the mark the grid folds an edit on
-            // (`PhotoFold`).
+            // (`kit::rules::folded_by_edits`).
             captureGroupId = if (changed) ref else null,
             after = after,
             changedInPlace = changed,

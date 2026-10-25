@@ -11,7 +11,6 @@ import centraid.core.v1.Row
 import centraid.screen.v1.ReadFailure
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
-import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
@@ -85,13 +84,6 @@ public interface ScreenReads<S, E> {
 
     /** The refusal, as this screen's `ReadRefused`. */
     public fun refused(failure: ReadFailure): E
-
-    /**
-     * How a tapped original's fetch went, as this screen's `FetchSettled`
-     * (#1080): [fetched] when the bytes are on this phone now, else the line
-     * that says why not. Null for a screen that never asks for an original.
-     */
-    public fun fetchSettled(assetId: String, fetched: Boolean, sentence: String): E? = null
 }
 
 /**
@@ -152,7 +144,7 @@ public interface ScreenWrites<S, E> {
  *
  * ## The gap this closes
  *
- * `PhotosGridMachine` and `NotesEditorMachine` have emitted
+ * `NotesEditorMachine` has emitted
  * `ScreenEffect.ReadPage` since #1020 and **nothing served it** — there was no
  * per-screen query, no runner and no bridge, on either shell. Home alone was
  * wired, through `shell/HomeRuntime.kt`. So all three app screens drew their
@@ -183,7 +175,7 @@ public interface ScreenWrites<S, E> {
  * Every screen-specific decision — the statement, the projection, the event —
  * is [ScreenReads], which each app implements in its own package. That is what
  * keeps this file inside the second Konsist rule: a runtime that mentioned
- * `PhotosGridState` would be a runtime that has to be edited to add an app.
+ * `NotesEditorState` would be a runtime that has to be edited to add an app.
  *
  * ## The core is a SUPPLIER, not a handle
  *
@@ -228,13 +220,6 @@ public class ScreenRuntime<S, E>(
     private val stranded: StrandedWrites? = null,
     /** The device's zone at the moment of the read, for [ScreenReads.query]. Empty when unknown. */
     private val zone: () -> String = { "" },
-    /**
-     * BRING ONE ORIGINAL BACK (#1080, `fetch_original = 25`): the door a
-     * [ScreenEffect.FetchOriginal] is served through, given the vault pinned
-     * when the tap was emitted. Null is no answer — no core, or a refusal.
-     */
-    private val fetchOriginal: suspend (pinned: CentraidCore?, contentHash: String) -> FetchedOriginal? =
-        { pinned, hash -> CoreBackupDoors { pinned }.fetchOriginal(hash)?.first },
 ) {
     /**
      * Collect this host's effects and serve the ones that are this screen's.
@@ -277,34 +262,9 @@ public class ScreenRuntime<S, E>(
             if (effect is ScreenEffect.Schedule && effect.screenId == reads.screenId) {
                 scope.launch { serveSchedule(effect, host) }
             }
-            if (effect is ScreenEffect.FetchOriginal && effect.screenId == reads.screenId) {
-                // THE VAULT IS PINNED WHEN THE TAP IS EMITTED, for the write's
-                // reason above: an original tapped in vault A comes back to A.
-                val pinned = core()
-                scope.launch { serveFetch(effect, pinned) }
-            }
         }
     }
 
-    /**
-     * ONE ORIGINAL BACK, AND THE SCREEN TOLD EITHER WAY (#1080).
-     *
-     * The core's `fetch_original` answers from this phone when the bytes are
-     * already here, else asks each paired gateway and keeps what lands in the
-     * app's own store. The screen hears `fetched` — its next read serves the
-     * original — or the line naming why not. No answer at all is
-     * [SharedCopy.FETCH_NO_ANSWER]'s line, never silence: a photograph left
-     * fetching because nobody said "it did not happen" is the state this ends.
-     */
-    private suspend fun serveFetch(effect: ScreenEffect.FetchOriginal, pinned: CentraidCore?) {
-        val outcome = fetchOriginal(pinned, effect.contentHash)
-        val event = reads.fetchSettled(
-            assetId = effect.assetId,
-            fetched = outcome?.fetched == true,
-            sentence = outcome?.sentence ?: SharedCopy.FETCH_NO_ANSWER,
-        ) ?: return
-        host.send(event)
-    }
     private suspend fun serve(afterCursor: String?) {
         val query = reads.query(host.state.value, afterCursor, zone())
         if (query == null) {
@@ -371,11 +331,8 @@ public class ScreenRuntime<S, E>(
      * page cursor is OPAQUE: minted by this runtime, handed to a screen, handed
      * back to this runtime, and never compared to anything.
      *
-     * **THE SPELLING IS THE FIXTURES', NOT A NEW ONE.** `contracts/screens`'
-     * `photos-shelf/album-selecting` carries a `next_cursor` and `ScreenFixtureSpec` asserts
-     * it contains a `|` — so the pipe is already this product's written-down
-     * answer to "how does a keyset pair ride as one string", and a second
-     * spelling here would make the fixture a fixture of nothing. It cannot
+     * **THE SPELLING IS A PIPE.** It is this product's written-down answer to
+     * "how does a keyset pair ride as one string". It cannot
      * occur in the TEXT keys these tables use, which are ids and RFC 3339
      * timestamps. A string without it is not a cursor this runtime wrote, so it
      * is dropped rather than guessed at — which starts the walk again rather

@@ -2,11 +2,7 @@ package dev.centraid.shared.shell
 
 import centraid.screen.v1.BackupState
 import centraid.screen.v1.MediaPermission
-import centraid.screen.v1.PhotosGridEvent
-import centraid.screen.v1.PhotosGridState
 import dev.centraid.shared.platform.PlatformServices
-import dev.centraid.shared.screen.ScreenEffect
-import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.sync.ShelfDrain
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -14,21 +10,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 
 /**
- * THE THREE EFFECTS NOBODY SERVED (#1025 S6, D-1025-S7-74).
+ * THE CAMERA ROLL'S RUNNER (#1025 S6; #1135).
  *
- * `ScreenEffect.Backup`, `ScreenEffect.RequestMediaPermission` and the
- * `PHPhotoLibraryChangeObserver` nudge. All three existed as declarations —
- * the effect types were on `ScreenEffect`, `PhotosGridMachine` emitted one of
- * them, `BackupState` was on the screen's state and both shells drew it — and
- * **no runner collected any of them**. Pressing "Allow photo access" emitted an
- * effect into a `SharedFlow` with no subscriber; the backup could not be
- * started at all.
- *
- * `ScreenRuntime` is the twin of this class and serves `ReadPage` and
- * `SubmitWrite` for every screen. This is separate rather than a third branch
- * there for the reason `PerAppLayoutSpec` keeps: a camera roll is Photos'
- * business, `ScreenRuntime` is every screen's, and a runtime that grew an
- * `if` per app is a runtime every app has to be edited into.
+ * The Photos screen is Rust's: it words the banner and offers the remedies, and
+ * asks for them through a `CameraRoll` effect. The shell turns the effect into a
+ * [CameraRollSeat.Request], which this runner serves: the OS prompt, and a pass
+ * of the roll. What it learns goes back through the same seat (the grant, each
+ * pass's state), and [PhotosDevice] forwards it to the screen as events.
  *
  * ## One pass at a time, and it is a `Mutex` and not a flag
  *
@@ -43,7 +31,7 @@ import kotlinx.coroutines.sync.Mutex
 public class CameraRollRunner(
     private val services: PlatformServices,
     private val roll: CameraRoll,
-    private val host: ScreenHost<PhotosGridState, PhotosGridEvent>,
+    private val seat: CameraRollSeat,
     private val scope: CoroutineScope,
     /** Which vault the roll is being offered to. See [CameraRoll.cursorKey]. */
     private val vaultId: () -> String?,
@@ -66,17 +54,11 @@ public class CameraRollRunner(
      * read (#1025 live).
      */
     public suspend fun syncPermission() {
-        host.send(
-            PhotosGridEvent(
-                permission = PhotosGridEvent.PermissionChanged(
-                    permission = services.mediaLibrary.permission(),
-                ),
-            ),
-        )
+        seat.permissionChanged(services.mediaLibrary.permission())
     }
 
     /**
-     * Collect this screen's effects, and hear the library.
+     * Serve the screen's requests, and hear the library.
      *
      * The observer is registered here and not in [CameraRoll] because it is a
      * live subscription with a lifetime, and this object has one while a pure
@@ -101,18 +83,10 @@ public class CameraRollRunner(
         }
         return scope.launch {
             syncPermission()
-            host.effects.collect { effect ->
-                when {
-                    effect is ScreenEffect.RequestMediaPermission -> scope.launch { ask() }
-                    effect is ScreenEffect.Backup &&
-                        effect.action != ScreenEffect.Backup.Action.PAUSE ->
-                        scope.launch { walkToEnd() }
-                    // PAUSE STOPS THE NEXT PASS AND NEVER THE ONE RUNNING. A
-                    // stage that is interrupted half way leaves the core a
-                    // staging session nothing will ever end; the pass checks the
-                    // transfer rule between items and stops at an item boundary,
-                    // which is the same boundary every other stop uses.
-                    else -> Unit
+            seat.requests.collect { request ->
+                when (request) {
+                    CameraRollSeat.Request.ASK_PERMISSION -> scope.launch { ask() }
+                    CameraRollSeat.Request.IMPORT_NOW -> scope.launch { walkToEnd() }
                 }
             }
         }
@@ -127,9 +101,7 @@ public class CameraRollRunner(
      */
     public suspend fun ask(answered: () -> Unit = {}) {
         val answer = services.mediaLibrary.requestPermission()
-        host.send(
-            PhotosGridEvent(permission = PhotosGridEvent.PermissionChanged(permission = answer)),
-        )
+        seat.permissionChanged(answer)
         // The prompt is gone once the platform answers, so a caller with more
         // to ask (a made vault's other imports) asks now, not after the walk.
         answered()
@@ -190,14 +162,7 @@ public class CameraRollRunner(
 
     /**
      * Passes until the roll is walked, with every state they publish reaching
-     * the screen as a `BackupChanged` event. [passing] is held on entry and
-     * released here.
-     *
-     * The states are sent through [ScreenHost.send] rather than written onto
-     * the state directly, because the reducer is the only thing that may decide
-     * what a state becomes — a runner that assigned `backup` would be a second
-     * writer of a screen's state and would lose whatever the reducer did
-     * between two of its own frames.
+     * the [seat]. [passing] is held on entry and released here.
      */
     private suspend fun walk(vault: String) {
         var imported = 0
@@ -222,7 +187,7 @@ public class CameraRollRunner(
         const val MAX_PASSES: Int = 4_000
     }
 
-    private suspend fun publish(state: BackupState) {
-        host.send(PhotosGridEvent(backup = PhotosGridEvent.BackupChanged(backup = state)))
+    private fun publish(state: BackupState) {
+        seat.backupChanged(state)
     }
 }

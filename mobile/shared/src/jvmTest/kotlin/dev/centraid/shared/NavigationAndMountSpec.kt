@@ -1,7 +1,5 @@
 package dev.centraid.shared
 
-import centraid.screen.v1.PhotoStateView
-import centraid.screen.v1.PhotosGridState
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.DocsEntry
 import dev.centraid.shared.nav.NavStack
@@ -27,20 +25,6 @@ class NavigationAndMountSpec : StringSpec({
         stack.current shouldBe Destination.Home
         stack.pop() shouldBe stack
         shouldThrow<IllegalArgumentException> { NavStack(emptyList()) }
-    }
-
-    "a band destination changes in place, so back does not walk the bands" {
-        // Doctrine 1. A second screen per band would make every band tap a
-        // push, and a member who looked at three bands would press back three
-        // times to leave Photos.
-        val stack = NavStack()
-            .push(Destination.PhotosHome())
-            .withPhotosDestination(PhotosGridState.Destination.DESTINATION_COLLECTIONS)
-            .withPhotosDestination(PhotosGridState.Destination.DESTINATION_SEARCH)
-        stack.entries.size shouldBe 2
-        (stack.current as Destination.PhotosHome).destination shouldBe
-            PhotosGridState.Destination.DESTINATION_SEARCH
-        stack.pop().current shouldBe Destination.Home
     }
 
     "iOS tells a route swapped in place that it opened, not only a pushed one" {
@@ -71,18 +55,6 @@ class NavigationAndMountSpec : StringSpec({
         DocsEntry.folder("fld-1", "Taxes").route.docs_drive!!.folder_name shouldBe "Taxes"
         Destination.PeoplePerson(partyId = "p-1", name = "Dana Reyes").name shouldBe
             "Dana Reyes"
-    }
-
-    "a photo state view is a discriminated union" {
-        // Doctrine 3. The view is a oneof and not `{mode, party_id?}`; the arm
-        // that carried a person left with the face surfaces (Q-1047-2), and a
-        // view says which standing shelf it is and nothing else.
-        val trash = Destination.PhotoStateViewRoute(
-            PhotoStateView(
-                mode = PhotoStateView.Mode(kind = PhotoStateView.Mode.Kind.KIND_TRASH),
-            ),
-        )
-        trash.view.mode?.kind shouldBe PhotoStateView.Mode.Kind.KIND_TRASH
     }
 
     "there is no permission destination, and there is no vault parameter" {

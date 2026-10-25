@@ -1,7 +1,6 @@
 package dev.centraid.shared.nav
 
 import centraid.screen.v1.ChatCard
-import centraid.screen.v1.PhotoShelf
 
 /**
  * WHERE A REFERENCE TO ONE ROW OPENS (R-CHROME-6).
@@ -68,14 +67,12 @@ public object RowRoutes {
         AppIds.AGENDA to PROJECT -> AgendaEntry.project(row.id, row.title)
         AppIds.NOTES to NOTE -> NotesEntry.editor(row.id)
         AppIds.NOTES to NOTEBOOK -> NotesEntry.home(notebookId = row.id, notebookName = row.title)
-        AppIds.PHOTOS to ALBUM -> Destination.PhotoShelfRoute(
-            PhotoShelf(album = PhotoShelf.Album(collection_id = row.id, name = row.title)),
-        )
+        AppIds.PHOTOS to ALBUM -> PhotosShelfEntry.album(row.id, row.title)
         AppIds.DOCS to FOLDER -> DocsEntry.folder(row.id, row.title, parent = parent)
         AppIds.DOCS to DOCUMENT -> DocsEntry.document(row.id, row.title, parent = parent)
         AppIds.PEOPLE to PERSON -> Destination.PeoplePerson(row.id, row.title)
         AppIds.AGENDA to EVENT -> AgendaEntry.event(eventId = row.id, instanceKey = row.qualifier)
-        AppIds.PHOTOS to PHOTO -> Destination.PhotoLightbox(row.id, neighbours.ifEmpty { listOf(row.id) })
+        AppIds.PHOTOS to PHOTO -> PhotosEntry.lightbox(row.id, neighbours.ifEmpty { listOf(row.id) })
         AppIds.MONEY to TRANSACTION -> MoneyEntry.transaction(row.id, parent = parent)
         AppIds.LOCKER to LOCKER_ITEM -> lockerItem(row, parent)
         else -> appHome(row.app)
@@ -116,7 +113,7 @@ public object RowRoutes {
         AppIds.DOCS -> DocsEntry.home()
         AppIds.PEOPLE -> Destination.PeopleHome()
         AppIds.AGENDA -> AgendaEntry.home()
-        AppIds.PHOTOS -> Destination.PhotosHome()
+        AppIds.PHOTOS -> PhotosEntry.home()
         AppIds.MONEY -> MoneyEntry.home()
         AppIds.HEALTH -> Destination.HealthHome()
         else -> null

@@ -30,7 +30,7 @@ import kotlinx.coroutines.withTimeout
  */
 class ScreensRoundTripSpec : StringSpec({
 
-    "the runtime opens both of its tabs, proof and agenda, each with its root" {
+    "the runtime opens its three tabs, proof, agenda and photos, each with its root" {
         val core = openRealCore()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         try {
@@ -39,9 +39,10 @@ class ScreensRoundTripSpec : StringSpec({
             screens.attach()
             screens.start()
             val navigation = screens.navigation.value!!
-            navigation.tabs.map { it.tab } shouldBe listOf("proof", "agenda")
+            navigation.tabs.map { it.tab } shouldBe listOf("proof", "agenda", "photos")
             navigation.tabs.forEach { it.entries.size shouldBe 1 }
             navigation.tab("agenda").entries.single().route!!.screen shouldBe "agenda.home"
+            navigation.tab("photos").entries.single().route!!.screen shouldBe "photos.home"
         } finally {
             scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
             core.close()

@@ -23,12 +23,6 @@ final class ChatModel: ObservableObject {
     /// machine's own initial state (phase unspecified, nothing drawn).
     @Published private(set) var data = Data()
 
-    /// The vault's photographs, drawn in the attach picker. It is the Photos
-    /// app's own picker machine over the session's core — the same cells, the
-    /// same held states — opened on no album, and its "pick" is the chat's
-    /// "attach this one": nothing it holds is ever added to anything.
-    @Published private(set) var photoChoiceData = Data()
-
     /// The vault's text documents, for the attach picker. Empty until asked.
     @Published private(set) var documents: [Centraid_Core_V1_AssistDocument] = []
     @Published private(set) var documentsLoaded = false
@@ -40,7 +34,6 @@ final class ChatModel: ObservableObject {
     private(set) var opened = false
 
     private var bridge = ChatBridge()
-    private let photoChoice = PhotoPickerBridge()
     private weak var session: HomeSession?
 
     init() {
@@ -88,8 +81,6 @@ final class ChatModel: ObservableObject {
     func attach(session: HomeSession) {
         self.session = session
         attachBridge()
-        photoChoice.attach(session: session)
-        photoChoice.observe { [weak self] bytes in self?.photoChoiceData = bytes.data }
     }
 
     private func attachBridge() {
@@ -286,17 +277,6 @@ final class ChatModel: ObservableObject {
         bridge.removeAttachment(id: Int64(bitPattern: id))
     }
 
-    /// A photograph from the vault, by asset id. `thumbnail` is the file the
-    /// picker already drew it from; nothing is copied.
-    func attachVaultPhoto(assetID: String, thumbnail: String) {
-        forward { event in
-            event.attached = .with {
-                $0.vaultPhoto = .with { $0.assetID = assetID }
-                $0.thumbnailPath = thumbnail
-            }
-        }
-    }
-
     /// A photograph the member picked from their library: JPEG bytes (the
     /// picker's HEIC converted and scaled), and the small thumbnail file the
     /// chip draws. The bytes cross once, with the send.
@@ -326,16 +306,6 @@ final class ChatModel: ObservableObject {
         build(&event)
         guard let bytes = try? event.serializedData() else { return }
         bridge.sendEncoded(event: bytes.kotlin)
-    }
-
-    /// OPEN THE VAULT PHOTO PICKER: the Photos picker machine, on no album.
-    func openPhotoChoice() {
-        photoChoice.opened(collectionId: "", collectionName: "", alreadyInAlbumAssetIds: [])
-    }
-
-    /// One tap in the vault photo picker.
-    func photoChoiceSend(_ event: Data) {
-        photoChoice.send(event: event.kotlin)
     }
 
     /// ASK THE CORE FOR THE TEXT DOCUMENTS THE CHAT CAN READ.

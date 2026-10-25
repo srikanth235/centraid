@@ -53,25 +53,20 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.PhotoCell
-import centraid.screen.v1.PhotosGridState
+import centraid.core.v1.PhotoTile as WireTile
+import centraid.core.v1.PhotosGrain
+import centraid.core.v1.PhotosGrainItem
+import centraid.core.v1.PhotosPeriod
+import centraid.core.v1.PhotosRowKind
+import centraid.core.v1.PhotosTimelineRow
 import dev.centraid.android.kit.ContentImage
 import dev.centraid.android.kit.GAP
-import dev.centraid.android.kit.JustifiedTile
 import dev.centraid.android.kit.PhotoTile
 import dev.centraid.android.kit.bandPress
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.design.copy.PhotosCopy
-import dev.centraid.shared.apps.photos.GrainItem
-import dev.centraid.shared.apps.photos.LibraryCell
-import dev.centraid.shared.apps.photos.LibraryPeriod
-import dev.centraid.shared.apps.photos.LibraryTitles
-import dev.centraid.shared.apps.photos.PhotosLibraryLayout
-import dev.centraid.shared.apps.photos.PhotosTimeline
-import dev.centraid.shared.apps.photos.TimelineRowKind
 import dev.centraid.shared.shell.BandPolicy
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -79,70 +74,16 @@ import kotlin.math.roundToInt
 /*
  * THE LIBRARY'S DRAWING, IN COMPOSE (#1029, photos port — v0's
  * `PhotoTimeline.tsx`, `PhotoGrainView.tsx`, `ScrubRail.tsx`,
- * `TimelineGrainControl.tsx` and `timeline-rows.ts`).
+ * `TimelineGrainControl.tsx`; #1135).
  *
- * What is drawn here is arithmetic over a width only the shell knows: where a
- * header sits, which tile is under a finger. WHICH ROWS THE CELLS PACK INTO,
- * where a month or a day header goes, which cards a grain draws and how the
- * months pair are not this file's: they are `PhotosLibraryLayout` and
- * `PhotoJustify` in `commonMain`, so the SwiftUI twin in `PhotosLibraryView.swift`
- * draws the same library from the same rules. What a day IS, which grain comes
- * next and what a pick means are the machine's (`PhotosGridMachine`,
- * `PhotosTimeline`). Only the date's spelling in the device's locale stays
- * here, because only the platform knows it ([DeviceLibraryTitles]).
+ * What is drawn here is arithmetic over a position only the shell knows: where
+ * a header sits, which tile is under a finger. WHICH ROWS THE CELLS PACK INTO,
+ * where a month or a day header goes, which cards a grain draws, how the months
+ * pair, every title and every count are Rust's (`photos::home::layout`): the
+ * shell reports the width it draws at and draws the rows it is given, so the
+ * SwiftUI twin in `PhotosLibraryView.swift` draws the same library from the
+ * same rules.
  */
-
-/** One row of the All grain, keyed so a recomposition keeps its place. */
-internal sealed interface LibraryRow {
-    val key: String
-
-    /** The month's name and nothing else — no tally (#712). Sticky. */
-    data class Month(override val key: String, val title: String, val day: String) : LibraryRow
-
-    /** A day's header. Selecting, it carries the day's "Select". */
-    data class Day(override val key: String, val day: String, val title: String, val ids: List<String>) : LibraryRow
-
-    /** One justified row of tiles. */
-    data class Tiles(override val key: String, val day: String, val tiles: List<JustifiedTile>) : LibraryRow
-}
-
-/**
- * THE SHELL'S SIDE OF THE LIBRARY'S ROWS: copy the cells into shared's
- * [LibraryCell], ask [PhotosLibraryLayout.rows], and put the cell back under
- * each tile it names. Nothing is decided here.
- */
-internal fun libraryRows(cells: List<PhotoCell>, width: Int, rung: Int, currentYear: Int): List<LibraryRow> =
-    PhotosLibraryLayout.rows(libraryCells(cells), width.toDouble(), rung, currentYear, DeviceLibraryTitles).map { row ->
-        when (row.kind) {
-            TimelineRowKind.MONTH -> LibraryRow.Month(row.id, row.title, row.day)
-            TimelineRowKind.DAY -> LibraryRow.Day(row.id, row.day, row.title, row.ids)
-            TimelineRowKind.TILES -> LibraryRow.Tiles(
-                row.id,
-                row.day,
-                row.tiles.map { JustifiedTile(cells[it.index], it.width.toInt(), it.height.toInt()) },
-            )
-        }
-    }
-
-/** The five fields the layout reads of a cell. */
-private fun libraryCells(cells: List<PhotoCell>): List<LibraryCell> = cells.map {
-    LibraryCell(
-        assetId = it.asset_id,
-        day = it.day,
-        video = it.kind == PhotoCell.Kind.KIND_VIDEO,
-        thumbnailPath = it.thumbnail_path.orEmpty(),
-        width = it.width,
-        height = it.height,
-    )
-}
-
-/** The day a row belongs to, for landing a grain switch where the member was. */
-internal fun dayOfRow(row: LibraryRow?): String = when (row) {
-    is LibraryRow.Month -> row.day
-    is LibraryRow.Day -> row.day
-    is LibraryRow.Tiles -> row.day
-    null -> ""
-}
 
 /**
  * THE ALL GRAIN: the justified timeline.
@@ -165,12 +106,14 @@ internal fun dayOfRow(row: LibraryRow?): String = when (row) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun LibraryTimeline(
-    rows: List<LibraryRow>,
+    tiles: List<WireTile>,
+    rows: List<PhotosTimelineRow>,
     rung: Int,
     selecting: Boolean,
     selected: Set<String>,
     complete: Boolean,
-    cellCount: Int,
+    loadingMoreLabel: String,
+    scrub: ScrubWords,
     listState: LazyListState,
     top: @Composable () -> Unit,
     onTile: (String) -> Unit,
@@ -182,6 +125,7 @@ internal fun LibraryTimeline(
     var sweeping by remember { mutableStateOf(false) }
     val density = LocalDensity.current
     val currentRows by rememberUpdatedState(rows)
+    val currentTiles by rememberUpdatedState(tiles)
     val pick by rememberUpdatedState(onPick)
     val pinch by rememberUpdatedState(onPinch)
     Box(Modifier.fillMaxSize()) {
@@ -213,14 +157,14 @@ internal fun LibraryTimeline(
                         // A TAP OR A SCROLL: the press never held still long enough.
                         if (ended != null) return@awaitEachGesture
                         sweeping = true
-                        tileAt(listState, currentRows, down.position.x, down.position.y, density.density)
+                        tileAt(listState, currentRows, currentTiles, down.position.x, down.position.y, density.density)
                             ?.let { pick(listOf(it), true) }
                         while (true) {
                             val change = awaitPointerEvent(PointerEventPass.Initial)
                                 .changes.firstOrNull { it.id == down.id } ?: break
                             change.consume()
                             if (!change.pressed) break
-                            tileAt(listState, currentRows, change.position.x, change.position.y, density.density)
+                            tileAt(listState, currentRows, currentTiles, change.position.x, change.position.y, density.density)
                                 ?.let { pick(listOf(it), true) }
                         }
                         sweeping = false
@@ -245,31 +189,33 @@ internal fun LibraryTimeline(
         ) {
             item(key = "top") { Column { top() } }
             rows.forEach { row ->
-                when (row) {
-                    is LibraryRow.Month -> stickyHeader(key = row.key) { MonthHeader(row.title) }
-                    is LibraryRow.Day -> item(key = row.key) {
+                when (row.kind) {
+                    PhotosRowKind.PHOTOS_ROW_KIND_MONTH -> stickyHeader(key = row.id) { MonthHeader(row.title) }
+                    PhotosRowKind.PHOTOS_ROW_KIND_DAY -> item(key = row.id) {
                         DayHeader(
                             title = row.title,
                             selecting = selecting,
-                            allPicked = row.ids.all { it in selected },
+                            toggleLabel = row.toggle_label,
+                            spoken = row.select_label,
+                            allPicked = row.all_selected,
                             onPickDay = { picked -> onPick(row.ids, picked) },
                         )
                     }
-                    is LibraryRow.Tiles -> item(key = row.key) {
+                    else -> item(key = row.id) {
                         Row(
                             Modifier.padding(bottom = GAP.dp),
                             horizontalArrangement = Arrangement.spacedBy(GAP.dp),
                         ) {
-                            row.tiles.forEach { tile ->
-                                val id = tile.cell.asset_id
+                            row.packed.forEach { packed ->
+                                val tile = tiles.getOrNull(packed.tile) ?: return@forEach
                                 PhotoTile(
-                                    cell = tile.cell,
-                                    width = tile.width,
-                                    height = tile.height,
+                                    cell = tile,
+                                    width = packed.width.toInt(),
+                                    height = packed.height.toInt(),
                                     rung = rung,
                                     selecting = selecting,
-                                    selected = id in selected,
-                                    onTap = { onTile(id) },
+                                    selected = tile.photo_id in selected,
+                                    onTap = { onTile(tile.photo_id) },
                                     // THE LONG PRESS IS THE LIST'S, not the tile's:
                                     // see the sweep above.
                                     onLongPress = null,
@@ -280,21 +226,23 @@ internal fun LibraryTimeline(
                     }
                 }
             }
-            item(key = "more") { MoreSentinel(complete, cellCount, onMore) }
+            item(key = "more") { MoreSentinel(complete, tiles.size, loadingMoreLabel, onMore) }
         }
-        ScrubRail(listState = listState, rows = rows)
+        ScrubRail(listState = listState, rows = rows, words = scrub)
     }
 }
+
+/** The scrub rail's three spoken words, finished by Rust. */
+internal class ScrubWords(val label: String, val next: String, val previous: String)
 
 /**
  * THE NEXT PAGE IS ASKED FOR WHEN THE END IS ON SCREEN — and asked again each
  * time a page lands while it still is, which is what `cellCount` keys: a
  * member at the foot of a library of short days pages on without lifting a
- * finger. The machine keeps one read in flight, so an ask it cannot serve yet
- * is simply dropped.
+ * finger. Rust reads one page at a time, so an ask it cannot serve is dropped.
  */
 @Composable
-private fun MoreSentinel(complete: Boolean, cellCount: Int, onMore: () -> Unit) {
+private fun MoreSentinel(complete: Boolean, cellCount: Int, label: String, onMore: () -> Unit) {
     if (complete) {
         Spacer(Modifier.height(GAP.dp))
         return
@@ -305,9 +253,9 @@ private fun MoreSentinel(complete: Boolean, cellCount: Int, onMore: () -> Unit) 
     Box(
         Modifier
             .fillMaxWidth()
-            .height(PhotosTimeline.RUNG_HEIGHTS[0].dp)
+            .height(SENTINEL_HEIGHT.dp)
             .background(centraidColor("skel"))
-            .semantics { contentDescription = PhotosCopy.PHOTOS_LIBRARY_LOADING_MORE },
+            .semantics { contentDescription = label },
     )
 }
 
@@ -335,10 +283,17 @@ private fun MonthHeader(title: String) {
 /**
  * A DAY'S HEADER. Selecting, it offers the whole day at once — v0's "Select
  * day", and Apple Photos' per-day Select — and says "Deselect" once every
- * photograph under it is picked.
+ * photograph under it is picked. The words are Rust's.
  */
 @Composable
-private fun DayHeader(title: String, selecting: Boolean, allPicked: Boolean, onPickDay: (Boolean) -> Unit) {
+private fun DayHeader(
+    title: String,
+    selecting: Boolean,
+    toggleLabel: String,
+    spoken: String,
+    allPicked: Boolean,
+    onPickDay: (Boolean) -> Unit,
+) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -354,20 +309,18 @@ private fun DayHeader(title: String, selecting: Boolean, allPicked: Boolean, onP
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).semantics { heading() },
         )
-        if (selecting) {
-            val label = if (allPicked) PhotosCopy.PHOTOS_DESELECT else PhotosCopy.PHOTOS_SELECT
-            val said = (if (allPicked) PhotosCopy.PHOTOS_DESELECT_DAY else PhotosCopy.PHOTOS_SELECT_DAY).replace("{title}", title)
+        if (selecting && toggleLabel.isNotEmpty()) {
             Box(
                 Modifier
                     .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
-                    .clickable(onClickLabel = said) { onPickDay(!allPicked) }
+                    .clickable(onClickLabel = spoken) { onPickDay(!allPicked) }
                     .semantics {
                         role = Role.Button
-                        contentDescription = said
+                        contentDescription = spoken
                     },
                 contentAlignment = Alignment.CenterEnd,
             ) {
-                Text(text = label, style = centraidType("control"), color = centraidColor("text"))
+                Text(text = toggleLabel, style = centraidType("control"), color = centraidColor("text"))
             }
         }
     }
@@ -375,20 +328,27 @@ private fun DayHeader(title: String, selecting: Boolean, allPicked: Boolean, onP
 
 /**
  * THE TILE UNDER A POINT, for a sweep. The row from the list's own layout,
- * the tile by walking the row's widths — the same widths [justify] gave it.
- * Rows are full-bleed, so `x` is already row-relative.
+ * the tile by walking the row's widths — the same widths Rust gave it. Rows are
+ * full-bleed, so `x` is already row-relative.
  */
-private fun tileAt(state: LazyListState, rows: List<LibraryRow>, x: Float, y: Float, density: Float): String? {
+private fun tileAt(
+    state: LazyListState,
+    rows: List<PhotosTimelineRow>,
+    tiles: List<WireTile>,
+    x: Float,
+    y: Float,
+    density: Float,
+): String? {
     val item = state.layoutInfo.visibleItemsInfo.firstOrNull { y >= it.offset && y < it.offset + it.size }
         ?: return null
-    val row = rows.firstOrNull { it.key == item.key } as? LibraryRow.Tiles ?: return null
+    val row = rows.firstOrNull { it.id == item.key && it.kind == PhotosRowKind.PHOTOS_ROW_KIND_TILES } ?: return null
     var left = 0f
-    row.tiles.forEach { tile ->
-        val right = left + tile.width * density
-        if (x < right) return tile.cell.asset_id
+    row.packed.forEach { packed ->
+        val right = left + packed.width.toFloat() * density
+        if (x < right) return tiles.getOrNull(packed.tile)?.photo_id
         left = right + GAP * density
     }
-    return row.tiles.lastOrNull()?.cell?.asset_id
+    return row.packed.lastOrNull()?.let { tiles.getOrNull(it.tile)?.photo_id }
 }
 
 /**
@@ -400,11 +360,11 @@ private fun tileAt(state: LazyListState, rows: List<LibraryRow>, x: Float, y: Fl
  * control stepping a month at a time.
  */
 @Composable
-private fun ScrubRail(listState: LazyListState, rows: List<LibraryRow>) {
+private fun ScrubRail(listState: LazyListState, rows: List<PhotosTimelineRow>, words: ScrubWords) {
     if (rows.size < RAIL_MIN_ROWS) return
     val scope = rememberCoroutineScope()
     val total = rows.size
-    val months = remember(rows) { rows.withIndex().filter { it.value is LibraryRow.Month } }
+    val months = remember(rows) { rows.withIndex().filter { it.value.kind == PhotosRowKind.PHOTOS_ROW_KIND_MONTH } }
     // The list's item 0 is the top slot, so a row's item is its index + 1.
     val position = ((listState.firstVisibleItemIndex - 1).coerceAtLeast(0).toFloat() / (total - 1).coerceAtLeast(1))
         .coerceIn(0f, 1f)
@@ -412,8 +372,7 @@ private fun ScrubRail(listState: LazyListState, rows: List<LibraryRow>) {
     var fraction by remember { mutableFloatStateOf(0f) }
     var label by remember { mutableStateOf("") }
     val shown = if (dragging) fraction else position
-    fun monthAt(index: Int): String =
-        (months.lastOrNull { it.index <= index }?.value as? LibraryRow.Month)?.title ?: ""
+    fun monthAt(index: Int): String = months.lastOrNull { it.index <= index }?.value?.title ?: ""
     fun scrubTo(target: Float) {
         fraction = target.coerceIn(0f, 1f)
         val index = (fraction * (total - 1)).roundToInt()
@@ -448,16 +407,16 @@ private fun ScrubRail(listState: LazyListState, rows: List<LibraryRow>) {
                     )
                 }
                 .semantics {
-                    contentDescription = PhotosCopy.PHOTOS_SCRUB
+                    contentDescription = words.label
                     stateDescription = monthAt(((total - 1) * position).roundToInt())
                     customActions = listOf(
-                        androidx.compose.ui.semantics.CustomAccessibilityAction(PhotosCopy.PHOTOS_SCRUB_NEXT) {
+                        androidx.compose.ui.semantics.CustomAccessibilityAction(words.next) {
                             val here = ((total - 1) * position).roundToInt()
                             val next = months.firstOrNull { it.index > here } ?: return@CustomAccessibilityAction false
                             scope.launch { listState.scrollToItem(next.index + 1) }
                             true
                         },
-                        androidx.compose.ui.semantics.CustomAccessibilityAction(PhotosCopy.PHOTOS_SCRUB_PREVIOUS) {
+                        androidx.compose.ui.semantics.CustomAccessibilityAction(words.previous) {
                             val here = ((total - 1) * position).roundToInt()
                             val previous = months.lastOrNull { it.index < here } ?: return@CustomAccessibilityAction false
                             scope.launch { listState.scrollToItem(previous.index + 1) }
@@ -512,31 +471,32 @@ private fun ScrubRail(listState: LazyListState, rows: List<LibraryRow>) {
  * selects — a period is not a photograph. A year is a chapter — full width,
  * its name on the cover over a scrim; a month is one of twelve — two to a row,
  * its name beneath. Year headers only when the library spans more than one
- * year. The periods are the same cells All draws, grouped by prefix, so the
- * grains cannot disagree about where a period starts; undated photographs are
- * in All only, because "sometime" is not a stretch of time.
+ * year. The periods are the same cells All draws, grouped by prefix by Rust, so
+ * the grains cannot disagree about where a period starts; undated photographs
+ * are in All only, because "sometime" is not a stretch of time.
  */
 @Composable
 internal fun LibraryGrains(
-    cells: List<PhotoCell>,
-    grain: PhotosGridState.Grain,
+    items: List<PhotosGrainItem>,
+    years: Boolean,
     placeDay: String,
     complete: Boolean,
+    cellCount: Int,
+    undatedNote: String,
+    loadingMoreLabel: String,
     listState: LazyListState,
     top: @Composable () -> Unit,
     onOpenPeriod: (String) -> Unit,
     onMore: () -> Unit,
     onPinch: (Float) -> Unit,
 ) {
-    val years = grain == PhotosGridState.Grain.GRAIN_YEARS
-    val items = remember(cells, grain) { grainItemsOf(cells, years) }
     val pinch by rememberUpdatedState(onPinch)
     // LAND ON THE PERIOD THAT HOLDS THE DAY, once per distinct day, so a
     // member who scrolls away is not pulled back on the next recomposition.
     var landed by remember { mutableStateOf("") }
-    LaunchedEffect(placeDay, items, grain) {
+    LaunchedEffect(placeDay, items) {
         if (placeDay.isEmpty() || placeDay == landed) return@LaunchedEffect
-        val index = PhotosLibraryLayout.grainItemIndex(items, placeDay)
+        val index = items.indexOfFirst { item -> item.periods.any { placeDay.startsWith(it.key) } }
         if (index >= 0) {
             landed = placeDay
             listState.scrollToItem(index + 1)
@@ -566,12 +526,12 @@ internal fun LibraryGrains(
                 },
         ) {
             item(key = "top") { Column { top() } }
-            if (items.isEmpty() && complete) {
+            if (items.isEmpty() && complete && undatedNote.isNotEmpty()) {
                 item(key = "undated") {
                     // A QUIET LINE, NOT A CARD: undated photographs live in All,
                     // and a card for them would be a fake period.
                     Text(
-                        text = PhotosCopy.PHOTOS_LIBRARY_UNDATED_NOTE,
+                        text = undatedNote,
                         style = centraidType("small"),
                         color = centraidColor("textSoft"),
                         modifier = Modifier.padding(CentraidGeometry.PAGE_MARGIN.dp),
@@ -612,14 +572,14 @@ internal fun LibraryGrains(
                     }
                 }
             }
-            item(key = "more") { MoreSentinel(complete, cells.size, onMore) }
+            item(key = "more") { MoreSentinel(complete, cellCount, loadingMoreLabel, onMore) }
         }
     }
 }
 
 @Composable
 private fun PeriodCard(
-    period: LibraryPeriod,
+    period: PhotosPeriod,
     coverHeight: androidx.compose.ui.unit.Dp,
     overlaid: Boolean,
     onOpenPeriod: (String) -> Unit,
@@ -627,10 +587,10 @@ private fun PeriodCard(
     Column(
         Modifier
             .fillMaxWidth()
-            .clickable(onClickLabel = PhotosCopy.PHOTOS_OPEN_ITEM.replace("{label}", period.title)) { onOpenPeriod(period.anchorDay) }
+            .clickable(onClickLabel = period.title) { onOpenPeriod(period.anchor_day) }
             .semantics(mergeDescendants = true) {
                 role = Role.Button
-                contentDescription = "${period.title}, ${period.count}"
+                contentDescription = period.accessibility_label
             }
             .padding(bottom = CARD_BOTTOM.dp),
     ) {
@@ -641,7 +601,8 @@ private fun PeriodCard(
                 .clip(RoundedCornerShape(RADIUS_MD.dp))
                 .background(centraidColor("skel")),
         ) {
-            if (period.coverPath.isNotEmpty()) ContentImage(period.coverPath)
+            val cover = period.cover?.thumbnail_path.orEmpty()
+            if (cover.isNotEmpty()) ContentImage(cover)
             if (overlaid) {
                 // AN OVERLAY ONLY WITH A GROUND OF ITS OWN: a name over an
                 // unpredictable photograph needs the scrim under it.
@@ -666,42 +627,37 @@ private fun PeriodCard(
                     modifier = Modifier.weight(1f, fill = false),
                 )
             }
-            Text(period.count, style = centraidType("mono"), color = centraidColor("textSoft"), maxLines = 1)
+            Text(period.count_label, style = centraidType("mono"), color = centraidColor("textSoft"), maxLines = 1)
         }
     }
 }
+
+/** The day a row belongs to, for landing a grain switch where the member was. */
+internal fun dayOfRow(row: PhotosTimelineRow?): String = row?.day.orEmpty()
 
 /**
  * THE DAY AT THE TOP OF A GRAIN'S LIST — the first card's newest day under a
  * year header, or the card's own — so a switch to another grain lands where
  * the member was. Item 0 is the top slot.
  */
-internal fun grainDayAt(cells: List<PhotoCell>, grain: PhotosGridState.Grain, index: Int): String {
-    val items = grainItemsOf(cells, grain == PhotosGridState.Grain.GRAIN_YEARS)
+internal fun grainDayAt(items: List<PhotosGrainItem>, index: Int): String {
     val item = items.drop((index - 1).coerceAtLeast(0)).firstOrNull { it.periods.isNotEmpty() }
-    return item?.periods?.firstOrNull()?.anchorDay ?: ""
+    return item?.periods?.firstOrNull()?.anchor_day ?: ""
 }
-
-/** The Years or Months list: its cards, in the cells' own newest-first order. */
-private fun grainItemsOf(cells: List<PhotoCell>, years: Boolean): List<GrainItem> =
-    PhotosLibraryLayout.grainItems(
-        PhotosLibraryLayout.periods(libraryCells(cells), years, DeviceLibraryTitles),
-        years,
-    )
 
 /**
  * THE GRAIN CONTROL (v0's `TimelineGrainControl.tsx`): Years · Months · All,
  * PERMANENT while the library is the destination — never armed by a scroll,
  * never on a timer. The band's grammar: one elevated plate on the pill rung
- * with a hairline, the lit segment in ink with a mark-wide rule over it.
+ * with a hairline, the lit segment in ink with a mark-wide rule over it. The
+ * three words are Rust's.
  */
 @Composable
-internal fun GrainControl(grain: PhotosGridState.Grain, onGrain: (PhotosGridState.Grain) -> Unit) {
-    val segments = listOf(
-        PhotosGridState.Grain.GRAIN_YEARS to PhotosCopy.PHOTOS_GRAIN_YEARS,
-        PhotosGridState.Grain.GRAIN_MONTHS to PhotosCopy.PHOTOS_GRAIN_MONTHS,
-        PhotosGridState.Grain.GRAIN_ALL to PhotosCopy.PHOTOS_GRAIN_ALL,
-    )
+internal fun GrainControl(
+    grain: PhotosGrain,
+    labels: List<Pair<PhotosGrain, String>>,
+    onGrain: (PhotosGrain) -> Unit,
+) {
     Box(Modifier.fillMaxWidth().padding(top = BandPolicy.BAND_TOP_GAP.dp), contentAlignment = Alignment.Center) {
         Row(
             Modifier
@@ -715,9 +671,9 @@ internal fun GrainControl(grain: PhotosGridState.Grain, onGrain: (PhotosGridStat
                 .padding(BandPolicy.BAND_PLATE_PAD.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            segments.forEach { (key, label) ->
+            labels.forEach { (key, label) ->
                 val active = key == grain ||
-                    (key == PhotosGridState.Grain.GRAIN_ALL && grain == PhotosGridState.Grain.GRAIN_UNSPECIFIED)
+                    (key == PhotosGrain.PHOTOS_GRAIN_ALL && grain == PhotosGrain.PHOTOS_GRAIN_UNSPECIFIED)
                 Box(
                     Modifier
                         .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
@@ -752,42 +708,27 @@ internal fun GrainControl(grain: PhotosGridState.Grain, onGrain: (PhotosGridStat
     }
 }
 
-/**
- * A DATE IN THE READER'S LOCALE — `Fri, Aug 14`, with the year only when it is
- * not this one (v0's `sectionPhotoAssets`), and `August 2026`. The one thing
- * the shared layout cannot say: `CivilWords` spells days in English from the
- * copy tables, and the library has always spelled them the way the device
- * does. The day is already the capture-local day; it is formatted at noon UTC
- * in UTC so no zone can move it.
- */
-private object DeviceLibraryTitles : LibraryTitles {
-    override fun month(year: Int, month: Int): String =
-        format(year, month, 1, android.text.format.DateFormat.getBestDateTimePattern(java.util.Locale.getDefault(), "MMMMyyyy"))
+/** A month header's height. */
+private const val MONTH_ROW_HEIGHT: Int = 46
 
-    override fun day(year: Int, month: Int, day: Int, withYear: Boolean): String {
-        val skeleton = if (withYear) "EEEMMMdyyyy" else "EEEMMMd"
-        return format(year, month, day, android.text.format.DateFormat.getBestDateTimePattern(java.util.Locale.getDefault(), skeleton))
-    }
+/** A day header's height. */
+private const val DAY_ROW_HEIGHT: Int = 34
 
-    private fun format(year: Int, month: Int, day: Int, pattern: String): String {
-        val utc = java.util.TimeZone.getTimeZone("UTC")
-        val calendar = java.util.Calendar.getInstance(utc).apply {
-            clear()
-            set(year, month - 1, day, 12, 0)
-        }
-        return java.text.SimpleDateFormat(pattern, java.util.Locale.getDefault())
-            .apply { timeZone = utc }
-            .format(calendar.time)
-    }
-}
+/** The scrub rail's width, the thumb's height, and its clearance from the top and bottom. */
+private const val RAIL_WIDTH: Int = 44
+private const val RAIL_TOP: Int = 8
+private const val THUMB_HEIGHT: Int = 44
 
-private const val MONTH_ROW_HEIGHT: Int = PhotosLibraryLayout.MONTH_ROW
-private const val DAY_ROW_HEIGHT: Int = PhotosLibraryLayout.DAY_ROW
-private const val RAIL_WIDTH: Int = PhotosLibraryLayout.RAIL_WIDTH
-private const val RAIL_TOP: Int = PhotosLibraryLayout.RAIL_INSET
-private const val THUMB_HEIGHT: Int = PhotosLibraryLayout.THUMB
-private const val RAIL_MIN_ROWS: Int = PhotosLibraryLayout.RAIL_MIN_ROWS
-private const val YEAR_COVER_RATIO: Float = PhotosLibraryLayout.YEAR_COVER_RATIO.toFloat()
-private const val CARD_GUTTER: Int = PhotosLibraryLayout.CARD_GUTTER
-private const val CARD_BOTTOM: Int = PhotosLibraryLayout.CARD_BOTTOM
+/** The rail appears only for a library at least this many rows long. */
+private const val RAIL_MIN_ROWS: Int = 12
+
+/** A year card's cover height, as a share of the stage's width. */
+private const val YEAR_COVER_RATIO: Float = 0.72f
+
+/** The gutter between the two month cards of a row, and a card's foot. */
+private const val CARD_GUTTER: Int = 8
+private const val CARD_BOTTOM: Int = 20
+
+/** The ground a page that has not landed stands on: the smallest rung's height. */
+private const val SENTINEL_HEIGHT: Int = 64
 private const val RADIUS_MD: Int = 7

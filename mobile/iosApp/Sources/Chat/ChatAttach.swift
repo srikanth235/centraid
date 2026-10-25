@@ -5,14 +5,14 @@ import UniformTypeIdentifiers
 
 import CentraidShared
 
-// THE CHAT'S ATTACH PICKERS: three sources, one chip.
+// THE CHAT'S ATTACH PICKERS: two sources, one chip.
 //
-// "Photo from vault" is the Photos app's own cells; "Photo library" is the
-// system's PHPickerViewController, which runs out of process and needs NO photo
-// permission (the app sees only the one item the member picks); "Document" is
-// the vault's text documents. Whatever is chosen is handed to the chat model by
-// NAME (an asset id, a document id) or, for the library, by the bytes of ONE
-// image scaled here. Nothing is written beyond a small thumbnail file, in the
+// "Photo library" is the system's PHPickerViewController, which runs out of
+// process and needs NO photo permission (the app sees only the one item the
+// member picks); "Document" is the vault's text documents. Whatever is chosen
+// is handed to the chat model by NAME (a document id) or, for the library, by
+// the bytes of ONE image scaled here. There is no "Photo from vault" source:
+// Photos' picker is Rust's (`photos.picker`) and only adds to an album. Nothing is written beyond a small thumbnail file, in the
 // temporary directory, swept on launch, on a new chat and on a vault switch.
 
 /// THUMBNAILS THE COMPOSER DRAWS FOR A LIBRARY PHOTO, and nothing else.
@@ -123,65 +123,6 @@ struct LibraryPhotoPicker: UIViewControllerRepresentable {
                 DispatchQueue.main.async { onPicked(data) }
             }
         }
-    }
-}
-
-// MARK: - Vault photographs
-
-/// THE VAULT'S PHOTOGRAPHS, AS A GRID TO CHOOSE ONE FROM. The Photos picker's
-/// own cell renderer over its own machine; a tap attaches and closes.
-struct ChatVaultPhotoSheet: View {
-    @ObservedObject var chat: ChatModel
-    let onPicked: (_ assetID: String, _ thumbnail: String) -> Void
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.dismiss) private var dismiss
-
-    private var state: PhotoPickerStateView { PhotoPickerStateView(data: chat.photoChoiceData) }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                switch state.content {
-                case .loading:
-                    RowSkeleton(rows: 6).padding(.top, 24)
-                case let .denied(denied):
-                    DeniedGate(denied)
-                case let .failure(sentence, remedy):
-                    ScreenFailureView(sentence: sentence, remedy: remedy)
-                case let .data(cells, packAbsent):
-                    // Photographs and scans: a video is not an image to read.
-                    let images = cells.filter { $0.kind == .photo || $0.kind == .scan }
-                    if images.isEmpty {
-                        ScreenEmptyView(sentence: ChatCopy.shared.ATTACH_NO_PHOTOS)
-                            .padding(.top, 24)
-                    } else {
-                        PhotoCellsGrid(
-                            cells: images,
-                            packAbsent: packAbsent,
-                            onTap: { identifier in
-                                let thumbnail = images.first { $0.assetID == identifier }?.thumbnailPath ?? ""
-                                onPicked(identifier, thumbnail)
-                                dismiss()
-                            }
-                        )
-                    }
-                }
-            }
-            .contentMargins(.horizontal, CentraidGeometry.pageMargin, for: .scrollContent)
-            .navigationTitle(ChatCopy.shared.ATTACH_PICK_PHOTO)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        CentraidIconView(iconKey: "X", tint: Theme.color("text", scheme), size: 18)
-                    }
-                    .accessibilityLabel(ChatCopy.shared.CLOSE)
-                    .accessibilityIdentifier("chat-attach-close")
-                }
-            }
-        }
-        .onAppear { chat.openPhotoChoice() }
-        .accessibilityIdentifier("chat-vault-photos")
     }
 }
 

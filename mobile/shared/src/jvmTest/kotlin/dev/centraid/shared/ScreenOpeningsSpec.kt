@@ -3,13 +3,9 @@ package dev.centraid.shared
 import centraid.core.v1.AgendaDestination
 import centraid.core.v1.DocsDestination
 import centraid.core.v1.Route
-import centraid.screen.v1.PhotoShelf
 import dev.centraid.shared.apps.health.HealthHomeMachine
 import dev.centraid.shared.apps.people.PeopleHomeMachine
 import dev.centraid.shared.apps.people.PeoplePersonMachine
-import dev.centraid.shared.apps.photos.PhotoLightboxMachine
-import dev.centraid.shared.apps.photos.PhotoShelfMachine
-import dev.centraid.shared.apps.photos.PhotosGridMachine
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.DocsEntry
@@ -64,8 +60,9 @@ class ScreenOpeningsSpec : StringSpec({
             dev.centraid.shared.nav.ScreenIds.RUST_SCREEN
 
         val shelf = RowRoutes.route(row("photos", "album", "al", "Summer"))!!
-        shelf.screenId shouldBe PhotoShelfMachine.SCREEN_ID
-        PhotoShelf.ADAPTER.decode(shelf.event).album!!.collection_id shouldBe "al"
+        // AN ALBUM ROW IS A RUST SCREEN (#1135): the route Rust's shelf opens from.
+        shelf.screenId shouldBe dev.centraid.shared.nav.ScreenIds.RUST_SCREEN
+        centraid.core.v1.Route.ADAPTER.decode(shelf.event).photos_shelf!!.id shouldBe "al"
     }
 
     "a photograph's swipe walks the photographs among the answer, in the order it showed them" {
@@ -74,12 +71,15 @@ class ScreenOpeningsSpec : StringSpec({
             row("photos", "photo", "a"),
             row("photos", "photo", "b"),
         )
+        // The lightbox is a screen Rust owns: the opening is the route Rust will push.
         val lightbox = RowRoutes.route(row("photos", "photo", "b"), among = among)!!
-        lightbox.screenId shouldBe PhotoLightboxMachine.SCREEN_ID
-        lightbox.assetId shouldBe "b"
-        lightbox.neighbours shouldContainExactly listOf("a", "b")
+        lightbox.screenId shouldBe ScreenIds.RUST_SCREEN
+        val args = Route.ADAPTER.decode(lightbox.event).photos_lightbox!!
+        args.photo_id shouldBe "b"
+        args.neighbour_ids shouldContainExactly listOf("a", "b")
         // Alone, it is its own swipe.
-        RowRoutes.route(row("photos", "photo", "z"))!!.neighbours shouldContainExactly listOf("z")
+        Route.ADAPTER.decode(RowRoutes.route(row("photos", "photo", "z"))!!.event)
+            .photos_lightbox!!.neighbour_ids shouldContainExactly listOf("z")
     }
 
     "a noun the table has no row for opens the app's home, an unknown app opens nothing" {
@@ -87,7 +87,7 @@ class ScreenOpeningsSpec : StringSpec({
         RowRoutes.route(row("money", "tag", "x"))!!.screenId shouldBe
             dev.centraid.shared.nav.ScreenIds.RUST_SCREEN
         RowRoutes.route(row("health", "activity", "x"))!!.screenId shouldBe HealthHomeMachine.SCREEN_ID
-        RowRoutes.route(row("photos", "tag", "x"))!!.screenId shouldBe PhotosGridMachine.SCREEN_ID
+        RowRoutes.route(row("photos", "tag", "x"))!!.screenId shouldBe ScreenIds.RUST_SCREEN
         RowRoutes.route(row("weather", "forecast", "x")).shouldBeNull()
         RowRoutes.appHomeRoute("locker").shouldBeNull()
     }

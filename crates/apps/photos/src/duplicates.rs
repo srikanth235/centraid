@@ -13,8 +13,10 @@
 //!
 //! Two rules the fold keeps:
 //!
-//! 1. **Only LIVE photographs ride a cluster card.** A trashed member of a cluster
-//!    is not something to offer trashing again.
+//! 1. **Only LIVE photographs ride a cluster card** (`Standing::is_live`: not
+//!    trashed, not archived, not folded under an edit). A trashed member is not
+//!    something to offer trashing again, a put-away photograph is not in the
+//!    library being tidied, and an edit's original is not a duplicate of its edit.
 //! 2. **A cluster left with fewer than two live members is dropped entirely.** A
 //!    "duplicate" with one member is a photograph.
 
@@ -25,6 +27,9 @@ use centraid_apps_kit::reads::{PageDoor, Read, read_window};
 use centraid_apps_kit::row::{Row, integer_or_zero, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
+use centraid_apps_kit::rules::Standing;
+
+use crate::cells::{PhotoCell, read_cells};
 use crate::queries::PHOTO_PAIR_BOUND;
 
 /// How many fingerprints the review surface considers.
@@ -52,13 +57,17 @@ pub struct DuplicatePhoto {
 }
 
 /// One near-duplicate cluster.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DuplicateCluster {
     /// The group's lowest photograph id.
     pub key: String,
     /// `"phash"`. A second tier would be a second signal, and there is one.
     pub tier: &'static str,
     pub photos: Vec<DuplicatePhoto>,
+    /// The same members as cells: what this device holds of each, its size and
+    /// box, its heart and the albums it is in, so a review can show which copy to
+    /// keep and which are placed.
+    pub cells: Vec<PhotoCell>,
 }
 
 /// `photos.duplicates.phashes` — the perceptual hashes, by the blob they hash.
@@ -112,6 +121,7 @@ pub fn fold_clusters(
             key: key.to_owned(),
             tier: "phash",
             photos: members.into_iter().cloned().collect(),
+            cells: Vec::new(),
         })
         .collect();
     // Biggest cluster first, ties broken by the cluster id so the order is total.
@@ -126,7 +136,7 @@ pub fn fold_clusters(
 }
 
 /// The hashes of the live photographs, in blob order, at most [`CLUSTER_ROWS`].
-pub fn fingerprints(door: &dyn PageDoor) -> KitResult<Vec<Fingerprint>> {
+pub fn fingerprints(door: &dyn PageDoor, standing: &Standing) -> KitResult<Vec<Fingerprint>> {
     let hashes = read_window(door, &phash_statement(), CLUSTER_ROWS)?.rows;
     let by_blob: BTreeMap<String, String> = hashes
         .iter()
@@ -142,25 +152,12 @@ pub fn fingerprints(door: &dyn PageDoor) -> KitResult<Vec<Fingerprint>> {
         &blobs,
         None,
     )?;
-    let ids: Vec<String> = photos.iter().filter_map(|row| text_of(row, "id")).collect();
-    let live: Vec<String> = read_of(
-        door,
-        "photos.duplicates.live",
-        "entity",
-        "id",
-        "id",
-        &ids,
-        Some(("deleted_at IS NULL", Vec::new())),
-    )?
-    .iter()
-    .filter_map(|row| text_of(row, "id"))
-    .collect();
     Ok(photos
         .iter()
         .filter_map(|row| {
             let id = text_of(row, "id")?;
             let phash = by_blob.get(&text_of(row, "blob")?)?.clone();
-            live.contains(&id).then_some(Fingerprint {
+            standing.is_live(&id).then_some(Fingerprint {
                 photo_id: id,
                 phash,
             })
@@ -168,13 +165,33 @@ pub fn fingerprints(door: &dyn PageDoor) -> KitResult<Vec<Fingerprint>> {
         .collect())
 }
 
+/// How many clusters of look-alikes there are: the groups of two or more among the
+/// live photographs' fingerprints. A count, so no member is read.
+///
+/// # Errors
+/// The door's refusal, or a walk past its bound.
+pub fn duplicate_cluster_count(
+    door: &dyn PageDoor,
+    cluster: impl Fn(&[Fingerprint]) -> BTreeMap<String, String>,
+) -> KitResult<usize> {
+    let standing = Standing::read(door)?;
+    let cluster_of = cluster(&fingerprints(door, &standing)?);
+    let mut sizes: BTreeMap<&str, usize> = BTreeMap::new();
+    for key in cluster_of.values() {
+        *sizes.entry(key.as_str()).or_default() += 1;
+    }
+    Ok(sizes.values().filter(|size| **size >= 2).count())
+}
+
 /// Read and fold `duplicates`: `cluster` maps each fingerprinted photograph that is
 /// in a group of two or more to its cluster id (`centraid_media::duplicates::cluster`).
 pub fn duplicate_clusters(
     door: &dyn PageDoor,
+    now_ms: i64,
     cluster: impl Fn(&[Fingerprint]) -> BTreeMap<String, String>,
 ) -> KitResult<Vec<DuplicateCluster>> {
-    let prints = fingerprints(door)?;
+    let standing = Standing::read(door)?;
+    let prints = fingerprints(door, &standing)?;
     let cluster_of = cluster(&prints);
     if cluster_of.is_empty() {
         return Ok(Vec::new());
@@ -238,7 +255,22 @@ pub fn duplicate_clusters(
             ))
         })
         .collect();
-    Ok(fold_clusters(&cluster_of, &known))
+    let mut clusters = fold_clusters(&cluster_of, &known);
+    let members: Vec<String> = clusters
+        .iter()
+        .flat_map(|cluster| cluster.photos.iter().map(|photo| photo.photo_id.clone()))
+        .collect();
+    let mut cells = read_cells(door, &standing, &members, now_ms)?;
+    for cluster in &mut clusters {
+        let mut ids: Vec<&str> = cluster
+            .photos
+            .iter()
+            .map(|photo| photo.photo_id.as_str())
+            .collect();
+        ids.sort_unstable();
+        cluster.cells = ids.iter().filter_map(|id| cells.remove(*id)).collect();
+    }
+    Ok(clusters)
 }
 
 #[cfg(test)]

@@ -108,6 +108,8 @@ const PHOTOS: &[Row] = &[
     ("restore-album", "delete-album", Input::Id),
     ("flag-photo", "unflag-photo", Input::Same),
     ("unflag-photo", "flag-photo", Input::Same),
+    ("archive-photo", "unarchive-photo", Input::Same),
+    ("unarchive-photo", "archive-photo", Input::Same),
     ("add-to-album", "remove-from-album", Input::Same),
     ("remove-from-album", "add-to-album", Input::Same),
     ("tag-photo", "untag-photo", Input::Same),

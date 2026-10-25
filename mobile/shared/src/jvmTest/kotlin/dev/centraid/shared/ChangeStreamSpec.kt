@@ -8,14 +8,12 @@ import centraid.core.v1.Value
 import centraid.screen.v1.TrashListData
 import centraid.screen.v1.TrashListEvent
 import centraid.screen.v1.TrashRow
-import centraid.screen.v1.PhotoCell
-import centraid.screen.v1.PhotosGridData
-import centraid.screen.v1.PhotosGridEvent
-import dev.centraid.shared.apps.photos.PhotosGridMachine
 import dev.centraid.shared.kit.TrashMachine
 import dev.centraid.shared.kit.TrashSpec
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
+import dev.centraid.shared.screen.ScreenMachine
+import dev.centraid.shared.screen.Step
 import dev.centraid.shared.shell.HomeMachine
 import dev.centraid.shared.shell.HomeAgendaTile
 import dev.centraid.shared.shell.HomeHealthTile
@@ -96,17 +94,7 @@ class ChangeStreamSpec : StringSpec({
         return host
     }
 
-    suspend fun photosShowing(vararg ids: String): ScreenHost<*, PhotosGridEvent> {
-        val host = ScreenHost(PhotosGridMachine)
-        host.send(
-            PhotosGridEvent(
-                data_ = PhotosGridEvent.DataArrived(
-                    data_ = PhotosGridData(cells = ids.map { PhotoCell(asset_id = it) }),
-                ),
-            ),
-        )
-        return host
-    }
+    suspend fun gridShowing(): ScreenHost<*, String> = ScreenHost(RuleAwareGrid)
 
     "a row a list is showing moves it, with no relaunch and no gesture" {
         val host = listShowing("t-1")
@@ -146,11 +134,9 @@ class ChangeStreamSpec : StringSpec({
         // machine: a stream holding its own table map would be a second place
         // every screen's reads are written down.
         keyedTrash.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
-        // A grid is the library: `photo`, and the `entity` and `edge` a photograph
-        // is live by. A note is none of them.
-        PhotosGridMachine.rowsChanged("note", listOf("t-1")).shouldBeNull()
-        PhotosGridMachine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
-        PhotosGridMachine.rowsChanged("entity", listOf("t-1")).shouldNotBeNull()
+        RuleAwareGrid.rowsChanged("note", listOf("t-1")).shouldBeNull()
+        RuleAwareGrid.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
+        RuleAwareGrid.rowsChanged("entity", listOf("t-1")).shouldNotBeNull()
         // Home COUNTS Locker's items since #1047 (ids only), off `entity` and the
         // `edge` that archives one (#1135); a Locker sidecar is not Home's table.
         HomeMachine.rowsChanged("locker_item_field", listOf("fld-1")).shouldBeNull()
@@ -187,19 +173,6 @@ class ChangeStreamSpec : StringSpec({
                 HomeNotesTile.TABLES + HomeMoneyTile.TABLES + HomeHealthTile.TABLES
     }
 
-    "a grid re-reads its first page rather than patching a cell" {
-        val host = photosShowing("ast-1")
-        val effects = mutableListOf<ScreenEffect>()
-        val watcher = watch(host, effects)
-        val stream = ChangeStream()
-        stream.route(host)
-        stream.deliver(change("photo", "ast-1"))
-        // The FIRST page, with a null cursor: a grid ordered by capture time
-        // cannot patch a cell whose position in that order may have moved.
-        effects shouldBe listOf(ScreenEffect.ReadPage(PhotosGridMachine.SCREEN_ID, null))
-        watcher.cancel()
-    }
-
     "a changed rule makes the grid read its page again, and a list does not" {
         // THE RULE IS NOT A ROW (#1080). No `photo` row moved when the
         // member chose a rule, yet every cell's download arrow was derived
@@ -207,7 +180,7 @@ class ChangeStreamSpec : StringSpec({
         // machine, and a screen whose rows say nothing about what this phone
         // holds answers null and reads nothing.
         val list = listShowing("t-1")
-        val photos = photosShowing("ast-1")
+        val photos = gridShowing()
         val listEffects = mutableListOf<ScreenEffect>()
         val photosEffects = mutableListOf<ScreenEffect>()
         val a = watch(list, listEffects)
@@ -218,17 +191,17 @@ class ChangeStreamSpec : StringSpec({
         stream.route(photos)
         stream.conditionsChanged()
 
-        photosEffects shouldBe listOf(ScreenEffect.ReadPage(PhotosGridMachine.SCREEN_ID, null))
+        photosEffects shouldBe listOf(ScreenEffect.ReadPage(RuleAwareGrid.ID, null))
         listEffects shouldBe emptyList()
         keyedTrash.conditionsChanged().shouldBeNull()
-        PhotosGridMachine.conditionsChanged().shouldNotBeNull()
+        RuleAwareGrid.conditionsChanged().shouldNotBeNull()
         a.cancel()
         b.cancel()
     }
 
     "one change reaches every screen that cares and no others" {
         val list = listShowing("t-1")
-        val photos = photosShowing("ast-1")
+        val photos = gridShowing()
         val seen = mutableListOf<String>()
         val scope = CoroutineScope(Dispatchers.Unconfined)
         val a = scope.launch { list.effects.collect { seen += "list" } }
@@ -267,3 +240,22 @@ class ChangeStreamSpec : StringSpec({
         )
     }
 })
+
+/**
+ * A GENERIC SCREEN THAT IS A "GRID": it re-reads on a `photo` change and on a
+ * changed transfer rule, the two routings Photos' library grid used to
+ * exercise here. Photos is Rust's now, so the routing law is asserted on this
+ * stand-in; the Rust side is pinned by `crates/screens/tests/photos_home.rs`
+ * (its `DataChanged` re-read) and `crates/core/src/events.rs`
+ * (`bytes_landing_are_a_change_on_the_photographs_that_own_them`).
+ */
+private object RuleAwareGrid : ScreenMachine<Int, String> {
+    val ID: String = "test.grid"
+    override fun initial(): Int = 0
+    override fun reduce(state: Int, event: String): Step<Int> =
+        Step(state + 1, listOf(ScreenEffect.ReadPage(ID, null)))
+    override fun rowsChanged(table: String, keys: List<String>): String? =
+        if (table == "photo" || table == "entity") "rows" else null
+    override fun seatChanged(seat: centraid.screen.v1.SeatState): String? = null
+    override fun conditionsChanged(): String = "conditions"
+}

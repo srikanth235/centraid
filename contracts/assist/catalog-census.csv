@@ -129,22 +129,24 @@ people,add-journal-entry,create,journal_entry,card,no,no
 people,save-contact-channel,edit,contact_point,card,yes: apps/people/PeoplePersonMachine.kt,no
 people,delete-contact-channel,delete,contact_point,card,yes: apps/people/PeoplePersonMachine.kt,no
 people,merge-people,merge,person,card,yes: apps/people/PeoplePersonMachine.kt,no
-photos,upload,import,photo,card,yes: apps/photos/PhotoWrites.kt,no
-photos,edit-photo,edit,photo,card,yes: apps/photos/PhotoWrites.kt,no
-photos,retitle-photo,edit,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
-photos,flag-photo,star,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
-photos,unflag-photo,unstar,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
-photos,delete-photo,delete,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
-photos,restore-photo,restore,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
-photos,purge-photo,purge,photo,card,yes: apps/photos/PhotoWrites.kt,no
-photos,create-album,create,album,direct,yes: apps/photos/PhotoWrites.kt,yes
-photos,rename-album,edit,album,direct,yes: apps/photos/PhotoWrites.kt,yes
-photos,set-album-cover,edit,album,card,yes: apps/photos/PhotoWrites.kt,no
-photos,delete-album,delete,album,direct,yes: apps/photos/PhotoWrites.kt,yes
-photos,restore-album,restore,album,direct,yes: apps/photos/PhotoWrites.kt,no
-photos,add-to-album,add_to,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
-photos,remove-from-album,remove_from,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
-photos,set-place,edit,place,card,yes: apps/photos/PhotoWrites.kt,no
-photos,name-place,edit,place,card,yes: apps/photos/PhotoWrites.kt,no
-photos,tag-photo,tag,photo,direct,yes: apps/photos/PhotoWrites.kt,no
-photos,untag-photo,untag,photo,direct,yes: apps/photos/PhotoWrites.kt,no
+photos,upload,import,photo,card,yes: crates/screens/src/photos/editor.rs,no
+photos,edit-photo,edit,photo,card,no,no
+photos,retitle-photo,edit,photo,direct,yes: crates/screens/src/photos/lightbox.rs,yes
+photos,flag-photo,star,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
+photos,unflag-photo,unstar,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
+photos,archive-photo,archive,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
+photos,unarchive-photo,unarchive,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
+photos,delete-photo,delete,photo,direct,yes: crates/screens/src/photos/duplicate_review.rs; crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
+photos,restore-photo,restore,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
+photos,purge-photo,purge,photo,card,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs; crates/screens/src/photos/shelf.rs,no
+photos,create-album,create,album,direct,yes: crates/screens/src/photos/album_choice.rs; crates/screens/src/photos/home/collections.rs,yes
+photos,rename-album,edit,album,direct,yes: crates/screens/src/photos/shelf.rs,yes
+photos,set-album-cover,edit,album,card,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/shelf.rs,no
+photos,delete-album,delete,album,direct,yes: crates/screens/src/photos/home/collections.rs; crates/screens/src/photos/shelf.rs,yes
+photos,restore-album,restore,album,direct,yes: crates/screens/src/photos/home/collections.rs; crates/screens/src/photos/shelf.rs,no
+photos,add-to-album,add_to,photo,direct,yes: crates/screens/src/photos/album_choice.rs,yes
+photos,remove-from-album,remove_from,photo,direct,yes: crates/screens/src/photos/selection.rs,yes
+photos,set-place,edit,place,card,yes: crates/screens/src/photos/lightbox.rs,no
+photos,name-place,edit,place,card,yes: crates/screens/src/photos/places.rs,no
+photos,tag-photo,tag,photo,direct,yes: crates/screens/src/photos/lightbox.rs,no
+photos,untag-photo,untag,photo,direct,yes: crates/screens/src/photos/lightbox.rs,no

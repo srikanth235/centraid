@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 36] = [
+const PROTOS: [&str; 40] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/command.proto",
@@ -84,6 +84,12 @@ const PROTOS: [&str; 36] = [
     "proto/centraid/core/v1/route.proto",
     "proto/centraid/core/v1/kit_screens.proto",
     "proto/centraid/core/v1/agenda_screens.proto",
+    // Photos' screens (#1135, lane D): the vocabulary every Photos screen shares
+    // (the cell, the selection bar, the album sheet), then one file per worker.
+    "proto/centraid/core/v1/photos_screens.proto",
+    "proto/centraid/core/v1/photos_home_screens.proto",
+    "proto/centraid/core/v1/photos_shelf_screens.proto",
+    "proto/centraid/core/v1/photos_lightbox_screens.proto",
     "proto/centraid/core/v1/locker_screens.proto",
     "proto/centraid/core/v1/money_screens.proto",
     "proto/centraid/core/v1/docs_screens.proto",
@@ -111,10 +117,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .out_dir(&out)
         // Boxed where one oneof arm dwarfs its siblings, so a small message
         // does not carry the largest arm's size inline (`large_enum_variant`).
-        .boxed(".centraid.screen.v1.PhotoLightboxState.content.detail")
-        .boxed(".centraid.screen.v1.PhotoLightboxEvent.kind.data")
         // Every app screen's `data` arm: the answer is the whole screen, and
         // its siblings (loading, empty, refused) are a line or two each.
+        .boxed(".centraid.core.v1.PhotosDuplicatesState.content.data")
+        .boxed(".centraid.core.v1.PhotosDuplicateReviewState.content.data")
+        .boxed(".centraid.core.v1.PhotosEditorState.content.data")
+        .boxed(".centraid.core.v1.PhotosLightboxState.content.photo")
+        .boxed(".centraid.core.v1.ViewState.kind.photos_lightbox")
         .boxed(".centraid.core.v1.AgendaHomeState.content.data")
         .boxed(".centraid.core.v1.AgendaEventState.content.data")
         .boxed(".centraid.core.v1.AgendaEditorState.content.data")
@@ -134,6 +143,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.MoneyRulesState.content.data")
         // Home is by far the largest view state.
         .boxed(".centraid.core.v1.ViewState.kind.agenda_home")
+        // Photos' home carries the library, Collections and Search in one state.
+        .boxed(".centraid.core.v1.ViewState.kind.photos_home")
+        .boxed(".centraid.core.v1.PhotosLibrary.content.data")
+        .boxed(".centraid.core.v1.PhotosSearchView.content.hits")
         .boxed(".centraid.core.v1.ViewState.kind.docs_drive")
         .boxed(".centraid.core.v1.ViewState.kind.notes_home")
         .boxed(".centraid.screen.v1.PeopleHomeData.surface.touch")
@@ -144,6 +157,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.DocsDriveState.content.data")
         .boxed(".centraid.core.v1.DocsDocumentState.content.data")
         .boxed(".centraid.core.v1.Response.kind.app_query")
+        // Photos' collections overview holds a cover cell for each shelf and album.
+        .boxed(".centraid.core.v1.AppQueryResponse.answer.photos_albums")
+        .boxed(".centraid.core.v1.AppQueryResponse.answer.photos_photo")
+        .boxed(".centraid.core.v1.AppQueryResponse.answer.photos_shelf")
+        .boxed(".centraid.core.v1.PhotosShelfState.content.data")
+        .boxed(".centraid.core.v1.PhotosPickerState.content.data")
+        .boxed(".centraid.core.v1.PhotosPlacesState.content.data")
+        .boxed(".centraid.core.v1.ViewState.kind.photos_shelf")
+        .boxed(".centraid.core.v1.ViewState.kind.photos_picker")
+        .boxed(".centraid.core.v1.ViewState.kind.photos_places")
         // The one read and the one write (#1135): a request carries a map, and
         // an answer the app's whole typed answer.
         .boxed(".centraid.core.v1.Request.kind.load")

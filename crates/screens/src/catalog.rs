@@ -3775,6 +3775,7 @@ pub mod act {
             pub offset_min: Field<i64>,
             pub phash: Field<String>,
             pub place_id: Field<String>,
+            pub size: Option<i64>,
             pub taken_at: Field<String>,
             pub thumbhash: Field<String>,
             pub title: Option<String>,
@@ -3799,6 +3800,7 @@ pub mod act {
                 put_field(&mut map, "offset_min", self.offset_min, |it| whole(it));
                 put_field(&mut map, "phash", self.phash, |it| text(it));
                 put_field(&mut map, "place_id", self.place_id, |it| text(it));
+                if let Some(it) = self.size { map.insert("size".to_owned(), whole(it)); }
                 put_field(&mut map, "taken_at", self.taken_at, |it| text(it));
                 put_field(&mut map, "thumbhash", self.thumbhash, |it| text(it));
                 if let Some(it) = self.title { map.insert("title".to_owned(), text(it)); }
@@ -3860,25 +3862,9 @@ pub mod act {
             }
         }
 
-        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-        pub enum FlagPhotoFlag {
-            #[default]
-            Starred,
-            Archived,
-        }
-        impl FlagPhotoFlag {
-            fn wire(self) -> &'static str {
-                match self {
-                    Self::Starred => "starred",
-                    Self::Archived => "archived",
-                }
-            }
-        }
-
-        /// Heart a photograph (starred) or put it in the archive (archived) through flag.set — one `tagged` edge to the flag; an archived photograph is in neither the library nor the trash.
+        /// Heart a photograph through flag.set — one `tagged` edge to the starred flag. The archive is its own action, archive-photo.
         #[derive(Clone, Debug, Default)]
         pub struct FlagPhoto {
-            pub flag: FlagPhotoFlag,
             pub photo_id: String,
         }
         impl FlagPhoto {
@@ -3886,7 +3872,7 @@ pub mod act {
             pub fn request(self) -> wire::ActRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("flag".to_owned(), text(self.flag.wire()));
+                map.insert("flag".to_owned(), text("starred"));
                 map.insert("id".to_owned(), text(self.photo_id));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -3897,25 +3883,9 @@ pub mod act {
             }
         }
 
-        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-        pub enum UnflagPhotoFlag {
-            #[default]
-            Starred,
-            Archived,
-        }
-        impl UnflagPhotoFlag {
-            fn wire(self) -> &'static str {
-                match self {
-                    Self::Starred => "starred",
-                    Self::Archived => "archived",
-                }
-            }
-        }
-
-        /// Take a photograph's heart or its archive flag away through flag.clear.
+        /// Take a photograph's heart away through flag.clear.
         #[derive(Clone, Debug, Default)]
         pub struct UnflagPhoto {
-            pub flag: UnflagPhotoFlag,
             pub photo_id: String,
         }
         impl UnflagPhoto {
@@ -3923,13 +3893,55 @@ pub mod act {
             pub fn request(self) -> wire::ActRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("flag".to_owned(), text(self.flag.wire()));
+                map.insert("flag".to_owned(), text("starred"));
                 map.insert("id".to_owned(), text(self.photo_id));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
         impl From<UnflagPhoto> for wire::ActRequest {
             fn from(value: UnflagPhoto) -> Self {
+                value.request()
+            }
+        }
+
+        /// Put a photograph in the archive through flag.set — out of the library and the lists, kept forever. Not the trash: no purge date is set and nothing expires. Trash wins: an archived photograph can still be deleted, and it is then in the trash only. An album that holds it still shows it.
+        #[derive(Clone, Debug, Default)]
+        pub struct ArchivePhoto {
+            pub photo_id: String,
+        }
+        impl ArchivePhoto {
+            pub const NAME: &str = "archive-photo";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("flag".to_owned(), text("archived"));
+                map.insert("id".to_owned(), text(self.photo_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ArchivePhoto> for wire::ActRequest {
+            fn from(value: ArchivePhoto) -> Self {
+                value.request()
+            }
+        }
+
+        /// Bring an archived photograph back into the library through flag.clear.
+        #[derive(Clone, Debug, Default)]
+        pub struct UnarchivePhoto {
+            pub photo_id: String,
+        }
+        impl UnarchivePhoto {
+            pub const NAME: &str = "unarchive-photo";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("flag".to_owned(), text("archived"));
+                map.insert("id".to_owned(), text(self.photo_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<UnarchivePhoto> for wire::ActRequest {
+            fn from(value: UnarchivePhoto) -> Self {
                 value.request()
             }
         }
@@ -4708,9 +4720,8 @@ pub mod load {
             pub fn request(self) -> wire::LoadRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                if let Some(it) = self.after { map.insert("after".to_owned(), text(it)); }
                 if let Some(it) = self.kind_concept_id { map.insert("kind_concept_id".to_owned(), text(it)); }
-                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, after: self.after.unwrap_or_default(), params: map, ..Default::default() }
             }
         }
         impl From<Workouts> for wire::LoadRequest {
@@ -4997,10 +5008,9 @@ pub mod load {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("month".to_owned(), text(self.month));
                 if let Some(it) = self.account_id { map.insert("account_id".to_owned(), text(it)); }
-                if let Some(it) = self.after { map.insert("after".to_owned(), text(it)); }
                 if let Some(it) = self.category_filter { map.insert("category_filter".to_owned(), text(it)); }
                 if let Some(it) = self.category_id { map.insert("category_id".to_owned(), text(it)); }
-                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, after: self.after.unwrap_or_default(), params: map, ..Default::default() }
             }
         }
         impl From<Activity> for wire::LoadRequest {
@@ -5491,31 +5501,11 @@ pub mod load {
         use super::*;
         pub const APP: &str = "photos";
 
-        /// A bounded recent window of live photographs (newest by taken_at, not archived, an edit folding the original it was made from) with their bytes' media type and size plus the albums they belong to — never a whole-table pull; trashed photographs ride separately (newest 200) with their days-until-purge, and `truncated` says older photographs exist beyond the window. Each photograph also carries `place` and `tags`; `places` is the full known place list. `before` is a keyset cursor (only photographs taken strictly earlier), and `tail` reports the oldest timestamp this page reached — pass it back as the next `before`.
-        #[derive(Clone, Debug, Default)]
-        pub struct Library {
-            pub before: Option<String>,
-            pub limit: u32,
-        }
-        impl Library {
-            pub const NAME: &str = "library";
-            pub fn request(self) -> wire::LoadRequest {
-                #[allow(unused_mut)]
-                let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                if let Some(it) = self.before { map.insert("before".to_owned(), text(it)); }
-                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
-            }
-        }
-        impl From<Library> for wire::LoadRequest {
-            fn from(value: Library) -> Self {
-                value.request()
-            }
-        }
-
-        /// Caption and place search over the whole live library through the vault's one search index (the caption, the place's name and its locality) — not just the loaded window; returns the ranked photograph ids a grid reads, leaving out the archive.
+        /// Search the whole live library: the vault's one search index (the caption, the place's name and its locality, the text recognised in the picture) plus the places a word names, `no location` for the photographs that have none, and the labels a word names — all folded into one answer. `photos` are the index's ranked photograph ids; `cells` are every live photograph any leg reaches, newest taken first then the undated, at most `limit` of them, with `total` the exact number; `top_hits` are the places (three at most, then the no-location bucket) and albums (three at most) the words name, each with the size of the shelf it opens; `labels` are the labels the words name that are on a live photograph. The archive and an edited photograph's original are left out. An empty `term` answers the resting suggestions instead: the places that hold a live photograph and the labels on one. `correct` allows a typo to be corrected when nothing was found as typed.
         #[derive(Clone, Debug, Default)]
         pub struct Search {
             pub correct: Option<i64>,
+            pub limit: u32,
             pub term: Option<String>,
         }
         impl Search {
@@ -5525,7 +5515,7 @@ pub mod load {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 if let Some(it) = self.correct { map.insert("correct".to_owned(), whole(it)); }
                 if let Some(it) = self.term { map.insert("term".to_owned(), text(it)); }
-                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
             }
         }
         impl From<Search> for wire::LoadRequest {
@@ -5534,7 +5524,7 @@ pub mod load {
             }
         }
 
-        /// Near-duplicate clusters over the live library: groups the photographs whose perceptual hashes (a derivative of each blob) lie within a few bits of one another, recomputed at read — a true visual-similarity signal, not a coincidence-prone fingerprint, and nothing stored.
+        /// Near-duplicate clusters over the live library: groups the photographs whose perceptual hashes (a derivative of each blob) lie within a few bits of one another, recomputed at read — a true visual-similarity signal, not a coincidence-prone fingerprint, and nothing stored. Each cluster lists its members as cells (pixel box, size, form, capture time, heart, the albums that hold it, held thumbnail path) so a review can show which copy to keep and which are placed in an album or hearted. The archive, the trash and an edited photograph's original are never members.
         #[derive(Clone, Debug, Default)]
         pub struct Duplicates {
         }
@@ -5548,6 +5538,113 @@ pub mod load {
         }
         impl From<Duplicates> for wire::LoadRequest {
             fn from(value: Duplicates) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum ShelfView {
+            #[default]
+            Live,
+            Favorites,
+            Videos,
+            Archive,
+            Trash,
+            Album,
+            Place,
+            Unplaced,
+        }
+        impl ShelfView {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Live => "live",
+                    Self::Favorites => "favorites",
+                    Self::Videos => "videos",
+                    Self::Archive => "archive",
+                    Self::Trash => "trash",
+                    Self::Album => "album",
+                    Self::Place => "place",
+                    Self::Unplaced => "unplaced",
+                }
+            }
+        }
+
+        /// One page of one photo shelf, newest taken first and then the photographs with no capture time. `view` is `live` (the library: not in the trash, not archived, and an edited photograph's original folded under its edit), `favorites`, `videos`, `archive` (archived and not in the trash), `trash` (every deleted photograph, archived or not, newest deleted first, each with its days until purge), `album` (its members that are not in the trash, an archived one included; needs `id`), `place` (needs `id`) or `unplaced` (no location yet). A cell carries what a grid draws: the bytes' hash, form, capture time and offset, pixel box, duration, caption, heart, the albums that hold it, the held thumbnail path and whether the original is on this device, and its Live Photo pairing. `total` is the shelf's exact size and comes with the first page only; pass `next` back as `after` for the next page.
+        #[derive(Clone, Debug, Default)]
+        pub struct Shelf {
+            pub limit: u32,
+            pub view: ShelfView,
+            pub after: Option<String>,
+            pub id: Option<String>,
+        }
+        impl Shelf {
+            pub const NAME: &str = "shelf";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("view".to_owned(), text(self.view.wire()));
+                if let Some(it) = self.id { map.insert("id".to_owned(), text(it)); }
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, after: self.after.unwrap_or_default(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Shelf> for wire::LoadRequest {
+            fn from(value: Shelf) -> Self {
+                value.request()
+            }
+        }
+
+        /// Everything one photograph's screens show: its cell (bytes' hash, form, capture time, pixel box, duration, caption, heart, archive flag, size, held thumbnail path, Live Photo pairing), whether it is in the trash and when it purges, the albums that hold it by name, its labels, its place and how to say where it is (a name, `near <city>`, a bearing from the nearest named place — never coordinates), the photographs made from it, and what it was edited from. Answers nothing for an id that is no photograph.
+        #[derive(Clone, Debug, Default)]
+        pub struct Photo {
+            pub id: String,
+        }
+        impl Photo {
+            pub const NAME: &str = "photo";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Photo> for wire::LoadRequest {
+            fn from(value: Photo) -> Self {
+                value.request()
+            }
+        }
+
+        /// The collections overview: every album with its exact count (members not in the trash) and cover, the albums in the trash waiting for a restore, and the standing shelves — the library, favorites, videos, archive and trash — each with its exact count and its newest photograph, plus how many places hold a live photograph and how many live photographs have no location. Every count is the size of the shelf it opens, so `photos` is the number of photographs in the library (an edit and the photograph it was made from count once).
+        #[derive(Clone, Debug, Default)]
+        pub struct Albums {
+        }
+        impl Albums {
+            pub const NAME: &str = "albums";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Albums> for wire::LoadRequest {
+            fn from(value: Albums) -> Self {
+                value.request()
+            }
+        }
+
+        /// Every place that is not in the trash with the number of live photographs in it, its newest live photograph and how to say where it is (its name, `near <city>`, a bearing from the nearest named place — never coordinates), the places with photographs first; plus the number of live photographs with no location yet. A place with no live photograph is still listed, so it can be chosen.
+        #[derive(Clone, Debug, Default)]
+        pub struct Places {
+        }
+        impl Places {
+            pub const NAME: &str = "places";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Places> for wire::LoadRequest {
+            fn from(value: Places) -> Self {
                 value.request()
             }
         }

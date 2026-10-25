@@ -20,8 +20,6 @@ public object ScreenIds {
 
 
 
-    /** The folder page: the drive's machine on a bridge of its own, keyed apart so the drive under it keeps its tab. */
-
     public const val PEOPLE_HOME: String = "people.home"
     public const val PEOPLE_PERSON: String = "people.person"
     public const val PEOPLE_EDITOR: String = "people.editor"
@@ -34,8 +32,4 @@ public object ScreenIds {
     public const val HEALTH_WORKOUT: String = "health.workout"
     public const val HEALTH_CONNECT: String = "health.connect"
 
-
-    public const val PHOTOS_GRID: String = "photos.grid"
-    public const val PHOTOS_SHELF: String = "photos.shelf"
-    public const val PHOTOS_LIGHTBOX: String = "photos.lightbox"
 }

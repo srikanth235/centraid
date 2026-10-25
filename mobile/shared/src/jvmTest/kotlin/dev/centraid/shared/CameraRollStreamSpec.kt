@@ -11,12 +11,11 @@ import centraid.core.v1.StageSource
 import centraid.screen.v1.BackupState
 import centraid.screen.v1.MediaPermission
 import dev.centraid.core.CentraidCore
-import dev.centraid.shared.apps.photos.PhotosGridMachine
 import dev.centraid.shared.platform.FakePlatformServices
 import dev.centraid.shared.platform.MediaLibrary
 import dev.centraid.shared.platform.NetworkStatus
-import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.CameraRoll
+import dev.centraid.shared.shell.CameraRollSeat
 import dev.centraid.shared.shell.CameraRollRunner
 import dev.centraid.shared.shell.LibraryFeed
 import dev.centraid.shared.shell.Shelf
@@ -147,7 +146,7 @@ class CameraRollStreamSpec : StringSpec({
             val runner = CameraRollRunner(
                 services = services,
                 roll = CameraRoll(services, core = { core.core }),
-                host = ScreenHost(PhotosGridMachine),
+                seat = CameraRollSeat(),
                 scope = backgroundScope,
                 vaultId = { "vault-1" },
             )
@@ -172,7 +171,7 @@ class CameraRollStreamSpec : StringSpec({
             CameraRollRunner(
                 services = services,
                 roll = CameraRoll(services, core = { core.core }),
-                host = ScreenHost(PhotosGridMachine),
+                seat = CameraRollSeat(),
                 scope = backgroundScope,
                 vaultId = { "vault-1" },
             ).start()

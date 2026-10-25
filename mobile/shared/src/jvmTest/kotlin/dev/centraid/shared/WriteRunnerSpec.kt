@@ -79,8 +79,6 @@ class WriteRunnerSpec : StringSpec({
             .seat_changed?.seat shouldBe reachable
         dev.centraid.shared.apps.people.PeopleTrashMachine.seatChanged(reachable)
             .seat_changed?.seat shouldBe reachable
-        dev.centraid.shared.apps.photos.PhotosGridMachine.seatChanged(reachable)
-            .seat_changed?.seat shouldBe reachable
         dev.centraid.shared.shell.HomeMachine.seatChanged(reachable)
             .seat_changed?.seat shouldBe reachable
     }

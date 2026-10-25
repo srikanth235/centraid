@@ -1,0 +1,271 @@
+// PHOTOS' COMMON SCREEN VOCABULARY (#1135, lane D): what every Photos screen
+// draws or sends the same way. The three per-screen files
+// (`photos_home_screens.proto`, `photos_shelf_screens.proto`,
+// `photos_lightbox_screens.proto`) import this one and add their own states and
+// events; none of them restates a cell, a selection bar or the album sheet.
+// Rust (`crates/screens`, module `photos`) makes every decision, string, count
+// and route; SwiftUI and Compose draw these messages and send these events.
+//
+// A LEAF over `kit_screens.proto` and `route.proto`, so it is imported by the
+// per-screen files and by `screens.proto` without a cycle.
+//
+// WHAT IS HERE
+//
+// - `PhotoTile`: one photograph as a grid draws it, sourced from the core's
+//   `PhotosCell` (`photos.proto`) and finished by `photos::cells`.
+// - `PhotosSelection` and `PhotosSelectionEvent`: select mode, the picked set,
+//   the bar's sentence and its batch actions with their confirms, shared by the
+//   library grid and every shelf.
+// - `PhotosAlbumChoice` and `PhotosAlbumChoiceEvent`: "Add to album", once.
+// - `PhotosBatchAction.Kind`: the verbs a bar offers.
+//
+// A refused write is the kit's `StatusLine` with `refused` set; a screen holds
+// it in its own slot, never in the read's `Failure`, so a refused favourite
+// does not replace the grid with an error.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/kit_screens.proto";
+
+// ---------------------------------------------------------------------------
+// The cell
+// ---------------------------------------------------------------------------
+
+// ONE PHOTOGRAPH, AS A GRID DRAWS IT. A Live Photo's movie is folded into its
+// still (`live`), so a grid never holds both.
+message PhotoTile {
+  // The photograph's id: what a tap opens and a selection holds.
+  string photo_id = 1;
+  // The bytes' hash, also the original's: what a download arrow asks for. A
+  // shell never composes a blob URI from it.
+  string content_id = 2;
+  // The thumbnail's local path, when this device holds one. Absent is a real
+  // answer; `held` says which kind of absent.
+  optional string thumbnail_path = 3;
+  Held held = 4;
+  Kind kind = 5;
+  bool favorite = 6;
+  bool archived = 7;
+  // A Live Photo's still and its movie share one capture group (the core's
+  // `burst`); empty when the photograph has none.
+  string capture_group = 8;
+  // The pixel box, 0 when the vault does not know it: a justified row packs
+  // from the real aspect ratio before a byte arrives, and unknown is square.
+  uint32 width = 9;
+  uint32 height = 10;
+  // A video's length in whole seconds, 0 when unknown or not a video.
+  uint32 duration_seconds = 11;
+  // `1:04`, `1:02:03`: the tile's kind line for a video with a known length;
+  // empty otherwise. Finished here so neither shell formats a clock.
+  string duration_label = 12;
+  // The capture-local day, `YYYY-MM-DD`, empty when the photograph carries no
+  // capture time. Derived once from the instant and its offset so both shells
+  // group a day the same way.
+  string day = 13;
+  // A LIVE PHOTO: its movie is folded into this cell.
+  bool live = 14;
+  // The folded movie's id, empty unless `live`.
+  string live_movie_id = 15;
+  // What a screen reader says: "Photo", "Video", "Live photo", with "preview
+  // not downloaded" when no thumbnail is here.
+  string accessibility_label = 16;
+  // HOW FAR A `HELD_FETCHING` CELL HAS GOT, 0-100, and 0 when nobody can say.
+  uint32 fetch_percent = 17;
+  // The caption; empty when there is none.
+  string title = 18;
+  // The trash's countdown: whole days left, 0 when the photograph is not in
+  // the trash or has no date to count from.
+  uint32 purge_in_days = 19;
+  // "live": the mark a Live Photo's cell carries; empty unless `live`.
+  string live_label = 20;
+  // The words of the held mark: "downloading" over a `HELD_FETCHING` cell and
+  // "Download full-size photo" (the arrow's label) over `HELD_WITHHELD_BY_RULE`;
+  // empty otherwise.
+  string held_label = 21;
+
+  // The five states a cell can be in, and no sixth. `HELD_FETCHING` is a
+  // screen's: a tap is not a fact a page read can see.
+  enum Held {
+    HELD_UNSPECIFIED = 0;
+    // The original is on this device.
+    HELD_ORIGINAL = 1;
+    // A thumbnail is here and nothing but a window that has not come round yet
+    // is holding the original back. No arrow.
+    HELD_THUMBNAIL_ONLY = 2;
+    // The member tapped it and the bytes are moving.
+    HELD_FETCHING = 3;
+    // The member's own transfer rule is why the original is not here: a
+    // decision and not a failure, and the one state that carries the download
+    // arrow.
+    HELD_WITHHELD_BY_RULE = 4;
+    // Nothing of this photograph has reached this device, not even a
+    // thumbnail.
+    HELD_ABSENT = 5;
+  }
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_PHOTO = 1;
+    KIND_VIDEO = 2;
+    KIND_SCAN = 3;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Selection
+// ---------------------------------------------------------------------------
+
+// THE SELECTION BAR, finished. A mode and a set, not a set alone: a member who
+// pressed Select and has picked nothing yet is selecting.
+message PhotosSelection {
+  bool selecting = 1;
+  // In the order picked.
+  repeated string selected_ids = 2;
+  uint32 count = 3;
+  // "3 photos selected" (the grid) or "3 chosen" (a shelf); empty when
+  // nothing is picked.
+  string title = 4;
+  // The bar's verbs, in draw order, each enabled only when it can act.
+  repeated PhotosBatchAction actions = 5;
+  // The way out of the mode.
+  string cancel_label = 6;
+  // The confirm on screen, over the verb that asked (`confirming`): the trash
+  // and delete-forever ask first, in full sentences.
+  optional Confirm confirm = 7;
+  PhotosBatchAction.Kind confirming = 8;
+}
+
+message PhotosBatchAction {
+  Kind kind = 1;
+  string label = 2;
+  bool enabled = 3;
+  // Drawn as the outlined `net` action.
+  bool destructive = 4;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_FAVORITE = 1;
+    KIND_UNFAVORITE = 2;
+    KIND_ARCHIVE = 3;
+    KIND_UNARCHIVE = 4;
+    KIND_TRASH = 5;
+    // Out of the trash.
+    KIND_RESTORE = 6;
+    KIND_DELETE_FOREVER = 7;
+    // Opens the album sheet.
+    KIND_ADD_TO_ALBUM = 8;
+    KIND_REMOVE_FROM_ALBUM = 9;
+  }
+}
+
+// What a selection-bearing screen is told. One arm in the screen's own event.
+message PhotosSelectionEvent {
+  oneof kind {
+    // Select was tapped (true), or Cancel (false). Leaving empties the set,
+    // closes the album sheet and takes back a confirm.
+    ModeSet mode = 1;
+    // A tap while selecting, or a long press: the photograph joins or leaves.
+    Toggled toggled = 2;
+    // A drag across tiles or a day's Select: a set joins or leaves at once.
+    SetPicked set = 3;
+    // Select every photograph the screen holds.
+    SelectAll all = 4;
+    // Everything from one photograph to another, in the order drawn.
+    SelectRange range = 5;
+    // A bar verb. Trash and delete-forever answer with a confirm; the rest act.
+    ActionTapped action = 6;
+    Confirmed confirmed = 7;
+    ConfirmDismissed dismissed = 8;
+  }
+
+  message ModeSet {
+    bool selecting = 1;
+  }
+
+  message Toggled {
+    string photo_id = 1;
+  }
+
+  message SetPicked {
+    repeated string photo_ids = 1;
+    bool selected = 2;
+  }
+
+  message SelectAll {}
+
+  message SelectRange {
+    string from_photo_id = 1;
+    string to_photo_id = 2;
+  }
+
+  message ActionTapped {
+    PhotosBatchAction.Kind kind = 1;
+  }
+
+  message Confirmed {}
+
+  message ConfirmDismissed {}
+}
+
+// ---------------------------------------------------------------------------
+// The album sheet
+// ---------------------------------------------------------------------------
+
+// "ADD TO ALBUM", ONCE, FOR EVERY SCREEN THAT OFFERS IT: the lightbox, the
+// library grid and a shelf. The list is read when the sheet opens and again
+// when an album moves.
+message PhotosAlbumChoice {
+  bool open = 1;
+  // "Add to album".
+  string title = 2;
+  // False while the list is being read.
+  bool loaded = 3;
+  repeated PhotosAlbumChoiceEntry entries = 4;
+  // "No albums yet." Empty when there are albums.
+  string empty = 5;
+  // "New album…", the sheet's last row, and its field and verb.
+  string new_album_label = 6;
+  string name_placeholder = 7;
+  string create_label = 8;
+  string cancel_label = 9;
+}
+
+message PhotosAlbumChoiceEntry {
+  string album_id = 1;
+  string title = 2;
+  uint32 count = 3;
+  // `3 photos`, `At least 200 photos`, `Empty`: a count read off one page is a
+  // floor, and a bare number over a full page would state a total nobody
+  // counted.
+  string count_label = 4;
+  // The album's cover; absent when it has none this device can draw.
+  optional PhotoTile cover = 5;
+}
+
+message PhotosAlbumChoiceEvent {
+  oneof kind {
+    // The member asked to put the pick into an album: the sheet opens.
+    Opened opened = 1;
+    // The sheet went away without a choice.
+    Dismissed dismissed = 2;
+    // The album the pick goes into.
+    Chosen chosen = 3;
+    // "New album…" from the sheet: the create alone, and the sheet STAYS OPEN
+    // with the new album in the list for the member's next tap.
+    Created created = 4;
+  }
+
+  message Opened {}
+
+  message Dismissed {}
+
+  message Chosen {
+    string album_id = 1;
+  }
+
+  message Created {
+    string title = 1;
+  }
+}

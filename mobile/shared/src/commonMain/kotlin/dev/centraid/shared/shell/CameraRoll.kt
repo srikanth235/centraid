@@ -58,7 +58,7 @@ import okio.ByteString.Companion.encodeUtf8
  * every edit, and without a date or a caption, which the core fills in from
  * the original so a date the member set on it is kept. Both carry the asset's
  * capture group, which is what the grid folds on: the newest of a group's
- * photographs is the one drawn ([dev.centraid.shared.apps.photos.PhotoFold]).
+ * photographs is the one drawn (`kit::rules::folded_by_edits`, in Rust).
  * A re-offer is the same two commits and the same bytes, and the core adopts
  * both: an edit is never doubled. No adjustment data travels (A20(2)).
  *
@@ -165,7 +165,7 @@ public class CameraRoll(
         if (!canEnumerate(permission)) {
             // THE GRID IS UNAFFECTED and the backup is idle. Two planes, two
             // permissions: a denied photo grant must never blank a library the
-            // member already owns (`PhotosGridMachine`).
+            // member already owns (Rust's Photos home).
             val idle = BackupState(
                 phase = BackupState.Phase.PHASE_IDLE,
                 paused_reason = permissionSentence(permission),
@@ -572,8 +572,8 @@ public class CameraRoll(
     /**
      * WHAT THE GRANT MEANS, IN WORDS, AND NEVER A MEMBER'S FAULT.
      *
-     * The same four sentences `PhotosGridMachine` already words, kept identical
-     * here rather than reworded: a pass and a reducer telling a member two
+     * The same four sentences Rust's Photos home words, kept identical
+     * here rather than reworded: a pass and a screen telling a member two
      * different things about one grant is the defect this duplication is
      * checked against in `CameraRollSpec`.
      */

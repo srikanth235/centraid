@@ -132,6 +132,10 @@ pub mod docs;
 pub mod locker;
 pub mod money;
 pub mod notes;
+pub mod photos;
+pub mod photos_home;
+pub mod photos_lightbox;
+pub mod photos_shelf;
 pub mod shared;
 pub mod task;
 

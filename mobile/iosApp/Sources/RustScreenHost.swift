@@ -18,8 +18,11 @@ enum RustScreens {
     /// The screen id the shared side spells a Rust route under (`ScreenOpening.screenId`);
     /// its event is the encoded `centraid.core.v1.Route`.
     static let id = ScreenIds.shared.RUST_SCREEN
-    /// The tab Rust keeps these screens' stack under.
-    static let tab = "agenda"
+    /// The tab Rust keeps a route's screens' stack under: an app's screens live
+    /// under that app (`photos.` under `photos`), the rest under Agenda's.
+    static func tab(for route: Centraid_Core_V1_Route) -> String {
+        route.screen.hasPrefix("photos.") ? "photos" : "agenda"
+    }
 }
 
 /// ONE PUSH OF A RUST ROUTE: the route Rust built and a token unique to the
@@ -119,6 +122,33 @@ private struct RustScreenView: View {
                 send: { store.send(instance, .todoCatchUp($0)) },
                 open: open,
                 onBack: pop
+            )
+        case .photosHome(let state)?:
+            PhotosHomeView(
+                state: state,
+                send: { store.send(instance, .photosHome($0)) },
+                open: open,
+                onHome: { shell.path.removeAll() },
+                onResume: { store.photos?.opened() }
+            )
+        case .photosShelf(let state)?:
+            PhotoShelfView(
+                state: state,
+                send: { store.send(instance, .photosShelf($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .photosPicker(let state)?:
+            PhotoPickerView(
+                state: state,
+                send: { store.send(instance, .photosPicker($0)) },
+                onFinished: pop
+            )
+        case .photosPlaces(let state)?:
+            PlacesView(
+                state: state,
+                send: { store.send(instance, .photosPlaces($0)) },
+                open: open
             )
         case .lockerHome(let state)?:
             LockerHomeView(
@@ -291,6 +321,55 @@ private struct RustScreenView: View {
             CoreTrashView(
                 state: state,
                 send: { store.send(instance, .trash($0)) },
+                onBack: pop
+            )
+        // PHOTOS' ONE-PHOTOGRAPH PAGES (#1135).
+        case .photosLightbox(let state)?:
+            PhotosLightboxView(
+                state: state,
+                send: { kind in
+                    var event = Centraid_Core_V1_PhotosLightboxEvent()
+                    event.kind = kind
+                    store.send(instance, .photosLightbox(event))
+                },
+                open: open,
+                onClose: pop
+            )
+        case .photosEditor(let state)?:
+            PhotosEditorView(
+                state: state,
+                send: { kind in
+                    var event = Centraid_Core_V1_PhotosEditorEvent()
+                    event.kind = kind
+                    store.send(instance, .photosEditor(event))
+                },
+                onClose: pop,
+                // A SAVE REPLACES THE EDITOR WITH THE NEW PHOTOGRAPH: it comes off
+                // the stack and the lightbox on what the member just made goes on.
+                onSaved: { route in
+                    pop()
+                    shell.open(route)
+                }
+            )
+        case .photosDuplicates(let state)?:
+            PhotosDuplicatesView(
+                state: state,
+                send: { kind in
+                    var event = Centraid_Core_V1_PhotosDuplicatesEvent()
+                    event.kind = kind
+                    store.send(instance, .photosDuplicates(event))
+                },
+                open: open,
+                onBack: pop
+            )
+        case .photosDuplicateReview(let state)?:
+            PhotosDuplicateReviewView(
+                state: state,
+                send: { kind in
+                    var event = Centraid_Core_V1_PhotosDuplicateReviewEvent()
+                    event.kind = kind
+                    store.send(instance, .photosDuplicateReview(event))
+                },
                 onBack: pop
             )
         default:

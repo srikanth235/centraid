@@ -30,6 +30,9 @@ package centraid.core.v1;
 import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/docs_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/photos_home_screens.proto";
+import "centraid/core/v1/photos_lightbox_screens.proto";
+import "centraid/core/v1/photos_shelf_screens.proto";
 import "centraid/core/v1/locker_screens.proto";
 import "centraid/core/v1/money_screens.proto";
 import "centraid/core/v1/notes_screens.proto";
@@ -187,6 +190,15 @@ message ScreenEvent {
     TodoProjectEvent todo_project = 104;
     TodoDetailEvent todo_detail = 105;
     TodoCatchUpEvent todo_catch_up = 106;
+    // ---- photos (800-899) ----
+    PhotosHomeEvent photos_home = 800;
+    PhotosShelfEvent photos_shelf = 801;
+    PhotosPickerEvent photos_picker = 802;
+    PhotosPlacesEvent photos_places = 803;
+    PhotosLightboxEvent photos_lightbox = 804;
+    PhotosEditorEvent photos_editor = 805;
+    PhotosDuplicatesEvent photos_duplicates = 806;
+    PhotosDuplicateReviewEvent photos_duplicate_review = 807;
     // ---- locker (400-499) ----
     LockerWallEvent locker_wall = 400;
     LockerHomeEvent locker_home = 401;
@@ -251,6 +263,15 @@ message ViewState {
     TodoProjectState todo_project = 104;
     TodoDetailState todo_detail = 105;
     TodoCatchUpState todo_catch_up = 106;
+    // ---- photos (800-899) ----
+    PhotosHomeState photos_home = 800;
+    PhotosShelfState photos_shelf = 801;
+    PhotosPickerState photos_picker = 802;
+    PhotosPlacesState photos_places = 803;
+    PhotosLightboxState photos_lightbox = 804;
+    PhotosEditorState photos_editor = 805;
+    PhotosDuplicatesState photos_duplicates = 806;
+    PhotosDuplicateReviewState photos_duplicate_review = 807;
     // ---- locker (400-499) ----
     LockerHomeState locker_home = 400;
     LockerItemState locker_item = 401;
@@ -318,6 +339,13 @@ message Effect {
     SaveFile save_file = 16;
     // Tell the shell something happened it may act on (a Locker unlock).
     Announce announce = 17;
+    // ---- photos (#1135, lane D) ----
+    FetchOriginal fetch_original = 21;
+    ExportOriginals export_originals = 22;
+    CameraRoll camera_roll = 23;
+    FreeUpSpace free_up_space = 24;
+    RenderEdit render_edit = 25;
+    ReadCamera read_camera = 26;
     // Open a page now, wherever the member is: the shell pushes `route` as a
     // tapped row's route is pushed. For a screen that makes a thing and
     // opens it (a document just filed).
@@ -427,6 +455,146 @@ message PhoneWatch {
   bool on = 2;
 }
 
+// ---------------------------------------------------------------------------
+// Photos' platform work (#1135, lane D). Four effects the screens of Photos
+// share: the lightbox, the library and a shelf each ask for the same fetch and
+// the same hand-off, so they are named here once. Every sentence a member reads
+// about their outcome is Rust's (`photos::fetch`, `photos::keep_originals`,
+// `strings::photos_home`); the shell reports what happened as a closed enum.
+// ---------------------------------------------------------------------------
+
+// BRING ONE ORIGINAL BACK from a paired gateway by its content hash (#1080): the
+// shell sends the core's `fetch_original` request and answers
+// `OriginalFetched`. A shell with no core answers `EffectFailed`.
+message FetchOriginal {
+  // The bytes' hash as 64 hex characters (`PhotoTile.content_id`).
+  string content_hash = 1;
+}
+
+// How a fetch ended: the core's `FetchOutcome`, restated here so a screen's wire
+// does not import the backup plane's.
+enum OriginalFetchOutcome {
+  ORIGINAL_FETCH_OUTCOME_UNSPECIFIED = 0;
+  ORIGINAL_FETCH_OUTCOME_LANDED = 1;
+  ORIGINAL_FETCH_OUTCOME_ALREADY_HELD = 2;
+  ORIGINAL_FETCH_OUTCOME_UNREACHABLE = 3;
+  ORIGINAL_FETCH_OUTCOME_NOT_IN_BACKUP = 4;
+  ORIGINAL_FETCH_OUTCOME_UNTRUSTED = 5;
+  ORIGINAL_FETCH_OUTCOME_DAMAGED = 6;
+}
+
+message OriginalFetched {
+  OriginalFetchOutcome outcome = 1;
+  // The file in the app's own store when there is one; empty otherwise.
+  string path = 2;
+  // The hash that was asked for, echoed, so a screen with several fetches in
+  // flight knows which one this answers.
+  string content_hash = 3;
+}
+
+// HAND THE ORIGINALS OF A PICK TO THE PLATFORM: its share sheet (`MODE_SEND`) or
+// this device's own photo library (`MODE_SAVE`). The shell finds each original
+// on this phone, takes the location out of the file unless `keep_location`
+// (failing closed: a file whose place cannot be removed is not sent, #816), and
+// answers `OriginalsExported`.
+message ExportOriginals {
+  repeated string photo_ids = 1;
+  Mode mode = 2;
+  bool keep_location = 3;
+
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    MODE_SEND = 1;
+    MODE_SAVE = 2;
+  }
+}
+
+message OriginalsExported {
+  Status status = 1;
+  // How many originals went, and how many of the pick were not on this phone.
+  uint32 handed = 2;
+  uint32 missing = 3;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    // The sheet or the library took what was found. (The sheet says what it did.)
+    STATUS_DONE = 1;
+    // Nothing of the pick is on this phone.
+    STATUS_NONE_HERE = 2;
+    // A file's location could not be taken out, so nothing was sent.
+    STATUS_LOCATION_NOT_REMOVABLE = 3;
+    // The platform refused the save or the copy.
+    STATUS_FAILED = 4;
+  }
+}
+
+// THE CAMERA ROLL'S PLATFORM HALF (#1025 S6). Photos' grid decides what the
+// banner says and which remedy it offers; the shell performs the remedy. The
+// roll itself (enumerating, uploading) is the shell's own and is not an effect.
+message CameraRoll {
+  Action action = 1;
+
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    // The system's photo-access prompt. The shell answers by sending the
+    // screen a `PermissionChanged` event.
+    ACTION_ASK_PERMISSION = 1;
+    // This app's page in Settings.
+    ACTION_OPEN_SETTINGS = 2;
+    // iOS's limited selection: let the member edit it.
+    ACTION_MANAGE_SELECTION = 3;
+    // Run one camera-roll pass now.
+    ACTION_IMPORT_NOW = 4;
+  }
+}
+
+// FREE UP SPACE (#1080 A19, A20): count what this phone holds that a gateway
+// also holds, or free it behind the system's own confirmation. Either way the
+// shell answers `FreeUpFacts`; the sentences are Rust's.
+message FreeUpSpace {
+  Action action = 1;
+
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    ACTION_COUNT = 1;
+    ACTION_FREE = 2;
+  }
+}
+
+message FreeUpFacts {
+  // The platform can delete from its library behind the system's own
+  // confirmation. False draws no row at all.
+  bool offered = 1;
+  // The census of originals on this phone answered.
+  bool counted = 2;
+  uint32 on_phone_count = 3;
+  uint64 on_phone_bytes = 4;
+  // How many of them are in albums the member keeps on this phone.
+  uint32 kept_count = 5;
+  // The core named what is safe to free (`releasable`) and how much.
+  bool checked = 6;
+  uint32 releasable_count = 7;
+  uint64 releasable_bytes = 8;
+  // What the last free-up came to; unspecified before the first.
+  Outcome outcome = 9;
+  // For `OUTCOME_FREED`: the bytes that went.
+  uint64 freed_bytes = 10;
+  // For `OUTCOME_PLATFORM_ERROR`: the platform's own words.
+  string platform_error = 11;
+
+  enum Outcome {
+    OUTCOME_UNSPECIFIED = 0;
+    OUTCOME_FREED = 1;
+    // The member said no in the system's dialog, or nothing could go.
+    OUTCOME_NOTHING_REMOVED = 2;
+    // The library let them go and the core did not record it.
+    OUTCOME_NOT_RECORDED = 3;
+    // The core could not say what is safe, so nothing was deleted.
+    OUTCOME_NOT_CHECKED = 4;
+    OUTCOME_PLATFORM_ERROR = 5;
+  }
+}
+
 // THE OWNER CHECK: iOS `LAContext().evaluatePolicy(.deviceOwnerAuthentication,
 // localizedReason: reason)`; Android `BiometricPrompt` with
 // `setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)`,
@@ -514,6 +682,12 @@ message EffectResult {
     PhoneChanged phone_changed = 8;
     BytesPicked bytes_picked = 9;
     OwnerChecked owner_checked = 10;
+    // ---- photos (#1135, lane D) ----
+    OriginalFetched original_fetched = 11;
+    OriginalsExported originals_exported = 12;
+    FreeUpFacts free_up_facts = 13;
+    EditRendered edit_rendered = 14;
+    CameraRead camera_read = 15;
     // ---- docs (200-299): files ----
     FilePicked file_picked = 200;
     FileProgress file_progress = 201;

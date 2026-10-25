@@ -55,6 +55,10 @@ message AppQueryRequest {
   reserved "tally_dashboard", "tally_group", "tally_friend", "tally_expense",
            "tally_settle_up", "tally_recurring", "tally_spending", "tally_search",
            "tally_trash", "tally_export";
+  // 92 was `photos.library`, a windowed overview the screens' shelf, albums and
+  // places reads replaced (#1135).
+  reserved 92;
+  reserved "photos_library";
   oneof query {
     AgendaUpcomingRequest agenda_upcoming = 1;
     AgendaDayContextRequest agenda_day_context = 2;
@@ -103,7 +107,11 @@ message AppQueryRequest {
     // Photos' own search (#1097, R-1097-25..27): 90.
     PhotosSearchRequest photos_search = 90;
     PhotosDuplicatesRequest photos_duplicates = 91;
-    PhotosLibraryRequest photos_library = 92;
+    // The screens' reads (#1135): one shelf, one photograph, the collections, the places.
+    PhotosShelfRequest photos_shelf = 93;
+    PhotosPhotoRequest photos_photo = 94;
+    PhotosAlbumsRequest photos_albums = 95;
+    PhotosPlacesRequest photos_places = 96;
     // Money (#1099, R-1099-12): 100-109. 111-119 stay reserved for Money. The
     // import plan rides `Request.money` (`money.proto`).
     MoneySpendingRequest money_spending = 100;
@@ -139,6 +147,8 @@ message AppQueryResponse {
   reserved "tally_dashboard", "tally_group", "tally_friend", "tally_expense",
            "tally_settle_up", "tally_recurring", "tally_spending", "tally_search",
            "tally_trash", "tally_export";
+  reserved 92;
+  reserved "photos_library";
   oneof answer {
     AgendaUpcoming agenda_upcoming = 1;
     AgendaDayContext agenda_day_context = 2;
@@ -180,7 +190,10 @@ message AppQueryResponse {
     VaultSearch vault_search = 80;
     PhotosSearch photos_search = 90;
     PhotosDuplicates photos_duplicates = 91;
-    PhotosLibrary photos_library = 92;
+    PhotosShelf photos_shelf = 93;
+    PhotosPhoto photos_photo = 94;
+    PhotosAlbums photos_albums = 95;
+    PhotosPlaces photos_places = 96;
     MoneySpending money_spending = 100;
     MoneyActivity money_activity = 101;
     MoneyTransaction money_transaction = 102;

@@ -154,9 +154,12 @@ pub(crate) fn answer_recording(
         Q::ChatThread(asked) => chat::thread(vault, asked)?,
         Q::ChatCard(asked) => chat::card(vault, asked)?,
         Q::VaultSearch(asked) => vault::search(vault, &door, asked)?,
-        Q::PhotosSearch(asked) => photos::search(vault, &door, asked)?,
-        Q::PhotosDuplicates(_) => photos::duplicates(&door)?,
-        Q::PhotosLibrary(asked) => photos::library(&door, &now, asked)?,
+        Q::PhotosSearch(asked) => photos::search(vault, &door, &now, asked)?,
+        Q::PhotosDuplicates(_) => photos::duplicates(&door, &now)?,
+        Q::PhotosShelf(asked) => photos::shelf(&door, &now, asked)?,
+        Q::PhotosPhoto(asked) => photos::photo(&door, &now, asked)?,
+        Q::PhotosAlbums(_) => photos::albums(&door, &now)?,
+        Q::PhotosPlaces(_) => photos::places(&door, &now)?,
         Q::MoneySpending(asked) => money::spending(vault, &door, &now, asked)?,
         Q::MoneyActivity(asked) => money::activity(vault, &door, &now, asked)?,
         Q::MoneyTransaction(asked) => money::transaction(vault, &door, &now, asked)?,
@@ -720,7 +723,7 @@ impl PageDoor for VaultDoor<'_> {
                 .after
                 .as_ref()
                 .map(|cursor| (cursor.sort_key.clone(), cursor.pk.clone())),
-            held_thumbnail: false,
+            held_thumbnail: query.held_thumbnail,
             document_size: false,
         });
         match answer {

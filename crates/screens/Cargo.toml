@@ -31,3 +31,7 @@ rand.workspace = true
 centraid-identity = { path = "../identity" }
 # The headless driver founds and seeds a scratch vault (`testing`).
 centraid-ontology = { path = "../ontology" }
+
+[dev-dependencies]
+# Photos' tests stage a photograph's bytes and need the digest the vault names them by.
+centraid-vault = { path = "../vault" }

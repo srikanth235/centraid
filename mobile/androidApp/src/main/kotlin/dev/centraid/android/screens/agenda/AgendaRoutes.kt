@@ -159,6 +159,7 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow, private val o
             PerformScreenEffects(
                 runtime,
                 phone,
+                tab = TAB,
                 onAnnounce = { topic ->
                     if (topic == "locker.unlocked") session?.let { LockerEntry.unlocked(it) }
                 },

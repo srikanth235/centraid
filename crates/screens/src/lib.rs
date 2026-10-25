@@ -12,6 +12,7 @@ pub mod kit;
 pub mod locker;
 pub mod money;
 pub mod notes;
+pub mod photos;
 pub mod proof;
 pub mod registry;
 pub mod runtime;
@@ -35,12 +36,20 @@ pub fn standard() -> Runtime {
             .merge(locker::registry())
             .merge(money::registry())
             .merge(docs::registry())
-            .merge(notes::registry()),
+            .merge(notes::registry())
+            .merge(photos::registry()),
         vec![
             ("proof".to_owned(), proof::route()),
             (
                 agenda::TAB.to_owned(),
                 agenda::routes::home(centraid_api_proto::core_v1::AgendaDestination::Day, ""),
+            ),
+            (
+                photos::TAB.to_owned(),
+                photos::routes::home(
+                    centraid_api_proto::core_v1::PhotosDestination::Library,
+                    None,
+                ),
             ),
         ],
     )

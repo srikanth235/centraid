@@ -43,7 +43,8 @@ import kotlinx.coroutines.launch
  * here, so this file moves unchanged when `:core` stops being KMP.
  */
 public class Screens(
-    private val core: CentraidCore,
+    /** The core the runtime stands on: the shell's effect performers reach its doors through it. */
+    public val core: CentraidCore,
     private val scope: CoroutineScope,
 ) {
     private val navigationState = MutableStateFlow<Navigation?>(null)
