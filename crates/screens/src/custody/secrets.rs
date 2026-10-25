@@ -55,10 +55,6 @@ pub const WORDS: usize = 24;
 pub const INDEX_PREFIX: &str = "vault-index.";
 /// The highest index this phone ever recorded; never lowered.
 pub const INDEX_HIGH_WATER: &str = "vault-index-high-water";
-/// `<index>\n<path>` (and `\n<own>` for a vault on its own words) of a found in
-/// flight: the index is spent BEFORE the found, so a crash between the found
-/// and the record cannot hand the same index to two vaults.
-pub const PENDING_FOUND: &str = "vault-index-pending";
 /// Device-only: the seed, when the synchronised store refused it.
 pub const LOCAL_SEED: &str = "recovery-seed.this-device";
 /// Device-only: the 24 words, space-separated.
@@ -124,15 +120,6 @@ impl fmt::Debug for OwnSeed {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "OwnSeed({}, {}, <redacted>)", self.id, self.label)
     }
-}
-
-/// One spent, unrecorded index and the file it was spent for, and the entry
-/// whose seed keys it for a vault on its own words.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PendingFound {
-    pub index: u32,
-    pub path: String,
-    pub own: Option<String>,
 }
 
 #[derive(Default)]
@@ -487,72 +474,6 @@ impl VaultSecrets {
     #[must_use]
     pub fn next_vault_index(&self) -> u32 {
         self.high_water().map_or(0, |mark| mark + 1)
-    }
-
-    /// Spend the next index BEFORE the found, and say where (#1047 E4, the
-    /// crash window): the high-water mark is raised past it and the pending
-    /// record names the file it is for. A launch that finds a pending record
-    /// finishes it; a found that is refused gives the index back
-    /// ([`Self::release_vault_index`]). Answers the index and the ops.
-    #[must_use]
-    pub fn reserve_vault_index(&self, path: &str) -> (u32, Vec<wire::SecretOp>) {
-        let index = self.next_vault_index();
-        (
-            index,
-            vec![
-                set_device(PENDING_FOUND, &format!("{index}\n{path}")),
-                set_device(INDEX_HIGH_WATER, &index.to_string()),
-            ],
-        )
-    }
-
-    /// A found of a vault on entry `own`'s seed, pending against `path`: as
-    /// [`Self::reserve_vault_index`], at index 0, no mark.
-    #[must_use]
-    pub fn reserve_own_found(path: &str, own: &str) -> wire::SecretOp {
-        set_device(PENDING_FOUND, &format!("0\n{path}\n{own}"))
-    }
-
-    /// A found that spent an index and has not yet recorded it.
-    #[must_use]
-    pub fn pending_found(&self) -> Option<PendingFound> {
-        let raw = self
-            .device_get(PENDING_FOUND)
-            .filter(|raw| !raw.is_empty())?;
-        let mut lines = raw.split('\n');
-        let index = lines.next()?.parse().ok()?;
-        let path = lines.next().filter(|line| !line.is_empty())?.to_owned();
-        let own = lines
-            .next()
-            .filter(|line| !line.is_empty())
-            .map(str::to_owned);
-        Some(PendingFound { index, path, own })
-    }
-
-    /// The found finished: its index is recorded under the vault's id.
-    #[must_use]
-    pub fn clear_pending_found() -> wire::SecretOp {
-        set_device(PENDING_FOUND, "")
-    }
-
-    /// A refused found gives its index back: only while it is still the highest,
-    /// and only because nothing was sealed under it (the file is deleted before
-    /// this is called). An index a restore's gap scan must cross is one this
-    /// phone skipped, and the scan stops after twenty in a row.
-    #[must_use]
-    pub fn release_vault_index(&self, index: u32) -> Vec<wire::SecretOp> {
-        let mut ops = vec![set_device(PENDING_FOUND, "")];
-        if self.high_water() == Some(index) {
-            ops.push(set_device(
-                INDEX_HIGH_WATER,
-                &if index == 0 {
-                    String::new()
-                } else {
-                    (index - 1).to_string()
-                },
-            ));
-        }
-        ops
     }
 
     // ---- vaults on their own words (R-1047-E18) ------------------------------

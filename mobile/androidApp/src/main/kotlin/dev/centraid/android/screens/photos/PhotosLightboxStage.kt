@@ -82,7 +82,7 @@ import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.shared.kit.MediaFormat
+import dev.centraid.android.kit.MediaClock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -511,8 +511,8 @@ internal fun LightboxTransport(player: LightboxPlayer, words: centraid.core.v1.P
                 .semantics {
                     contentDescription = words.player_position
                     stateDescription = words.player_position_value
-                        .replace("{position}", MediaFormat.clock(player.position / 1_000L))
-                        .replace("{duration}", MediaFormat.clock(player.duration / 1_000L))
+                        .replace("{position}", MediaClock.clock(player.position / 1_000L))
+                        .replace("{duration}", MediaClock.clock(player.duration / 1_000L))
                 }
                 .pointerInput(player) {
                     detectTapGestures { player.seekTo(it.x / size.width) }
@@ -538,7 +538,7 @@ internal fun LightboxTransport(player: LightboxPlayer, words: centraid.core.v1.P
             )
         }
         Text(
-            text = MediaFormat.clock(player.position / 1_000L) + " / " + MediaFormat.clock(player.duration / 1_000L),
+            text = MediaClock.clock(player.position / 1_000L) + " / " + MediaClock.clock(player.duration / 1_000L),
             color = soft,
             style = centraidType("mono"),
         )

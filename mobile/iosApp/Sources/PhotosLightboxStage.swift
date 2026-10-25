@@ -528,9 +528,9 @@ struct LightboxTransport: View {
             .accessibilityLabel(words.playerPosition)
             .accessibilityValue(
                 copyFill(
-                    copyFill(words.playerPositionValue, "position", MediaFormat.shared.clockOf(seconds: player.position)),
+                    copyFill(words.playerPositionValue, "position", MediaClock.of(seconds: player.position)),
                     "duration",
-                    MediaFormat.shared.clockOf(seconds: player.duration)
+                    MediaClock.of(seconds: player.duration)
                 )
             )
             .accessibilityAdjustableAction { direction in
@@ -539,7 +539,7 @@ struct LightboxTransport: View {
                 let now = player.position / player.duration
                 player.seek(to: direction == .increment ? now + step : now - step)
             }
-            Text("\(MediaFormat.shared.clockOf(seconds: player.position)) / \(MediaFormat.shared.clockOf(seconds: player.duration))")
+            Text("\(MediaClock.of(seconds: player.position)) / \(MediaClock.of(seconds: player.duration))")
                 .centraidType("mono")
                 .foregroundStyle(Theme.color("onStageSoft", scheme))
         }

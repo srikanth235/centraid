@@ -74,15 +74,18 @@ pub mod originals;
 /// `phone.proto`.
 pub mod phone;
 pub mod screens;
+/// THE SHELL'S OWN CATALOGUE (#1135): the reads that are no one app's, named in
+/// one manifest beside the eight apps' and served by `load` the same way.
 pub mod shell;
 pub mod stage;
 /// THE STARTER ROWS a member's first vault is founded with: ordinary rows of
 /// theirs, best-effort, declared as data. See `vault.proto`'s `FoundContent`.
 pub mod starters;
+pub mod vaults;
 
 /// Lane C's generated types, re-exported so a consumer needs one dependency.
 pub use centraid_api_proto::core_v1 as api_proto;
-pub use config::CoreConfig;
+pub use config::{CoreConfig, ShelfConfig};
 pub use error::{CoreError, Result, sentence_for_code};
 pub use events::{ChangeFeed, EVENT_QUEUE_CAP, EventQueue};
 pub use handle::{Core, Handle};

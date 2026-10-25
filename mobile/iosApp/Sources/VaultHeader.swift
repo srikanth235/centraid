@@ -30,73 +30,23 @@ import CentraidShared
 /// One trailing verb, Settings, and only when originals are waiting: the key
 /// to the transfer rules that decided it (HomeRoom: one trailing verb).
 struct VaultHeader: View {
-    let vault: Centraid_Screen_V1_VaultLockup
+    /// The lockup and the keys beside it, finished by Rust (`HomeBar`).
+    let bar: Centraid_Core_V1_HomeBar
     @ObservedObject var shell: ShellModel
-    /// THE VAULT'S BACKUP, said as the lockup's second line (R-ONBOARD-11):
-    /// `BackupLine.status`, in place of "On this phone". Nil — an example, or
-    /// a route with no backup line — keeps the vault's own state line.
-    var backup: Centraid_Screen_V1_BackupLine? = nil
-    /// The status line's door: the Backup tab. Nil draws it as text.
-    var onOpenBackup: (() -> Void)? = nil
-    /// HOME'S SEARCH (R-CHROME-6): a framed key at the lockup's trailing edge,
-    /// the one way into search over every app. Nil draws none.
-    var onSearch: (() -> Void)? = nil
-    var searchLabel: String = ""
-    /// THE APPEARANCE KEY (R-CHROME-7), right of search: one tap flips light
-    /// and dark. Nil draws none.
-    var onAppearance: (() -> Void)? = nil
+    @ObservedObject var store: ScreenStore
     @Environment(\.colorScheme) private var scheme
 
-    /// The backup status to draw, or empty for the vault's own line. A vault
-    /// that MOVED keeps its own line: that is the fact, and the backup's
-    /// status says the same thing less exactly.
-    private var status: String {
-        guard let backup, vault.state != .frozen else { return "" }
-        return backup.status
-    }
+    private var vault: Centraid_Core_V1_HomeVault { bar.vault }
+
+    /// The backup's status stands in the line only when Rust sent it (it sends
+    /// none for a vault that moved).
+    private var status: String { bar.hasBackup ? bar.backup.status : "" }
 
     private var loud: Bool {
-        guard let backup else { return false }
-        return backup.tone == .attention || backup.tone == .urgent
+        guard bar.hasBackup else { return false }
+        return bar.backup.tone == .attention || bar.backup.tone == .urgent
     }
 
-    /// No name is a REAL STATE; never render a blank lockup.
-    private var name: String {
-        let trimmed = vault.vaultName.trimmingCharacters(in: .whitespaces)
-        return trimmed.isEmpty ? PhotosCopy.shared.VAULT_NONE_YET : trimmed
-    }
-
-    /// Where this vault stands, in a member's words. See [stateLine], which
-    /// the switcher's rows draw from too so the header and the sheet cannot
-    /// word the same fact two ways.
-    private var line: String { vault.stateLine }
-
-    /// THE MEMBER'S OWN RULE, SAID IN PLACE (#1025 S4, D-1025-S7-61).
-    ///
-    /// **A grid of thumbnails with no full-size files is a DECISION and not a
-    /// failure**, and a header that says nothing is how a working byte plane
-    /// looks broken. It is a SECOND line beside the state and not a
-    /// replacement for it: a device can be perfectly current and still be
-    /// waiting for Wi-Fi to bring the photographs, and collapsing the two
-    /// would make "synced" and "waiting" one word.
-    ///
-    /// Empty when nothing is withheld, which is the ordinary case.
-    private var waiting: String {
-        vault.originalsWithheld == 0
-            ? ""
-            : (vault.originalsWithheld == 1
-                ? PhotosCopy.shared.TRANSFER_ORIGINAL_WAITING_ONE
-                : copyFill(
-                    PhotosCopy.shared.TRANSFER_ORIGINAL_WAITING_MANY, "count", "\(vault.originalsWithheld)"))
-    }
-
-    /// The vault's hue washed behind the mark, exactly as an app chip is washed.
-    ///
-    /// The arithmetic is `packages/design`'s and is emitted per app; a vault's
-    /// hue is the member's own and is not in that table, so the wash is mixed
-    /// here from the SAME tint share the emitter uses. A vault with no colour
-    /// takes ink, never a default hue — an invented identity is still an
-    /// invented identity when it is only a colour.
     private var mark: (ground: Color, ink: Color) {
         guard let hue = VaultHue.parse(vault.color) else {
             return (Theme.color("bgSunken", scheme), Theme.color("text", scheme))
@@ -107,18 +57,14 @@ struct VaultHeader: View {
         return (VaultHue.mix(hue, over: Theme.color("bg", scheme), share: share), hue)
     }
 
-    /// THE BACKUP STATUS: a dot in the tone's colour when it wants the member
-    /// (none when it is quiet), then the few words. The same mono line the
-    /// state line was, so the lockup keeps its shape; a loud status reads in
-    /// ink rather than faint.
     private var statusLine: some View {
         Button {
-            onOpenBackup?()
+            store.sendHome(.backup(.init()))
         } label: {
             HStack(spacing: 6) {
                 if loud {
                     Circle()
-                        .fill(Theme.color(backup?.tone == .urgent ? "danger" : "attention", scheme))
+                        .fill(Theme.color(bar.backup.tone == .urgent ? "danger" : "attention", scheme))
                         .frame(width: 6, height: 6)
                 }
                 Text(status)
@@ -130,21 +76,24 @@ struct VaultHeader: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        // NO DOOR (the Backup tab itself) IS PLAIN TEXT, not a dimmed
-        // control: the status is still true there.
-        .allowsHitTesting(onOpenBackup != nil)
-        .accessibilityLabel(status + (onOpenBackup == nil ? "" : ". " + SharedCopy.shared.BACKUP_STATUS_OPEN))
+        // THE BACKUP TAB ITSELF IS PLAIN TEXT, not a dimmed control: the status
+        // is still true there.
+        .allowsHitTesting(shell.tab != .backup)
+        .accessibilityLabel(status + (shell.tab == .backup ? "" : ". " + bar.backupOpenSpoken))
         .accessibilityIdentifier("home-backup-status")
     }
+
+    /// The Backup tab shows the lockup too, but not the search and appearance keys.
+    private var onHome: Bool { shell.tab == .home }
 
     var body: some View {
         HStack(spacing: 12) {
             // TWO DOORS IN ONE LOCKUP: the mark and the name are the vault
             // switch; the status under them is the Backup tab's.
             Button {
-                shell.send(screen: HomeMachine.shared.SCREEN_ID, event: HomeEvents.vaultSwitch())
+                store.sendHome(.vault(.init()))
             } label: {
-                Text(String(name.prefix(1)).uppercased())
+                Text(vault.initial)
                     .centraidType("smallStrong")
                     .foregroundStyle(mark.ink)
                     .frame(width: 30, height: 30)
@@ -157,9 +106,9 @@ struct VaultHeader: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Button {
-                    shell.send(screen: HomeMachine.shared.SCREEN_ID, event: HomeEvents.vaultSwitch())
+                    store.sendHome(.vault(.init()))
                 } label: {
-                    Text(name)
+                    Text(vault.name)
                         .centraidType("smallStrong")
                         .foregroundStyle(Theme.color("text", scheme))
                         .lineLimit(1)
@@ -167,19 +116,19 @@ struct VaultHeader: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(name + ". " + SharedCopy.shared.VAULT_SWITCH_SPOKEN)
+                .accessibilityLabel(vault.name + ". " + bar.switchSpoken)
                 .accessibilityIdentifier("home-vault-switch")
 
                 if !status.isEmpty {
                     statusLine
-                } else if !line.isEmpty {
-                    Text(line)
+                } else if !vault.stateLine.isEmpty {
+                    Text(vault.stateLine)
                         .centraidType("mono")
                         .foregroundStyle(Theme.color("textFaint", scheme))
                         .lineLimit(1)
                 }
-                if !waiting.isEmpty {
-                    Text(waiting)
+                if !vault.originalsLine.isEmpty {
+                    Text(vault.originalsLine)
                         .centraidType("mono")
                         .foregroundStyle(Theme.color("textFaint", scheme))
                         .lineLimit(1)
@@ -188,40 +137,38 @@ struct VaultHeader: View {
             }
 
             // THE TRAILING KEYS AS ONE GROUP: their 44pt targets touch, so
-            // the 36pt plates stand 8pt apart and read as a pair, not as
-            // two strays across the lockup's 12pt rhythm.
+            // the 36pt plates stand 8pt apart and read as a pair.
             HStack(spacing: 0) {
-                // THE DOOR TO THE TRANSFER RULES (#1025 S4). Beside the line that
-                // reports them rather than buried in settings: the member reads
-                // "12 originals waiting for Wi-Fi" and the next thing they want is
-                // the control that decided it.
-                if !waiting.isEmpty {
+                // THE DOOR TO THE TRANSFER RULES (#1025 S4), beside the line that
+                // reports them rather than buried in settings.
+                if vault.originalsWithheld > 0 {
                     KitIconKey(
                         iconKey: "Settings",
-                        label: PhotosCopy.shared.TRANSFER_SETTINGS_LABEL,
+                        label: bar.transferRulesLabel,
                         identifier: "home-transfer-rules"
                     ) {
                         shell.openTransferRules()
                     }
                 }
-                if let onSearch {
+                if onHome, bar.hasSearchRoute {
                     KitIconKey(
                         iconKey: "Search",
-                        label: searchLabel,
+                        label: bar.searchLabel,
                         framed: true,
-                        identifier: "home-search-open",
-                        action: onSearch
-                    )
+                        identifier: "home-search-open"
+                    ) {
+                        shell.open(bar.searchRoute)
+                    }
                 }
-                if let onAppearance {
-                    let key = shell.appearanceKey(dark: scheme == .dark)
+                if onHome {
                     KitIconKey(
-                        iconKey: key.iconKey,
-                        label: key.label,
+                        iconKey: bar.appearanceIcon,
+                        label: bar.appearanceLabel,
                         framed: true,
-                        identifier: "home-appearance",
-                        action: onAppearance
-                    )
+                        identifier: "home-appearance"
+                    ) {
+                        store.sendHome(.appearance(.init()))
+                    }
                 }
             }
             // The last plate's edge on the page margin, not 4pt inside it:
@@ -286,44 +233,6 @@ private extension Color {
         #else
         return page
         #endif
-    }
-}
-
-/// THE ONE PLACE A `State` BECOMES WORDS.
-///
-/// The header's second line and every row of the vault switcher are two
-/// renderings of ONE fact, exactly as `RosterChanged` made them two renderings
-/// of one stream (#1025 S7-9) — so the wording lives here rather than in a
-/// table copied into each view, where the two copies drift the first time one
-/// sentence is reworded.
-extension Centraid_Screen_V1_VaultLockup {
-    /// EXHAUSTIVE, with no `default:`. A fourth case added to `State` must fail
-    /// to compile here rather than fall quietly into somebody else's sentence,
-    /// which is the whole failure this line is recovering from.
-    ///
-    /// `.unspecified` is NEVER EMITTED — it is the lockup nobody filled in, a
-    /// vault the shell could not identify — and it draws NOTHING. "No vault
-    /// yet" over silence is honest; "No vault yet" over a claim about a
-    /// gateway is what this replaced.
-    ///
-    /// **"On this phone", never "synced" or "connected".** `STATE_ONLINE`
-    /// says the vault is here and whole — the phone is the vault. Nothing on
-    /// this side probes anything, so "connected" would promise a live link no
-    /// layer here has checked, and "synced" claimed a backup over a vault that
-    /// was never paired (#1047 walk); what a gateway holds is the backup
-    /// status's to say (`BackupLine.status`, drawn in its place on Home, #1080). `.syncing` and `.offline` left with the pass
-    /// they described (#1029 §1, W5) and `.frozen` took their place.
-    var stateLine: String {
-        switch state {
-        case .unspecified: return ""
-        case .online: return PhotosCopy.shared.VAULT_ONLINE
-        // THE VAULT MOVED TO THE MEMBER'S OTHER PHONE (#1029 F1, W5). The
-        // Android table states the identical sentence; the two shells must
-        // read the same. The count of what this phone is still holding rides
-        // beside it in `VaultLockup.frozen_line`.
-        case .frozen: return PhotosCopy.shared.VAULT_MOVED
-        case .UNRECOGNIZED: return ""
-        }
     }
 }
 

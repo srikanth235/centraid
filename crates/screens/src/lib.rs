@@ -23,24 +23,40 @@ pub mod proof;
 pub mod registry;
 pub mod runtime;
 pub mod screen;
+pub mod shell;
 pub mod strings;
 pub mod testing;
+pub mod vault;
 
 pub use registry::Registry;
 pub use runtime::Runtime;
 pub use screen::{Ctx, Environment, Screen};
 
-/// The runtime the shells attach today: the proof screen on one tab and
-/// Agenda's screens on another. The shell lane replaces the roots with the
-/// real ones as it ports Home and the other apps.
+/// The runtime the shells attach: every app's screens and the shell's own, and
+/// one tab, `home`, rooted at Home (`shell`). An app opens as a page pushed on
+/// that tab, so back returns to Home; the chat and the backup add their own tabs
+/// beside it. The band follows the tabs that exist.
 #[must_use]
 pub fn standard() -> Runtime {
+    assemble().0
+}
+
+/// [`standard`], and the shelf of vaults its screens and the core share
+/// (`vault`): the shell's core is bound to it by [`attach`].
+#[must_use]
+pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
     // The vault plumbing's one cache of what the shell keeps secret: custody,
     // pairing, the backup screen and the pass service all read the same one.
     let secrets = custody::secrets::VaultSecrets::new();
-    Runtime::new(
+    let shelf = vault::Shelf::new(&secrets);
+    // The words screens found, restore and re-key through the shelf, and the
+    // pass service asks it which vaults are held and for one's own core.
+    let keeper = custody::keeper::KeeperSlot::with(shelf.clone());
+    secrets.conductor().use_holdings(shelf.clone());
+    let runtime = Runtime::new(
         Registry::default()
             .with(proof::NAME, proof::build)
+            .merge(shell::registry())
             .merge(agenda::registry())
             .merge(locker::registry())
             .merge(money::registry())
@@ -49,29 +65,31 @@ pub fn standard() -> Runtime {
             .merge(notes::registry())
             .merge(people::registry())
             .merge(photos::registry())
-            .merge(custody::registry(&secrets))
+            .merge(custody::registry_with(&secrets, &keeper))
             .merge(pairing::registry(&secrets))
             .merge(backup::registry(&secrets))
-            .merge(passes::registry(&secrets)),
+            .merge(passes::registry(&secrets))
+            .merge(vault::registry(&shelf, &secrets)),
         vec![
-            ("proof".to_owned(), proof::route()),
-            (
-                agenda::TAB.to_owned(),
-                agenda::routes::home(centraid_api_proto::core_v1::AgendaDestination::Day, ""),
-            ),
-            (
-                photos::TAB.to_owned(),
-                photos::routes::home(
-                    centraid_api_proto::core_v1::PhotosDestination::Library,
-                    None,
-                ),
-            ),
+            (shell::TAB.to_owned(), shell::routes::home()),
+            (shell::band::BACKUP.to_owned(), backup::routes::home()),
         ],
     )
-    .with_services([passes::services(), custody::services()].concat())
+    .with_band(shell::band::view)
+    .with_services([passes::services(), custody::services(), vault::services()].concat());
+    (runtime, shelf)
 }
 
 /// Attach [`standard`] to a core. `centraid_open` calls this.
 pub fn attach(handle: &centraid_core::Handle) {
-    handle.attach_screens(std::sync::Arc::new(standard()));
+    attach_with(handle, std::sync::Arc::new(vault::default_prepare));
+}
+
+/// [`attach`], with how each core the shelf opens is made ready (the byte
+/// store, an engine the core crate cannot link). A core opened as the door to a
+/// shelf of vaults is bound to the shelf; any other is a single-vault core.
+pub fn attach_with(handle: &centraid_core::Handle, prepare: vault::Prepare) {
+    let (runtime, shelf) = assemble();
+    handle.attach_screens(std::sync::Arc::new(runtime));
+    shelf.bind(handle, prepare);
 }

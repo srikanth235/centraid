@@ -51,7 +51,12 @@ struct Tab {
     stack: Vec<u64>,
 }
 
+/// Words the band for the tabs that exist: `(locale, tab ids in order, selected)`.
+/// The shell lane supplies it; a runtime without one has no band.
+pub type BandFn = fn(Locale, &[String], &str) -> wire::ShellBand;
+
 struct State {
+    band: Option<BandFn>,
     next_instance: u64,
     next_effect: u64,
     instances: BTreeMap<u64, Instance>,
@@ -64,10 +69,27 @@ struct State {
     next_job: u64,
     env: Environment,
     started: bool,
+    /// The vault the open tabs were made for. A shelf whose foreground is
+    /// another is a switch the tabs have not followed yet (see
+    /// [`Runtime::follow_foreground`]).
+    foreground: Option<String>,
+    /// A vault a screen asked to bring to the front during this call.
+    switch: Option<String>,
     /// Topics screens announced during the update in flight, relayed to every
     /// open screen by [`Runtime::settle`].
     announced: Vec<String>,
+    /// The shelf commands screens issued during the update in flight
+    /// (`VaultCommand` effects), relayed to the services by
+    /// [`Runtime::settle`]: the shelf is Rust's, so they never reach a shell.
+    commands: Vec<wire::VaultCommand>,
+    /// The route names of the screens opened during the update in flight,
+    /// relayed to the services by [`Runtime::settle`].
+    opened: Vec<String>,
 }
+
+/// How many times one call lets the services answer what the last answer
+/// left to settle.
+const SETTLE_ROUNDS: usize = 8;
 
 /// The screen runtime.
 pub struct Runtime {
@@ -91,6 +113,7 @@ impl Runtime {
             roots,
             services: Vec::new(),
             state: Mutex::new(State {
+                band: None,
                 next_instance: 1,
                 next_effect: 1,
                 instances: BTreeMap::new(),
@@ -102,7 +125,11 @@ impl Runtime {
                 next_job: 1,
                 env: Environment::default(),
                 started: false,
+                foreground: None,
+                switch: None,
                 announced: Vec::new(),
+                commands: Vec::new(),
+                opened: Vec::new(),
             }),
         }
     }
@@ -116,6 +143,14 @@ impl Runtime {
     #[must_use]
     pub fn with_services(mut self, services: Vec<wire::Route>) -> Self {
         self.services = services;
+        self
+    }
+
+    /// Frame every tab root with a band (`Navigation.band`), worded by `band`
+    /// for the tabs that exist.
+    #[must_use]
+    pub fn with_band(self, band: BandFn) -> Self {
+        self.lock().band = Some(band);
         self
     }
 
@@ -152,6 +187,10 @@ impl Runtime {
                 })
                 .collect(),
             revision: state.nav_revision,
+            band: state.band.map(|band| {
+                let tabs: Vec<String> = state.tabs.iter().map(|tab| tab.id.clone()).collect();
+                band(state.env.locale, &tabs, &state.selected)
+            }),
         }
     }
 
@@ -170,6 +209,9 @@ impl Runtime {
             .ok_or_else(|| Self::bad(format!("no screen is registered as `{}`", route.screen)))?;
         let id = state.next_instance;
         state.next_instance += 1;
+        if !service {
+            state.opened.push(route.screen.clone());
+        }
         state.instances.insert(
             id,
             Instance {
@@ -198,6 +240,11 @@ impl Runtime {
     fn close(state: &mut State, id: u64, out: &mut wire::ScreenUpdate) {
         if state.instances.remove(&id).is_some() {
             out.closed.push(id);
+            // WHAT AN INSTANCE SAID EARLIER IN THIS UPDATE DIES WITH IT: a view
+            // or an effect for a screen the same update closes would be drawn
+            // or performed for nothing.
+            out.views.retain(|view| view.instance != id);
+            out.effects.retain(|effect| effect.instance != id);
         }
         state.timers.retain(|(owner, _), _| *owner != id);
         state.jobs.retain(|_, (owner, _)| *owner != id);
@@ -235,7 +282,14 @@ impl Runtime {
         let effects = instance.screen.update(event, &ctx);
         let mut done = ctx.finish();
         let signals = std::mem::take(&mut done.signals);
+        let tells = std::mem::take(&mut done.tells);
         instance.tables.extend(done.tables);
+        if let Some(vault_id) = done.switch {
+            state.switch = Some(vault_id);
+        }
+        let Some(instance) = state.instances.get_mut(&id) else {
+            return;
+        };
 
         if !instance.service {
             let view_ctx = Ctx::new(core, &env);
@@ -272,8 +326,33 @@ impl Runtime {
             core.off_thread(job, work);
         }
         for effect in effects {
+            // WHEN THE CORE IS THE DOOR TO A SHELF, THE SHELF IS RUST'S: a
+            // screen's request of it (Home's switch, make, restore, forget and
+            // rename) is the shelf service's to perform and never reaches a
+            // shell. The platform's own doors (`Open`: the transfer rules, the
+            // notification settings) do. A core that holds one vault has no
+            // shelf, and the shell performs them all.
+            if let Some(wire::effect::Kind::VaultCommand(command)) = &effect.kind
+                && !matches!(command.kind, Some(wire::vault_command::Kind::Open(_)))
+                && core.vaults().is_some()
+            {
+                state.commands.push(command.clone());
+                continue;
+            }
             if let Some(wire::effect::Kind::Announce(note)) = &effect.kind {
                 state.announced.push(note.topic.clone());
+            }
+            // A TAB SELECTION IS THE RUNTIME'S OWN: the selection moves here and
+            // the shell hears the new `Navigation`; nothing is performed on the
+            // platform, so no destination is ever named in Swift or Kotlin.
+            if let Some(wire::effect::Kind::SelectTab(select)) = &effect.kind {
+                if state.tabs.iter().any(|tab| tab.id == select.tab) && state.selected != select.tab
+                {
+                    state.selected.clone_from(&select.tab);
+                    state.nav_revision += 1;
+                    out.navigation = Some(Self::navigation(state));
+                }
+                continue;
             }
             let effect_id = state.next_effect;
             state.next_effect += 1;
@@ -304,6 +383,21 @@ impl Runtime {
                     },
                     out,
                 );
+            }
+        }
+        // A TELL REACHES EVERY OPEN SCREEN OF THE NAME it was addressed to, after
+        // this screen's own work is recorded.
+        for (screen, event) in tells {
+            let named: Vec<u64> = state
+                .instances
+                .iter()
+                .filter(|(other, instance)| {
+                    **other != id && !instance.service && instance.route.screen == screen
+                })
+                .map(|(other, _)| *other)
+                .collect();
+            for other in named {
+                Self::dispatch(state, core, other, event.clone(), out);
             }
         }
     }
@@ -415,14 +509,96 @@ impl Runtime {
         }
     }
 
-    /// RELAY WHAT SCREENS ANNOUNCED. An `Announce` is the shell's to act on
-    /// (Locker's unlock, for one); the runtime also tells every open screen,
-    /// services included, so a screen that must follow (a vault's own key is
-    /// filed in Locker after an unlock) hears it in the same call and needs
-    /// nothing back from the shell. An announcement a screen makes while
-    /// hearing one is relayed in turn.
-    fn settle(state: &mut State, core: &dyn ScreenCtx, out: &mut wire::ScreenUpdate) {
-        while !state.announced.is_empty() {
+    /// MAKE THE TABS FOLLOW THE VAULT IN FRONT.
+    ///
+    /// The shelf behind the core ([`ScreenCtx::vaults`]) decides which vault
+    /// every read and write goes to, so the screens need no change of their own
+    /// — but a screen that loaded one vault's rows must not go on showing them
+    /// over another's. Two cases, both run at the end of every call, change,
+    /// wake and finished job:
+    ///
+    /// * a screen asked for a switch ([`Ctx::switch_vault`]): every screen in a
+    ///   tab hears it is being left FIRST, so what the member typed is written
+    ///   to the vault it was typed in, and only then is the vault brought to
+    ///   the front;
+    /// * the shelf's foreground is not the one the tabs were made for (a vault
+    ///   founded, the one in front forgotten, a launch that has just opened
+    ///   its vaults): the screens are closed WITHOUT that last event, because
+    ///   the vault they would write it to is gone or is not the one they were
+    ///   typed in.
+    ///
+    /// Either way each tab's root is closed with everything stacked over it and
+    /// opened again, the selected tab stays selected, and the shell draws an
+    /// ordinary update. Services are not touched: they hold no vault's rows.
+    fn follow_foreground(
+        &self,
+        state: &mut State,
+        core: &dyn ScreenCtx,
+        out: &mut wire::ScreenUpdate,
+    ) {
+        let Some(vaults) = core.vaults() else {
+            state.switch = None;
+            return;
+        };
+        if let Some(target) = state.switch.take()
+            && vaults.foreground_id().as_deref() != Some(target.as_str())
+            && vaults.held().iter().any(|held| held.vault_id == target)
+        {
+            let screens: Vec<u64> = state
+                .tabs
+                .iter()
+                .flat_map(|tab| tab.stack.iter().rev().copied())
+                .collect();
+            for id in screens {
+                Self::leave(state, core, id);
+            }
+            vaults.bring_to_front(&target);
+        }
+        let now = vaults.foreground_id();
+        if !state.started || now == state.foreground {
+            return;
+        }
+        state.foreground = now;
+        let mut reopened = Vec::new();
+        for tab in 0..state.tabs.len() {
+            for id in std::mem::take(&mut state.tabs[tab].stack) {
+                Self::close(state, id, out);
+            }
+            reopened.push(tab);
+        }
+        for tab in reopened {
+            let name = state.tabs[tab].id.clone();
+            let Some((_, route)) = self.roots.iter().find(|(root, _)| *root == name) else {
+                continue;
+            };
+            if let Ok(id) = self.open(state, core, route.clone(), false, out) {
+                state.tabs[tab].stack = vec![id];
+            }
+        }
+        state.nav_revision += 1;
+        out.navigation = Some(Self::navigation(state));
+    }
+
+    /// SETTLE WHAT AN UPDATE LEFT BEHIND, until nothing is left.
+    ///
+    /// * **Announcements.** An `Announce` is the shell's to act on (Locker's
+    ///   unlock, for one); the runtime also tells every open screen, services
+    ///   included, so a screen that must follow (a vault's own key is filed in
+    ///   Locker after an unlock) hears it in the same call and needs nothing
+    ///   back from the shell.
+    /// * **The shelf.** A screen's request of it (`VaultCommand`) and the
+    ///   opening of a screen are told to the services, whose job the shelf is;
+    ///   a switch they ask for is followed here ([`Self::follow_foreground`]),
+    ///   which opens the roots again, which the services are told.
+    ///
+    /// An announcement or a command made while hearing one is relayed in turn;
+    /// a screen that never stops asking is cut off after [`SETTLE_ROUNDS`].
+    fn settle(&self, state: &mut State, core: &dyn ScreenCtx, out: &mut wire::ScreenUpdate) {
+        for _ in 0..SETTLE_ROUNDS {
+            self.follow_foreground(state, core, out);
+            if state.announced.is_empty() && state.commands.is_empty() && state.opened.is_empty() {
+                return;
+            }
             for topic in std::mem::take(&mut state.announced) {
                 Self::broadcast(
                     state,
@@ -432,6 +608,34 @@ impl Runtime {
                             kind: Some(wire::screen_event::Kind::Announced(wire::Announced {
                                 topic: topic.clone(),
                             })),
+                        })
+                    },
+                    out,
+                );
+            }
+            for command in std::mem::take(&mut state.commands) {
+                Self::broadcast(
+                    state,
+                    core,
+                    |instance| {
+                        instance.service.then(|| wire::ScreenEvent {
+                            kind: Some(wire::screen_event::Kind::VaultCommanded(command.clone())),
+                        })
+                    },
+                    out,
+                );
+            }
+            for screen in std::mem::take(&mut state.opened) {
+                Self::broadcast(
+                    state,
+                    core,
+                    |instance| {
+                        instance.service.then(|| wire::ScreenEvent {
+                            kind: Some(wire::screen_event::Kind::ScreenOpened(
+                                wire::ScreenOpened {
+                                    screen: screen.clone(),
+                                },
+                            )),
                         })
                     },
                     out,
@@ -497,6 +701,11 @@ impl ScreenHost for Runtime {
                     region: region_of(&environment.locale),
                     platform: environment.platform.clone(),
                 };
+                // The band's words follow the locale.
+                if state.band.is_some() {
+                    state.nav_revision += 1;
+                    out.navigation = Some(Self::navigation(&state));
+                }
                 Self::broadcast(
                     &mut state,
                     core,
@@ -541,8 +750,22 @@ impl ScreenHost for Runtime {
                     &mut out,
                 );
             }
+            // THE OPERATING SYSTEM WANTS ITS MEMORY BACK: the shelf's service
+            // rests every vault but the one in front.
+            K::MemoryWarning(_) => Self::broadcast(
+                &mut state,
+                core,
+                |_| {
+                    Some(wire::ScreenEvent {
+                        kind: Some(wire::screen_event::Kind::MemoryWarning(
+                            wire::MemoryWarning {},
+                        )),
+                    })
+                },
+                &mut out,
+            ),
         }
-        Self::settle(&mut state, core, &mut out);
+        self.settle(&mut state, core, &mut out);
         // The first call also carries the opened roots, so a snapshot is not a
         // second round trip: `start` filled `out` already.
         if out.navigation.is_none() && !out.views.is_empty() && state.nav_revision == 1 {
@@ -554,6 +777,9 @@ impl ScreenHost for Runtime {
     fn changed(&self, core: &dyn ScreenCtx, tables: &[String]) {
         let mut state = self.lock();
         let mut out = wire::ScreenUpdate::default();
+        // A SHELF THAT CHANGED THE VAULT IN FRONT is followed before anything
+        // hears the table: the screens about to be closed are not re-rendered.
+        self.follow_foreground(&mut state, core, &mut out);
         Self::broadcast(
             &mut state,
             core,
@@ -574,7 +800,7 @@ impl ScreenHost for Runtime {
             },
             &mut out,
         );
-        Self::settle(&mut state, core, &mut out);
+        self.settle(&mut state, core, &mut out);
         if !Self::empty(&out) {
             core.push(out);
         }
@@ -597,6 +823,7 @@ impl ScreenHost for Runtime {
             },
             &mut out,
         );
+        self.settle(&mut state, core, &mut out);
         if !Self::empty(&out) {
             core.push(out);
         }
@@ -626,7 +853,7 @@ impl ScreenHost for Runtime {
                 &mut out,
             );
         }
-        Self::settle(&mut state, core, &mut out);
+        self.settle(&mut state, core, &mut out);
         if !Self::empty(&out) {
             core.push(out);
         }

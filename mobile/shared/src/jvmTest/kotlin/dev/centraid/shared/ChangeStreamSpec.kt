@@ -5,21 +5,10 @@ import centraid.core.v1.Event
 import centraid.core.v1.HealthEvent
 import centraid.core.v1.RecordKey
 import centraid.core.v1.Value
-import centraid.screen.v1.TrashListData
-import centraid.screen.v1.TrashListEvent
-import centraid.screen.v1.TrashRow
-import dev.centraid.shared.kit.TrashMachine
-import dev.centraid.shared.kit.TrashSpec
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
-import dev.centraid.shared.shell.HomeMachine
-import dev.centraid.shared.shell.HomeAgendaTile
-import dev.centraid.shared.shell.HomeHealthTile
-import dev.centraid.shared.shell.HomeMoneyTile
-import dev.centraid.shared.shell.HomeNotesTile
-import dev.centraid.shared.shell.HomeReads
 import dev.centraid.shared.sync.ChangeStream
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
@@ -67,30 +56,10 @@ class ChangeStreamSpec : StringSpec({
             host.effects.collect { into += it }
         }
 
-    /** THE KIT'S TRASH MACHINE over a table keyed by the rows it lists: any app's trash is one of these. */
-    val keyedTrash = TrashMachine(
-        TrashSpec(
-            appId = "kit",
-            table = "entity",
-            restoreCommand = "entity.restore",
-            purgeCommand = null,
-            emptyCommand = null,
-            idColumn = "id",
-            titleColumn = "title",
-            purgeWindowDays = 30,
-        ),
-    )
-
-    /** A paged list showing [ids]: the kit's trash machine. */
-    suspend fun listShowing(vararg ids: String): ScreenHost<*, TrashListEvent> {
-        val host = ScreenHost(keyedTrash)
-        host.send(
-            TrashListEvent(
-                data_ = TrashListEvent.DataArrived(
-                    data_ = TrashListData(rows = ids.map { TrashRow(id = it) }),
-                ),
-            ),
-        )
+    /** A paged list showing [ids]. */
+    suspend fun listShowing(vararg ids: String): ScreenHost<*, ShownRows.Event> {
+        val host = ScreenHost(ShownRows)
+        host.send(ShownRows.Event.Shown(ids.toSet()))
         return host
     }
 
@@ -109,7 +78,7 @@ class ChangeStreamSpec : StringSpec({
         // state cannot change until rows are read, and the re-read IS the
         // deliverable: without it a member sees a gateway's write on the next
         // relaunch.
-        effects shouldBe listOf(ScreenEffect.ReadPage(keyedTrash.screenId, null))
+        effects shouldBe listOf(ScreenEffect.ReadPage(ShownRows.ID, null))
         watcher.cancel()
     }
 
@@ -133,44 +102,10 @@ class ChangeStreamSpec : StringSpec({
         // The routing decision is the MACHINE's, so it is asserted on the
         // machine: a stream holding its own table map would be a second place
         // every screen's reads are written down.
-        keyedTrash.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
+        ShownRows.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
         RuleAwareGrid.rowsChanged("note", listOf("t-1")).shouldBeNull()
         RuleAwareGrid.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
         RuleAwareGrid.rowsChanged("entity", listOf("t-1")).shouldNotBeNull()
-        // Home COUNTS Locker's items since #1047 (ids only), off `entity` and the
-        // `edge` that archives one (#1135); a Locker sidecar is not Home's table.
-        HomeMachine.rowsChanged("locker_item_field", listOf("fld-1")).shouldBeNull()
-    }
-
-    "every table Home counts is a table Home redraws on" {
-        // Derived rather than listed, and this is what says so: a tile whose
-        // query moved to another table would otherwise stop redrawing on sync
-        // with nothing failing anywhere.
-        HomeReads.READS.forEach { read ->
-            HomeMachine.rowsChanged(read.query.from, listOf("x")).shouldNotBeNull()
-        }
-        // AGENDA'S APP QUERY NAMES ITS TABLES ITSELF (#1046): the runtime
-        // cannot see what the core joins, so the tile declares them and Home
-        // redraws on every one.
-        HomeAgendaTile.TABLES.forEach { table ->
-            HomeMachine.rowsChanged(table, listOf("x")).shouldNotBeNull()
-        }
-        // MONEY'S TILE RIDES THE CORE'S OWN ARM (#1099) and declares its tables the same way.
-        HomeMoneyTile.TABLES.forEach { table ->
-            HomeMachine.rowsChanged(table, listOf("x")).shouldNotBeNull()
-        }
-        // HEALTH'S TILE IS AN APP QUERY TOO (#1129): the days and the store's origin.
-        HomeHealthTile.TABLES.forEach { table ->
-            HomeMachine.rowsChanged(table, listOf("x")).shouldNotBeNull()
-        }
-        // A FILTER'S SUBQUERY TABLE REDRAWS TOO: trashing a person moves
-        // `person` and `entity`, never the owner (#1047, #1135).
-        HomeReads.READS.flatMap { it.alsoReads }.forEach { table ->
-            HomeMachine.rowsChanged(table, listOf("x")).shouldNotBeNull()
-        }
-        HomeReads.TABLES shouldBe
-            HomeReads.READS.flatMap { listOf(it.query.from) + it.alsoReads }.toSet() + HomeAgendaTile.TABLES +
-                HomeNotesTile.TABLES + HomeMoneyTile.TABLES + HomeHealthTile.TABLES
     }
 
     "a changed rule makes the grid read its page again, and a list does not" {
@@ -193,7 +128,7 @@ class ChangeStreamSpec : StringSpec({
 
         photosEffects shouldBe listOf(ScreenEffect.ReadPage(RuleAwareGrid.ID, null))
         listEffects shouldBe emptyList()
-        keyedTrash.conditionsChanged().shouldBeNull()
+        ShownRows.conditionsChanged().shouldBeNull()
         RuleAwareGrid.conditionsChanged().shouldNotBeNull()
         a.cancel()
         b.cancel()
@@ -258,4 +193,37 @@ private object RuleAwareGrid : ScreenMachine<Int, String> {
         if (table == "photo" || table == "entity") "rows" else null
     override fun seatChanged(seat: centraid.screen.v1.SeatState): String? = null
     override fun conditionsChanged(): String = "conditions"
+}
+
+/**
+ * A GENERIC SCREEN THAT IS A "LIST": it re-reads on an `entity` change that
+ * names a row it shows (or names none), and on nothing else. The kit's trash
+ * screen was the stand-in the routing law was first pinned through; it is
+ * Rust's now (`kit::trash`, re-rendered by `DataChanged` on the tables its
+ * loads read), so the law is asserted on this one.
+ */
+private object ShownRows : ScreenMachine<Set<String>, ShownRows.Event> {
+    const val ID: String = "test.list"
+
+    sealed interface Event {
+        data class Shown(val ids: Set<String>) : Event
+        data class RowsChanged(val ids: List<String>) : Event
+    }
+
+    override fun initial(): Set<String> = emptySet()
+
+    override fun reduce(state: Set<String>, event: Event): Step<Set<String>> = when (event) {
+        is Event.Shown -> Step(event.ids)
+        is Event.RowsChanged ->
+            if (event.ids.isNotEmpty() && event.ids.none { it in state }) {
+                Step(state)
+            } else {
+                Step(state, listOf(ScreenEffect.ReadPage(ID, null)))
+            }
+    }
+
+    override fun rowsChanged(table: String, keys: List<String>): Event? =
+        if (table == "entity") Event.RowsChanged(keys) else null
+
+    override fun seatChanged(seat: centraid.screen.v1.SeatState): Event? = null
 }

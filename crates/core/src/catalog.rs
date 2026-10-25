@@ -95,6 +95,16 @@ pub(crate) fn app(id: &str) -> Option<App> {
         .or_else(|| (id == SHELL.id).then_some(SHELL))
 }
 
+/// The manifest `load` answers from for an app id: one of the eight apps', or
+/// the shell's own catalogue ([`crate::shell`], no app: it has no actions, so
+/// [`app`] and `act` never see it).
+pub(crate) fn manifest_of(id: &str) -> Option<&'static Manifest> {
+    if id == crate::shell::ID {
+        return Some(crate::shell::manifest());
+    }
+    app(id).map(|app| app.manifest())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

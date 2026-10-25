@@ -13,7 +13,7 @@ import dev.centraid.android.MainActivity
  * permissions only when the app says where its rationale lives; the manifest points both the
  * Android 13 action and the Android 14 permission-usage alias here. Health's words are Rust's
  * (`health.connect`: the lede and the list of types), so this draws none of its own: it asks the
- * app to open that page ([HealthRationale.requested], taken by `AgendaRoutes`) and comes forward.
+ * app to open that page ([HealthRationale.requested], taken by `RustRoot`) and comes forward.
  * Nothing is asked of the OS until the member taps Connect there.
  */
 public class HealthRationaleActivity : ComponentActivity() {

@@ -99,6 +99,35 @@ pub fn config_from_json(bytes: &[u8]) -> Result<CoreConfig, CoreError> {
         serde_json::from_str(text).map_err(|error| CoreError::InvalidRequest {
             detail: format!("the open configuration is not JSON: {error}"),
         })?;
+    // A SHELF'S DOOR (#1135, lane H2): `{"shelf": "<dir>"}` opens the core that
+    // fronts every vault under the directory and holds none itself. The shell
+    // names no vault file and no `path`; `create` is ignored (the front is
+    // never a file) and so is `vault` (the shelf keys each vault it opens).
+    let shelf = parsed
+        .get("shelf")
+        .and_then(serde_json::Value::as_str)
+        .filter(|dir| !dir.trim().is_empty())
+        .map(|dir| {
+            let mut shelf = centraid_core::ShelfConfig::new(dir);
+            shelf.dev_seed = parsed
+                .get("devSeed")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned);
+            shelf
+        });
+    if let Some(shelf) = shelf {
+        let mut config = CoreConfig::fronting(shelf);
+        config.ui_thread_name = parsed
+            .get("uiThreadName")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned);
+        config.expected_digest = parsed
+            .get("expectedIdentity")
+            .and_then(serde_json::Value::as_str)
+            .filter(|digest| !digest.trim().is_empty())
+            .map(str::to_owned);
+        return Ok(config);
+    }
     let path = parsed
         .get("path")
         .and_then(serde_json::Value::as_str)
@@ -154,6 +183,7 @@ pub fn config_from_json(bytes: &[u8]) -> Result<CoreConfig, CoreError> {
         // is bounded by its free space and 2 GiB, and a smaller ceiling is a
         // drill's (`CoreConfig::with_spool_ceiling`).
         spool_ceiling: None,
+        shelf: None,
     };
     // DEFAULTS TO CREATING, because a shell that named a path and said nothing
     // else is founding a vault there — which is what the phone does now
@@ -316,6 +346,29 @@ mod tests {
                 .expect("parses")
                 .create,
             "a shell waiting on a restore must not be handed an empty vault"
+        );
+    }
+
+    /// THE SHELL HANDS OVER A DIRECTORY, NOT A VAULT (#1135, lane H2): the core
+    /// that opens is the front of a shelf, holds no vault and is never created.
+    #[test]
+    fn a_shelf_is_a_directory_and_the_front_core_is_never_created() {
+        let config = config_from_json(
+            br#"{"shelf":"/data/vaults","create":true,"devSeed":"ab","uiThreadName":"main"}"#,
+        )
+        .expect("it parses");
+        let shelf = config.shelf.as_ref().expect("a shelf");
+        assert_eq!(shelf.dir, std::path::PathBuf::from("/data/vaults"));
+        assert_eq!(shelf.dev_seed.as_deref(), Some("ab"));
+        assert!(!config.create, "the front is never a file");
+        assert_eq!(
+            config.path,
+            std::path::PathBuf::from("/data/vaults/custody-probe.sqlite3")
+        );
+        assert_eq!(config.ui_thread_name.as_deref(), Some("main"));
+        assert!(
+            config_from_json(br#"{"shelf":"  "}"#).is_err(),
+            "a blank directory names no shelf"
         );
     }
 

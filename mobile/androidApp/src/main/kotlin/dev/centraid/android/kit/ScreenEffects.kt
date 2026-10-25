@@ -41,6 +41,7 @@ import centraid.core.v1.KeychainValue
 import centraid.core.v1.OriginalFetched
 import centraid.core.v1.PassNoted
 import centraid.core.v1.PhoneChanged
+import centraid.core.v1.VaultCommand
 import centraid.core.v1.Route
 import dev.centraid.android.backup.BackupNow
 import dev.centraid.android.backup.PassWork
@@ -85,6 +86,9 @@ import okio.ByteString
  * [docs] performs Docs' `PickFile`, `FollowFolder` and `StopFollowing` (the pickers, the
  * camera, the follower's grant); [openRoute] is `OpenRoute`: a page Rust asked the shell to push.
  * [health] answers `HealthRead` (Health Connect, read only). Either is null where the host has none, and the effect is answered `failed`.
+ *
+ * ONE PERFORMER FOR THE ONE RUNTIME (#1135): every screen is on Rust's `home` tab over a single
+ * [Screens], so every effect is performed here exactly once. [vaultCommand] is Home's `VaultCommand`.
  */
 @Composable
 internal fun PerformScreenEffects(
@@ -92,8 +96,6 @@ internal fun PerformScreenEffects(
     phone: AndroidPhoneFollow?,
     /** Photos' device half: the camera roll, free up space and an original from the gateway. */
     photos: PhotosDevice? = null,
-    /** This app's tab: when set, only its instances' effects are performed here (two apps share one core). */
-    tab: String? = null,
     onAnnounce: (String) -> Unit = {},
     /** Also perform the effects of services (screens in no tab, `custody.filing`): one host does. */
     services: Boolean = false,
@@ -126,15 +128,6 @@ internal fun PerformScreenEffects(
     scanDoor.Host()
     LaunchedEffect(screens) {
         screens.effects.collect { request ->
-            // TWO APPS' RUNTIMES SHARE ONE CORE, so each hears every push: an effect for
-            // another app's screen is that app's performer's to answer.
-            val tabs = screens.navigation.value?.tabs.orEmpty()
-            val mine = tabs.firstOrNull { it.tab == tab }?.entries?.any { it.instance == request.instance } == true
-            // A SERVICE (custody.filing) is in no tab: the one host that says so performs its effects.
-            val service = services && tabs.none { stack -> stack.entries.any { it.instance == request.instance } }
-            if (tab != null && !mine && !service) {
-                return@collect
-            }
             // ONE COROUTINE PER EFFECT: a permission dialog waits for the member
             // without holding up the keychain read behind it.
             launch {

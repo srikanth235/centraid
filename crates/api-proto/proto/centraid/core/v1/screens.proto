@@ -44,6 +44,9 @@ import "centraid/core/v1/money_screens.proto";
 import "centraid/core/v1/notes_screens.proto";
 import "centraid/core/v1/people_screens.proto";
 import "centraid/core/v1/route.proto";
+import "centraid/core/v1/vault_screens.proto";
+import "centraid/core/v1/shell_home_screens.proto";
+import "centraid/core/v1/shell_search_screens.proto";
 
 // ---------------------------------------------------------------------------
 // The door
@@ -69,6 +72,11 @@ message ScreenRequest {
     // the OS finished (`passes_screens.proto`). The runtime hands it to every
     // open screen and service as `ScreenEvent.shell_fact`.
     ShellFact shell_fact = 1500;
+    // The operating system is asking for memory back (iOS
+    // `didReceiveMemoryWarning`, Android `onTrimMemory`). The runtime tells every
+    // open screen and service (`ScreenEvent.memory_warning`); the shelf closes
+    // every vault's core but the one in front.
+    MemoryWarning memory_warning = 1560;
   }
 }
 
@@ -138,6 +146,9 @@ message Navigation {
   repeated TabStack tabs = 2;
   // Monotonic: a renderer drops a navigation older than the one it drew.
   uint64 revision = 3;
+  // THE BAND (#1135): the places a tab root is framed by, Rust's to word and to
+  // light. A shell draws it under a tab's root and sends `select_tab` for a press.
+  ShellBand band = 4;
 }
 
 message TabStack {
@@ -286,6 +297,17 @@ message ScreenEvent {
     // RUNTIME-ORIGINATED: another screen called `Ctx::signal`; only a screen
     // that `hears` the topic is sent it.
     Signalled signalled = 1501;
+    // ---- the vault shelf (1560-1599, lane H2): vault_screens.proto ----
+    // RUNTIME-ORIGINATED from `ScreenRequest.memory_warning`.
+    MemoryWarning memory_warning = 1560;
+    // RUNTIME-ORIGINATED, to services only: a screen asked the shelf for
+    // something (Home's `VaultCommand` effect, which never reaches a shell).
+    VaultCommand vault_commanded = 1561;
+    // RUNTIME-ORIGINATED, to services only: a screen was opened.
+    ScreenOpened screen_opened = 1562;
+    // ---- the shell (1000-1999): Home 1000-1299 ----
+    HomeEvent home = 1000;
+    HomeSearchEvent home_search = 1001;
   }
 }
 
@@ -382,6 +404,9 @@ message ViewState {
     TrashView trash = 900;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeState backup_home = 1450;
+    // ---- the shell (1000-1999): Home 1000-1299 ----
+    HomeState home = 1000;
+    HomeSearchState home_search = 1001;
   }
 }
 
@@ -452,6 +477,12 @@ message Effect {
     LongRun long_run = 1372;
     UploadsOp uploads = 1373;
     StreamFromLibrary stream_from_library = 1374;
+    // ---- the shell (1000-1999) ----
+    // Home asks the shell to act on the vaults the phone holds.
+    VaultCommand vault_command = 1000;
+    // Select a tab: the runtime performs it itself (the shell hears the new
+    // `Navigation`), so no destination is ever named in Swift or Kotlin.
+    SelectTab select_tab = 1001;
   }
 }
 

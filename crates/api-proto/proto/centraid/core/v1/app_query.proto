@@ -47,6 +47,7 @@ import "centraid/core/v1/notes.proto";
 import "centraid/core/v1/people.proto";
 import "centraid/core/v1/photos.proto";
 import "centraid/core/v1/tasks.proto";
+import "centraid/core/v1/vault_screens.proto";
 import "centraid/core/v1/vault_search.proto";
 
 message AppQueryRequest {
@@ -217,6 +218,9 @@ message AppQueryResponse {
     // ---- the shell's own queries (1300-1599, lane H2): `shell.manifest.json` ----
     // `backup-status` (1450-1499 are the backup's).
     ShellBackupStatus shell_backup_status = 1450;
+    // The vaults this phone holds: `shell.holdings` (1540-1599 are the shelf's;
+    // see `vault_screens.proto`).
+    Holdings holdings = 1540;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }

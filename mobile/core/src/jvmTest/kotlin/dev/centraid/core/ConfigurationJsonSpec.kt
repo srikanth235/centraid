@@ -31,6 +31,18 @@ class ConfigurationJsonSpec : StringSpec({
         json shouldContain """"vault":{"seed":"${"ab".repeat(64)}","index":3}"""
     }
 
+    "a shelf is opened by its directory, with the demo seed only when a debug build has one" {
+        val plain = CoreConfiguration.shelf("/data/vaults").toJson("main")
+        plain shouldBe """{"shelf":"/data/vaults","uiThreadName":"main"}"""
+        val demo = CoreConfiguration.shelf("/data/vaults/", devSeedHex = "ab".repeat(64))
+        demo.toJson("main") shouldContain """"devSeed":"${"ab".repeat(64)}""""
+        // THE FRONT CORE IS NAMED AFTER THE DIRECTORY, once, and is never created.
+        demo.databasePath shouldBe "/data/vaults/custody-probe.sqlite3"
+        demo.create shouldBe false
+        // A SEED NEVER PRINTS.
+        demo.toString().contains("ab".repeat(64)) shouldBe false
+    }
+
     "no open carries a device secret: a gateway knows the phone by its token (#1080 A21)" {
         // THE CORE MINTS NO DEVICE KEY AND READS NONE. A `device` object on the
         // config would be a secret handed to a core that ignores it, and a

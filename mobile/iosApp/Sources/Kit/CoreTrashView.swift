@@ -2,7 +2,7 @@ import SwiftUI
 
 /// THE KIT'S TRASH, WHEN RUST OWNS IT (#1135; `kit_screens.proto`'s `TrashView`).
 ///
-/// The twin of `TrashListView` for the apps whose screens are Rust's: the same
+/// The kit's trash page for the apps whose screens are Rust's: the same
 /// page, the same row and the same confirm, over `ViewState.trash`. Every word
 /// is on the state (the title and back words, the rows' meta and verbs, the
 /// empty state, "Empty trash", the confirm and the refusal's line); the view

@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// A TEXT FIELD WHOSE WORDS THE MACHINE HOLDS, WITHOUT A ROUND TRIP PER KEY.
 ///
 /// Binding a `TextField` straight to the state (`get: { state.x }`, `set:
@@ -11,7 +9,7 @@ import CentraidShared
 /// screen's edit event. The field FOLLOWS the machine only when the machine
 /// says something new while the member is not typing — a seed (Notes' "Send
 /// to Tasks") — or clears it (a submitted add), and never when what it says is
-/// an echo of the typing (the shared `TypedText`: an emptied field's late echo
+/// an echo of the typing (`TypedText`: an emptied field's late echo
 /// once took back the letters typed after it).
 struct MachineTextField: View {
     let placeholder: String

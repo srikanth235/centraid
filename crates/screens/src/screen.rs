@@ -70,7 +70,13 @@ pub(crate) struct Done {
     pub tables: BTreeSet<String>,
     pub timers: Vec<TimerOp>,
     pub jobs: Vec<(String, centraid_core::screens::OffThreadWork)>,
+    /// The vault the screen asked to bring to the front, see
+    /// [`Ctx::switch_vault`].
+    pub switch: Option<String>,
     pub signals: Vec<String>,
+    /// Events for every open screen registered under a name, see
+    /// [`Ctx::tell_screen`].
+    pub tells: Vec<(String, wire::ScreenEvent)>,
 }
 
 /// A screen's door to the core, the catalog and the clock.
@@ -168,7 +174,19 @@ impl<'a> Ctx<'a> {
     /// restore): the answer is a [`wire::VaultCalled`] — the core's encoded
     /// `Response`, or its typed refusal.
     pub fn vault_async(&self, tag: &str, request: VaultRequest) {
-        self.off_thread(tag, move |handle| {
+        // BOUND TO THE VAULT IN FRONT WHEN IT IS ASKED FOR: a pass or a pairing
+        // started on one vault finishes on it, whatever is in front when its
+        // door is called. The words and a restore are the front's own (a restore
+        // lays vaults down beside the front's file, not inside a vault's).
+        let bound = match request {
+            VaultRequest::Phrase(_) | VaultRequest::Restore(_) => None,
+            _ => self
+                .core
+                .vaults()
+                .and_then(|vaults| vaults.foreground_core()),
+        };
+        self.off_thread(tag, move |front| {
+            let handle = bound.as_ref().unwrap_or(front);
             let called = match handle.call(&request.into_request()) {
                 Ok(response) => wire::VaultCalled {
                     response: response.encode_to_vec(),
@@ -181,6 +199,26 @@ impl<'a> Ctx<'a> {
             };
             called.encode_to_vec()
         });
+    }
+
+    /// The vaults this phone holds, when the core is the door to a shelf of
+    /// them (`centraid_core::vaults`): which are held and drainable, and a way
+    /// to reach the core of one that is not in front.
+    #[must_use]
+    pub fn vaults(&self) -> Option<std::sync::Arc<dyn centraid_core::vaults::Vaults>> {
+        self.core.vaults()
+    }
+
+    /// BRING THE VAULT `vault_id` TO THE FRONT, when this update is done.
+    ///
+    /// Every screen of a tab is told it is being left, so what the member typed
+    /// is written to the vault it was typed in; then the vault is brought to
+    /// the front and each tab's root is closed and opened again, so no screen
+    /// shows one vault's rows over another's. A vault nothing holds, or whose
+    /// file will not reopen, leaves the phone where it was. The shell sees an
+    /// ordinary update: instances closed, new views, a new navigation.
+    pub fn switch_vault(&self, vault_id: &str) {
+        self.done.borrow_mut().switch = Some(vault_id.to_owned());
     }
 
     /// The locale every string is made in.
@@ -232,6 +270,17 @@ impl<'a> Ctx<'a> {
     /// each other; not a broadcast of data.
     pub fn signal(&self, topic: &str) {
         self.done.borrow_mut().signals.push(topic.to_owned());
+    }
+
+    /// Send `event` to every open screen registered under `screen` (a route
+    /// name), after this update is recorded. For a service that tells a screen
+    /// what it holds and cannot know which instances exist (a Home told what
+    /// the shelf holds); the event is delivered as any other.
+    pub fn tell_screen(&self, screen: &str, event: wire::ScreenEvent) {
+        self.done
+            .borrow_mut()
+            .tells
+            .push((screen.to_owned(), event));
     }
 
     pub(crate) fn finish(self) -> Done {

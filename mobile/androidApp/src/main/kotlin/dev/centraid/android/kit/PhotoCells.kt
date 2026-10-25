@@ -38,7 +38,6 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.copy.PhotosCopy
 import centraid.core.v1.PhotosPackedRow
-import dev.centraid.shared.kit.MediaFormat
 
 /**
  * ONE CELL RENDERER, FOR EVERY SURFACE THAT DRAWS PHOTOGRAPHS.
@@ -322,10 +321,10 @@ private fun BoxScope.KindLine(cell: WireTile, rung: Int) {
 }
 
 /**
- * `1:04`, `12:07`, `1:02:03` — the shared [MediaFormat]'s, so a tile, the player
+ * `1:04`, `12:07`, `1:02:03` — [MediaClock]'s, so a tile, the player
  * and the facts panel state one recording's length the same way.
  */
-public fun mediaClock(seconds: Int): String = MediaFormat.clock(seconds.toLong())
+public fun mediaClock(seconds: Int): String = MediaClock.clock(seconds.toLong())
 
 /**
  * THE GRID IS THE LOADING STATE (v0's `PhotosGridSkeleton.tsx`, §14).

@@ -6,6 +6,17 @@
   "version": "0.1.0",
   "queries": [
     {
+      "name": "holdings",
+      "kind": "vault",
+      "figures": ["loaded", "foreground", "vaults"],
+      "description": "(vault plumbing, lane H2) The vaults this phone holds: each one's id, name and how it stands (in front, resting, keyed, kept on its own words, frozen with the date and the count of changes no gateway acknowledged), the one in front first. Answered by the shelf, not by a vault: it is the one shell read the front core keeps for itself.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "chats",
       "kind": "chat_thread",
       "figures": ["threads", "corrected"],
@@ -80,6 +91,33 @@
         "type": "object",
         "properties": {},
         "additionalProperties": false
+      }
+    },
+    {
+      "name": "search",
+      "kind": "search_hit",
+      "figures": ["matches"],
+      "description": "Home's vault search: every searchable app's rows for one term in one answer (notes, people, agenda, tasks, photos, docs, Locker items by their plain text, and the named containers and chat threads), at most eight of each kind, under the owner. Blank answers no hits. `corrected` names the words searched when the typed ones found little and a correction added rows.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "hits": {
+            "type": "array"
+          },
+          "corrected": {
+            "type": "string"
+          }
+        }
       }
     }
   ],

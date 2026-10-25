@@ -144,6 +144,13 @@ pub trait ScreenCtx {
         let _ = (job, work);
     }
 
+    /// The shelf, when this core is the door to a directory of vaults
+    /// ([`crate::vaults`]): which vaults the phone holds, and a way to run a
+    /// door on one that is not in front.
+    fn vaults(&self) -> Option<std::sync::Arc<dyn crate::vaults::Vaults>> {
+        None
+    }
+
     /// Push a finished update to the shell's event stream.
     fn push(&self, update: wire::ScreenUpdate);
 
@@ -222,7 +229,15 @@ impl ScreenCtx for HandleState {
         HandleState::call(self, &request.into_request())
     }
 
+    fn vaults(&self) -> Option<std::sync::Arc<dyn crate::vaults::Vaults>> {
+        HandleState::vaults(self).cloned()
+    }
+
     fn off_thread(&self, job: u64, work: OffThreadWork) {
+        // THE JOB GETS THE FRONT: a call on it goes to the vault in front when
+        // the call is MADE, except the words and a restore, which are the
+        // front's own. A job that must finish on the vault it began on binds its
+        // core when it is asked (`Ctx::vault_async`, `ScreenCtx::vaults`).
         let Some(handle) = Handle::of(self) else {
             return;
         };

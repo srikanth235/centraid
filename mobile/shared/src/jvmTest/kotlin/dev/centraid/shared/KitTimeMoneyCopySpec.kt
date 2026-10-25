@@ -1,9 +1,7 @@
 package dev.centraid.shared
 
 import centraid.screen.v1.Money
-import dev.centraid.shared.kit.MoneyFold
 import dev.centraid.shared.kit.time.CivilWords
-import dev.centraid.shared.shell.HomeAgendaTile
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
@@ -14,9 +12,11 @@ import java.util.Currency
 import java.util.Locale
 
 /**
- * The kit's pure halves: civil days in words, money arithmetic, and the one
- * money fixture both shells' renderers answer to — plus the copy tables, which
- * are generated from `copy/<app>.json` and must say exactly what it says.
+ * The kit's pure halves: civil days in words, the one money fixture both shells'
+ * renderers answer to — plus the copy tables, which are generated from
+ * `copy/<app>.json` and must say exactly what it says. (Money arithmetic is
+ * Rust's: `kit::money` holds the fixture's sums; Home's tile says a day through
+ * `kit::civil` as every screen does.)
  */
 class KitTimeMoneyCopySpec : StringSpec({
 
@@ -47,26 +47,7 @@ class KitTimeMoneyCopySpec : StringSpec({
         CivilWords.dayMonth("nonsense") shouldBe "nonsense"
     }
 
-    "Home's Agenda tile says a day the kit's way" {
-        HomeAgendaTile.ordinal(22) shouldBe CivilWords.ordinal(22)
-    }
-
     // --- Money ------------------------------------------------------------
-
-    "money: sums never cross a currency, and the fixture's sums hold" {
-        val fixture = root.resolve("contracts/screens/money-render.json").readText()
-        val sums = Regex(""""name": "([^"]+)",\s*"in": \[(.*?)\],\s*"out": \[(.*?)\]""", RegexOption.DOT_MATCHES_ALL)
-            .findAll(fixture).toList()
-        sums.size shouldBe 3
-        sums.forEach { match ->
-            withClue(match.groupValues[1]) {
-                MoneyFold.sumByCurrency(amounts(match.groupValues[2])) shouldBe amounts(match.groupValues[3])
-            }
-        }
-        MoneyFold.sign(Money(minor = -5, currency = "USD")) shouldBe -1
-        MoneyFold.sign(Money(minor = 0, currency = "USD")) shouldBe 0
-        MoneyFold.isZero(Money(minor = 0, currency = "JPY")) shouldBe true
-    }
 
     "money: every fixture case renders as the Android renderer's law says" {
         // `formatMoney` (androidApp `theme/Theme.kt`) mirrored on the JVM, where

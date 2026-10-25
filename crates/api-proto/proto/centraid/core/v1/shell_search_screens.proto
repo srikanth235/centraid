@@ -1,0 +1,90 @@
+// HOME'S SEARCH (#1135, lane H1): one term asked of the whole vault through the
+// shell's named query `search`, drawn as one group per app. The same search
+// Notes' link picker runs; there is no second engine behind it. Rust folds the
+// hits into groups, words every row and chooses where a tap goes; the shells
+// draw `HomeSearchState`.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/route.proto";
+
+message HomeSearchChrome {
+  string placeholder = 1;
+  string scope_label = 2;
+  string cancel = 3;
+  string close_label = 4;
+  string loading = 5;
+  string retry = 6;
+  string title = 7;
+}
+
+message HomeSearchResting {
+  string note = 1;
+  // "Recent", or empty when there is nothing recent.
+  string suggestions_label = 2;
+  repeated string suggestions = 3;
+}
+
+message HomeSearchRow {
+  string entity = 1;
+  string id = 2;
+  string app_id = 3;
+  string kind_label = 4;
+  string title = 5;
+  string accessibility_label = 6;
+  // WHERE A TAP GOES. Absent for a row whose app the shell has no page for.
+  optional Route route = 7;
+}
+
+message HomeSearchGroup {
+  string app_id = 1;
+  string label = 2;
+  uint32 count = 3;
+  string accessibility_label = 4;
+  repeated HomeSearchRow rows = 5;
+  repeated SearchContainer containers = 6;
+}
+
+message HomeSearchData {
+  repeated HomeSearchGroup groups = 1;
+  optional EmptyState empty = 2;
+  // "Including results for “x”" when the core corrected a typo.
+  string corrected = 3;
+  // The Ask row under the answer.
+  optional SearchAsk ask = 4;
+  // The Ask's finished route, so a shell pushes it like any row.
+  optional Route ask_route = 5;
+}
+
+message HomeSearchState {
+  HomeSearchChrome chrome = 1;
+  string term = 2;
+  oneof content {
+    HomeSearchResting resting = 3;
+    Loading loading = 4;
+    Failure failure = 5;
+    Denied denied = 6;
+    HomeSearchData data = 7;
+  }
+  repeated string recent = 8;
+}
+
+message HomeSearchEvent {
+  oneof kind {
+    TermChanged term = 1;
+    SuggestionPicked suggestion = 2;
+    // The member acted on the answer (a row, a container, the Ask, or Return):
+    // the term is remembered as a recent search.
+    Committed committed = 3;
+    Cleared cleared = 4;
+    Refreshed refreshed = 5;
+  }
+  message TermChanged { string term = 1; }
+  message SuggestionPicked { string term = 1; }
+  message Committed {}
+  message Cleared {}
+  message Refreshed {}
+}

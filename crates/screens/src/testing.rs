@@ -209,6 +209,57 @@ impl Driver {
         }
     }
 
+    /// A driver over the door to a SHELF of vaults (#1135, lane H2): the core
+    /// is opened as a shell opens it, over the directory `dir`, holding no
+    /// vault, and `shelf` is bound to it. The vaults are opened by the shelf's
+    /// own launch (`vault::service`), which the first call starts and a test
+    /// answers with [`Self::serve`].
+    ///
+    /// # Panics
+    /// When the core cannot be opened.
+    #[must_use]
+    pub fn shelved(
+        runtime: Runtime,
+        shelf: &std::sync::Arc<crate::vault::Shelf>,
+        dir: &std::path::Path,
+        dev_seed: Option<&str>,
+    ) -> Self {
+        Self::shelved_with(
+            runtime,
+            shelf,
+            dir,
+            dev_seed,
+            std::sync::Arc::new(crate::vault::default_prepare),
+        )
+    }
+
+    /// [`Self::shelved`], with how each core the shelf opens is made ready.
+    ///
+    /// # Panics
+    /// When the core cannot be opened.
+    #[must_use]
+    pub fn shelved_with(
+        runtime: Runtime,
+        shelf: &std::sync::Arc<crate::vault::Shelf>,
+        dir: &std::path::Path,
+        dev_seed: Option<&str>,
+        prepare: crate::vault::Prepare,
+    ) -> Self {
+        let mut config = centraid_core::ShelfConfig::new(dir);
+        config.dev_seed = dev_seed.map(str::to_owned);
+        let handle = Core::open(CoreConfig::fronting(config)).expect("the front core opens");
+        handle.attach_screens(std::sync::Arc::new(runtime));
+        assert!(shelf.bind(&handle, prepare), "the shelf binds to its front");
+        Self {
+            handle,
+            views: BTreeMap::new(),
+            navigation: None,
+            effects: Vec::new(),
+            closed: Vec::new(),
+            _dir: dir.to_path_buf(),
+        }
+    }
+
     /// [`Self::with_runtime`] over the standard runtime.
     #[must_use]
     pub fn founded() -> Self {
