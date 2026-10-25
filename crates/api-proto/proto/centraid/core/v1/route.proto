@@ -79,6 +79,8 @@ message Route {
     TrashRoute trash = 900;
     // ---- the shell: chat (1600-1699) ----
     ChatRoute chat = 1600;
+    // ---- the shell: phone imports (1700-1899) ----
+    ImportsRoute imports = 1700;
   }
 }
 
@@ -195,6 +197,9 @@ enum PhotosPickerPurpose {
   PHOTOS_PICKER_PURPOSE_UNSPECIFIED = 0;
   // Photographs to put into the album `album_id` names.
   PHOTOS_PICKER_PURPOSE_ADD_TO_ALBUM = 1;
+  // One photograph to attach to a chat question. The pick goes back to the chat
+  // screen (`chat.home`) as `ChatEvent.Attached`; no `album_id`.
+  PHOTOS_PICKER_PURPOSE_ATTACH = 2;
 }
 
 // `photos.home`: lands on `destination` (the library when unspecified); a
@@ -515,3 +520,10 @@ message MoneyPageRoute {
 
 // `chat.home`: no arguments. The Chat tab's root.
 message ChatRoute {}
+
+// `imports.camera_roll`, `imports.files`, `imports.made`: the phone imports'
+// headless services, each serving one vault. The camera roll's cursor is kept per
+// vault (a photograph offered to two vaults is two imports).
+message ImportsRoute {
+  string vault_id = 1;
+}

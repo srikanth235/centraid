@@ -30,6 +30,7 @@ package centraid.core.v1;
 import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/assist.proto";
 import "centraid/core/v1/chat_screens.proto";
+import "centraid/core/v1/imports_screens.proto";
 import "centraid/core/v1/docs_screens.proto";
 import "centraid/core/v1/health_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
@@ -249,6 +250,10 @@ message ScreenEvent {
     TrashEvent trash = 900;
     // ---- the shell (1000-1999): chat (1600-1699) ----
     ChatEvent chat = 1600;
+    // ---- the shell: phone imports (1700-1899) ----
+    ImportsCameraRollEvent imports_camera_roll = 1700;
+    ImportsFilesEvent imports_files = 1701;
+    ImportsMadeEvent imports_made = 1702;
   }
 }
 
@@ -332,6 +337,10 @@ message ViewState {
     TrashView trash = 900;
     // ---- the shell (1000-1999): chat (1600-1699) ----
     ChatState chat = 1600;
+    // ---- the shell: phone imports (1700-1899) ----
+    ImportsCameraRollState imports_camera_roll = 1700;
+    ImportsFilesState imports_files = 1701;
+    ImportsMadeState imports_made = 1702;
   }
 }
 
@@ -394,6 +403,15 @@ message Effect {
     // ---- the shell (1000-1999): chat (1600-1699) ----
     ModelDownload model_download = 1600;
     PickLibraryPhoto pick_library_photo = 1601;
+    // ---- the shell: phone imports (1700-1899) ----
+    LibraryPermission library_permission = 1700;
+    RollPage roll_page = 1701;
+    LinkRead link_read = 1702;
+    LibraryStage library_stage = 1703;
+    LibraryDerivatives library_derivatives = 1704;
+    FoldersRead folders_read = 1705;
+    StageFolderFile stage_folder_file = 1706;
+    RemindersRead reminders_read = 1707;
   }
 }
 
@@ -759,6 +777,14 @@ message EffectResult {
     FolderFollowed folder_followed = 202;
     // ---- the shell (1000-1999): chat (1600-1699) ----
     LibraryPhotoPicked library_photo_picked = 1600;
+    // ---- the shell: phone imports (1700-1899) ----
+    LibraryPermissionRead library_permission_read = 1700;
+    RollPaged roll_paged = 1701;
+    LinkReading link_reading = 1702;
+    LibraryStaged library_staged = 1703;
+    FoldersListing folders_listing = 1705;
+    FolderFileStaged folder_file_staged = 1706;
+    RemindersSnapshot reminders_snapshot = 1707;
   }
 }
 

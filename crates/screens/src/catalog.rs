@@ -4382,6 +4382,73 @@ pub mod act {
                 value.request()
             }
         }
+
+        /// (imports, lane I) Follow a folder of the phone's files through follow.files, one folder at a time: a file the vault lacks becomes a document in the folder's own Docs folder, a changed file a new revision, one gone from a complete read goes to the trash if the member never touched it.
+        #[derive(Clone, Debug, Default)]
+        pub struct FollowFiles {
+            pub origin: String,
+            pub records: String,
+            pub complete: Option<bool>,
+        }
+        impl FollowFiles {
+            pub const NAME: &str = "follow-files";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("origin".to_owned(), text(self.origin));
+                map.insert("records".to_owned(), text(self.records));
+                if let Some(it) = self.complete { map.insert("complete".to_owned(), flag(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<FollowFiles> for wire::ActRequest {
+            fn from(value: FollowFiles) -> Self {
+                value.request()
+            }
+        }
+
+        /// (imports, lane I) Name bytes the stage door stored through blob.stage, at the size the core counted, so no stored bytes sit in the vault that nothing names.
+        #[derive(Clone, Debug, Default)]
+        pub struct ClaimBytes {
+            pub hash: String,
+            pub size: i64,
+        }
+        impl ClaimBytes {
+            pub const NAME: &str = "claim-bytes";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("hash".to_owned(), text(self.hash));
+                map.insert("size".to_owned(), whole(self.size));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ClaimBytes> for wire::ActRequest {
+            fn from(value: ClaimBytes) -> Self {
+                value.request()
+            }
+        }
+
+        /// (imports, lane I) Stop following a folder through follow.stop: its sources are forgotten and the origin retired; every document stays.
+        #[derive(Clone, Debug, Default)]
+        pub struct StopFollowingFiles {
+            pub r#ref: String,
+        }
+        impl StopFollowingFiles {
+            pub const NAME: &str = "stop-following-files";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("ref".to_owned(), text(self.r#ref));
+                map.insert("system".to_owned(), text("files"));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<StopFollowingFiles> for wire::ActRequest {
+            fn from(value: StopFollowingFiles) -> Self {
+                value.request()
+            }
+        }
     }
 }
 
@@ -5849,6 +5916,24 @@ pub mod load {
         }
         impl From<ChatCard> for wire::LoadRequest {
             fn from(value: ChatCard) -> Self {
+                value.request()
+            }
+        }
+
+        /// (imports, lane I) The folders the vault follows, with the documents each still holds and each file's last stated stat, so a rescan of an unchanged folder reads no bytes.
+        #[derive(Clone, Debug, Default)]
+        pub struct FilesFollowed {
+        }
+        impl FilesFollowed {
+            pub const NAME: &str = "files-followed";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<FilesFollowed> for wire::LoadRequest {
+            fn from(value: FilesFollowed) -> Self {
                 value.request()
             }
         }

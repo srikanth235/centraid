@@ -48,6 +48,17 @@
         "required": ["app", "entity", "id"],
         "additionalProperties": false
       }
+    },
+    {
+      "name": "files-followed",
+      "kind": "followed_folder",
+      "figures": ["folders"],
+      "description": "(imports, lane I) The folders the vault follows, with the documents each still holds and each file's last stated stat, so a rescan of an unchanged folder reads no bytes.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
     }
   ],
   "actions": [
@@ -116,6 +127,90 @@
       "input": {
         "type": "object",
         "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "follow-files",
+      "verb": "import",
+      "kind": "followed_folder",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "follow.files",
+      "phrasings": [
+        "follow this folder",
+        "keep a folder of files in step",
+        "import the files of a folder"
+      ],
+      "description": "(imports, lane I) Follow a folder of the phone's files through follow.files, one folder at a time: a file the vault lacks becomes a document in the folder's own Docs folder, a changed file a new revision, one gone from a complete read goes to the trash if the member never touched it.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "origin": {
+            "type": "object",
+            "properties": {
+              "ref": { "type": "string" },
+              "label": { "type": "string" },
+              "device_id": { "type": ["string", "null"] },
+              "fills": { "type": ["string", "null"] }
+            },
+            "required": ["ref", "label"],
+            "additionalProperties": false
+          },
+          "records": { "type": "array" },
+          "complete": { "type": "boolean" }
+        },
+        "required": ["origin", "records"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "claim-bytes",
+      "verb": "attach",
+      "kind": "followed_folder",
+      "inverse": null,
+      "sealed": [],
+      "command": "blob.stage",
+      "phrasings": [
+        "claim the bytes I just staged",
+        "name the staged file",
+        "count the staged bytes"
+      ],
+      "description": "(imports, lane I) Name bytes the stage door stored through blob.stage, at the size the core counted, so no stored bytes sit in the vault that nothing names.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "hash": { "type": "string", "minLength": 64, "maxLength": 64 },
+          "size": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["hash", "size"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "stop-following-files",
+      "verb": "detach",
+      "kind": "followed_folder",
+      "inverse": null,
+      "sealed": [],
+      "command": "follow.stop",
+      "phrasings": [
+        "stop following this folder",
+        "unfollow a folder",
+        "forget this folder's link"
+      ],
+      "description": "(imports, lane I) Stop following a folder through follow.stop: its sources are forgotten and the origin retired; every document stays.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "system": { "type": "string", "enum": ["files"] },
+          "ref": { "type": "string", "minLength": 1 }
+        },
+        "required": ["system", "ref"],
         "additionalProperties": false
       }
     }
