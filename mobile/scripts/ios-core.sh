@@ -5,9 +5,9 @@
 #   mobile/scripts/ios-core.sh aarch64-apple-ios-sim   # one triple
 #
 # The same cargo command `.github/workflows/lane-prebuilt-core.yml` runs for
-# the XCFramework (`--features llama`, the engine a phone's library carries),
-# in the dev profile, writing where `mobile/shared/build.gradle.kts` and the
-# Xcode project read: `target/<triple>/debug/libcentraid_core_ffi.a`. The header
+# the release slices (`--features llama`, the engine a phone's library carries),
+# in the dev profile, writing where the Xcode project (`iosApp/project.yml`)
+# reads: `target/<triple>/debug/libcentraid_core_ffi.a`. The header
 # is the committed `crates/core-ffi/include/centraid.h`; `iosApp/CoreBridge` maps
 # it to the Swift module `CentraidCoreC`.
 #
