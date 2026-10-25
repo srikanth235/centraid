@@ -226,7 +226,7 @@
     "class": "contract",
     "rung": 1,
     "door": "hook",
-    "why": "The Copy rulebook from DESIGN.md: banned words, the vocabulary table, the ' · ' rule and the per-key word caps are a ratcheted finding in every copy/*.json string."
+    "why": "The Copy rulebook from DESIGN.md: banned words, the vocabulary table, the ' · ' rule and the per-key word caps are a ratcheted finding in every Rust catalogue string and `copy/chat.json`."
   },
   "lint:motion-rule": {
     "class": "contract",
