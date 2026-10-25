@@ -34,6 +34,9 @@ use serde_json::Value;
 /// Where the generated file lives, relative to the repository root.
 pub const OUTPUT: &str = "crates/screens/src/catalog.rs";
 
+/// The shell's own manifest, beside the core that answers it.
+const SHELL_MANIFEST: &str = "crates/core/src/shell/manifest.json";
+
 /// Write the file, or with `check` compare it to the committed one.
 ///
 /// # Errors
@@ -73,6 +76,14 @@ pub fn generate(root: &Path) -> Result<String> {
             apps.push(json);
         }
     }
+    // THE SHELL'S OWN CATALOGUE is read like an app's: its reads are named
+    // queries too (`load::shell::*`). It has no actions, so it adds nothing to
+    // `act`.
+    let shell = root.join(SHELL_MANIFEST);
+    let body = std::fs::read_to_string(&shell)?;
+    apps.push(
+        serde_json::from_str(&body).with_context(|| format!("parsing {}", shell.display()))?,
+    );
     apps.sort_by(|a, b| text(a, "id").cmp(text(b, "id")));
 
     let mut out = String::from(HEADER);

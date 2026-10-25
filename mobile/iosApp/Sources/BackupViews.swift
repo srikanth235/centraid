@@ -2,204 +2,96 @@ import SwiftUI
 
 import CentraidShared
 
-// THE BACKUP SCREEN (#1080, the shells; seam contract A11). Home's half of the
-// backup is the vault lockup's status line (`VaultHeader`, R-ONBOARD-11).
+// THE BACKUP SCREEN (`backup.home`; #1080, #1135). Home's half of the backup is
+// the vault lockup's status line (`VaultHeader`, R-ONBOARD-11).
 //
-// **THESE VIEWS DECIDE NOTHING** (R-1047-K1). Every sentence — the line and
-// its detail, each reason something waits, each gateway's last word, every
-// control's label, what the last act did, why the phone will not wake
-// Centraid — arrives in the state, and so do the line's tone and whether
-// "Back up now" may be pressed. A view that needs one the state does not
-// carry has a gap in the machine, never a computation here. What is the
-// view's is what only a platform can do: hand pairing a new gateway to
-// `pair.laptop`'s scanner. The screen stays awake for a run through the
-// core's own `backlog` hook (`IosBackgroundTasks`), so leaving this screen
-// mid-run does not let the phone lock on it.
-//
-// **EVERY PROTO NAME THIS FILE READS IS IN [BackupScreenModel.init] AND
-// [BackupEvents]** — and `VaultHeader` reads `BackupLine.status` and `tone`
-// from Home's `backup_line` — so a change to `screen.proto`'s
-// `// --- Backup ---` block is an edit to those places. The Android twin is
+// **THESE VIEWS DECIDE NOTHING** (R-1047-K1). Every sentence — the line and its
+// detail, each reason something waits, each gateway's last word, every control's
+// label, the rule's three choices and which is picked, what the last act did, why
+// the phone will not wake Centraid — arrives in `BackupHomeState`, and so does
+// the page's one Ink button, whether "Back up now" may be pressed and whether
+// the vault moved. A view that needs one the state does not carry has a gap in
+// the screen (`crates/screens/src/backup`), never a computation here. What is the
+// view's is what only a platform can do: hand pairing a new gateway to the
+// pairing page, and the recovery key to `words.show`. The Android twin is
 // `BackupScreens.kt`; the two read the same names.
-//
-// The rule control is the member's existing transfer rule, read and written
-// through `HomeBridge`'s doors (`ShellModel.transferRule`), so the Home
-// header's sheet and this screen are one setting with one store.
 
-/// What the Backup screen draws, copied out of `BackupScreenState`.
-struct BackupScreenModel: Equatable {
-    struct Destination: Equatable, Identifiable {
-        let id: String
-        let label: String
-        let detail: String
-        /// "Laptop. 192.168.1.20:7443 · Reached 2 minutes ago".
-        let accessibilityLabel: String
-    }
-
-    var title = ""
-    /// The line Home draws too, and its second clause.
-    var line = ""
-    var lineDetail = ""
-    /// One sentence per reason something waits (Wi-Fi, charger, gateway…).
-    var waiting: [String] = []
-    /// Why the phone will not wake Centraid in the background, or empty.
-    var backgroundNotice = ""
-    /// What the last act did, or why it could not: one clause, never a toast.
-    var notice = ""
-    var destinations: [Destination] = []
-    var addLabel = ""
-    var forgetLabel = ""
-    var ruleLabel = ""
-    var videosLabel = ""
-    var includeVideos = true
-    var backUpNowLabel = ""
-    /// The machine's verdict: a gateway to back up to, a vault that has not
-    /// moved, and no run already going.
-    var backUpNowEnabled = false
-    /// Non-empty only while a run is in progress.
-    var progress = ""
-    /// THE RECOVERY KEY (R-ONBOARD-10): empty heading draws no section.
-    var keyHeading = ""
-    var keyLine = ""
-    /// The key is on this phone alone and no copy was saved: drawn as a warning.
-    var keyWarning = false
-    var keyShowLabel = ""
-    var keySyncLabel = ""
-    var keySynced = false
-    /// The page's one Ink button, named by the machine (DESIGN.md: at most one
-    /// per view); every other button these labels draw is the Outline button.
-    var ink = Centraid_Screen_V1_BackupScreenState.InkAction.none
-
-    init() {}
-
-    init(decoding data: Data) {
-        let state = (try? Centraid_Screen_V1_BackupScreenState(serializedBytes: data)) ?? .init()
-        title = state.title
-        line = state.line.sentence
-        lineDetail = state.line.detail
-        waiting = state.line.waiting.map(\.sentence).filter { !$0.isEmpty }
-        backgroundNotice = state.backgroundNotice
-        notice = state.notice
-        destinations = state.destinations.map {
-            Destination(
-                id: $0.gatewayID,
-                label: $0.label,
-                detail: $0.detail,
-                accessibilityLabel: $0.accessibilityLabel
-            )
-        }
-        addLabel = state.addDestinationLabel
-        forgetLabel = state.forgetLabel
-        ruleLabel = state.ruleLabel
-        videosLabel = state.includeVideosLabel
-        includeVideos = state.includeVideos
-        backUpNowLabel = state.backUpNowLabel
-        backUpNowEnabled = state.backUpNowEnabled
-        progress = state.progress
-        keyHeading = state.keyHeading
-        keyLine = state.keyLine
-        keyWarning = state.keyWarning
-        keyShowLabel = state.keyShowLabel
-        keySyncLabel = state.keySyncLabel
-        keySynced = state.keySynced
-        ink = state.inkAction
-    }
-}
-
-/// Encoded `BackupScreenEvent`s, so a view forwards bytes and never a decision.
-enum BackupEvents {
-    static func backUpNow() -> Data {
-        event { $0.backUpNow = .init() }
-    }
-
-    /// A3: the member's words are "include videos"; the core's wire field is
-    /// `exclude_videos`, and the negation is the machine's, not the view's.
-    static func setIncludeVideos(_ include: Bool) -> Data {
-        event { $0.setIncludeVideos = .with { $0.include = include } }
-    }
-
-    /// A5: forgetting a gateway drops its row and its confirmations on this
-    /// phone; what it already holds stays where it is.
-    static func forget(_ gateway: String) -> Data {
-        event { $0.forgetDestination = .with { $0.gatewayID = gateway } }
-    }
-
-    static func dismissed() -> Data {
-        event { $0.dismissed = .init() }
-    }
-
-    /// Move the recovery key into the keychain, or out of it.
-    static func setKeySync(_ on: Bool) -> Data {
-        event { $0.setKeySync = .with { $0.on = on } }
-    }
-
-    private static func event(_ build: (inout Centraid_Screen_V1_BackupScreenEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_BackupScreenEvent()
-        build(&event)
-        return (try? event.serializedBytes()) ?? Data()
-    }
-}
-
-/// THE BACKUP SCREEN: where the backup stands, the three controls, and the
-/// gateways this phone backs up to.
-struct BackupView: View {
-    let data: Data
+/// THE BACKUP SCREEN: where the backup stands, the three controls, the gateways
+/// this phone backs up to and where the recovery key is.
+struct BackupHomeView: View {
+    let state: Centraid_Core_V1_BackupHomeState
     @ObservedObject var shell: ShellModel
-    let send: (Data) -> Void
-    /// Pairing another gateway is `pair.laptop`'s scan or paste.
+    let send: (Centraid_Core_V1_BackupHomeEvent) -> Void
+    /// Pairing another gateway is the pairing page's scan or paste.
     let onAddDestination: () -> Void
-    /// THE RECOVERY KEY, from the screen that is about getting the vault
-    /// back: `words.show`, over the passcode.
+    /// THE RECOVERY KEY, from the screen that is about getting the vault back:
+    /// `words.show`, over the passcode.
     let onShowWords: () -> Void
     @Environment(\.colorScheme) private var scheme
 
+    private func event(_ build: (inout Centraid_Core_V1_BackupHomeEvent) -> Void) -> Centraid_Core_V1_BackupHomeEvent {
+        var event = Centraid_Core_V1_BackupHomeEvent()
+        build(&event)
+        return event
+    }
+
     var body: some View {
-        let model = BackupScreenModel(decoding: data)
+        switch state.body {
+        case .data(let data)?:
+            page(data)
+        case .failure(let failure)?:
+            FailureView(sentence: failure.sentence, remedy: failure.remedy) {
+                send(event { $0.retry = .init() })
+            }
+        default:
+            RowSkeleton()
+        }
+    }
+
+    private func page(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
         let paired = !model.destinations.isEmpty
-        ScrollViewReader { proxy in
+        return ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 // WHERE THE BACKUP STANDS, and the one act that moves it: with
                 // nothing paired that act is adding a backup device, drawn as
                 // the page's primary; once one is paired it is "Back up now".
                 VStack(alignment: .leading, spacing: 12) {
-                    WordsHead(title: model.title, lead: model.line)
-                    if !model.lineDetail.isEmpty {
-                        sentence(model.lineDetail)
+                    WordsHead(title: model.title, lead: model.line.sentence)
+                    if !model.line.detail.isEmpty {
+                        sentence(model.line.detail)
                     }
-                    ForEach(model.waiting, id: \.self) { reason in
+                    ForEach(model.line.waiting.map(\.sentence).filter { !$0.isEmpty }, id: \.self) { reason in
                         sentence(reason)
                     }
                     // WHY THE PHONE WILL NOT WAKE CENTRAID, when it will not.
                     if !model.backgroundNotice.isEmpty {
                         sentence(model.backgroundNotice, id: "backup-background-notice")
                     }
-                    // ONE INK BUTTON AT A TIME, and the machine names it
-                    // (`ink_action`); a verb that is not the page's one thing
-                    // to do is the outline.
-                    if !paired && !model.addLabel.isEmpty {
+                    // ONE INK BUTTON AT A TIME, and the screen names it (`ink`);
+                    // a verb that is not the page's one thing to do is the outline.
+                    if !paired && !model.addDestinationLabel.isEmpty {
                         if model.ink == .addDestination {
-                            KitInkButton(label: model.addLabel, action: onAddDestination)
+                            KitInkButton(label: model.addDestinationLabel, action: onAddDestination)
                                 .padding(.top, 8)
                                 .accessibilityIdentifier("backup-add-destination")
                         } else {
-                            KitOutlineButton(label: model.addLabel, action: onAddDestination)
+                            KitOutlineButton(label: model.addDestinationLabel, action: onAddDestination)
                                 .padding(.top, 8)
                                 .accessibilityIdentifier("backup-add-destination")
                         }
                     }
                     // BACK UP NOW, only once there is somewhere to back up to
-                    // (the machine draws no label before). Pressable when the
-                    // machine says so; while a run goes, its progress stands
-                    // beside it.
+                    // (the screen draws no label before). Pressable when it
+                    // says so; while a run goes, its progress stands beside it.
                     if !model.backUpNowLabel.isEmpty {
                         if model.ink == .backUpNow {
-                            KitInkButton(label: model.backUpNowLabel) { send(BackupEvents.backUpNow()) }
+                            KitInkButton(label: model.backUpNowLabel) { send(event { $0.backUpNow = .init() }) }
                                 .disabled(!model.backUpNowEnabled)
                                 .padding(.top, 8)
                                 .accessibilityIdentifier("backup-now")
                         } else {
-                            KitOutlineButton(label: model.backUpNowLabel) { send(BackupEvents.backUpNow()) }
+                            KitOutlineButton(label: model.backUpNowLabel) { send(event { $0.backUpNow = .init() }) }
                                 .disabled(!model.backUpNowEnabled)
                                 .padding(.top, 8)
                                 .accessibilityIdentifier("backup-now")
@@ -223,20 +115,20 @@ struct BackupView: View {
                 }
 
                 if paired {
-                    section(SharedCopy.shared.BACKUP_DEVICES_HEADING) { destinations(model) }
+                    section(model.devicesHeading) { destinations(model) }
                 }
 
-                if !shell.transferRuleChoices.isEmpty {
+                if !model.ruleChoices.isEmpty {
                     section(model.ruleLabel) { rule(model) }
                 }
 
-                if !model.videosLabel.isEmpty {
+                if !model.includeVideosLabel.isEmpty {
                     divider
                     Toggle(isOn: Binding(
                         get: { model.includeVideos },
-                        set: { send(BackupEvents.setIncludeVideos($0)) }
+                        set: { value in send(event { $0.setIncludeVideos = .with { $0.include = value } }) }
                     )) {
-                        Text(model.videosLabel)
+                        Text(model.includeVideosLabel)
                             .centraidType("body")
                             .foregroundStyle(Theme.color("text", scheme))
                     }
@@ -276,13 +168,12 @@ struct BackupView: View {
     private static let top = "backup-top"
 
     /// WHERE THE RECOVERY KEY IS, and what can be done about it. A warning
-    /// carries the attention mark Home's line uses, and the machine makes
-    /// "Show recovery key" the page's Ink button (`ink_action`); otherwise it
-    /// is one quiet sentence and an outline button. Moving the key into or out
-    /// of the keychain is a plain link: it is a choice made once, not a thing
-    /// to do.
+    /// carries the attention mark Home's line uses, and the screen makes "Show
+    /// recovery key" the page's Ink button (`ink`); otherwise it is one quiet
+    /// sentence and an outline button. Moving the key into or out of the
+    /// keychain is a plain link: it is a choice made once, not a thing to do.
     @ViewBuilder
-    private func recoveryKey(_ model: BackupScreenModel) -> some View {
+    private func recoveryKey(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
         if !model.keyHeading.isEmpty {
             section(model.keyHeading) {
                 VStack(alignment: .leading, spacing: 12) {
@@ -313,7 +204,7 @@ struct BackupView: View {
                     }
                     if !model.keySyncLabel.isEmpty {
                         KitLink(label: model.keySyncLabel, identifier: "backup-key-sync") {
-                            send(BackupEvents.setKeySync(!model.keySynced))
+                            send(event { $0.setKeySync = .with { $0.on = !model.keySynced } })
                         }
                     }
                 }
@@ -346,7 +237,7 @@ struct BackupView: View {
         .padding(.vertical, 20)
     }
 
-    /// One of the machine's sentences, drawn quietly.
+    /// One of the screen's sentences, drawn quietly.
     @ViewBuilder
     private func sentence(_ text: String, id: String? = nil) -> some View {
         let drawn = Text(text)
@@ -361,9 +252,9 @@ struct BackupView: View {
     }
 
     @ViewBuilder
-    private func destinations(_ model: BackupScreenModel) -> some View {
+    private func destinations(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(model.destinations) { row in
+            ForEach(model.destinations, id: \.gatewayID) { row in
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(row.label)
@@ -383,8 +274,8 @@ struct BackupView: View {
                     // it forgets this phone's pairing and nothing the gateway
                     // holds, and pairing again undoes it.
                     if !model.forgetLabel.isEmpty {
-                        KitLink(label: model.forgetLabel, dense: true, identifier: "backup-forget-\(row.id)") {
-                            send(BackupEvents.forget(row.id))
+                        KitLink(label: model.forgetLabel, dense: true, identifier: "backup-forget-\(row.gatewayID)") {
+                            send(event { $0.forgetDestination = .with { $0.gatewayID = row.gatewayID } })
                         }
                         .accessibilityLabel("\(model.forgetLabel) \(row.label)")
                     }
@@ -398,8 +289,8 @@ struct BackupView: View {
                     .frame(height: CentraidGeometry.hairline)
             }
             // ANOTHER BACKUP DEVICE, once one is paired: the secondary form.
-            if !model.addLabel.isEmpty {
-                KitOutlineButton(label: model.addLabel, action: onAddDestination)
+            if !model.addDestinationLabel.isEmpty {
+                KitOutlineButton(label: model.addDestinationLabel, action: onAddDestination)
                     .padding(.top, 12)
                     .accessibilityIdentifier("backup-add-destination")
             }
@@ -409,19 +300,21 @@ struct BackupView: View {
     /// THE MEMBER'S RULE, the same three sentences the Home header's sheet
     /// draws, from the same store. Its heading is the section's.
     @ViewBuilder
-    private func rule(_ model: BackupScreenModel) -> some View {
+    private func rule(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(shell.transferRuleChoices, id: \.stored) { choice in
-                let picked = shell.transferRule == choice.stored
+            ForEach(model.ruleChoices, id: \.stored) { choice in
                 Button {
+                    send(event { $0.ruleChosen = .with { $0.stored = choice.stored } })
+                    // THE BACKGROUND WINDOWS FOLLOW THE RULE: until the pass
+                    // service owns them, the session that does is told.
                     shell.setTransferRule(choice.stored)
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        RuleMark(picked: picked)
+                        RuleMark(picked: choice.picked)
                             .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }
                         Text(choice.sentence)
                             .centraidType("small")
-                            .foregroundStyle(Theme.color(picked ? "text" : "textSoft", scheme))
+                            .foregroundStyle(Theme.color(choice.picked ? "text" : "textSoft", scheme))
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 0)
@@ -431,7 +324,7 @@ struct BackupView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(KitRowPress())
-                .accessibilityAddTraits(picked ? [.isSelected] : [])
+                .accessibilityAddTraits(choice.picked ? [.isSelected] : [])
                 .accessibilityIdentifier("backup-rule-\(choice.stored)")
             }
         }

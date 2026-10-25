@@ -37,6 +37,7 @@ syntax = "proto3";
 package centraid.core.v1;
 
 import "centraid/core/v1/agenda.proto";
+import "centraid/core/v1/backup_screens.proto";
 import "centraid/core/v1/chat.proto";
 import "centraid/core/v1/docs.proto";
 import "centraid/core/v1/health.proto";
@@ -213,6 +214,9 @@ message AppQueryResponse {
     HealthWorkouts health_workouts = 123;
     HealthWorkout health_workout = 124;
     HealthFollowView health_follow_view = 125;
+    // ---- the shell's own queries (1300-1599, lane H2): `shell.manifest.json` ----
+    // `backup-status` (1450-1499 are the backup's).
+    ShellBackupStatus shell_backup_status = 1450;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }

@@ -21,6 +21,8 @@ use centraid_apps_kit::manifest::{Manifest, parse_manifest};
 use crate::error::{CoreError, Result};
 use crate::handle::Handle;
 
+pub mod backup;
+
 /// The app id the shell's queries are addressed under.
 pub const ID: &str = "shell";
 
@@ -49,13 +51,14 @@ pub fn load(handle: &Handle, request: &wire::LoadRequest) -> Result<wire::LoadRe
             detail: format!("the shell declares no query `{}`", request.query),
         });
     }
-    let _ = handle;
-    Err(CoreError::InvalidRequest {
-        detail: format!(
-            "the shell declares the query `{}` and this core has no reader for it yet",
-            request.query
-        ),
-    })
+    match request.query.as_str() {
+        backup::STATUS => backup::status(handle),
+        other => Err(CoreError::InvalidRequest {
+            detail: format!(
+                "the shell declares the query `{other}` and this core has no reader for it yet"
+            ),
+        }),
+    }
 }
 
 #[cfg(test)]

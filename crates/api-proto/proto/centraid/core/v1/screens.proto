@@ -246,6 +246,8 @@ message ScreenEvent {
     PeopleEditorEvent people_editor = 702;
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
+    // ---- backup (1450-1499, lane H2) ----
+    BackupHomeEvent backup_home = 1450;
   }
 }
 
@@ -327,6 +329,8 @@ message ViewState {
     PeopleEditorState people_editor = 702;
     // ---- the kit (900-999) ----
     TrashView trash = 900;
+    // ---- backup (1450-1499, lane H2) ----
+    BackupHomeState backup_home = 1450;
   }
 }
 
@@ -387,6 +391,8 @@ message Effect {
     SecretBatch secrets = 1300;
     CoreCall core_call = 1301;
     SyncedSecretsProbe synced_probe = 1302;
+    // ---- backup (1350-1369, lane H2): backup_screens.proto ----
+    BackgroundProbe background_probe = 1350;
   }
 }
 
@@ -753,6 +759,8 @@ message EffectResult {
     SecretBatched secrets = 1300;
     CoreCalled core_called = 1301;
     SyncedSecretsStatus synced_status = 1302;
+    // ---- backup (1350-1369, lane H2) ----
+    BackgroundStatus background_status = 1350;
   }
 }
 

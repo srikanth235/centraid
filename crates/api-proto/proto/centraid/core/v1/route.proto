@@ -77,6 +77,8 @@ message Route {
     PeopleEditorRoute people_editor = 702;
     // ---- the kit (900-999) ----
     TrashRoute trash = 900;
+    // ---- backup (1450-1499, lane H2) ----
+    BackupHomeRoute backup_home = 1450;
   }
 }
 
@@ -410,6 +412,9 @@ message PeopleEditorRoute {
 
 // `<app>.trash`: the kit's one trash screen; the screen name says which app.
 message TrashRoute {}
+
+// `backup.home`: the Backup screen. No arguments.
+message BackupHomeRoute {}
 
 // ---------------------------------------------------------------------------
 // Locker

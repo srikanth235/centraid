@@ -5718,4 +5718,27 @@ pub mod load {
             }
         }
     }
+
+    pub mod shell {
+        use super::*;
+        pub const APP: &str = "shell";
+
+        /// Where this vault's backup stands, read from the phone's own ledger without dialling anyone: the gateways it is paired with, when one last acknowledged the head (the gateway's clock), how many photos and files are confirmed of how many the vault knows, what waits and why, and this phone's clock for wording. Re-read whenever a pass, a pairing or a forget moves the ledger, or the vault's files change.
+        #[derive(Clone, Debug, Default)]
+        pub struct BackupStatus {
+        }
+        impl BackupStatus {
+            pub const NAME: &str = "backup-status";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<BackupStatus> for wire::LoadRequest {
+            fn from(value: BackupStatus) -> Self {
+                value.request()
+            }
+        }
+    }
 }
