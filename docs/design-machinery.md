@@ -10,8 +10,9 @@ Inventory and ownership map for the visual system across the native mobile shell
 | Typed registry | `packages/design/src` | Theme ramps, semantic roles, type, spacing, radii, density, motion, icons, app identity, and recipe inventory |
 | CSS lowering | `toCss()` | CSS custom properties. Its consumer today is the public-site emitter below |
 | Native lowering | `toNativeTheme(scheme)` | Concrete values with no CSS parsing or runtime override layer — every value ready to render, no `var()`, `calc()`, `color-mix()` or `oklch()` |
-| Native emission | [`contracts/tools/export-native-theme.ts`](../contracts/tools/export-native-theme.ts) | Writes the native lowering as data — `design/native-theme.json`, `mobile/shared/src/commonMain/kotlin/dev/centraid/design/Tokens.kt` and `mobile/iosApp/Design/Theme.swift` — plus the FACES: it copies `packages/design/fonts/InstrumentSans_470Book.ttf` and `InstrumentSans-SemiBold.ttf` into `mobile/iosApp/Resources/Fonts/` and `mobile/androidApp/src/main/res/font/`, and emits the PostScript names (Swift) and resource names (Kotlin) read from each TTF's own `name` table. The 400 register resolves to the 470 file HERE and only here — a per-surface lowering, not a third weight; the emitted `weight` stays `400` ([decisions.md](decisions.md), ruled 2026-08-19, restored 2026-09-22). Calls the two emitters below, so one command writes every native artifact |
-| Catalogue emission | [`contracts/tools/export-native-catalog.ts`](../contracts/tools/export-native-catalog.ts) | The app catalogue, identity hues, icon-chip colours and icon path data: `design/native-catalog.json`, `Catalog.kt`, `mobile/iosApp/Design/Catalog.swift` |
+| Native emission | [`contracts/tools/export-native-theme.ts`](../contracts/tools/export-native-theme.ts) | Writes the native lowering as data — `design/native-theme.json`, `mobile/androidApp/src/main/kotlin/dev/centraid/android/design/Tokens.kt` (package `dev.centraid.design`) and `mobile/iosApp/Design/Theme.swift` — plus the FACES: it copies `packages/design/fonts/InstrumentSans_470Book.ttf` and `InstrumentSans-SemiBold.ttf` into `mobile/iosApp/Resources/Fonts/` and `mobile/androidApp/src/main/res/font/`, and emits the PostScript names (Swift) and resource names (Kotlin) read from each TTF's own `name` table. The 400 register resolves to the 470 file HERE and only here — a per-surface lowering, not a third weight; the emitted `weight` stays `400` ([decisions.md](decisions.md), ruled 2026-08-19, restored 2026-09-22). Calls the three emitters below, so one command writes every native artifact |
+| Catalogue emission | [`contracts/tools/export-native-catalog.ts`](../contracts/tools/export-native-catalog.ts) | The app catalogue, identity hues, icon-chip colours and icon path data: `design/native-catalog.json`, `Catalog.kt` beside `Tokens.kt`, `mobile/iosApp/Design/Catalog.swift` |
+| Kit words emission | [`contracts/tools/export-native-words.ts`](../contracts/tools/export-native-words.ts) | The handful of words the native kit draws with no view to carry them (`KitWords`: retry, cancel, done, back, search …), read from the Rust catalogue `crates/screens/src/strings/shared.rs` into `Words.kt` beside `Tokens.kt` and `mobile/iosApp/Design/Words.swift` ([#1135](https://github.com/srikanth235/centraid/issues/1135)) |
 | Identity corpus | [`contracts/tools/export-design-corpus.ts`](../contracts/tools/export-design-corpus.ts) | Runs the real presentation functions (`partyHueKey`, `identityInitials`, `figureTone`) over a fixed hostile corpus into `design/identity-corpus.json` |
 | Rust lowering | [`crates/design`](../crates/design/README.md) | Reads `design/native-theme.json` and is asserted row by row against the identity corpus, so a parity fixture's presentation fields can be compared at all |
 | Public-site lowering | `scripts/site-tokens.mjs` | `toCss()` verbatim plus the bundled `@font-face` block, emitted into a committed `centraid-tokens.css` for `centraid.dev` and `centraid.dev/docs/`. Not a further lowering — it re-serves `toCss()` and adds only a page-scale layer (reading measure, section rhythm, the one sanctioned display step) that composes from tokens above it |
@@ -25,7 +26,7 @@ The direction is one-way:
 
 A screen must not generate a token, a component must not invent a scale, and a lowering must not keep a second editable registry.
 
-`copy/*.json` is a source, not an artifact: its upstream was the v0 app tree ([#1020](https://github.com/srikanth235/centraid/issues/1020)). The Kotlin tables both shells read, `dev.centraid.design.copy.<App>Copy`, are generated from it at build time by `:shared:generateCopy` and are not checked in.
+Copy is not a design artifact. Every sentence a screen shows is a finished string in its Rust `ViewState`, from the catalogue in [`crates/screens/src/strings`](../crates/screens/src/strings/mod.rs); native views write none, and the only copy a shell holds is the emitted `KitWords` above ([#1135](https://github.com/srikanth235/centraid/issues/1135)). `copy/chat.json` is the assistant's own turn sentences (`SAID_*`), compiled into `crates/assist`. `bun run lint:copy` holds both to DESIGN.md's Copy rules.
 
 The values under the 4px base are the registry's `subBase` seams — `hair` (1), `gutter` (2), `chip` (3). A shell holds no sub-4px constant of its own ([#1015](https://github.com/srikanth235/centraid/issues/1015), R-NY-15).
 
@@ -45,8 +46,8 @@ Two blocks read records, and the difference is the question being asked. **Doc t
 
 | Surface | Shared implementation | Local adapter | Design-lint coverage |
 | --- | --- | --- | --- |
-| Mobile (Compose, SwiftUI) | the emitted native table and catalogue | Compose and SwiftUI read the emitted tables; neither holds a literal | the drift gate below, `NativeThemeSpec` over the emitted table in both schemes, `CatalogSpec`, and `NativeAccessibilityLintSpec` over both view trees (`mobile/shared/src/jvmTest`) |
-| Rust | `crates/design` | none | `crates/design/tests/corpus.rs` asserts every corpus row; `copy::route_gaps` names a route id present on one side and not the other ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-T1) |
+| Mobile (Compose, SwiftUI) | the emitted native table and catalogue | Compose and SwiftUI read the emitted tables; neither holds a literal | the drift gate below; `packages/design/src/native-emission.test.ts` over the emitted token table in both schemes, the catalogue and the kit words; `crates/screens/tests/icon_keys.rs` over every icon key a screen names; and `cargo xtask rules`' `native-accessibility` over both view trees |
+| Rust | `crates/design` | none | `crates/design/tests/corpus.rs` asserts every corpus row ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-T1) |
 | Public site (`centraid.dev`, `/docs/`) | the generated `centraid-tokens.css` — `toCss()` verbatim, plus `toFontFaceCss()` | `scripts/home-site/public/index.html`'s inline sheet and `scripts/docs-site/public/assets/docs.css` | `lint:site-tokens` — emitter freshness by bytes, unresolvable `var()`s, literal font families, font-CDN references, retired theme names. **Not** `lint:design-tokens`: see [the public web surfaces](#the-public-web-surfaces) |
 
 The phone draws the touch values; the registry's pointer values are read only by the public site. Host names and viewport width do not create more design modes.
@@ -69,7 +70,7 @@ bun run --cwd packages/design test          # the registry and its lowerings
 bun run lint:design-md                      # DESIGN.md itself
 bun run lint:design-tokens                  # zero-debt CSS gate
 bun run lint:site-tokens                    # the public-site sheets
-bun contracts/tools/export-native-theme.ts && bun run format && git diff --exit-code design copy mobile
+bun contracts/tools/export-native-theme.ts && bun run format && git diff --exit-code design mobile
 cargo test -p centraid-design               # the Rust lowering against the corpus
 cargo xtask gate --profile pr               # runs the `emitters` drift step
 cargo xtask gate --profile mobile-jvm       # regenerates and diffs, then `./gradlew -p mobile mobileJvm`

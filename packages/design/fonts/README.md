@@ -17,7 +17,7 @@ The upstream commit is pinned by SHA and not by branch because `master` is a mov
 
 ## The 470, and why the 400 register is not drawn by a 400 face
 
-Ruled 2026-08-19 and restored for the KMP shells 2026-09-22 ([#1029](https://github.com/srikanth235/centraid/issues/1029)); the argument lives in `docs/decisions.md` and the mechanism in the emitter's own comment. The short version is that the native lowering already concedes the phone needs +2px size and +3px leading over a desktop pane at the same role, and that step scales the glyph without scaling the stroke's optical presence. iOS compounds it — CoreText draws with grayscale antialiasing where a desktop browser gets stem darkening. The 400 register therefore reads correct at a desk and thin on the device. 500 was measured and judged to overshoot.
+Ruled 2026-08-19 and restored for the native shells 2026-09-22 ([#1029](https://github.com/srikanth235/centraid/issues/1029)); the argument lives in `docs/decisions.md` and the mechanism in the emitter's own comment. The short version is that the native lowering already concedes the phone needs +2px size and +3px leading over a desktop pane at the same role, and that step scales the glyph without scaling the stroke's optical presence. iOS compounds it — CoreText draws with grayscale antialiasing where a desktop browser gets stem darkening. The 400 register therefore reads correct at a desk and thin on the device. 500 was measured and judged to overshoot.
 
 This is a **lowering, not a third weight**. DESIGN.md still specifies two weights and nothing in the ramp may name a 470; the emitted `NativeTypeStyle.weight` stays `400` and only the file behind it changes. Web and desktop are untouched.
 
