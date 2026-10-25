@@ -1,6 +1,5 @@
 package dev.centraid.android.kit
 
-import dev.centraid.shared.sync.phone.PhoneIds
 
 /**
  * THE IDS AND ORIGINS THE ANDROID READERS HAND THE PHONE SYNC (R-1127-10, #1127).
@@ -25,10 +24,10 @@ internal object PhoneOrigins {
     const val LOCAL_ACCOUNT: String = "local"
 
     fun contactId(lookupKey: String?, contactRowId: Long): String =
-        lookupKey?.trim()?.takeIf { it.isNotEmpty() }?.let(PhoneIds::lookup) ?: PhoneIds.local(contactRowId.toString())
+        lookupKey?.trim()?.takeIf { it.isNotEmpty() }?.let { "lookup:$it" } ?: "local:$contactRowId"
 
     fun eventId(uid: String?, eventRowId: Long): String =
-        uid?.trim()?.takeIf { it.isNotEmpty() }?.let(PhoneIds::uid) ?: PhoneIds.local(eventRowId.toString())
+        uid?.trim()?.takeIf { it.isNotEmpty() }?.let { "uid:$it" } ?: "local:$eventRowId"
 
     fun accountKey(type: String?, name: String?): String {
         val kind = type?.trim().orEmpty()

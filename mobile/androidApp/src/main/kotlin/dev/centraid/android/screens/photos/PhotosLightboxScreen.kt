@@ -59,7 +59,6 @@ import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StageKey
 import dev.centraid.android.kit.StageSpinner
 import dev.centraid.android.kit.StageVerb
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
@@ -380,12 +379,12 @@ private fun Sheets(
         }
     }
     val album = state.album_choice
-    if (album != null && album.open) {
+    if (album != null && album.open_) {
         PhotosAlbumChoiceSheet(album) { event -> onEvent(PhotosLightboxEvent(album_choice = event)) }
     }
     state.confirm?.let { confirm ->
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             onConfirm = { onEvent(PhotosLightboxEvent(confirmed = PhotosLightboxEvent.Confirmed())) },
             onDismiss = { onEvent(PhotosLightboxEvent(confirm_dismissed = PhotosLightboxEvent.ConfirmDismissed())) },
         )

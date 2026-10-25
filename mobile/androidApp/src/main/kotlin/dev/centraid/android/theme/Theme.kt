@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import centraid.screen.v1.Money
+import dev.centraid.android.kit.Money
 import dev.centraid.android.R
 import dev.centraid.design.CentraidTokens
 import dev.centraid.design.NATIVE_TYPE_FACES

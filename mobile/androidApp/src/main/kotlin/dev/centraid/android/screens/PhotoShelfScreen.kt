@@ -1,5 +1,6 @@
 package dev.centraid.android.screens
 
+import dev.centraid.android.kit.KitWords
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,7 +50,6 @@ import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.kitSwitchColors
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -209,7 +209,7 @@ public fun PhotoShelfScreen(
                             if (selecting) {
                                 select(PhotosSelectionEvent(toggled = PhotosSelectionEvent.Toggled(photo_id = photoId)))
                             } else {
-                                data.cells.firstOrNull { it.tile?.photo_id == photoId }?.open?.let(onOpen)
+                                data.cells.firstOrNull { it.tile?.photo_id == photoId }?.open_?.let(onOpen)
                             }
                         },
                     )
@@ -228,7 +228,7 @@ public fun PhotoShelfScreen(
         }
     }
 
-    state.album_choice?.takeIf { it.open }?.let { choice ->
+    state.album_choice?.takeIf { it.open_ }?.let { choice ->
         PhotosAlbumChoiceSheet(choice = choice) { onEvent(PhotosShelfEvent(album_choice = it)) }
     }
 
@@ -237,7 +237,7 @@ public fun PhotoShelfScreen(
     val batchConfirm = selection?.confirm
     if (batchConfirm != null) {
         ConfirmSheet(
-            confirm = batchConfirm.toKit(),
+            confirm = batchConfirm,
             onConfirm = { select(PhotosSelectionEvent(confirmed = PhotosSelectionEvent.Confirmed())) },
             onDismiss = { select(PhotosSelectionEvent(dismissed = PhotosSelectionEvent.ConfirmDismissed())) },
             cancelLabel = state.prompt_cancel_label,
@@ -246,7 +246,7 @@ public fun PhotoShelfScreen(
     val confirm = state.confirm
     if (confirm != null) {
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             onConfirm = { onEvent(PhotosShelfEvent(prompt_confirmed = PhotosShelfEvent.PromptConfirmed())) },
             onDismiss = { onEvent(PhotosShelfEvent(prompt_dismissed = PhotosShelfEvent.PromptDismissed())) },
             cancelLabel = state.prompt_cancel_label,
@@ -446,7 +446,7 @@ internal fun RenameSheet(
     fieldLabel: String,
     current: String,
     onDismiss: () -> Unit,
-    primaryLabel: String = PhotosCopy.PHOTOS_SAVE,
+    primaryLabel: String = KitWords.SAVE,
     onSave: (String) -> Unit,
 ) {
     var name by remember { mutableStateOf(current) }

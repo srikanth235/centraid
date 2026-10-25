@@ -28,7 +28,6 @@ import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.ShowMoreFooter
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
 
 // ---------------------------------------------------------------------------
 // health.home: Today · Trends · Workouts, More as a sheet (#1129, #1135)
@@ -77,7 +76,7 @@ internal fun HealthHomeScreen(
         ) { data ->
             val empty = data.empty
             if (empty != null) {
-                EmptyStateView(empty.toKit(), onAction = { data.connect?.let(onOpen) })
+                EmptyStateView(empty, onAction = { data.connect?.let(onOpen) })
             } else {
                 LazyColumn {
                     if (state.segments.isNotEmpty()) {
@@ -119,7 +118,7 @@ internal fun HealthHomeScreen(
         // THE STOP IS THE MORE ROW'S NET ACT, confirmed in Rust's own sentences.
         HealthHomeState.Sheet.SHEET_STOP -> state.stop?.let { stop ->
             ConfirmSheet(
-                confirm = stop.toKit(),
+                confirm = stop,
                 onConfirm = { onEvent(HealthHomeEvent(stop = HealthHomeEvent.StopConfirmed())) },
                 onDismiss = close,
                 cancelLabel = chrome?.stop_cancel.orEmpty().ifEmpty { KitWords.CANCEL },
@@ -146,7 +145,7 @@ private fun LazyListScope.trends(state: HealthHomeState, onOpen: (Route) -> Unit
     val trends = state.data_?.trends ?: return
     val empty = trends.empty
     if (empty != null) {
-        item(key = "empty") { EmptyStateView(empty.toKit(), onAction = null) }
+        item(key = "empty") { EmptyStateView(empty, onAction = null) }
         return
     }
     item(key = "compare") { HealthNote(trends.compare_line) }
@@ -157,7 +156,7 @@ private fun LazyListScope.workouts(state: HealthHomeState, onOpen: (Route) -> Un
     val workouts = state.data_?.workouts ?: return
     val empty = workouts.empty
     if (empty != null) {
-        item(key = "empty") { EmptyStateView(empty.toKit(), onAction = null) }
+        item(key = "empty") { EmptyStateView(empty, onAction = null) }
         return
     }
     workouts.sections.forEachIndexed { index, section ->

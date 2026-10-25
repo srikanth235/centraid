@@ -75,7 +75,6 @@ import centraid.core.v1.PhotosEditorEvent
 import centraid.core.v1.PhotosEditorState
 import centraid.core.v1.PhotosEditorWords
 import centraid.core.v1.Route
-import dev.centraid.android.kit.toKit
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -144,7 +143,7 @@ public fun PhotosEditorScreen(
     }
     state.discard?.let { discard ->
         ConfirmSheet(
-            confirm = discard.toKit(),
+            confirm = discard,
             cancelLabel = words.cancel,
             onConfirm = { onEvent(PhotosEditorEvent(discard = PhotosEditorEvent.DiscardAnswered(discard = true))) },
             onDismiss = { onEvent(PhotosEditorEvent(discard = PhotosEditorEvent.DiscardAnswered(discard = false))) },

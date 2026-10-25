@@ -1,5 +1,6 @@
 package dev.centraid.android.screens.words
 
+import dev.centraid.android.kit.SecureWindow
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -7,7 +8,9 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
@@ -28,25 +31,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * The routes of the 24 words' screens, for the shell's own doors (the vault
- * switcher, the empty shelf, Locker's wall, the Backup tab). Rust's screens carry
- * `Route`s in their views; Home is not Rust's yet, so these spell the same three
- * values until it is.
- */
-internal object CustodyRoutes {
-    fun make(): Route = Route(screen = "words.make", words_make = WordsMakeRoute())
-
-    /** Restore onto this phone; a phone already holding a seed restores from it. */
-    fun restore(): Route = enter(WordsEnterPurpose.WORDS_ENTER_PURPOSE_RESTORE, WordsEnterOrigin.WORDS_ENTER_ORIGIN_UNSPECIFIED)
-
-    fun rekey(origin: WordsEnterOrigin): Route = enter(WordsEnterPurpose.WORDS_ENTER_PURPOSE_REKEY, origin)
-
-    fun show(): Route = Route(screen = "words.show", words_show = WordsShowRoute())
-
-    private fun enter(purpose: WordsEnterPurpose, origin: WordsEnterOrigin): Route =
-        Route(screen = "words.enter", words_enter = WordsEnterRoute(purpose = purpose, origin = origin))
-}
 
 /**
  * `words.enter` AS A PAGE: the grid, and the platform halves of scanning the

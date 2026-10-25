@@ -174,7 +174,7 @@ private fun PlaceCard(
 ) {
     Column(
         modifier = Modifier
-            .clickable { row.open?.let(onOpen) }
+            .clickable { row.open_?.let(onOpen) }
             .semantics { contentDescription = row.spoken },
     ) {
         Box(
@@ -260,7 +260,7 @@ private fun PlacesPlot(data: PhotosPlacesData, onOpen: (Route) -> Unit) {
                     .clip(shape)
                     .background(centraidColor(if (cover != null) "bgElev" else "stage"))
                     .border(CentraidGeometry.HAIRLINE.dp, centraidColor("line"), shape)
-                    .clickable { row.open?.let(onOpen) }
+                    .clickable { row.open_?.let(onOpen) }
                     .semantics { contentDescription = row.spoken },
                 contentAlignment = Alignment.Center,
             ) {

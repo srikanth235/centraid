@@ -24,14 +24,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import centraid.core.v1.ChatEvent
 import centraid.core.v1.DocsDriveEvent
-import centraid.core.v1.DocsFollowed
 import centraid.core.v1.DocsPermission
-import centraid.core.v1.HomeBackupLine
 import centraid.core.v1.HomeEvent
 import centraid.core.v1.HomeScheme
-import centraid.core.v1.HomeStatus
-import centraid.core.v1.HomeTone
-import centraid.core.v1.HomeVaultState
 import centraid.core.v1.LockerWallEvent
 import centraid.core.v1.NavEvent
 import centraid.core.v1.NavPopToRoot
@@ -42,13 +37,7 @@ import centraid.core.v1.PhotosDestination
 import centraid.core.v1.PhotosHomeEvent
 import centraid.core.v1.Route
 import centraid.core.v1.ScreenEvent
-import centraid.core.v1.ShellVault
-import centraid.core.v1.VaultCommand
-import centraid.screen.v1.BackupLine
-import centraid.screen.v1.VaultLockup
 import dev.centraid.android.kit.AndroidHealth
-import dev.centraid.android.kit.AndroidPhoneFollow
-import dev.centraid.android.kit.PerformScreenEffects
 import dev.centraid.android.kit.TrashScreen
 import dev.centraid.android.screens.agenda.AgendaEditorScreen
 import dev.centraid.android.screens.agenda.AgendaEventScreen
@@ -59,7 +48,6 @@ import dev.centraid.android.screens.agenda.TodoProjectScreen
 import dev.centraid.android.screens.backup.BackupHomeScreen
 import dev.centraid.android.screens.chat.ChatScreen
 import dev.centraid.android.screens.pairing.PairLaptopPage
-import dev.centraid.android.screens.words.CustodyRoutes
 import dev.centraid.android.screens.words.VaultWordsScreen
 import dev.centraid.android.screens.words.WordsEnterPage
 import dev.centraid.android.screens.words.WordsShowScreen
@@ -103,127 +91,66 @@ import dev.centraid.android.screens.photos.PhotosHomeScreen
 import dev.centraid.android.screens.photos.PhotosLightboxScreen
 import dev.centraid.android.screens.photos.PhotosShelfFamilyScreen
 import dev.centraid.android.theme.centraidColor
-import dev.centraid.core.CentraidCore
 import dev.centraid.core.Screens
-import dev.centraid.shared.nav.LockerEntry
-import dev.centraid.shared.shell.HomeSession
-import dev.centraid.shared.shell.PhotosDevice
-import dev.centraid.shared.sync.phone.PhoneSource
+import centraid.core.v1.ImportsCameraRollEvent
+import dev.centraid.android.backup.MediaStoreDeleter
+import dev.centraid.android.kit.HostScreenEffects
+import dev.centraid.android.session.AppSession
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.util.Locale
-import java.util.TimeZone
-import centraid.screen.v1.HomeStatus as ShelfStatus
 
 /**
- * THE ONE NAVIGATION ROOT, OVER THE SCREEN RUNTIME (#1135, lane H1). Every
- * screen on this phone that Rust owns — Home, its search, and every app's pages —
- * is a `ViewState` this file draws and a `ScreenEvent` it sends. Rust holds the
- * route stack of the one `home` tab: its root is Home, an app opens as a page
- * pushed on it, and back pops it. This file keeps no stack of its own: it draws
- * `Screens.navigation`, reports a pop (`NavPopped`) and pushes the route a row
- * carried (`NavPush`). It names no destination beyond mapping which `ViewState`
- * arm Rust sent to the composable that draws it.
+ * THE ONE NAVIGATION ROOT, OVER THE SCREEN RUNTIME (#1135). Every screen on this phone — Home, its
+ * search, every app's pages, the chat, the backup and the 24 words — is a `ViewState` this file
+ * draws and a `ScreenEvent` it sends. Rust holds the route stack of every tab: Home is the `home`
+ * tab's root and an app opens as a page pushed on it, the chat and the backup are tabs of their
+ * own, and the band selects among them. This file keeps no stack: it draws `Screens.navigation`,
+ * reports a pop (`NavPopped`) and pushes the route a row carried (`NavPush`). It names no
+ * destination beyond mapping which `ViewState` arm Rust sent to the composable that draws it.
  *
- * ONE [Screens] PER VAULT CORE, built when the session's core is first seen and
- * again if the foreground vault changes, and ONE performer for every effect
- * ([PerformScreenEffects]) — composed here so a late answer (a calendar read that
- * outlives its page) is still performed, and so no effect is performed twice.
+ * ONE [Screens] FOR THE PROCESS ([AppSession]): the shelf in Rust switches the vault in front by
+ * closing and reopening the tabs' roots, so the runtime never changes under this root. The
+ * effects are performed by the session ([dev.centraid.android.session.ShellEffects]); this root
+ * hands it the activity's half ([HostScreenEffects]) while it is composed.
  *
- * WHAT THE SHELF TELLS HOME. The vault files, the roster and the backup line are
- * still the KMP shelf's ([HomeSession.state]); [feedHome] forwards them to Home
- * as facts (`VaultsTold`, `BackupLineTold`, `StatusTold`) and Rust words them.
- * What Home asks of the shelf comes back as one `VaultCommand` effect, performed
- * by [vaultCommand].
- *
- * THE CAMERA ROLL IS THE SHELL'S ([PhotosDevice]): the OS grant and each pass's
- * progress reach Photos' home as events, and what the screen asks of the roll
- * comes back as effects.
- *
- * THE CHAT IS A RUST TAB (#1135, lane I): `chat.home` is the root of the `chat` tab, which the
- * band selects like any place Rust owns. While it is the selected tab this root draws ITS stack
- * (the chat, over the band; a page a card opens is pushed on the chat's own stack, so back lands
- * in the chat), and a search's Ask or a found conversation is a `chat.ask` / `chat.thread` page
- * drawn by the same [ChatScreen].
- *
- * TRANSITIONAL (lane H2): the Backup tab is still hosted natively beside this root by
- * `MainActivity`; it joins it as a Rust tab and that hosting is deleted.
+ * The phone imports' services are the roots of hidden tabs (`imports-*`): never drawn, never in
+ * the band, and never "the tab the member is in".
  */
 internal class RustRoot(
-    private val phone: AndroidPhoneFollow,
     private val health: AndroidHealth,
-    private val openWords: () -> Unit,
-    /** What Home asks of the shelf: switch, make, restore, forget, rename, open a settings door. */
-    private val vaultCommand: (VaultCommand) -> Unit,
+    private val deleter: MediaStoreDeleter,
 ) {
-    private var session: HomeSession? = null
+    private var session: AppSession.Open? = null
     private var scope: CoroutineScope? = null
 
-    /** The runtime for the core it was built on, or null before there is one. Read by composition. */
+    /** The runtime, or null before the session opened. Read by composition. */
     private var screens: Screens? by mutableStateOf(null)
-    private var core: CentraidCore? = null
-    private var attached: Job? = null
-    private var facts: Job? = null
 
-    private val docsFiles = DocsFiles()
-
-    /** THE DEVICE'S HALF OF PHOTOS: the camera roll (walked once PER VAULT), free up space and an original from the gateway. */
-    private val device = PhotosDevice()
-
-    /** What the camera roll last said, replayed to a Photos home that opens after it. */
-    private var grant: PhotosHomeEvent? = null
-    private var progress: PhotosHomeEvent? = null
-    private val told = mutableSetOf<Long>()
+    private val docsFiles = DocsFiles(
+        core = { session?.core },
+        relay = { event -> session?.imports?.files(event) },
+    )
 
     /** The app whose page the member last had open: the chat's scope while it has nothing to lose. */
     private var lastApp: String = ""
 
-    fun attach(session: HomeSession, scope: CoroutineScope) {
-        this.session = session
+    fun attach(open: AppSession.Open, scope: CoroutineScope) {
+        this.session = open
         this.scope = scope
-        docsFiles.attach(session)
-        // THE CAMERA ROLL FIRST: the screen is told its grant as it opens. **Called
-        // exactly once**, because attaching routes a host onto the change stream.
-        device.attach(session)
-        // THE ROLL'S GRANT AND PROGRESS go to every Photos home that is open.
-        device.observe { bytes ->
-            val event = PhotosHomeEvent.ADAPTER.decode(bytes)
-            if (event.permission != null) grant = event else progress = event
-            scope.launch {
-                val runtime = screens ?: return@launch
-                runtime.views.value.filterValues { it.photos_home != null }.keys
-                    .forEach { runtime.send(it, ScreenEvent(photos_home = event)) }
-            }
-        }
-        ensureScreens()
-        // A VAULT MADE OR SWITCHED LATER gets a runtime on its own core.
-        scope.launch { session.state.collect { ensureScreens() } }
+        screens = open.screens
     }
 
-    /**
-     * A VAULT WAS JUST MADE and the system's photo prompt was answered
-     * (R-ONBOARD-8): read the grant and, when it allows, bring the camera roll
-     * in. The prompt itself is the activity's launcher.
-     */
-    fun photosAnswered() {
-        device.perform(PhotosDevice.ACTION_ASK_PERMISSION)
-    }
-
-    /** The 24 words' sheet closed: every Locker wall re-reads whether this core holds keys (a re-key just landed). */
-    fun foregrounded() {
-        val runtime = screens ?: return
-        scope?.launch { runtime.lifecycle(foreground = true) }
+    fun detach() {
+        session = null
+        screens = null
     }
 
     // -- navigation: Rust's, reported ------------------------------------------
 
-    /** The tab the member is in: the one Rust has selected, else Home's. */
+    /** The tab the member is in: the one Rust has selected (never a hidden service's), else Home's. */
     private fun activeTab(): String {
         val nav = screens?.navigation?.value ?: return TAB
-        return nav.selected_tab.takeIf { selected -> nav.tabs.any { it.tab == selected } } ?: TAB
+        return nav.selected_tab.takeIf { selected -> !selected.startsWith(HIDDEN) && nav.tabs.any { it.tab == selected } } ?: TAB
     }
 
     /** The tab whose stack holds `instance`. */
@@ -252,8 +179,8 @@ internal class RustRoot(
         scope?.launch { runtime.navigate(NavEvent(popped = NavPopped(tab = tab, instance = instance))) }
     }
 
-    /** Back to the tab's root (Home, or the chat): every page above it goes. */
-    fun popToRoot() {
+    /** Back to the tab's root: every page above it goes. */
+    private fun popToRoot() {
         val runtime = screens ?: return
         val tab = activeTab()
         scope?.launch { runtime.navigate(NavEvent(pop_to_root = NavPopToRoot(tab = tab))) }
@@ -262,15 +189,6 @@ internal class RustRoot(
     private fun select(tab: String) {
         val runtime = screens ?: return
         scope?.launch { runtime.navigate(NavEvent(select_tab = NavSelectTab(tab = tab))) }
-    }
-
-    /** Tell Home a fact the shell holds (an outcome of a rename or a make). */
-    fun tell(event: HomeEvent) {
-        val runtime = screens ?: return
-        scope?.launch {
-            val root = runtime.navigation.value?.tabs?.firstOrNull { it.tab == TAB }?.entries?.firstOrNull() ?: return@launch
-            runtime.send(root.instance, ScreenEvent(home = event))
-        }
     }
 
     // -- theme: Rust's choice ---------------------------------------------------
@@ -302,19 +220,9 @@ internal class RustRoot(
 
     // -- the root ---------------------------------------------------------------
 
-    /**
-     * THE TOP OF RUST'S STACK, and the platform work around it. The Backup tab is
-     * still the native one (TRANSITIONAL, lane H2): while it shows, Home draws it.
-     */
+    /** THE TOP OF RUST'S STACK, and the platform work around it. */
     @Composable
-    fun Content(
-        phoneDark: Boolean,
-        backupShown: Boolean,
-        onOpenBackup: () -> Unit,
-        onOpenHome: () -> Unit,
-        backupTab: @Composable () -> Unit,
-        onDownloadSettings: () -> Unit,
-    ) {
+    fun Content(phoneDark: Boolean) {
         val runtime = screens
         if (runtime == null) {
             Box(Modifier.fillMaxSize().background(centraidColor("bg")))
@@ -337,10 +245,7 @@ internal class RustRoot(
         if (!inChat) {
             top.route?.screen?.substringBefore('.')?.takeIf { it in CHAT_SCOPES }?.let { lastApp = it }
         }
-        // THE BACKUP TAB (still native) is Home's: choosing the chat from it leaves it, and the
-        // backup's own door brings Home back under it.
-        LaunchedEffect(inChat) { if (inChat && backupShown) onOpenHome() }
-        // BACK IS RUST'S STACK, AND A BAND IS NOT A STEP IN IT. DISABLED AT HOME, so the
+        // BACK IS RUST'S STACK, AND A BAND IS NOT A STEP IN IT. DISABLED AT A TAB'S ROOT, so the
         // floor keeps the platform's own meaning: back out of the app. Photos' Collections
         // and Search are places of ONE Rust screen, so back returns it to its library first.
         BackHandler(enabled = entries.size > 1) {
@@ -387,31 +292,17 @@ internal class RustRoot(
             HomeScreen(
                 state = home,
                 band = navigation?.band,
-                runtimeTabs = navigation?.tabs.orEmpty().map { it.tab }.toSet(),
                 onEvent = { event -> scope?.launch { runtime.send(top.instance, ScreenEvent(home = event)) } },
                 onOpen = ::push,
                 onSelectTab = ::select,
-                onDownloadSettings = onDownloadSettings,
-                onOpenBackup = onOpenBackup,
-                backupShown = backupShown,
-                onOpenHome = onOpenHome,
-                backupTab = backupTab,
             )
             return
         }
-        if (inChat && top.instance == root.instance) {
-            // THE CHAT'S ROOT, over the band: a place Rust owns, drawn like Home's.
+        if (top.instance == root.instance) {
+            // ANOTHER TAB'S ROOT (the chat, the backup), over the band: a place Rust owns, drawn like Home's.
             androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
                 Box(Modifier.weight(1f)) { Page(runtime, view, top.instance) }
-                Band(
-                    navigation?.band,
-                    navigation?.tabs.orEmpty().map { it.tab }.toSet(),
-                    backupShown,
-                    // THE BACKUP'S DOOR is native: Home first, so the band lights the right place.
-                    { select(TAB); onOpenBackup() },
-                    { select(TAB); onOpenHome() },
-                    ::select,
-                )
+                Band(navigation?.band, ::select)
             }
             return
         }
@@ -419,119 +310,34 @@ internal class RustRoot(
     }
 
     /**
-     * WHAT THE SHELL PERFORMS WHEREVER THE MEMBER IS: every effect Rust asks for (one performer for
-     * the one runtime), the Locker's relock when the app leaves the foreground, and a request from
-     * outside the app (Health Connect's "what this app reads").
+     * WHAT THE SHELL DOES WHEREVER THE MEMBER IS: the activity's half of the effects, the app's
+     * foreground and background reported (the Locker relocks on leaving; the pass service decides
+     * whether coming back is worth a pass), and a request from outside the app (Health Connect's
+     * "what this app reads").
      */
     @Composable
     private fun Globals(runtime: Screens) {
-        // A REQUEST FROM OUTSIDE THE APP (Health Connect's "what this app reads"): the Connect page.
-        // GAP: this is a deep link and Kotlin names the page; Rust has no inbound-route event yet.
+        val open = session ?: return
+        // A REQUEST FROM OUTSIDE THE APP (Health Connect's "what this app reads"): Home answers it.
         if (HealthRationale.requested) {
             LaunchedEffect(Unit) {
                 HealthRationale.requested = false
                 tellHome(HomeEvent(entry_asked = HomeEvent.EntryAsked(entry = HomeEvent.EntryAsked.Entry.ENTRY_HEALTH_CONNECT)))
             }
         }
-        // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED, and when Home's tile learns the Locker is open.
-        val pickers = rememberDocsPickers(docsFiles, onFollowed = { phone.requested(PhoneSource.FILES) })
-        PerformScreenEffects(
-            runtime,
-            phone,
-            photos = device,
-            onAnnounce = { topic ->
-                if (topic == "locker.unlocked") session?.let { LockerEntry.unlocked(it) }
-            },
-            docs = pickers,
-            health = health,
-            openRoute = ::push,
-            vaultCommand = vaultCommand,
-        )
-        // THE APP LEAVING THE FOREGROUND RELOCKS THE LOCKER: the core does it, every open screen hears it.
+        val pickers = rememberDocsPickers(docsFiles)
+        HostScreenEffects(open, pickers, health, deleter, openRoute = ::push)
         val owner = LocalLifecycleOwner.current
         DisposableEffect(owner, runtime) {
             val observer = LifecycleEventObserver { _, event ->
                 when (event) {
-                    Lifecycle.Event.ON_STOP -> {
-                        LockerEntry.setOpen(false)
-                        scope?.launch { runtime.lifecycle(foreground = false) }
-                    }
-                    Lifecycle.Event.ON_START -> scope?.launch { runtime.lifecycle(foreground = true) }
+                    Lifecycle.Event.ON_STOP -> scope?.launch { open.foreground(false) }
+                    Lifecycle.Event.ON_START -> scope?.launch { open.foreground(true) }
                     else -> Unit
                 }
             }
             owner.lifecycle.addObserver(observer)
             onDispose { owner.lifecycle.removeObserver(observer) }
-        }
-    }
-
-    /** The runtime for the foreground vault's core; a new one when the core changed. */
-    private fun ensureScreens(): Screens? {
-        val live = session?.shelf?.core() ?: return screens
-        if (live === core) return screens
-        val home = scope ?: return null
-        attached?.cancel()
-        facts?.cancel()
-        told.clear()
-        val next = Screens(live, home)
-        core = live
-        screens = next
-        attached = next.attach()
-        home.launch {
-            // THE DEVICE'S LOCALE AND ZONE, then the tabs' roots, then any page a
-            // previous run of this process left open above them is closed.
-            next.environment(Locale.getDefault().toLanguageTag(), TimeZone.getDefault().id)
-            next.start()
-            next.navigate(NavEvent(pop_to_root = NavPopToRoot(tab = TAB)))
-        }
-        // A PHOTOS HOME THAT OPENS LATER IS TOLD WHAT THE ROLL ALREADY SAID.
-        home.launch {
-            next.views.collect { views ->
-                views.filterValues { it.photos_home != null }.keys
-                    .filter { told.add(it) }
-                    .forEach { instance ->
-                        grant?.let { next.send(instance, ScreenEvent(photos_home = it)) }
-                        progress?.let { next.send(instance, ScreenEvent(photos_home = it)) }
-                    }
-            }
-        }
-        facts = feedHome(next, session ?: return next, home)
-        return next
-    }
-
-    /**
-     * THE SHELF'S FACTS, TOLD TO HOME. The vault in front, the roster, the backup line and the
-     * ribbon are the KMP shelf's; whenever they change Home is told them as given. Home sorts
-     * nothing and words them itself.
-     */
-    private fun feedHome(runtime: Screens, shelf: HomeSession, scope: CoroutineScope): Job = scope.launch {
-        val root = runtime.navigation.filterNotNull()
-            .first { nav -> nav.tabs.any { it.tab == TAB && it.entries.isNotEmpty() } }
-            .tabs.first { it.tab == TAB }.entries.first().instance
-        var lastVaults: HomeEvent.VaultsTold? = null
-        var lastLine: HomeBackupLine? = null
-        var lastRibbon: HomeStatus? = null
-        shelf.state.collect { kmp ->
-            val now = HomeEvent.VaultsTold(
-                vault = kmp.vault?.takeIf { it.vault_id.isNotEmpty() }?.let(::shellVault),
-                vaults = kmp.vaults.filter { it.vault_id.isNotEmpty() }.map(::shellVault),
-                // A phone with no vault is the shelf's failed Home; a lockup still landing is neither.
-                none = kmp.data_ == null && kmp.failure != null,
-            )
-            if (now != lastVaults && (now.vault != null || now.none)) {
-                lastVaults = now
-                runtime.send(root, ScreenEvent(home = HomeEvent(vaults_told = now)))
-            }
-            val backup = kmp.backup_line?.let(::backupLine)
-            if (backup != lastLine) {
-                lastLine = backup
-                runtime.send(root, ScreenEvent(home = HomeEvent(backup_told = HomeEvent.BackupLineTold(line = backup))))
-            }
-            val status = kmp.data_?.status?.let(::ribbon)
-            if (status != lastRibbon) {
-                lastRibbon = status
-                runtime.send(root, ScreenEvent(home = HomeEvent(status_told = HomeEvent.StatusTold(status = status))))
-            }
         }
     }
 
@@ -703,7 +509,7 @@ internal class RustRoot(
                 onEvent = { send(ScreenEvent(locker_home = it)) },
                 sendWall = sendWall,
                 onOpen = open,
-                onWords = openWords,
+                onWords = { wordsRoute(view)?.let(open) },
                 onHome = toHome,
             )
             lockerItem != null -> LockerItemScreen(
@@ -711,41 +517,41 @@ internal class RustRoot(
                 onEvent = { send(ScreenEvent(locker_item = it)) },
                 sendWall = sendWall,
                 onOpen = open,
-                onWords = openWords,
+                onWords = { wordsRoute(view)?.let(open) },
                 onBack = back,
             )
             lockerEditor != null -> LockerEditorScreen(
                 state = lockerEditor,
                 onEvent = { send(ScreenEvent(locker_editor = it)) },
                 sendWall = sendWall,
-                onWords = openWords,
+                onWords = { wordsRoute(view)?.let(open) },
                 onClose = back,
             )
             lockerAccess != null -> LockerAccessScreen(
                 state = lockerAccess,
                 onEvent = { send(ScreenEvent(locker_access = it)) },
                 sendWall = sendWall,
-                onWords = openWords,
+                onWords = { wordsRoute(view)?.let(open) },
                 onBack = back,
             )
             lockerExport != null -> LockerExportScreen(
                 state = lockerExport,
                 onEvent = { send(ScreenEvent(locker_export = it)) },
                 sendWall = sendWall,
-                onWords = openWords,
+                onWords = { wordsRoute(view)?.let(open) },
                 onBack = back,
             )
             lockerImport != null -> LockerImportScreen(
                 state = lockerImport,
                 onEvent = { send(ScreenEvent(locker_import = it)) },
                 sendWall = sendWall,
-                onWords = openWords,
+                onWords = { wordsRoute(view)?.let(open) },
                 onBack = back,
             )
             lockerLock != null -> LockerLockPage(
                 state = lockerLock,
                 send = sendWall,
-                onWords = openWords,
+                onWords = { wordsRoute(view)?.let(open) },
                 onClose = back,
             )
             moneyHome != null -> MoneyHomeScreen(
@@ -887,7 +693,13 @@ internal class RustRoot(
                 onEvent = { send(ScreenEvent(photos_home = it)) },
                 onOpen = open,
                 onHome = toHome,
-                onResume = { device.opened() },
+                onResume = {
+                    session?.imports?.roll(
+                        ImportsCameraRollEvent(
+                            requested = ImportsCameraRollEvent.Requested(action = ImportsCameraRollEvent.Requested.Action.ACTION_READ_PERMISSION),
+                        ),
+                    )
+                },
             )
             photosLightbox != null -> {
                 // A deleted-for-good photograph leaves its own room.
@@ -939,9 +751,7 @@ internal class RustRoot(
                 state = backupHome,
                 onEvent = { send(ScreenEvent(backup_home = it)) },
                 // The rule is written, and the pass service told, by the Backup screen in Rust.
-                onRulePicked = {},
-                onAddDestination = { open(Route(screen = "pair.laptop")) },
-                onShowWords = { open(CustodyRoutes.show()) },
+                onOpen = open,
             )
             wordsMake != null -> VaultWordsScreen(
                 state = wordsMake,
@@ -986,16 +796,15 @@ internal class RustRoot(
                 surface = DocsDriveEvent.PermissionChanged.Surface.SURFACE_CAMERA,
                 permission = camera,
             ))))
-            docsFiles.follow.followed { folders ->
-                val followed = folders.map { DocsFollowed(origin_id = it.originId, name = it.name, documents = it.documents) }
-                send(ScreenEvent(docs_drive = DocsDriveEvent(followed_changed = DocsDriveEvent.FollowedChanged(followed = followed))))
-            }
         }
     }
 
     private companion object {
         /** Rust's one tab for every page this root draws: Home is its root and an app opens on it. */
         const val TAB = "home"
+
+        /** The hidden tabs the phone imports' services are the roots of: never drawn, never selected here. */
+        const val HIDDEN = "imports-"
 
         /** The chat's tab in Rust's runtime (`chat::TAB`); its root is `chat.home`. */
         const val CHAT_TAB = "chat"
@@ -1005,49 +814,16 @@ internal class RustRoot(
     }
 }
 
-/** A shelf lockup, as the fact Home is told: ids, names and states, no words. */
-private fun shellVault(lockup: VaultLockup): ShellVault = ShellVault(
-    vault_id = lockup.vault_id,
-    name = lockup.vault_name,
-    color = lockup.color,
-    state = when (lockup.state) {
-        VaultLockup.State.STATE_ONLINE -> HomeVaultState.HOME_VAULT_STATE_ONLINE
-        VaultLockup.State.STATE_FROZEN -> HomeVaultState.HOME_VAULT_STATE_FROZEN
-        VaultLockup.State.STATE_UNSPECIFIED -> HomeVaultState.HOME_VAULT_STATE_UNSPECIFIED
-    },
-    originals_withheld = lockup.originals_withheld,
-)
-
-private fun tone(tone: BackupLine.Tone): HomeTone = when (tone) {
-    BackupLine.Tone.TONE_QUIET -> HomeTone.HOME_TONE_QUIET
-    BackupLine.Tone.TONE_ATTENTION -> HomeTone.HOME_TONE_ATTENTION
-    BackupLine.Tone.TONE_URGENT -> HomeTone.HOME_TONE_URGENT
-    BackupLine.Tone.TONE_UNSPECIFIED -> HomeTone.HOME_TONE_UNSPECIFIED
-}
-
-/** The backup's finished line (the backup lane words it), as Home is told it. */
-private fun backupLine(line: BackupLine): HomeBackupLine =
-    HomeBackupLine(status = line.status, tone = tone(line.tone), accessibility_label = line.accessibility_label)
-
-/** The shelf's ribbon (a stranded write, a low disk), as Home is told it. */
-private fun ribbon(status: ShelfStatus): HomeStatus = HomeStatus(
-    tone = when (status.tone) {
-        ShelfStatus.Tone.TONE_QUIET -> HomeTone.HOME_TONE_QUIET
-        ShelfStatus.Tone.TONE_ATTENTION -> HomeTone.HOME_TONE_ATTENTION
-        ShelfStatus.Tone.TONE_URGENT -> HomeTone.HOME_TONE_URGENT
-        ShelfStatus.Tone.TONE_UNSPECIFIED -> HomeTone.HOME_TONE_UNSPECIFIED
-    },
-    copy = status.copy,
-    action = status.action,
-    destination = when (status.destination) {
-        ShelfStatus.Destination.DESTINATION_NONE -> HomeStatus.Destination.DESTINATION_NONE
-        ShelfStatus.Destination.DESTINATION_PHONE -> HomeStatus.Destination.DESTINATION_PHONE
-        ShelfStatus.Destination.DESTINATION_NOTIFICATIONS -> HomeStatus.Destination.DESTINATION_NOTIFICATIONS
-        ShelfStatus.Destination.DESTINATION_BACKUP -> HomeStatus.Destination.DESTINATION_BACKUP
-        ShelfStatus.Destination.DESTINATION_UNSPECIFIED -> HomeStatus.Destination.DESTINATION_UNSPECIFIED
-    },
-)
-
+/** The page a Locker wall's words control opens, Rust's (`LockerWall.words_route`). */
+private fun wordsRoute(view: centraid.core.v1.ViewState): Route? = listOfNotNull(
+    view.locker_home?.wall,
+    view.locker_item?.wall,
+    view.locker_editor?.wall,
+    view.locker_access?.wall,
+    view.locker_export?.wall,
+    view.locker_import?.wall,
+    view.locker_lock?.wall,
+).firstNotNullOfOrNull { it.words_route }
 
 /**
  * THE CALL LINK, HANDED OFF: `call_uri` is the event's own link (a meeting URL

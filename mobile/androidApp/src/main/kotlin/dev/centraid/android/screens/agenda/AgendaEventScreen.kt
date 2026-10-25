@@ -20,8 +20,8 @@ import centraid.core.v1.AgendaEventState
 import centraid.core.v1.AgendaGone
 import centraid.core.v1.AgendaScopeChoice
 import centraid.core.v1.Route
-import centraid.screen.v1.EmptyState
-import centraid.screen.v1.SectionHead
+import centraid.core.v1.EmptyState
+import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EmptyStateView
@@ -37,7 +37,6 @@ import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -94,7 +93,7 @@ internal fun AgendaEventScreen(
     val confirm = state.confirm
     if (confirm != null) {
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             onConfirm = { onEvent(AgendaEventEvent(confirmed = AgendaEventEvent.Confirmed())) },
             onDismiss = { onEvent(AgendaEventEvent(confirm_dismissed = AgendaEventEvent.ConfirmDismissed())) },
             cancelLabel = chrome?.confirm_keep?.ifEmpty { null } ?: KitWords.CANCEL,

@@ -1,6 +1,5 @@
 package dev.centraid.android.kit
 
-import dev.centraid.shared.shell.HomeWords
 
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -52,9 +51,7 @@ import androidx.compose.ui.unit.dp
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.design.copy.SharedCopy
 import centraid.core.v1.ShellBandTab
-import dev.centraid.shared.shell.BandPolicy
 
 /**
  * THE BAND — invariant 1 (#1020, wave A; v0 `screens/home/HomeBand.tsx`).
@@ -295,7 +292,7 @@ public fun AppBand(
                 .border(CentraidGeometry.HAIRLINE.dp, centraidColor("lineStrong"), CircleShape)
                 .testTag("$app-band-home")
                 .semantics {
-                    contentDescription = HomeWords.BAND_HOME
+                    contentDescription = KitWords.BAND_HOME
                     role = Role.Button
                 },
             contentAlignment = Alignment.Center,
@@ -335,7 +332,7 @@ public fun AppBand(
                 if (onMore != null) {
                     AppBandTabView(
                         iconKey = "MoreHoriz",
-                        label = HomeWords.BAND_MORE,
+                        label = KitWords.BAND_MORE,
                         selected = false,
                         testTag = "$app-band-more",
                         onPress = onMore,
@@ -380,7 +377,7 @@ private fun AppBandTabView(
             .padding(top = BandPolicy.BAND_TAB_TOP.dp, bottom = BandPolicy.BAND_TAB_BOTTOM.dp)
             .testTag(testTag)
             .semantics {
-                contentDescription = label + if (selected) ", " + SharedCopy.BAND_CURRENT_SPOKEN else ""
+                contentDescription = label + if (selected) ", " + KitWords.BAND_CURRENT else ""
                 role = Role.Tab
                 this.selected = selected
             },

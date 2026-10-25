@@ -1,6 +1,6 @@
 package dev.centraid.android.theme
 
-import centraid.screen.v1.Money
+import dev.centraid.android.kit.Money
 import java.io.File
 import java.util.Locale
 import org.junit.Assert.assertEquals

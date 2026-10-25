@@ -38,7 +38,7 @@ import centraid.core.v1.HealthMetricLine
 import centraid.core.v1.HealthRangeBar
 import centraid.core.v1.HealthTrendRow
 import centraid.core.v1.HealthWorkoutLine
-import centraid.screen.v1.SectionHead
+import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.SectionHeader

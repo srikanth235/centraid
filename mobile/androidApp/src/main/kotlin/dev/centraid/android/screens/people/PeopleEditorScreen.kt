@@ -22,7 +22,6 @@ import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -45,7 +44,7 @@ public fun PeopleEditorScreen(
     val reload: Any? = if (clean) Pair(autosave?.base_revision_id, autosave?.saved_seq) else null
     EditorRoom(
         title = chrome?.title.orEmpty(),
-        status = if (draft != null) autosave?.toKit() else null,
+        status = if (draft != null) autosave else null,
         closeLabel = chrome?.close_label?.takeIf { it.isNotEmpty() } ?: KitWords.DONE,
         onClose = onClose,
         onDeparted = {},
@@ -53,7 +52,7 @@ public fun PeopleEditorScreen(
         StatusLine(state.status?.sentence.orEmpty())
         val gone = state.gone
         if (gone != null) {
-            EmptyStateView(gone.toKit(), onAction = null)
+            EmptyStateView(gone, onAction = null)
             return@EditorRoom
         }
         ReadStateView(

@@ -1,5 +1,6 @@
 package dev.centraid.android.screens.locker
 
+import dev.centraid.android.kit.SecureWindow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,7 +26,7 @@ import centraid.core.v1.LockerExportState
 import centraid.core.v1.LockerImportEvent
 import centraid.core.v1.LockerImportState
 import centraid.core.v1.LockerWallEvent
-import centraid.screen.v1.SectionHead
+import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.ChoiceStack
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EmptyStateView
@@ -40,8 +41,6 @@ import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.StatusChipView
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
-import dev.centraid.android.screens.words.SecureWindow
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -67,7 +66,7 @@ internal fun LockerExportScreen(
             title = chrome?.title.orEmpty(),
             parentTitle = chrome?.back_label.orEmpty(),
             onBack = onBack,
-            statusLine = { StatusLine(state.status?.toKit()) {} },
+            statusLine = { StatusLine(state.status) {} },
         ) {
             ReadStateView(
                 content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
@@ -114,7 +113,7 @@ internal fun LockerExportScreen(
         }
         state.confirm?.let { confirm ->
             ConfirmSheet(
-                confirm = confirm.toKit(),
+                confirm = confirm,
                 onConfirm = { onEvent(LockerExportEvent(confirmed = LockerExportEvent.Confirmed())) },
                 onDismiss = { onEvent(LockerExportEvent(dismissed = LockerExportEvent.Dismissed())) },
             )
@@ -142,7 +141,7 @@ internal fun LockerImportScreen(
             title = chrome?.title.orEmpty(),
             parentTitle = chrome?.back_label.orEmpty(),
             onBack = onBack,
-            statusLine = { StatusLine(state.status?.toKit()) {} },
+            statusLine = { StatusLine(state.status) {} },
         ) {
             ReadStateView(
                 content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
@@ -165,7 +164,7 @@ internal fun LockerImportScreen(
                         item(key = "verdicts-head") { SectionHeader(SectionHead(title = plan.verdicts_label)) }
                         items(plan.verdicts, key = { "v-" + it.label }) { verdict -> FieldRow(verdict.label, verdict.detail) }
                     }
-                    plan.empty?.let { empty -> item(key = "empty") { EmptyStateView(empty.toKit(), onAction = null) } }
+                    plan.empty?.let { empty -> item(key = "empty") { EmptyStateView(empty, onAction = null) } }
                     if (plan.rows_label.isNotEmpty()) {
                         item(key = "rows-head") {
                             SectionHeader(SectionHead(title = plan.rows_label))
@@ -186,7 +185,7 @@ internal fun LockerImportScreen(
                                     Text(row.title, style = centraidType("body"), color = centraidColor("text"), maxLines = 1)
                                     Text(row.meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"), maxLines = 2)
                                 }
-                                row.chip?.let { StatusChipView(it.toKit()) }
+                                row.chip?.let { StatusChipView(it) }
                             }
                         }
                     }

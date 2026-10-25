@@ -29,12 +29,11 @@ import androidx.compose.ui.unit.dp
 import centraid.core.v1.MoneyFigure
 import centraid.core.v1.MoneyHero
 import centraid.core.v1.MoneyRow
-import centraid.screen.v1.SectionHead
+import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.kitSwitchColors
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.kit.toneInk
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
@@ -155,8 +154,8 @@ internal fun MoneyRowView(row: MoneyRow, onTap: (() -> Unit)?) {
         title = row.title,
         meta = listOf(row.category_label, row.meta).filter { it.isNotEmpty() }.joinToString(" · "),
         trailing = money(row.amount),
-        trailingTone = row.amount_tone.toKit(),
-        chips = row.chips.map { it.toKit() },
+        trailingTone = row.amount_tone,
+        chips = row.chips.map { it },
         dimmed = row.dimmed,
         a11y = spoken(row.accessibility_label, row.amount),
         testTag = "money-row-${row.txn_id}",

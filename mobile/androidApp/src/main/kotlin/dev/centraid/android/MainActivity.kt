@@ -1,373 +1,108 @@
 package dev.centraid.android
 
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.testTagsAsResourceId
-import androidx.compose.runtime.setValue
-import android.content.pm.PackageManager
 import android.os.Bundle
-import androidx.fragment.app.FragmentActivity
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
+import android.util.Log
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import dev.centraid.android.kit.AndroidHealth
-import dev.centraid.android.kit.AndroidPhoneFollow
-import dev.centraid.android.kit.PhoneFollowSheet
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.runtime.SideEffect
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.core.view.WindowCompat
-import dev.centraid.android.screens.mediaPermissions
-import dev.centraid.android.screens.words.FirstLaunchScreen
-import dev.centraid.android.screens.words.WordsSheets
-import dev.centraid.android.theme.centraidColor
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-// `var x by mutableStateOf(...)` needs BOTH operators in scope. Only
-// `getValue` was imported, so the read compiled and the write did not
-// (#1020, wave A) — the whole `by` delegate fails on the setter alone.
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import centraid.core.v1.HomeEvent as RustHomeEvent
-import centraid.core.v1.HomeStatus
-import centraid.core.v1.VaultCommand
-import dev.centraid.android.screens.RustRoot
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.core.view.WindowCompat
+import androidx.fragment.app.FragmentActivity
 import dev.centraid.android.backup.MediaStoreDeleter
-import dev.centraid.android.backup.ProcessSession
-import dev.centraid.android.screens.backup.BackupRoute
-import dev.centraid.android.screens.backup.writeTransferRule
-import dev.centraid.android.kit.TransferRulesSheet
+import dev.centraid.android.kit.AndroidHealth
+import dev.centraid.android.kit.ClipboardDeadline
+import dev.centraid.android.screens.RustRoot
+import dev.centraid.android.session.AppSession
 import dev.centraid.android.theme.CentraidTheme
+import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidDark
-import dev.centraid.shared.shell.HomeSession
-import dev.centraid.shared.platform.platformServices
-import dev.centraid.shared.shell.TransferRuleChoice
-import dev.centraid.shared.shell.Shelf
-import dev.centraid.shared.sync.TransferRule
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The composition root (#1020, #1135). It names no screen and no destination:
- * Rust holds the one route stack (`RustRoot`), Home is its root and apps are
- * covers pushed over it. What stays here is the activity's: the session, the
- * platform doors and the first-launch gate.
- *
- * ONE ROOT STACK, NO BOTTOM TABS — apps are covers over Home.
+ * The composition root (#1020, #1135). It names no screen and no destination: Rust holds every
+ * route stack ([RustRoot]), Home is the `home` tab's root and apps are pages pushed over it. What
+ * stays here is the activity's: holding the process's one session, the platform doors that need an
+ * activity, and the system bars.
  */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-// A `FragmentActivity` AND NOT A PLAIN `ComponentActivity` for one reason:
-// Locker's unlock raises `BiometricPrompt`, which hosts itself in a fragment
-// of the activity it is given (#1047, D-5).
+// A `FragmentActivity` AND NOT A PLAIN `ComponentActivity` for one reason: Locker's unlock raises
+// `BiometricPrompt`, which hosts itself in a fragment of the activity it is given (#1047, D-5).
 public class MainActivity : FragmentActivity() {
-    /**
-     * HOME OVER A REAL VAULT.
-     *
-     * `HomeSession` owns the host, the core and the effect runner; this
-     * activity owns only the file path, which is the one part that is
-     * genuinely Android's. Opened off the main thread because
-     * `centraid_open` asserts it is not on the UI thread — and the assertion
-     * is the thing standing between a well-meaning `LaunchedEffect` and a
-     * frozen app.
-     */
-    private var session: HomeSession? = null
-
-    /**
-     * What the first-launch gate reads while the core is opening: not read yet.
-     * Null is neither "none" nor "some" (`Shelf.holdsNoVault`), so a phone that
-     * holds a vault never flashes the gate on its way up.
-     */
-    private val shelfUnread =
-        kotlinx.coroutines.flow.MutableStateFlow<Boolean?>(null).asStateFlow()
-
-    /**
-     * THE ONE NAVIGATION ROOT (#1135): Rust holds the stack, Home is its root and every app
-     * opens on it. This file names no app screen and no destination; it holds the root for
-     * the activity's life (`ChangeStream.route` is registration with no removal, so the
-     * runtime is built once per core and attached once) and answers what Home asks of the
-     * shelf ([onVaultCommand]).
-     */
-    private val rust: RustRoot by lazy {
-        RustRoot(phoneFollow, health, openWords = { words.openRekey() }, vaultCommand = ::onVaultCommand)
-    }
-
-    /** THE 24 WORDS' SHEETS (#1047 E3), over every screen. See `WordsSheets`. */
-    private val words: WordsSheets by lazy {
-        WordsSheets(onEnterClosed = { rust.foregrounded() }).also {
-            it.camera = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
-        }
-    }
-
-    /**
-     * WHAT HOME ASKS OF THE SHELF (#1135). The vault files, their keys and the roster are the
-     * KMP shelf's: a switch, a make, a restore, a forget and a rename are acts on it, and
-     * Rust decides which and when. FORGETTING AND RENAMING ARE I/O, on IO for the reason
-     * `open` is: `centraid_open` asserts it is not on the main thread and the rebind opens a core.
-     */
-    private fun onVaultCommand(command: VaultCommand) {
-        val live = session
-        val outcome = { line: String, renameFailed: Boolean ->
-            rust.tell(RustHomeEvent(outcome_told = RustHomeEvent.OutcomeTold(status_line = line, rename_failed = renameFailed)))
-        }
-        val picked = command.switch_to
-        val forgotten = command.forget
-        val renamed = command.rename
-        val door = command.open_
-        when {
-            picked != null -> {
-                outcome("", false)
-                kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { live?.switchVault(picked) }
-            }
-            command.make == true -> words.makeVault()
-            command.restore == true -> words.openRestore()
-            forgotten != null -> kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                live?.forget(forgotten)
-                withContext(Dispatchers.Main) { outcome("", false) }
-            }
-            renamed != null -> kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                val saved = live?.renameVault(renamed.vault_id, renamed.name) == true
-                withContext(Dispatchers.Main) { outcome("", !saved) }
-            }
-            door != null -> openSettings(door)
-        }
-    }
-
-    /** The ribbon's doors into the system's settings (the backup's is a tab, which Rust selects itself). */
-    private fun openSettings(door: HomeStatus.Destination) {
-        val intent = when (door) {
-            HomeStatus.Destination.DESTINATION_NOTIFICATIONS ->
-                android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
-            HomeStatus.Destination.DESTINATION_PHONE ->
-                android.content.Intent(
-                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    android.net.Uri.fromParts("package", packageName, null),
-                )
-            else -> return
-        }
-        runCatching { startActivity(intent) }
-    }
-
-    /**
-     * ANDROID FOLLOWS THE PHONE (#1127): the foreground and content-observer triggers and the
-     * question an account that left asks. Started in `onStart`, stopped in `onStop`.
-     */
-    private val phoneFollow: AndroidPhoneFollow by lazy { AndroidPhoneFollow(this) }
-
-    /**
-     * HEALTH CONNECT (#1129): the reader the follower and Health's Connect share, the member's
-     * chosen types, and the phone's facts Health's screens are stamped with. Read only.
-     */
+    /** HEALTH CONNECT (#1129): the reader and the phone's facts Health's screens are stamped with. Read only. */
     private val health: AndroidHealth by lazy { AndroidHealth(this) }
 
-
     /**
-     * FREE UP SPACE'S HAND ON MEDIASTORE (#1080 A20). A FIELD, NEVER `lazy`: its
-     * activity result launcher must be registered before this activity starts.
-     * Installed on the session when it opens and cleared when this activity
-     * goes (`produceState` below). See `MediaStoreDeleter`.
+     * FREE UP SPACE'S HAND ON MEDIASTORE (#1080 A20). A FIELD, NEVER `lazy`: its activity result
+     * launcher must be registered before this activity starts.
      */
     private val libraryDeleter: MediaStoreDeleter = MediaStoreDeleter(this)
 
-    /**
-     * THE OS ASKING FOR MEMORY BACK (#1025 S7-13, ruling F).
-     *
-     * Every held vault's core is open, so a switch is a pointer move rather
-     * than a SQLite close-and-open. The bound on that is not a count of cores —
-     * that would make "is this vault open" depend on how recently some other
-     * vault was touched — it is this callback: every core but the foreground's
-     * closes, and a rested vault reopens on the next tap or the next sync
-     * round.
-     *
-     * Every level, including the trims Android sends a BACKGROUNDED process.
-     * A phone the member is not looking at is exactly when giving the memory
-     * back costs nothing.
-     */
-    // `onPause` IS GONE FROM THIS ACTIVITY (#1029 §1). With `onResume` it ran
-    // `HomeSession.foreground()` and `leftTheForeground()`: catch every
-    // holding up and hold the foreground one's log stream open while the member
-    // is looking, close it when they leave. That shape left with the gateway;
-    // what arriving and leaving do now is the backup's (#1080), and it is
-    // Rust's: the lifecycle is reported to the runtime (`AgendaRoutes`).
+    private val rust: RustRoot by lazy { RustRoot(health, libraryDeleter) }
 
     /**
-     * THE PHONE IS FOLLOWED WHILE THE APP IS IN VIEW (#1127): see [AndroidPhoneFollow]. Health's
-     * facts are stated first (#1129) — a locale change re-makes the activity, so this is also
-     * where a new measurement system reaches the screens.
+     * THE OS ASKING FOR MEMORY BACK (#1025 S7-13). Every held vault's core is open so a switch is a
+     * pointer move; the bound on that is this callback, and Rust's shelf closes every core but the
+     * one in front. Every level, the trims a backgrounded process gets included.
      */
-    override fun onStart() {
-        super.onStart()
-        phoneFollow.start()
-    }
-
-    /**
-     * THE FOREGROUND AND BACKGROUND PASSES ARE RUST'S: `AgendaRoutes` reports the lifecycle to
-     * the runtime, and the pass scheduler decides that coming back or leaving is worth a pass
-     * (`crates/screens/src/passes`). The activity runs none.
-     */
-    override fun onStop() {
-        super.onStop()
-        // EVERY STOP, a rotation's too: this activity's observers must not outlive it.
-        phoneFollow.stop()
-    }
-
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        val open = session ?: return
-        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { open.rest() }
+        val open = AppSession.current.value ?: return
+        open.scope.launch { open.screens.memoryWarning() }
     }
-
-    // `onDestroy` NO LONGER CLOSES THE SESSION (#1080). The session is the
-    // PROCESS's ([ProcessSession]); this activity's hold on it is released by
-    // the composition that took it, when the composition is disposed — so a
-    // pass a job or a worker is running finishes its part rather than losing
-    // its core under it, and the last holder's release is what closes it.
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // A secret copied before the app was killed is cleared once its deadline has passed.
-        dev.centraid.android.kit.ClipboardDeadline.sweep(applicationContext)
-        // EDGE TO EDGE, and it owns the system bars' icon contrast. The page
-        // ground is the emitted `bg` and it reaches the notch; the insets are
-        // then paid back by `safeDrawingPadding` below, which is the only place
-        // this shell knows a system bar exists.
+        ClipboardDeadline.sweep(applicationContext)
+        // EDGE TO EDGE: the page ground is the emitted `bg` and reaches the notch; the insets are paid
+        // back by `safeDrawingPadding` below, the only place this shell knows a system bar exists.
         enableEdgeToEdge()
-        // THE VAULT IS AN ARTIFACT THAT WAS PUT HERE, never founded on the
-        // phone. `mobile/scripts/demo-vault.sh` seeds one and places it; the
-        // asset copy below is what makes a fresh install carry it too. A core
-        // opened with `create = true` in its place would found an empty vault
-        // and the screen would be honestly, uselessly empty.
-        //
-        // EVERY `<dir>/vault.db` IN `filesDir` IS A VAULT, one directory per
-        // vault (#1047, Q-1047-17), and the directory is the roster: no
-        // manifest sits beside it, because a manifest would be a second place a
-        // vault's name and existence live. What each file is CALLED is read out
-        // of the file itself; see `VaultRoster`. A placed fixture
-        // `demo-vault.sqlite3` lands as `files/demo-vault/vault.db`
-        // (`Shelf.VAULT_FILE`), beside the backup home the core keeps for it.
-        for (name in assets.list("")?.filter { it.endsWith(".sqlite3") }.orEmpty()) {
-            val home = java.io.File(filesDir, name.substringBeforeLast('.'))
-            val file = java.io.File(home, Shelf.VAULT_FILE)
-            if (file.exists()) continue
-            runCatching {
-                home.mkdirs()
-                assets.open(name).use { source ->
-                    file.outputStream().use { sink -> source.copyTo(sink) }
-                }
-            }.onFailure {
-                // No asset and no file: the screen still runs and draws its
-                // loading grid. An app that refused to start because a demo
-                // fixture is missing would be worse than one that shows a Home
-                // nothing lands in.
-                android.util.Log.w("Centraid", "could not place $name: ${it.message}")
-            }
-        }
-        // WHERE THIS DEVICE'S VAULTS LIVE, as a DIRECTORY and not a list of
-        // paths (#1025 S5): `filesDir`, which `ProcessSession` opens for this
-        // activity and for every background pass alike. The shell used to
-        // enumerate whatever `.db` files had been placed there and hand the
-        // list over; a device makes its own vaults now, so what it knows is
-        // where they go and `Shelf` opens every file it finds. An empty
-        // directory is the ordinary first run.
-        // THE DEMO VAULT'S SEED, HANDED TO A DEBUG BUILD AT LAUNCH (#1047 W2).
-        // `mobile/scripts/demo-vault.sh android` starts the activity with the
-        // seed `seed-demo-vault` printed as `CENTRAID_DEMO_SEED` — the public
-        // all-`abandon` words' seed — as an extra, and the shelf stores it where
-        // a real seed lives, so the demo Locker opens keyed. A build that is not
-        // debuggable never reads the extra. See `DevSeed`.
+        placeDemoVaults()
+        // THE DEMO VAULT'S SEED, HANDED TO A DEBUG BUILD AT LAUNCH (#1047 W2):
+        // `mobile/scripts/demo-vault.sh android` starts the activity with the public all-`abandon`
+        // words' seed as an extra, and the shelf stores it where a real seed lives. A build that is
+        // not debuggable never reads the extra.
         val devSeed = if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
-            dev.centraid.shared.custody.DevSeed.parse(intent?.getStringExtra(DEV_SEED_EXTRA))
+            intent?.getStringExtra(DEV_SEED_EXTRA)?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
         } else {
             null
         }
         setContent {
-            // THE MEMBER'S APPEARANCE (R-CHROME-7) is Rust's: Home's header key flips it, Rust
-            // keeps it in the Keychain, and it is the phone's until Home says otherwise.
+            // THE MEMBER'S APPEARANCE (R-CHROME-7) is Rust's: Home's header key flips it.
             val phoneDark = isSystemInDarkTheme()
             CentraidTheme(dark = rust.dark(phoneDark)) {
-                val scope = androidx.compose.runtime.rememberCoroutineScope()
-                // ONE SESSION FOR THE LIFE OF THE ACTIVITY. `produceState`
-                // rather than `LaunchedEffect` + a `mutableStateOf`, so the
-                // first composition already has a value to draw and the open
-                // runs on the IO dispatcher exactly once.
-                val homeSession by androidx.compose.runtime.produceState<HomeSession?>(null) {
-                    // THE PROCESS'S ONE SESSION (#1080): opened here or by a
-                    // background pass that got there first, and held for as
-                    // long as this composition lives — over `filesDir`, the
-                    // one directory the passes open too. The
-                    // pass the OS runs is installed by `CentraidApplication`,
-                    // not here, so a window that wakes the app with no activity
-                    // still has a body to run.
-                    //
-                    // NOT CANCELLABLE WHILE IT OPENS, and released in `finally`:
-                    // a composition disposed mid-open (a fast rotation) still
-                    // gets its hold back and gives it up, so the count never
-                    // keeps a session open for an activity that is gone.
-                    val opened = withContext(kotlinx.coroutines.NonCancellable) {
-                        ProcessSession.acquire(applicationContext, devSeed)
-                    }
+                val scope = rememberCoroutineScope()
+                // THE PROCESS'S ONE SESSION, held for as long as this composition lives: opened here or
+                // by a background pass that got there first. Not cancellable while it opens, and
+                // released in `finally`, so a fast rotation still gives its hold back.
+                val session by produceState<AppSession.Open?>(null) {
+                    val opened = withContext(NonCancellable) { AppSession.acquire(applicationContext, devSeed) }
+                    if (opened == null) return@produceState
                     try {
-                        session = opened
-                        // THE APP SCREENS GO ON THE SAME CORE (#1025 S5, lane
-                        // L5). R-1020-24 is one core per VAULT FILE, so every app
-                        // reads through the handle this session holds rather than
-                        // opening its own. The one screen runtime attaches here,
-                        // once: it also routes onto the change stream, so a row
-                        // that arrives moves the screen without a tap — and a
-                        // host routed twice re-reads twice.
                         rust.attach(opened, scope)
-                        words.attach(opened, scope)
-                        phoneFollow.attach(opened)
-                        opened.installLibraryDeleter(libraryDeleter)
                         value = opened
-                        kotlinx.coroutines.awaitCancellation()
+                        awaitCancellation()
                     } finally {
-                        session = null
-                        phoneFollow.detach()
-                        // CLEARED ONLY IF STILL THIS ACTIVITY'S: after a rotation
-                        // the new activity may have installed its own first.
-                        if (opened.libraryDeleter === libraryDeleter) opened.installLibraryDeleter(null)
-                        ProcessSession.release()
+                        rust.detach()
+                        AppSession.release()
                     }
                 }
-                // THE QUESTION AN ACCOUNT THAT LEFT THE PHONE ASKS (R-1127-9).
-                phoneFollow.question?.let { asked ->
-                    PhoneFollowSheet(asked) { keep -> phoneFollow.answer(asked, keep) }
-                }
-                // THE FIRST-LAUNCH GATE: the shelf's one answer to "does this
-                // device hold no vault", read here and nowhere else.
-                val holdsNoVault by (homeSession?.shelf?.holdsNoVault ?: shelfUnread)
-                    .collectAsStateWithLifecycle()
-                // ENGAGING IT LEAVES NOTHING OF HOME STANDING: an app screen
-                // pushed over it, and the switcher the last Forget was made
-                // from, would each come back with Home once a vault is made.
-                LaunchedEffect(holdsNoVault) {
-                    if (holdsNoVault == true) {
-                        rust.popToRoot()
-                        rust.tell(RustHomeEvent(sheet_closed = RustHomeEvent.SheetClosed()))
-                    }
-                }
-                // THE GROUND IS PAINTED HERE, under the insets: the window's own
-                // background is transparent, and a screen that paints none (the
-                // Photos pages) would otherwise sit on black. A photograph's
-                // screens stand on `stage` edge to edge, as iOS draws them, so
-                // the ground under the system bars follows, and the bars' icons
-                // turn light to be read on it.
+                // A PHOTOGRAPH'S SCREENS STAND ON `stage` edge to edge, so the ground under the system
+                // bars follows and the bars' icons turn light to be read on it.
                 val onStage = rust.onStage()
                 val view = LocalView.current
                 val darkScheme = centraidDark()
@@ -381,120 +116,41 @@ public class MainActivity : FragmentActivity() {
                 Box(
                     Modifier
                         .fillMaxSize()
-                        // EVERY TEST TAG IS A RESOURCE ID (#1128, Q-1128-2): set once on the root
-                        // content, so Maestro's `id:` selectors see the Compose `testTag`s
-                        // (`mobile/maestro/flows/selectors.md`) as they see iOS identifiers.
+                        // EVERY TEST TAG IS A RESOURCE ID (#1128, Q-1128-2), so Maestro's `id:`
+                        // selectors see the Compose `testTag`s as they see iOS identifiers.
                         .semantics { testTagsAsResourceId = true }
                         .background(centraidColor(if (onStage) "stage" else "bg"))
                         .safeDrawingPadding(),
                 ) {
-                    Column(Modifier.fillMaxSize()) {
-                        Box(Modifier.weight(1f).fillMaxWidth()) {
-                            if (holdsNoVault == true) {
-                                // A DEVICE THAT HOLDS NO VAULT opens onto the way to make
-                                // one, not onto a Home with nothing to read. The words
-                                // sheet below rises over it, so a cancel lands back here.
-                                FirstLaunchScreen(
-                                    onMake = { words.makeVault() },
-                                    onRestore = { words.openRestore() },
-                                )
-                            } else {
-                                // THE TRANSFER RULES (#1025 S4). Read from the secure
-                                // store when the sheet OPENS and not held since launch:
-                                // the store is the authority, and a value cached at
-                                // launch is one a restore may have moved underneath.
-                                var rulesOpen by remember { mutableStateOf(false) }
-                                var rule by remember { mutableStateOf("") }
-                                // THE MADE VAULT'S SENTENCE (words.make's MADE) stays on
-                                // the vault sheet, as `found`'s did — taken once, and told to Home.
-                                val made = words.made
-                                // A VAULT WAS MADE: what the phone already holds is asked
-                                // for once and brought in (R-ONBOARD-8) — the photos
-                                // (Android has no system reminders; the calendar and the contacts
-                                // are Agenda's and People's own imports, held by their screens in Rust).
-                                // The photo prompt is this activity's launcher; the answer
-                                // goes to the camera-roll runner, which walks on a grant.
-                                val photosAsked = rememberLauncherForActivityResult(
-                                    ActivityResultContracts.RequestMultiplePermissions(),
-                                ) {
-                                    rust.photosAnswered()
-                                }
-                                LaunchedEffect(made.first) {
-                                    words.takeMade()?.let {
-                                        rust.tell(RustHomeEvent(outcome_told = RustHomeEvent.OutcomeTold(status_line = it)))
-                                        photosAsked.launch(mediaPermissions())
-                                    }
-                                }
-                                rust.Content(
-                                    phoneDark = phoneDark,
-                                    backupShown = backupSheet.showing,
-                                    // HOME'S BACKUP LINE AND THE BAND'S BACKUP TAB OPEN THE
-                                    // BACKUP TAB (#1080, R-ONBOARD-9): the backup devices
-                                    // and the 24 words live there. "Add a backup device"
-                                    // and "Show my 24 words" open their sheets over it.
-                                    // TRANSITIONAL (lane H2 registers a Rust tab).
-                                    onOpenBackup = { backupSheet.open() },
-                                    onOpenHome = { backupSheet.close() },
-                                    backupTab = {
-                                        backupSheet.Tab(
-                                            onAddDestination = {
-                                                words.openPair(
-                                                    camera = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY),
-                                                )
-                                            },
-                                            onShowWords = { words.openShow() },
-                                        )
-                                    },
-                                    onDownloadSettings = {
-                                        scope.launch {
-                                            rule = TransferRule.read(
-                                                platformServices().secureStore,
-                                            ).stored
-                                            rulesOpen = true
-                                        }
-                                    },
-                                )
-                                // A PAIRING THAT CLOSED OVER THE BACKUP TAB: read again,
-                                // so the new backup device's row is there.
-                                LaunchedEffect(words.showing) { if (words.showing == null) backupSheet.reread() }
-                                if (rulesOpen) {
-                                    TransferRulesSheet(
-                                        choices = TransferRule.entries.map {
-                                            TransferRuleChoice(it.stored, it.sentence)
-                                        },
-                                        selected = rule,
-                                        onDismiss = { rulesOpen = false },
-                                        onPick = { picked ->
-                                            scope.launch {
-                                                // WHAT THE STORE HOLDS, and not
-                                                // what was tapped: an unknown word
-                                                // settles to the conservative
-                                                // default, and a tick the next
-                                                // launch would not draw is worse
-                                                // than a tap that appears to do
-                                                // nothing. The background windows
-                                                // are asked for again under it
-                                                // (#1080), as from the Backup screen.
-                                                rule = writeTransferRule(session, picked)
-                                            }
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    // THE 24 WORDS' SHEET, over whatever is drawn (#1047 E3).
-                    words.Sheets()
-                    // THE BACKUP TAB'S NOTIFICATION GRANT, registered at the root
-                    // whether or not the tab is shown (`BackupSheets.Registered`).
-                    backupSheet.Registered()
+                    if (session != null) rust.Content(phoneDark = phoneDark)
                 }
             }
         }
     }
 
+    /**
+     * A PLACED DEMO VAULT (`mobile/scripts/demo-vault.sh`): every `<name>.sqlite3` asset lands as
+     * `filesDir/<name>/vault.db`, one directory per vault, which is where the Rust shelf looks
+     * (`docs/mobile-offline.md`). A vault is never founded in its place; an empty directory is the
+     * ordinary first run. Off the main thread is not needed: it runs once, before the core opens.
+     */
+    private fun placeDemoVaults() {
+        for (name in assets.list("")?.filter { it.endsWith(".sqlite3") }.orEmpty()) {
+            val home = java.io.File(filesDir, name.substringBeforeLast('.'))
+            val file = java.io.File(home, VAULT_FILE)
+            if (file.exists()) continue
+            runCatching {
+                home.mkdirs()
+                assets.open(name).use { source -> file.outputStream().use { sink -> source.copyTo(sink) } }
+            }.onFailure { Log.w("Centraid", "could not place $name: ${it.message}") }
+        }
+    }
+
     private companion object {
-        /** The launch extra a debug build reads its demo seed from. See `DevSeed`. */
+        /** The launch extra a debug build reads its demo seed from. */
         const val DEV_SEED_EXTRA: String = "dev.centraid.DEV_SEED"
+
+        /** One vault's file in its directory (`vault::files`). */
+        const val VAULT_FILE: String = "vault.db"
     }
 }

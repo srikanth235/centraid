@@ -34,8 +34,8 @@ import centraid.core.v1.NotesHistoryEvent
 import centraid.core.v1.NotesHistoryState
 import centraid.core.v1.NotesLinkSheet
 import centraid.core.v1.Route
-import centraid.screen.v1.SearchField
-import centraid.screen.v1.SectionHead
+import dev.centraid.android.kit.SearchField
+import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.CentraidSearchField
 import dev.centraid.android.kit.EditableFieldRow
@@ -55,7 +55,6 @@ import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
 
 /**
  * `notes.editor` (#1135), in the kit's `EditorRoom`.
@@ -95,7 +94,7 @@ public fun NotesEditorScreen(
     var menuOpen by remember(state.note_id) { mutableStateOf(false) }
     EditorRoom(
         title = chrome?.title.orEmpty(),
-        status = state.autosave?.toKit(),
+        status = state.autosave,
         closeLabel = chrome?.close.orEmpty().ifEmpty { dev.centraid.android.kit.KitWords.DONE },
         onClose = onClose,
         // The page's pop is the flush: Rust sends itself `Left`.
@@ -277,7 +276,7 @@ public fun NotesHistoryScreen(
         ) { data ->
             val empty = data.empty
             if (data.rows.size <= 1 && empty != null) {
-                EmptyStateView(empty.toKit(), onAction = null)
+                EmptyStateView(empty, onAction = null)
             } else {
                 LazyColumn(Modifier.testTag("notes-history")) {
                     items(data.rows, key = { it.content_id }) { row ->

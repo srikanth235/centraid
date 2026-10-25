@@ -56,14 +56,13 @@ import centraid.core.v1.AgendaToolbar
 import centraid.core.v1.Route
 import centraid.core.v1.SearchContainer
 import centraid.core.v1.TodoChrome
-import centraid.screen.v1.SearchField
+import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.DeniedGate
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.hueColor
-import dev.centraid.android.kit.importLabel
 import dev.centraid.android.kit.KitStepper
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RoomSearch
@@ -72,7 +71,6 @@ import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.SkeletonBar
 import dev.centraid.android.kit.StatusLine
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.screens.agenda.AGENDA_TASK_ROW
 import dev.centraid.android.screens.agenda.AgendaNoticeView
 import dev.centraid.android.screens.agenda.AgendaTaskActions
@@ -120,7 +118,7 @@ public fun AgendaHomeScreen(
         // is no Agenda to move around in, search or add to.
         Box(Modifier.fillMaxSize().testTag("agenda-home")) {
             AppPlace(app = "agenda", title = chrome.title) {
-                DeniedGate(denied.toKit(), Modifier.testTag("agenda-denied"))
+                DeniedGate(denied, Modifier.testTag("agenda-denied"))
             }
         }
         return
@@ -214,7 +212,7 @@ public fun AgendaHomeScreen(
                 // THE ASK ROW closes a search's answer (#1097); the state holds one only while it is drawn.
                 SearchAskRow(state.search_ask_row, onOpen)
                 // THE TASK WRITE'S STATUS LINE ("Task done", Undo) docks under whichever place's list.
-                StatusLine(state.status?.toKit(), actTag = "agenda-status-action") {
+                StatusLine(state.status, actTag = "agenda-status-action") {
                     onEvent(AgendaHomeEvent(status_acted = AgendaHomeEvent.StatusActed()))
                 }
                 // THE PLUS OPENED THE BAR (To-do only): the keyboard-attached quick add, focus from `focused`.
@@ -327,7 +325,7 @@ private fun AgendaList(
     // NO EVENT OF THE MEMBER'S YET, only marks (due tasks, birthdays): the
     // phone's calendar is offered quietly above them, at the point of use. The
     // tap is an event: the import itself is Rust's (`ImportRequested`).
-    val importVerb = importLabel(data.import_source.toKit())
+    val importVerb = data.import_label
     val offersImport = importVerb.isNotEmpty()
     // THE KEYS, IN DRAW ORDER, so landing can find its index without the view
     // deciding where to land: the machine's `landing` names the day and
@@ -431,7 +429,7 @@ private fun AgendaEmptyBlock(
         // DAY ONE, WHERE THE PHONE HOLDS A CALENDAR (`import_source`): the import, an event Rust
         // answers with its own `CalendarRead`, in place of `empty_action`. "New event" stays in the
         // header, so the one action here is the faster way to the member's own events.
-        val importVerb = importLabel(data.import_source.toKit())
+        val importVerb = data.import_label
         if (importVerb.isNotEmpty()) {
             OutlineButton(
                 label = importVerb,
@@ -699,6 +697,7 @@ private fun AgendaMoreSheet(
                 val pick = {
                     onEvent(AgendaHomeEvent(more_row = AgendaHomeEvent.MoreRowPicked(key = row.key)))
                     row.route?.let(onOpen)
+                    Unit
                 }
                 if (row.toggle) {
                     AgendaToggleRow(row, pick)

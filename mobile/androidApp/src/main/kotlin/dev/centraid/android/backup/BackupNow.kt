@@ -20,8 +20,6 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dev.centraid.android.MainActivity
-import dev.centraid.shared.sync.BackupClaim
-import dev.centraid.shared.sync.DrainCopy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -51,7 +49,7 @@ import kotlinx.coroutines.launch
  *
  * **Started and stopped by the member's run, from a visible app.**
  * Rust's `LongRun` effect calls [start] as the run begins and [stop] however
- * it ends (`kit/ScreenEffects.kt`); the Backup sheet only sends the event, once
+ * it ends (`session/ShellEffects.kt`); the Backup sheet only sends the event, once
  * the notification grant is answered. A user-initiated job may only be scheduled
  * while the app is visible and a foreground service may not be started from
  * the background on Android 12 and up; a refusal answers `false` and the
@@ -77,8 +75,21 @@ public object BackupNow {
     internal const val JOB_ID: Int = 1080
     internal const val NOTIFICATION_ID: Int = 1080
 
+    /**
+     * The notification's words, Rust's (`LongRun`): the title of the run and the name of its
+     * channel. Kept for the job or the service that posts the notification after [start].
+     */
+    @Volatile internal var title: String = ""
+    @Volatile internal var channelName: String = ""
+
     /** Start it. `false` when the platform refused; see the class comment. */
-    public fun start(context: Context): Boolean =
+    public fun start(context: Context, title: String, channelName: String): Boolean {
+        this.title = title
+        this.channelName = channelName
+        return startRun(context)
+    }
+
+    private fun startRun(context: Context): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startJob(context.applicationContext)
         } else {
@@ -231,9 +242,9 @@ internal object BackupNotices {
         val manager = NotificationManagerCompat.from(context)
         manager.createNotificationChannel(
             NotificationChannelCompat.Builder(CHANNEL, NotificationManagerCompat.IMPORTANCE_LOW)
-                // THE SHELL'S OWN WORDS (`commonMain`), so the notification and
-                // the screens cannot word one thing two ways.
-                .setName(BackupClaim.TITLE)
+                // RUST'S WORDS (`LongRun`), so the notification and the
+                // screens cannot word one thing two ways.
+                .setName(BackupNow.channelName)
                 .build(),
         )
         val open = PendingIntent.getActivity(
@@ -247,7 +258,7 @@ internal object BackupNotices {
             // monochrome resource the system tints, and the app ships no
             // drawable of its own.
             .setSmallIcon(android.R.drawable.stat_sys_upload)
-            .setContentTitle(DrainCopy.IN_FLIGHT_TITLE)
+            .setContentTitle(BackupNow.title)
             .setProgress(0, 0, true)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

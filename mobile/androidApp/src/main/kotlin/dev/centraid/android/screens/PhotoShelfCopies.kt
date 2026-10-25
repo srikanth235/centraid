@@ -20,7 +20,6 @@ import centraid.core.v1.Request
 import centraid.core.v1.Value
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
-import dev.centraid.design.copy.PhotosCopy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -66,7 +65,7 @@ internal suspend fun performExportOriginals(
     if (located.originals.isEmpty()) return exported(OriginalsExported.Status.STATUS_NONE_HERE)
     return when (export.mode) {
         ExportOriginals.Mode.MODE_SEND -> {
-            val files = withContext(Dispatchers.IO) { prepare(context, located.originals, export.keep_location) }
+            val files = withContext(Dispatchers.IO) { prepare(context, located.originals, export.keep_location, export) }
                 ?: return exported(OriginalsExported.Status.STATUS_LOCATION_NOT_REMOVABLE)
             val authority = context.packageName + COPIES_AUTHORITY_SUFFIX
             val uris = ArrayList(files.map { FileProvider.getUriForFile(context, authority, it) })
@@ -76,13 +75,13 @@ internal suspend fun performExportOriginals(
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             context.startActivity(
-                Intent.createChooser(send, PhotosCopy.PHOTOS_SEND_COPY).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                Intent.createChooser(send, export.chooser_title.ifEmpty { null }).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
             exported(OriginalsExported.Status.STATUS_DONE, files.size)
         }
 
         ExportOriginals.Mode.MODE_SAVE -> {
-            val saved = withContext(Dispatchers.IO) { saveToPhotos(context, located.originals) }
+            val saved = withContext(Dispatchers.IO) { saveToPhotos(context, located.originals, export) }
             if (saved < 0) {
                 exported(OriginalsExported.Status.STATUS_FAILED)
             } else {
@@ -159,12 +158,12 @@ private const val COPIES_FOLDER: String = "shared-copies/batch"
  * Copies under [COPIES_FOLDER], named by type, the location taken out unless
  * the member kept it. Null when a file's location could not be taken out.
  */
-private fun prepare(context: Context, originals: List<LocatedOriginal>, keepLocation: Boolean): List<File>? {
+private fun prepare(context: Context, originals: List<LocatedOriginal>, keepLocation: Boolean, export: ExportOriginals): List<File>? {
     val folder = File(context.cacheDir, COPIES_FOLDER)
     folder.deleteRecursively()
     folder.mkdirs()
     return originals.mapIndexed { index, original ->
-        val target = File(folder, fileName(original, index))
+        val target = File(folder, fileName(original, index, export))
         val copied = runCatching { File(original.path).copyTo(target, overwrite = true) }.isSuccess
         if (!copied) return null
         if (!keepLocation && !stripLocation(target, original)) return null
@@ -220,7 +219,7 @@ private val GPS_TAGS: List<String> = listOf(
  * those devices the save is refused with the export-failed sentence rather
  * than a permission prompt nothing else in Photos needs.
  */
-private fun saveToPhotos(context: Context, originals: List<LocatedOriginal>): Int {
+private fun saveToPhotos(context: Context, originals: List<LocatedOriginal>, export: ExportOriginals): Int {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return -1
     val resolver = context.contentResolver
     var saved = 0
@@ -231,7 +230,7 @@ private fun saveToPhotos(context: Context, originals: List<LocatedOriginal>): In
             MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         }
         val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName(original, index))
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName(original, index, export))
             put(MediaStore.MediaColumns.MIME_TYPE, original.mediaType.ifEmpty { if (original.isVideo) "video/mp4" else "image/jpeg" })
             put(MediaStore.MediaColumns.RELATIVE_PATH, if (original.isVideo) "Movies/Centraid" else "Pictures/Centraid")
             put(MediaStore.MediaColumns.IS_PENDING, 1)
@@ -250,9 +249,9 @@ private fun saveToPhotos(context: Context, originals: List<LocatedOriginal>): In
     return saved
 }
 
-/** `Photo 1.jpg`, `Video 2.mp4` — the extension from the media type the byte door reported. */
-private fun fileName(original: LocatedOriginal, index: Int): String {
-    val stem = if (original.isVideo) PhotosCopy.PHOTOS_CELL_VIDEO else PhotosCopy.PHOTOGRAPH
+/** `Photo 1.jpg`, `Video 2.mp4` — Rust's stems, the extension from the media type the byte door reported. */
+private fun fileName(original: LocatedOriginal, index: Int, export: ExportOriginals): String {
+    val stem = if (original.isVideo) export.video_stem else export.photo_stem
     val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(original.mediaType)
         ?: if (original.isVideo) "mp4" else "jpg"
     return "$stem ${index + 1}.$ext"

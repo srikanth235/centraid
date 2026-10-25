@@ -23,9 +23,9 @@ import centraid.core.v1.NotesNotebooksData
 import centraid.core.v1.NotesPlace
 import centraid.core.v1.NotesSheet
 import centraid.core.v1.Route
-import centraid.screen.v1.SearchField
-import centraid.screen.v1.SectionHead
-import centraid.screen.v1.StatusChip
+import dev.centraid.android.kit.SearchField
+import dev.centraid.android.kit.SectionHead
+import centraid.core.v1.StatusChip
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
@@ -49,7 +49,6 @@ import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -91,7 +90,7 @@ public fun NotesHomeScreen(
         },
         search = if (notesPlace && search != null && denied == null) {
             RoomSearch(
-                field = SearchField(open_ = search.open, term = search.term, corrected = search.corrected),
+                field = SearchField(open_ = search.open_, term = search.term, corrected = search.corrected),
                 placeholder = chrome?.search_placeholder.orEmpty(),
                 label = chrome?.search_label.orEmpty(),
                 closeLabel = chrome?.search_close.orEmpty(),
@@ -119,12 +118,12 @@ public fun NotesHomeScreen(
         band = if (state.band.isEmpty()) null else ({ NotesBand(state.band, { key -> onEvent(NotesHomeEvent(band = NotesHomeEvent.BandPicked(key))) }, onHome) }),
     ) {
         val results = search?.results
-        if (notesPlace && search?.open == true && results != null && state.library != null) {
+        if (notesPlace && search?.open_ == true && results != null && state.library != null) {
             LazyColumn(Modifier.testTag("notes-search-results")) {
                 val empty = results.empty
                 if (results.rows.isEmpty() && search.containers.isEmpty() && empty != null) {
                     item(key = "empty") {
-                        if (empty.headline.isEmpty()) Quiet(empty.body) else EmptyStateView(empty.toKit(), onAction = null)
+                        if (empty.headline.isEmpty()) Quiet(empty.body) else EmptyStateView(empty, onAction = null)
                     }
                 }
                 // THE NOTEBOOKS WHOSE NAME MATCHED come first (#1097), through the route they carry.
@@ -180,7 +179,7 @@ private fun LibraryList(
         val empty = data.empty
         if (data.sections.all { it.rows.isEmpty() } && empty != null) {
             item(key = "empty") {
-                EmptyStateView(empty.toKit(), onAction = { state.new_note?.let(onOpen) })
+                EmptyStateView(empty, onAction = { state.new_note?.let(onOpen) })
             }
         }
         sections(data, menuLabel, onOpen, onEvent)
@@ -286,7 +285,7 @@ private fun NotebooksList(data: NotesNotebooksData, state: NotesHomeState, onEve
         val empty = data.empty
         if (empty != null) {
             item(key = "empty") {
-                EmptyStateView(empty.toKit(), onAction = { onEvent(NotesHomeEvent(form_opened = NotesHomeEvent.FormOpened(notebook_id = ""))) })
+                EmptyStateView(empty, onAction = { onEvent(NotesHomeEvent(form_opened = NotesHomeEvent.FormOpened(notebook_id = ""))) })
             }
         }
     }
@@ -301,7 +300,7 @@ private fun JournalList(
 ) {
     val empty = data.empty
     if (data.days.isEmpty() && empty != null) {
-        EmptyStateView(empty.toKit(), onAction = null)
+        EmptyStateView(empty, onAction = null)
         return
     }
     LazyColumn(Modifier.testTag("notes-journal")) {
@@ -395,7 +394,7 @@ private fun HomeSheets(state: NotesHomeState, onEvent: (NotesHomeEvent) -> Unit,
     }
     state.confirm?.let { confirm ->
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             onConfirm = { onEvent(NotesHomeEvent(confirmed = NotesHomeEvent.Confirmed())) },
             onDismiss = { onEvent(NotesHomeEvent(dismissed = NotesHomeEvent.Dismissed())) },
         )

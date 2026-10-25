@@ -19,7 +19,7 @@ import centraid.core.v1.PhotosHomeState
 import centraid.core.v1.PhotosSelection
 import centraid.core.v1.PhotosSelectionEvent
 import centraid.core.v1.Route
-import centraid.screen.v1.SearchField
+import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace

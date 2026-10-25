@@ -33,7 +33,6 @@ import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.PhotoCellsGrid
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.ScreenFailure
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
@@ -80,7 +79,7 @@ internal fun PhotosSearchScreen(
                     // NOTHING MATCHED IS NOT NOTHING TYPED: the query quoted back and
                     // everywhere search looked, in the kit's empty state.
                     Box(Modifier.fillMaxWidth().padding(top = 160.dp).testTag("photos-search-no-match")) {
-                        EmptyStateView(empty.toKit(), onAction = null)
+                        EmptyStateView(empty, onAction = null)
                     }
                     SearchAskRow(search.ask, onOpen)
                 } else {
@@ -88,7 +87,7 @@ internal fun PhotosSearchScreen(
                         cells = hits.tiles,
                         // `onTap` BY NAME: this composable's last parameter is `header`.
                         onTap = { photoId ->
-                            val template = hits.open
+                            val template = hits.open_
                             val args = template?.photos_lightbox
                             if (template != null && args != null) {
                                 onOpen(template.copy(photos_lightbox = args.copy(photo_id = photoId)))

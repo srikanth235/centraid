@@ -25,30 +25,24 @@ import centraid.core.v1.FilePicked
 import centraid.core.v1.FileProgress
 import centraid.core.v1.FolderFollowed
 import centraid.core.v1.PickFile
-import dev.centraid.shared.apps.docs.DocsFollowBridge
-import dev.centraid.shared.shell.HomeSession
-import dev.centraid.shared.shell.StageFileBridge
+import centraid.core.v1.ImportsFilesEvent
+import dev.centraid.android.session.Stage
+import dev.centraid.core.CentraidCore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okio.ByteString.Companion.EMPTY
 import java.io.File
 
 /**
- * WHAT DOCS' EFFECTS NEED FROM THE SESSION (#1135): the stage door that a picked file
- * streams through, and the vault's half of following a folder. Attached once, with the
- * session (`RustRoot.attach`).
+ * WHAT DOCS' EFFECTS NEED FROM THE SESSION (#1135): the core a picked file streams into (the vault
+ * in front, through the front's stage door) and the follow service a picked or dropped folder is
+ * relayed to (`imports.files`: the vault's half of following is Rust's).
  */
-internal class DocsFiles {
-    val stage = StageFileBridge()
-    val follow = DocsFollowBridge()
-
-    fun attach(session: HomeSession) {
-        stage.attach(session)
-        follow.attach(session)
-    }
-}
+internal class DocsFiles(
+    val core: () -> CentraidCore?,
+    val relay: (ImportsFilesEvent) -> Unit,
+)
 
 /**
  * THE PLATFORM'S HALF OF `PickFile`, `FollowFolder` AND `StopFollowing` (#1047 R-1047-Q4,
@@ -63,7 +57,6 @@ internal class DocsPickers(
     private val context: Context,
     private val files: DocsFiles,
     private val scope: CoroutineScope,
-    private val onFollowed: () -> Unit,
 ) {
     private var answer: ((EffectResult) -> Unit)? = null
     internal var upload: ManagedActivityResultLauncher<Array<String>, Uri?>? = null
@@ -149,22 +142,47 @@ internal class DocsPickers(
 
     private fun stage(path: String, name: String, mediaType: String) {
         val answer = answer
-        files.stage.stage(
-            path = path,
-            mediaType = mediaType,
-            progress = { sent, total ->
-                answer?.invoke(EffectResult(file_progress = FileProgress(staged_bytes = sent, total_bytes = total, name = name)))
-            },
-            staged = { blob, size ->
-                DocsIngestFiles.discard(File(path))
-                answer?.invoke(EffectResult(file_picked = FilePicked(blob = blob, byte_size = size, name = name, media_type = mediaType)))
-            },
-            refused = { reason ->
-                DocsIngestFiles.discard(File(path))
-                answer?.invoke(EffectResult(failed = EffectFailed(reason = reason)))
-            },
-        )
         this.answer = null
+        val file = File(path)
+        scope.launch {
+            val core = files.core()
+            val size = file.length()
+            val outcome = if (core == null) {
+                Stage.Outcome.Refused("")
+            } else {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        file.inputStream().use { input ->
+                            var sent = 0L
+                            val slices = Stage.slices(input)
+                            Stage.stage(core, mediaType, size) { max ->
+                                slices(max).also {
+                                    sent += it.size
+                                    answer?.invoke(
+                                        EffectResult(file_progress = FileProgress(staged_bytes = sent, total_bytes = size, name = name)),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }.getOrElse { Stage.Outcome.Refused("") }
+            }
+            DocsIngestFiles.discard(file)
+            when (outcome) {
+                is Stage.Outcome.Staged -> answer?.invoke(
+                    EffectResult(
+                        file_picked = FilePicked(
+                            blob = outcome.handle.content_hash,
+                            byte_size = outcome.handle.byte_size,
+                            name = name,
+                            media_type = mediaType,
+                        ),
+                    ),
+                )
+                is Stage.Outcome.Refused ->
+                    answer?.invoke(EffectResult(failed = EffectFailed(reason = outcome.sentence.ifEmpty { "the file was not staged" })))
+            }
+        }
     }
 
     // FOLLOW A FOLDER (#1127, R-1127-7): the system's folder picker, raised only by the member's
@@ -180,34 +198,30 @@ internal class DocsPickers(
         }
     }
 
-    /** The folder picker returned [tree]. */
+    /**
+     * The folder picker returned [tree]: the shell mints the origin, keeps the grant under it and
+     * answers `FolderFollowed`; the vault's half is `imports.files`', which hears the same answer. A
+     * pick of a folder already followed is a pass and no more.
+     */
     fun treePicked(tree: Uri?) {
         if (tree == null) return done()
         if (FolderAccess.following(context, tree) != null) {
-            onFollowed()
+            files.relay(ImportsFilesEvent(requested = ImportsFilesEvent.Requested()))
             return done()
         }
-        val origin = files.follow.mintOrigin()
+        val origin = "folder:" + java.util.UUID.randomUUID().toString()
         if (!FolderAccess.remember(context, origin, tree)) return fail("the folder could not be followed")
         val name = FolderAccess.name(context, tree).ifEmpty { tree.lastPathSegment.orEmpty() }
-        files.follow.follow(origin, name) { followed ->
-            if (followed) {
-                onFollowed()
-                answer?.invoke(EffectResult(folder_followed = FolderFollowed(origin = origin, name = name)))
-                answer = null
-            } else {
-                FolderAccess.forget(context, origin)
-                fail("the folder could not be followed")
-            }
-        }
+        answer?.invoke(EffectResult(folder_followed = FolderFollowed(origin = origin, name = name)))
+        answer = null
+        files.relay(ImportsFilesEvent(folder_followed = ImportsFilesEvent.FolderFollowed(origin = origin, name = name)))
     }
 
-    /** "Stop following": the vault forgets the links (every document stays), then the grant goes. */
+    /** "Stop following": the grant goes, and the vault forgets the links (`imports.files`; every document stays). */
     fun stop(origin: String, answer: (EffectResult) -> Unit) {
-        files.follow.stop(origin) { stopped ->
-            if (stopped) FolderAccess.forget(context, origin)
-            answer(EffectResult(done = EffectDone()))
-        }
+        FolderAccess.forget(context, origin)
+        answer(EffectResult(done = EffectDone()))
+        files.relay(ImportsFilesEvent(folder_stopped = ImportsFilesEvent.FolderStopped(origin = origin)))
     }
 
     private fun done() {
@@ -237,10 +251,10 @@ internal class DocsPickers(
 
 /** The launchers the pickers use, registered with the composition that performs the effects. */
 @Composable
-internal fun rememberDocsPickers(files: DocsFiles, onFollowed: () -> Unit): DocsPickers {
+internal fun rememberDocsPickers(files: DocsFiles): DocsPickers {
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
-    val pickers = remember(files) { DocsPickers(context, files, scope, onFollowed) }
+    val pickers = remember(files) { DocsPickers(context, files, scope) }
     // The camera's target survives the activity being recreated behind it.
     var target by rememberSaveable { mutableStateOf("") }
     pickers.setScanTarget = { target = it }

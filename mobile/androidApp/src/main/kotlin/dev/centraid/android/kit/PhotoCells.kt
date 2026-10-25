@@ -32,11 +32,10 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.EmptyState
+import centraid.core.v1.EmptyState
 import centraid.core.v1.PhotoTile as WireTile
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
-import dev.centraid.design.copy.PhotosCopy
 import centraid.core.v1.PhotosPackedRow
 
 /**
@@ -174,7 +173,7 @@ public fun PhotoTile(
             .combinedClickable(
                 onClick = onTap,
                 onLongClick = onLongPress,
-                onClickLabel = if (selecting) PhotosCopy.PHOTOS_SELECT else PhotosCopy.PHOTOS_OPEN,
+                onClickLabel = if (selecting) KitWords.SELECT else KitWords.OPEN,
             )
             .semantics {
                 contentDescription = label

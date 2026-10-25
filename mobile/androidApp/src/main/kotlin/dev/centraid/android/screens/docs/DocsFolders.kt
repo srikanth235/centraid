@@ -4,13 +4,12 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
-import dev.centraid.shared.apps.docs.FilesImport
-import dev.centraid.shared.apps.docs.FilesRead
-import dev.centraid.shared.apps.docs.FilesReader
-import dev.centraid.shared.apps.docs.PhoneFile
-import dev.centraid.shared.apps.docs.PhoneFileBytes
-import dev.centraid.shared.sync.phone.PhoneOriginRef
-import java.io.InputStream
+import centraid.core.v1.FolderFile
+import centraid.core.v1.FolderFileStaged
+import centraid.core.v1.FolderListed
+import centraid.core.v1.FoldersListing
+import dev.centraid.android.session.Stage
+import dev.centraid.core.CentraidCore
 
 /**
  * THE ACCESS THE MEMBER GAVE TO THE FOLDERS DOCS FOLLOWS (#1127, R-1127-7), Android's half.
@@ -69,48 +68,55 @@ internal object FolderAccess {
     }.getOrDefault("")
 }
 
-/** A file's bytes from the provider's stream. */
-private class StreamBytes(private val input: InputStream) : PhoneFileBytes {
-    override fun read(max: Int): ByteArray {
-        val buffer = ByteArray(max)
-        val count = input.read(buffer)
-        return if (count <= 0) ByteArray(0) else buffer.copyOf(count)
-    }
-
-    override fun close() {
-        runCatching { input.close() }
-    }
-}
-
 /**
- * THE FOLLOWER'S FOLDER READER (#1127): a LISTING of every followed folder, over the grants the
- * member already gave, with `DocumentsContract` (children queried one directory at a time, no
- * `DocumentFile` and no bytes). Called off the main thread by [dev.centraid.android.kit.AndroidPhoneFollow].
+ * THE FOLLOWED FOLDERS, AS `imports.files` ASKS FOR THEM (#1127; #1135): a LISTING of each folder
+ * the vault follows, over the grants the member already gave, with `DocumentsContract` (children
+ * queried one directory at a time, no bytes), and one file streamed through the stage door. Which
+ * folders, which files are records, the stat pre-check and whether a read was whole are Rust's
+ * (`crates/screens/src/imports/files.rs`).
  *
- * - **A folder with no grant, or whose root the provider will not answer for, is left out of
- *   `origins`**: the shared engine takes it for gone and asks (R-1127-9).
- * - **A directory the provider would not list makes the read incomplete**, so nothing is trashed
- *   or held because of it (R-1127-3).
+ * - **A folder with no grant, or whose root the provider will not answer for, is left out.**
+ * - **A directory the provider would not list makes the listing incomplete** (R-1127-3).
  * - Hidden names (a leading `.`), virtual documents (a Google Doc with no bytes) and files whose
- *   provider states no size are skipped.
+ *   provider states no size are not listed.
  */
-internal class AndroidFolderReader(private val context: Context) : FilesReader {
-    override fun read(followed: List<String>, deliver: (FilesRead?) -> Unit) {
-        val files = mutableListOf<PhoneFile>()
-        val origins = mutableListOf<PhoneOriginRef>()
+internal object FolderReader {
+    /** `FoldersRead`: every followed folder the shell can still open, as a listing. */
+    fun list(context: Context, origins: List<String>, deviceId: String): FoldersListing {
         var complete = true
-        for (origin in followed) {
-            val tree = FolderAccess.tree(context, origin) ?: continue
-            val name = FolderAccess.name(context, tree)
-            if (name.isEmpty()) continue
-            origins += FilesImport.folder(origin, name)
-            if (!walk(origin, tree, files)) complete = false
+        val folders = origins.mapNotNull { origin ->
+            val tree = FolderAccess.tree(context, origin) ?: return@mapNotNull null
+            val label = FolderAccess.name(context, tree)
+            if (label.isEmpty()) return@mapNotNull null
+            val files = mutableListOf<FolderFile>()
+            if (!walk(context, tree) { path, _, size, modified, mime -> files += FolderFile(path = path, size = size, modified_ms = modified, media_type = mime) }) complete = false
+            FolderListed(origin = origin, label = label, files = files)
         }
-        deliver(FilesRead(files, origins, complete))
+        return FoldersListing(complete = complete, device_id = deviceId, folders = folders)
     }
 
-    /** Every file under [tree], breadth-first. False when a directory could not be listed. */
-    private fun walk(origin: String, tree: Uri, into: MutableList<PhoneFile>): Boolean {
+    /** `StageFolderFile`: the file at [path] in [origin]'s folder, streamed through the stage door. */
+    suspend fun stage(context: Context, core: CentraidCore, origin: String, path: String, mediaType: String): FolderFileStaged {
+        val tree = FolderAccess.tree(context, origin) ?: return FolderFileStaged(ok = false)
+        var found: Pair<Uri, Long>? = null
+        walk(context, tree) { at, uri, size, _, _ -> if (at == path && found == null) found = uri to size }
+        val (uri, size) = found ?: return FolderFileStaged(ok = false)
+        val outcome = try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                Stage.stage(core, mediaType.ifEmpty { OCTET_STREAM }, size, read = Stage.slices(input))
+            }
+        } catch (why: Exception) {
+            null
+        }
+        return when (outcome) {
+            is Stage.Outcome.Staged ->
+                FolderFileStaged(ok = true, content_hash = outcome.handle.content_hash, byte_size = outcome.handle.byte_size)
+            else -> FolderFileStaged(ok = false)
+        }
+    }
+
+    /** Every file under [tree], breadth-first, as `(path, uri, size, modified ms, media type)`. False when a directory could not be listed. */
+    private fun walk(context: Context, tree: Uri, each: (String, Uri, Long, Long, String) -> Unit): Boolean {
         var complete = true
         val pending = ArrayDeque<Pair<String, String>>()
         pending.add(DocumentsContract.getTreeDocumentId(tree) to "")
@@ -140,14 +146,12 @@ internal class AndroidFolderReader(private val context: Context) : FilesReader {
                     }
                     val virtual = flags and DocumentsContract.Document.FLAG_VIRTUAL_DOCUMENT != 0
                     if (virtual || it.isNull(3)) continue
-                    val uri = DocumentsContract.buildDocumentUriUsingTree(tree, id)
-                    into += PhoneFile(
-                        origin = origin,
-                        path = path,
-                        size = it.getLong(3),
-                        modifiedMs = if (it.isNull(4)) 0L else it.getLong(4),
-                        mediaType = mime.takeUnless { type -> type == OCTET_STREAM }.orEmpty(),
-                        open = { open(uri) },
+                    each(
+                        path,
+                        DocumentsContract.buildDocumentUriUsingTree(tree, id),
+                        it.getLong(3),
+                        if (it.isNull(4)) 0L else it.getLong(4),
+                        mime.takeUnless { type -> type == OCTET_STREAM }.orEmpty(),
                     )
                 }
             }
@@ -155,21 +159,13 @@ internal class AndroidFolderReader(private val context: Context) : FilesReader {
         return complete
     }
 
-    private fun open(uri: Uri): PhoneFileBytes? = try {
-        context.contentResolver.openInputStream(uri)?.let(::StreamBytes)
-    } catch (why: Exception) {
-        null
-    }
-
-    private companion object {
-        const val OCTET_STREAM = "application/octet-stream"
-        val COLUMNS = arrayOf(
-            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-            DocumentsContract.Document.COLUMN_MIME_TYPE,
-            DocumentsContract.Document.COLUMN_SIZE,
-            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
-            DocumentsContract.Document.COLUMN_FLAGS,
-        )
-    }
+    private const val OCTET_STREAM = "application/octet-stream"
+    private val COLUMNS = arrayOf(
+        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+        DocumentsContract.Document.COLUMN_MIME_TYPE,
+        DocumentsContract.Document.COLUMN_SIZE,
+        DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+        DocumentsContract.Document.COLUMN_FLAGS,
+    )
 }

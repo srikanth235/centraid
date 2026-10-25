@@ -47,7 +47,6 @@ import androidx.core.content.ContextCompat
 import centraid.core.v1.BackupHomeData
 import centraid.core.v1.BackupHomeEvent
 import centraid.core.v1.BackupHomeState
-import centraid.core.v1.BackupHomeRoute
 import centraid.core.v1.BackupInk
 import centraid.core.v1.Route
 import dev.centraid.android.kit.FailureView
@@ -58,9 +57,6 @@ import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.shared.platform.platformServices
-import dev.centraid.shared.shell.HomeSession
-import dev.centraid.shared.sync.TransferRule
 
 // THE BACKUP SCREEN (`backup.home`; #1080, #1135). Home's half of the backup is
 // the vault lockup's status line (`VaultHeader`, R-ONBOARD-11).
@@ -77,50 +73,23 @@ import dev.centraid.shared.sync.TransferRule
 // the same names.
 
 /**
- * THE ROUTE OF THE BACKUP SCREEN, for the doors that open it from outside a Rust
- * page (Home's backup line, the band's Backup place). Rust builds every route a
- * Rust screen hands out (`backup::routes::home`); these two doors are the shell's
- * own until the shell lane's tabs replace them.
- */
-internal object BackupRoute {
-    val home: Route = Route(screen = "backup.home", backup_home = BackupHomeRoute())
-}
-
-/**
- * THE MEMBER CHANGED THE RULE, from the Backup screen or the Home header's
- * sheet (#1080): written, answered as what the store HOLDS, and the
- * background windows asked for again (`HomeSession.ruleChanged`), so the
- * periodic worker's network constraint follows the rule. `HomeBridge.setTransferRule`
- * is the iOS twin. The Backup screen also tells Rust (`RuleChosen`), which keeps
- * the same word in the same store, until the pass service owns the windows.
- */
-internal suspend fun writeTransferRule(session: HomeSession?, picked: String): String {
-    val settled = TransferRule.of(picked)
-    TransferRule.write(platformServices().secureStore, settled)
-    session?.ruleChanged()
-    return settled.stored
-}
-
-/**
  * THE BACKUP SCREEN: where the backup stands, the three controls, the gateways this
  * phone backs up to and where the recovery key is.
  *
- * [onRulePicked] tells the session the rule changed (the background windows follow
- * it); [onAddDestination] and [onShowWords] hand pairing and the recovery key to
- * their pages.
+ * The rule is written, and the pass service told, by the Backup screen in Rust
+ * (`RuleChosen`); pairing and the recovery key are the routes its view carries
+ * (`add_destination`, `key_show`), pushed by [onOpen].
  */
 @Composable
 internal fun BackupHomeScreen(
     state: BackupHomeState,
     onEvent: (BackupHomeEvent) -> Unit,
-    onRulePicked: (String) -> Unit,
-    onAddDestination: () -> Unit,
-    onShowWords: () -> Unit,
+    onOpen: (Route) -> Unit,
 ) {
     val data = state.data_
     val failure = state.failure
     when {
-        data != null -> BackupPage(data, onEvent, onRulePicked, onAddDestination, onShowWords)
+        data != null -> BackupPage(data, onEvent, onOpen)
         failure != null -> FailureView(
             sentence = failure.sentence,
             remedy = failure.remedy,
@@ -134,10 +103,10 @@ internal fun BackupHomeScreen(
 private fun BackupPage(
     model: BackupHomeData,
     onEvent: (BackupHomeEvent) -> Unit,
-    onRulePicked: (String) -> Unit,
-    onAddDestination: () -> Unit,
-    onShowWords: () -> Unit,
+    onOpen: (Route) -> Unit,
 ) {
+    val onAddDestination = { model.add_destination?.let(onOpen); Unit }
+    val onShowWords = { model.key_show?.let(onOpen); Unit }
     val context = LocalContext.current
     // "BACK UP NOW" IS RUST'S: the event asks for a pass. The shell's part is the
     // notification grant, asked for at the tap and never before; the event goes once
@@ -229,7 +198,6 @@ private fun BackupPage(
                             .heightIn(min = 44.dp)
                             .clickable {
                                 onEvent(BackupHomeEvent(rule_chosen = BackupHomeEvent.RuleChosen(stored = choice.stored)))
-                                onRulePicked(choice.stored)
                             }
                             .padding(vertical = 8.dp)
                             .testTag("backup-rule-" + choice.stored)

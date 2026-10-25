@@ -43,7 +43,7 @@ public fun TrashScreen(
         ) { trash ->
             val empty = trash.empty
             if (trash.rows.isEmpty() && empty != null) {
-                EmptyStateView(empty.toKit(), onAction = null)
+                EmptyStateView(empty, onAction = null)
             } else {
                 LazyColumn {
                     items(trash.rows, key = { it.id }) { row ->
@@ -76,7 +76,7 @@ public fun TrashScreen(
     val confirm = view.confirm
     if (confirm != null) {
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             onConfirm = { onEvent(TrashEvent(confirmed = TrashEvent.Confirmed())) },
             onDismiss = { onEvent(TrashEvent(dismissed = TrashEvent.Dismissed())) },
         )

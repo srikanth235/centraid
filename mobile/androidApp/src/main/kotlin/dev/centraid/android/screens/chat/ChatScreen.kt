@@ -63,8 +63,8 @@ import centraid.core.v1.ChatPending
 import centraid.core.v1.ChatState
 import centraid.core.v1.ChatThreadItem
 import centraid.core.v1.Route
-import centraid.screen.v1.Confirm
-import centraid.screen.v1.SearchField
+import centraid.core.v1.Confirm
+import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.CentraidSearchField
 import dev.centraid.android.kit.ConfirmSheet
@@ -157,7 +157,7 @@ internal fun ChatScreen(
             )
         }
         val sheet = state.document_sheet
-        if (sheet != null && sheet.open) {
+        if (sheet != null && sheet.open_) {
             DocumentSheet(
                 sheet,
                 onPick = { doc ->
@@ -929,7 +929,7 @@ private fun ChatDrawer(
                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp).semantics { heading() },
             )
             val search = state.drawer_search
-            if (search != null && search.open) {
+            if (search != null && search.open_) {
                 CentraidSearchField(
                     field = SearchField(open_ = true, term = search.term, corrected = search.corrected),
                     placeholder = state.drawer_search_placeholder,

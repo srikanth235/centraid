@@ -1,6 +1,6 @@
 package dev.centraid.android
 
-import dev.centraid.shared.platform.SealedEntries
+import dev.centraid.android.kit.SealedEntries
 import java.security.GeneralSecurityException
 import javax.crypto.KeyGenerator
 import kotlin.io.encoding.Base64
@@ -11,7 +11,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /**
- * THE SEALING UNDER `AndroidSecureStore`, on the JVM with software keys.
+ * THE SEALING UNDER THE DEVICE SECRET STORE (`kit/SecretStores.kt`), on the JVM with software keys.
  *
  * The phone generates the same two key kinds inside the Android Keystore; what
  * a unit test cannot reach is the Keystore itself, so this proves the format

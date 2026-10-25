@@ -15,7 +15,7 @@ import centraid.core.v1.TodoListEvent
 import centraid.core.v1.TodoListState
 import centraid.core.v1.TodoProjectEvent
 import centraid.core.v1.TodoProjectState
-import centraid.screen.v1.SectionHead
+import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EmptyStateView
@@ -31,7 +31,6 @@ import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.ShowMoreFooter
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -54,7 +53,7 @@ internal fun TodoListScreen(
             ) { list ->
                 val empty = list.empty
                 if (list.groups.isEmpty() && empty != null) {
-                    EmptyStateView(empty.toKit(), onAction = null)
+                    EmptyStateView(empty, onAction = null)
                 } else {
                     LazyColumn(Modifier.fillMaxSize().testTag("tasks-list")) {
                         todoGroups(
@@ -79,7 +78,7 @@ internal fun TodoListScreen(
                     }
                 }
             }
-            StatusLine(state.status?.toKit()) { onEvent(TodoListEvent(status_acted = TodoListEvent.StatusActed())) }
+            StatusLine(state.status) { onEvent(TodoListEvent(status_acted = TodoListEvent.StatusActed())) }
         }
     }
 }
@@ -115,7 +114,7 @@ internal fun TodoProjectScreen(
             ) { project ->
                 val empty = project.empty
                 if (project.groups.isEmpty() && empty != null) {
-                    EmptyStateView(empty.toKit(), onAction = null)
+                    EmptyStateView(empty, onAction = null)
                 } else {
                     LazyColumn(Modifier.fillMaxSize().testTag("tasks-project")) {
                         if (project.count_label.isNotEmpty()) {
@@ -142,7 +141,7 @@ internal fun TodoProjectScreen(
                     }
                 }
             }
-            StatusLine(state.status?.toKit()) { onEvent(TodoProjectEvent(status_acted = TodoProjectEvent.StatusActed())) }
+            StatusLine(state.status) { onEvent(TodoProjectEvent(status_acted = TodoProjectEvent.StatusActed())) }
             TodoQuickAddBar(
                 quickAdd = state.quick_add,
                 placeholder = chrome?.quick_add_placeholder.orEmpty(),
@@ -209,7 +208,7 @@ internal fun TodoCatchUpScreen(
             ) { catchUp ->
                 val empty = catchUp.empty
                 if (catchUp.piles.isEmpty() && empty != null) {
-                    EmptyStateView(empty.toKit(), onAction = null)
+                    EmptyStateView(empty, onAction = null)
                 } else {
                     LazyColumn(Modifier.fillMaxSize().testTag("tasks-catch-up")) {
                         if (catchUp.head.isNotEmpty()) {
@@ -242,13 +241,13 @@ internal fun TodoCatchUpScreen(
                     }
                 }
             }
-            StatusLine(state.status?.toKit()) { onEvent(TodoCatchUpEvent(status_acted = TodoCatchUpEvent.StatusActed())) }
+            StatusLine(state.status) { onEvent(TodoCatchUpEvent(status_acted = TodoCatchUpEvent.StatusActed())) }
         }
     }
     val confirm = state.confirm
     if (confirm != null) {
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             onConfirm = { onEvent(TodoCatchUpEvent(confirmed = TodoCatchUpEvent.Confirmed())) },
             onDismiss = { onEvent(TodoCatchUpEvent(dismissed = TodoCatchUpEvent.Dismissed())) },
             cancelLabel = chrome?.cancel?.ifEmpty { null } ?: KitWords.CANCEL,

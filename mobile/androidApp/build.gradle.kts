@@ -6,10 +6,11 @@
 // `cargo xtask gate` today, which `mobile/README.md` states as an owner
 // hand-off with the exact command.
 //
-// A `com.android.application` module that depends on `:shared`, per the AGP 9
-// layout: the application plugin and the Kotlin Multiplatform plugin are
-// incompatible in one module from AGP 9 on, so the entry point lives here and
-// the shared code stays a KMP library.
+// A `com.android.application` module over `:core`, the ABI binding, per the
+// AGP 9 layout: the application plugin and the Kotlin Multiplatform plugin are
+// incompatible in one module from AGP 9 on, so the binding stays a KMP library
+// and everything above it is this module (#1135: the screens, the session and
+// every decision are Rust's).
 
 plugins {
     id("com.android.application")
@@ -58,8 +59,11 @@ android {
 }
 
 dependencies {
-    implementation(project(":shared"))
     implementation(project(":core"))
+    // WHAT `:core`'s PUBLIC TYPES ARE MADE OF: the Wire messages it generates and
+    // the coroutines its session speaks. Named here, not inherited.
+    implementation(libs.wire.runtime)
+    implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -103,8 +107,8 @@ dependencies {
     testImplementation(libs.roborazzi.compose)
 }
 
-// THE UNIT TESTS RUN ON JDK 21. `:shared` and `:core` compile with
-// `jvmToolchain(21)`, so their classes are Java 21 bytecode; a test task left
+// THE UNIT TESTS RUN ON JDK 21. `:core` compiles with
+// `jvmToolchain(21)`, so its classes are Java 21 bytecode; a test task left
 // on the JVM that runs Gradle cannot load them where that JVM is older
 // (`UnsupportedClassVersionError` on every test, seen on a JDK 17 Mac).
 tasks.withType<Test>().configureEach {

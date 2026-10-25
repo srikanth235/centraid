@@ -18,7 +18,7 @@ import centraid.core.v1.AgendaTodo
 import centraid.core.v1.Route
 import centraid.core.v1.TodoChrome
 import centraid.core.v1.TodoNotice
-import centraid.screen.v1.SectionHead
+import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EmptyStateView
@@ -29,7 +29,6 @@ import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.ShowMoreFooter
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -100,7 +99,7 @@ internal fun AgendaTodoPlace(
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 EmptyStateView(
-                    empty.toKit(),
+                    empty,
                     onAction = if (empty.action_label.isNotEmpty()) {
                         { onEvent(AgendaHomeEvent(todo_empty_acted = AgendaHomeEvent.TodoEmptyActed())) }
                     } else {
@@ -133,7 +132,7 @@ internal fun AgendaTodoPlace(
             items(group.rows, key = { "project-${it.row?.id}" }) { project ->
                 project.row?.let { row ->
                     Box(Modifier.testTag("agenda-project-${row.id}")) {
-                        CentraidRow(row.toKit()) { project.route?.let(actions.onOpen) }
+                        CentraidRow(row) { project.route?.let(actions.onOpen) }
                     }
                 }
             }

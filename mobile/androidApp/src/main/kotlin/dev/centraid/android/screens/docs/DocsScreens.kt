@@ -67,9 +67,9 @@ import centraid.core.v1.DocsStage
 import centraid.core.v1.DocsVersionsEvent
 import centraid.core.v1.DocsVersionsState
 import centraid.core.v1.Route
-import centraid.screen.v1.SearchField
-import centraid.screen.v1.SectionHead
-import centraid.screen.v1.StatusChip
+import dev.centraid.android.kit.SearchField
+import dev.centraid.android.kit.SectionHead
+import centraid.core.v1.StatusChip
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
@@ -103,8 +103,7 @@ import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
-import dev.centraid.android.screens.LightboxTransport
+import dev.centraid.android.screens.photos.LightboxTransport
 import dev.centraid.android.screens.photos.PlayerSurface
 import dev.centraid.android.screens.decodeUpright
 import dev.centraid.android.screens.photos.rememberLightboxPlayer
@@ -398,7 +397,7 @@ internal fun DocsDriveScreen(
     val confirm = state.confirm
     if (confirm != null) {
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             onConfirm = { onEvent(DocsDriveEvent(confirmed = DocsDriveEvent.Confirmed())) },
             onDismiss = { onEvent(DocsDriveEvent(dismissed = DocsDriveEvent.Dismissed())) },
         )
@@ -446,7 +445,7 @@ private fun DriveData(
     val containers = data.containers
     if (data.rows.isEmpty() && data.folders.isEmpty() && containers.isEmpty() && empty != null) {
         EmptyStateView(
-            empty.toKit(),
+            empty,
             onAction = when (data.empty_action) {
                 DocsDriveData.EmptyAction.EMPTY_ACTION_ADD -> {
                     { onEvent(DocsDriveEvent(sheet_opened = DocsDriveEvent.SheetOpened(kind = DocsSheet.Kind.KIND_ADD))) }
@@ -641,7 +640,7 @@ internal fun DocsDocumentScreen(
         ) { document ->
             val gone = document.gone
             if (gone != null) {
-                EmptyStateView(gone.toKit(), onAction = null)
+                EmptyStateView(gone, onAction = null)
                 return@ReadStateView
             }
             LazyColumn(Modifier.fillMaxSize()) {
@@ -725,7 +724,7 @@ internal fun DocsDocumentScreen(
     val confirm = state.confirm
     if (confirm != null) {
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             onConfirm = { onEvent(DocsDocumentEvent(confirmed = DocsDocumentEvent.Confirmed())) },
             onDismiss = { onEvent(DocsDocumentEvent(dismissed = DocsDocumentEvent.Dismissed())) },
         )
@@ -756,7 +755,7 @@ internal fun DocsVersionsScreen(state: DocsVersionsState, onEvent: (DocsVersions
         ) { data ->
             val empty = data.empty
             if (empty != null) {
-                EmptyStateView(empty.toKit(), onAction = null)
+                EmptyStateView(empty, onAction = null)
                 return@ReadStateView
             }
             LazyColumn(Modifier.fillMaxSize()) {
@@ -854,7 +853,7 @@ private fun StagePlayer(stage: DocsStage, path: String) {
         if (stage.media == DocsStage.Media.MEDIA_VIDEO) {
             Box(Modifier.fillMaxWidth().aspectRatio(VIDEO_ASPECT)) { PlayerSurface(player) }
         }
-        LightboxTransport(player)
+        LightboxTransport(player, stage.play_label, stage.pause_label, stage.position_label, stage.position_value)
     }
 }
 
@@ -930,7 +929,7 @@ internal fun DocsEditorScreen(state: DocsEditorState, onEvent: (DocsEditorEvent)
     val draft = state.draft
     EditorRoom(
         title = draft?.title?.ifEmpty { null } ?: state.title_hint,
-        status = state.autosave?.toKit(),
+        status = state.autosave,
         onClose = onClose,
         // CLOSE = DONE: the pop is a `NavPopped`, which Rust turns into the screen's `Left`, the flush.
         onDeparted = {},

@@ -45,8 +45,8 @@ import centraid.core.v1.HomeSearchRow
 import centraid.core.v1.HomeSearchState
 import centraid.core.v1.Route
 import centraid.core.v1.SearchContainer
-import centraid.screen.v1.SearchField
-import centraid.screen.v1.SectionHead
+import dev.centraid.android.kit.SearchField
+import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidSearchField
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.KitChip
@@ -58,7 +58,6 @@ import dev.centraid.android.kit.SearchAskRow
 import dev.centraid.android.kit.SearchContainerRow
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidDark
 import dev.centraid.android.theme.centraidType
@@ -147,7 +146,7 @@ internal fun HomeSearchScreen(
                     // NOTHING MATCHED: the empty state's one action asks the assistant about the term.
                     val ask = found.ask_route
                     if (empty != null) {
-                        EmptyStateView(empty.toKit(), onAction = ask?.let { route -> { onOpen(route) } })
+                        EmptyStateView(empty, onAction = ask?.let { route -> { onOpen(route) } })
                     } else {
                         Groups(found, onEvent, onOpen)
                     }

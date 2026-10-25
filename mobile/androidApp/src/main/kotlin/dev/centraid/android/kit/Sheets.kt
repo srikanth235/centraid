@@ -18,7 +18,7 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.Confirm
+import centraid.core.v1.Confirm
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 

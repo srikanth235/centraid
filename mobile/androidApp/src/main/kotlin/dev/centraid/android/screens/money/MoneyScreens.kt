@@ -24,7 +24,7 @@ import centraid.core.v1.MoneyTargetEvent
 import centraid.core.v1.MoneyTargetState
 import centraid.core.v1.MoneyTransactionEvent
 import centraid.core.v1.MoneyTransactionState
-import centraid.screen.v1.SearchField
+import dev.centraid.android.kit.SearchField
 import centraid.core.v1.Route
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
@@ -53,7 +53,6 @@ import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.ShowMoreFooter
 import dev.centraid.android.kit.StatusChipView
 import dev.centraid.android.kit.StatusLine
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.kit.toneInk
 import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
@@ -131,11 +130,11 @@ internal fun MoneyHomeScreen(
     when (state.sheet) {
         MoneyHomeState.Sheet.SHEET_MORE -> OptionSheet(
             title = chrome?.more_title.orEmpty(),
-            options = chrome?.more_rows.orEmpty().map { SheetOption(key = it.route.screen, label = it.label, iconKey = it.icon_key, detail = it.meta) },
+            options = chrome?.more_rows.orEmpty().map { SheetOption(key = it.route?.screen.orEmpty(), label = it.label, iconKey = it.icon_key, detail = it.meta) },
             onPick = { key ->
                 // The sheet closes behind the page the row opens.
                 onEvent(MoneyHomeEvent(more_opened = MoneyHomeEvent.MoreOpened()))
-                chrome?.more_rows.orEmpty().firstOrNull { it.route.screen == key }?.let { onOpen(it.route) }
+                chrome?.more_rows.orEmpty().firstOrNull { it.route?.screen == key }?.route?.let(onOpen)
             },
             onDismiss = close,
         )
@@ -190,7 +189,7 @@ private fun LazyListScope.spending(state: MoneyHomeState, onOpen: (Route) -> Uni
     val spending = state.data_?.spending ?: return
     val empty = spending.empty
     if (empty != null) {
-        item(key = "empty") { EmptyStateView(empty.toKit(), onAction = addStatement) }
+        item(key = "empty") { EmptyStateView(empty, onAction = addStatement) }
         return
     }
     items(spending.heroes.size, key = { "hero-$it" }) { index -> MoneyHeroView(spending.heroes[index]) }
@@ -200,18 +199,18 @@ private fun LazyListScope.spending(state: MoneyHomeState, onOpen: (Route) -> Uni
     }
     spending.tables.forEach { table ->
         item(key = "table-${table.currency}") { MoneySection(table.heading) }
-        items(table.rows, key = { "c-${table.currency}-${it.route.money_target?.category_id}" }) { line ->
+        items(table.rows, key = { "c-${table.currency}-${it.route?.money_target?.category_id}" }) { line ->
             CentraidRow(
                 title = line.label,
                 meta = if (line.has_plan) money(line.planned) else "",
                 trailing = money(if (line.has_plan) line.left else line.spent),
                 trailingTone = if (line.over) {
-                    centraid.screen.v1.StatusChip.Tone.TONE_NET
+                    centraid.core.v1.StatusChip.Tone.TONE_NET
                 } else {
-                    centraid.screen.v1.StatusChip.Tone.TONE_NEUTRAL
+                    centraid.core.v1.StatusChip.Tone.TONE_NEUTRAL
                 },
                 a11y = spoken(line.accessibility_label, if (line.has_plan) line.left else line.spent),
-                testTag = "money-category-${line.route.money_target?.category_id}",
+                testTag = "money-category-${line.route?.money_target?.category_id}",
                 onTap = { line.route?.let(onOpen) },
             )
         }
@@ -243,7 +242,7 @@ private fun LazyListScope.activity(
     val activity = state.data_?.activity ?: return
     val empty = activity.empty
     if (empty != null) {
-        item(key = "empty") { EmptyStateView(empty.toKit(), onAction = addStatement) }
+        item(key = "empty") { EmptyStateView(empty, onAction = addStatement) }
         return
     }
     if (activity.needs_label.isNotEmpty()) {
@@ -268,7 +267,7 @@ private fun LazyListScope.cashflow(state: MoneyHomeState, addStatement: () -> Un
     val flow = state.data_?.cashflow ?: return
     val empty = flow.empty
     if (empty != null) {
-        item(key = "empty") { EmptyStateView(empty.toKit(), onAction = addStatement) }
+        item(key = "empty") { EmptyStateView(empty, onAction = addStatement) }
         return
     }
     flow.series.forEach { series ->
@@ -278,7 +277,7 @@ private fun LazyListScope.cashflow(state: MoneyHomeState, addStatement: () -> Un
                 title = month.label,
                 meta = month.meta,
                 trailing = money(month.net),
-                trailingTone = month.net_tone.toKit(),
+                trailingTone = month.net_tone,
                 dimmed = month.partial,
                 a11y = spoken(month.accessibility_label, month.net),
                 testTag = "money-month-${month.month}",
@@ -331,7 +330,7 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
                         color = centraidColor("text"),
                         modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp).semantics { heading() },
                     )
-                    Row(Modifier.padding(horizontal = KitGeometry.GUTTER)) { tx.chips.forEach { StatusChipView(it.toKit(), Modifier.padding(end = 6.dp)) } }
+                    Row(Modifier.padding(horizontal = KitGeometry.GUTTER)) { tx.chips.forEach { StatusChipView(it, Modifier.padding(end = 6.dp)) } }
                 }
                 items(tx.facts.size, key = { "fact-$it" }) { index -> FieldRow(key = tx.facts[index].label, value = tx.facts[index].detail) }
                 tx.notes.forEach { note -> item(key = "note-$note") { MoneyNote(note) } }
@@ -384,7 +383,7 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
     }
     state.confirm?.let { confirm ->
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             onConfirm = { onEvent(MoneyTransactionEvent(confirm_accepted = MoneyTransactionEvent.ConfirmAccepted())) },
             onDismiss = { onEvent(MoneyTransactionEvent(confirm_dismissed = MoneyTransactionEvent.ConfirmDismissed())) },
         )
@@ -498,7 +497,7 @@ internal fun MoneyRecurringScreen(state: MoneyRecurringState, onEvent: (MoneyRec
         ) { recurring ->
             val empty = recurring.empty
             if (empty != null) {
-                EmptyStateView(empty.toKit(), onAction = null)
+                EmptyStateView(empty, onAction = null)
             } else {
                 LazyColumn {
                     items(recurring.rows, key = { it.key }) { row ->
@@ -506,7 +505,7 @@ internal fun MoneyRecurringScreen(state: MoneyRecurringState, onEvent: (MoneyRec
                             title = row.merchant,
                             meta = listOf(row.meta, row.detail).filter { it.isNotEmpty() }.joinToString(" · "),
                             trailing = money(row.amount),
-                            chips = row.chips.map { it.toKit() },
+                            chips = row.chips.map { it },
                             a11y = spoken(row.accessibility_label, row.amount),
                             testTag = "money-recurring-${row.key}",
                         )
@@ -544,7 +543,7 @@ internal fun MoneySearchScreen(
             )
             val resting = state.resting
             if (resting != null) {
-                EmptyStateView(resting.toKit(), onAction = null)
+                EmptyStateView(resting, onAction = null)
             } else {
                 ReadStateView(
                     content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
@@ -554,7 +553,7 @@ internal fun MoneySearchScreen(
                     val empty = search.empty
                     if (search.rows.isEmpty() && empty != null) {
                         androidx.compose.foundation.layout.Column {
-                            EmptyStateView(empty.toKit(), onAction = null)
+                            EmptyStateView(empty, onAction = null)
                             SearchAskRow(search.ask, onOpen)
                         }
                     } else {

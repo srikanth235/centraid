@@ -33,7 +33,7 @@ import centraid.core.v1.TodoDetailData
 import centraid.core.v1.TodoDetailEvent
 import centraid.core.v1.TodoDetailState
 import centraid.core.v1.TodoField
-import centraid.screen.v1.SectionHead
+import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ChoiceFieldRow
 import dev.centraid.android.kit.ConfirmSheet
@@ -51,7 +51,6 @@ import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.screens.CivilDateDialog
 import dev.centraid.android.screens.CivilTimeDialog
 import dev.centraid.android.theme.centraidColor
@@ -73,12 +72,12 @@ internal fun TodoDetailScreen(
     val gone = state.gone
     EditorRoom(
         title = state.chrome?.title.orEmpty(),
-        status = state.autosave?.toKit(),
+        status = state.autosave,
         onClose = onClose,
         onDeparted = {},
     ) {
         if (gone != null) {
-            EmptyStateView(gone.toKit(), onAction = onClose)
+            EmptyStateView(gone, onAction = onClose)
             return@EditorRoom
         }
         Column(Modifier.weight(1f).fillMaxWidth()) {
@@ -88,7 +87,7 @@ internal fun TodoDetailScreen(
                 skeleton = { RowSkeleton(rows = 6, label = state.chrome?.loading?.ifEmpty { null } ?: KitWords.OPENING) },
                 modifier = Modifier.weight(1f),
             ) { data -> TodoDetailBody(state, data, onEvent, onOpen) }
-            StatusLine(state.status?.toKit()) { onEvent(TodoDetailEvent(status_acted = TodoDetailEvent.StatusActed())) }
+            StatusLine(state.status) { onEvent(TodoDetailEvent(status_acted = TodoDetailEvent.StatusActed())) }
         }
     }
     val open = state.data_?.fields?.firstOrNull { it.key == state.open_field }
@@ -98,7 +97,7 @@ internal fun TodoDetailScreen(
     val confirm = state.confirm
     if (confirm != null) {
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             onConfirm = { onEvent(TodoDetailEvent(confirmed = TodoDetailEvent.Confirmed())) },
             onDismiss = { onEvent(TodoDetailEvent(dismissed = TodoDetailEvent.Dismissed())) },
             cancelLabel = state.chrome?.cancel?.ifEmpty { null } ?: KitWords.CANCEL,

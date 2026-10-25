@@ -33,7 +33,6 @@ import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -61,7 +60,7 @@ internal fun HealthMetricScreen(state: HealthMetricState, onEvent: (HealthMetric
             ) { data ->
                 val empty = data.empty
                 if (empty != null) {
-                    EmptyStateView(empty.toKit(), onAction = null)
+                    EmptyStateView(empty, onAction = null)
                 } else {
                     LazyColumn {
                         item(key = "head") {
@@ -98,7 +97,7 @@ internal fun HealthWorkoutScreen(state: HealthWorkoutState, onEvent: (HealthWork
         ) { data ->
             val gone = data.gone
             if (gone != null) {
-                EmptyStateView(gone.toKit(), onAction = null)
+                EmptyStateView(gone, onAction = null)
             } else {
                 LazyColumn {
                     item(key = "head") {

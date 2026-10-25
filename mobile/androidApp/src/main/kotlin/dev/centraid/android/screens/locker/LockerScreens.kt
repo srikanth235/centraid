@@ -1,5 +1,6 @@
 package dev.centraid.android.screens.locker
 
+import dev.centraid.android.kit.SecureWindow
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -74,8 +75,8 @@ import centraid.core.v1.LockerRow
 import centraid.core.v1.LockerWall
 import centraid.core.v1.LockerWallEvent
 import centraid.core.v1.Route
-import centraid.screen.v1.SearchField
-import centraid.screen.v1.SectionHead
+import dev.centraid.android.kit.SearchField
+import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppMark
@@ -107,8 +108,6 @@ import dev.centraid.android.kit.StatusChipView
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.kitSwitchColors
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
-import dev.centraid.android.screens.words.SecureWindow
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -245,7 +244,7 @@ internal fun LockerHomeScreen(
             // SEARCH IS THE ROOM'S BAR (R-CHROME-2), never a tab.
             search = if (state.denied == null) {
                 RoomSearch(
-                    field = SearchField(open = field?.open == true, term = field?.term.orEmpty(), answered_term = field?.answered_term.orEmpty(), corrected = field?.corrected.orEmpty()),
+                    field = SearchField(open_ = field?.open_ == true, term = field?.term.orEmpty(), answered_term = field?.answered_term.orEmpty(), corrected = field?.corrected.orEmpty()),
                     placeholder = chrome?.search_placeholder.orEmpty(),
                     onTerm = { onEvent(LockerHomeEvent(search_typed = LockerHomeEvent.SearchTyped(term = it))) },
                     onClose = { onEvent(LockerHomeEvent(search_closed = LockerHomeEvent.SearchClosed())) },
@@ -265,7 +264,7 @@ internal fun LockerHomeScreen(
             },
             status = if (generating) "" else data?.status_line.orEmpty(),
             statusLine = state.status?.let { line ->
-                { StatusLine(line.toKit()) {} }
+                { StatusLine(line) {} }
             },
             band = if (state.band.isEmpty()) {
                 null
@@ -328,7 +327,7 @@ private fun LazyListScope.itemsTab(home: LockerHomeData, add: Route?, onOpen: (R
     if (home.rows.isEmpty() && empty != null) {
         item(key = "empty") {
             Box(Modifier.heightIn(min = 320.dp)) {
-                EmptyStateView(empty.toKit(), onAction = add?.let { route -> { onOpen(route) } })
+                EmptyStateView(empty, onAction = add?.let { route -> { onOpen(route) } })
             }
         }
     }
@@ -339,7 +338,7 @@ private fun LazyListScope.itemsTab(home: LockerHomeData, add: Route?, onOpen: (R
 private fun LazyListScope.reviewTab(home: LockerHomeData, onOpen: (Route) -> Unit) {
     val clear = home.review_clear
     if (clear != null) {
-        item(key = "clear") { Box(Modifier.heightIn(min = 200.dp)) { EmptyStateView(clear.toKit(), onAction = null) } }
+        item(key = "clear") { Box(Modifier.heightIn(min = 200.dp)) { EmptyStateView(clear, onAction = null) } }
     }
     home.review.forEach { section ->
         item(key = "s-" + section.key) {
@@ -364,7 +363,7 @@ private fun LazyListScope.searchTab(state: LockerHomeState, home: LockerHomeData
     }
     val empty = home.search_empty
     if (home.hits.isEmpty() && empty != null) {
-        item(key = "empty") { Box(Modifier.heightIn(min = 240.dp)) { EmptyStateView(empty.toKit(), onAction = null) } }
+        item(key = "empty") { Box(Modifier.heightIn(min = 240.dp)) { EmptyStateView(empty, onAction = null) } }
     }
     items(home.hits, key = { "h-" + it.item_id }) { row -> LockerRowView(row) { row.route?.let(onOpen) } }
 }
@@ -381,7 +380,7 @@ internal fun LockerRowView(row: LockerRow, onTap: () -> Unit) {
             title = row.title,
             modifier = Modifier.weight(1f),
             meta = row.meta,
-            chips = row.chips.map { it.toKit() },
+            chips = row.chips.map { it },
             a11y = row.accessibility_label,
             testTag = "locker-row-${row.item_id}",
             onTap = onTap,
@@ -592,7 +591,7 @@ internal fun LockerItemScreen(
             trailing = chrome?.edit_label?.takeIf { it.isNotEmpty() && data?.gone == null }?.let { label ->
                 RoomAction("Pencil", label, "locker-edit") { chrome.edit_route?.let(onOpen) }
             },
-            statusLine = { StatusLine(state.status?.toKit()) { onEvent(LockerItemEvent(status_acted = LockerItemEvent.StatusActed())) } },
+            statusLine = { StatusLine(state.status) { onEvent(LockerItemEvent(status_acted = LockerItemEvent.StatusActed())) } },
         ) {
             ReadStateView(
                 content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -601,7 +600,7 @@ internal fun LockerItemScreen(
             ) { item ->
                 val gone = item.gone
                 if (gone != null) {
-                    EmptyStateView(gone.toKit(), onAction = null)
+                    EmptyStateView(gone, onAction = null)
                     return@ReadStateView
                 }
                 LazyColumn(Modifier.fillMaxSize().testTag("locker-item")) {
@@ -618,7 +617,7 @@ internal fun LockerItemScreen(
                                 modifier = Modifier.padding(start = 10.dp).weight(1f),
                             )
                             if (item.starred) CentraidIcon(iconKey = "Star", tint = centraidColor("textSoft"), size = 16.dp)
-                            item.chips.forEach { chip -> StatusChipView(chip.toKit(), Modifier.padding(start = 8.dp)) }
+                            item.chips.forEach { chip -> StatusChipView(chip, Modifier.padding(start = 8.dp)) }
                         }
                         LockerNote(item.trashed_note, ink = "net")
                         LockerNote(item.status_line)
@@ -691,7 +690,7 @@ internal fun LockerItemScreen(
         }
         state.confirm?.let { confirm ->
             ConfirmSheet(
-                confirm = confirm.toKit(),
+                confirm = confirm,
                 onConfirm = { onEvent(LockerItemEvent(confirmed = LockerItemEvent.Confirmed())) },
                 onDismiss = { onEvent(LockerItemEvent(dismissed = LockerItemEvent.Dismissed())) },
             )
@@ -964,7 +963,7 @@ internal fun LockerEditorScreen(
         }
         state.confirm?.let { confirm ->
             ConfirmSheet(
-                confirm = confirm.toKit(),
+                confirm = confirm,
                 onConfirm = { onEvent(LockerEditorEvent(confirmed = LockerEditorEvent.Confirmed())) },
                 onDismiss = { onEvent(LockerEditorEvent(dismissed = LockerEditorEvent.Dismissed())) },
             )

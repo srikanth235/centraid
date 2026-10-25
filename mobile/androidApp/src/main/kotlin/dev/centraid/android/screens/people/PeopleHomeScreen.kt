@@ -36,9 +36,9 @@ import centraid.core.v1.PeopleRow
 import centraid.core.v1.PeopleSectionHead
 import centraid.core.v1.PeopleTouchData
 import centraid.core.v1.Route
-import centraid.screen.v1.SearchField
-import centraid.screen.v1.SectionHead
-import centraid.screen.v1.StatusChip
+import dev.centraid.android.kit.SearchField
+import dev.centraid.android.kit.SectionHead
+import centraid.core.v1.StatusChip
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
@@ -59,7 +59,6 @@ import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.hueColor
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -97,7 +96,7 @@ public fun PeopleHomeScreen(
         },
         search = if (search != null && !denied) {
             RoomSearch(
-                field = SearchField(open_ = search.open, term = search.term, corrected = search.corrected),
+                field = SearchField(open_ = search.open_, term = search.term, corrected = search.corrected),
                 placeholder = chrome?.search_placeholder.orEmpty(),
                 label = chrome?.search_label.orEmpty(),
                 closeLabel = chrome?.search_close.orEmpty(),
@@ -140,12 +139,12 @@ public fun PeopleHomeScreen(
         },
     ) {
         val results = search?.results
-        if (search?.open == true && results != null && !denied) {
+        if (search?.open_ == true && results != null && !denied) {
             // SEARCH IS A MODE OVER THE SURFACE: its rows while a term reads.
             LazyColumn(Modifier.testTag("people-search-results")) {
                 val empty = results.empty
                 if (results.rows.isEmpty() && empty != null) {
-                    item(key = "empty") { EmptyStateView(empty.toKit(), onAction = null) }
+                    item(key = "empty") { EmptyStateView(empty, onAction = null) }
                 }
                 items(results.rows, key = { "s-" + it.party_id }) { row -> PersonRow(row, onOpen, onEvent) }
                 // THE ASK ROW closes the answer, whether or not anything matched (#1097).
@@ -204,8 +203,8 @@ public fun PeopleHomeScreen(
 @Composable
 private fun DayOne(empty: centraid.core.v1.EmptyState, importLabel: String, onEvent: (PeopleHomeEvent) -> Unit) {
     val offersImport = empty.import_source == centraid.core.v1.ImportSource.IMPORT_SOURCE_CONTACTS && importLabel.isNotEmpty()
-    val shown = empty.toKit().copy(
-        import_source = centraid.screen.v1.ImportSource.IMPORT_SOURCE_UNSPECIFIED,
+    val shown = empty.copy(
+        import_source = centraid.core.v1.ImportSource.IMPORT_SOURCE_UNSPECIFIED,
         action_label = if (offersImport) importLabel else "",
     )
     EmptyStateView(

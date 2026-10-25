@@ -1,5 +1,6 @@
 package dev.centraid.android.screens.words
 
+import dev.centraid.android.kit.KitWords
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -49,7 +50,6 @@ import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.ReaderException
 import com.google.zxing.common.HybridBinarizer
-import dev.centraid.design.copy.WordsCopy
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -88,7 +88,7 @@ internal fun PairScanner(
         Box(Modifier.fillMaxSize().background(Color.Black).testTag("pair-scanner")) {
             CameraPreview(onRead)
             OutlineButton(
-                label = WordsCopy.CANCEL,
+                label = KitWords.CANCEL,
                 testTag = "pair-scan-close",
                 ink = "onAccent",
                 modifier = Modifier

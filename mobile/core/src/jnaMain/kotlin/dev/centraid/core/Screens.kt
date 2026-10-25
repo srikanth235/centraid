@@ -82,9 +82,21 @@ public class Screens(
     public suspend fun navigate(event: NavEvent): CoreOutcome<Unit> =
         request(ScreenRequest(nav = event))
 
-    /** Report the device's locale and zone; Rust formats from them. */
-    public suspend fun environment(locale: String, zone: String, platform: String = "android"): CoreOutcome<Unit> =
-        request(ScreenRequest(environment = Environment(locale = locale, zone = zone, platform = platform)))
+    /**
+     * Report the device's locale and zone (Rust formats from them), the platform, and whether it
+     * deletes from its photo library behind its own confirmation (Free up space is offered only then).
+     */
+    public suspend fun environment(
+        locale: String,
+        zone: String,
+        platform: String = "android",
+        libraryDeletes: Boolean = false,
+    ): CoreOutcome<Unit> =
+        request(
+            ScreenRequest(
+                environment = Environment(locale = locale, zone = zone, platform = platform, library_deletes = libraryDeletes),
+            ),
+        )
 
     /** Report the app's foreground or background; Rust's screens and the Locker's relock hear it. */
     public suspend fun lifecycle(foreground: Boolean): CoreOutcome<Unit> =

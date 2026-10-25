@@ -19,27 +19,20 @@ import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import centraid.core.v1.EffectDone
-import centraid.core.v1.EffectFailed
-import centraid.core.v1.EffectRequest
-import centraid.core.v1.EffectResult
 import centraid.core.v1.LinkChanged
-import centraid.core.v1.PassNoted
 import centraid.core.v1.ShellFact
 import centraid.core.v1.Window
 import centraid.core.v1.WindowGranted
 import centraid.core.v1.WindowLink
 import centraid.core.v1.WindowsScheduled
+import dev.centraid.android.session.AppSession
 import dev.centraid.core.Screens
-import java.util.Locale
-import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -71,6 +64,10 @@ internal object PassWork {
     /** The notification an EXPEDITED one-off shows below API 31, where it runs as a foreground service. */
     @Volatile var notice: ((Context) -> ForegroundInfo)? = null
 
+    /** Whether the platform took a window, as it last answered; null before anything was asked. */
+    @Volatile var registered: Boolean? = null
+        private set
+
     /** Windows granted and not yet done, by name: [windowDone] resolves them. */
     private val waiting = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
 
@@ -101,6 +98,7 @@ internal object PassWork {
                 refusals += "${window.name}: ${error.message ?: "refused"}"
             }
         }
+        registered = taken.isNotEmpty()
         return WindowsScheduled(taken = taken, refused = refused, refusal = refusals.joinToString("; "))
     }
 
@@ -193,69 +191,16 @@ public class CentraidSyncWorker(
 }
 
 /**
- * WHERE A GRANTED WINDOW FINDS THE RUNTIME. With the app on screen it is that runtime's `Screens`
- * ([live], set by the hosting route); with the app closed the worker opens the process's session
- * and runs a headless one, performing only the effects a pass asks for (no screen is drawn).
+ * WHERE A GRANTED WINDOW FINDS THE RUNTIME: the process's one session ([AppSession]), the activity's
+ * if it is up, else opened here for the window with no activity at all. Its performer answers every
+ * effect a pass asks for either way, so nothing here depends on a screen being drawn.
  */
 internal object PassHost {
-    /** The foreground runtime's shell side, when the UI holds one. */
-    @Volatile var live: Screens? = null
-        set(value) {
-            field = value
-            if (value != null) LinkFacts.start(value)
-        }
-
-    suspend fun run(context: Context, window: String, budgetMs: Long): Boolean {
-        live?.let { screens ->
-            screens.shellFact(ShellFact(link = LinkFacts.read(context)))
-            return PassWork.granted(screens, window, budgetMs)
-        }
-        return ProcessSession.use(context) { session ->
-            // NO CORE HELD IS NOTHING TO BACK UP, which is a window that drained.
-            val core = session.shelf.core() ?: return@use true
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-            val screens = Screens(core, scope)
-            val attached = screens.attach()
-            try {
-                val performer = scope.launch {
-                    screens.effects.collect { request -> scope.launch { performHeadless(context, screens, request) } }
-                }
-                screens.environment(Locale.getDefault().toLanguageTag(), TimeZone.getDefault().id)
-                screens.start()
-                screens.shellFact(ShellFact(link = LinkFacts.read(context)))
-                val drained = PassWork.granted(screens, window, budgetMs)
-                performer.cancel()
-                drained
-            } finally {
-                attached.cancel()
-                scope.cancel()
-            }
-        }
-    }
-
-    /**
-     * THE EFFECTS A PASS ASKS FOR, with no UI: the windows, the long run, the camera roll's walk
-     * (a window has no time for one). Anything else is answered
-     * `failed`, by value, so the service that asked is never left waiting.
-     */
-    private suspend fun performHeadless(context: Context, screens: Screens, request: EffectRequest) {
-        val effect = request.effect
-        val result = when {
-            effect?.schedule_windows != null ->
-                EffectResult(windows_scheduled = PassWork.schedule(context, effect.schedule_windows!!.windows))
-            effect?.pass_window_done != null -> {
-                PassWork.windowDone(effect.pass_window_done!!.window, effect.pass_window_done!!.drained)
-                EffectResult(pass_noted = PassNoted())
-            }
-            effect?.long_run != null -> {
-                if (effect.long_run!!.start) BackupNow.start(context) else BackupNow.stop(context)
-                EffectResult(pass_noted = PassNoted())
-            }
-            effect?.camera_roll != null -> EffectResult(done = EffectDone())
-            else -> EffectResult(failed = EffectFailed(reason = "not performed by this shell"))
-        }
-        screens.answer(request, result)
-    }
+    suspend fun run(context: Context, window: String, budgetMs: Long): Boolean =
+        AppSession.use(context) { open ->
+            open.screens.shellFact(ShellFact(link = LinkFacts.read(context)))
+            PassWork.granted(open.screens, window, budgetMs)
+        } ?: false
 }
 
 /**
@@ -284,14 +229,18 @@ internal object LinkFacts {
         )
     }
 
-    /** Report to [screens] now and on every change of the default network, once. */
+    /** The runtime the network callback reports to; the session's, while one is open. */
+    @Volatile private var reportTo: Screens? = null
+
+    /** Report to [screens] now and on every change of the default network; the callback is registered once per process. */
     @Synchronized
-    fun start(screens: Screens) {
-        val context = screensContext ?: return
-        val manager = context.getSystemService(ConnectivityManager::class.java) ?: return
+    fun start(context: Context, screens: Screens) {
+        reportTo = screens
+        val app = context.applicationContext
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        scope.launch { screens.shellFact(ShellFact(link = read(context))) }
+        scope.launch { screens.shellFact(ShellFact(link = read(app))) }
         if (started) return
+        val manager = app.getSystemService(ConnectivityManager::class.java) ?: return
         started = true
         manager.registerDefaultNetworkCallback(
             object : ConnectivityManager.NetworkCallback() {
@@ -302,13 +251,10 @@ internal object LinkFacts {
                 override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) = report()
 
                 private fun report() {
-                    val live = PassHost.live ?: return
-                    scope.launch { live.shellFact(ShellFact(link = read(context))) }
+                    val live = reportTo ?: return
+                    scope.launch { live.shellFact(ShellFact(link = read(app))) }
                 }
             },
         )
     }
-
-    /** The application context, set once by the `Application`. */
-    @Volatile var screensContext: Context? = null
 }

@@ -34,8 +34,6 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidDark
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.design.copy.PhotosCopy
-import dev.centraid.shared.shell.TransferRuleChoice
 
 /**
  * THE TWO FACTS TRUE ON EVERY ROUTE: which vault, and how it stands
@@ -263,49 +261,4 @@ private fun parseHex(value: String?): Color? {
         green = ((scanned shr 8) and 0xFF).toInt() / 255f,
         blue = (scanned and 0xFF).toInt() / 255f,
     )
-}
-
-/**
- * THE MEMBER'S TRANSFER RULE, AS A SHEET (#1025 S4, D-1025-S7-60).
- *
- * Three choices, each a plain SENTENCE rather than a label — a member deciding
- * how their phone spends money is owed something they can act on, and "Wi-Fi
- * only" is a label that does not say what it governs. The sentences come from
- * the shell's own copy source in `commonMain` (`TransferRule`, through
- * `HomeBridge.transferRuleChoices`), so this shell and iOS cannot word the
- * same choice two ways.
- *
- * **It sets the rule and starts nothing.** A member who has just chosen to
- * spend less must not be answered by a pass that spends; the new rule governs
- * the next window.
- *
- * A choice is a sheet of [SheetRow]s (#1015 D4); the chosen one is ticked.
- */
-@Composable
-public fun TransferRulesSheet(
-    choices: List<TransferRuleChoice>,
-    selected: String,
-    onPick: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    SheetRoom(title = PhotosCopy.TRANSFER_TITLE, onDismiss = onDismiss) {
-        Text(
-            PhotosCopy.TRANSFER_SUBTITLE,
-            style = centraidType("small"),
-            color = centraidColor("textSoft"),
-            modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
-        )
-        choices.forEach { choice ->
-            SheetRow(
-                label = choice.sentence,
-                // THE SELECTION IS THE STORE'S ANSWER, not the tap: an
-                // unknown word settles to the conservative default, and a
-                // tick on a row the next launch would not tick is worse
-                // than a tap that appears to do nothing.
-                selected = choice.stored == selected,
-                testTag = "transfer-rule-" + choice.stored,
-                onTap = { onPick(choice.stored) },
-            )
-        }
-    }
 }

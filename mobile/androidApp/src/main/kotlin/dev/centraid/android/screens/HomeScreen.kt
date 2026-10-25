@@ -1,7 +1,6 @@
 package dev.centraid.android.screens
 
 import dev.centraid.android.kit.LocalShellLine
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -62,7 +61,7 @@ import centraid.core.v1.HomeVaultState
 import centraid.core.v1.Route
 import centraid.core.v1.ShellBand
 import centraid.core.v1.ShellBandTab
-import centraid.screen.v1.Confirm
+import centraid.core.v1.Confirm
 import dev.centraid.android.kit.AppMark
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
@@ -80,8 +79,7 @@ import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.CentraidGeometry
 // TRANSITIONAL (lane H2 deletes it with the Backup tab): the one place Home still
 // words a place Rust does not own yet.
-import dev.centraid.design.copy.SharedCopy
-import dev.centraid.shared.shell.HomeWords
+import dev.centraid.android.screens.words.FirstLaunchScreen
 
 /**
  * Home, the graded springboard (#1020, wave A; #1135).
@@ -110,31 +108,22 @@ public fun HomeScreen(
     state: HomeState,
     /** The band Rust framed this root with, or null before it says. */
     band: ShellBand?,
-    /** The runtime's tabs: a band place in this set is selected by Rust, any other is hosted natively. */
-    runtimeTabs: Set<String>,
     onEvent: (HomeEvent) -> Unit,
     /** Push a route a row or the search key carried. */
     onOpen: (Route) -> Unit,
     /** A press on a band place Rust owns: the runtime selects the tab. */
     onSelectTab: (String) -> Unit,
-    /**
-     * Open the transfer-rules sheet (#1025 S4). Defaulted so a preview renders
-     * this screen without one.
-     */
-    onDownloadSettings: () -> Unit = {},
-    // TRANSITIONAL (lane H2 registers a Rust `backup` tab and deletes these four):
-    // the Backup tab is still hosted natively, drawn in place of the springboard.
-    /** Open the native Backup tab. */
-    onOpenBackup: () -> Unit = {},
-    /** Whether the native Backup tab is drawn in place of the springboard. */
-    backupShown: Boolean = false,
-    /** The band's Home, pressed on the Backup tab. */
-    onOpenHome: () -> Unit = {},
-    /** The Backup tab's screen; Rust's `backup.home` is pushed as a page now, so Home passes none. */
-    backupTab: @Composable () -> Unit = {},
 ) {
-    // BACK ON THE BACKUP TAB returns to Home, as the band's Home does.
-    BackHandler(enabled = backupShown) { onOpenHome() }
+    // A PHONE THAT HOLDS NO VAULT opens onto the way to make one, not onto a Home with
+    // nothing to read: Rust's gate, drawn in place of Home.
+    state.first_launch?.let { gate ->
+        FirstLaunchScreen(
+            gate = gate,
+            onMake = { onEvent(HomeEvent(make = HomeEvent.MakePressed())) },
+            onRestore = { onEvent(HomeEvent(restore = HomeEvent.RestorePressed())) },
+        )
+        return
+    }
     val bar = state.bar
     val failure = state.failure
     // BARE PAPER UNTIL THE LOCKUP LANDS. The shelf says it holds a vault a
@@ -147,11 +136,9 @@ public fun HomeScreen(
         Box(Modifier.fillMaxSize().background(centraidColor("bg")))
         return
     }
-    // THE BACKUP LINE'S DOOR: the runtime's tab once Rust owns it, the native one until then.
-    val hasBackupTab = "backup" in runtimeTabs
-    val openBackup = {
-        if (hasBackupTab) onEvent(HomeEvent(backup = HomeEvent.BackupPressed())) else onOpenBackup()
-    }
+    // THE BACKUP LINE'S DOOR, and the download settings' gear: the backup tab, where the
+    // rule is chosen. Rust selects it.
+    val openBackup = { onEvent(HomeEvent(backup = HomeEvent.BackupPressed())) }
     val search: () -> Unit = { bar?.search_route?.let(onOpen) }
     val appearance: () -> Unit = { onEvent(HomeEvent(appearance = HomeEvent.AppearancePressed())) }
     Column(
@@ -166,7 +153,7 @@ public fun HomeScreen(
             VaultHeader(
                 bar = bar,
                 onSwitchVault = { onEvent(HomeEvent(vault = HomeEvent.VaultPressed())) },
-                onDownloadSettings = onDownloadSettings,
+                onDownloadSettings = openBackup,
                 // THE LOCKUP'S SECOND LINE IS THE BACKUP'S STATUS (R-ONBOARD-11),
                 // and its door. Nothing between it and the grid: no backup
                 // sentence, no "Home" title (the band says where the member is),
@@ -175,20 +162,11 @@ public fun HomeScreen(
                 // HOME'S SEARCH KEY (R-CHROME-6), at the lockup's trailing edge;
                 // a tap pushes the search over every app. Not on the
                 // Backup tab, which is the backup's and not the springboard's.
-                onSearch = search.takeIf { !backupShown },
-                onAppearance = appearance.takeIf { !backupShown },
+                onSearch = search,
+                onAppearance = appearance,
             )
         }
-        // THE BACKUP TAB DRAWS IN PLACE OF THE SPRINGBOARD, as Chat does on
-        // iOS, under the vault's lockup: the backup it describes is that
-        // vault's, and the band stays where it is.
-        if (backupShown) {
-            Box(Modifier.weight(1f)) { backupTab() }
-            LocalShellLine.current?.invoke()
-            Band(band, runtimeTabs, backupShown, onOpenBackup, onOpenHome, onSelectTab)
-            return@Column
-        }
-        StatusRibbon(state.status, onEvent, hasBackupTab, onOpenBackup)
+        StatusRibbon(state.status, onEvent)
         val data = state.data_
         // THE PAGE TAKES THE SLACK, THE BAND TAKES ITS OWN HEIGHT. The band is
         // never scrolled away, so it is a sibling of the scrolling page and not
@@ -205,7 +183,7 @@ public fun HomeScreen(
         }
         // THE IMPORT'S LINE, on the band (DESIGN.md's one status line).
         LocalShellLine.current?.invoke()
-        Band(band, runtimeTabs, backupShown, onOpenBackup, onOpenHome, onSelectTab)
+        Band(band, onSelectTab)
     }
     // THE SWITCHER IS A SHEET and never a destination. It is a sibling of the
     // column above rather than a child of it, because a sheet inside a
@@ -214,48 +192,10 @@ public fun HomeScreen(
     if (sheet != null) VaultSheet(sheet, onEvent)
 }
 
-/**
- * THE BAND, Rust's places and (until lane H2 registers a Rust `backup` tab) the
- * native Backup place beside them. A press on a place the runtime holds selects
- * that tab; the Home place pressed on the native Backup tab returns to Home.
- */
+/** THE BAND: Rust's places, its words and its lit place; a press selects that tab. */
 @Composable
-internal fun Band(
-    band: ShellBand?,
-    runtimeTabs: Set<String>,
-    backupShown: Boolean,
-    onOpenBackup: () -> Unit,
-    onOpenHome: () -> Unit,
-    onSelectTab: (String) -> Unit,
-) {
-    val rust = band?.tabs.orEmpty().map { tab ->
-        // The native Backup tab has the lit place while it is drawn.
-        if (backupShown && tab.selected) tab.copy(selected = false, spoken = tab.label) else tab
-    }
-    val native = if (rust.any { it.tab == "backup" }) {
-        emptyList()
-    } else {
-        listOf(
-            ShellBandTab(
-                tab = "backup",
-                label = HomeWords.BAND_BACKUP,
-                spoken = HomeWords.BAND_BACKUP_SPOKEN +
-                    if (backupShown) ", " + SharedCopy.BAND_CURRENT_SPOKEN else "",
-                icon_key = "Backup",
-                selected = backupShown,
-            ),
-        )
-    }
-    HomeBand(
-        tabs = rust + native,
-        onSelect = { tab ->
-            when {
-                tab == "home" && backupShown -> onOpenHome()
-                tab in runtimeTabs -> onSelectTab(tab)
-                tab == "backup" -> onOpenBackup()
-            }
-        },
-    )
+internal fun Band(band: ShellBand?, onSelectTab: (String) -> Unit) {
+    HomeBand(tabs = band?.tabs.orEmpty(), onSelect = onSelectTab)
 }
 
 /**
@@ -497,8 +437,6 @@ private fun SwitcherAction(label: String, iconKey: String, testTag: String, onPr
 private fun StatusRibbon(
     status: HomeStatus?,
     onEvent: (HomeEvent) -> Unit,
-    hasBackupTab: Boolean,
-    onOpenBackup: () -> Unit,
 ) {
     // A RIBBON WITH NOTHING TO SAY IS NOT DRAWN: since All apps left it
     // (R-ONBOARD-11) it carries nothing else, and an empty band above the grid
@@ -509,14 +447,7 @@ private fun StatusRibbon(
         Modifier
             .fillMaxWidth()
             .heightIn(min = if (loud) 40.dp else 32.dp)
-            .clickable(enabled = status.action.isNotEmpty()) {
-                // UNTIL RUST REGISTERS A BACKUP TAB the native place is the only door.
-                if (status.destination == HomeStatus.Destination.DESTINATION_BACKUP && !hasBackupTab) {
-                    onOpenBackup()
-                } else {
-                    onEvent(HomeEvent(status = HomeEvent.StatusPressed()))
-                }
-            }
+            .clickable(enabled = status.action.isNotEmpty()) { onEvent(HomeEvent(status = HomeEvent.StatusPressed())) }
             .padding(horizontal = PAGE_MARGIN)
             .testTag("home-status")
             .semantics {

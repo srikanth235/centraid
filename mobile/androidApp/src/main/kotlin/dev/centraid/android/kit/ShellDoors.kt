@@ -15,21 +15,7 @@ import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import centraid.screen.v1.ImportSource
 import dev.centraid.android.theme.centraidColor
-import dev.centraid.design.copy.AgendaCopy
-
-/**
- * THE IMPORT'S VERB FOR [source], or "" WHERE ANDROID HAS NOTHING TO READ:
- * Android has no system reminders, so a Reminders source draws the app's own
- * action instead, and Contacts is People's own screen's import (#1135) (and
- * Rust has no path for the phone's reminders import yet, only the calendar's,
- * which Agenda's screen starts itself with `ImportRequested`, #1135).
- */
-public fun importLabel(source: ImportSource): String = when (source) {
-    ImportSource.IMPORT_SOURCE_CALENDAR -> AgendaCopy.IMPORT_CALENDAR
-    else -> ""
-}
 
 /**
  * THE SHELL'S STATUS LINE, handed down to whichever place draws it above its

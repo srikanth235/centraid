@@ -9,15 +9,13 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import centraid.core.v1.LibraryDeleteItem
+import centraid.core.v1.LibraryDeleted
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
-import dev.centraid.shared.sync.DeleteCapability
-import dev.centraid.shared.sync.DeleteOutcome
-import dev.centraid.shared.sync.LibraryDeleter
-import dev.centraid.shared.sync.ReleasableItem
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
@@ -29,32 +27,29 @@ import java.util.concurrent.Executors
  * `MediaStore.createDeleteRequest` (API 30 and up) answers a `PendingIntent`
  * whose dialog counts what goes and deletes on a yes. Below API 30 that verb
  * does not exist — API 29 asks once per item and API 28 and below not at all —
- * so [capability] answers `NONE` there and the More sheet draws no row
+ * so [offered] is false there and the More sheet draws no row
  * (`minSdk` is an owner question, `docs/release/v1-handoffs.md` PH4).
  *
  * **One per activity.** The dialog's answer comes back through an activity
  * result launcher, which must be registered before the activity starts — so
- * `MainActivity` builds this as a field, installs it on the session when the
- * session opens (`HomeSession.installLibraryDeleter`) and clears it when the
- * activity goes, and a rotation never leaves a destroyed activity holding the
- * member's answer. A request in flight across a rotation is kept by the
+ * `MainActivity` builds this as a field and its effects host performs Rust's
+ * `LibraryDelete` with it (`kit/ScreenEffects.kt`), and a rotation never leaves a
+ * destroyed activity holding the member's answer. Which originals are safe to
+ * free, and what the member reads, are Rust's (`photos::free_up`). A request in flight across a rotation is kept by the
  * process ([Waiting]), because the result is delivered to the NEW activity's
  * launcher, registered under the same key.
  *
- * Three rules, each with its reason:
+ * Two rules, each with its reason:
  *
  * 1. **The collection is the item's media type** (A20): `video/…` names
  *    `MediaStore.Video`, anything else `MediaStore.Images`. A ref whose walker
  *    prefix (`image:` / `video:`) names the other collection is skipped, never
  *    guessed at.
- * 2. **A row that changed since it was backed up is kept.** The store's `SIZE`
- *    must equal the size the core backed up; an item edited in place, or a row
- *    the store no longer has, is left out of the request.
- * 3. **What is reported is what the request removed.** On a yes each asked row
+ * 2. **What is reported is what the request removed.** On a yes each asked row
  *    is looked up again, and only a row the store no longer answers for is
  *    reported deleted. The member's no is `declined`; anything else is `error`.
  */
-internal class MediaStoreDeleter(private val activity: ComponentActivity) : LibraryDeleter {
+internal class MediaStoreDeleter(private val activity: ComponentActivity) {
     // READ AT FIRST USE, NOT AT CONSTRUCTION: this is built while its activity
     // is constructed, before it has a context, and only the launcher below may
     // be made that early.
@@ -66,10 +61,10 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) : Libr
             answered(result.resultCode == Activity.RESULT_OK)
         }
 
-    override fun capability(): DeleteCapability =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) DeleteCapability.SYSTEM_CONFIRMATION else DeleteCapability.NONE
+    /** Whether this platform deletes behind the system's own confirmation (API 30 and up). */
+    val offered: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
 
-    override fun delete(items: List<ReleasableItem>, done: (DeleteOutcome) -> Unit) {
+    fun delete(items: List<LibraryDeleteItem>, done: (LibraryDeleted) -> Unit) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             done(NOTHING)
             return
@@ -79,12 +74,8 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) : Libr
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
-    private fun ask(items: List<ReleasableItem>, done: (DeleteOutcome) -> Unit) {
-        val asked = items.mapNotNull { item ->
-            val uri = uriOf(item) ?: return@mapNotNull null
-            // RULE 2.
-            if (sizeOf(uri) != item.size) null else item to uri
-        }
+    private fun ask(items: List<LibraryDeleteItem>, done: (LibraryDeleted) -> Unit) {
+        val asked = items.mapNotNull { item -> uriOf(item)?.let { item to it } }
         // NOTHING TO ASK ABOUT asks nothing: no dialog for zero items.
         if (asked.isEmpty()) {
             done(NOTHING)
@@ -116,34 +107,25 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) : Libr
     private fun answered(yes: Boolean) {
         val waiting = Waiting.take() ?: return
         if (!yes) {
-            waiting.done(DeleteOutcome(deleted = emptyList(), declined = true, error = null))
+            waiting.done(LibraryDeleted(declined = true))
             return
         }
         io.execute {
-            // RULE 3.
-            val gone = waiting.asked.filter { (_, uri) -> !exists(uri) }.map { (item, _) -> item.contentHash }
-            waiting.done(DeleteOutcome(deleted = gone, declined = false, error = null))
+            // RULE 2.
+            val gone = waiting.asked.filter { (_, uri) -> !exists(uri) }.map { (item, _) -> item.content_hash }
+            waiting.done(LibraryDeleted(deleted_hashes = gone))
         }
     }
 
     /** RULE 1. Null when the ref names no row, or names the other collection. */
-    private fun uriOf(item: ReleasableItem): Uri? {
-        val video = item.mediaType.startsWith("video/")
-        val ref = item.osRef
+    private fun uriOf(item: LibraryDeleteItem): Uri? {
+        val video = item.media_type.startsWith("video/")
+        val ref = item.os_ref
         if (ref.startsWith(VIDEO_REF) && !video) return null
         if (ref.startsWith(IMAGE_REF) && video) return null
         val id = ref.removePrefix(VIDEO_REF).removePrefix(IMAGE_REF).toLongOrNull() ?: return null
         val base = if (video) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         return ContentUris.withAppendedId(base, id)
-    }
-
-    /** The store's own size for a row, or null when it answers nothing for it. */
-    private fun sizeOf(uri: Uri): Long? = try {
-        resolver.query(uri, arrayOf(MediaStore.MediaColumns.SIZE), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
-        }
-    } catch (refused: SecurityException) {
-        null
     }
 
     /** Whether the store still answers for a row. A refusal reads as "still there". */
@@ -153,8 +135,8 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) : Libr
         true
     }
 
-    private fun failed(error: Exception): DeleteOutcome =
-        DeleteOutcome(deleted = emptyList(), declined = false, error = error.message ?: error.javaClass.simpleName)
+    private fun failed(error: Exception): LibraryDeleted =
+        LibraryDeleted(error = error.message ?: error.javaClass.simpleName)
 
     /**
      * THE REQUEST IN FLIGHT, kept by the process and touched on the main
@@ -162,8 +144,8 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) : Libr
      * `done` is called exactly once.
      */
     private class Waiting(
-        val asked: List<Pair<ReleasableItem, Uri>>,
-        val done: (DeleteOutcome) -> Unit,
+        val asked: List<Pair<LibraryDeleteItem, Uri>>,
+        val done: (LibraryDeleted) -> Unit,
     ) {
         companion object {
             private var current: Waiting? = null
@@ -182,7 +164,7 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) : Libr
         const val IMAGE_REF = "image:"
         const val VIDEO_REF = "video:"
 
-        val NOTHING = DeleteOutcome(deleted = emptyList(), declined = false, error = null)
+        val NOTHING = LibraryDeleted()
 
         /** One thread for the store's reads, shared by every activity's deleter. */
         val io: Executor = Executors.newSingleThreadExecutor { work ->

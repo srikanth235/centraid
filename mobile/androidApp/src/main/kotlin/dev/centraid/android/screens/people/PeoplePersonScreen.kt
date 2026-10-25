@@ -19,7 +19,7 @@ import centraid.core.v1.PeoplePersonSheet
 import centraid.core.v1.PeoplePersonState
 import centraid.core.v1.PeopleSheetFrame
 import centraid.core.v1.Route
-import centraid.screen.v1.StatusChip
+import centraid.core.v1.StatusChip
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
@@ -39,7 +39,6 @@ import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusChipView
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -77,7 +76,7 @@ public fun PeoplePersonScreen(
     ) {
         val gone = state.gone
         if (gone != null) {
-            EmptyStateView(gone.toKit(), onAction = null)
+            EmptyStateView(gone, onAction = null)
         } else {
             ReadStateView(
                 content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -91,7 +90,7 @@ public fun PeoplePersonScreen(
     state.sheet?.let { sheet -> PersonSheet(sheet, onEvent) }
     state.confirm?.let { confirm ->
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             onConfirm = { onEvent(PeoplePersonEvent(confirmed = PeoplePersonEvent.Confirmed())) },
             onDismiss = { onEvent(PeoplePersonEvent(dismissed = PeoplePersonEvent.Dismissed())) },
         )

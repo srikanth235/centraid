@@ -19,7 +19,6 @@ import centraid.core.v1.CounterView
 import centraid.core.v1.NavEvent
 import centraid.core.v1.NavPopped
 import centraid.core.v1.ScreenEvent
-import dev.centraid.android.kit.PerformScreenEffects
 import dev.centraid.core.Screens
 import kotlinx.coroutines.launch
 
@@ -39,7 +38,6 @@ fun ProofScreen(screens: Screens, tab: String) {
     val entries = navigation?.tabs?.firstOrNull { it.tab == tab }?.entries.orEmpty()
     val top = entries.lastOrNull() ?: return
 
-    PerformScreenEffects(screens, phone = null)
 
     BackHandler(enabled = entries.size > 1) {
         scope.launch {

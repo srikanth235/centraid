@@ -32,7 +32,6 @@ import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -57,7 +56,7 @@ public fun PhotosDuplicatesScreen(
         ) { data ->
             val empty = data.empty
             if (empty != null) {
-                EmptyStateView(empty.toKit(), onAction = null)
+                EmptyStateView(empty, onAction = null)
             } else {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
@@ -123,7 +122,7 @@ public fun PhotosDuplicateReviewScreen(
         ) { data ->
             val empty = data.empty
             if (empty != null) {
-                EmptyStateView(empty.toKit(), onAction = null)
+                EmptyStateView(empty, onAction = null)
             } else {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()).padding(16.dp),

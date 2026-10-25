@@ -48,7 +48,7 @@ import centraid.core.v1.TodoChoice
 import centraid.core.v1.TodoQuickAdd
 import centraid.core.v1.TodoRow
 import centraid.core.v1.TodoRowGroup
-import centraid.screen.v1.SectionHead
+import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.KitGeometry

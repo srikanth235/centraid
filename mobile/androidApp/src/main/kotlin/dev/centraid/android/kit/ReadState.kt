@@ -33,14 +33,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.Denied
-import centraid.screen.v1.EmptyState
-import centraid.screen.v1.Loading
-import centraid.screen.v1.ReadFailure
+import centraid.core.v1.Denied
+import centraid.core.v1.EmptyState
+import centraid.core.v1.Loading
+import centraid.core.v1.Failure as ReadFailure
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.design.CentraidTokens
 import dev.centraid.android.theme.centraidType
-import dev.centraid.shared.shell.HomeWords
 
 /**
  * THE READ LAW'S FOUR ARMS, AS A VIEW SEES THEM (K5, #1029).

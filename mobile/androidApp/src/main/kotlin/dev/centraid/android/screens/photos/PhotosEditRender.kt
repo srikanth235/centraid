@@ -12,7 +12,7 @@ import centraid.core.v1.PhotosEditCrop
 import centraid.core.v1.PhotosEditPlan
 import centraid.core.v1.RenderEdit
 import dev.centraid.core.CentraidCore
-import dev.centraid.shared.shell.Staging
+import dev.centraid.android.session.Stage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -53,21 +53,17 @@ internal object PhotosEditRender {
             try {
                 val size = made.file.length()
                 val staged = made.file.inputStream().use { source ->
-                    Staging.stage(core = core, mediaType = MEDIA_TYPE, byteSize = size) { max ->
-                        val buffer = ByteArray(max)
-                        val read = source.read(buffer)
-                        if (read <= 0) ByteArray(0) else buffer.copyOf(read)
-                    }
+                    Stage.stage(core, MEDIA_TYPE, size, read = Stage.slices(source))
                 }
                 when (staged) {
-                    is Staging.Outcome.No -> failed(staged.refused.sentence)
-                    is Staging.Outcome.Ok -> EffectResult(
+                    is Stage.Outcome.Refused -> failed(staged.sentence)
+                    is Stage.Outcome.Staged -> EffectResult(
                         edit_rendered = EditRendered(
-                            content_hash = staged.staged.contentHash,
+                            content_hash = staged.handle.content_hash,
                             media_type = MEDIA_TYPE,
                             width = made.width,
                             height = made.height,
-                            byte_size = staged.staged.byteSize,
+                            byte_size = staged.handle.byte_size,
                         ),
                     )
                 }

@@ -55,7 +55,6 @@ import dev.centraid.android.kit.ContentImage
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.ScreenFailure
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
@@ -119,7 +118,7 @@ internal fun PhotosCollectionsScreen(
     val confirm = collections.delete_confirm
     if (confirm != null) {
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             cancelLabel = collections.keep_label,
             onConfirm = { onEvent(PhotosHomeEvent(album_delete_confirmed = centraid.core.v1.PhotosDeleteConfirmed())) },
             onDismiss = { onEvent(PhotosHomeEvent(album_delete_dismissed = centraid.core.v1.PhotosDeleteDismissed())) },

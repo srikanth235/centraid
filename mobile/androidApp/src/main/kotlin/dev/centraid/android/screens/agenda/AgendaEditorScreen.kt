@@ -48,7 +48,6 @@ import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.kitSwitchColors
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.screens.CivilDateDialog
 import dev.centraid.android.screens.CivilTimeDialog
 import dev.centraid.android.theme.centraidColor
@@ -99,7 +98,7 @@ internal fun AgendaEditorScreen(
     val confirm = state.confirm
     if (confirm != null) {
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             onConfirm = { onEvent(AgendaEditorEvent(confirmed = AgendaEditorEvent.Confirmed())) },
             onDismiss = { onEvent(AgendaEditorEvent(confirm_dismissed = AgendaEditorEvent.ConfirmDismissed())) },
             cancelLabel = chrome?.keep_editing?.ifEmpty { null } ?: KitWords.CANCEL,

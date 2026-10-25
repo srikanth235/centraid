@@ -3,7 +3,6 @@ package dev.centraid.android.kit
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import android.util.Base64
 import centraid.core.v1.SecretAnswer
 import centraid.core.v1.SecretBatch
 import centraid.core.v1.SecretBatched
@@ -16,11 +15,8 @@ import com.google.android.gms.auth.blockstore.DeleteBytesRequest
 import com.google.android.gms.auth.blockstore.RetrieveBytesRequest
 import com.google.android.gms.auth.blockstore.StoreBytesData
 import java.security.KeyStore
-import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
-import javax.crypto.Mac
 import javax.crypto.SecretKey
-import javax.crypto.spec.GCMParameterSpec
 import kotlinx.coroutines.tasks.await
 import okio.ByteString.Companion.toByteString
 
@@ -55,8 +51,6 @@ internal object SecretStores {
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
     private const val INDEX = PREFIX + "\u0000names"
     private const val ADOPTED = "centraid.v1.legacy-adopted"
-    private const val NONCE_BYTES = 12
-    private const val TAG_BITS = 128
     private val keyLock = Any()
 
     /** Run [batch] in order, one answer per op. */
@@ -79,11 +73,11 @@ internal object SecretStores {
 
     private suspend fun perform(context: Context, op: SecretOp): SecretAnswer {
         val synced = op.store == SecretStore.SECRET_STORE_SYNCED
-        val value = op.value.utf8()
+        val value = op.value_.utf8()
         return when (op.op) {
             SecretOp.Op.OP_GET -> {
                 val held = if (synced) syncedGet(context, op.key) else deviceGet(context, op.key)
-                SecretAnswer(ok = true, found = held != null, value = (held ?: "").encodeToByteString())
+                SecretAnswer(ok = true, found = held != null, value_ = (held ?: "").encodeToByteString())
             }
             SecretOp.Op.OP_SET -> when {
                 // An empty value deletes: an empty secret that reads back as present is a credential the app believes it has.
@@ -95,13 +89,23 @@ internal object SecretStores {
                 SecretAnswer(ok = if (synced) syncedDelete(context, op.key) else deviceDelete(context, op.key))
             SecretOp.Op.OP_LIST -> {
                 val entries = if (synced) syncedList(context, op.key) else deviceList(context, op.key)
-                SecretAnswer(ok = true, entries = entries.map { (key, held) -> SecretEntry(key = key, value = held.encodeToByteString()) })
+                SecretAnswer(ok = true, entries = entries.map { (key, held) -> SecretEntry(key = key, value_ = held.encodeToByteString()) })
             }
             else -> SecretAnswer()
         }
     }
 
     // ---- device -----------------------------------------------------------------
+
+    /**
+     * ONE DEVICE-STORE VALUE, for the shell's own keys and the generic `Keychain` effect: the same
+     * file, the same names, the same sealing as `SecretBatch`'s device store. An empty value deletes.
+     */
+    fun read(context: Context, key: String): String? = deviceGet(context, key)
+
+    fun write(context: Context, key: String, value: String): Boolean =
+        if (value.isEmpty()) deviceDelete(context, key) else deviceSet(context, key, value)
+
 
     private fun preferences(context: Context) = context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
 
@@ -173,41 +177,18 @@ internal object SecretStores {
         return preferences(context).edit().putString(nameOf(INDEX), seal(INDEX, names.sorted().joinToString("\n"))).commit()
     }
 
-    private fun valueKey(): SecretKey = keystoreKey(VALUE_KEY_ALIAS, KeyProperties.KEY_ALGORITHM_AES)
+    /** Every value AES-GCM sealed to its name, every name an HMAC: both keys in the Keystore. */
+    private val sealing = SealedEntries(
+        valueKey = { keystoreKey(VALUE_KEY_ALIAS, KeyProperties.KEY_ALGORITHM_AES) },
+        nameKey = { keystoreKey(NAME_KEY_ALIAS, KeyProperties.KEY_ALGORITHM_HMAC_SHA256) },
+    )
 
-    private fun nameKey(): SecretKey = keystoreKey(NAME_KEY_ALIAS, KeyProperties.KEY_ALGORITHM_HMAC_SHA256)
+    private fun nameOf(logicalName: String): String = sealing.nameOf(logicalName)
 
-    /** The name [logicalName]'s value is stored under: an HMAC, URL-safe, unpadded. */
-    private fun nameOf(logicalName: String): String {
-        val mac = Mac.getInstance("HmacSHA256")
-        mac.init(nameKey())
-        return Base64.encodeToString(
-            mac.doFinal(logicalName.encodeToByteArray()),
-            Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP,
-        )
-    }
-
-    /** [value] sealed to [logicalName]. Never the same text twice. */
-    private fun seal(logicalName: String, value: String): String {
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        // NO NONCE IS SUPPLIED: a Keystore AES key refuses a caller-chosen nonce;
-        // the provider draws one, and it travels in front of the ciphertext.
-        cipher.init(Cipher.ENCRYPT_MODE, valueKey())
-        cipher.updateAAD(logicalName.encodeToByteArray())
-        val nonce = cipher.iv
-        check(nonce.size == NONCE_BYTES) { "AES-GCM drew a ${nonce.size}-byte nonce, not $NONCE_BYTES" }
-        return Base64.encodeToString(nonce + cipher.doFinal(value.encodeToByteArray()), Base64.NO_WRAP)
-    }
+    private fun seal(logicalName: String, value: String): String = sealing.seal(logicalName, value)
 
     /** THROWS on a value that does not open: a null would read as "no credential". */
-    private fun open(logicalName: String, sealed: String): String {
-        val bytes = Base64.decode(sealed, Base64.NO_WRAP)
-        require(bytes.size > NONCE_BYTES) { "a sealed entry shorter than its nonce" }
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, valueKey(), GCMParameterSpec(TAG_BITS, bytes, 0, NONCE_BYTES))
-        cipher.updateAAD(logicalName.encodeToByteArray())
-        return cipher.doFinal(bytes, NONCE_BYTES, bytes.size - NONCE_BYTES).decodeToString()
-    }
+    private fun open(logicalName: String, sealed: String): String = sealing.open(logicalName, sealed)
 
     /** The Keystore key under [alias], generated on first use, under a lock so two first reads cannot each generate one. */
     private fun keystoreKey(alias: String, algorithm: String): SecretKey = synchronized(keyLock) {

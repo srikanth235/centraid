@@ -67,7 +67,7 @@ import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.shared.shell.BandPolicy
+import dev.centraid.android.kit.BandPolicy
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -541,7 +541,7 @@ internal fun LibraryGrains(
             items.forEach { entry ->
                 item(key = entry.key) {
                     when {
-                        entry.header.isNotEmpty() -> Box(
+                        entry.header_.isNotEmpty() -> Box(
                             Modifier
                                 .fillMaxWidth()
                                 .height(MONTH_ROW_HEIGHT.dp)
@@ -549,7 +549,7 @@ internal fun LibraryGrains(
                             contentAlignment = Alignment.BottomStart,
                         ) {
                             Text(
-                                entry.header,
+                                entry.header_,
                                 style = centraidType("eyebrow"),
                                 color = centraidColor("text"),
                                 modifier = Modifier.padding(bottom = 6.dp).semantics { heading() },

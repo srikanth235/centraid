@@ -35,12 +35,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.Autosave
-import centraid.screen.v1.ChatCard
-import centraid.screen.v1.ListRow
-import centraid.screen.v1.SearchContainer
-import centraid.screen.v1.SectionHead
-import centraid.screen.v1.StatusChip
+import centraid.core.v1.Autosave
+import centraid.core.v1.ListRow
+import centraid.core.v1.SearchContainer
+import centraid.core.v1.StatusChip
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -450,33 +448,6 @@ private val PARTY_HUES: Set<String> =
 /** The same eight, as the theme's colour roles. */
 private val PARTY_ROLES: Set<String> = PARTY_HUES.mapTo(mutableSetOf()) { "c" + it.replaceFirstChar(Char::uppercaseChar) }
 
-/**
- * A CONTAINER AS A SEARCH RESULT (#1097): the notebook, album, project, group
- * or folder a member typed the name of. ONE ROW for Home's search and for the
- * four owning apps' own search results — its glyph by kind, its title, its kind
- * in a soft word — drawn above the result rows. The machine finished every
- * word and the glyph ([SearchContainer]); a tap hands the row's reference
- * ([SearchContainer.target]) to the shell's one row router and decides nothing
- * itself. Its id is `search-container-<entity>-<id>`, the same everywhere.
- */
-@Composable
-public fun SearchContainerRow(
-    container: SearchContainer,
-    modifier: Modifier = Modifier,
-    onOpen: (ChatCard) -> Unit,
-) {
-    val target = container.target
-    SearchContainerLine(
-        container.entity,
-        container.id,
-        container.icon_key,
-        container.title,
-        container.kind_label,
-        container.accessibility_label,
-        modifier,
-        onTap = if (target != null) ({ onOpen(target) }) else null,
-    )
-}
 
 /**
  * THE SAME ROW FROM THE SCREEN RUNTIME'S CONTAINER (#1135): a tap hands the

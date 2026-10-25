@@ -489,6 +489,12 @@ internal fun PlayerSurface(player: LightboxPlayer) {
  */
 @Composable
 internal fun LightboxTransport(player: LightboxPlayer, words: centraid.core.v1.PhotosLightboxWords) {
+    LightboxTransport(player, words.play, words.pause, words.player_position, words.player_position_value)
+}
+
+/** The same transport with its words given one by one (a document's stage carries its own). */
+@Composable
+internal fun LightboxTransport(player: LightboxPlayer, play: String, pause: String, position: String, positionValue: String) {
     val ink = centraidColor("onStage")
     val soft = centraidColor("onStageSoft")
     val fraction = if (player.duration > 0L) player.position.toFloat() / player.duration else 0f
@@ -499,7 +505,7 @@ internal fun LightboxTransport(player: LightboxPlayer, words: centraid.core.v1.P
     ) {
         StageKey(
             iconKey = if (player.playing) "Pause" else "Play",
-            label = if (player.playing) words.pause else words.play,
+            label = if (player.playing) pause else play,
             onClick = { player.toggle() },
         )
         // The strip's width is the pointer scope's `size`; nothing reads the
@@ -509,8 +515,8 @@ internal fun LightboxTransport(player: LightboxPlayer, words: centraid.core.v1.P
                 .weight(1f)
                 .height(28.dp)
                 .semantics {
-                    contentDescription = words.player_position
-                    stateDescription = words.player_position_value
+                    contentDescription = position
+                    stateDescription = positionValue
                         .replace("{position}", MediaClock.clock(player.position / 1_000L))
                         .replace("{duration}", MediaClock.clock(player.duration / 1_000L))
                 }

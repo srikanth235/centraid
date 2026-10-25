@@ -72,11 +72,10 @@ import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.bandFloor
 import dev.centraid.android.kit.bandPress
-import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.shared.shell.BandPolicy
+import dev.centraid.android.kit.BandPolicy
 
 /**
  * The Photos library (#1020, D-1020-E3; #1135).
@@ -256,7 +255,7 @@ internal fun PhotosLibraryBody(
 
 /** The lightbox route the library hands out: its template with the tapped photograph's id set. */
 private fun lightboxRoute(data: PhotosLibraryData, photoId: String): Route? {
-    val template = data.open ?: return null
+    val template = data.open_ ?: return null
     val args = template.photos_lightbox ?: return null
     return template.copy(photos_lightbox = args.copy(photo_id = photoId))
 }
@@ -271,7 +270,7 @@ private fun toggled(photoId: String): PhotosSelectionEvent =
     PhotosSelectionEvent(toggled = PhotosSelectionEvent.Toggled(photo_id = photoId))
 
 private fun pickedSet(ids: List<String>, picked: Boolean): PhotosSelectionEvent =
-    PhotosSelectionEvent(set = PhotosSelectionEvent.SetPicked(photo_ids = ids, selected = picked))
+    PhotosSelectionEvent(set_ = PhotosSelectionEvent.SetPicked(photo_ids = ids, selected = picked))
 
 /** Keep [visibleDay] on the day at the top of the list as it scrolls. */
 @Composable
@@ -543,7 +542,7 @@ internal fun PhotosSheets(state: PhotosHomeState, onEvent: (PhotosHomeEvent) -> 
                 ) {
                     detail.rows.forEach { row ->
                         Text(
-                            text = row.value,
+                            text = row.value_,
                             style = centraidType(if (row.key == "Status") "body" else "small"),
                             color = centraidColor(if (row.key == "Status") "text" else "textSoft"),
                         )
@@ -574,7 +573,7 @@ internal fun PhotosSheets(state: PhotosHomeState, onEvent: (PhotosHomeEvent) -> 
     // THE SELECTION'S TWO SHEETS: the album choice (one sheet for every "Add to
     // album") and the trash confirm — a confirm is a sheet (D4).
     val choice = state.album_choice
-    if (choice != null && choice.open) {
+    if (choice != null && choice.open_) {
         PhotosAlbumChoiceSheet(
             choice = choice,
             onEvent = { event -> onEvent(PhotosHomeEvent(album_choice = event)) },
@@ -584,7 +583,7 @@ internal fun PhotosSheets(state: PhotosHomeState, onEvent: (PhotosHomeEvent) -> 
     val confirm = selection?.confirm
     if (selection != null && confirm != null) {
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             cancelLabel = selection.cancel_label,
             onConfirm = {
                 onEvent(PhotosHomeEvent(selection = PhotosSelectionEvent(confirmed = PhotosSelectionEvent.Confirmed())))

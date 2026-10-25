@@ -31,7 +31,7 @@ import centraid.core.v1.HealthDayTotal
 import centraid.core.v1.HealthPhoneWorkout
 import centraid.core.v1.HealthRead
 import centraid.core.v1.HealthSnapshot
-import dev.centraid.shared.sync.phone.PhoneDevice
+import dev.centraid.android.session.InstallId
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -286,7 +286,7 @@ internal class HealthConnectReader(private val context: Context) {
             days = days,
             workouts = sessions.first,
             workouts_complete = sessions.second,
-            device_id = PhoneDevice.id(),
+            device_id = InstallId.of(context),
         )
     }
 

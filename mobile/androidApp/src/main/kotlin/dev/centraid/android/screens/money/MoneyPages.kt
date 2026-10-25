@@ -35,7 +35,6 @@ import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.kit.toKit
 import centraid.core.v1.Route
 
 // ---------------------------------------------------------------------------
@@ -68,7 +67,7 @@ internal fun MoneyImportScreen(
         ) { plan ->
             val empty = plan.empty
             if (empty != null) {
-                EmptyStateView(empty.toKit(), onAction = { plan.accounts_route?.let(onOpen) })
+                EmptyStateView(empty, onAction = { plan.accounts_route?.let(onOpen) })
             } else {
                 LazyColumn {
                     item(key = "lede") { MoneyNote(plan.lede) }
@@ -142,7 +141,7 @@ internal fun MoneyImportScreen(
                                 meta = listOf(line.line_label.takeIf { line.title.isNotEmpty() }.orEmpty(), line.meta, line.reason)
                                     .filter { it.isNotEmpty() }.joinToString(" · "),
                                 trailing = if (line.has_amount) money(line.amount) else "",
-                                chips = listOfNotNull(line.chip?.toKit()),
+                                chips = listOfNotNull(line.chip),
                                 a11y = spoken(line.accessibility_label, if (line.has_amount) line.amount else null),
                                 testTag = "money-import-${statement.key}-${line.key}",
                             )
@@ -224,7 +223,7 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
         ) { accounts ->
             val empty = accounts.empty
             if (empty != null) {
-                EmptyStateView(empty.toKit(), onAction = { onEvent(MoneyAccountsEvent(add = MoneyAccountsEvent.AddTapped())) })
+                EmptyStateView(empty, onAction = { onEvent(MoneyAccountsEvent(add = MoneyAccountsEvent.AddTapped())) })
             } else {
                 LazyColumn {
                     if (accounts.net_worth.isNotEmpty()) {
@@ -332,7 +331,7 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
     }
     state.confirm?.let { confirm ->
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             onConfirm = { onEvent(MoneyAccountsEvent(confirm_accepted = MoneyAccountsEvent.ConfirmAccepted())) },
             onDismiss = { onEvent(MoneyAccountsEvent(confirm_dismissed = MoneyAccountsEvent.ConfirmDismissed())) },
         )
@@ -363,7 +362,7 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
         ) { rules ->
             val empty = rules.empty
             if (empty != null) {
-                EmptyStateView(empty.toKit(), onAction = { onEvent(MoneyRulesEvent(add = MoneyRulesEvent.AddTapped())) })
+                EmptyStateView(empty, onAction = { onEvent(MoneyRulesEvent(add = MoneyRulesEvent.AddTapped())) })
             } else {
                 LazyColumn {
                     item(key = "limit") { MoneyNote(rules.limit_line) }
@@ -491,7 +490,7 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
     }
     state.confirm?.let { confirm ->
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             onConfirm = { onEvent(MoneyRulesEvent(confirm_accepted = MoneyRulesEvent.ConfirmAccepted())) },
             onDismiss = { onEvent(MoneyRulesEvent(confirm_dismissed = MoneyRulesEvent.ConfirmDismissed())) },
         )
@@ -522,7 +521,7 @@ internal fun MoneyCategoriesScreen(state: MoneyCategoriesState, onEvent: (MoneyC
         ) { categories ->
             val empty = categories.empty
             if (empty != null) {
-                EmptyStateView(empty.toKit(), onAction = null)
+                EmptyStateView(empty, onAction = null)
             } else {
                 LazyColumn {
                     categories.groups.forEach { group ->
@@ -592,7 +591,7 @@ internal fun MoneyCategoriesScreen(state: MoneyCategoriesState, onEvent: (MoneyC
     }
     state.confirm?.let { confirm ->
         ConfirmSheet(
-            confirm = confirm.toKit(),
+            confirm = confirm,
             onConfirm = { onEvent(MoneyCategoriesEvent(confirm_accepted = MoneyCategoriesEvent.ConfirmAccepted())) },
             onDismiss = { onEvent(MoneyCategoriesEvent(confirm_dismissed = MoneyCategoriesEvent.ConfirmDismissed())) },
         )
