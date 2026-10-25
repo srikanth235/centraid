@@ -18,8 +18,6 @@ agp = "9.4.0"
 wire = "7.0.1"
 kotest = "6.2.5"
 turbine = "1.2.1"
-kover = "0.9.9"
-konsist = "0.17.3"
 jna = "5.19.1"
 # Android-only, unresolvable here.
 androidx-activity-compose = "1.12.0"
@@ -46,9 +44,9 @@ androidx-media3 = "1.11.1"
 # The seed is the ONE secret allowed to follow a member to their next phone, and
 # on Android the only thing that carries it is Block Store. It is Play Services,
 # which is a real cost — a device without Play Services gets
-# `SyncedSecrets.UNKNOWN_SENTENCE` and the written phrase, which is the path
+# the written phrase (Rust's `custody::secrets` words it), which is the path
 # Android members are on anyway (Block Store restores only in the device-setup
-# flow). Confined to `:shared`'s androidMain, behind `androidEnabled`.
+# flow). Confined to the Android app.
 gms-blockstore = "16.4.0"
 # PAIRING'S SCAN (#1047 E6): the laptop's square, read in the app. CameraX for
 # the preview and the frames; ZXing's pure-Java, Apache-2.0 reader for the
@@ -74,7 +72,6 @@ wire-runtime = { module = "com.squareup.wire:wire-runtime", version.ref = "wire"
 kotest-runner-junit5 = { module = "io.kotest:kotest-runner-junit5", version.ref = "kotest" }
 kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
-konsist = { module = "com.lemonappdev:konsist", version.ref = "konsist" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 # `libjnidispatch.so` for desktop ABIs only; the AAR carries the Android ones
 # and is the only way the native bridge loads on a device. Without it the app
@@ -109,7 +106,6 @@ roborazzi-compose = { module = "io.github.takahirom.roborazzi:roborazzi-compose"
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 wire = { id = "com.squareup.wire", version.ref = "wire" }
-kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
 # Gated: see the `agp` note above.
 android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
 android-application = { id = "com.android.application", version.ref = "agp" }
