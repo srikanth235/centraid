@@ -194,6 +194,9 @@ message Event {
     // The screen runtime's own timer marker. The core handles it inside
     // `next_event` and never hands it to a shell.
     ScreenWake wake = 6;
+    // A screen's off-thread job finished. Handled by the core inside
+    // `next_event`, like `wake`; a shell never sees it.
+    ScreenJobDone job_done = 7;
   }
 }
 

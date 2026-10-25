@@ -31,7 +31,7 @@ use centraid_vault::chat::{DocumentSource, PhotoSource};
 use image::imageops::FilterType;
 
 use crate::error::{CoreError, Result};
-use crate::handle::Handle;
+use crate::handle::HandleState as Handle;
 
 /// The most bytes of an image the chat will take from a shell or a file.
 pub const IMAGE_BYTES_MAX: usize = 25 * 1024 * 1024;

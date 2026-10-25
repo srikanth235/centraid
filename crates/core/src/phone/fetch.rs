@@ -30,7 +30,7 @@ use centraid_vault::backup::store::{
 use super::link::GatewayStore;
 use super::{Keyring, hash_of, plane_error, store_error};
 use crate::error::{CoreError, Result};
-use crate::handle::Handle;
+use crate::handle::HandleState as Handle;
 
 /// What assembling one file came to.
 pub(crate) enum Assembled {
