@@ -1,12 +1,9 @@
 #![forbid(unsafe_code)]
-//! The two protobuf packages and their generated Rust types (#1020).
+//! The protobuf package and its generated Rust types (#1020).
 //!
-//! **Two packages, two promises** (#1020, *One protobuf schema workspace*):
-//!
-//! | Package | Module | `buf breaking` against | Promise |
-//! |---|---|---|---|
-//! | `centraid.core.v1` | [`core_v1`] | the PR base **and every released tag in the version window** | a gateway's commitment to seats that update on their own schedule |
-//! | `centraid.screen.v1` | [`screen_v1`] | the PR base only | shell-internal; may change every release |
+//! One package, `centraid.core.v1` ([`core_v1`]): the language between a shell
+//! and the core it links, which ship in one artifact. `buf breaking` runs
+//! against the PR base and every released tag in the version window.
 //!
 //! The `.proto` files are the source of truth and carry the reasoning; this
 //! crate is codegen plus the round-trip tests. See `README.md` for how to add a
@@ -52,9 +49,4 @@
 /// `centraid.core.v1` — the gateway's compatibility commitment.
 pub mod core_v1 {
     include!(concat!(env!("OUT_DIR"), "/centraid.core.v1.rs"));
-}
-
-/// `centraid.screen.v1` — shell-internal, free to change every release.
-pub mod screen_v1 {
-    include!(concat!(env!("OUT_DIR"), "/centraid.screen.v1.rs"));
 }

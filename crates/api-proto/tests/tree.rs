@@ -1,4 +1,4 @@
-//! The proto tree and `build.rs`'s list agree, and the two packages stay two.
+//! The proto tree and `build.rs`'s list agree, and the one package stays one.
 //!
 //! `build.rs` names every file rather than globbing, so a `.proto` added to the
 //! tree and not to the list would generate nothing and be discovered by a
@@ -67,11 +67,11 @@ fn every_proto_in_the_tree_is_compiled() {
     );
 }
 
-/// Two packages, and exactly two. A third would need its own `buf breaking`
+/// One package, and exactly one. A second would need its own `buf breaking`
 /// promise in `buf.yaml`, and one added without it would inherit whichever
 /// module's config matched first.
 #[test]
-fn there_are_exactly_two_packages_and_each_file_declares_its_own() {
+fn there_is_exactly_one_package_and_each_file_declares_its_own() {
     let root = proto_root();
     let mut files = Vec::new();
     every_proto(&root, &mut files);
@@ -103,6 +103,6 @@ fn there_are_exactly_two_packages_and_each_file_declares_its_own() {
     }
     assert_eq!(
         packages.into_iter().collect::<Vec<_>>(),
-        ["centraid.core.v1", "centraid.screen.v1"]
+        ["centraid.core.v1"]
     );
 }

@@ -12,7 +12,6 @@
 use centraid_api_proto::core_v1::{
     self as core, Envelope, Error, RecordKey, RowImage, Value, envelope, value,
 };
-use centraid_api_proto::screen_v1::ScreenState;
 use prost::Message;
 
 fn text(literal: &str) -> Value {
@@ -239,7 +238,7 @@ fn an_app_query_and_its_typed_answer_round_trip_with_absence_intact() {
     });
 }
 
-/// An act's output and the screen's state are OPAQUE BYTES, and that is
+/// An act's output is OPAQUE BYTES, and that is
 /// load-bearing: it is mechanism 2 of D-1020-C13, the reason a newer peer's
 /// payload arrives whole even though prost drops unknown FIELDS.
 ///
@@ -256,14 +255,6 @@ fn opaque_payloads_survive_byte_for_byte() {
     };
     let decoded = core::ActResponse::decode(acted.encode_to_vec().as_slice()).expect("decode");
     assert_eq!(decoded.output, payload);
-
-    let screen = ScreenState {
-        screen_id: "photos.grid".to_owned(),
-        state: payload.clone(),
-        revision: 9,
-    };
-    let decoded = ScreenState::decode(screen.encode_to_vec().as_slice()).expect("decode");
-    assert_eq!(decoded.state, payload);
 }
 
 /// prost 0.14 has no unknown-field retention, and this test is what says so out

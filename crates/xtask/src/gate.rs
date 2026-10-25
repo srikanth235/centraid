@@ -368,12 +368,11 @@ fn has_linked_artifact(names: &[String], member: &str) -> bool {
 ///      (R-CHAT-10). The cdylib reports a model file as `NO_ENGINE`, which
 ///      `AssistRoundTripSpec` accepts; the engine-wired answer is asserted in
 ///      Rust by the `engine` job in `gate.yml`.
-///   2. `./gradlew mobileJvm` = `:core:jvmTest`, the JVM binding's specs
-///      (the KMP `:shared` module and its suites are deleted, #1135; what
-///      they pinned is Rust's `Driver` tests, `cargo xtask rules` and
-///      `packages/design`'s `native-emission.test.ts`).
+///   2. `./gradlew mobileJvm` = `:core:jvmTest`, the JVM binding's specs.
+///      Screen behaviour is pinned by Rust's `Driver` tests, `cargo xtask
+///      rules` and `packages/design`'s `native-emission.test.ts`.
 ///   3. The generated-artifact drift check. The token table, the catalogue,
-///      the kit's words and the screen fixtures are all emitted and committed;
+///      the kit's words are all emitted and committed;
 ///      one emitter, N committed artifacts, one lint that fails on drift.
 ///
 /// WHAT THIS STEP DOES NOT DO, and says so rather than skipping quietly: it
@@ -418,14 +417,14 @@ fn run_mobile_jvm(ctx: &Ctx) -> Result<Outcome> {
     // THE DRIFT CHECK. `bun` is already a gate dependency (`ts-static`), and
     // the check is a regeneration followed by a clean-tree assertion, which is
     // the same shape `lint:site-tokens` uses for the CSS side.
-    for emitter in [
-        "contracts/tools/export-native-theme.ts",
-        "contracts/tools/build-screen-fixtures.ts",
-    ] {
-        let emitted = process(ctx, "mobile-jvm", "bun", &[emitter])?;
-        if !matches!(emitted, Outcome::Ok(_)) {
-            return Ok(emitted);
-        }
+    let emitted = process(
+        ctx,
+        "mobile-jvm",
+        "bun",
+        &["contracts/tools/export-native-theme.ts"],
+    )?;
+    if !matches!(emitted, Outcome::Ok(_)) {
+        return Ok(emitted);
     }
     // THEN FORMAT, because the committed artifacts are formatted and the
     // emitters do not format. Without this the check fails on every run over a
@@ -438,18 +437,13 @@ fn run_mobile_jvm(ctx: &Ctx) -> Result<Outcome> {
     if !matches!(formatted, Outcome::Ok(_)) {
         return Ok(formatted);
     }
-    assert_clean_tree(
-        ctx,
-        "mobile-jvm",
-        &["design", "mobile", "contracts/screens"],
-    )
+    assert_clean_tree(ctx, "mobile-jvm", &["design", "mobile"])
 }
 
 /// `emitters` — the generated trees, regenerated and asserted clean.
 ///
-/// `mobile-jvm` runs the OTHER two emitters (`contracts/screens`) and diffs the
-/// same trees; this step is the half that costs no Gradle, so it can sit on the
-/// per-PR profile. The two overlap on purpose: a drift check that only exists
+/// `mobile-jvm` diffs the same trees after its own emitters; this step is the
+/// half that costs no Gradle, so it can sit on the per-PR profile. The two overlap on purpose: a drift check that only exists
 /// in a nightly profile is a drift check that reports a day late.
 fn run_emitters(ctx: &Ctx) -> Result<Outcome> {
     for emitter in [

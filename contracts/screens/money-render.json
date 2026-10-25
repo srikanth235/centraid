@@ -1,5 +1,5 @@
 {
-  "$comment": "ONE MONEY LAW, TWO RENDERERS. Each case is a centraid.screen.v1.Money and the string both shells must draw for it: Android's formatMoney (asserted on the JVM by MoneyRenderSpec, which mirrors it) and iOS's Money.render (asserted by the K5 iOS test). The exponent is the message's, never assumed to be 2; a code ISO 4217 does not know is spelled after the amount. Locales are explicit: an EMPTY locale means the device's on both shells, which no fixture can pin.",
+  "$comment": "ONE MONEY LAW, TWO RENDERERS. Each case is an amount and the string it must draw: the Rust formatter `centraid_screens::kit::money` is the one renderer (asserted by its own test), and Android's formatMoney (asserted on the JVM by MoneyRenderTest) draws the same cases. The exponent is the message's, never assumed to be 2; a code ISO 4217 does not know is spelled after the amount. Locales are explicit: an EMPTY locale means the device's on both shells, which no fixture can pin.",
   "cases": [
     {
       "name": "usd-en-us",

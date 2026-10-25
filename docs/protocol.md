@@ -16,7 +16,7 @@ Wire schema changes **never break parsing** in either direction:
 | Types | Never narrow without a floor |
 | Discriminants | Add new `oneof` members only as unknown-tolerant (`Unsupported`) or behind a capability |
 
-The handshake and parsers stay green across versions even when a **feature** is unavailable. `buf breaking` holds the rules mechanically (see [the v1 wire](#the-v1-wire-two-packages-two-promises-1020)).
+The handshake and parsers stay green across versions even when a **feature** is unavailable. `buf breaking` holds the rules mechanically (see [the v1 wire](#the-v1-wire-one-package-1020)).
 
 ### (b) Feature contract — per feature
 
@@ -62,16 +62,13 @@ Schemas are **structural declarations only**:
 
 Keeps generated clients (Rust, Kotlin, Swift, TypeScript), docs, and human readers aligned; prevents "schema that is really a parser."
 
-## The v1 wire: two packages, two promises ([#1020](https://github.com/srikanth235/centraid/issues/1020))
+## The v1 wire: one package ([#1020](https://github.com/srikanth235/centraid/issues/1020))
 
-The screen and core wires are protobuf, defined in [`crates/api-proto`](../crates/api-proto/README.md) as **two packages with two different compatibility promises** ([R-1020-4](decisions.md#backup-and-the-gateway)):
+The core wire, screens included, is protobuf, defined in [`crates/api-proto`](../crates/api-proto/README.md) as one package ([R-1020-4](decisions.md#backup-and-the-gateway)):
 
 | Package | What it carries | Promise | Checked against |
 | --- | --- | --- | --- |
-| `centraid.core.v1` | Reads, acts, rows, change events, the screens, the phone's backup plane, the handshake | A **gateway compatibility commitment**: a member's paired phone depends on it | `buf breaking` against **the PR base and every released tag inside the version window** — a chain of individually-compatible commits can still break the release a member is running |
-| `centraid.screen.v1` | Screen states and screen events | **Shell-internal**; it may change every release | `buf breaking` against the PR base only |
-
-One schema with one promise would force the weaker half to carry the stronger half's cost: a screen-state field rename would become a wire break, so screen shapes would ossify or the promise would quietly stop being kept.
+| `centraid.core.v1` | Reads, acts, rows, change events, the screens, the phone's backup plane, the handshake | A **compatibility commitment**: a member's paired phone depends on it | `buf breaking` against **the PR base and every released tag inside the version window** — a chain of individually-compatible commits can still break the release a member is running |
 
 ### The version window
 

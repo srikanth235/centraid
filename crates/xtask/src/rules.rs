@@ -450,8 +450,8 @@ pub fn commonmain_no_platform_import(root: &Path) -> RuleReport {
     const NAME: &str = "commonmain-no-platform-import";
     // `mobile/core`'s `commonMain` is the ABI binding's shared half: a JNA
     // `Pointer` or a `kotlinx.cinterop` import leaking into it is platform code
-    // where only the protocol belongs (#1020 wave 3 lane E). The KMP `:shared`
-    // module that also had one is deleted (#1135; `no-kmp-shared`).
+    // where only the protocol belongs (#1020 wave 3 lane E). `no-kmp-shared`
+    // keeps the deleted `:shared` module deleted (#1135).
     let dir = root.join("mobile/core/src/commonMain");
     if !dir.is_dir() {
         return RuleReport::pending(NAME, "no mobile/core/src/commonMain");

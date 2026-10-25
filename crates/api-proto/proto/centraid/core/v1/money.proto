@@ -15,9 +15,7 @@
 // EVERY FIGURE IS A `MoneyAmount`: minor units, the currency code and that
 // currency's minor-unit exponent from `centraid_apps_kit::money::minor_units`,
 // never a bare integer a shell would divide by 100 (JPY is 0, BHD is 3). It is
-// declared here rather than imported from `screen.v1.Money`: the core package
-// imports nothing from the shell-internal package, whose compatibility promise
-// is weaker, and the locale a screen renders in is the vault's, which every
+// declared here: the locale a screen renders in is the vault's, which every
 // shell already holds. A figure that spans currencies is one `MoneyAmount` PER
 // currency and nothing here adds across them.
 //

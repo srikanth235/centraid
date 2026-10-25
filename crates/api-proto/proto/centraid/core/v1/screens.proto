@@ -4,10 +4,8 @@
 // the view state, send events, and perform effects — they own no copy, no count,
 // no timer and no route.
 //
-// IN `core.v1` AND NOT `screen.v1`, deliberately. `centraid.screen.v1` is the
-// KMP shell's per-screen state package and is deleted with that shell; this file
-// is what replaces it, and it rides the one `Envelope` (`Request.screen`,
-// `Response.screen`, `Event.screen`) so the ABI stays five symbols.
+// IT RIDES THE ONE `Envelope` (`Request.screen`, `Response.screen`,
+// `Event.screen`), so the ABI stays five symbols.
 //
 // HOW AN APP LANE ADDS A SCREEN: one arm in each of `Route.args`,
 // `ScreenEvent.kind` and `ViewState.kind`, in the app's reserved range (below),

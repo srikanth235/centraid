@@ -1,4 +1,4 @@
-//! Generate the Rust types for both protobuf packages (#1020, D-1020-C5).
+//! Generate the Rust types for the protobuf package (#1020, D-1020-C5).
 //!
 //! `protox` parses the `.proto` tree in pure Rust and produces the
 //! `FileDescriptorSet`; `prost-build` turns that into Rust. There is
@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 50] = [
+const PROTOS: [&str; 49] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/query.proto",
@@ -115,7 +115,6 @@ const PROTOS: [&str; 50] = [
     // reads an app already answers. Its own file because a turn is neither a
     // command nor a page read.
     "proto/centraid/core/v1/assist.proto",
-    "proto/centraid/screen/v1/screen.proto",
 ];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -216,12 +215,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // (#1047 T2); boxed so every other session step stays small.
         .boxed(".centraid.core.v1.LockerSessionResponse.exported")
         .boxed(".centraid.core.v1.LockerSessionResponse.import_plan")
-        // Money's screens (#1099): the five whose data arm dwarfs its siblings.
-        .boxed(".centraid.screen.v1.MoneyHomeState.content.data")
-        .boxed(".centraid.screen.v1.MoneyTransactionState.content.data")
-        .boxed(".centraid.screen.v1.MoneyTargetState.content.data")
-        .boxed(".centraid.screen.v1.MoneyImportState.content.data")
-        .boxed(".centraid.screen.v1.MoneyCategoriesState.content.data")
         .compile_fds(descriptors)?;
     Ok(())
 }

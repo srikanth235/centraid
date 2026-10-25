@@ -195,8 +195,8 @@ message Error {
   // A field rather than a `oneof` over every code's companion: companions are
   // per-code and rare, and a oneof would make each new one a change to the
   // shape every decoder reads. `code` is still what a shell branches on, and an
-  // absent `moved` on a `VAULT_MOVED` is HANDLED rather than trusted — see
-  // `dev.centraid.shared.sync.movedFrom`.
+  // absent `moved` on a `VAULT_MOVED` is HANDLED rather than trusted — see the
+  // `VaultMoved` arm in `crates/screens/src/pairing/door.rs`.
   optional VaultMoved moved = 5;
 }
 
