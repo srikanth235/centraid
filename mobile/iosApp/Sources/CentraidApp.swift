@@ -154,6 +154,7 @@ struct CentraidApp: App {
                 switch phase {
                 case .active:
                     shell.unmask()
+                    shell.tellPhoneScheme()
                     shell.screens?.lifecycle(foreground: true)
                     // AND DRAIN. The amendment's foreground half (#1029 W18-6):
                     // the phone backs up while the member is in the app, not

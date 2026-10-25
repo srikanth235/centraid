@@ -9,7 +9,7 @@ import SwiftUI
 // the view below, which switches on `ViewState.kind`. The views add no copy,
 // format nothing, count nothing and start no timer; they send `ScreenEvent`s.
 //
-// INTERIM HOSTING: the shell's `path` still holds the back stack. An entry
+// THE STACK: Rust holds one (tab `home`, rooted at Home); the shell's `path` mirrors it. An entry
 // pushed onto it sends `NavPush` (`ShellModel.openRust`), and leaving it by any
 // route sends `NavPopped` (`ShellModel.rustPopped`). The shell lane replaces
 // this with the stack Rust holds (`ProofStackView`).
@@ -18,11 +18,12 @@ enum RustScreens {
     /// The screen id the shared side spells a Rust route under (`ScreenOpening.screenId`);
     /// its event is the encoded `centraid.core.v1.Route`.
     static let id = ScreenIds.shared.RUST_SCREEN
-    /// The tab Rust keeps a route's screens' stack under: an app's screens live
-    /// under that app (`photos.` under `photos`), the rest under Agenda's.
-    static func tab(for route: Centraid_Core_V1_Route) -> String {
-        route.screen.hasPrefix("photos.") ? "photos" : "agenda"
-    }
+    /// The tab Home is the root of. Rust owns the stack: every page, whichever
+    /// app's, is pushed on this tab, so back returns to Home.
+    static let homeTab = BandPolicy.shared.PLACE_HOME
+
+    /// The tab Rust keeps a route's screens' stack under: always Home's.
+    static func tab(for route: Centraid_Core_V1_Route) -> String { homeTab }
 }
 
 /// ONE PUSH OF A RUST ROUTE: the route Rust built and a token unique to the
@@ -75,6 +76,15 @@ private struct RustScreenView: View {
     var body: some View {
         let open: (Centraid_Core_V1_Route) -> Void = { shell.open($0) }
         switch store.views[instance]?.kind {
+        // HOME'S SEARCH (#1135, lane H1): a page pushed over Home.
+        case .homeSearch(let state)?:
+            ShellSearchView(
+                state: state,
+                send: { store.send(instance, .homeSearch($0)) },
+                open: open,
+                ask: { question, scope in shell.askChat(question, scope: scope) },
+                onCancel: pop
+            )
         case .agendaHome(let state)?:
             AgendaHomeView(
                 state: state,
@@ -417,6 +427,7 @@ private struct RustScreenView: View {
                 },
                 onBack: pop
             )
+        // HOME is the root of the `home` tab, drawn by `HomeView`, never pushed.
         default:
             BarePaper()
         }

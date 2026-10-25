@@ -46,6 +46,15 @@ final class ScreenStore: ObservableObject {
     /// OPEN A PAGE NOW, wherever the member is (`OpenRoute`): the shell pushes the
     /// route as it pushes a tapped row's route. Set by `ShellModel`.
     var onOpenRoute: ((Centraid_Core_V1_Route) -> Void)?
+    /// WHAT HOME ASKED OF THE SHELF (`VaultCommand`): switch, make, restore, forget,
+    /// rename, or open a settings door. The vault files are the shell's; which and
+    /// when is Rust's. Set by `ShellModel`.
+    var onVaultCommand: ((Centraid_Core_V1_VaultCommand) -> Void)?
+    /// Home's `scheme` moved (the member's light/dark choice, which Rust keeps).
+    var onHomeScheme: ((Centraid_Core_V1_HomeScheme) -> Void)?
+    /// Home's first view arrived: the shell tells it what the shelf already holds.
+    var onHomeAppeared: (() -> Void)?
+    private var homeTold: UInt64?
     /// An import over iOS's limited contact access: the shell raises the system's picker.
     var onContactsLimited: (() -> Void)?
 
@@ -149,6 +158,29 @@ final class ScreenStore: ObservableObject {
         navigate(.popped(popped))
     }
 
+    /// HOME'S INSTANCE: the root of the `home` tab.
+    var homeInstance: UInt64? { entries(of: RustScreens.homeTab).first?.instance }
+
+    /// Home's latest state, once it has been drawn.
+    var homeView: Centraid_Core_V1_HomeState? {
+        homeInstance.flatMap { views[$0] }?.homeState
+    }
+
+    /// Send an event to Home.
+    func sendHome(_ kind: Centraid_Core_V1_HomeEvent.OneOf_Kind) {
+        guard let instance = homeInstance else { return }
+        var event = Centraid_Core_V1_HomeEvent()
+        event.kind = kind
+        send(instance, .home(event))
+    }
+
+    /// A band press: Rust selects the tab and the shell hears the new navigation.
+    func selectTab(_ tab: String) {
+        var select = Centraid_Core_V1_NavSelectTab()
+        select.tab = tab
+        navigate(.selectTab(select))
+    }
+
     /// A tab's stack, root first, as Rust holds it.
     func entries(of tab: String) -> [Centraid_Core_V1_StackEntry] {
         navigation?.tabs.first { $0.tab == tab }?.entries ?? []
@@ -176,6 +208,13 @@ final class ScreenStore: ObservableObject {
         for view in update.views
         where !closed.contains(view.instance) && view.revision > (views[view.instance]?.revision ?? 0) {
             views[view.instance] = view
+            if let home = view.homeState {
+                onHomeScheme?(home.scheme)
+                if homeTold != view.instance {
+                    homeTold = view.instance
+                    onHomeAppeared?()
+                }
+            }
             // A PHOTOS HOME THAT OPENS AFTER THE ROLL SPOKE is told what it said.
             if view.isPhotosHome, rollTold.insert(view.instance).inserted {
                 for event in rollEvents.values { send(view.instance, .photosHome(event)) }
@@ -304,6 +343,9 @@ final class ScreenStore: ObservableObject {
             }
         case .openRoute(let open)?:
             onOpenRoute?(open.route)
+            answer(request, .done(Centraid_Core_V1_EffectDone()))
+        case .vaultCommand(let command)?:
+            onVaultCommand?(command)
             answer(request, .done(Centraid_Core_V1_EffectDone()))
         // DOCS' FILES (#1135): the file picker and scanner (answered more than once under
         // one effect: progress, then the file), and the folder picker.
@@ -486,5 +528,13 @@ extension Centraid_Core_V1_PhotosHomeEvent {
     var permissionKey: Int {
         if case .permission? = kind { return 0 }
         return 1
+    }
+}
+
+extension Centraid_Core_V1_HomeState {
+    /// An app's tile, whose `route` is the app's front door.
+    func homeTile(of app: String) -> Centraid_Core_V1_HomeTile? {
+        guard case let .data(data)? = content else { return nil }
+        return data.tiles.first { $0.appID == app }
     }
 }

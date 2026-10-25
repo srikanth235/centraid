@@ -206,16 +206,19 @@ final class ShellModel: ObservableObject {
     @Published var transferRule = ""
     /// The three choices, each a plain sentence from the shell's copy source.
     @Published var transferRuleChoices: [(stored: String, sentence: String)] = []
-    /// THE MEMBER'S APPEARANCE (R-CHROME-7), as the store's own word, read at
-    /// launch. `HomeBridge` parses it; empty until the read lands, which
-    /// follows the phone exactly as "system" does.
-    @Published var appearance = ""
+    /// THE SCHEME THE WINDOW IS HELD TO, or nil to follow the phone: Home's
+    /// `scheme` (R-CHROME-7), which Rust keeps in the Keychain (`ScreenStore.onHomeScheme`).
+    @Published var preferredScheme: ColorScheme?
     /// The last thing the vault sheet said, in a member's words.
     ///
     /// A SENTENCE THE CORE ALREADY DECIDED WAS SHOWABLE. Nothing here composes
     /// one out of an error: `Error.detail` is logs-only, and a shell that made
     /// its own sentence from a peer's words would be the hole in that rule.
-    @Published var gatewayStatus = ""
+    @Published var gatewayStatus = "" {
+        // The switcher's status line is Rust's (`HomeVaultSheet.status_line`); it is
+        // told what a make or a restore came to, in the shelf's words.
+        didSet { if gatewayStatus != oldValue { tellOutcome(gatewayStatus) } }
+    }
 
     /// WHICH 24-WORDS SCREEN IS UP (#1047 E2), if any: `words.make` or
     /// `words.enter`. One sheet at the root for both, so switching from one to
@@ -314,6 +317,23 @@ final class ShellModel: ObservableObject {
     func attachScreens(core: any ScreenCore) {
         let store = ScreenStore(core: core)
         store.onOpenRoute = { [weak self] route in self?.open(route) }
+        store.onVaultCommand = { [weak self] command in self?.perform(command) }
+        store.onHomeScheme = { [weak self] scheme in
+            let held: ColorScheme?
+            switch scheme {
+            case .light: held = .light
+            case .dark: held = .dark
+            default: held = nil
+            }
+            if self?.preferredScheme != held { self?.preferredScheme = held }
+        }
+        // HOME HAS ITS FIRST VIEW: tell it what the shelf already knows.
+        store.onHomeAppeared = { [weak self] in
+            self?.lastHomeFacts = [:]
+            self?.tellHomeFacts()
+            self?.tellPhoneScheme()
+            self?.tellOutcome(self?.gatewayStatus ?? "")
+        }
         store.onContactsLimited = { [weak self] in self?.contactAccessPickerShown = true }
         screens = store
         // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED (R-ONBOARD-10), and when
@@ -376,9 +396,10 @@ final class ShellModel: ObservableObject {
     init() {
         home.observe { [weak self] bytes in
             self?.homeState = bytes.data
+            // THE SHELF'S FACTS (vaults, backup line, ribbon) are told to Rust's Home.
+            self?.tellHomeFacts()
         }
         home.observeHoldsNoVault { [weak self] none in self?.holdsNoVaultChanged(none.boolValue) }
-        home.appearance { [weak self] stored in self?.appearance = stored }
         vaultWords.observe { [weak self] bytes in self?.vaultWordsChanged(bytes.data) }
         // A VAULT WAS MADE (`VaultWordsBridge.made`, once per make): its
         // sentence stays on the vault sheet, as `found`'s did, and the photos are
@@ -396,8 +417,6 @@ final class ShellModel: ObservableObject {
         backup.observe { [weak self] bytes in self?.backupChanged(bytes.data) }
         // ONE LINE PER APP lives in `AppRegistry.apps`, not here.
         for app in AppRegistry.apps { app.register(into: self) }
-        // HOME'S SEARCH (R-CHROME-6): Home's own screen, not an app's.
-        HomeSearchScreens.register(into: self)
         // THE SESSION OWNS THE ONE CORE (R-1020-24), so the app screens are
         // attached TO it rather than opening one. It is opened asynchronously,
         // so this is a callback and not a getter: there is exactly one moment
@@ -607,9 +626,9 @@ final class ShellModel: ObservableObject {
             path = []
             tab = .home
             transferRulesOpen = false
-            // A DISMISSAL, as the switcher's own swipe sends it: shut the
-            // machine's sheet flag, change no vault.
-            send(screen: HomeMachine.shared.SCREEN_ID, event: HomeEvents.vaultPicked(""))
+            // A DISMISSAL, as the switcher's own swipe sends it: shut Home's
+            // sheet, change no vault.
+            screens?.sendHome(.sheetClosed(.init()))
         }
         holdsNoVault = none
     }
@@ -715,9 +734,8 @@ final class ShellModel: ObservableObject {
     /// dismissal has to finish first, or the next sheet is dropped.
     @discardableResult
     private func closeVaultSwitcher() -> Double {
-        let state = (try? Centraid_Screen_V1_HomeState(serializedBytes: homeState)) ?? .init()
-        guard state.vaultSheetOpen else { return 0 }
-        send(screen: HomeMachine.shared.SCREEN_ID, event: HomeEvents.vaultPicked(""))
+        guard screens?.homeView?.hasSheet == true else { return 0 }
+        screens?.sendHome(.sheetClosed(.init()))
         return 0.45
     }
 
@@ -1036,7 +1054,12 @@ final class ShellModel: ObservableObject {
     func renameVault(vaultID: String, name: String) {
         home.renameVault(vaultId: vaultID, name: name) { [weak self] renamed in
             DispatchQueue.main.async {
-                self?.gatewayStatus = renamed.boolValue ? "" : HomeWords.shared.VAULTS_RENAME_FAILED
+                // A refusal is Rust's to word (`OutcomeTold.rename_failed`).
+                if renamed.boolValue {
+                    self?.gatewayStatus = ""
+                } else {
+                    self?.screens?.sendHome(.outcomeTold(.with { $0.renameFailed = true }))
+                }
             }
         }
     }
@@ -1055,9 +1078,10 @@ final class ShellModel: ObservableObject {
     func openImported() {
         let app = importOpens
         dismissImportNotice()
-        guard let route = ShellModel.Route.home(of: app) else { return }
+        // The app's front door is the route its Home tile carries.
+        guard let route = screens?.homeView?.homeTile(of: app)?.route else { return }
         tab = .home
-        path.append(route)
+        open(route)
     }
 
     /// The member moved: a settled line has been read, and goes. A running
@@ -1091,7 +1115,6 @@ final class ShellModel: ObservableObject {
     /// every screen that exists is connected.
     func send(screen: String, event: Data) {
         switch screen {
-        case HomeMachine.shared.SCREEN_ID: home.send(event: event.kotlin)
         // EVERY REGISTERED SCREEN: a lookup, not a case (K5).
         default: ports[screen]?.send(event)
         }
@@ -1133,12 +1156,6 @@ final class ShellModel: ObservableObject {
         }
     }
 
-    /// THE SCHEME THE WINDOW IS HELD TO, or nil to follow the phone.
-    var preferredScheme: ColorScheme? {
-        guard let held = home.appearanceHeldDark(stored: appearance) else { return nil }
-        return held.boolValue ? .dark : .light
-    }
-
     /// What the PHONE shows, under any hold this app puts on its own window:
     /// the screen's trait, which `preferredColorScheme` does not override.
     private var phoneDark: Bool {
@@ -1148,17 +1165,118 @@ final class ShellModel: ObservableObject {
         return screen?.traitCollection.userInterfaceStyle == .dark
     }
 
-    /// Home's appearance key as drawn on a screen that is `dark`.
-    func appearanceKey(dark: Bool) -> (iconKey: String, label: String) {
-        let key = home.appearanceKey(dark: dark)
-        return (key.iconKey, key.label)
+    /// Tell Home whether the phone itself is dark: what "follow the phone" means.
+    func tellPhoneScheme() {
+        screens?.sendHome(.phoneSchemeTold(.with { $0.dark = phoneDark }))
     }
 
-    /// The key's tap: flipped against the phone, written, and drawn from
-    /// what the store answers.
-    func toggleAppearance() {
-        home.toggleAppearance(current: appearance, phoneDark: phoneDark) { [weak self] stored in
-            self?.appearance = stored
+    // MARK: Home's facts (the shelf is KMP's, the words are Rust's)
+
+    /// The last bytes told for each fact, so a KMP state that moved something else tells nothing.
+    private var lastHomeFacts: [String: Data] = [:]
+
+    private func tellOnce(_ key: String, _ event: Centraid_Core_V1_HomeEvent.OneOf_Kind, _ bytes: Data) {
+        guard lastHomeFacts[key] != bytes else { return }
+        lastHomeFacts[key] = bytes
+        screens?.sendHome(event)
+    }
+
+    private static func shellVault(_ vault: Centraid_Screen_V1_VaultLockup) -> Centraid_Core_V1_ShellVault {
+        .with {
+            $0.vaultID = vault.vaultID
+            $0.name = vault.vaultName
+            $0.color = vault.color
+            $0.originalsWithheld = vault.originalsWithheld
+            switch vault.state {
+            case .online: $0.state = .online
+            case .frozen: $0.state = .frozen
+            default: $0.state = .unspecified
+            }
+        }
+    }
+
+    private static func tone(_ tone: Centraid_Screen_V1_BackupLine.Tone) -> Centraid_Core_V1_HomeTone {
+        switch tone {
+        case .attention: return .attention
+        case .urgent: return .urgent
+        case .quiet: return .quiet
+        default: return .unspecified
+        }
+    }
+
+    /// Tell Rust's Home the vaults, the backup line and the ribbon the shelf holds.
+    func tellHomeFacts() {
+        guard let screens, screens.homeInstance != nil else { return }
+        let state = (try? Centraid_Screen_V1_HomeState(serializedBytes: homeState)) ?? .init()
+        let told = Centraid_Core_V1_HomeEvent.VaultsTold.with {
+            $0.none = holdsNoVault == true
+            if state.hasVault, !state.vault.vaultID.isEmpty || !state.vault.vaultName.isEmpty {
+                $0.vault = Self.shellVault(state.vault)
+            }
+            $0.vaults = state.vaults.map(Self.shellVault)
+        }
+        tellOnce("vaults", .vaultsTold(told), (try? told.serializedData()) ?? Data())
+        let backup = Centraid_Core_V1_HomeEvent.BackupLineTold.with {
+            if state.hasBackupLine {
+                $0.line = .with {
+                    $0.status = state.backupLine.status
+                    $0.tone = Self.tone(state.backupLine.tone)
+                    $0.accessibilityLabel = state.backupLine.accessibilityLabel
+                }
+            }
+        }
+        tellOnce("backup-line", .backupTold(backup), (try? backup.serializedData()) ?? Data())
+        let ribbon = Centraid_Core_V1_HomeEvent.StatusTold.with {
+            if state.data.hasStatus {
+                let status = state.data.status
+                $0.status = .with {
+                    switch status.tone {
+                    case .attention: $0.tone = .attention
+                    case .urgent: $0.tone = .urgent
+                    case .quiet: $0.tone = .quiet
+                    default: $0.tone = .unspecified
+                    }
+                    $0.copy = status.copy
+                    $0.action = status.action
+                    switch status.destination {
+                    case .phone: $0.destination = .phone
+                    case .notifications: $0.destination = .notifications
+                    case .backup: $0.destination = .backup
+                    case .none: $0.destination = .none
+                    default: $0.destination = .unspecified
+                    }
+                }
+            }
+        }
+        tellOnce("status", .statusTold(ribbon), (try? ribbon.serializedData()) ?? Data())
+    }
+
+    /// Tell Home what a make, a restore or a rename came to, in the shelf's words.
+    func tellOutcome(_ sentence: String) {
+        let told = Centraid_Core_V1_HomeEvent.OutcomeTold.with { $0.statusLine = sentence }
+        tellOnce("outcome", .outcomeTold(told), (try? told.serializedData()) ?? Data())
+    }
+
+    /// WHAT HOME ASKED OF THE SHELF (`VaultCommand`): the vault files, their keys and
+    /// the settings pages are this shell's; which and when is Rust's.
+    func perform(_ command: Centraid_Core_V1_VaultCommand) {
+        switch command.kind {
+        case let .switchTo(id)?:
+            clearStaleGatewayStatus()
+            // The shelf re-points; the facts feed then tells Home the new lockup.
+            home.switchVault(vaultId: id)
+        case .make?: makeVault()
+        case .restore?: openRestore()
+        case let .forget(id)?: forget(vaultID: id)
+        case let .rename(rename)?: renameVault(vaultID: rename.vaultID, name: rename.name)
+        case let .open(destination)?:
+            // The phone's own grant is changed in Settings (a notification or a
+            // low-disk door); the backup tab is a tab Rust selects itself.
+            if destination == .phone || destination == .notifications,
+                let url = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(url)
+            }
+        case nil: break
         }
     }
 
