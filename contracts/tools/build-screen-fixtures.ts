@@ -38,12 +38,8 @@ import path from "node:path";
  */
 const TYPES: Record<string, string> = {
   home: "centraid.screen.v1.HomeState",
-  // Money's three states worth a fixture (#1099): the home over its tabs, the
-  // import's review and its question, and a transaction with its two offers.
-  money: "centraid.screen.v1.MoneyHomeState",
-  "money-import": "centraid.screen.v1.MoneyImportState",
-  "money-transaction": "centraid.screen.v1.MoneyTransactionState",
   // Photos' screens are `crates/screens` views (#1135), tested there.
+  // Money and Locker are `crates/screens` views (#1099, #1135), tested there.
   seat: "centraid.screen.v1.SeatState",
 };
 

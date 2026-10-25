@@ -18,6 +18,12 @@ pub enum Field<T> {
     Is(T),
 }
 
+pub(crate) fn blob(value: impl Into<Vec<u8>>) -> wire::Value {
+    wire::Value {
+        kind: Some(wire::value::Kind::Blob(value.into())),
+    }
+}
+
 pub(crate) fn text(value: impl Into<String>) -> wire::Value {
     wire::Value {
         kind: Some(wire::value::Kind::Text(value.into())),
@@ -39,6 +45,13 @@ pub(crate) fn real(value: f64) -> wire::Value {
 /// A boolean travels as 0 or 1; the core types it by the manifest's schema.
 pub(crate) fn flag(value: bool) -> wire::Value {
     whole(i64::from(value))
+}
+
+/// An explicit `null`, for a required property the schema lets be cleared.
+pub(crate) fn null() -> wire::Value {
+    wire::Value {
+        kind: Some(wire::value::Kind::Null(wire::NullValue {})),
+    }
 }
 
 pub(crate) fn put_field<T>(

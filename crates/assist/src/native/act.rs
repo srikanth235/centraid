@@ -2183,6 +2183,22 @@ impl Session {
                     note: None,
                 }
             }
+            // A TRANSFER IS TWO LINES THAT POINT AT EACH OTHER: the undo links the partner again
+            // (the `transfer` field is the partner's id), so an unlink is taken back exactly.
+            Verb::Unlink => {
+                check_args(&[])?;
+                let Some(Val::Text(partner)) = row.field("transfer") else {
+                    return Ok(Plan::Already("is not part of a transfer".to_owned()));
+                };
+                let back = action.inverse.ok_or_else(|| not_applicable(verb, kind))?;
+                run(
+                    vec![Step::of(action, target())],
+                    vec![Step {
+                        act: back.call(),
+                        input: json!({ back.id_param: id, "other_id": partner }),
+                    }],
+                )
+            }
             Verb::Reveal => self.plan_reveal(row, args)?,
             Verb::Reschedule => self.plan_reschedule(row, args)?,
             Verb::Edit => self.plan_edit(row, args)?,
@@ -3617,6 +3633,22 @@ impl Session {
                 }
                 (input, action.id_param)
             }
+            // AN ACCOUNT NAMES ITS TYPE (the vault has no default for what money it holds).
+            Kind::Account => {
+                let Some(kind_value) = text("type") else {
+                    return Err(
+                        "error: create account needs type: checking | savings | credit card | cash."
+                            .to_owned(),
+                    );
+                };
+                let kind_value = whr::enum_value(Kind::Account, "type", &kind_value)?;
+                (
+                    json!({"id": mint(), "title": name, "type": kind_value}),
+                    action.id_param,
+                )
+            }
+            // A CATEGORY'S ID IS ITS NAME: the core derives it, so there is none to mint.
+            Kind::Category => (json!({"title": name}), "id"),
             // ANY OTHER KIND the catalog creates is its create action's input as the manifest
             // says it: the name, the id the core would mint, what can only be one value and what
             // has a default. A container (an album, a notebook, a folder) is that and nothing more,

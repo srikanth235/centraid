@@ -150,6 +150,126 @@ private struct RustScreenView: View {
                 send: { store.send(instance, .photosPlaces($0)) },
                 open: open
             )
+        case .lockerHome(let state)?:
+            LockerHomeView(
+                state: state,
+                send: { store.send(instance, .lockerHome($0)) },
+                sendWall: { store.send(instance, .lockerWall($0)) },
+                open: open,
+                onWords: { shell.openRekey() },
+                onHome: { shell.path.removeAll() }
+            )
+        case .lockerItem(let state)?:
+            LockerItemView(
+                state: state,
+                send: { store.send(instance, .lockerItem($0)) },
+                sendWall: { store.send(instance, .lockerWall($0)) },
+                open: open,
+                onWords: { shell.openRekey() },
+                onBack: pop
+            )
+        case .lockerEditor(let state)?:
+            LockerEditorView(
+                state: state,
+                send: { store.send(instance, .lockerEditor($0)) },
+                sendWall: { store.send(instance, .lockerWall($0)) },
+                onWords: { shell.openRekey() },
+                onClose: pop
+            )
+        case .lockerAccess(let state)?:
+            LockerAccessView(
+                state: state,
+                send: { store.send(instance, .lockerAccess($0)) },
+                sendWall: { store.send(instance, .lockerWall($0)) },
+                onWords: { shell.openRekey() },
+                onBack: pop
+            )
+        case .lockerExport(let state)?:
+            LockerExportView(
+                state: state,
+                send: { store.send(instance, .lockerExport($0)) },
+                sendWall: { store.send(instance, .lockerWall($0)) },
+                onWords: { shell.openRekey() },
+                onBack: pop
+            )
+        case .lockerImport(let state)?:
+            LockerImportView(
+                state: state,
+                send: { store.send(instance, .lockerImport($0)) },
+                sendWall: { store.send(instance, .lockerWall($0)) },
+                onWords: { shell.openRekey() },
+                onBack: pop
+            )
+        case .lockerLock(let state)?:
+            LockerLockPageView(
+                state: state,
+                sendWall: { store.send(instance, .lockerWall($0)) },
+                onWords: { shell.openRekey() },
+                onClose: pop
+            )
+        case .moneyHome(let state)?:
+            MoneyHomeView(
+                state: state,
+                send: { store.send(instance, .moneyHome($0)) },
+                open: open,
+                onHome: { shell.path.removeAll() }
+            )
+        case .moneyTransaction(let state)?:
+            MoneyTransactionView(
+                state: state,
+                send: { store.send(instance, .moneyTransaction($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .moneyTarget(let state)?:
+            MoneyTargetView(
+                state: state,
+                send: { store.send(instance, .moneyTarget($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .moneyRecurring(let state)?:
+            MoneyRecurringView(
+                state: state,
+                send: { store.send(instance, .moneyRecurring($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .moneyAccounts(let state)?:
+            MoneyAccountsView(
+                state: state,
+                send: { store.send(instance, .moneyAccounts($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .moneyRules(let state)?:
+            MoneyRulesView(
+                state: state,
+                send: { store.send(instance, .moneyRules($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .moneyCategories(let state)?:
+            MoneyCategoriesView(
+                state: state,
+                send: { store.send(instance, .moneyCategories($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .moneyImport(let state)?:
+            MoneyImportView(
+                state: state,
+                send: { store.send(instance, .moneyImport($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .moneySearch(let state)?:
+            MoneySearchView(
+                state: state,
+                send: { store.send(instance, .moneySearch($0)) },
+                open: open,
+                onBack: pop
+            )
         case .docsDrive(let state)?:
             DocsDriveView(
                 state: state,

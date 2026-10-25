@@ -1,29 +1,28 @@
 import SwiftUI
-import UIKit
-import UniformTypeIdentifiers
 
 import CentraidShared
 
-// LOCKER'S SHARED PARTS (#1047): the wall, the covered page, the item row,
-// the choice pills and the clipboard. Every word is the machines'.
+// LOCKER'S SHARED PARTS (#1047, #1135): the wall, the item row, the choice
+// pills and the quiet note. Every word is Rust's (`crates/screens/src/locker`).
 
-extension Centraid_Screen_V1_LockerLockState {
-    /// DRAW THE WALL. Bytes that have not arrived yet decode as UNSPECIFIED,
-    /// and a Locker that has not heard its gate fails CLOSED: nothing of it is
-    /// drawn before the machine says the Locker is open.
-    var covers: Bool { cover || phase == .unspecified }
-
-    static func of(_ data: Data) -> Self {
-        (try? Self(serializedBytes: data)) ?? .init()
+/// The wall's events, built once: Unlock and the member's own Lock.
+enum LockerWallEvents {
+    static func make(_ build: (inout Centraid_Core_V1_LockerWallEvent) -> Void) -> Centraid_Core_V1_LockerWallEvent {
+        var event = Centraid_Core_V1_LockerWallEvent()
+        build(&event)
+        return event
     }
 }
 
-/// THE LOCK WALL (`LockerLockState`): the title, what unlocking does, the
-/// notice a failed or unavailable phase says, the one ink button that asks
-/// the OS, and what a session is. Nothing of Locker is drawn under it.
-struct LockerWall: View {
-    let lock: Centraid_Screen_V1_LockerLockState
-    let sendLock: (Data) -> Void
+/// THE LOCK WALL (`LockerWall`): the title, what unlocking does, the notice a
+/// failed or unavailable phase says, the one ink button that asks the OS, and
+/// the way to the recovery words when this phone lacks the key. Nothing of
+/// Locker is drawn under it.
+struct LockerWallView: View {
+    let wall: Centraid_Core_V1_LockerWall
+    let send: (Centraid_Core_V1_LockerWallEvent) -> Void
+    /// "Enter your recovery key": the shell's custody flow (`words.enter` for a re-key).
+    let onWords: () -> Void
 
     @Environment(\.colorScheme) private var scheme
 
@@ -33,46 +32,40 @@ struct LockerWall: View {
                 CentraidIconView(iconKey: "Lock", tint: Theme.color("text", scheme), size: 28)
                     .accessibilityHidden(true)
                     .padding(.top, 24)
-                Text(lock.title)
+                Text(wall.title)
                     .centraidType("title")
                     .foregroundStyle(Theme.color("text", scheme))
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("locker-wall-title")
-                if !lock.body.isEmpty {
-                    Text(lock.body)
+                if !wall.body.isEmpty {
+                    Text(wall.body)
                         .centraidType("body")
                         .foregroundStyle(Theme.color("textSoft", scheme))
                 }
-                if !lock.notice.isEmpty {
-                    Text(lock.notice)
+                if !wall.notice.isEmpty {
+                    Text(wall.notice)
                         .centraidType("small")
-                        .foregroundStyle(Theme.color(lock.phase == .failed ? "net" : "textSoft", scheme))
+                        .foregroundStyle(Theme.color(wall.phase == .failed ? "net" : "textSoft", scheme))
                         .accessibilityIdentifier("locker-wall-notice")
                 }
                 // UNLOCK AND THE WORDS DOOR ARE ALTERNATIVES: one stack.
-                if !lock.unlockLabel.isEmpty || !lock.wordsLabel.isEmpty {
+                if !wall.unlockLabel.isEmpty || !wall.wordsLabel.isEmpty {
                     KitChoiceStack {
-                        if !lock.unlockLabel.isEmpty {
-                            KitInkButton(label: lock.unlockLabel) {
-                                sendLock(LockerLockSeam.event { $0.unlock = .init() })
+                        if !wall.unlockLabel.isEmpty {
+                            KitInkButton(label: wall.unlockLabel) {
+                                send(LockerWallEvents.make { $0.unlock = .init() })
                             }
                             .accessibilityIdentifier("locker-unlock")
                         }
-                        // THE KEY IS NOT ON THIS PHONE: "Enter your 24 words",
-                        // the intent the shell routes to words.enter (#1047
-                        // E2). ONE INK PER VIEW: Unlock is the thing to do; the
-                        // words verb is the ink only when it stands alone.
-                        if !lock.wordsLabel.isEmpty {
-                            if lock.unlockLabel.isEmpty {
-                                KitInkButton(label: lock.wordsLabel) {
-                                    sendLock(LockerLockSeam.event { $0.words = .init() })
-                                }
-                                .accessibilityIdentifier("locker-words")
+                        // ONE INK PER VIEW: Unlock is the thing to do; the words
+                        // verb is the ink only when it stands alone.
+                        if !wall.wordsLabel.isEmpty {
+                            if wall.unlockLabel.isEmpty {
+                                KitInkButton(label: wall.wordsLabel, action: onWords)
+                                    .accessibilityIdentifier("locker-words")
                             } else {
-                                KitOutlineButton(label: lock.wordsLabel) {
-                                    sendLock(LockerLockSeam.event { $0.words = .init() })
-                                }
-                                .accessibilityIdentifier("locker-words")
+                                KitOutlineButton(label: wall.wordsLabel, action: onWords)
+                                    .accessibilityIdentifier("locker-words")
                             }
                         }
                     }
@@ -86,28 +79,38 @@ struct LockerWall: View {
     }
 }
 
-/// A PUSHED LOCKER PAGE, COVERED while the Locker is locked: the wall in a
-/// page whose back returns to where the member came from. Unlocked, the page.
+/// A PUSHED LOCKER PAGE, COVERED while the Locker is locked: the wall in a page
+/// whose back returns to where the member came from. Unlocked, the page.
 struct LockerCovered<Content: View>: View {
-    let lock: Data
-    let sendLock: (Data) -> Void
+    let wall: Centraid_Core_V1_LockerWall?
+    let backLabel: String
+    let send: (Centraid_Core_V1_LockerWallEvent) -> Void
+    let onWords: () -> Void
     let onBack: () -> Void
     let content: () -> Content
 
-    init(lock: Data, sendLock: @escaping (Data) -> Void, onBack: @escaping () -> Void, @ViewBuilder content: @escaping () -> Content) {
-        self.lock = lock
-        self.sendLock = sendLock
+    init(
+        wall: Centraid_Core_V1_LockerWall?,
+        backLabel: String,
+        send: @escaping (Centraid_Core_V1_LockerWallEvent) -> Void,
+        onWords: @escaping () -> Void,
+        onBack: @escaping () -> Void,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.wall = wall
+        self.backLabel = backLabel
+        self.send = send
+        self.onWords = onWords
         self.onBack = onBack
         self.content = content
     }
 
     var body: some View {
-        let state = Centraid_Screen_V1_LockerLockState.of(lock)
-        if state.covers {
-            PushedPage(title: "", parentTitle: LockerCopy.shared.APP_NAME, onBack: onBack) {
+        if let wall {
+            PushedPage(title: "", parentTitle: backLabel, onBack: onBack) {
                 EmptyView()
             } content: {
-                LockerWall(lock: state, sendLock: sendLock)
+                LockerWallView(wall: wall, send: send, onWords: onWords)
             }
         } else {
             content()
@@ -115,34 +118,26 @@ struct LockerCovered<Content: View>: View {
     }
 }
 
-/// THE CAPTURE SHIELD FOR AN OPEN LOCKER (#1047, D-10): `LockerLockState.secure`,
-/// set by the gate exactly while UNLOCKED, drawn with the words screens' own
+/// THE CAPTURE SHIELD FOR AN OPEN LOCKER (#1047, D-10): `secure` is Rust's,
+/// set exactly while the Locker is open, drawn with the words screens' own
 /// `WordsShield` — the content in a secure canvas screenshots and recordings
 /// leave out, and covered while the screen is captured or the scene is not
-/// active, so the app-switcher snapshot holds no item. The view decides
-/// nothing of when; the relock clears `secure` and the wall replaces the page.
-///
-/// It wraps a page's CONTENT or a sheet's room, never navigation chrome or a
-/// presentation: the canvas hosts its content in a controller of its own,
-/// which a toolbar or a sheet's detents cannot reach through. So a shielded
-/// sheet states its `SheetPresentation` again outside the shield, the kit's
-/// trash takes `secure` and shields its own list, and an item page leaves its
-/// name out of the navigation bar while `secure` (its header draws it inside).
-/// What stays outside is the app's own words — the bar's title and back
-/// label — and the root switcher mask (`CentraidApp`) covers those.
+/// active. The view decides nothing of when; a relock clears `secure` and the
+/// wall replaces the page.
 struct LockerShield<Content: View>: View {
-    let lock: Data
+    let secure: Bool
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        WordsShield(secure: Centraid_Screen_V1_LockerLockState.of(lock).secure, content: content)
+        WordsShield(secure: secure, content: content)
     }
 }
 
-/// THE ITEM ROW (the handoff's): the two-letter type chip on the rose wash,
-/// the title, the secret-free meta, a star, the chips. Never a secret.
+/// THE ITEM ROW (the handoff's): the two-letter type chip on the rose wash, the
+/// title, the secret-free meta, a star, the chips. Never a secret. A tap opens
+/// the route Rust put on the row.
 struct LockerRowView: View {
-    let row: Centraid_Screen_V1_LockerRow
+    let row: Centraid_Core_V1_LockerRow
     let onTap: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -164,7 +159,7 @@ struct LockerRowView: View {
                     }
                 }
                 Spacer(minLength: 8)
-                ForEach(Array(row.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
+                ForEach(Array(row.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip.legacy) }
                 if row.starred {
                     CentraidIconView(iconKey: "Star", tint: Theme.color("textSoft", scheme), size: 14)
                 }
@@ -202,10 +197,10 @@ struct LockerTypeChip: View {
     }
 }
 
-/// A ROW OF PILLS: a choice, lit when selected, its detail (a count) beside
-/// the label. Tapping sends the choice's key.
+/// A ROW OF PILLS: a choice, lit when selected, its detail (a count) beside the
+/// label. Tapping sends the choice's key.
 struct LockerChoicePills: View {
-    let choices: [Centraid_Screen_V1_LockerChoice]
+    let choices: [Centraid_Core_V1_LockerChoice]
     var identifier: String = "locker-choice"
     let onPick: (String) -> Void
 
@@ -228,55 +223,62 @@ struct LockerChoicePills: View {
     }
 }
 
-/// THE CLIPBOARD, PERFORMED (`LockerClipboard`): a sensitive value goes on
-/// LOCAL-ONLY and EXPIRING — never to Universal Clipboard, gone by itself —
-/// then the screen hears `ClipboardDone`. A plain value is plain metadata.
-enum LockerClipboardSeam {
-    /// The pasteboard's `changeCount` just after Locker's last copy, or nil:
-    /// a different count means somebody copied since, and that is theirs.
-    @MainActor private static var ours: Int?
+/// One quiet line of Rust's — a status, a note, a window's end.
+struct LockerNote: View {
+    let text: String
 
-    @MainActor static func perform(_ clip: Centraid_Screen_V1_LockerClipboard) {
-        defer { ours = UIPasteboard.general.changeCount }
-        guard clip.sensitive else {
-            UIPasteboard.general.string = clip.value
-            return
-        }
-        var options: [UIPasteboard.OptionsKey: Any] = [.localOnly: true]
-        if clip.expiresInMs > 0 {
-            options[.expirationDate] = Date().addingTimeInterval(TimeInterval(clip.expiresInMs) / 1000)
-        }
-        UIPasteboard.general.setItems([[UTType.plainText.identifier: clip.value]], options: options)
-    }
+    @Environment(\.colorScheme) private var scheme
 
-    /// THE WALL'S `clipboardClear` (the member locked): Locker's last copy
-    /// comes off the pasteboard, only if it is still the one there.
-    @MainActor static func clearOwn() {
-        guard let count = ours else { return }
-        ours = nil
-        if UIPasteboard.general.changeCount == count {
-            UIPasteboard.general.setItems([], options: [:])
+    var body: some View {
+        if !text.isEmpty {
+            Text(text)
+                .centraidType("annotLabel")
+                .foregroundStyle(Theme.color("textSoft", scheme))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.vertical, 8)
         }
     }
 }
 
-/// Runs a screen's clipboard once per token, then says so.
-struct LockerClipboardRunner: ViewModifier {
-    let clip: Centraid_Screen_V1_LockerClipboard?
-    let done: (UInt64) -> Void
+/// A ONE-TIME CODE'S LIFE (Q-1047-16): a small ring that empties as the step
+/// runs out. The seconds are also in the row's note, so the ring is decoration
+/// and hidden from VoiceOver.
+struct LockerCountdownRing: View {
+    let countdown: Centraid_Core_V1_LockerCountdown
 
-    @State private var performed: UInt64 = 0
+    @Environment(\.colorScheme) private var scheme
 
-    func body(content: Content) -> some View {
-        content
-            .onAppear(perform: run)
-            .onChange(of: clip?.token ?? 0) { _, _ in run() }
+    private var fraction: Double {
+        guard countdown.period > 0 else { return 0 }
+        return min(1, Double(countdown.secondsLeft) / Double(countdown.period))
     }
 
-    private func run() {
-        guard let clip, clip.token != 0, clip.token != performed else { return }
-        performed = clip.token
-        LockerClipboardSeam.perform(clip)
-        done(clip.token)
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Theme.color("line", scheme), lineWidth: 2)
+            Circle()
+                .trim(from: 0, to: fraction)
+                .stroke(Theme.color(countdown.secondsLeft <= 5 ? "net" : "textSoft", scheme), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.linear(duration: 1), value: fraction)
+        }
+        .frame(width: 14, height: 14)
+        .accessibilityHidden(true)
+        .accessibilityIdentifier("locker-code-countdown")
     }
+}
+
+/// The content of a Locker view state's `oneof content`, as the kit's read states take it.
+func lockerContent<Value>(
+    loading: Bool,
+    failure: Centraid_Core_V1_Failure?,
+    denied: Centraid_Core_V1_Denied?,
+    data: Value?
+) -> ScreenContent<Value> {
+    if let data { return .data(data) }
+    if let failure { return .failed(failure) }
+    if let denied { return .gated(denied) }
+    return .loading(true)
 }

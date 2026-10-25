@@ -1265,6 +1265,7 @@ fn a_fetch_that_fails_stops_the_spinner_and_names_why_without_replacing_the_libr
     r.d.answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
         reason: "no core".to_owned(),
         denied: false,
+        cancelled: false,
     }));
     assert_eq!(
         r.state().status.as_ref().unwrap().sentence,

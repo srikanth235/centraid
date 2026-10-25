@@ -1,6 +1,6 @@
 //! # Locker — the password manager, and the one app with sealed cells
 //!
-//! 5 queries, 19 actions, **28 scopes including the only three `reveal` verbs
+//! 6 queries, 20 actions, **29 scopes including the only three `reveal` verbs
 //! in the product** (#1020, wave 4 census §A8, §F; #1135). A Locker item is an
 //! entity of kind `locker_item`: its trash, star, archive and tags are the
 //! vault's shared verbs, and this crate folds an item from its entity row, its

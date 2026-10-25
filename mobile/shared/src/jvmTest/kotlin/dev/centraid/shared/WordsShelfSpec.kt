@@ -12,13 +12,8 @@ import centraid.core.v1.Response
 import centraid.core.v1.Row
 import centraid.core.v1.UnclaimedVault
 import centraid.core.v1.Value
-import centraid.screen.v1.LockerBiometry
-import centraid.screen.v1.LockerLockEvent
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreConfiguration
-import dev.centraid.design.copy.LockerCopy
-import dev.centraid.shared.apps.locker.GateInput
-import dev.centraid.shared.apps.locker.LockerLockMachine
 import dev.centraid.shared.custody.CorePhraseDoor
 import dev.centraid.shared.custody.PairRefusal
 import dev.centraid.shared.custody.PairResult
@@ -322,28 +317,5 @@ class WordsShelfSpec : StringSpec({
             refusing(null).pair("t") shouldBe PairResult.Refused(PairRefusal.UNREACHABLE)
             CorePairDoor({ null }).pair("t") shouldBe PairResult.Refused(PairRefusal.UNREACHABLE)
         }
-    }
-
-    // --- Locker's wall -----------------------------------------------------------
-
-    "the no-words wall offers the words; the passcode wall and the ordinary lock do not" {
-        val attached = GateInput.View(
-            LockerLockEvent(attached = LockerLockEvent.Attached(available = true, biometry = LockerBiometry.LOCKER_BIOMETRY_FACE)),
-        )
-        var gate = LockerLockMachine.reduce(LockerLockMachine.initial(), GateInput.Keys(keyed = false)).gate
-        gate = LockerLockMachine.reduce(gate, attached).gate
-        gate.state.words_label shouldBe LockerCopy.LOCK_NO_WORDS_ACTION
-        // THE INTENT CHANGES NOTHING in the gate: the shell routes it.
-        val tapped = LockerLockMachine.reduce(gate, GateInput.View(LockerLockEvent(words = LockerLockEvent.WordsTapped())))
-        tapped.gate shouldBe gate
-        tapped.effects shouldBe emptyList()
-
-        val keyed = LockerLockMachine.reduce(gate, GateInput.Keys(keyed = true)).gate
-        keyed.state.words_label shouldBe ""
-        val noPasscode = LockerLockMachine.reduce(
-            LockerLockMachine.initial(),
-            GateInput.View(LockerLockEvent(attached = LockerLockEvent.Attached(available = false))),
-        ).gate
-        noPasscode.state.words_label shouldBe ""
     }
 })

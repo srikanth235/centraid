@@ -205,6 +205,8 @@ message AppQueryResponse {
     MoneyRecurring money_recurring = 108;
     MoneySearch money_search = 109;
     MoneyHomeTile money_home_tile = 110;
+    // The plan a statement would make, as the manifest's `import-plan` query.
+    MoneyImportPlan money_import_plan = 111;
     HealthToday health_today = 120;
     HealthSeries health_series = 121;
     HealthTrends health_trends = 122;

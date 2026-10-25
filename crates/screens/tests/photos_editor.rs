@@ -475,6 +475,7 @@ fn a_render_the_shell_could_not_do_is_a_sentence_beside_the_editor_and_the_plan_
     d.answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
         reason: "no decoder".to_owned(),
         denied: false,
+        cancelled: false,
     }));
     let state = state_of(&d, at);
     assert_eq!(state.phase, Phase::Editing as i32);

@@ -739,6 +739,20 @@
       }
     ]
   },
+  "act.create_account_needs_type_checking_savings": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "create",
+          "kind": "account",
+          "args": "name: x"
+        }
+      }
+    ]
+  },
   "act.a_kind_value_item_keeps_no_field": {
     "tool": "act",
     "argument": "args",

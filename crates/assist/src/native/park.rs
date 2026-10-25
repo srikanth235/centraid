@@ -479,6 +479,13 @@ pub(crate) fn apply(
         "locker.add_item" => locker_add(world, cx, input),
         "locker.edit_item" => locker_edit(world, cx, input),
         "locker.reveal_receipt" => Ok(ok(json!({"receipt_id": cx.id("receipt_id")}))),
+        "account.add" => account_add(world, cx, input),
+        "category.add" => category_add(world, cx, input),
+        "account.edit" => account_edit(world, cx, input),
+        "rule.edit" => rule_edit(world, cx, input),
+        "txn.link_transfer" | "txn.unlink_transfer" => {
+            transfer(world, input, command == "txn.link_transfer")
+        }
         other => Err(format!(
             "error: park has no patch for {other}; the write cannot be shown before it is made."
         )),
@@ -1792,6 +1799,178 @@ fn locker_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> 
     }
     world.rows.insert(row.key(), row);
     Ok(ok(json!({"item_id": id, "template_fields": 0})))
+}
+
+/// A new account: its type, its currency (the vault's when it names none) and a zero opening.
+fn account_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").map_or_else(|| cx.id("id"), str::to_owned);
+    let title = text(input, "title")
+        .unwrap_or_default()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut row = new_row(Kind::Account, &id, &title, cx);
+    if let Some(model) = Kind::Account
+        .spec()
+        .field("type")
+        .and_then(|field| field.model_value(text(input, "type").unwrap_or_default()))
+    {
+        row.fields.insert("type", Val::Enum(model));
+    }
+    let currency =
+        text(input, "currency").map_or_else(|| world.currency.clone(), str::to_uppercase);
+    row.fields.insert("currency", Val::Text(currency.clone()));
+    row.fields.insert(
+        "opening",
+        Val::Money(int(input, "opening_minor").unwrap_or(0), currency),
+    );
+    row.fields.insert(
+        "on_budget",
+        Val::Bool(
+            input
+                .get("on_budget")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+        ),
+    );
+    world.rows.insert(row.key(), row);
+    Ok(ok(json!({"id": id})))
+}
+
+/// A category the member makes: its id and key are its folded name, under its group's.
+fn category_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let title = text(input, "title")
+        .unwrap_or_default()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let parent = text(input, "parent_id");
+    let group_key = parent.map(|parent| parent.trim_start_matches("category:").to_owned());
+    let folded = centraid_vault::model::fold_label(&title);
+    let key = match &group_key {
+        Some(group) => format!("{group}.{folded}"),
+        None => folded,
+    };
+    let id = format!("category:{key}");
+    if world.rows.contains_key(&(Kind::Category, id.clone())) {
+        return Ok(refused("category_is_new", "that category already exists"));
+    }
+    let mut row = new_row(Kind::Category, &id, &title, cx);
+    put(&mut row, "key", nonempty(&key));
+    put(
+        &mut row,
+        "group",
+        parent
+            .and_then(|parent| world.rows.get(&(Kind::Category, parent.to_owned())))
+            .map(|group| Val::Text(group.name.clone())),
+    );
+    world.rows.insert(row.key(), row);
+    Ok(ok(json!({"id": id})))
+}
+
+/// An account's rename, type and budget membership: the fields the world reads.
+fn account_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    let Some(row) = world
+        .rows
+        .get_mut(&(Kind::Account, id.to_owned()))
+        .filter(|row| !row.trashed)
+    else {
+        return Ok(refused("account_live", &gone_text(id)));
+    };
+    let old_name = row.name.clone();
+    if let Some(title) = text(input, "title") {
+        row.name = title.trim().to_owned();
+    }
+    let new_name = row.name.clone();
+    if let Some(vault) = text(input, "type")
+        && let Some(model) = Kind::Account
+            .spec()
+            .field("type")
+            .and_then(|field| field.model_value(vault))
+    {
+        row.fields.insert("type", Val::Enum(model));
+    }
+    if let Some(on) = input.get("on_budget").and_then(Value::as_bool) {
+        row.fields.insert("on_budget", Val::Bool(on));
+    }
+    row.updated = cx.now.clone();
+    // a transaction names its account: a rename reads through every line of it
+    if old_name != new_name {
+        for line in world
+            .rows
+            .values_mut()
+            .filter(|r| r.kind == Kind::Transaction)
+        {
+            if line.fields.get("account") == Some(&Val::Text(old_name.clone())) {
+                line.fields.insert("account", Val::Text(new_name.clone()));
+            }
+        }
+    }
+    Ok(ok(json!({"id": id})))
+}
+
+/// A rule's text (upper-cased as the vault matches it), category and order.
+fn rule_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default().to_owned();
+    let category = text(input, "category_id").and_then(|category| {
+        world
+            .rows
+            .get(&(Kind::Category, category.to_owned()))
+            .map(|row| row.name.clone())
+    });
+    let Some(row) = world.rows.get_mut(&(Kind::Rule, id.clone())) else {
+        return Ok(refused("rule_exists", &gone_text(&id)));
+    };
+    if let Some(matched) = text(input, "text") {
+        row.name = matched
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_ascii_uppercase();
+    }
+    if let Some(title) = category {
+        row.fields.insert("category", Val::Text(title));
+    }
+    if let Some(position) = input
+        .get("position")
+        .and_then(Value::as_f64)
+        .filter(|position| position.abs() < 1e9)
+    {
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "the filter keeps position finite and under a billion in magnitude"
+        )]
+        row.fields.insert("position", Val::Num(position as i64));
+    }
+    row.updated = cx.now.clone();
+    Ok(ok(json!({"id": id})))
+}
+
+/// Two lines pointing at each other (or at nothing): the `transfer` field of both halves.
+fn transfer(world: &mut World, input: &Value, link: bool) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default().to_owned();
+    let Some(this) = world.rows.get(&(Kind::Transaction, id.clone())) else {
+        return Ok(refused("transaction_exists", &gone_text(&id)));
+    };
+    let other = if link {
+        text(input, "other_id").unwrap_or_default().to_owned()
+    } else {
+        match this.field("transfer") {
+            Some(Val::Text(partner)) => partner.clone(),
+            _ => String::new(),
+        }
+    };
+    for (from, to) in [(&id, &other), (&other, &id)] {
+        if let Some(row) = world.rows.get_mut(&(Kind::Transaction, from.clone())) {
+            put(row, "transfer", link.then(|| Val::Text(to.clone())));
+        }
+    }
+    Ok(ok(json!({"changed": true})))
+}
+
+fn gone_text(id: &str) -> String {
+    format!("there is nothing with the id `{id}`")
 }
 
 fn locker_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {

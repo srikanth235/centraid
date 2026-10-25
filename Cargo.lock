@@ -785,11 +785,14 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-api-proto",
  "centraid-apps-docs",
+ "centraid-apps-locker",
  "centraid-core",
  "centraid-design",
+ "centraid-identity",
  "centraid-ontology",
  "centraid-vault",
  "prost",
+ "rand",
  "serde_json",
 ]
 

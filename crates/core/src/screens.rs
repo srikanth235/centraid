@@ -56,6 +56,20 @@ pub trait ScreenCtx {
         })
     }
 
+    /// One step of the Locker session (unlock, relock, a reveal, a one-time
+    /// code, an export, an import): the session `Request.locker` drives, on the
+    /// same core. The plaintext of a reveal comes back to the screen that asked
+    /// and nowhere else. A door with no session says so.
+    ///
+    /// # Errors
+    /// The session's own refusals.
+    fn locker(&self, request: &wire::LockerSessionRequest) -> Result<wire::LockerSessionResponse> {
+        let _ = request;
+        Err(crate::error::CoreError::Unavailable {
+            reason: "this door holds no Locker session".to_owned(),
+        })
+    }
+
     /// Push a finished update to the shell's event stream.
     fn push(&self, update: wire::ScreenUpdate);
 
@@ -121,6 +135,10 @@ impl ScreenCtx for Handle {
                 type_url: "content_urls".to_owned(),
             }),
         }
+    }
+
+    fn locker(&self, request: &wire::LockerSessionRequest) -> Result<wire::LockerSessionResponse> {
+        Handle::locker_session(self, request)
     }
 
     fn push(&self, update: wire::ScreenUpdate) {

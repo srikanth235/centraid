@@ -60,6 +60,8 @@ fn row(listed: Listed, zone: &FireZone) -> wire::LockerItemRow {
     let item = listed.row;
     wire::LockerItemRow {
         updated_local_day: day_of(zone, item.updated_at.as_deref()),
+        deleted_local_day: String::new(),
+        purge_local_day: String::new(),
         url: if rendered == "login" {
             item.url.unwrap_or_default()
         } else {
@@ -258,6 +260,39 @@ pub(crate) fn search(
                 .collect(),
             truncated: data.truncated,
             corrected,
+        })
+    })
+}
+
+/// THE TRASH (#1135): the trashed items as the shelf's rows, each with the day
+/// it went and the day the sweep erases it, in the request's zone.
+pub(crate) fn trash(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    asked: &wire::LockerReviewRequest,
+) -> Result<Answer> {
+    let zone = zone_of(vault, &asked.tz)?;
+    answered(door, phone::load_trash(door), |rows| {
+        Answer::LockerItems(wire::LockerItems {
+            items: rows
+                .into_iter()
+                .map(|trashed| {
+                    let deleted = day_of(&zone, trashed.deleted_at.as_deref());
+                    let purge = day_of(&zone, trashed.purge_at.as_deref());
+                    let mut shelf = row(
+                        Listed {
+                            starred: trashed.starred,
+                            tags: Vec::new(),
+                            row: trashed,
+                        },
+                        &zone,
+                    );
+                    shelf.deleted_local_day = deleted;
+                    shelf.purge_local_day = purge;
+                    shelf
+                })
+                .collect(),
+            ..wire::LockerItems::default()
         })
     })
 }

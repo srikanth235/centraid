@@ -206,11 +206,13 @@
             "type": "integer"
           },
           "title": {
+            "aliases": ["name"],
             "maxLength": 80,
             "minLength": 1,
             "type": "string"
           },
           "type": {
+            "aliases": ["type"],
             "enum": ["checking", "savings", "credit_card", "cash"]
           }
         },
@@ -262,6 +264,7 @@
             "type": "boolean"
           },
           "title": {
+            "aliases": ["name"],
             "maxLength": 80,
             "minLength": 1,
             "type": "string"
@@ -768,6 +771,7 @@
             "type": "string"
           },
           "title": {
+            "aliases": ["name"],
             "maxLength": 1000,
             "type": "string"
           }
@@ -1218,6 +1222,7 @@
             "type": "string"
           },
           "title": {
+            "aliases": ["name"],
             "maxLength": 60,
             "minLength": 1,
             "type": "string"
@@ -1290,7 +1295,7 @@
       "name": "archive-category",
       "verb": "archive",
       "kind": "category",
-      "inverse": null,
+      "inverse": "unarchive-category",
       "sealed": [],
       "command": "flag.set",
       "phrasings": [
@@ -1329,9 +1334,90 @@
           }
         }
       }
+    },
+    {
+      "name": "unarchive-category",
+      "verb": "unarchive",
+      "kind": "category",
+      "inverse": "archive-category",
+      "sealed": [],
+      "command": "flag.clear",
+      "phrasings": [
+        "bring the Pets category back",
+        "unarchive the Gifts category",
+        "restore the Subscriptions category"
+      ],
+      "description": "Bring an archived category back: it can be chosen again. Send flag `archived`.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "flag": {
+            "enum": ["starred", "pinned", "archived"],
+            "type": "string"
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["id", "flag"],
+        "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
     }
   ],
   "queries": [
+    {
+      "name": "import-plan",
+      "kind": "transaction",
+      "figures": ["new", "already_in"],
+      "description": "What a bank statement would do if it were imported: every row's verdict (new, already in, a possible duplicate, repeated in the file, unreadable), the totals, the balance it states and the command input that publishes it. The file is read once and dropped; nothing is written.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": ["csv", "ofx"]
+          },
+          "content": {
+            "type": "string",
+            "format": "binary",
+            "description": "The statement as picked, byte for byte; at most 8 MiB."
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "date_order": {
+            "type": "string",
+            "enum": ["mdy", "dmy", "ymd"]
+          },
+          "sign": {
+            "type": "string",
+            "enum": ["debits_negative", "debits_positive"]
+          }
+        },
+        "additionalProperties": false,
+        "required": ["source", "content"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {}
+      }
+    },
     {
       "name": "spending",
       "kind": "transaction",
@@ -1606,7 +1692,7 @@
       "name": "transaction",
       "plural": "transactions",
       "order": 11,
-      "live": "read",
+      "live": "write",
       "entity": "txn",
       "table": "txn",
       "pk": "id",
@@ -1632,6 +1718,11 @@
           "source": ["txn", "category_id"]
         },
         {
+          "name": "transfer",
+          "type": "text",
+          "source": ["txn", "transfer_id"]
+        },
+        {
           "name": "status",
           "type": "enum",
           "source": ["txn", "status"],
@@ -1650,7 +1741,7 @@
       "name": "account",
       "plural": "accounts",
       "order": 14,
-      "live": "declared",
+      "live": "write",
       "entity": "account",
       "table": "account",
       "pk": "id",
@@ -1692,7 +1783,7 @@
       "name": "category",
       "plural": "categories",
       "order": 15,
-      "live": "declared",
+      "live": "write",
       "entity": "category",
       "table": "concept",
       "pk": "id",
@@ -1718,7 +1809,7 @@
       "name": "budget",
       "plural": "budgets",
       "order": 16,
-      "live": "declared",
+      "live": "write",
       "entity": "budget",
       "table": "budget",
       "pk": "category_id",
@@ -1753,7 +1844,7 @@
       "name": "rule",
       "plural": "rules",
       "order": 17,
-      "live": "declared",
+      "live": "write",
       "entity": "rule",
       "table": "rule",
       "pk": "id",

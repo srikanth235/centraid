@@ -50,7 +50,7 @@ internal fun centraid.core.v1.ListRow.toKit(): ListRow = ListRow(
     title = title,
     meta = meta,
     trailing = trailing,
-    chips = chips.map { StatusChip(label = it.label, tone = it.tone.toKit()) },
+    chips = chips.map { it.toKit() },
     hue_key = hue_key,
     accessibility_label = accessibility_label,
     dimmed = dimmed,
@@ -58,7 +58,9 @@ internal fun centraid.core.v1.ListRow.toKit(): ListRow = ListRow(
     trailing_tone = trailing_tone.toKit(),
 )
 
-private fun centraid.core.v1.StatusChip.Tone.toKit(): StatusChip.Tone =
+internal fun centraid.core.v1.StatusChip.toKit(): StatusChip = StatusChip(label = label, tone = tone.toKit())
+
+internal fun centraid.core.v1.StatusChip.Tone.toKit(): StatusChip.Tone =
     StatusChip.Tone.fromValue(value) ?: StatusChip.Tone.TONE_UNSPECIFIED
 
 /**
@@ -71,3 +73,7 @@ public fun <V : Any> screenContentOf(
     data: V?,
     denied: centraid.core.v1.Denied? = null,
 ): ScreenContent<V> = screenContentOf(loading?.toKit(), failure?.toKit(), data, denied?.toKit())
+
+/** A Rust-owned screen's tone, inked by the kit's one mapping. */
+internal fun toneInk(tone: centraid.core.v1.StatusChip.Tone, neutral: String): androidx.compose.ui.graphics.Color =
+    toneInk(tone.toKit(), neutral)

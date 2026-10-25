@@ -1,5 +1,6 @@
 package dev.centraid.core
 
+import centraid.core.v1.AppLifecycle
 import centraid.core.v1.EffectRequest
 import centraid.core.v1.EffectResult
 import centraid.core.v1.Envelope
@@ -82,6 +83,10 @@ public class Screens(
     /** Report the device's locale and zone; Rust formats from them. */
     public suspend fun environment(locale: String, zone: String): CoreOutcome<Unit> =
         request(ScreenRequest(environment = Environment(locale = locale, zone = zone)))
+
+    /** Report the app's foreground or background; Rust's screens and the Locker's relock hear it. */
+    public suspend fun lifecycle(foreground: Boolean): CoreOutcome<Unit> =
+        request(ScreenRequest(lifecycle = AppLifecycle(foreground = foreground)))
 
     /** Answer an effect the shell performed. */
     public suspend fun answer(effect: EffectRequest, result: EffectResult): CoreOutcome<Unit> =

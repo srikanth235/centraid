@@ -1017,6 +1017,7 @@ fn download_saves_the_original_into_the_phones_library_and_says_so() {
             outcome: Some(wire::effect_result::Outcome::Failed(wire::EffectFailed {
                 reason: "x".into(),
                 denied: false,
+                cancelled: false,
             })),
         }),
     );

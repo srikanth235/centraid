@@ -11,40 +11,6 @@ import dev.centraid.shared.apps.health.HealthMetricMachine
 import dev.centraid.shared.apps.health.HealthMetricReads
 import dev.centraid.shared.apps.health.HealthWorkoutMachine
 import dev.centraid.shared.apps.health.HealthWorkoutReads
-import dev.centraid.shared.apps.locker.LOCKER_TRASH
-import dev.centraid.shared.apps.locker.LockerAccessMachine
-import dev.centraid.shared.apps.locker.LockerAccessReads
-import dev.centraid.shared.apps.locker.LockerEditorMachine
-import dev.centraid.shared.apps.locker.LockerEditorReads
-import dev.centraid.shared.apps.locker.LockerExportMachine
-import dev.centraid.shared.apps.locker.LockerExportReads
-import dev.centraid.shared.apps.locker.LockerGeneratorMachine
-import dev.centraid.shared.apps.locker.LockerGeneratorReads
-import dev.centraid.shared.apps.locker.LockerHomeMachine
-import dev.centraid.shared.apps.locker.LockerHomeReads
-import dev.centraid.shared.apps.locker.LockerImportMachine
-import dev.centraid.shared.apps.locker.LockerImportReads
-import dev.centraid.shared.apps.locker.LockerItemMachine
-import dev.centraid.shared.apps.locker.LockerItemReads
-import dev.centraid.shared.apps.locker.LockerTrashMachine
-import dev.centraid.shared.apps.money.MoneyAccountsMachine
-import dev.centraid.shared.apps.money.MoneyAccountsReads
-import dev.centraid.shared.apps.money.MoneyCategoriesMachine
-import dev.centraid.shared.apps.money.MoneyCategoriesReads
-import dev.centraid.shared.apps.money.MoneyHomeMachine
-import dev.centraid.shared.apps.money.MoneyHomeReads
-import dev.centraid.shared.apps.money.MoneyImportMachine
-import dev.centraid.shared.apps.money.MoneyImportReads
-import dev.centraid.shared.apps.money.MoneyRecurringMachine
-import dev.centraid.shared.apps.money.MoneyRecurringReads
-import dev.centraid.shared.apps.money.MoneyRulesMachine
-import dev.centraid.shared.apps.money.MoneyRulesReads
-import dev.centraid.shared.apps.money.MoneySearchMachine
-import dev.centraid.shared.apps.money.MoneySearchReads
-import dev.centraid.shared.apps.money.MoneyTargetMachine
-import dev.centraid.shared.apps.money.MoneyTargetReads
-import dev.centraid.shared.apps.money.MoneyTransactionMachine
-import dev.centraid.shared.apps.money.MoneyTransactionReads
 import dev.centraid.shared.apps.people.PeopleEditorMachine
 import dev.centraid.shared.apps.people.PeopleEditorReads
 import dev.centraid.shared.apps.people.PeopleHomeMachine
@@ -85,71 +51,6 @@ import java.io.File
 class AppReadsSpec : StringSpec({
 
     /**
-     * Every screen's reads beside the machine that emits its effects.
-     *
-     * A list and not three copies of one test: the properties below are laws
-     * for every app screen, and a fourth app that got its own hand-written test
-     * would be a fourth chance to leave one out.
-     */
-    val screens: List<Triple<String, ScreenReads<*, *>, ScreenMachine<*, *>>> = listOf(
-        // LOCKER (#1047): the kit's trash over `entity`, kind `locker_item` (#1135). The statement is
-        // the kit's own; `LockerTrashReads` adds only the gate in front of it
-        // (`LockerSpec`).
-        Triple("locker.trash", TrashReads(LOCKER_TRASH), LockerTrashMachine),
-    )
-
-    /** The statement each screen makes when it is holding a state that can read. */
-    fun statementOf(name: String) = when (name) {
-        // A PARAMETERISED SCREEN IS ASKED IN THE STATE IT WOULD REALLY READ IN.
-        // `query` returns null when a screen cannot yet say what to read, so a
-        // shelf asked with no shelf, a lightbox with no asset or a review with
-        // no cluster would answer null and this whole spec would pass over an
-        // empty statement — proving nothing about the screens most likely to
-        // get their projection wrong. Each is driven through its own `Opened`,
-        // which is how the parameter reaches the state in the product.
-        "locker.trash" -> TrashReads(LOCKER_TRASH).query(LockerTrashMachine.initial(), null)
-        else -> error("no statement for $name")
-    }
-
-    "every screen's select carries both order columns" {
-        // THE DOOR HAS NO `key_of` CALLBACK, so the cursor is read off the row
-        // by the two columns the ORDER BY names (`statement.ts:43-48`). A
-        // statement that orders by a column it did not project produces a walk
-        // that is not a walk: the second page starts from an empty key and
-        // repeats the first.
-        screens.forEach { (name, _, _) ->
-            val query = statementOf(name).shouldNotBeNull()
-            val order = query.order.shouldNotBeNull()
-            withClue("$name selects ${query.select}") {
-                query.select.contains(order.sort_column) shouldBe true
-                query.select.contains(order.pk_column) shouldBe true
-            }
-        }
-    }
-
-    "every screen reads the table its machine says it re-reads on" {
-        // THE PAIRING, ASSERTED MECHANICALLY. `rowsChanged` is what makes a
-        // screen move when a row arrives from sync, and it is the machine's own
-        // declaration of a table name; the query is where the rows actually
-        // come from. When the two part company nothing fails — the screen
-        // simply stops redrawing on sync, and the symptom is a list that is
-        // right only after a relaunch. So the machine is asked, rather than the
-        // table being re-listed here: a query that moves to another table
-        // without updating `rowsChanged` makes this RED.
-        screens.forEach { (name, reads, machine) ->
-            val query = statementOf(name).shouldNotBeNull()
-            withClue("$name reads ${query.from}") {
-                query.from shouldBe reads.table
-                // The machine answers an event for its own table and null for
-                // any other, which is the only way to ask it what its table is
-                // without it declaring it twice.
-                machine.rowsChanged(reads.table, listOf("k")).shouldNotBeNull()
-                machine.rowsChanged(reads.table + "_other", listOf("k")) shouldBe null
-            }
-        }
-    }
-
-    /**
      * EVERY TABLE IN THE VAULT, from the DDL the vault is built from.
      *
      * The universe the app-query law below is asked over: a machine can only
@@ -178,30 +79,6 @@ class AppReadsSpec : StringSpec({
         Triple("people.person", PeoplePersonReads, PeoplePersonMachine),
         Triple("people.editor", PeopleEditorReads, PeopleEditorMachine),
         Triple("people.trash", PeopleTrashReads, PeopleTrashMachine),
-        // LOCKER (#1047). Every read screen shares one table set — the item,
-        // its sidecars and its tags; the generator reads none.
-        Triple("locker.home", LockerHomeReads, LockerHomeMachine),
-        Triple("locker.item", LockerItemReads, LockerItemMachine),
-        Triple("locker.editor", LockerEditorReads, LockerEditorMachine),
-        Triple("locker.generator", LockerGeneratorReads, LockerGeneratorMachine),
-        // #1047 T2: the item page reads its access history (`receipt`);
-        // export and import read the shelf's counts.
-        Triple("locker.export", LockerExportReads, LockerExportMachine),
-        Triple("locker.import", LockerImportReads, LockerImportMachine),
-        // Q-1047-21: the whole Locker's access history reads the receipts and
-        // the two tables a receipt's item and field are named from.
-        Triple("locker.access", LockerAccessReads, LockerAccessMachine),
-        // MONEY (#1099). Every screen reads the same table set: one app query folds
-        // accounts, lines, targets, rules, checkpoints, categories and transfer links.
-        Triple("money.home", MoneyHomeReads, MoneyHomeMachine),
-        Triple("money.transaction", MoneyTransactionReads, MoneyTransactionMachine),
-        Triple("money.target", MoneyTargetReads, MoneyTargetMachine),
-        Triple("money.recurring", MoneyRecurringReads, MoneyRecurringMachine),
-        Triple("money.import", MoneyImportReads, MoneyImportMachine),
-        Triple("money.accounts", MoneyAccountsReads, MoneyAccountsMachine),
-        Triple("money.rules", MoneyRulesReads, MoneyRulesMachine),
-        Triple("money.categories", MoneyCategoriesReads, MoneyCategoriesMachine),
-        Triple("money.search", MoneySearchReads, MoneySearchMachine),
         // HEALTH (#1129). Home reads the days, the workouts, their kinds and whether a
         // store is connected; a metric only the days; a workout its activity and kind.
         Triple("health.home", HealthHomeReads, HealthHomeMachine),

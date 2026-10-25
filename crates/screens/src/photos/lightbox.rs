@@ -1193,6 +1193,8 @@ impl Screen for Lightbox {
                                 wire::ClipboardSet {
                                     text,
                                     sensitive: false,
+                                    // A place is not a secret: the clip stays.
+                                    clear_after_ms: 0,
                                 },
                             ))];
                         }
