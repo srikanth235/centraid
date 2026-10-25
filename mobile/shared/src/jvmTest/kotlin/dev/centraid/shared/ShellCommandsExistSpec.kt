@@ -95,7 +95,13 @@ class ShellCommandsExistSpec : StringSpec({
         val known = declaredCommands(repositoryRoot)
         val tables = vaultTables(repositoryRoot)
         val sources = sharedSources(mobileRoot)
-        withClue("${sources.size} shared Kotlin files scanned") { (sources.size >= 150).shouldBeTrue() }
+        // The scan reached every source set, not a count of files: the module
+        // shrinks as each app's screens move to Rust (#1135), and a floor sized
+        // for the old tree would fail an honest one.
+        val sets = sources.map { (name, _) -> name.substringBefore(File.separatorChar) }.toSet()
+        withClue("${sources.size} shared Kotlin files scanned, from $sets") {
+            sets.containsAll(listOf("androidMain", "commonMain", "iosMain", "jvmMain")).shouldBeTrue()
+        }
         val screens = registeredScreenIds(sources)
         val findings = sources.flatMap { (name, text) -> unknownIds(name, text, known, tables, screens) }
         // The failure message IS the finding: where, naming what, and the nearest
