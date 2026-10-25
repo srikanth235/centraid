@@ -180,10 +180,22 @@ impl Home {
     }
 
     /// A different vault in front: every tile was read out of the one just left.
+    ///
+    /// By id when both lockups have one, because two vaults may share a display
+    /// name and a member who founded "Personal" twice is not a member whose
+    /// switch should silently do nothing. By name when they do not, because an
+    /// unidentified lockup is still a lockup, and treating every gateway or
+    /// reachability update as a switch would reload Home on a flicker. The FIRST
+    /// lockup is no switch: a Home that knew no vault was not looking at another.
     fn vault_changed(&self, told: &wire::home_event::VaultsTold) -> bool {
-        let before = self.vault.as_ref().map(|vault| vault.vault_id.as_str());
-        let after = told.vault.as_ref().map(|vault| vault.vault_id.as_str());
-        matches!((before, after), (Some(before), Some(after)) if !before.is_empty() && !after.is_empty() && before != after)
+        let (Some(before), Some(after)) = (self.vault.as_ref(), told.vault.as_ref()) else {
+            return false;
+        };
+        if !before.vault_id.is_empty() && !after.vault_id.is_empty() {
+            before.vault_id != after.vault_id
+        } else {
+            before.name != after.name
+        }
     }
 
     fn vault_named(&self, vault_id: &str) -> Option<&wire::ShellVault> {
@@ -255,6 +267,7 @@ impl Home {
             H::AskDismissed(_) => self.ask = Ask::None,
             H::VaultsTold(told) => {
                 let switched = self.vault_changed(&told);
+                let was_none = self.none;
                 self.vault = told.vault.clone();
                 self.vaults = told.vaults;
                 self.none = told.none;
@@ -266,9 +279,10 @@ impl Home {
                         .map(|app| ((*app).to_owned(), tiles::loading()))
                         .collect();
                 }
-                // A phone with no vault has nothing to read; any other change of
-                // roster or lockup leaves the tiles as read.
-                if switched || !self.read || self.none {
+                // Founding a vault leaves the failed Home (its tiles ask to be read),
+                // and a switch reads again; any other change of roster or lockup
+                // leaves the tiles as read.
+                if switched || !self.read || was_none != self.none {
                     self.reload(ctx);
                 }
             }

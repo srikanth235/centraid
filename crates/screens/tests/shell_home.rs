@@ -517,3 +517,78 @@ fn a_stranded_write_ribbon_is_shown_and_its_door_goes_where_it_says() {
             if *dest == wire::home_status::Destination::Phone as i32
     ));
 }
+
+#[test]
+fn two_vaults_sharing_a_name_are_still_two_vaults_and_an_unnamed_lockup_compares_by_name() {
+    let (mut d, i) = started();
+    let first = vault("v1", "Personal");
+    tell(&mut d, i, told(&first, std::slice::from_ref(&first)));
+    // The sheet is open so a reload (which shuts it) is visible.
+    tell(&mut d, i, H::Vault(wire::home_event::VaultPressed {}));
+    let twin = vault("v2", "Personal");
+    tell(&mut d, i, told(&twin, &[first.clone(), twin.clone()]));
+    assert!(
+        state(&d, i).sheet.is_none(),
+        "another id is a switch even under the same name"
+    );
+    // With no ids a lockup is compared by name: the same name is the same vault...
+    let (mut d, i) = started();
+    let bare = vault("", "Personal");
+    tell(&mut d, i, told(&bare, std::slice::from_ref(&bare)));
+    tell(&mut d, i, H::Vault(wire::home_event::VaultPressed {}));
+    tell(&mut d, i, told(&bare, std::slice::from_ref(&bare)));
+    assert!(state(&d, i).sheet.is_some());
+    // ...and another name is another vault.
+    let other = vault("", "House");
+    tell(&mut d, i, told(&other, std::slice::from_ref(&other)));
+    assert!(state(&d, i).sheet.is_none());
+}
+
+#[test]
+fn founding_a_vault_leaves_the_failed_home_and_reads_the_tiles() {
+    let (mut d, i) = started();
+    tell(
+        &mut d,
+        i,
+        H::VaultsTold(wire::home_event::VaultsTold {
+            none: true,
+            ..Default::default()
+        }),
+    );
+    assert!(matches!(
+        state(&d, i).content,
+        Some(wire::home_state::Content::Failure(_))
+    ));
+    // A pull or a foreground while there is no vault stays failed.
+    d.send(i, E::Appeared(wire::Appeared {}));
+    tell(&mut d, i, H::Shown(wire::home_event::Shown {}));
+    assert!(matches!(
+        state(&d, i).content,
+        Some(wire::home_state::Content::Failure(_))
+    ));
+    let founded = vault("v1", "Personal");
+    tell(&mut d, i, told(&founded, std::slice::from_ref(&founded)));
+    let data = data(&d, i);
+    assert_eq!(data.tiles.len(), 8);
+}
+
+#[test]
+fn a_dismissal_carries_no_id_changes_no_vault_and_asks_the_shelf_nothing() {
+    let (mut d, i) = started();
+    let a = vault("v1", "Personal");
+    tell(&mut d, i, told(&a, std::slice::from_ref(&a)));
+    tell(&mut d, i, H::Vault(wire::home_event::VaultPressed {}));
+    d.effects.clear();
+    tell(
+        &mut d,
+        i,
+        H::VaultPicked(wire::home_event::VaultPicked {
+            vault_id: String::new(),
+        }),
+    );
+    assert!(state(&d, i).sheet.is_none());
+    assert!(d.effects.is_empty());
+    // Pressing the lockup asks for nothing either.
+    tell(&mut d, i, H::Vault(wire::home_event::VaultPressed {}));
+    assert!(d.effects.is_empty());
+}

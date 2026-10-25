@@ -360,3 +360,163 @@ fn opens(hit: &wire::VaultSearchHit) -> &str {
         &hit.open_id
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hit(entity: &str, id: &str, title: &str, app: &str) -> wire::VaultSearchHit {
+        wire::VaultSearchHit {
+            entity: entity.to_owned(),
+            id: id.to_owned(),
+            title: title.to_owned(),
+            app_id: app.to_owned(),
+            ..Default::default()
+        }
+    }
+
+    fn found(hits: Vec<wire::VaultSearchHit>) -> wire::VaultSearch {
+        wire::VaultSearch {
+            hits,
+            corrected: String::new(),
+        }
+    }
+
+    fn data(hits: Vec<wire::VaultSearchHit>) -> wire::HomeSearchData {
+        fold(Locale::En, "cabin", &found(hits))
+    }
+
+    #[test]
+    fn the_hits_are_grouped_by_app_in_homes_tile_order_each_counted_each_row_named_by_its_kind() {
+        let answer = data(vec![
+            hit("person", "p1", "Maya", "people"),
+            hit("note", "n1", "Cabin list", "notes"),
+            hit("task", "t1", "Book the cabin", "agenda"),
+            hit("event", "e1", "Cabin weekend", "agenda"),
+            hit("document", "d1", "Lease", "docs"),
+        ]);
+        let groups: Vec<(&str, u32)> = answer
+            .groups
+            .iter()
+            .map(|group| (group.app_id.as_str(), group.count))
+            .collect();
+        assert_eq!(
+            groups,
+            [("docs", 1), ("agenda", 2), ("notes", 1), ("people", 1)]
+        );
+        let agenda = &answer.groups[1];
+        assert_eq!(agenda.label, "Agenda");
+        assert_eq!(agenda.accessibility_label, "Agenda, 2 results");
+        assert_eq!(answer.groups[0].accessibility_label, "Docs, 1 result");
+        assert_eq!(agenda.rows[0].kind_label, "Task");
+        assert_eq!(agenda.rows[0].accessibility_label, "Task, Book the cabin");
+        assert_eq!(agenda.rows[1].kind_label, "Event");
+    }
+
+    #[test]
+    fn a_locker_item_is_a_hit_in_lockers_group_naming_its_kind_and_opening_the_item() {
+        let answer = data(vec![hit("locker_item", "i1", "Bank login", "locker")]);
+        let group = &answer.groups[0];
+        assert_eq!(
+            (group.app_id.as_str(), group.label.as_str()),
+            ("locker", "Locker")
+        );
+        let row = &group.rows[0];
+        assert_eq!(row.kind_label, "Locker item");
+        let route = row.route.as_ref().expect("opens the item");
+        assert_eq!(route.screen, crate::locker::ITEM);
+    }
+
+    #[test]
+    fn a_container_that_matched_is_apart_from_the_plain_rows_and_opens_its_own_page() {
+        let answer = data(vec![
+            hit("notebook", "nb1", "Cabin", "notes"),
+            hit("note", "n1", "Cabin list", "notes"),
+        ]);
+        let group = &answer.groups[0];
+        assert_eq!(group.count, 2);
+        assert_eq!(group.rows.len(), 1);
+        let container = &group.containers[0];
+        assert_eq!(
+            (container.kind_label.as_str(), container.icon_key.as_str()),
+            ("Notebook", "Book")
+        );
+        assert_eq!(container.accessibility_label, "Notebook, Cabin");
+        assert_eq!(
+            container.route.as_ref().map(|route| route.screen.as_str()),
+            Some(crate::notes::HOME)
+        );
+    }
+
+    #[test]
+    fn a_hit_with_no_page_to_open_is_not_offered_and_does_not_count() {
+        // A conversation has no page until the chat registers one.
+        let answer = data(vec![
+            hit("thread", "c1", "Cabin planning", "chat"),
+            hit("note", "n1", "Cabin list", "notes"),
+        ]);
+        assert_eq!(answer.groups.len(), 1);
+        assert_eq!(answer.groups[0].app_id, "notes");
+        let only_chat = data(vec![hit("thread", "c1", "Cabin planning", "chat")]);
+        assert!(only_chat.groups.is_empty());
+        assert_eq!(only_chat.empty.unwrap().headline, "No matches");
+    }
+
+    #[test]
+    fn a_photograph_opens_by_the_asset_the_hit_names() {
+        let mut photo = hit("photo", "content-item", "Bay", "photos");
+        photo.open_id = "asset-1".to_owned();
+        let answer = data(vec![photo]);
+        let Some(wire::route::Args::PhotosLightbox(lightbox)) = answer.groups[0].rows[0]
+            .route
+            .as_ref()
+            .and_then(|route| route.args.clone())
+        else {
+            panic!("not a lightbox");
+        };
+        assert_eq!(lightbox.photo_id, "asset-1");
+    }
+
+    #[test]
+    fn the_words_the_core_corrected_are_said_once_and_an_exact_answer_says_nothing() {
+        let mut answer = found(vec![hit("note", "n1", "Cabin list", "notes")]);
+        assert!(fold(Locale::En, "cabn", &answer).corrected.is_empty());
+        answer.corrected = "cabin".to_owned();
+        assert_eq!(
+            fold(Locale::En, "cabn", &answer).corrected,
+            "Including results for “cabin”"
+        );
+    }
+
+    #[test]
+    fn every_answer_offers_one_unscoped_ask_that_hands_the_term_to_the_assistant() {
+        let answer = data(vec![]);
+        let ask = answer.ask.expect("an ask");
+        assert_eq!(ask.scope, "");
+        assert_eq!(ask.question, "Find cabin");
+        assert_eq!(answer.ask_route, Some(super::routes::ask("Find cabin", "")));
+        assert_eq!(
+            answer.empty.expect("an empty state").body,
+            "Nothing in this vault matches “cabin”."
+        );
+    }
+
+    #[test]
+    fn an_app_the_springboard_does_not_know_goes_last_under_a_capitalised_name() {
+        let answer = data(vec![
+            hit("thing", "x", "Odd", "weather"),
+            hit("note", "n1", "Cabin list", "notes"),
+        ]);
+        // `weather` has no page, so it is not offered; with one it would sort last.
+        assert_eq!(
+            answer
+                .groups
+                .iter()
+                .map(|g| g.app_id.as_str())
+                .collect::<Vec<_>>(),
+            ["notes"]
+        );
+        assert_eq!(app_label(Locale::En, "weather"), "Weather");
+        assert_eq!(app_label(Locale::En, ""), "");
+    }
+}
