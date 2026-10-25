@@ -30,7 +30,7 @@ fn checked(id: &str) -> le::Kind {
 
 #[test]
 fn a_projects_hue_is_a_colour_role_never_the_wheels_word() {
-    let project = wire::TasksProject {
+    let project = wire::AgendaTaskProject {
         project_id: "p1".into(),
         color: Some("var(--c-teal)".into()),
         ..Default::default()
@@ -39,7 +39,7 @@ fn a_projects_hue_is_a_colour_role_never_the_wheels_word() {
     // No stored hue: the id's own, still a role.
     let own = rows::hue_of(
         "p1",
-        Some(&wire::TasksProject {
+        Some(&wire::AgendaTaskProject {
             project_id: "p1".into(),
             ..Default::default()
         }),
@@ -50,7 +50,7 @@ fn a_projects_hue_is_a_colour_role_never_the_wheels_word() {
 
 #[test]
 fn a_rows_meta_line_names_the_age_only_from_the_cores_local_day() {
-    let old = wire::TasksTask {
+    let old = wire::AgendaTask {
         task_id: "b".into(),
         title: "Paint shed".into(),
         status: "open".into(),
@@ -66,7 +66,7 @@ fn a_rows_meta_line_names_the_age_only_from_the_cores_local_day() {
     };
     assert_eq!(rows::meta(EN, &old, &ctx), "sitting since November");
     // NO LOCAL DAY ANSWERED: the month is not guessed from a UTC instant.
-    let unplaced = wire::TasksTask {
+    let unplaced = wire::AgendaTask {
         created_local_day: String::new(),
         ..old
     };
@@ -75,7 +75,7 @@ fn a_rows_meta_line_names_the_age_only_from_the_cores_local_day() {
 
 #[test]
 fn a_rows_meta_line_says_project_repeats_missed_effort_tags_and_family() {
-    let behind = wire::TasksTask {
+    let behind = wire::AgendaTask {
         task_id: "a".into(),
         title: "Rent".into(),
         status: "open".into(),
@@ -86,18 +86,18 @@ fn a_rows_meta_line_says_project_repeats_missed_effort_tags_and_family() {
         recurrence_summary: Some("Monthly".into()),
         missed: 2,
         effort_min: Some(25),
-        tags: vec![wire::TasksTag {
+        tags: vec![wire::AgendaTaskTag {
             concept_id: "c".into(),
             label: "home".into(),
         }],
         children: vec![
-            wire::TasksTask {
+            wire::AgendaTask {
                 task_id: "c1".into(),
                 title: "Transfer".into(),
                 status: "open".into(),
                 ..Default::default()
             },
-            wire::TasksTask {
+            wire::AgendaTask {
                 task_id: "c2".into(),
                 title: "Receipt".into(),
                 status: "done".into(),
@@ -108,7 +108,7 @@ fn a_rows_meta_line_says_project_repeats_missed_effort_tags_and_family() {
         priority: 3,
         ..Default::default()
     };
-    let projects = [wire::TasksProject {
+    let projects = [wire::AgendaTaskProject {
         project_id: "p1".into(),
         name: "Home admin".into(),
         ..Default::default()

@@ -224,12 +224,14 @@ impl World {
     }
 
     /// Every task on the board with this title.
-    pub fn tasks_titled(&self, title: &str) -> Vec<wire::TasksTask> {
-        let wire::app_query_response::Answer::TasksBoard(board) = self.load(load::agenda::Board {
-            limit: 200,
-            view: Some(load::agenda::BoardView::All),
-            ..load::agenda::Board::default()
-        }) else {
+    pub fn tasks_titled(&self, title: &str) -> Vec<wire::AgendaTask> {
+        let wire::app_query_response::Answer::AgendaTaskBoard(board) =
+            self.load(load::agenda::Board {
+                limit: 200,
+                view: Some(load::agenda::BoardView::All),
+                ..load::agenda::Board::default()
+            })
+        else {
             panic!("board answered something else");
         };
         board

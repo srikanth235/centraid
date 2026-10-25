@@ -68,6 +68,7 @@ catalog! {
     plain guests_none = ("Nobody else", "Nobody else");
     plain guest_awaiting = ("awaiting", "awaiting");
     plain guest_you = ("you", "you");
+    plain import_calendar = ("Import calendar", "Import calendar");
     plain import_calendar_add_account = ("No calendars found. Add your Google or other account in your phone's Settings, then come back.", "No calendars found. Add your Google or other account in your phone's Settings, then come back.");
     plain import_calendar_done = ("{count} events imported", "{count} events imported");
     plain import_calendar_failed = ("The calendar did not import.", "The calendar did not import.");

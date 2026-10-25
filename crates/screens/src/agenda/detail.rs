@@ -8,7 +8,7 @@
 //! Tags, a subtask added, Release, Delete. There is no Save.
 //!
 //! Repeats is the core's sentence ("Every 2 weeks on Monday"), "Never" for a
-//! one-off — never v0's "—". The stored rule (`TasksTask.rrule`) rides as the
+//! one-off — never v0's "—". The stored rule (`AgendaTask.rrule`) rides as the
 //! field's `raw` and pre-selects the preset it is, and is never drawn (#834).
 //! A date-only reminder names no moment: "On the day". A date or time picked
 //! from the platform's picker closes the field, as a chip does.
@@ -115,14 +115,14 @@ impl Draft for Typed {
 /// What the page holds of its reads.
 #[derive(Clone, Debug)]
 struct Answered {
-    detail: wire::TasksTaskDetail,
+    detail: wire::AgendaTaskDetail,
     /// The projects the Project field offers; `None` until a read of them
     /// lands, and then the detail's own project and section stand in.
-    projects: Option<wire::TasksProjects>,
+    projects: Option<wire::AgendaTaskProjects>,
 }
 
 impl Answered {
-    fn task(&self) -> Option<&wire::TasksTask> {
+    fn task(&self) -> Option<&wire::AgendaTask> {
         self.detail.task.as_ref()
     }
 
@@ -130,7 +130,7 @@ impl Answered {
         &self.detail.today
     }
 
-    fn lists(&self) -> (Vec<wire::TasksProject>, Vec<wire::TasksSection>) {
+    fn lists(&self) -> (Vec<wire::AgendaTaskProject>, Vec<wire::AgendaTaskSection>) {
         match &self.projects {
             Some(projects) => (projects.projects.clone(), projects.sections.clone()),
             None => (
@@ -165,7 +165,7 @@ struct Detail {
     task_id: String,
     phase: Phase<Answered>,
     /// The last projects read that landed, kept over a read that does not.
-    projects: Option<wire::TasksProjects>,
+    projects: Option<wire::AgendaTaskProjects>,
     autosave: Autosave<Typed>,
     asking: Asking,
     open_field: String,
@@ -182,7 +182,7 @@ impl Detail {
                 task_id: self.task_id.clone(),
             },
             |answer| match answer {
-                Answer::TasksTask(detail) => Some(detail),
+                Answer::AgendaTask(detail) => Some(detail),
                 _ => None,
             },
         );
@@ -190,7 +190,7 @@ impl Detail {
             ctx,
             load::agenda::Projects::default(),
             |answer| match answer {
-                Answer::TasksProjects(projects) => Some(projects),
+                Answer::AgendaTaskProjects(projects) => Some(projects),
                 _ => None,
             },
         );
@@ -211,7 +211,7 @@ impl Detail {
         let Some(task) = answer.task() else {
             return;
         };
-        let open: Vec<&wire::TasksTask> = task
+        let open: Vec<&wire::AgendaTask> = task
             .children
             .iter()
             .chain(std::iter::once(task))
@@ -227,7 +227,7 @@ impl Detail {
         });
     }
 
-    fn task(&self) -> Option<wire::TasksTask> {
+    fn task(&self) -> Option<wire::AgendaTask> {
         self.phase.data().and_then(Answered::task).cloned()
     }
 
@@ -258,7 +258,7 @@ impl Detail {
     fn edit(
         &mut self,
         ctx: &Ctx,
-        task: &wire::TasksTask,
+        task: &wire::AgendaTask,
         field: &str,
         value: &str,
         edit: act::agenda::EditTask,
@@ -456,7 +456,7 @@ impl Detail {
     }
 
     /// The Project field's choice: the Inbox, a project, or one of its sections.
-    fn file(&mut self, ctx: &Ctx, task: &wire::TasksTask, key: &str) {
+    fn file(&mut self, ctx: &Ctx, task: &wire::AgendaTask, key: &str) {
         if task.parent_task_id.is_some() {
             return;
         }
@@ -664,7 +664,7 @@ impl Detail {
         &self,
         locale: Locale,
         answer: &Answered,
-        task: &wire::TasksTask,
+        task: &wire::AgendaTask,
     ) -> wire::TodoDetailData {
         let today = answer.today();
         let (projects, sections) = answer.lists();
@@ -833,7 +833,7 @@ pub fn day_for(key: &str, today: &str) -> Option<String> {
 
 /// SETTING THE DAY KEEPS THE TIME (v0's rule): a task due at 09:00 moved is
 /// still due at 09:00.
-fn with_time(task: &wire::TasksTask, day: &str) -> String {
+fn with_time(task: &wire::AgendaTask, day: &str) -> String {
     if task.due_time.is_empty() {
         day.to_owned()
     } else {
@@ -878,7 +878,7 @@ fn lead_label(locale: Locale, lead: u32) -> String {
 }
 
 /// The owner's ruling: a moment only when the core supplies one, else "On the day".
-fn reminder_value(locale: Locale, task: &wire::TasksTask, today: &str) -> String {
+fn reminder_value(locale: Locale, task: &wire::AgendaTask, today: &str) -> String {
     if task.remind_before_min.is_none() {
         words::remind_none(locale)
     } else if !task.remind_at_local.is_empty() {
@@ -898,10 +898,10 @@ fn reminder_value(locale: Locale, task: &wire::TasksTask, today: &str) -> String
 
 fn fields(
     locale: Locale,
-    task: &wire::TasksTask,
+    task: &wire::AgendaTask,
     today: &str,
-    projects: &[wire::TasksProject],
-    sections: &[wire::TasksSection],
+    projects: &[wire::AgendaTaskProject],
+    sections: &[wire::AgendaTaskSection],
 ) -> Vec<wire::TodoField> {
     let dated = !task.due_day.is_empty();
     let mut out = Vec::new();
@@ -1183,9 +1183,9 @@ fn fields(
 /// sections indented under it.
 fn place_choices(
     locale: Locale,
-    task: &wire::TasksTask,
-    projects: &[wire::TasksProject],
-    sections: &[wire::TasksSection],
+    task: &wire::AgendaTask,
+    projects: &[wire::AgendaTaskProject],
+    sections: &[wire::AgendaTaskSection],
 ) -> Vec<wire::TodoChoice> {
     let mut out = vec![wire::TodoChoice {
         key: rows::FILE_INBOX.to_owned(),
@@ -1195,7 +1195,7 @@ fn place_choices(
         icon_key: "Inbox".to_owned(),
         ..wire::TodoChoice::default()
     }];
-    let mut ordered: Vec<&wire::TasksProject> = projects.iter().collect();
+    let mut ordered: Vec<&wire::AgendaTaskProject> = projects.iter().collect();
     ordered.sort_by(|a, b| {
         a.sort_order
             .cmp(&b.sort_order)
@@ -1211,7 +1211,7 @@ fn place_choices(
             icon_key: "Folder".to_owned(),
             ..wire::TodoChoice::default()
         });
-        let mut own: Vec<&wire::TasksSection> = sections
+        let mut own: Vec<&wire::AgendaTaskSection> = sections
             .iter()
             .filter(|s| s.project_id == project.project_id)
             .collect();

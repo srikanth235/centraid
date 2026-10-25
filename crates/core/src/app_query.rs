@@ -141,12 +141,12 @@ pub(crate) fn answer_recording(
         Q::NotesLinkTargets(asked) => notes::link_targets(vault, &door, asked)?,
         Q::NotesNote(asked) => notes::note(vault, &door, asked)?,
         Q::NotesAbout(asked) => notes::about(vault, &door, asked)?,
-        Q::TasksBoard(asked) => agenda_task::board(vault, &door, &now, asked)?,
-        Q::TasksTask(asked) => agenda_task::task(vault, &door, &now, asked)?,
-        Q::TasksProjects(asked) => agenda_task::projects(vault, &door, &now, asked)?,
-        Q::TasksSearch(asked) => agenda_task::search(vault, &door, &now, asked)?,
-        Q::TasksCatchUp(asked) => agenda_task::catch_up(vault, &door, &now, asked)?,
-        Q::TasksTrash(asked) => agenda_task::trash(vault, &door, asked)?,
+        Q::AgendaTaskBoard(asked) => agenda_task::board(vault, &door, &now, asked)?,
+        Q::AgendaTask(asked) => agenda_task::task(vault, &door, &now, asked)?,
+        Q::AgendaTaskProjects(asked) => agenda_task::projects(vault, &door, &now, asked)?,
+        Q::AgendaTaskSearch(asked) => agenda_task::search(vault, &door, &now, asked)?,
+        Q::AgendaTaskCatchUp(asked) => agenda_task::catch_up(vault, &door, &now, asked)?,
+        Q::AgendaTaskTrash(asked) => agenda_task::trash(vault, &door, asked)?,
         Q::LockerItems(asked) => locker::items(vault, &door, &now, asked)?,
         Q::LockerItem(asked) => locker::item(vault, &door, &now, asked)?,
         Q::LockerSearch(asked) => locker::search(vault, &door, asked)?,
@@ -314,13 +314,13 @@ pub(crate) fn agenda_search(
         vault,
         door,
         now,
-        &wire::TasksSearchRequest {
+        &wire::AgendaTaskSearchRequest {
             term: asked.term.clone(),
             limit: asked.limit,
             tz: asked.tz.clone(),
         },
     )?;
-    if let A::TasksSearch(tasks) = tasks
+    if let A::AgendaTaskSearch(tasks) = tasks
         && (!tasks.tasks.is_empty() || !tasks.containers.is_empty())
     {
         found.tasks = Some(tasks);

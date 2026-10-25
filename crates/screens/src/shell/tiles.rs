@@ -281,8 +281,8 @@ impl Due {
         }
     }
 
-    fn of(board: &wire::TasksBoard) -> Self {
-        use wire::TasksGroupKind as Kind;
+    fn of(board: &wire::AgendaTaskBoard) -> Self {
+        use wire::AgendaTaskGroupKind as Kind;
         let count = board
             .counts
             .as_ref()
@@ -296,7 +296,7 @@ impl Due {
                 None
             }
         };
-        let mut groups: Vec<&wire::TasksGroup> = board
+        let mut groups: Vec<&wire::AgendaTaskGroup> = board
             .groups
             .iter()
             .filter(|group| rank(group.kind).is_some())
@@ -458,7 +458,7 @@ fn agenda(ctx: &Ctx) -> Made {
             project_id: None,
         },
         |answer| match answer {
-            Answer::TasksBoard(board) => Some(board),
+            Answer::AgendaTaskBoard(board) => Some(board),
             _ => None,
         },
     );
@@ -470,7 +470,7 @@ fn agenda(ctx: &Ctx) -> Made {
 fn agenda_tile(
     locale: Locale,
     upcoming: &wire::AgendaUpcoming,
-    board: Option<&wire::TasksBoard>,
+    board: Option<&wire::AgendaTaskBoard>,
 ) -> Made {
     let (today, now) = (upcoming.today.as_str(), upcoming.now_local.as_str());
     let owed = board.map_or(Due::none(), Due::of);
@@ -953,8 +953,8 @@ mod tests {
         }
     }
 
-    fn due_task(title: &str) -> wire::TasksTask {
-        wire::TasksTask {
+    fn due_task(title: &str) -> wire::AgendaTask {
+        wire::AgendaTask {
             task_id: format!("t-{title}"),
             title: title.to_owned(),
             status: "open".to_owned(),
@@ -962,17 +962,17 @@ mod tests {
         }
     }
 
-    fn board(overdue: &[&str], due: &[&str]) -> wire::TasksBoard {
-        use wire::TasksGroupKind as Kind;
+    fn board(overdue: &[&str], due: &[&str]) -> wire::AgendaTaskBoard {
+        use wire::AgendaTaskGroupKind as Kind;
         let group = |kind: Kind, key: &str, titles: &[&str]| {
-            (!titles.is_empty()).then(|| wire::TasksGroup {
+            (!titles.is_empty()).then(|| wire::AgendaTaskGroup {
                 kind: kind as i32,
                 key: key.to_owned(),
                 tasks: titles.iter().map(|title| due_task(title)).collect(),
                 ..Default::default()
             })
         };
-        wire::TasksBoard {
+        wire::AgendaTaskBoard {
             today: TODAY.to_owned(),
             now_local: NOW.to_owned(),
             groups: [
@@ -982,7 +982,7 @@ mod tests {
             .into_iter()
             .flatten()
             .collect(),
-            counts: Some(wire::TasksCounts {
+            counts: Some(wire::AgendaTaskCounts {
                 overdue: u32::try_from(overdue.len()).unwrap(),
                 today: u32::try_from(due.len()).unwrap(),
                 ..Default::default()

@@ -148,7 +148,7 @@ fn open_tasks(shell: &Shell) -> u32 {
                 ..load::agenda::Board::default()
             },
             |answer| match answer {
-                Answer::TasksBoard(board) => board.counts.map(|counts| counts.open),
+                Answer::AgendaTaskBoard(board) => board.counts.map(|counts| counts.open),
                 _ => None,
             },
         ) {

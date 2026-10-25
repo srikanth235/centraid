@@ -228,6 +228,9 @@ message AgendaHomeData {
   // CATCH UP, the page the Overdue group's verb and the absence notice's verb
   // push.
   Route catch_up = 19;
+  // The words on the empty state's Import ("Import calendar"), finished; empty
+  // exactly when `import_source` is not CALENDAR.
+  string import_label = 20;
 }
 
 // THE TO-DO PLACE (#1128, R-1128-1): the Inbox's tasks, then the projects by

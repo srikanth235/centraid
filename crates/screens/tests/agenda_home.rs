@@ -255,7 +255,7 @@ impl Rig {
             load::agenda::BoardView::All,
             load::agenda::BoardView::Logbook,
         ] {
-            let wire::app_query_response::Answer::TasksBoard(board) =
+            let wire::app_query_response::Answer::AgendaTaskBoard(board) =
                 self.read(load::agenda::Board {
                     limit: 500,
                     view: Some(view),
@@ -1388,6 +1388,7 @@ fn the_empties_are_four_different_screens() {
     assert_eq!(data.empty_body, "The first event is one field and a time.");
     assert_eq!(data.empty_action, "New event");
     assert_eq!(data.import_source, wire::ImportSource::Calendar as i32);
+    assert_eq!(data.import_label, "Import calendar");
     // The action pushes the add sheet, on the anchor day.
     let add = r.state().new_event.clone().unwrap();
     assert_eq!(
@@ -1419,6 +1420,7 @@ fn the_empties_are_four_different_screens() {
         r.data().import_source,
         wire::ImportSource::Unspecified as i32
     );
+    assert_eq!(r.data().import_label, "");
 
     let mut d = rig(Dest::Day);
     d.clear();
@@ -1426,6 +1428,7 @@ fn the_empties_are_four_different_screens() {
     assert_eq!(d.data().empty_title, "Nothing on this day.");
     assert_eq!(d.data().empty_action, "");
     assert_eq!(d.data().import_source, wire::ImportSource::Calendar as i32);
+    assert_eq!(d.data().import_label, "Import calendar");
 }
 
 #[test]
@@ -1946,7 +1949,7 @@ fn quick_add_files_a_bare_title_in_the_inbox_and_the_bar_stays_open_for_the_next
         count
     );
     // The task is the vault's: it also shows on another surface's read.
-    let wire::app_query_response::Answer::TasksBoard(board) = r.read(load::agenda::Board {
+    let wire::app_query_response::Answer::AgendaTaskBoard(board) = r.read(load::agenda::Board {
         limit: 100,
         view: Some(load::agenda::BoardView::Inbox),
         project_id: None,
@@ -2103,7 +2106,7 @@ fn filing_is_a_sheet_of_inbox_projects_and_sections_and_the_task_leaves_the_inbo
     assert_eq!(r.status().unwrap().sentence, "Filed in Zq Garden · Zq Beds");
     assert!(!inbox_titles(&r).contains(&"Zq Bulbs".to_owned()));
     // The vault holds what the sheet said.
-    let wire::app_query_response::Answer::TasksTask(detail) = r.read(load::agenda::Task {
+    let wire::app_query_response::Answer::AgendaTask(detail) = r.read(load::agenda::Task {
         task_id: "zq-bulbs".to_owned(),
     }) else {
         panic!("task");

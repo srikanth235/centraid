@@ -30,7 +30,7 @@
 //! - **NO DATA OF ITS OWN** — revoke the grant and the app goes dark.
 //! - **THE PHONE READS IT IN THE CORE** (#1046): `crates/core`'s `app_query`
 //!   runs [`load_board`], [`load_task`] and [`load_search_term`] and answers
-//!   `tasks.proto`. Every civil reading a screen draws — a due's local day and
+//!   `agenda.proto`. Every civil reading a screen draws — a due's local day and
 //!   time, overdue, today, the reminder's wall clock, each place's groups — is
 //!   [`local`] and [`views`], in the zone the device states.
 //!

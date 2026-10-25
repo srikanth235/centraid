@@ -43,7 +43,7 @@ struct Project {
     project_id: String,
     /// The name riding along from the route, until the answer names it.
     name: String,
-    phase: Phase<wire::TasksBoard>,
+    phase: Phase<wire::AgendaTaskBoard>,
     ops: Ops,
     quick_title: String,
     /// The section a quick add lands in; empty is the project's unsectioned work.
@@ -105,7 +105,7 @@ impl Project {
         }
     }
 
-    fn data(&self, locale: Locale, board: &wire::TasksBoard) -> wire::TodoProjectData {
+    fn data(&self, locale: Locale, board: &wire::AgendaTaskBoard) -> wire::TodoProjectData {
         let rename = |data: wire::TodoProjectData| wire::TodoProjectData {
             rename_label: agenda_todo::rename(locale),
             rename_title: agenda_todo::rename_title(locale),

@@ -159,7 +159,7 @@ fn every_app_answers_a_load_by_the_name_its_manifest_declares() {
                 | ("notes", A::NotesLibrary(_))
                 | ("people", A::PeopleSearch(_))
                 | ("photos", A::PhotosSearch(_))
-                | ("agenda", A::TasksBoard(_))
+                | ("agenda", A::AgendaTaskBoard(_))
         );
         assert!(arm_matches, "{app}.{query} answered {answer:?}");
         assert!(!matches!(answer, A::Denied(_)), "{app}.{query} was denied");

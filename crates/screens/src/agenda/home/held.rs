@@ -43,12 +43,12 @@ pub struct Held {
     pub upcoming: Option<wire::AgendaUpcoming>,
     pub context: Option<wire::AgendaDayContext>,
     pub dated: Option<String>,
-    pub today_board: Option<wire::TasksBoard>,
-    pub upcoming_board: Option<wire::TasksBoard>,
-    pub catch_up: Option<wire::TasksCatchUp>,
+    pub today_board: Option<wire::AgendaTaskBoard>,
+    pub upcoming_board: Option<wire::AgendaTaskBoard>,
+    pub catch_up: Option<wire::AgendaTaskCatchUp>,
     pub todo: bool,
-    pub inbox: Option<wire::TasksBoard>,
-    pub projects: Option<wire::TasksProjects>,
+    pub inbox: Option<wire::AgendaTaskBoard>,
+    pub projects: Option<wire::AgendaTaskProjects>,
     /// The trimmed term `search` answers.
     pub search_term: Option<String>,
     pub search: Option<wire::AgendaSearch>,
@@ -72,9 +72,9 @@ impl Held {
     /// Every task the held answers carry, root or child: the Inbox, the dated
     /// boards and the hits.
     #[must_use]
-    pub fn tasks(&self) -> Vec<&wire::TasksTask> {
+    pub fn tasks(&self) -> Vec<&wire::AgendaTask> {
         let boards = [&self.inbox, &self.today_board, &self.upcoming_board];
-        let mut found: Vec<&wire::TasksTask> = boards
+        let mut found: Vec<&wire::AgendaTask> = boards
             .into_iter()
             .flatten()
             .flat_map(|board| &board.groups)
@@ -93,7 +93,7 @@ impl Held {
 
     /// A task on screen, root or child, by id.
     #[must_use]
-    pub fn find(&self, id: &str) -> Option<wire::TasksTask> {
+    pub fn find(&self, id: &str) -> Option<wire::AgendaTask> {
         if id.is_empty() {
             return None;
         }
@@ -105,7 +105,7 @@ impl Held {
 
     /// Projects and sections from whichever answer holds them.
     #[must_use]
-    pub fn projects_of(&self) -> (&[wire::TasksProject], &[wire::TasksSection]) {
+    pub fn projects_of(&self) -> (&[wire::AgendaTaskProject], &[wire::AgendaTaskSection]) {
         if let Some(projects) = &self.projects {
             return (&projects.projects, &projects.sections);
         }
@@ -171,7 +171,7 @@ impl Home {
         };
         if matches!(self.phase, Phase::Ready) {
             let tasks = self.held.tasks();
-            let open: Vec<&wire::TasksTask> = tasks
+            let open: Vec<&wire::AgendaTask> = tasks
                 .into_iter()
                 .filter(|task| rows::is_open(task))
                 .collect();
@@ -214,12 +214,12 @@ impl Home {
                     project_id: None,
                 },
                 |answer| match answer {
-                    Answer::TasksBoard(board) => Some(board),
+                    Answer::AgendaTaskBoard(board) => Some(board),
                     _ => None,
                 },
             ))?;
             let projects = get(read(ctx, query::Projects {}, |answer| match answer {
-                Answer::TasksProjects(projects) => Some(projects),
+                Answer::AgendaTaskProjects(projects) => Some(projects),
                 _ => None,
             }))?;
             self.today.clone_from(&board.today);
@@ -289,7 +289,7 @@ impl Home {
                         project_id: None,
                     },
                     |answer| match answer {
-                        Answer::TasksBoard(board) => Some(board),
+                        Answer::AgendaTaskBoard(board) => Some(board),
                         _ => None,
                     },
                 )
@@ -300,7 +300,7 @@ impl Home {
             let catch_up =
                 if self.destination == wire::AgendaDestination::Day && self.anchor == self.today {
                     Some(get(read(ctx, query::CatchUp {}, |answer| match answer {
-                        Answer::TasksCatchUp(catch_up) => Some(catch_up),
+                        Answer::AgendaTaskCatchUp(catch_up) => Some(catch_up),
                         _ => None,
                     }))?)
                 } else {
@@ -331,7 +331,7 @@ impl Home {
         // A hit's meta line names its project: held from a board, or read.
         if self.held.projects_of().0.is_empty() {
             self.held.projects = Some(get(read(ctx, query::Projects {}, |answer| match answer {
-                Answer::TasksProjects(projects) => Some(projects),
+                Answer::AgendaTaskProjects(projects) => Some(projects),
                 _ => None,
             }))?);
         }

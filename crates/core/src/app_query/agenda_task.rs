@@ -1,5 +1,5 @@
 //! THE TASK HALF OF AGENDA'S ARM OF THE APP QUERY (#1046): `crates/apps/agenda`' `task` loaders, asked
-//! through [`super::VaultDoor`] and spelled as `tasks.proto` spells them.
+//! through [`super::VaultDoor`] and spelled as `agenda.proto` spells them.
 //!
 //! The board, the families, the recurrence facts, every civil reading and
 //! every place's groups are the crate's (`queries`, `local`, `views`); this
@@ -38,8 +38,8 @@ fn limit_of(limit: u32) -> Option<i64> {
     (limit > 0).then_some(i64::from(limit))
 }
 
-fn view_of(asked: &wire::TasksBoardRequest) -> Result<Option<View>> {
-    use wire::TasksView as V;
+fn view_of(asked: &wire::AgendaTaskBoardRequest) -> Result<Option<View>> {
+    use wire::AgendaTaskView as V;
     Ok(Some(
         match V::try_from(asked.view).unwrap_or(V::Unspecified) {
             V::Unspecified => return Ok(None),
@@ -67,7 +67,7 @@ pub(crate) fn board(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
-    asked: &wire::TasksBoardRequest,
+    asked: &wire::AgendaTaskBoardRequest,
 ) -> Result<Answer> {
     let zone = zone_of(vault, &asked.tz)?;
     let today = today_in(&zone, now)?;
@@ -83,12 +83,12 @@ pub(crate) fn board(
                 .map(|view| views::groups(view, &open, &logbook, &data.projects, &data.sections))
                 .unwrap_or_default();
             let counts = views::counts(&open);
-            Answer::TasksBoard(wire::TasksBoard {
+            Answer::AgendaTaskBoard(wire::AgendaTaskBoard {
                 today: today.day_text(),
                 now_local: today.local_text(),
                 view: asked.view,
                 groups: groups.into_iter().map(group_to_wire).collect(),
-                counts: Some(wire::TasksCounts {
+                counts: Some(wire::AgendaTaskCounts {
                     overdue: count(counts.overdue),
                     today: count(counts.today),
                     upcoming: count(counts.upcoming),
@@ -111,7 +111,7 @@ pub(crate) fn board(
                 tags: data
                     .tags
                     .into_iter()
-                    .map(|chip| wire::TasksTagChip {
+                    .map(|chip| wire::AgendaTaskTagChip {
                         concept_id: chip.concept_id,
                         label: chip.label,
                     })
@@ -127,7 +127,7 @@ pub(crate) fn task(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
-    asked: &wire::TasksTaskRequest,
+    asked: &wire::AgendaTaskRequest,
 ) -> Result<Answer> {
     let zone = zone_of(vault, &asked.tz)?;
     let today = today_in(&zone, now)?;
@@ -156,7 +156,7 @@ pub(crate) fn task(
                 .iter()
                 .find(|section| Some(&section.section_id) == task.section_id.as_ref())
         });
-        Answer::TasksTask(Box::new(wire::TasksTaskDetail {
+        Answer::AgendaTask(Box::new(wire::AgendaTaskDetail {
             today: today.day_text(),
             now_local: today.local_text(),
             task: placed_task.as_ref().map(task_to_wire),
@@ -174,13 +174,13 @@ pub(crate) fn projects(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
-    asked: &wire::TasksProjectsRequest,
+    asked: &wire::AgendaTaskProjectsRequest,
 ) -> Result<Answer> {
     let zone = zone_of(vault, &asked.tz)?;
     let today = today_in(&zone, now)?;
     settle(door, task::load_board(door, None, now, &zone), |data| {
         let open = placed(&data.open, &zone, &today);
-        Answer::TasksProjects(wire::TasksProjects {
+        Answer::AgendaTaskProjects(wire::AgendaTaskProjects {
             projects: data
                 .projects
                 .iter()
@@ -201,7 +201,7 @@ pub(crate) fn projects(
 pub(crate) fn trash(
     vault: &Vault,
     door: &VaultDoor<'_>,
-    asked: &wire::TasksTrashRequest,
+    asked: &wire::AgendaTaskTrashRequest,
 ) -> Result<Answer> {
     let zone = zone_if_any(vault, &asked.tz)?;
     let day_in = |instant: Option<&str>| {
@@ -212,11 +212,11 @@ pub(crate) fn trash(
             .unwrap_or_default()
     };
     settle(door, task::load_trash(door), |data| {
-        Answer::TasksTrash(wire::TasksTrash {
+        Answer::AgendaTaskTrash(wire::AgendaTaskTrash {
             tasks: data
                 .tasks
                 .into_iter()
-                .map(|row| wire::TasksTrashRow {
+                .map(|row| wire::AgendaTaskTrashRow {
                     deleted_local_day: day_in(row.deleted_at.as_deref()),
                     purge_local_day: day_in(row.purge_at.as_deref()),
                     deleted_at: row.deleted_at.unwrap_or_default(),
@@ -234,7 +234,7 @@ pub(crate) fn search(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
-    asked: &wire::TasksSearchRequest,
+    asked: &wire::AgendaTaskSearchRequest,
 ) -> Result<Answer> {
     if asked.limit == 0 {
         // REQUIRED AND VALIDATED, not defaulted: proto3 cannot say "required".
@@ -298,7 +298,7 @@ pub(crate) fn search(
         )))
     })??;
     settle(door, loaded, |((data, found), corrected)| {
-        Answer::TasksSearch(wire::TasksSearch {
+        Answer::AgendaTaskSearch(wire::AgendaTaskSearch {
             corrected,
             today: today.day_text(),
             now_local: today.local_text(),
@@ -316,14 +316,14 @@ pub(crate) fn catch_up(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
-    asked: &wire::TasksCatchUpRequest,
+    asked: &wire::AgendaTaskCatchUpRequest,
 ) -> Result<Answer> {
     let zone = zone_of(vault, &asked.tz)?;
     let today = today_in(&zone, now)?;
     settle(door, task::load_board(door, None, now, &zone), |data| {
         let piles = views::catch_up(&placed(&data.open, &zone, &today));
         let rows = |pile: &[Placed]| pile.iter().map(task_to_wire).collect();
-        Answer::TasksCatchUp(wire::TasksCatchUp {
+        Answer::AgendaTaskCatchUp(wire::AgendaTaskCatchUp {
             today: today.day_text(),
             now_local: today.local_text(),
             dated: rows(&piles.dated),
@@ -350,8 +350,8 @@ fn placed(rows: &[TaskRow], zone: &FireZone, today: &Civil) -> Vec<Placed> {
         .collect()
 }
 
-fn project_to_wire(project: &ProjectRow, open: &[Placed]) -> wire::TasksProject {
-    wire::TasksProject {
+fn project_to_wire(project: &ProjectRow, open: &[Placed]) -> wire::AgendaTaskProject {
+    wire::AgendaTaskProject {
         project_id: project.project_id.clone(),
         name: project.name.clone().unwrap_or_default(),
         area: project.area.clone(),
@@ -368,8 +368,8 @@ fn project_to_wire(project: &ProjectRow, open: &[Placed]) -> wire::TasksProject 
     }
 }
 
-fn section_to_wire(section: &SectionRow, open: &[Placed]) -> wire::TasksSection {
-    wire::TasksSection {
+fn section_to_wire(section: &SectionRow, open: &[Placed]) -> wire::AgendaTaskSection {
+    wire::AgendaTaskSection {
         section_id: section.section_id.clone(),
         project_id: section.project_id.clone().unwrap_or_default(),
         name: section.name.clone().unwrap_or_default(),
@@ -385,9 +385,9 @@ fn section_to_wire(section: &SectionRow, open: &[Placed]) -> wire::TasksSection 
     }
 }
 
-fn group_to_wire(group: views::Group) -> wire::TasksGroup {
-    use wire::TasksGroupKind as K;
-    wire::TasksGroup {
+fn group_to_wire(group: views::Group) -> wire::AgendaTaskGroup {
+    use wire::AgendaTaskGroupKind as K;
+    wire::AgendaTaskGroup {
         kind: match group.kind {
             GroupKind::Overdue => K::Overdue,
             GroupKind::Today => K::Today,
@@ -410,12 +410,12 @@ fn group_to_wire(group: views::Group) -> wire::TasksGroup {
     }
 }
 
-fn task_to_wire(placed: &Placed) -> wire::TasksTask {
+fn task_to_wire(placed: &Placed) -> wire::AgendaTask {
     let task = &placed.task;
     let due = &placed.due;
     let small =
         |value: i64| i32::try_from(value).unwrap_or(if value < 0 { i32::MIN } else { i32::MAX });
-    wire::TasksTask {
+    wire::AgendaTask {
         task_id: task.task_id.clone(),
         parent_task_id: task.parent_task_id.clone(),
         project_id: task.project_id.clone(),
@@ -452,7 +452,7 @@ fn task_to_wire(placed: &Placed) -> wire::TasksTask {
         tags: task
             .tags
             .iter()
-            .map(|tag| wire::TasksTag {
+            .map(|tag| wire::AgendaTaskTag {
                 concept_id: tag.concept_id.clone(),
                 label: tag.label.clone(),
             })
@@ -460,7 +460,7 @@ fn task_to_wire(placed: &Placed) -> wire::TasksTask {
         attachments: task
             .attachments
             .iter()
-            .map(|attachment| wire::TasksAttachment {
+            .map(|attachment| wire::AgendaTaskAttachment {
                 attachment_id: attachment.attachment_id.clone(),
                 content_id: attachment.content_id.clone(),
                 media_type: attachment.media_type.clone(),
@@ -471,7 +471,7 @@ fn task_to_wire(placed: &Placed) -> wire::TasksTask {
         references: task
             .references
             .iter()
-            .map(|reference| wire::TasksReference {
+            .map(|reference| wire::AgendaTaskReference {
                 to_type: reference.to_type.clone(),
                 to_id: reference.to_id.clone(),
             })

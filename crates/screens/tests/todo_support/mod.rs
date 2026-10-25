@@ -61,14 +61,14 @@ pub fn load_board(
     d: &Driver,
     view: load::agenda::BoardView,
     project: Option<&str>,
-) -> wire::TasksBoard {
+) -> wire::AgendaTaskBoard {
     let request = load::agenda::Board {
         limit: 500,
         project_id: project.map(str::to_owned),
         view: Some(view),
     };
     match answer(d, request) {
-        Answer::TasksBoard(board) => board,
+        Answer::AgendaTaskBoard(board) => board,
         other => panic!("a board answered {other:?}"),
     }
 }
@@ -88,14 +88,14 @@ pub fn answer(d: &Driver, request: impl Into<wire::LoadRequest>) -> Answer {
     loaded.answer.and_then(|a| a.answer).expect("an answer")
 }
 
-pub fn task_of(d: &Driver, id: &str) -> wire::TasksTask {
+pub fn task_of(d: &Driver, id: &str) -> wire::AgendaTask {
     match answer(
         d,
         load::agenda::Task {
             task_id: id.to_owned(),
         },
     ) {
-        Answer::TasksTask(detail) => detail.task.expect("the task is live"),
+        Answer::AgendaTask(detail) => detail.task.expect("the task is live"),
         other => panic!("a task answered {other:?}"),
     }
 }

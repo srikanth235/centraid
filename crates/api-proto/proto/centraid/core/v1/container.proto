@@ -2,7 +2,7 @@
 // or Docs folder a member typed the name of.
 //
 // One message shared by the three owning apps' own search answers
-// (`NotesSearch.containers`, `TasksSearch.containers`, `DocsSearch.containers`),
+// (`NotesSearch.containers`, `AgendaTaskSearch.containers`, `DocsSearch.containers`),
 // so a shell draws a container the same way wherever it
 // is found. Home carries the same fact as a `VaultSearchHit` (`vault_search.proto`),
 // which has its own subtitle and day and so does not use this.

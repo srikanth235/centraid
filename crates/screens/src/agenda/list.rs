@@ -60,7 +60,7 @@ pub(super) fn board(
     view: load::agenda::BoardView,
     project_id: Option<String>,
     limit: u32,
-) -> Reading<wire::TasksBoard> {
+) -> Reading<wire::AgendaTaskBoard> {
     read::read(
         ctx,
         load::agenda::Board {
@@ -69,14 +69,14 @@ pub(super) fn board(
             view: Some(view),
         },
         |answer| match answer {
-            Answer::TasksBoard(board) => Some(board),
+            Answer::AgendaTaskBoard(board) => Some(board),
             _ => None,
         },
     )
 }
 
 /// Every open task of a board, roots and children, for `Ops::answered`.
-pub(super) fn open_tasks(board: &wire::TasksBoard) -> Vec<&wire::TasksTask> {
+pub(super) fn open_tasks(board: &wire::AgendaTaskBoard) -> Vec<&wire::AgendaTask> {
     board
         .groups
         .iter()
@@ -86,7 +86,7 @@ pub(super) fn open_tasks(board: &wire::TasksBoard) -> Vec<&wire::TasksTask> {
 }
 
 /// A task of the board by id, roots and children.
-pub(super) fn find(board: &wire::TasksBoard, id: &str) -> Option<wire::TasksTask> {
+pub(super) fn find(board: &wire::AgendaTaskBoard, id: &str) -> Option<wire::AgendaTask> {
     board
         .groups
         .iter()
@@ -96,7 +96,7 @@ pub(super) fn find(board: &wire::TasksBoard, id: &str) -> Option<wire::TasksTask
 }
 
 /// "100 tasks · more not shown" when the window is not everything.
-fn window_label(locale: Locale, board: &wire::TasksBoard) -> String {
+fn window_label(locale: Locale, board: &wire::AgendaTaskBoard) -> String {
     if board.truncated {
         fill(
             &agenda_todo::window_label(locale),
@@ -128,7 +128,7 @@ struct List {
     view: wire::TodoView,
     /// The board window: it widens by a page at "Show more", up to the manifest's bound.
     limit: u32,
-    phase: Phase<wire::TasksBoard>,
+    phase: Phase<wire::AgendaTaskBoard>,
     ops: Ops,
 }
 
@@ -158,10 +158,10 @@ impl List {
 
     fn wire_view(&self) -> i32 {
         let view = match self.view {
-            wire::TodoView::All => wire::TasksView::All,
-            wire::TodoView::Logbook => wire::TasksView::Logbook,
-            wire::TodoView::Reminders => wire::TasksView::Reminders,
-            _ => wire::TasksView::Anytime,
+            wire::TodoView::All => wire::AgendaTaskView::All,
+            wire::TodoView::Logbook => wire::AgendaTaskView::Logbook,
+            wire::TodoView::Reminders => wire::AgendaTaskView::Reminders,
+            _ => wire::AgendaTaskView::Anytime,
         };
         view as i32
     }
@@ -184,7 +184,7 @@ impl List {
         }
     }
 
-    fn data(&self, locale: Locale, board: &wire::TasksBoard) -> wire::TodoListData {
+    fn data(&self, locale: Locale, board: &wire::AgendaTaskBoard) -> wire::TodoListData {
         let row_ctx = Context::of(&board.today, &board.projects, &board.sections);
         let groups = rows::groups(locale, &board.groups, &row_ctx);
         wire::TodoListData {

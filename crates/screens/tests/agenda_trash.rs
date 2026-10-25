@@ -363,7 +363,7 @@ mod kit {
             d,
             centraid_screens::catalog::load::agenda::Projects::default(),
         ) {
-            wire::app_query_response::Answer::TasksProjects(p) => {
+            wire::app_query_response::Answer::AgendaTaskProjects(p) => {
                 p.projects.into_iter().map(|p| p.name).collect()
             }
             other => panic!("{other:?}"),

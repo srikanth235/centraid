@@ -93,7 +93,7 @@ impl<'a> Hues<'a> {
 /// One row on a day: an event or a task, and the key it sorts by.
 enum Slot<'a> {
     Event(&'a wire::AgendaEvent, String),
-    Task(&'a wire::TasksTask, String),
+    Task(&'a wire::AgendaTask, String),
 }
 
 impl Slot<'_> {
@@ -355,6 +355,8 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
         _ => (String::new(), String::new(), String::new()),
     };
 
+    let offer_import = fold.term.is_none() && fold.hidden.is_empty() && upcoming.events.is_empty();
+
     Some(wire::AgendaHomeData {
         today: today.to_owned(),
         now_local: now.to_owned(),
@@ -368,13 +370,15 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
         // alone: a first vault's starter tasks and an imported contact's
         // birthday fill the list with marks, and an offer keyed on an empty
         // screen would never be seen.
-        import_source: if fold.term.is_none()
-            && fold.hidden.is_empty()
-            && upcoming.events.is_empty()
-        {
+        import_source: if offer_import {
             wire::ImportSource::Calendar as i32
         } else {
             wire::ImportSource::Unspecified as i32
+        },
+        import_label: if offer_import {
+            words::import_calendar(locale)
+        } else {
+            String::new()
         },
         calendars: upcoming
             .calendars
@@ -455,7 +459,7 @@ fn items(
     locale: Locale,
     day: &str,
     events: &[&wire::AgendaEvent],
-    tasks: &[&wire::TasksTask],
+    tasks: &[&wire::AgendaTask],
     today: &str,
     now: &str,
     hues: &Hues,
@@ -525,7 +529,7 @@ fn event_key(event: &wire::AgendaEvent, day: &str) -> String {
 }
 
 /// Untimed right after the all-day rows; timed among the timed ones, by time.
-fn task_key(task: &wire::TasksTask, day: &str) -> String {
+fn task_key(task: &wire::AgendaTask, day: &str) -> String {
     if task.due_time.is_empty() {
         "01".to_owned()
     } else {
@@ -540,16 +544,18 @@ fn task_key(task: &wire::TasksTask, day: &str) -> String {
 fn tasks_by_day<'a>(
     held: &'a Held,
     window: &HashSet<&str>,
-) -> BTreeMap<&'a str, Vec<&'a wire::TasksTask>> {
+) -> BTreeMap<&'a str, Vec<&'a wire::AgendaTask>> {
     let mut seen = HashSet::new();
-    let mut out: BTreeMap<&str, Vec<&wire::TasksTask>> = BTreeMap::new();
+    let mut out: BTreeMap<&str, Vec<&wire::AgendaTask>> = BTreeMap::new();
     let boards = [&held.today_board, &held.upcoming_board];
     for group in boards.into_iter().flatten().flat_map(|board| &board.groups) {
-        let kind =
-            wire::TasksGroupKind::try_from(group.kind).unwrap_or(wire::TasksGroupKind::Unspecified);
+        let kind = wire::AgendaTaskGroupKind::try_from(group.kind)
+            .unwrap_or(wire::AgendaTaskGroupKind::Unspecified);
         if !matches!(
             kind,
-            wire::TasksGroupKind::Overdue | wire::TasksGroupKind::Today | wire::TasksGroupKind::Day
+            wire::AgendaTaskGroupKind::Overdue
+                | wire::AgendaTaskGroupKind::Today
+                | wire::AgendaTaskGroupKind::Day
         ) {
             continue;
         }
@@ -572,7 +578,7 @@ fn overdue_group(locale: Locale, held: &Held, ctx: &rows::Context) -> Option<wir
     let group = board
         .groups
         .iter()
-        .find(|group| group.kind == wire::TasksGroupKind::Overdue as i32)?;
+        .find(|group| group.kind == wire::AgendaTaskGroupKind::Overdue as i32)?;
     rows::groups(locale, std::slice::from_ref(group), ctx)
         .into_iter()
         .next()
@@ -1086,31 +1092,31 @@ mod tests {
     #[test]
     fn the_notice_names_the_absence_and_counts_one_in_the_singular() {
         let mut held = held_of(vec![]);
-        held.catch_up = Some(wire::TasksCatchUp {
+        held.catch_up = Some(wire::AgendaTaskCatchUp {
             away_days: 16,
             overdue: 34,
             absent: true,
-            ..wire::TasksCatchUp::default()
+            ..wire::AgendaTaskCatchUp::default()
         });
         assert_eq!(
             notice_of(Locale::En, &held).unwrap().sentence,
             "You were away 16 days; 34 tasks came due"
         );
-        held.catch_up = Some(wire::TasksCatchUp {
+        held.catch_up = Some(wire::AgendaTaskCatchUp {
             away_days: 9,
             overdue: 1,
             absent: true,
-            ..wire::TasksCatchUp::default()
+            ..wire::AgendaTaskCatchUp::default()
         });
         assert_eq!(
             notice_of(Locale::En, &held).unwrap().sentence,
             "You were away 9 days; 1 task came due"
         );
-        held.catch_up = Some(wire::TasksCatchUp {
+        held.catch_up = Some(wire::AgendaTaskCatchUp {
             away_days: 3,
             overdue: 2,
             absent: false,
-            ..wire::TasksCatchUp::default()
+            ..wire::AgendaTaskCatchUp::default()
         });
         assert!(
             notice_of(Locale::En, &held).is_none(),

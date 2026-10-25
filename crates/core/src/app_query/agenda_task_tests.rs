@@ -119,13 +119,13 @@ impl Scratch {
         self.add(input)
     }
 
-    fn board(&self, view: wire::TasksView) -> wire::TasksBoard {
+    fn board(&self, view: wire::AgendaTaskView) -> wire::AgendaTaskBoard {
         self.board_for(view, "")
     }
 
-    fn board_for(&self, view: wire::TasksView, project_id: &str) -> wire::TasksBoard {
+    fn board_for(&self, view: wire::AgendaTaskView, project_id: &str) -> wire::AgendaTaskBoard {
         match self
-            .ask(Q::TasksBoard(wire::TasksBoardRequest {
+            .ask(Q::AgendaTaskBoard(wire::AgendaTaskBoardRequest {
                 tz: TZ.to_owned(),
                 limit: 0,
                 view: view as i32,
@@ -133,32 +133,32 @@ impl Scratch {
             }))
             .expect("the board answers")
         {
-            A::TasksBoard(board) => board,
+            A::AgendaTaskBoard(board) => board,
             other => panic!("the board answered as {other:?}"),
         }
     }
 
-    fn detail(&self, task_id: &str) -> wire::TasksTaskDetail {
+    fn detail(&self, task_id: &str) -> wire::AgendaTaskDetail {
         match self
-            .ask(Q::TasksTask(wire::TasksTaskRequest {
+            .ask(Q::AgendaTask(wire::AgendaTaskRequest {
                 task_id: task_id.to_owned(),
                 tz: TZ.to_owned(),
             }))
             .expect("the task answers")
         {
-            A::TasksTask(detail) => *detail,
+            A::AgendaTask(detail) => *detail,
             other => panic!("the task answered as {other:?}"),
         }
     }
 
-    fn catch_up(&self) -> wire::TasksCatchUp {
+    fn catch_up(&self) -> wire::AgendaTaskCatchUp {
         match self
-            .ask(Q::TasksCatchUp(wire::TasksCatchUpRequest {
+            .ask(Q::AgendaTaskCatchUp(wire::AgendaTaskCatchUpRequest {
                 tz: TZ.to_owned(),
             }))
             .expect("catch up answers")
         {
-            A::TasksCatchUp(piles) => piles,
+            A::AgendaTaskCatchUp(piles) => piles,
             other => panic!("catch up answered as {other:?}"),
         }
     }
@@ -171,12 +171,12 @@ fn civil_days(from: &str, to: &str) -> i64 {
     (day(to) - day(from)) / 86_400_000
 }
 
-fn titles(group: &wire::TasksGroup) -> Vec<&str> {
+fn titles(group: &wire::AgendaTaskGroup) -> Vec<&str> {
     group.tasks.iter().map(|task| task.title.as_str()).collect()
 }
 
-fn every_id(board: &wire::TasksBoard) -> Vec<String> {
-    fn walk(task: &wire::TasksTask, out: &mut Vec<String>) {
+fn every_id(board: &wire::AgendaTaskBoard) -> Vec<String> {
+    fn walk(task: &wire::AgendaTask, out: &mut Vec<String>) {
         out.push(task.task_id.clone());
         for child in &task.children {
             walk(child, out);
@@ -202,11 +202,14 @@ fn the_board_groups_today_in_the_request_zone() {
     scratch.titled("Tomorrow", Some("2099-06-02"));
     scratch.titled("Someday", None);
 
-    let today = scratch.board(wire::TasksView::Today);
+    let today = scratch.board(wire::AgendaTaskView::Today);
     assert_eq!(today.today, "2099-06-01");
     assert_eq!(today.now_local, "2099-06-01T22:00");
     assert_eq!(today.groups.len(), 2);
-    assert_eq!(today.groups[0].kind, wire::TasksGroupKind::Overdue as i32);
+    assert_eq!(
+        today.groups[0].kind,
+        wire::AgendaTaskGroupKind::Overdue as i32
+    );
     assert_eq!(titles(&today.groups[0]), ["Late"]);
     assert_eq!(titles(&today.groups[1]), ["Tonight"]);
     let tonight = &today.groups[1].tasks[0];
@@ -215,7 +218,7 @@ fn the_board_groups_today_in_the_request_zone() {
     assert!(tonight.lands_today && !tonight.overdue);
     assert_eq!(today.groups[0].tasks[0].days_from_today, Some(-2));
 
-    let upcoming = scratch.board(wire::TasksView::Upcoming);
+    let upcoming = scratch.board(wire::AgendaTaskView::Upcoming);
     assert_eq!(upcoming.groups.len(), 1);
     assert_eq!(upcoming.groups[0].day, "2099-06-02");
     assert_eq!(titles(&upcoming.groups[0]), ["Tomorrow"]);
@@ -249,8 +252,8 @@ fn a_trashed_task_and_its_family_are_on_no_place() {
     scratch.run("entity.trash", serde_json::json!({ "id": parent }));
     scratch.run("entity.trash", serde_json::json!({ "id": done }));
 
-    let all = scratch.board(wire::TasksView::All);
-    let logbook = scratch.board(wire::TasksView::Logbook);
+    let all = scratch.board(wire::AgendaTaskView::All);
+    let logbook = scratch.board(wire::AgendaTaskView::Logbook);
     let seen: Vec<String> = every_id(&all)
         .into_iter()
         .chain(every_id(&logbook))
@@ -282,9 +285,9 @@ fn local_times_follow_daylight_saving_and_the_reminder_is_read() {
     scratch.add(serde_json::json!({
         "title": "Dated only", "due": "2099-07-20", "remind_before_min": 15,
     }));
-    let all = scratch.board(wire::TasksView::All);
+    let all = scratch.board(wire::AgendaTaskView::All);
     let dated = &all.groups[0];
-    assert_eq!(dated.kind, wire::TasksGroupKind::Dated as i32);
+    assert_eq!(dated.kind, wire::AgendaTaskGroupKind::Dated as i32);
     assert_eq!(titles(dated), ["Summer", "Dated only", "Winter"]);
     let summer = &dated.tasks[0];
     assert_eq!(summer.due_time, "10:00");
@@ -298,7 +301,7 @@ fn local_times_follow_daylight_saving_and_the_reminder_is_read() {
     assert_eq!(dated_only.due_time, "");
     assert_eq!(dated_only.remind_at_local, "", "a date has no moment");
 
-    let reminders = scratch.board(wire::TasksView::Reminders);
+    let reminders = scratch.board(wire::AgendaTaskView::Reminders);
     assert_eq!(titles(&reminders.groups[0]).len(), 3);
     assert_eq!(reminders.counts.expect("counts").reminders, 3);
 }
@@ -341,7 +344,7 @@ fn a_repeating_task_due_by_date_is_on_today_at_every_hour_of_the_devices_day() {
     }));
     let mut problems: Vec<String> = Vec::new();
     for _ in 0..96 {
-        let board = scratch.board(wire::TasksView::Today);
+        let board = scratch.board(wire::AgendaTaskView::Today);
         let at = format!("{} ({} in New York)", scratch.now_text(), board.now_local);
         let found = board.groups.iter().find_map(|group| {
             group
@@ -354,7 +357,7 @@ fn a_repeating_task_due_by_date_is_on_today_at_every_hour_of_the_devices_day() {
             None => problems.push(format!("{at}: the daily task is not on Today")),
             Some((group, row)) => {
                 let behind = civil_days("2026-10-03", &board.today);
-                let wrong = group.kind != wire::TasksGroupKind::Today as i32
+                let wrong = group.kind != wire::AgendaTaskGroupKind::Today as i32
                     || row.due_day != board.today
                     || !row.due_time.is_empty()
                     || row.days_from_today != Some(0)
@@ -392,7 +395,7 @@ fn a_repeating_task_due_by_date_is_on_today_at_every_hour_of_the_devices_day() {
 fn the_round_trip_specs_daily_task_is_on_today_at_the_hours_it_failed() {
     for now in ["2026-10-08T03:25:00.000Z", "2026-10-08T03:38:00.000Z"] {
         let scratch = Scratch::founded_at(now);
-        let before = scratch.board(wire::TasksView::Today);
+        let before = scratch.board(wire::AgendaTaskView::Today);
         let due = {
             use centraid_vault::time::zone::{add_wall_days, parse_wall_iso, wall_iso};
             let today = parse_wall_iso(&before.today).expect("a date");
@@ -401,7 +404,7 @@ fn the_round_trip_specs_daily_task_is_on_today_at_the_hours_it_failed() {
         let daily = scratch.add(serde_json::json!({
             "title": "Tasks spec daily", "due": due, "rule": "FREQ=DAILY",
         }));
-        let board = scratch.board(wire::TasksView::Today);
+        let board = scratch.board(wire::AgendaTaskView::Today);
         let row = board
             .groups
             .iter()
@@ -434,7 +437,7 @@ fn completing_a_date_only_occurrence_leaves_the_successor_on_the_calendar() {
     assert_eq!(done["next_due"], serde_json::json!("2026-10-04"));
     let successor = done["next_id"].as_str().expect("a successor");
 
-    let board = scratch.board(wire::TasksView::Today);
+    let board = scratch.board(wire::AgendaTaskView::Today);
     assert_eq!(board.today, "2026-10-07", "23:25 on the 7th in New York");
     let row = board
         .groups
@@ -501,15 +504,18 @@ fn the_detail_answers_the_family_and_the_filing() {
     assert_eq!(unknown.today, "2099-06-01");
 
     // THE PROJECT PLACE answers every section, and the projects list counts.
-    let board = scratch.board_for(wire::TasksView::Project, &project);
+    let board = scratch.board_for(wire::AgendaTaskView::Project, &project);
     assert_eq!(board.groups.len(), 1);
-    assert_eq!(board.groups[0].kind, wire::TasksGroupKind::Section as i32);
+    assert_eq!(
+        board.groups[0].kind,
+        wire::AgendaTaskGroupKind::Section as i32
+    );
     assert_eq!(
         board.groups[0].section_id.as_deref(),
         Some(section.as_str())
     );
-    let A::TasksProjects(projects) = scratch
-        .ask(Q::TasksProjects(wire::TasksProjectsRequest {
+    let A::AgendaTaskProjects(projects) = scratch
+        .ask(Q::AgendaTaskProjects(wire::AgendaTaskProjectsRequest {
             tz: TZ.to_owned(),
         }))
         .expect("projects answer")
@@ -521,10 +527,10 @@ fn the_detail_answers_the_family_and_the_filing() {
     assert_eq!(projects.inbox_count, 0);
     // A PROJECT PLACE NAMING NO PROJECT is the request's fault.
     let refused = scratch
-        .ask(Q::TasksBoard(wire::TasksBoardRequest {
+        .ask(Q::AgendaTaskBoard(wire::AgendaTaskBoardRequest {
             tz: TZ.to_owned(),
-            view: wire::TasksView::Project as i32,
-            ..wire::TasksBoardRequest::default()
+            view: wire::AgendaTaskView::Project as i32,
+            ..wire::AgendaTaskBoardRequest::default()
         }))
         .expect_err("no project is refused");
     assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
@@ -543,13 +549,13 @@ fn search_answers_ranked_live_tasks() {
     scratch.titled("Dentist", None);
     scratch.run("entity.trash", serde_json::json!({ "id": trashed }));
     let search = |limit: u32| {
-        scratch.ask(Q::TasksSearch(wire::TasksSearchRequest {
+        scratch.ask(Q::AgendaTaskSearch(wire::AgendaTaskSearchRequest {
             term: "cabin".to_owned(),
             limit,
             tz: TZ.to_owned(),
         }))
     };
-    let A::TasksSearch(found) = search(10).expect("search answers") else {
+    let A::AgendaTaskSearch(found) = search(10).expect("search answers") else {
         panic!("search answered as something else");
     };
     let ids: Vec<&str> = found
@@ -582,8 +588,8 @@ fn a_typo_finds_the_task_and_says_what_it_searched() {
     }));
     scratch.titled("Dentist", None);
     let search = |term: &str| {
-        let A::TasksSearch(found) = scratch
-            .ask(Q::TasksSearch(wire::TasksSearchRequest {
+        let A::AgendaTaskSearch(found) = scratch
+            .ask(Q::AgendaTaskSearch(wire::AgendaTaskSearchRequest {
                 term: term.to_owned(),
                 limit: 10,
                 tz: TZ.to_owned(),
@@ -640,18 +646,18 @@ fn catch_up_names_a_long_absence() {
 fn an_empty_vault_answers_every_place_empty() {
     let scratch = Scratch::founded();
     for view in [
-        wire::TasksView::Unspecified,
-        wire::TasksView::Today,
-        wire::TasksView::Upcoming,
-        wire::TasksView::Inbox,
-        wire::TasksView::Anytime,
-        wire::TasksView::All,
-        wire::TasksView::Logbook,
-        wire::TasksView::Reminders,
+        wire::AgendaTaskView::Unspecified,
+        wire::AgendaTaskView::Today,
+        wire::AgendaTaskView::Upcoming,
+        wire::AgendaTaskView::Inbox,
+        wire::AgendaTaskView::Anytime,
+        wire::AgendaTaskView::All,
+        wire::AgendaTaskView::Logbook,
+        wire::AgendaTaskView::Reminders,
     ] {
         let board = scratch.board(view);
         assert!(board.groups.is_empty(), "{view:?}");
-        assert_eq!(board.counts, Some(wire::TasksCounts::default()));
+        assert_eq!(board.counts, Some(wire::AgendaTaskCounts::default()));
         assert_eq!(board.view, view as i32);
     }
     let piles = scratch.catch_up();
@@ -664,7 +670,7 @@ fn an_empty_vault_answers_every_place_empty() {
 fn an_unknown_zone_is_refused() {
     let scratch = Scratch::founded();
     let refused = scratch
-        .ask(Q::TasksCatchUp(wire::TasksCatchUpRequest {
+        .ask(Q::AgendaTaskCatchUp(wire::AgendaTaskCatchUpRequest {
             tz: "Mars/Olympus_Mons".to_owned(),
         }))
         .expect_err("refused");
@@ -714,8 +720,8 @@ fn a_project_is_found_by_name_beside_the_tasks() {
         .to_owned();
     let task = scratch.titled("Kitchen tiles", None);
     let search = |term: &str| {
-        let A::TasksSearch(found) = scratch
-            .ask(Q::TasksSearch(wire::TasksSearchRequest {
+        let A::AgendaTaskSearch(found) = scratch
+            .ask(Q::AgendaTaskSearch(wire::AgendaTaskSearchRequest {
                 term: term.to_owned(),
                 limit: 10,
                 tz: TZ.to_owned(),
@@ -776,7 +782,7 @@ fn priority_runs_higher_more_urgent_and_subtasks_are_ordered_that_way() {
     let middle = child("Middle", Some(3));
 
     // THE ORDER IS PRIORITY DESC, UNSET LAST (not creation order, not title).
-    let all = scratch.board(wire::TasksView::All);
+    let all = scratch.board(wire::AgendaTaskView::All);
     let family = all
         .groups
         .iter()
@@ -813,8 +819,10 @@ fn the_trash_shelf_lists_what_was_trashed_with_its_days_in_the_request_zone() {
     let child = scratch.add(serde_json::json!({ "title": "Pack the books", "parent_id": parent }));
     scratch.titled("Kept", None);
     let shelf = || {
-        let A::TasksTrash(shelf) = scratch
-            .ask(Q::TasksTrash(wire::TasksTrashRequest { tz: TZ.to_owned() }))
+        let A::AgendaTaskTrash(shelf) = scratch
+            .ask(Q::AgendaTaskTrash(wire::AgendaTaskTrashRequest {
+                tz: TZ.to_owned(),
+            }))
             .expect("the shelf answers")
         else {
             panic!("the shelf answered as something else");

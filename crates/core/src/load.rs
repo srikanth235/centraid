@@ -202,7 +202,7 @@ impl<'a> Params<'a> {
         }
     }
 
-    /// An enum by its proto name (`TASKS_VIEW_TODAY`), by the name after
+    /// An enum by its proto name (`AGENDA_TASK_VIEW_TODAY`), by the name after
     /// `prefix` in any case (`today`), or by its number; absent is 0.
     pub(crate) fn enumeration(
         &mut self,
@@ -351,10 +351,10 @@ fn read(
             vault,
             door,
             now,
-            &wire::TasksBoardRequest {
+            &wire::AgendaTaskBoardRequest {
                 tz,
                 limit: p.limit(0),
-                view: en!(p, "view", "TASKS_VIEW_", wire::TasksView),
+                view: en!(p, "view", "AGENDA_TASK_VIEW_", wire::AgendaTaskView),
                 project_id: p.text("project_id")?,
             },
         )?,
@@ -362,19 +362,25 @@ fn read(
             vault,
             door,
             now,
-            &wire::TasksTaskRequest {
+            &wire::AgendaTaskRequest {
                 task_id: p.text("task_id")?,
                 tz,
             },
         )?,
-        ("agenda", "projects") => {
-            app_query::agenda_task::projects(vault, door, now, &wire::TasksProjectsRequest { tz })?
-        }
-        ("agenda", "catch-up") => {
-            app_query::agenda_task::catch_up(vault, door, now, &wire::TasksCatchUpRequest { tz })?
-        }
+        ("agenda", "projects") => app_query::agenda_task::projects(
+            vault,
+            door,
+            now,
+            &wire::AgendaTaskProjectsRequest { tz },
+        )?,
+        ("agenda", "catch-up") => app_query::agenda_task::catch_up(
+            vault,
+            door,
+            now,
+            &wire::AgendaTaskCatchUpRequest { tz },
+        )?,
         ("agenda", "trash") => {
-            app_query::agenda_task::trash(vault, door, &wire::TasksTrashRequest { tz })?
+            app_query::agenda_task::trash(vault, door, &wire::AgendaTaskTrashRequest { tz })?
         }
 
         ("docs", "drive") => app_query::docs::drive(

@@ -26,8 +26,8 @@ pub const PILE_SITTING: &str = "sitting";
 /// What the page holds of its two reads.
 #[derive(Clone, Debug)]
 struct Answered {
-    catch_up: wire::TasksCatchUp,
-    projects: wire::TasksProjects,
+    catch_up: wire::AgendaTaskCatchUp,
+    projects: wire::AgendaTaskProjects,
 }
 
 #[must_use]
@@ -51,7 +51,7 @@ struct CatchUp {
 }
 
 /// Is this repeating task actually behind?
-fn behind(task: &wire::TasksTask) -> bool {
+fn behind(task: &wire::AgendaTask) -> bool {
     task.missed > 0 || task.overdue
 }
 
@@ -62,7 +62,7 @@ impl CatchUp {
             ctx,
             load::agenda::CatchUp::default(),
             |answer| match answer {
-                Answer::TasksCatchUp(catch_up) => Some(catch_up),
+                Answer::AgendaTaskCatchUp(catch_up) => Some(catch_up),
                 _ => None,
             },
         );
@@ -70,7 +70,7 @@ impl CatchUp {
             ctx,
             load::agenda::Projects::default(),
             |answer| match answer {
-                Answer::TasksProjects(projects) => Some(projects),
+                Answer::AgendaTaskProjects(projects) => Some(projects),
                 _ => None,
             },
         );
@@ -86,7 +86,7 @@ impl CatchUp {
             }
         };
         if let Phase::Ready(answer) = &self.phase {
-            let open: Vec<&wire::TasksTask> = answer
+            let open: Vec<&wire::AgendaTask> = answer
                 .catch_up
                 .dated
                 .iter()
@@ -100,7 +100,7 @@ impl CatchUp {
     }
 
     /// A pile's tasks, as the screen draws them.
-    fn pile(&self, key: &str) -> Vec<&wire::TasksTask> {
+    fn pile(&self, key: &str) -> Vec<&wire::AgendaTask> {
         let Some(answer) = self.phase.data() else {
             return Vec::new();
         };
@@ -117,7 +117,7 @@ impl CatchUp {
         }
     }
 
-    fn find(&self, id: &str) -> Option<wire::TasksTask> {
+    fn find(&self, id: &str) -> Option<wire::AgendaTask> {
         [PILE_DATED, PILE_REPEATING, PILE_SITTING]
             .iter()
             .flat_map(|key| self.pile(key))
@@ -191,7 +191,7 @@ impl CatchUp {
         let Some(pile) = self.asking.take() else {
             return;
         };
-        let tasks: Vec<wire::TasksTask> = self.pile(&pile).into_iter().cloned().collect();
+        let tasks: Vec<wire::AgendaTask> = self.pile(&pile).into_iter().cloned().collect();
         let mut done = 0_u64;
         self.ops.status = None;
         for task in &tasks {

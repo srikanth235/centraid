@@ -88,10 +88,13 @@ pub fn fold(locale: Locale, held: &Held, limit: u32) -> Option<wire::AgendaHomeD
 }
 
 /// Named areas A→Z, then the projects in none.
-fn project_groups(locale: Locale, answer: &wire::TasksProjects) -> Vec<wire::TodoProjectGroup> {
-    let mut sorted: Vec<&wire::TasksProject> = answer.projects.iter().collect();
+fn project_groups(
+    locale: Locale,
+    answer: &wire::AgendaTaskProjects,
+) -> Vec<wire::TodoProjectGroup> {
+    let mut sorted: Vec<&wire::AgendaTaskProject> = answer.projects.iter().collect();
     sorted.sort_by(|a, b| (a.sort_order, &a.name).cmp(&(b.sort_order, &b.name)));
-    let mut named: BTreeMap<&str, Vec<&wire::TasksProject>> = BTreeMap::new();
+    let mut named: BTreeMap<&str, Vec<&wire::AgendaTaskProject>> = BTreeMap::new();
     let mut unnamed = Vec::new();
     for project in sorted {
         match project
@@ -103,8 +106,8 @@ fn project_groups(locale: Locale, answer: &wire::TasksProjects) -> Vec<wire::Tod
             None => unnamed.push(project),
         }
     }
-    let group =
-        |key: String, title: String, projects: Vec<&wire::TasksProject>| wire::TodoProjectGroup {
+    let group = |key: String, title: String, projects: Vec<&wire::AgendaTaskProject>| {
+        wire::TodoProjectGroup {
             key,
             title,
             rows: projects
@@ -124,7 +127,8 @@ fn project_groups(locale: Locale, answer: &wire::TasksProjects) -> Vec<wire::Tod
                     }
                 })
                 .collect(),
-        };
+        }
+    };
     let mut out: Vec<wire::TodoProjectGroup> = named
         .into_iter()
         .map(|(area, projects)| group(format!("area|{area}"), area.to_owned(), projects))
@@ -146,7 +150,7 @@ pub fn file_choices(locale: Locale, held: &Held, task_id: &str) -> Vec<wire::Tod
         return Vec::new();
     };
     let (projects, sections) = held.projects_of();
-    let mut projects: Vec<&wire::TasksProject> = projects.iter().collect();
+    let mut projects: Vec<&wire::AgendaTaskProject> = projects.iter().collect();
     projects.sort_by(|a, b| (a.sort_order, &a.name).cmp(&(b.sort_order, &b.name)));
     let mut choices = vec![wire::TodoChoice {
         key: rows::FILE_INBOX.to_owned(),
@@ -166,7 +170,7 @@ pub fn file_choices(locale: Locale, held: &Held, task_id: &str) -> Vec<wire::Tod
             icon_key: "Folder".to_owned(),
             ..wire::TodoChoice::default()
         });
-        let mut own: Vec<&wire::TasksSection> = sections
+        let mut own: Vec<&wire::AgendaTaskSection> = sections
             .iter()
             .filter(|section| section.project_id == project.project_id)
             .collect();
@@ -222,24 +226,24 @@ mod tests {
 
     use super::*;
 
-    fn board(open: u32, closed: u32) -> wire::TasksBoard {
-        wire::TasksBoard {
+    fn board(open: u32, closed: u32) -> wire::AgendaTaskBoard {
+        wire::AgendaTaskBoard {
             today: "2026-06-15".to_owned(),
-            counts: Some(wire::TasksCounts {
+            counts: Some(wire::AgendaTaskCounts {
                 open,
                 closed,
-                ..wire::TasksCounts::default()
+                ..wire::AgendaTaskCounts::default()
             }),
-            ..wire::TasksBoard::default()
+            ..wire::AgendaTaskBoard::default()
         }
     }
 
-    fn held(board: wire::TasksBoard, projects: Vec<wire::TasksProject>) -> Held {
+    fn held(board: wire::AgendaTaskBoard, projects: Vec<wire::AgendaTaskProject>) -> Held {
         Held {
             inbox: Some(board),
-            projects: Some(wire::TasksProjects {
+            projects: Some(wire::AgendaTaskProjects {
                 projects,
-                ..wire::TasksProjects::default()
+                ..wire::AgendaTaskProjects::default()
             }),
             ..Held::default()
         }
@@ -279,15 +283,16 @@ mod tests {
 
     #[test]
     fn a_project_alone_is_something_and_the_projects_are_ordered_within_their_area() {
-        let project =
-            |id: &str, name: &str, area: Option<&str>, order: i64, open: u32| wire::TasksProject {
+        let project = |id: &str, name: &str, area: Option<&str>, order: i64, open: u32| {
+            wire::AgendaTaskProject {
                 project_id: id.to_owned(),
                 name: name.to_owned(),
                 area: area.map(str::to_owned),
                 sort_order: order,
                 open_count: open,
-                ..wire::TasksProject::default()
-            };
+                ..wire::AgendaTaskProject::default()
+            }
+        };
         let held = held(
             board(0, 0),
             vec![
@@ -358,17 +363,17 @@ mod tests {
     fn a_filing_key_names_its_place_or_nothing() {
         let mut held = held(
             board(1, 0),
-            vec![wire::TasksProject {
+            vec![wire::AgendaTaskProject {
                 project_id: "p1".to_owned(),
                 name: "Garden".to_owned(),
-                ..wire::TasksProject::default()
+                ..wire::AgendaTaskProject::default()
             }],
         );
-        held.projects.as_mut().unwrap().sections = vec![wire::TasksSection {
+        held.projects.as_mut().unwrap().sections = vec![wire::AgendaTaskSection {
             section_id: "s1".to_owned(),
             project_id: "p1".to_owned(),
             name: "Beds".to_owned(),
-            ..wire::TasksSection::default()
+            ..wire::AgendaTaskSection::default()
         }];
         let en = Locale::En;
         assert_eq!(

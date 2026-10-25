@@ -64,7 +64,7 @@ fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Denied {
 /// `agenda.trash`: the trashed tasks, most recently trashed first.
 fn trashed(ctx: &Ctx) -> Reading<Vec<TrashItem>> {
     let reading = read::read(ctx, load::agenda::Trash::default(), |answer| match answer {
-        Answer::TasksTrash(trash) => Some(trash),
+        Answer::AgendaTaskTrash(trash) => Some(trash),
         _ => None,
     });
     match reading {

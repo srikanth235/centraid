@@ -61,7 +61,7 @@ impl Ops {
     }
 
     /// The box. Open work completes; closed work (the Logbook) reopens.
-    pub fn check(&mut self, ctx: &Ctx, task: &wire::TasksTask) {
+    pub fn check(&mut self, ctx: &Ctx, task: &wire::AgendaTask) {
         let locale = ctx.locale();
         let open = rows::is_open(task);
         let key = kit_act::key(
@@ -194,7 +194,7 @@ impl Ops {
     pub fn file(
         &mut self,
         ctx: &Ctx,
-        task: &wire::TasksTask,
+        task: &wire::AgendaTask,
         project_id: Option<&str>,
         section_id: Option<&str>,
         label: &str,
@@ -260,7 +260,7 @@ impl Ops {
 
     /// A NEW ANSWER: a repeating task completed here names where its next
     /// occurrence landed, when the answer carries it.
-    pub fn answered(&mut self, locale: Locale, open: &[&wire::TasksTask], today: &str) {
+    pub fn answered(&mut self, locale: Locale, open: &[&wire::AgendaTask], today: &str) {
         let Some(done) = &self.next_of else {
             return;
         };

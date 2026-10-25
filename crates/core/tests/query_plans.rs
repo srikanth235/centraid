@@ -58,12 +58,12 @@ fn covers(query: &Q) -> &'static str {
         Q::AgendaParties(_) => "agenda.parties",
         Q::AgendaSearch(_) => "agenda.search",
         Q::AgendaEvent(_) => "agenda.event",
-        Q::TasksBoard(_) => "tasks.board",
-        Q::TasksTask(_) => "tasks.task",
-        Q::TasksProjects(_) => "tasks.projects",
-        Q::TasksSearch(_) => "tasks.search",
-        Q::TasksCatchUp(_) => "tasks.catch_up",
-        Q::TasksTrash(_) => "tasks.trash",
+        Q::AgendaTaskBoard(_) => "tasks.board",
+        Q::AgendaTask(_) => "tasks.task",
+        Q::AgendaTaskProjects(_) => "tasks.projects",
+        Q::AgendaTaskSearch(_) => "tasks.search",
+        Q::AgendaTaskCatchUp(_) => "tasks.catch_up",
+        Q::AgendaTaskTrash(_) => "tasks.trash",
         Q::DocsDrive(_) => "docs.drive",
         Q::DocsSearch(_) => "docs.search",
         Q::DocsDocument(_) => "docs.document",
@@ -150,18 +150,18 @@ fn requests(word: &str) -> Vec<Q> {
             tz: tz(),
             ..Default::default()
         }),
-        Q::TasksTask(wire::TasksTaskRequest {
+        Q::AgendaTask(wire::AgendaTaskRequest {
             task_id: some("task"),
             tz: tz(),
         }),
-        Q::TasksProjects(wire::TasksProjectsRequest { tz: tz() }),
-        Q::TasksSearch(wire::TasksSearchRequest {
+        Q::AgendaTaskProjects(wire::AgendaTaskProjectsRequest { tz: tz() }),
+        Q::AgendaTaskSearch(wire::AgendaTaskSearchRequest {
             term: word.clone(),
             limit: 50,
             tz: tz(),
         }),
-        Q::TasksCatchUp(wire::TasksCatchUpRequest { tz: tz() }),
-        Q::TasksTrash(wire::TasksTrashRequest { tz: tz() }),
+        Q::AgendaTaskCatchUp(wire::AgendaTaskCatchUpRequest { tz: tz() }),
+        Q::AgendaTaskTrash(wire::AgendaTaskTrashRequest { tz: tz() }),
         Q::DocsSearch(wire::DocsSearchRequest {
             term: word.clone(),
             limit: 50,
@@ -361,15 +361,15 @@ fn requests(word: &str) -> Vec<Q> {
         }
     }
     for view in [
-        wire::TasksView::Today,
-        wire::TasksView::Upcoming,
-        wire::TasksView::Inbox,
-        wire::TasksView::Anytime,
-        wire::TasksView::All,
-        wire::TasksView::Logbook,
+        wire::AgendaTaskView::Today,
+        wire::AgendaTaskView::Upcoming,
+        wire::AgendaTaskView::Inbox,
+        wire::AgendaTaskView::Anytime,
+        wire::AgendaTaskView::All,
+        wire::AgendaTaskView::Logbook,
     ] {
         for project in [String::new(), "project-000001".to_owned()] {
-            asked.push(Q::TasksBoard(wire::TasksBoardRequest {
+            asked.push(Q::AgendaTaskBoard(wire::AgendaTaskBoardRequest {
                 tz: tz(),
                 limit: 100,
                 view: view as i32,

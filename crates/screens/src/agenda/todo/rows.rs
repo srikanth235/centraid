@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 
 use centraid_api_proto::core_v1 as wire;
-use wire::TasksGroupKind as Kind;
+use wire::AgendaTaskGroupKind as Kind;
 
 use crate::agenda::routes;
 use crate::kit::civil;
@@ -40,8 +40,8 @@ const META_SEPARATOR: &str = " · ";
 #[derive(Clone, Debug, Default)]
 pub struct Context<'a> {
     pub today: &'a str,
-    pub projects: HashMap<&'a str, &'a wire::TasksProject>,
-    pub sections: HashMap<&'a str, &'a wire::TasksSection>,
+    pub projects: HashMap<&'a str, &'a wire::AgendaTaskProject>,
+    pub sections: HashMap<&'a str, &'a wire::AgendaTaskSection>,
     /// The group head already names the day, so the row says the time only.
     pub day_in_head: bool,
     /// Name the project in the meta line (not inside the project itself).
@@ -53,8 +53,8 @@ impl<'a> Context<'a> {
     #[must_use]
     pub fn of(
         today: &'a str,
-        projects: &'a [wire::TasksProject],
-        sections: &'a [wire::TasksSection],
+        projects: &'a [wire::AgendaTaskProject],
+        sections: &'a [wire::AgendaTaskSection],
     ) -> Self {
         Self {
             today,
@@ -73,7 +73,7 @@ impl<'a> Context<'a> {
 }
 
 #[must_use]
-pub fn is_open(task: &wire::TasksTask) -> bool {
+pub fn is_open(task: &wire::AgendaTask) -> bool {
     task.status != STATUS_DONE && task.status != STATUS_CANCELLED
 }
 
@@ -101,7 +101,7 @@ pub fn check_label(locale: Locale, title: &str, open: bool) -> String {
 
 /// The row for `task`; `subtask` rows carry no children of their own.
 #[must_use]
-pub fn row(locale: Locale, task: &wire::TasksTask, ctx: &Context, subtask: bool) -> wire::TodoRow {
+pub fn row(locale: Locale, task: &wire::AgendaTask, ctx: &Context, subtask: bool) -> wire::TodoRow {
     let title = if task.title.trim().is_empty() {
         words::untitled(locale)
     } else {
@@ -150,7 +150,7 @@ pub fn row(locale: Locale, task: &wire::TasksTask, ctx: &Context, subtask: bool)
 /// The due, in words. Overdue says how long ago — a fact, in the attention
 /// tone, never a scold. A group head that names the day leaves the time.
 #[must_use]
-pub fn due_label(locale: Locale, task: &wire::TasksTask, ctx: &Context) -> String {
+pub fn due_label(locale: Locale, task: &wire::AgendaTask, ctx: &Context) -> String {
     if task.due_day.is_empty() {
         return String::new();
     }
@@ -180,7 +180,7 @@ pub fn due_label(locale: Locale, task: &wire::TasksTask, ctx: &Context) -> Strin
 /// The meta line: project · repeats · missed · reminder · effort · tags ·
 /// family · age · logbook day. Each part only when it says something.
 #[must_use]
-pub fn meta(locale: Locale, task: &wire::TasksTask, ctx: &Context) -> String {
+pub fn meta(locale: Locale, task: &wire::AgendaTask, ctx: &Context) -> String {
     let mut parts: Vec<String> = Vec::new();
     let project = task
         .project_id
@@ -249,7 +249,7 @@ pub fn meta(locale: Locale, task: &wire::TasksTask, ctx: &Context) -> String {
 /// core supplies one (`remind_at_local`); a date has no moment to count back
 /// from, so it says "on the day" and never invents 09:00.
 #[must_use]
-pub fn reminder_part(locale: Locale, task: &wire::TasksTask, today: &str) -> Option<String> {
+pub fn reminder_part(locale: Locale, task: &wire::AgendaTask, today: &str) -> Option<String> {
     if !task.remind_at_local.is_empty() {
         let day = civil::relative_day(
             locale,
@@ -304,7 +304,7 @@ pub fn priority_label(locale: Locale, priority: i64) -> String {
 /// A project's hue as the theme's colour role (`cTeal`): the stored hue when it
 /// is a wheel hue, else the id's own.
 #[must_use]
-pub fn hue_of(project_id: &str, project: Option<&wire::TasksProject>) -> String {
+pub fn hue_of(project_id: &str, project: Option<&wire::AgendaTaskProject>) -> String {
     let key = centraid_design::party_hue_key(project_id, project.and_then(|p| p.color.as_deref()))
         .unwrap_or_else(|| centraid_design::identity_hue_key(project_id));
     hue_role(key)
@@ -348,7 +348,7 @@ pub fn count(locale: Locale, n: usize) -> String {
 #[must_use]
 pub fn groups(
     locale: Locale,
-    groups: &[wire::TasksGroup],
+    groups: &[wire::AgendaTaskGroup],
     ctx: &Context,
 ) -> Vec<wire::TodoRowGroup> {
     let mut last_month = ctx.today.get(..7).unwrap_or_default().to_owned();
@@ -400,7 +400,12 @@ pub fn groups(
 }
 
 #[must_use]
-pub fn title_of(locale: Locale, group: &wire::TasksGroup, kind: Kind, ctx: &Context) -> String {
+pub fn title_of(
+    locale: Locale,
+    group: &wire::AgendaTaskGroup,
+    kind: Kind,
+    ctx: &Context,
+) -> String {
     match kind {
         Kind::Overdue => words::group_overdue(locale),
         Kind::Today => words::group_today(locale),
@@ -426,7 +431,7 @@ pub fn title_of(locale: Locale, group: &wire::TasksGroup, kind: Kind, ctx: &Cont
     }
 }
 
-fn verb_of(locale: Locale, group: &wire::TasksGroup, kind: Kind) -> (String, String) {
+fn verb_of(locale: Locale, group: &wire::AgendaTaskGroup, kind: Kind) -> (String, String) {
     match kind {
         Kind::Overdue => (words::catch_up(locale), VERB_CATCH_UP.to_owned()),
         Kind::Section => (
@@ -449,7 +454,7 @@ pub fn root_count(groups: &[wire::TodoRowGroup]) -> usize {
 
 /// A group's roots and their children.
 #[must_use]
-pub fn flatten(group: &wire::TasksGroup) -> Vec<&wire::TasksTask> {
+pub fn flatten(group: &wire::AgendaTaskGroup) -> Vec<&wire::AgendaTask> {
     group
         .tasks
         .iter()
