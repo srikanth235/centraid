@@ -140,6 +140,47 @@ fn the_rule_the_member_chose_is_kept_by_the_shell_and_comes_back() {
 }
 
 #[test]
+fn choosing_a_rule_tells_the_pass_service_in_the_same_call_that_the_write_is_answered() {
+    let (mut driver, mut shell, instance) = open();
+    driver.serve(&mut shell);
+    let windows = |driver: &Driver| {
+        driver
+            .effects
+            .iter()
+            .filter_map(
+                |request| match request.effect.as_ref().and_then(|e| e.kind.as_ref()) {
+                    Some(wire::effect::Kind::ScheduleWindows(schedule)) => Some(schedule.clone()),
+                    _ => None,
+                },
+            )
+            .last()
+    };
+    let before = windows(&driver).map(|schedule| schedule.windows.len());
+    driver.effects.retain(|request| {
+        !matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::ScheduleWindows(_))
+        )
+    });
+    driver.send(
+        instance,
+        E::BackupHome(wire::BackupHomeEvent {
+            kind: Some(wire::backup_home_event::Kind::RuleChosen(
+                wire::backup_home_event::RuleChosen {
+                    stored: "manual".to_owned(),
+                },
+            )),
+        }),
+    );
+    driver.serve(&mut shell);
+    // NO ASK FROM THE SHELL: the screen's own write is what the service hears,
+    // and it asks the OS for its windows again under the new rule.
+    let schedule = windows(&driver)
+        .unwrap_or_else(|| panic!("the service asks for the windows again (before: {before:?})"));
+    assert_eq!(schedule.windows[0].link, wire::WindowLink::Unmetered as i32);
+}
+
+#[test]
 fn a_pushed_backup_page_pops_and_its_timers_die_with_it() {
     let (mut driver, mut shell, instance) = open();
     driver.serve(&mut shell);
