@@ -17,7 +17,7 @@
 use centraid_api_proto::core_v1 as wire;
 use wire::pair_laptop_state::Phase;
 
-use super::door::{self, Refusal, Verdict};
+use super::door::{self, Answer, Refusal, Verdict};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, pairing as words, shared};
 
@@ -35,14 +35,6 @@ pub const ANNOUNCE_REKEY: &str = "pair.rekey";
 #[must_use]
 pub fn build(_route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Laptop::default()))
-}
-
-/// What a pairing came back as, kept for the view.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct Answer {
-    safety_number: String,
-    label: String,
-    address: String,
 }
 
 /// The pairing code's secret is spent on first use, and the code is still never
@@ -392,14 +384,4 @@ fn paired_line(locale: Locale, answer: &Answer) -> String {
         &words::paired_line(locale),
         &[("where", &place), ("who", &who)],
     )
-}
-
-impl From<door::PairedAnswer> for Answer {
-    fn from(answer: door::PairedAnswer) -> Self {
-        Self {
-            safety_number: answer.safety_number,
-            label: answer.label,
-            address: answer.address,
-        }
-    }
 }
