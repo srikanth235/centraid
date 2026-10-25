@@ -5,8 +5,12 @@
 //! It is a service (`Runtime::with_services`) because the scheduler must hear
 //! every broadcast whether or not any page is open. Every effect it asks for is
 //! answered to it, and it tells its effects apart by what they answer
-//! (`PassNoted`, `WindowsScheduled`, `UploadsState`, `LibraryStreamed`; a bare
-//! `EffectDone` is the camera-roll walk).
+//! (`PassNoted`, `WindowsScheduled`, `UploadsState`).
+//!
+//! **The camera roll is not the shell's to relay**: the walk and the bytes the
+//! core asked for again are posted to `imports.camera_roll` by name
+//! (`Ctx::post`), and that service reports back as `RollReported` when the work
+//! ended. The shell performs only that service's platform effects.
 //!
 //! **A door that waits on a gateway is never called from `update`**: the runtime
 //! lock is held across `update`, and a pass takes minutes. A pass, a probe, a
@@ -34,6 +38,24 @@ use crate::strings::{backup, backup_home};
 /// (`centraid_core` `phone::backup_reads::TABLE`).
 const LEDGER_TABLE: &str = "backup";
 
+/// What the core asked for again, as the roll names it: the hash in hex, the
+/// form the stage door's answer carries.
+fn needed(need: &wire::NeedBytes) -> wire::NeededBytes {
+    use std::fmt::Write as _;
+    wire::NeededBytes {
+        os_ref: need.os_ref.clone(),
+        media_type: need.media_type.clone(),
+        size: need.size,
+        content_hash: need
+            .content_hash
+            .iter()
+            .fold(String::new(), |mut hex, byte| {
+                let _ = write!(hex, "{byte:02x}");
+                hex
+            }),
+    }
+}
+
 /// The route name of the service.
 pub const NAME: &str = "passes.conductor";
 
@@ -58,11 +80,9 @@ pub fn build(
 /// the oldest outstanding one of a compatible kind.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind {
-    Walk,
     Schedule,
     Noted,
     Count,
-    Stream,
     Load,
 }
 
@@ -109,18 +129,31 @@ impl Service {
         self.outstanding.remove(at)
     }
 
+    /// Hand `kind` to the camera-roll service, for `vault`.
+    fn roll(ctx: &Ctx, vault: String, kind: wire::imports_camera_roll_event::Kind) {
+        ctx.post(
+            crate::imports::CAMERA_ROLL,
+            wire::ScreenEvent {
+                kind: Some(E::ImportsCameraRoll(wire::ImportsCameraRollEvent {
+                    vault_id: vault,
+                    kind: Some(kind),
+                })),
+            },
+        );
+    }
+
     fn perform(&mut self, actions: Vec<Action>, ctx: &Ctx, out: &mut Vec<wire::Effect>) {
         let rule = Rules::read(&self.secrets).rule;
         for action in actions {
             match action {
-                Action::Walk => self.effect(
-                    Kind::Walk,
-                    wire::Effect {
-                        kind: Some(wire::effect::Kind::CameraRoll(wire::CameraRoll {
-                            action: wire::camera_roll::Action::ImportNow as i32,
-                        })),
-                    },
-                    out,
+                Action::Walk => Self::roll(
+                    ctx,
+                    ctx.vaults()
+                        .and_then(|vaults| vaults.foreground_id())
+                        .unwrap_or_default(),
+                    wire::imports_camera_roll_event::Kind::Walk(
+                        wire::imports_camera_roll_event::Walk {},
+                    ),
                 ),
                 Action::Drain { vault, request } => {
                     self.conductor.record_pass(&vault, &request);
@@ -131,17 +164,14 @@ impl Service {
                         VaultRequest::Drain(request),
                     );
                 }
-                Action::Stream { vault, needs } => self.effect(
-                    Kind::Stream,
-                    wire::Effect {
-                        kind: Some(wire::effect::Kind::StreamFromLibrary(
-                            wire::StreamFromLibrary {
-                                vault_id: vault,
-                                needs,
-                            },
-                        )),
-                    },
-                    out,
+                Action::Stream { vault, needs } => Self::roll(
+                    ctx,
+                    vault,
+                    wire::imports_camera_roll_event::Kind::BytesNeeded(
+                        wire::imports_camera_roll_event::BytesNeeded {
+                            needs: needs.iter().map(needed).collect(),
+                        },
+                    ),
                 ),
                 Action::Reconcile { vault } => self.call(
                     ctx,
@@ -262,6 +292,12 @@ impl Service {
             E::DataChanged(_) => self.conductor.commit_landed(),
             E::TimerFired(fired) => self.conductor.timer(&fired.timer),
             E::Signalled(_) => self.asked(),
+            E::RollReported(report) => match report.kind {
+                // THE WALK ENDED, OR FAILED, OR HAD NONE TO WALK: the pass runs either way.
+                Some(wire::roll_reported::Kind::Walked(_)) => self.conductor.walked(),
+                Some(wire::roll_reported::Kind::Fed(fed)) => self.conductor.streamed(fed.landed),
+                None => Vec::new(),
+            },
             E::ShellFact(fact) => self.fact(fact),
             _ => Vec::new(),
         };
@@ -350,36 +386,17 @@ impl Service {
                 self.answered(&[Kind::Count]);
                 self.conductor.pending(state.pending)
             }
-            Some(Outcome::LibraryStreamed(streamed)) => {
-                self.answered(&[Kind::Stream]);
-                self.conductor.streamed(streamed.landed)
-            }
-            // THE WALK ENDED, OR THE SHELL HAS NONE TO WALK: the pass runs either way.
-            Some(Outcome::Done(_)) => {
-                if self.answered(&[Kind::Walk]).is_some() {
-                    self.conductor.walked()
-                } else {
-                    Vec::new()
+            Some(Outcome::Failed(_)) => {
+                match self.answered(&[Kind::Schedule, Kind::Noted, Kind::Count, Kind::Load]) {
+                    Some(Kind::Count) => self.conductor.pending(MAX_IN_FLIGHT_FULL),
+                    Some(Kind::Load) => {
+                        self.loading = None;
+                        self.replay(ctx, out);
+                        Vec::new()
+                    }
+                    _ => Vec::new(),
                 }
             }
-            Some(Outcome::Failed(_)) => match self.answered(&[
-                Kind::Walk,
-                Kind::Schedule,
-                Kind::Noted,
-                Kind::Count,
-                Kind::Stream,
-                Kind::Load,
-            ]) {
-                Some(Kind::Walk) => self.conductor.walked(),
-                Some(Kind::Count) => self.conductor.pending(MAX_IN_FLIGHT_FULL),
-                Some(Kind::Stream) => self.conductor.streamed(0),
-                Some(Kind::Load) => {
-                    self.loading = None;
-                    self.replay(ctx, out);
-                    Vec::new()
-                }
-                _ => Vec::new(),
-            },
             _ => Vec::new(),
         };
         self.perform(actions, ctx, out);
@@ -484,7 +501,11 @@ impl Screen for Service {
                     self.handle(other, ctx, &mut out);
                 } else if matches!(
                     other,
-                    E::Lifecycle(_) | E::DataChanged(_) | E::ShellFact(_) | E::Signalled(_)
+                    E::Lifecycle(_)
+                        | E::DataChanged(_)
+                        | E::ShellFact(_)
+                        | E::Signalled(_)
+                        | E::RollReported(_)
                 ) {
                     // A pass reads the member's rule at its start, and the rule
                     // is in the device store the shell has not yet answered.

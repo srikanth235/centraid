@@ -17,7 +17,13 @@ pub struct Shell {
 }
 
 pub fn shell() -> Shell {
-    let mut d = Driver::with_runtime(imports::runtime());
+    shell_over(imports::runtime())
+}
+
+/// The same shell over a runtime of the test's own (the imports plus a stand-in for a screen
+/// that listens to them).
+pub fn shell_over(runtime: centraid_screens::Runtime) -> Shell {
+    let mut d = Driver::with_runtime(runtime);
     d.start();
     let tabs = d.navigation.clone().expect("navigation").tabs;
     let at = |n: usize| tabs[n].entries[0].instance;

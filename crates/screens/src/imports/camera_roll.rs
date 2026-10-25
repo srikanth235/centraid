@@ -335,20 +335,38 @@ impl Roll {
 
     /// The job is over, however it ended: what queued behind it goes.
     fn end(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        let _ = ctx;
         self.wait = Wait::Nothing;
         if let Some(Job::Walk(walk)) = self.job.take() {
             self.imported_total += walk.imported;
+            // THE PASS WAITS ON THE ROLL, so a walk that ends tells it however it ended (a
+            // denied grant, a refused effect, the end of the roll). A walk queued behind this
+            // one reports at its own end: the pass asked for the roll as it is now.
+            if !self.walk_queued {
+                Self::report(
+                    ctx,
+                    wire::roll_reported::Kind::Walked(wire::roll_reported::WalkEnded {}),
+                );
+            }
         }
         if !self.needs_queued.is_empty() {
             let needs = std::mem::take(&mut self.needs_queued);
-            return self.feed(needs);
+            return self.feed(ctx, needs);
         }
         if self.walk_queued {
             self.walk_queued = false;
             return self.trigger();
         }
         Vec::new()
+    }
+
+    /// Tell the pass service the work it asked of this one has ended.
+    fn report(ctx: &Ctx, kind: wire::roll_reported::Kind) {
+        ctx.post(
+            crate::passes::service::NAME,
+            wire::ScreenEvent {
+                kind: Some(E::RollReported(wire::RollReported { kind: Some(kind) })),
+            },
+        );
     }
 
     fn walk(&mut self) -> Option<&mut Walk> {
@@ -775,7 +793,7 @@ impl Roll {
 
     // ---- the bytes the core asked for again ----
 
-    fn feed(&mut self, needs: Vec<wire::NeededBytes>) -> Vec<wire::Effect> {
+    fn feed(&mut self, ctx: &Ctx, needs: Vec<wire::NeededBytes>) -> Vec<wire::Effect> {
         if self.job.is_some() {
             self.needs_queued.extend(needs);
             return Vec::new();
@@ -785,10 +803,10 @@ impl Roll {
             current: None,
             landed: 0,
         }));
-        self.feed_next()
+        self.feed_next(ctx)
     }
 
-    fn feed_next(&mut self) -> Vec<wire::Effect> {
+    fn feed_next(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         let Some(Job::Feed(feed)) = self.job.as_mut() else {
             return Vec::new();
         };
@@ -805,6 +823,10 @@ impl Roll {
         self.wait = Wait::Nothing;
         self.fed_last_round = landed;
         self.fed_rounds += 1;
+        Self::report(
+            ctx,
+            wire::roll_reported::Kind::Fed(wire::roll_reported::BytesFed { landed }),
+        );
         // A walk that queued behind the round goes now.
         if self.walk_queued {
             self.walk_queued = false;
@@ -826,7 +848,7 @@ impl Roll {
                 feed.landed += 1;
             }
         }
-        self.feed_next()
+        self.feed_next(ctx)
     }
 }
 
@@ -867,7 +889,7 @@ impl Screen for Roll {
                     // A NEW CAPTURE WHILE THE APP IS ON SCREEN: a nudge to run the ordinary pass, never
                     // a second way to learn what is new. The cursor is the durable answer.
                     Some(C::LibraryChanged(_) | C::Walk(_)) => self.trigger(),
-                    Some(C::BytesNeeded(needed)) => self.feed(needed.needs),
+                    Some(C::BytesNeeded(needed)) => self.feed(ctx, needed.needs),
                     None => Vec::new(),
                 }
             }

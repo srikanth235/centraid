@@ -199,14 +199,20 @@ message UploadsState {
   uint32 pending = 1;
 }
 
-// Stream the items the core asked for (`DrainResponse.need_bytes`) from the OS
-// photo library into that vault's core through the stage door, then answer how
-// many landed.
-message StreamFromLibrary {
-  string vault_id = 1;
-  repeated NeedBytes needs = 2;
-}
+// The camera-roll service's report to the pass service, posted by name when the
+// work the pass asked of it ended (`ImportsCameraRollEvent.walk`,
+// `.bytes_needed`). RUNTIME-ORIGINATED: no shell sends or draws it.
+message RollReported {
+  oneof kind {
+    // The walk ended, or failed, or had nothing to walk: the pass runs either way.
+    WalkEnded walked = 1;
+    // The bytes the core asked for again were offered; `landed` of them are staged.
+    BytesFed fed = 2;
+  }
 
-message LibraryStreamed {
-  uint32 landed = 1;
+  message WalkEnded {}
+
+  message BytesFed {
+    uint32 landed = 1;
+  }
 }

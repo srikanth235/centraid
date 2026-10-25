@@ -4,6 +4,8 @@
 //! the real core where a gateway is not needed, and against hand-built answers
 //! for every stop reason.
 
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
@@ -48,8 +50,43 @@ impl Screen for Probe {
     }
 }
 
-/// The pass service is the first instance the runtime opens.
+/// The camera-roll service's stand-in: it records what the pass service posted
+/// and, when a test says the work ended, reports as the real one does.
+#[derive(Clone, Default)]
+struct RollLog {
+    seen: Arc<Mutex<VecDeque<wire::ImportsCameraRollEvent>>>,
+    reports: Arc<Mutex<VecDeque<wire::roll_reported::Kind>>>,
+}
+
+struct FakeRoll(RollLog);
+
+impl Screen for FakeRoll {
+    fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
+        match event.kind {
+            Some(E::ImportsCameraRoll(asked)) => self.0.seen.lock().unwrap().push_back(asked),
+            Some(E::DataChanged(_)) => {
+                while let Some(kind) = self.0.reports.lock().unwrap().pop_front() {
+                    ctx.post(
+                        passes::service::NAME,
+                        wire::ScreenEvent {
+                            kind: Some(E::RollReported(wire::RollReported { kind: Some(kind) })),
+                        },
+                    );
+                }
+            }
+            _ => {}
+        }
+        Vec::new()
+    }
+
+    fn view(&self, _ctx: &Ctx) -> wire::ViewState {
+        wire::ViewState::default()
+    }
+}
+
+/// The pass service is the first instance the runtime opens, the roll next.
 const SERVICE: u64 = 1;
+const ROLL: u64 = 2;
 
 struct Rig {
     driver: Driver,
@@ -57,6 +94,7 @@ struct Rig {
     secrets: VaultSecrets,
     /// The doors the service asked of the core and nobody has answered, oldest first.
     calls: std::collections::VecDeque<(String, wire::Request)>,
+    roll: RollLog,
 }
 
 impl Rig {
@@ -77,7 +115,12 @@ impl Rig {
         let secrets = VaultSecrets::new();
         let probe_secrets = secrets.clone();
         let quiet_secrets = secrets.clone();
+        let roll = RollLog::default();
+        let fake_roll = roll.clone();
         let registry = passes::registry(&secrets)
+            .with(centraid_screens::imports::CAMERA_ROLL, move |_| {
+                Some(Box::new(FakeRoll(fake_roll.clone())))
+            })
             .with(PROBE, move |_| {
                 Some(Box::new(Probe {
                     conductor: probe_secrets.conductor().clone(),
@@ -94,13 +137,20 @@ impl Rig {
             screen: QUIET.to_owned(),
             args: None,
         };
-        let runtime =
-            Runtime::new(registry, vec![("t".to_owned(), root)]).with_services(passes::services());
+        let runtime = Runtime::new(registry, vec![("t".to_owned(), root)]).with_services({
+            let mut services = passes::services();
+            services.push(wire::Route {
+                screen: centraid_screens::imports::CAMERA_ROLL.to_owned(),
+                args: None,
+            });
+            services
+        });
         Self {
             driver: Driver::with_runtime(runtime),
             shell,
             secrets,
             calls: std::collections::VecDeque::new(),
+            roll,
         }
     }
 
@@ -138,11 +188,61 @@ impl Rig {
         );
     }
 
+    /// Whether the pass service asked the camera-roll service to walk.
+    fn walk_asked(&self) -> bool {
+        self.roll.seen.lock().unwrap().iter().any(|asked| {
+            matches!(
+                asked.kind,
+                Some(wire::imports_camera_roll_event::Kind::Walk(_))
+            )
+        })
+    }
+
+    /// The camera-roll service reports `kind` to the pass service.
+    fn report(&mut self, kind: wire::roll_reported::Kind) {
+        self.roll.reports.lock().unwrap().push_back(kind);
+        self.redraw(ROLL);
+    }
+
+    /// The walk the pass service asked for ended.
     fn walk(&mut self) {
-        self.answer(
-            is_walk,
-            wire::effect_result::Outcome::Done(wire::EffectDone {}),
-        );
+        let mut seen = self.roll.seen.lock().unwrap();
+        let at = seen
+            .iter()
+            .position(|asked| {
+                matches!(
+                    asked.kind,
+                    Some(wire::imports_camera_roll_event::Kind::Walk(_))
+                )
+            })
+            .expect("the roll was asked to walk");
+        seen.remove(at);
+        drop(seen);
+        self.report(wire::roll_reported::Kind::Walked(
+            wire::roll_reported::WalkEnded {},
+        ));
+    }
+
+    /// The bytes the pass service asked the roll to offer again, with the vault.
+    fn bytes_needed(&self) -> Option<(String, Vec<wire::NeededBytes>)> {
+        self.roll
+            .seen
+            .lock()
+            .unwrap()
+            .iter()
+            .find_map(|asked| match &asked.kind {
+                Some(wire::imports_camera_roll_event::Kind::BytesNeeded(needed)) => {
+                    Some((asked.vault_id.clone(), needed.needs.clone()))
+                }
+                _ => None,
+            })
+    }
+
+    /// The roll offered those bytes and `landed` of them are staged.
+    fn fed(&mut self, landed: u32) {
+        self.report(wire::roll_reported::Kind::Fed(
+            wire::roll_reported::BytesFed { landed },
+        ));
     }
 
     /// Pick up the doors asked since last looked.
@@ -251,14 +351,6 @@ impl Rig {
     }
 }
 
-fn is_walk(effect: &wire::Effect) -> bool {
-    matches!(
-        &effect.kind,
-        Some(wire::effect::Kind::CameraRoll(roll))
-            if roll.action == wire::camera_roll::Action::ImportNow as i32
-    )
-}
-
 fn is_schedule(effect: &wire::Effect) -> bool {
     matches!(&effect.kind, Some(wire::effect::Kind::ScheduleWindows(_)))
 }
@@ -317,9 +409,9 @@ fn nothing_runs_until_the_device_store_has_been_read() {
         .call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
             foreground: true,
         }));
-    assert!(!rig.has_call() && !rig.has(is_walk));
+    assert!(!rig.has_call() && !rig.walk_asked());
     rig.driver.serve(&mut rig.shell);
-    assert!(rig.has(is_schedule) && rig.has(is_walk));
+    assert!(rig.has(is_schedule) && rig.walk_asked());
 }
 
 #[test]
@@ -346,7 +438,7 @@ fn the_launch_asks_for_the_windows_walks_the_roll_and_then_passes() {
     );
     assert!(scheduled.windows[1].requires_charging);
     // THE ROLL IS WALKED FIRST; THE PASS WAITS FOR IT.
-    assert!(rig.has(is_walk));
+    assert!(rig.walk_asked());
     assert!(!rig.has_call());
     rig.walk();
     let (drain, vault) = rig.drain();
@@ -545,22 +637,13 @@ fn bytes_only_the_library_holds_are_streamed_in_and_the_pass_runs_again() {
         need_bytes: vec![need.clone()],
         ..empty()
     });
-    let at = rig
-        .position(|e| matches!(&e.kind, Some(wire::effect::Kind::StreamFromLibrary(_))))
-        .expect("the library is asked");
-    let Some(wire::effect::Kind::StreamFromLibrary(stream)) = rig.driver.effects[at]
-        .effect
-        .as_ref()
-        .and_then(|e| e.kind.clone())
-    else {
-        unreachable!()
-    };
-    assert_eq!(stream.vault_id, "");
-    assert_eq!(stream.needs, vec![need]);
-    rig.answer(
-        |e| matches!(&e.kind, Some(wire::effect::Kind::StreamFromLibrary(_))),
-        wire::effect_result::Outcome::LibraryStreamed(wire::LibraryStreamed { landed: 1 }),
-    );
+    // THE ROLL IS ASKED FOR THEM BY NAME, with the hash the way the stage door answers it.
+    let (vault, needs) = rig.bytes_needed().expect("the roll is asked");
+    assert_eq!(vault, "");
+    assert_eq!(needs.len(), 1);
+    assert_eq!((needs[0].os_ref.as_str(), needs[0].size), ("L/1", 9));
+    assert_eq!(needs[0].content_hash.len(), 64);
+    rig.fed(1);
     // THE SECOND ROUND TAKES NO SECOND SNAPSHOT.
     let (drain, _) = rig.drain();
     assert!(!drain.wants_snapshot);
@@ -584,10 +667,8 @@ fn a_library_that_lands_nothing_ends_the_pass_at_once() {
         }],
         ..empty()
     });
-    rig.answer(
-        |e| matches!(&e.kind, Some(wire::effect::Kind::StreamFromLibrary(_))),
-        wire::effect_result::Outcome::LibraryStreamed(wire::LibraryStreamed { landed: 0 }),
-    );
+    assert!(rig.bytes_needed().is_some());
+    rig.fed(0);
     assert!(!rig.has_call());
     assert!(!rig.secrets.conductor().facts().running);
 }
@@ -624,7 +705,7 @@ fn coming_back_is_a_pass_after_the_walk() {
         .call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
             foreground: true,
         }));
-    assert!(rig.has(is_walk));
+    assert!(rig.walk_asked());
     rig.walk();
     let (drain, _) = rig.drain();
     assert!(!drain.wants_snapshot);
@@ -639,7 +720,7 @@ fn a_granted_window_runs_inside_its_budget_and_is_told_whether_the_spool_emptied
         deadline_ms: 540_000,
     }));
     // A WINDOW DOES NOT WALK THE ROLL: it has no time for one.
-    assert!(!rig.has(is_walk));
+    assert!(!rig.walk_asked());
     let (drain, _) = rig.drain();
     assert_eq!(drain.deadline_ms, 540_000);
     rig.answer_drain(wire::DrainResponse {
@@ -716,7 +797,7 @@ fn back_up_now_from_another_screen_walks_asks_and_releases_the_long_run() {
         ("Backing up", "Backup")
     );
     // THE ROLL FIRST, THEN THE ASKED PASS WITH A SNAPSHOT.
-    assert!(rig.has(is_walk));
+    assert!(rig.walk_asked());
     rig.walk();
     let (drain, _) = rig.drain();
     assert!(drain.asked && drain.wants_snapshot);
@@ -832,6 +913,7 @@ fn ios(rig: &mut Rig) {
             locale: "en".to_owned(),
             zone: "UTC".to_owned(),
             platform: "ios".to_owned(),
+            ..Default::default()
         }));
 }
 
@@ -988,13 +1070,13 @@ fn a_repeated_lifecycle_is_not_a_transition() {
             }));
     };
     lifecycle(&mut rig, true);
-    assert!(rig.has(is_walk), "the first foreground is a pass");
+    assert!(rig.walk_asked(), "the first foreground is a pass");
     rig.walk();
     rig.answer_drain(empty());
     rig.take_windows();
     // A SHELL THAT RE-REPORTS THE FOREGROUND buys no walk and no pass.
     lifecycle(&mut rig, true);
-    assert!(!rig.has(is_walk) && !rig.has_call());
+    assert!(!rig.walk_asked() && !rig.has_call());
 }
 
 #[test]
@@ -1038,7 +1120,7 @@ fn a_finished_import_is_a_pass_and_asks_for_a_window_soon() {
     assert_eq!(nudge.windows[0].name, windows::NUDGE);
     assert_eq!(nudge.windows[0].period_minutes, 0);
     // AND THE PASS RUNS NOW, without walking the roll again (an import's own pass would loop).
-    assert!(!rig.has(is_walk));
+    assert!(!rig.walk_asked());
     let (drain, _) = rig.drain();
     assert!(!drain.wants_snapshot && !drain.asked);
 }

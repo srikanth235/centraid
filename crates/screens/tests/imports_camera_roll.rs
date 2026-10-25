@@ -11,7 +11,9 @@ use centraid_screens::imports::camera_roll::{
 };
 use centraid_screens::kit::read;
 use centraid_screens::strings::Locale;
-use imports_support::{Library, Shell, live, photo, resource, serve_library, shell, wifi};
+use imports_support::{
+    Library, Shell, live, photo, resource, serve_library, shell, shell_over, wifi,
+};
 use wire::PhotosMediaPermission as Permission;
 use wire::app_query_response::Answer;
 use wire::imports_camera_roll_event as roll;
@@ -638,6 +640,81 @@ fn the_feed_downloads_from_icloud_only_where_the_rule_lets_it_cross_the_link() {
     );
     serve_library(&mut shell, &mut library);
     assert_eq!(library.asked, vec![("P".to_owned(), false)]);
+}
+
+/// What the pass service hears from the roll: a stand-in registered under its name.
+struct PassEar(std::sync::Arc<std::sync::Mutex<Vec<wire::roll_reported::Kind>>>);
+
+impl centraid_screens::screen::Screen for PassEar {
+    fn update(
+        &mut self,
+        event: wire::ScreenEvent,
+        _ctx: &centraid_screens::screen::Ctx,
+    ) -> Vec<wire::Effect> {
+        if let Some(wire::screen_event::Kind::RollReported(report)) = event.kind {
+            self.0.lock().unwrap().extend(report.kind);
+        }
+        Vec::new()
+    }
+
+    fn view(&self, _ctx: &centraid_screens::screen::Ctx) -> wire::ViewState {
+        wire::ViewState::default()
+    }
+}
+
+fn listening() -> (
+    Shell,
+    std::sync::Arc<std::sync::Mutex<Vec<wire::roll_reported::Kind>>>,
+) {
+    let heard = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let ear = heard.clone();
+    let registry = centraid_screens::imports::registry()
+        .with(centraid_screens::passes::service::NAME, move |_| {
+            Some(Box::new(PassEar(ear.clone())))
+        });
+    let runtime = centraid_screens::Runtime::new(registry, centraid_screens::imports::roots())
+        .with_services(centraid_screens::passes::services());
+    (shell_over(runtime), heard)
+}
+
+#[test]
+fn the_pass_service_is_told_when_a_walk_ends_however_it_ended_and_how_much_a_feed_landed() {
+    use wire::roll_reported::Kind as Reported;
+    // A walk that finds its end.
+    let mut library = Library::new().with(photo("A"), &[("A", STILL)]);
+    let (mut shell, heard) = listening();
+    serve_library(&mut shell, &mut library);
+    walk(&mut shell, &mut library);
+    assert!(matches!(
+        heard.lock().unwrap().as_slice(),
+        [Reported::Walked(_)]
+    ));
+    heard.lock().unwrap().clear();
+    // A walk a denied grant stops: the pass runs either way, so it is told too.
+    library.permission = Permission::Denied;
+    walk(&mut shell, &mut library);
+    assert!(matches!(
+        heard.lock().unwrap().as_slice(),
+        [Reported::Walked(_)]
+    ));
+    heard.lock().unwrap().clear();
+    // A feed reports how many of its asks were staged, and the walk it did not start reports none.
+    library.bytes.insert("A".to_owned(), STILL.to_vec());
+    send(
+        &mut shell,
+        roll::Kind::BytesNeeded(roll::BytesNeeded {
+            needs: vec![
+                need(STILL, "A", "image/heic", STILL.len() as u64),
+                need(STILL, "gone", "image/heic", 0),
+            ],
+        }),
+    );
+    serve_library(&mut shell, &mut library);
+    let heard = heard.lock().unwrap();
+    assert!(
+        matches!(heard.as_slice(), [Reported::Fed(fed)] if fed.landed == 1),
+        "{heard:?}"
+    );
 }
 
 #[test]

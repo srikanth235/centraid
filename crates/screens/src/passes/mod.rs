@@ -16,8 +16,9 @@
 //! It reports facts (`ShellFact`: the link at launch and on every change, a
 //! window the OS granted, the vaults held, a finished import or restore, an
 //! upload the OS finished) and performs generic effects (`ScheduleWindows`,
-//! `PassWindowDone`, `LongRun`, `UploadsOp`, `StreamFromLibrary`, the
-//! camera-roll walk, and the off-thread door). It decides nothing.
+//! `PassWindowDone`, `LongRun`, `UploadsOp` and
+//! the off-thread door). It decides nothing; the camera roll's walk and the
+//! bytes the core asks for again are posted to `imports.camera_roll` in Rust.
 
 pub mod conditions;
 pub mod conductor;
