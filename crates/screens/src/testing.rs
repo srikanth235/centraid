@@ -10,9 +10,99 @@ use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_core::{Core, CoreConfig, Handle};
+use prost::Message;
 
 use crate::runtime::Runtime;
 use crate::screen::{Ctx, Environment};
+
+/// The shell's two secret stores and its synchronised-store reading, as a
+/// test double: what [`Driver::serve`] answers a [`wire::SecretBatch`] from.
+/// `synced_works: false` is a platform that refuses a synchronised write
+/// (Block Store without Google Play services).
+#[derive(Clone, Debug)]
+pub struct FakeShell {
+    pub device: BTreeMap<String, String>,
+    pub synced: BTreeMap<String, String>,
+    pub synced_works: bool,
+    pub synchronizing: bool,
+    pub restores_after_setup: bool,
+}
+
+impl Default for FakeShell {
+    fn default() -> Self {
+        Self {
+            device: BTreeMap::new(),
+            synced: BTreeMap::new(),
+            synced_works: true,
+            synchronizing: true,
+            restores_after_setup: true,
+        }
+    }
+}
+
+impl FakeShell {
+    /// Perform a batch in order, one answer per op.
+    #[must_use]
+    pub fn batch(&mut self, batch: &wire::SecretBatch) -> wire::SecretBatched {
+        use wire::secret_op::Op;
+        let answers = batch
+            .ops
+            .iter()
+            .map(|op| {
+                let synced_store = op.store == wire::SecretStore::Synced as i32;
+                if synced_store && !self.synced_works {
+                    return wire::SecretAnswer::default();
+                }
+                let store = if synced_store {
+                    &mut self.synced
+                } else {
+                    &mut self.device
+                };
+                let value = String::from_utf8_lossy(&op.value).into_owned();
+                match Op::try_from(op.op) {
+                    Ok(Op::Get) => wire::SecretAnswer {
+                        ok: true,
+                        found: store.contains_key(&op.key),
+                        value: store.get(&op.key).cloned().unwrap_or_default().into_bytes(),
+                        entries: Vec::new(),
+                    },
+                    Ok(Op::Set) => {
+                        if value.is_empty() {
+                            store.remove(&op.key);
+                        } else {
+                            store.insert(op.key.clone(), value);
+                        }
+                        wire::SecretAnswer {
+                            ok: true,
+                            ..Default::default()
+                        }
+                    }
+                    Ok(Op::Delete) => {
+                        store.remove(&op.key);
+                        wire::SecretAnswer {
+                            ok: true,
+                            ..Default::default()
+                        }
+                    }
+                    Ok(Op::List) => wire::SecretAnswer {
+                        ok: true,
+                        entries: store
+                            .iter()
+                            .filter(|(key, _)| key.starts_with(&op.key))
+                            .map(|(key, value)| wire::SecretEntry {
+                                key: key.clone(),
+                                value: value.clone().into_bytes(),
+                            })
+                            .collect(),
+                        ..Default::default()
+                    },
+                    _ => wire::SecretAnswer::default(),
+                }
+            })
+            .collect();
+        wire::SecretBatched { answers }
+    }
+}
 
 /// A core plus what a shell would have drawn from it.
 pub struct Driver {
@@ -240,6 +330,71 @@ impl Driver {
                 outcome: Some(outcome),
             }),
         )
+    }
+
+    /// Answer the effects the vault plumbing speaks the way a shell does,
+    /// until none of them is pending: a [`wire::SecretBatch`] against `shell`'s
+    /// two stores, a [`wire::CoreCall`] by calling this driver's own core, and a
+    /// [`wire::SyncedSecretsProbe`] with `shell`'s reading. Every other effect
+    /// stays in [`Self::effects`] for the test to answer. Answering one can
+    /// raise the next, so this loops. Returns how many it answered.
+    ///
+    /// # Panics
+    /// When a core call's request does not decode (a screen bug).
+    pub fn serve(&mut self, shell: &mut FakeShell) -> usize {
+        let mut answered = 0;
+        while let Some(at) = self.effects.iter().position(|request| {
+            matches!(
+                request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+                Some(
+                    wire::effect::Kind::Secrets(_)
+                        | wire::effect::Kind::CoreCall(_)
+                        | wire::effect::Kind::SyncedProbe(_)
+                )
+            )
+        }) {
+            let request = self.effects.remove(at);
+            let outcome = match request.effect.and_then(|e| e.kind) {
+                Some(wire::effect::Kind::Secrets(batch)) => {
+                    wire::effect_result::Outcome::Secrets(shell.batch(&batch))
+                }
+                Some(wire::effect::Kind::CoreCall(call)) => {
+                    wire::effect_result::Outcome::CoreCalled(self.core_call(&call))
+                }
+                Some(wire::effect::Kind::SyncedProbe(_)) => {
+                    wire::effect_result::Outcome::SyncedStatus(wire::SyncedSecretsStatus {
+                        synchronizing: shell.synchronizing,
+                        restores_after_setup: shell.restores_after_setup,
+                    })
+                }
+                _ => unreachable!("only plumbing effects are picked"),
+            };
+            self.send(
+                request.instance,
+                wire::screen_event::Kind::EffectResult(wire::EffectResult {
+                    effect_id: request.effect_id,
+                    outcome: Some(outcome),
+                }),
+            );
+            answered += 1;
+        }
+        answered
+    }
+
+    /// What a shell's `CoreCall` performer does: decode, call, encode.
+    fn core_call(&self, call: &wire::CoreCall) -> wire::CoreCalled {
+        let request = wire::Request::decode(call.request.as_slice())
+            .expect("a core call carries an encoded Request");
+        match self.handle.call(&request) {
+            Ok(response) => wire::CoreCalled {
+                response: response.encode_to_vec(),
+                error: None,
+            },
+            Err(refusal) => wire::CoreCalled {
+                response: Vec::new(),
+                error: Some(refusal.to_wire()),
+            },
+        }
     }
 
     /// Drain pushed events for up to `wait`, applying every screen update, and

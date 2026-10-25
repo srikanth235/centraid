@@ -70,6 +70,23 @@ pub trait ScreenCtx {
         })
     }
 
+    /// Any other core door a screen may need that is neither a read nor a
+    /// write of an app's rows: the 24 words (`phrase`), founding a vault
+    /// (`found`), a gateway's pairing, a restore, the backup status. The doors
+    /// that wait on a gateway (a pass, a pairing, a restore) are not called
+    /// from a screen's update: they ride the shell's `CoreCall` effect, so the
+    /// runtime's lock is never held across a network wait.
+    ///
+    /// # Errors
+    /// Whatever the door refuses with; a `Request.screen` is refused (a screen
+    /// calling the screen door would wait on its own lock).
+    fn door(&self, request: &wire::Request) -> Result<wire::Response> {
+        let _ = request;
+        Err(crate::error::CoreError::Unavailable {
+            reason: "this door carries no other core doors".to_owned(),
+        })
+    }
+
     /// Push a finished update to the shell's event stream.
     fn push(&self, update: wire::ScreenUpdate);
 
@@ -139,6 +156,15 @@ impl ScreenCtx for Handle {
 
     fn locker(&self, request: &wire::LockerSessionRequest) -> Result<wire::LockerSessionResponse> {
         Handle::locker_session(self, request)
+    }
+
+    fn door(&self, request: &wire::Request) -> Result<wire::Response> {
+        if matches!(request.kind, Some(wire::request::Kind::Screen(_))) {
+            return Err(crate::error::CoreError::InvalidRequest {
+                detail: "a screen cannot call the screen door".to_owned(),
+            });
+        }
+        Handle::call(self, request)
     }
 
     fn push(&self, update: wire::ScreenUpdate) {

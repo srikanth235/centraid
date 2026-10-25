@@ -134,6 +134,17 @@ impl<'a> Ctx<'a> {
         self.core.locker(request)
     }
 
+    /// Any other core door that is not a read or a write of an app's rows
+    /// (`phrase`, `found`, `backup_status`, ...). One that waits on a gateway
+    /// is not called here: it is the shell's `CoreCall` effect, so this
+    /// runtime's lock is never held across a network wait.
+    ///
+    /// # Errors
+    /// Whatever the door refuses with.
+    pub fn door(&self, request: &wire::Request) -> Result<wire::Response> {
+        self.core.door(request)
+    }
+
     /// The locale every string is made in.
     #[must_use]
     pub fn locale(&self) -> Locale {

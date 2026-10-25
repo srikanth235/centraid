@@ -28,6 +28,11 @@ syntax = "proto3";
 package centraid.core.v1;
 
 import "centraid/core/v1/agenda_screens.proto";
+import "centraid/core/v1/backup_screens.proto";
+import "centraid/core/v1/custody_screens.proto";
+import "centraid/core/v1/pair_screens.proto";
+import "centraid/core/v1/passes_screens.proto";
+import "centraid/core/v1/plumbing_screens.proto";
 import "centraid/core/v1/docs_screens.proto";
 import "centraid/core/v1/health_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
@@ -378,6 +383,10 @@ message Effect {
     PickFile pick_file = 200;
     FollowFolder follow_folder = 201;
     StopFollowing stop_following = 202;
+    // ---- vault plumbing (1300-1399, lane H2): plumbing_screens.proto ----
+    SecretBatch secrets = 1300;
+    CoreCall core_call = 1301;
+    SyncedSecretsProbe synced_probe = 1302;
   }
 }
 
@@ -740,6 +749,10 @@ message EffectResult {
     FilePicked file_picked = 200;
     FileProgress file_progress = 201;
     FolderFollowed folder_followed = 202;
+    // ---- vault plumbing (1300-1399, lane H2) ----
+    SecretBatched secrets = 1300;
+    CoreCalled core_called = 1301;
+    SyncedSecretsStatus synced_status = 1302;
   }
 }
 
