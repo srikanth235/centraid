@@ -392,3 +392,28 @@ fn a_vaults_own_key_waits_to_be_filed_until_it_is_filed_or_forgotten() {
     apply(&secrets, &secrets.clear_pending_filing("0123456789abcdef"));
     assert!(secrets.pending_filings().is_empty());
 }
+
+#[test]
+fn a_store_that_cannot_list_a_vaults_keys_is_asked_for_them_by_id() {
+    let secrets = VaultSecrets::new();
+    secrets.absorb(&VaultSecrets::load_ops(), &[listing(&[]), listing(&[])]);
+    let ids = vec!["v1".to_owned(), "v2".to_owned()];
+    let ops = VaultSecrets::hydrate_ops(&ids);
+    assert_eq!(ops.len(), 4);
+    let held = |value: &str| wire::SecretAnswer {
+        ok: true,
+        found: true,
+        value: value.as_bytes().to_vec(),
+        ..Default::default()
+    };
+    secrets.absorb(
+        &ops,
+        &[held("2"), refused(), refused(), held("abcdabcdabcdabcd")],
+    );
+    assert_eq!(secrets.vault_index("v1"), Some(2));
+    assert_eq!(secrets.vault_index("v2"), None);
+    assert_eq!(
+        secrets.own_seed_of("v2").as_deref(),
+        Some("abcdabcdabcdabcd")
+    );
+}

@@ -39,7 +39,7 @@ import okio.ByteString.Companion.toByteString
  *   exclude it, which is what `ThisDeviceOnly` buys on iOS. **Listing** needs the
  *   plain names, which the HMAC hides: the store therefore keeps one sealed
  *   index of the names it has written ([INDEX]). Names written before this index
- *   existed are not listed (they are still read by [get]).
+ *   existed are adopted once ([adoptLegacy]); a name built from a vault's id is read by [get].
  * * SYNCED: Block Store, end-to-end encrypted where the device supports it.
  *   It holds at most 16 keys per app (the member's seed, the index of vaults on
  *   their own words, and so fourteen such vaults). A refused set answers
@@ -54,6 +54,7 @@ internal object SecretStores {
     private const val NAME_KEY_ALIAS = "centraid.v1.secure-store.names"
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
     private const val INDEX = PREFIX + "\u0000names"
+    private const val ADOPTED = "centraid.v1.legacy-adopted"
     private const val NONCE_BYTES = 12
     private const val TAG_BITS = 128
     private val keyLock = Any()
@@ -128,8 +129,34 @@ internal object SecretStores {
     }
 
     private fun deviceList(context: Context, prefix: String): List<Pair<String, String>> {
+        adoptLegacy(context)
         val names = indexNames(context)
         return names.filter { it.startsWith(prefix) }.mapNotNull { key -> deviceGet(context, key)?.let { key to it } }
+    }
+
+    /**
+     * THE NAMES AN EARLIER BUILD WROTE, before the index existed, are adopted once: each fixed
+     * name the custody keeps is probed, and so are the entries a probed index names. A name
+     * built from a vault's id (`vault-index.<id>`, `vault-own.<id>`) cannot be probed from here:
+     * Rust asks for those by id once the shelf knows the vaults (`VaultSecrets::hydrate_ops`).
+     */
+    private fun adoptLegacy(context: Context) {
+        if (preferences(context).getBoolean(ADOPTED, false)) return
+        val fixed = listOf(
+            "recovery-seed.this-device", "recovery-words.this-device", "recovery-words-saved", "seed-settled",
+            "vault-index-high-water", "vault-index-pending", "vault-seeds.this-device", "vault-seeds.to-file",
+            "transfer-rule", "transfer-rule.include-videos",
+        )
+        val found = fixed.filter { deviceGet(context, it) != null }.toMutableList()
+        deviceGet(context, "vault-seeds.this-device")?.lines()
+            ?.mapNotNull { line -> line.substringBefore('\t').takeIf { it.isNotEmpty() } }
+            ?.forEach { id ->
+                listOf("vault-seed.this-device.$id", "vault-words.this-device.$id")
+                    .filterTo(found) { deviceGet(context, it) != null }
+            }
+        val names = indexNames(context).toMutableSet().apply { addAll(found) }
+        val written = preferences(context).edit().putString(nameOf(INDEX), seal(INDEX, names.sorted().joinToString("\n"))).commit()
+        if (written) preferences(context).edit().putBoolean(ADOPTED, true).apply()
     }
 
     private fun indexNames(context: Context): Set<String> = try {

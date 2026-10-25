@@ -254,6 +254,27 @@ impl VaultSecrets {
         ]
     }
 
+    /// The ops that read what a store cannot enumerate: the per-vault keys an
+    /// earlier build wrote under names built from a vault's id (the Android
+    /// store lists only names it has indexed). Send them after the load, once
+    /// the shelf knows the vault ids, then [`Self::absorb`] the answers.
+    #[must_use]
+    pub fn hydrate_ops(vault_ids: &[String]) -> Vec<wire::SecretOp> {
+        vault_ids
+            .iter()
+            .flat_map(|id| {
+                [
+                    device(wire::secret_op::Op::Get, &format!("{INDEX_PREFIX}{id}"), ""),
+                    device(
+                        wire::secret_op::Op::Get,
+                        &format!("{OWN_VAULT_PREFIX}{id}"),
+                        "",
+                    ),
+                ]
+            })
+            .collect()
+    }
+
     /// Fold the shell's answers to `ops` into the cache. The answers are in the
     /// order of the ops; an answer short of them is a shell that failed the
     /// batch and changes nothing.
