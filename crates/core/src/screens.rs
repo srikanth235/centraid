@@ -17,7 +17,58 @@ use std::time::Duration;
 use centraid_api_proto::core_v1 as wire;
 
 use crate::error::Result;
-use crate::handle::Handle;
+use crate::handle::{Handle, HandleState};
+
+/// The work of an off-thread job: it gets its own handle to the core and
+/// answers bytes.
+pub type OffThreadWork = Box<dyn FnOnce(&Handle) -> Vec<u8> + Send + 'static>;
+
+/// The vault lifecycle doors a screen may call: `vault.proto` and `phone.proto`
+/// request kinds, and nothing else.
+#[derive(Clone, Debug)]
+pub enum VaultRequest {
+    Phrase(wire::PhraseRequest),
+    Found(wire::FoundRequest),
+    Drain(wire::DrainRequest),
+    PairPhone(wire::PairRequest),
+    Restore(wire::RestoreRequest),
+    RefreshDestination(wire::RefreshDestinationRequest),
+    ForgetDestination(wire::ForgetDestinationRequest),
+    Handoff(wire::HandoffRequest),
+    Settle(wire::SettleRequest),
+    Reconcile(wire::ReconcileRequest),
+    Pins(wire::PinsRequest),
+    FetchOriginal(wire::FetchOriginalRequest),
+    Releasable(wire::ReleasableRequest),
+    Released(wire::ReleasedRequest),
+    LibraryAssets(wire::LibraryAssetsRequest),
+}
+
+impl VaultRequest {
+    /// The wire request this is.
+    #[must_use]
+    pub fn into_request(self) -> wire::Request {
+        use wire::request::Kind as K;
+        let kind = match self {
+            Self::Phrase(r) => K::Phrase(r),
+            Self::Found(r) => K::Found(r),
+            Self::Drain(r) => K::Drain(r),
+            Self::PairPhone(r) => K::PairPhone(r),
+            Self::Restore(r) => K::Restore(r),
+            Self::RefreshDestination(r) => K::RefreshDestination(r),
+            Self::ForgetDestination(r) => K::ForgetDestination(r),
+            Self::Handoff(r) => K::Handoff(r),
+            Self::Settle(r) => K::Settle(r),
+            Self::Reconcile(r) => K::Reconcile(r),
+            Self::Pins(r) => K::Pins(r),
+            Self::FetchOriginal(r) => K::FetchOriginal(r),
+            Self::Releasable(r) => K::Releasable(r),
+            Self::Released(r) => K::Released(r),
+            Self::LibraryAssets(r) => K::LibraryAssets(r),
+        };
+        wire::Request { kind: Some(kind) }
+    }
+}
 
 /// What a screen runtime may ask of the core.
 pub trait ScreenCtx {
@@ -70,21 +121,27 @@ pub trait ScreenCtx {
         })
     }
 
-    /// Any other core door a screen may need that is neither a read nor a
-    /// write of an app's rows: the 24 words (`phrase`), founding a vault
-    /// (`found`), a gateway's pairing, a restore, the backup status. The doors
-    /// that wait on a gateway (a pass, a pairing, a restore) are not called
-    /// from a screen's update: they ride the shell's `CoreCall` effect, so the
-    /// runtime's lock is never held across a network wait.
+    /// A vault lifecycle door that is neither a read nor a write of an app's
+    /// rows, and is quick: the 24 words (`phrase`), founding a vault. The type
+    /// limits what a screen can send to `vault.proto` and `phone.proto`; there
+    /// is no way through it to a `Command`.
     ///
     /// # Errors
-    /// Whatever the door refuses with; a `Request.screen` is refused (a screen
-    /// calling the screen door would wait on its own lock).
-    fn door(&self, request: &wire::Request) -> Result<wire::Response> {
+    /// Whatever the door refuses with.
+    fn vault(&self, request: VaultRequest) -> Result<wire::Response> {
         let _ = request;
         Err(crate::error::CoreError::Unavailable {
-            reason: "this door carries no other core doors".to_owned(),
+            reason: "this door carries no vault doors".to_owned(),
         })
+    }
+
+    /// Run `work` on its own thread with a handle to this core, and when it is
+    /// done tell the runtime ([`ScreenHost::job_done`], from `next_event`).
+    /// `job` is the runtime's own number for it. For a door that waits on a
+    /// gateway (a pass, a pairing, a restore): the runtime's lock is never held
+    /// across the wait.
+    fn off_thread(&self, job: u64, work: OffThreadWork) {
+        let _ = (job, work);
     }
 
     /// Push a finished update to the shell's event stream.
@@ -111,19 +168,22 @@ pub trait ScreenHost: Send + Sync {
 
     /// A [`ScreenCtx::wake_after`] elapsed: fire the timers that are due.
     fn wake(&self, ctx: &dyn ScreenCtx);
+
+    /// A [`ScreenCtx::off_thread`] job finished with `bytes`.
+    fn job_done(&self, ctx: &dyn ScreenCtx, job: u64, bytes: Vec<u8>);
 }
 
-impl ScreenCtx for Handle {
+impl ScreenCtx for HandleState {
     fn load(&self, request: &wire::LoadRequest) -> Result<wire::LoadResponse> {
-        Handle::load(self, request)
+        HandleState::load(self, request)
     }
 
     fn act(&self, request: &wire::ActRequest) -> Result<wire::ActResponse> {
-        Handle::act(self, request)
+        HandleState::act(self, request)
     }
 
     fn originals(&self, request: &wire::OriginalsRequest) -> Result<wire::OriginalsResponse> {
-        match Handle::call(
+        match HandleState::call(
             self,
             &wire::Request {
                 kind: Some(wire::request::Kind::Originals(request.clone())),
@@ -139,7 +199,7 @@ impl ScreenCtx for Handle {
     }
 
     fn content_urls(&self, request: &wire::ContentUrlRequest) -> Result<wire::ContentUrls> {
-        match Handle::call(
+        match HandleState::call(
             self,
             &wire::Request {
                 kind: Some(wire::request::Kind::ContentUrls(request.clone())),
@@ -155,16 +215,27 @@ impl ScreenCtx for Handle {
     }
 
     fn locker(&self, request: &wire::LockerSessionRequest) -> Result<wire::LockerSessionResponse> {
-        Handle::locker_session(self, request)
+        HandleState::locker_session(self, request)
     }
 
-    fn door(&self, request: &wire::Request) -> Result<wire::Response> {
-        if matches!(request.kind, Some(wire::request::Kind::Screen(_))) {
-            return Err(crate::error::CoreError::InvalidRequest {
-                detail: "a screen cannot call the screen door".to_owned(),
+    fn vault(&self, request: VaultRequest) -> Result<wire::Response> {
+        HandleState::call(self, &request.into_request())
+    }
+
+    fn off_thread(&self, job: u64, work: OffThreadWork) {
+        let Some(handle) = Handle::of(self) else {
+            return;
+        };
+        let events = self.events();
+        std::thread::spawn(move || {
+            let bytes = work(&handle);
+            events.push(wire::Event {
+                kind: Some(wire::event::Kind::JobDone(wire::ScreenJobDone {
+                    job,
+                    bytes,
+                })),
             });
-        }
-        Handle::call(self, request)
+        });
     }
 
     fn push(&self, update: wire::ScreenUpdate) {

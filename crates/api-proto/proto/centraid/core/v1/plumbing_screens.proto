@@ -76,13 +76,10 @@ message SecretBatched {
   repeated SecretAnswer answers = 1;
 }
 
-// Perform one core request off the UI thread and answer with its response.
-message CoreCall {
-  // An encoded `Request`.
-  bytes request = 1;
-}
-
-message CoreCalled {
+// What a vault door answered when it ran on a worker thread
+// (`Ctx::vault_async`): the core's encoded `Response`, or its typed refusal.
+// Carried inside `OffThreadDone.bytes`.
+message VaultCalled {
   // An encoded `Response`; empty when the core refused.
   bytes response = 1;
   // The core's typed refusal, when it refused.
