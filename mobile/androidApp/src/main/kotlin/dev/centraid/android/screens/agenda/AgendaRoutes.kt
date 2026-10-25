@@ -55,6 +55,7 @@ import dev.centraid.android.screens.locker.LockerHomeScreen
 import dev.centraid.android.screens.locker.LockerImportScreen
 import dev.centraid.android.screens.locker.LockerItemScreen
 import dev.centraid.android.screens.locker.LockerLockPage
+import dev.centraid.android.screens.pairing.PairLaptopPage
 import dev.centraid.android.screens.money.MoneyAccountsScreen
 import dev.centraid.android.screens.money.MoneyCategoriesScreen
 import dev.centraid.android.screens.money.MoneyHomeScreen
@@ -325,6 +326,7 @@ internal class AgendaRoutes(
         val healthMetric = view.health_metric
         val healthWorkout = view.health_workout
         val healthConnect = view.health_connect
+        val pairLaptop = view.pair_laptop
 
         // THE SCREEN IS DONE (a cancel committed, the editor saved or left, the task deleted): its page goes.
         val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true ||
@@ -565,6 +567,12 @@ internal class AgendaRoutes(
                 onEvent = { send(ScreenEvent(trash = it)) },
                 onBack = back,
             )
+            // PAIRING A GATEWAY: scan or paste its code (`ScanCode` is the effects performer's).
+            pairLaptop != null -> PairLaptopPage(
+                state = pairLaptop,
+                onEvent = { send(ScreenEvent(pair_laptop = it)) },
+                onDone = back,
+            )
         }
     }
 
@@ -600,7 +608,7 @@ internal class AgendaRoutes(
          * shell lane replaces the KMP one.
          */
         const val TAB = "agenda"
-        val PREFIXES = listOf("agenda.", "docs.", "notes.", "people.", "health.", "locker.", "money.")
+        val PREFIXES = listOf("agenda.", "docs.", "notes.", "people.", "health.", "locker.", "money.", "pair.")
     }
 }
 

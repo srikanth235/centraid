@@ -262,6 +262,8 @@ message ScreenEvent {
     PeopleHomeEvent people_home = 700;
     PeoplePersonEvent people_person = 701;
     PeopleEditorEvent people_editor = 702;
+    // ---- pairing (1400-1449, lane H2) ----
+    PairLaptopEvent pair_laptop = 1400;
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
   }
@@ -343,6 +345,8 @@ message ViewState {
     PeopleHomeState people_home = 700;
     PeoplePersonState people_person = 701;
     PeopleEditorState people_editor = 702;
+    // ---- pairing (1400-1449, lane H2) ----
+    PairLaptopState pair_laptop = 1400;
     // ---- the kit (900-999) ----
     TrashView trash = 900;
   }
@@ -401,6 +405,9 @@ message Effect {
     PickFile pick_file = 200;
     FollowFolder follow_folder = 201;
     StopFollowing stop_following = 202;
+    // ---- pairing (1340-1349, lane H2): pair_screens.proto ----
+    ScanCode scan_code = 1340;
+    BrowseGateways browse_gateways = 1341;
     // ---- vault plumbing (1300-1399, lane H2): plumbing_screens.proto ----
     SecretBatch secrets = 1300;
     SyncedSecretsProbe synced_probe = 1302;
@@ -766,6 +773,9 @@ message EffectResult {
     FilePicked file_picked = 200;
     FileProgress file_progress = 201;
     FolderFollowed folder_followed = 202;
+    // ---- pairing (1340-1349, lane H2) ----
+    CodeScanned code_scanned = 1340;
+    GatewaysSighted gateways_sighted = 1341;
     // ---- vault plumbing (1300-1399, lane H2) ----
     SecretBatched secrets = 1300;
     SyncedSecretsStatus synced_status = 1302;
