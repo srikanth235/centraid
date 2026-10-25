@@ -37,7 +37,8 @@ pub use screen::{Ctx, Environment, Screen};
 /// The runtime the shells attach: every app's screens and the shell's own, and
 /// one tab, `home`, rooted at Home (`shell`). An app opens as a page pushed on
 /// that tab, so back returns to Home; the chat and the backup add their own tabs
-/// beside it. The band follows the tabs that exist.
+/// beside it, and the phone imports are three hidden ones after them
+/// (`imports::roots`). The band follows the places it knows among the tabs.
 #[must_use]
 pub fn standard() -> Runtime {
     assemble().0
@@ -74,25 +75,23 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
             .merge(backup::registry(&secrets))
             .merge(passes::registry(&secrets))
             .merge(vault::registry(&shelf, &secrets)),
-        vec![
-            (shell::TAB.to_owned(), shell::routes::home()),
-            (chat::TAB.to_owned(), chat::routes::home()),
-            (shell::band::BACKUP.to_owned(), backup::routes::home()),
-        ],
-    )
-    .with_band(shell::band::view)
-    .with_services(
+        // THE PHONE IMPORTS ARE HIDDEN TAB ROOTS, NOT SERVICES: the shell sends
+        // them its events and forwards their views (docs/screens.md, "Phone
+        // imports"), so it must see their instances and their views, which a
+        // service never shows it. The band words only the places it knows, so
+        // they stay out of it; a vault switch reopens them for the vault in front.
         [
-            passes::services(),
-            custody::services(),
-            vault::services(),
-            imports::roots()
-                .into_iter()
-                .map(|(_, route)| route)
-                .collect(),
+            vec![
+                (shell::TAB.to_owned(), shell::routes::home()),
+                (chat::TAB.to_owned(), chat::routes::home()),
+                (shell::band::BACKUP.to_owned(), backup::routes::home()),
+            ],
+            imports::roots(),
         ]
         .concat(),
-    );
+    )
+    .with_band(shell::band::view)
+    .with_services([passes::services(), custody::services(), vault::services()].concat());
     (runtime, shelf)
 }
 
