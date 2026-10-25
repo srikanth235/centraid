@@ -67,6 +67,8 @@ pub(crate) enum TimerOp {
 pub(crate) struct Done {
     pub tables: BTreeSet<String>,
     pub timers: Vec<TimerOp>,
+    /// Events for other open screens, by registered name (`Ctx::post`).
+    pub posts: Vec<(String, centraid_api_proto::core_v1::ScreenEvent)>,
 }
 
 /// A screen's door to the core, the catalog and the clock.
@@ -189,6 +191,13 @@ impl<'a> Ctx<'a> {
             .borrow_mut()
             .timers
             .push(TimerOp::Cancel(name.to_owned()));
+    }
+
+    /// Hand `event` to every open screen registered as `screen` (a picker returning its pick to
+    /// the page that asked for it). Delivered after this update, in the same re-render; an
+    /// instance cannot post to itself.
+    pub fn post(&self, screen: &str, event: wire::ScreenEvent) {
+        self.done.borrow_mut().posts.push((screen.to_owned(), event));
     }
 
     pub(crate) fn finish(self) -> Done {

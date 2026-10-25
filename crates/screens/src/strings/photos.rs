@@ -10,6 +10,8 @@
 catalog! {
     plain photograph = ("Photo", "Photo");
     plain photos_add = ("Add", "Add");
+    plain photos_attach = ("Attach", "Attach");
+    plain photos_picker_attach_title = ("Choose a photo", "Choose a photo");
     plain photos_add_count = ("Add {count}", "Add {count}");
     plain photos_add_label = ("Add a label", "Add a label");
     plain photos_add_photos = ("Add photos", "Add photos");

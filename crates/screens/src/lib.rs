@@ -6,6 +6,7 @@
 
 pub mod agenda;
 pub mod catalog;
+pub mod chat;
 pub mod docs;
 pub mod field;
 pub mod health;
@@ -41,7 +42,8 @@ pub fn standard() -> Runtime {
             .merge(health::registry())
             .merge(notes::registry())
             .merge(people::registry())
-            .merge(photos::registry()),
+            .merge(photos::registry())
+            .merge(chat::registry()),
         vec![
             ("proof".to_owned(), proof::route()),
             (
@@ -55,6 +57,7 @@ pub fn standard() -> Runtime {
                     None,
                 ),
             ),
+            (chat::TAB.to_owned(), chat::routes::home()),
         ],
     )
 }

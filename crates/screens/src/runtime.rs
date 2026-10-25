@@ -233,6 +233,19 @@ impl Runtime {
                 }
             }
         }
+        // WHAT THIS SCREEN HANDED TO OTHERS (a picker's pick): delivered now, so one
+        // re-render carries both screens' views.
+        for (screen, post) in done.posts {
+            let targets: Vec<u64> = state
+                .instances
+                .iter()
+                .filter(|(other, instance)| **other != id && instance.route.screen == screen)
+                .map(|(other, _)| *other)
+                .collect();
+            for target in targets {
+                Self::dispatch(state, core, target, post.clone(), out);
+            }
+        }
         for effect in effects {
             let effect_id = state.next_effect;
             state.next_effect += 1;

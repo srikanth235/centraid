@@ -13,6 +13,10 @@
 //! replaced mid-pick. When every pick landed the screen is `finished` and the
 //! shell pops.
 //!
+//! A second purpose, `Attach` (lane I): the same grid, ONE photograph, and Confirm hands the
+//! pick to the chat screen (`chat.home`) as an `Attached` event instead of writing to an album.
+//! Nothing is taken (no album), and choosing another photograph replaces the first.
+//!
 //! Dropped with the Kotlin architecture: the seat, the page-read plumbing and
 //! its cursor events, the members read as a second "pass" (the album's own shelf
 //! is read here), the row-id filter on change events, and the settle event keyed
@@ -41,10 +45,12 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     let Some(wire::route::Args::PhotosPicker(args)) = &route.args else {
         return None;
     };
-    if args.album_id.is_empty() {
+    let attach = args.purpose == wire::PhotosPickerPurpose::Attach as i32;
+    if args.album_id.is_empty() && !attach {
         return None;
     }
     Some(Box::new(Picker {
+        attach,
         album_id: args.album_id.clone(),
         album_name: args.album_name.clone(),
         phase: Phase::Loading,
@@ -65,6 +71,8 @@ enum Phase {
 }
 
 struct Picker {
+    /// The purpose is to attach the pick to a chat question, not to fill an album.
+    attach: bool,
     album_id: String,
     album_name: String,
     phase: Phase,
@@ -126,7 +134,9 @@ impl Picker {
         self.cells = cells;
         self.next = next;
         self.phase = Phase::Ready;
-        self.read_members(ctx);
+        if !self.attach {
+            self.read_members(ctx);
+        }
     }
 
     /// What the album holds, walked to the end: a floor would let a member add
@@ -180,13 +190,42 @@ impl Picker {
         }
         if let Some(at) = self.picked.iter().position(|picked| picked == id) {
             self.picked.remove(at);
+        } else if self.attach {
+            // One photograph: the member's last choice is the one they meant.
+            self.picked = vec![id.to_owned()];
         } else {
             self.picked.push(id.to_owned());
         }
     }
 
+    /// Hand the chosen photograph to the chat that asked for it, and finish.
+    fn attach_pick(&mut self, ctx: &Ctx) {
+        let Some(photo_id) = self.picked.first().cloned() else {
+            return;
+        };
+        ctx.post(
+            crate::chat::HOME,
+            wire::ScreenEvent {
+                kind: Some(S::Chat(wire::ChatEvent {
+                    kind: Some(wire::chat_event::Kind::Attached(wire::chat_event::Attached {
+                        source: Some(wire::chat_event::attached::Source::VaultPhoto(
+                            wire::chat_event::VaultPhoto { asset_id: photo_id },
+                        )),
+                        label: String::new(),
+                        thumbnail_path: String::new(),
+                    })),
+                })),
+            },
+        );
+        self.finished = true;
+    }
+
     fn confirm(&mut self, ctx: &Ctx) {
         if self.picked.is_empty() {
+            return;
+        }
+        if self.attach {
+            self.attach_pick(ctx);
             return;
         }
         self.status = None;
@@ -268,7 +307,9 @@ impl Screen for Picker {
             Phase::Failed => wire::photos_picker_state::Content::Failure(read::failure(locale)),
             Phase::Ready => wire::photos_picker_state::Content::Data(Box::new(self.data(locale))),
         };
-        let add_label = if self.picked.is_empty() {
+        let add_label = if self.attach {
+            words::photos_attach(locale)
+        } else if self.picked.is_empty() {
             words::photos_add(locale)
         } else {
             fill(
@@ -279,14 +320,22 @@ impl Screen for Picker {
         wire::ViewState {
             kind: Some(wire::view_state::Kind::PhotosPicker(Box::new(
                 wire::PhotosPickerState {
-                    title: fill(
-                        &words::photos_picker_title(locale),
-                        &[("name", &self.album_name)],
-                    ),
+                    title: if self.attach {
+                        words::photos_picker_attach_title(locale)
+                    } else {
+                        fill(
+                            &words::photos_picker_title(locale),
+                            &[("name", &self.album_name)],
+                        )
+                    },
                     chosen_label: self.chosen(locale),
                     add_label,
                     add_enabled: !self.picked.is_empty(),
-                    refers_note: words::photos_album_refers(locale),
+                    refers_note: if self.attach {
+                        String::new()
+                    } else {
+                        words::photos_album_refers(locale)
+                    },
                     content: Some(content),
                     status: self.status.clone(),
                     finished: self.finished,
