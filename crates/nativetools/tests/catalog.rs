@@ -217,15 +217,13 @@ fn the_census_lists_every_action_as_its_manifest_classifies_it() {
         // a screen claim cites files that exist
         if let Some(files) = row[5].strip_prefix("yes: ") {
             for file in files.split("; ") {
-                // A Rust screen is cited from the repository root; a KMP file
-                // (the apps not yet ported) from the shared module.
-                let path = if file.starts_with("crates/") {
-                    repo().join(file)
-                } else {
-                    repo()
-                        .join("mobile/shared/src/commonMain/kotlin/dev/centraid/shared")
-                        .join(file)
-                };
+                // A screen claim cites a Rust screen, from the repository root.
+                assert!(
+                    file.starts_with("crates/"),
+                    "{} cites {file}, which is not a Rust screen",
+                    row[1]
+                );
+                let path = repo().join(file);
                 assert!(
                     path.is_file(),
                     "{} cites {file}, which does not exist",

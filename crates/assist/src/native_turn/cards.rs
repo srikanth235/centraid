@@ -134,28 +134,6 @@ pub fn card_of(row: &Row, _today: Date) -> Option<Card> {
 mod tests {
     use super::*;
 
-    /// The shells' routes, as the one shared table states them: the entities a
-    /// tap opens by row. Both shells route through `RowRoutes` (iOS through
-    /// `ChatRouting.route`, Android through `destination`).
-    const ROUTING: &str = include_str!(
-        "../../../../mobile/shared/src/commonMain/kotlin/dev/centraid/shared/nav/RowRoutes.kt"
-    );
-
-    /// Whether the table has an arm `AppIds.<APP> to <ENTITY> ->`, the entity
-    /// read through the file's own `const val <ENTITY>: String = "<entity>"`.
-    fn routes_row(app: &str, entity: &str) -> bool {
-        let declared = format!(": String = \"{entity}\"");
-        let Some(constant) = ROUTING.lines().find_map(|line| {
-            let line = line.trim();
-            line.ends_with(&declared)
-                .then(|| line.split("const val ").nth(1)?.split(':').next())
-                .flatten()
-        }) else {
-            return false;
-        };
-        ROUTING.contains(&format!("AppIds.{} to {constant} ->", app.to_uppercase()))
-    }
-
     #[test]
     fn every_kind_has_one_row() {
         for kind in Kind::ALL {
@@ -187,18 +165,6 @@ mod tests {
         assert_eq!(card.app, App::Locker);
     }
 
-    #[test]
-    fn the_shells_row_routes_are_exactly_the_entries_that_open_a_row() {
-        for entry in TABLE {
-            assert_eq!(
-                routes_row(entry.app.id(), entry.entity),
-                entry.opens == Opens::Row,
-                "{} {}: RowRoutes.kt and the table disagree about whether a tap opens the row",
-                entry.app.id(),
-                entry.entity
-            );
-        }
-    }
     #[test]
     fn a_transaction_card_names_money_opens_its_row_and_carries_the_signed_amount() {
         use crate::native::dates::Stamp;

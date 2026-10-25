@@ -126,6 +126,38 @@ mod tests {
         route.map(|route| route.screen).unwrap_or_default()
     }
 
+    /// The assistant's card table and the routing table agree: a card that
+    /// claims a tap opens its row has a page of its own in [`route`], and one
+    /// that claims the app's home lands on exactly that.
+    #[test]
+    fn the_assistants_cards_open_what_the_table_says_they_open() {
+        use centraid_assist::native::meta::Kind;
+        use centraid_assist::native_turn::cards::{Opens, card_kind};
+        for kind in Kind::ALL {
+            let Some(entry) = card_kind(kind) else {
+                continue;
+            };
+            let row = RowRef::new(entry.app.id(), entry.entity, "id1", "Title");
+            let opened = route(&row, "", &[]);
+            let home = app_home(entry.app.id());
+            match entry.opens {
+                Opens::Row => assert!(
+                    opened.is_some() && opened != home,
+                    "{} {}: the card says a tap opens the row but the table has no page",
+                    entry.app.id(),
+                    entry.entity
+                ),
+                Opens::AppHome => assert_eq!(
+                    opened,
+                    home,
+                    "{} {}: the card says a tap opens the app's home",
+                    entry.app.id(),
+                    entry.entity
+                ),
+            }
+        }
+    }
+
     #[test]
     fn every_app_has_a_home_and_a_stranger_has_none() {
         for app in super::super::policy::ORDER {
