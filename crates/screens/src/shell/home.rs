@@ -39,7 +39,8 @@ use super::policy;
 use super::routes;
 use super::row_routes;
 use super::tiles::{self, Made};
-use crate::custody::secrets::VaultSecrets;
+use crate::custody::secrets::{self as secrets, VaultSecrets};
+use crate::passes::{Rules, TransferRule, rule};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, home as words, photos};
 
@@ -131,6 +132,8 @@ struct Home {
     /// transfer rule is read from it and written through it.
     secrets: VaultSecrets,
     transfer_sheet_open: bool,
+    /// The rule write in flight, to be folded into the cache when it is answered.
+    keeping: Option<Vec<wire::SecretOp>>,
 }
 
 /// The registry factory. Home shares the cache of what the shell keeps (the
@@ -162,6 +165,7 @@ impl Home {
             appearance: Appearance::System,
             phone_dark: false,
             transfer_sheet_open: false,
+            keeping: None,
         }
     }
 }
@@ -301,7 +305,17 @@ impl Home {
             }
             H::AskConfirmed(_) => return self.ask_confirmed(),
             H::AskDismissed(_) => self.ask = Ask::None,
-            H::TransferRulesPressed(_) | H::TransferRuleChosen(_) | H::TransferRulesClosed(_) => {}
+            H::TransferRulesPressed(_) => self.transfer_sheet_open = true,
+            H::TransferRulesClosed(_) => self.transfer_sheet_open = false,
+            H::TransferRuleChosen(chosen) => {
+                // THE BACKUP PAGE'S WRITE, not a second one: the rule goes to the
+                // phone's device store as a `SecretBatch`, and its answer is what
+                // tells the pass service (`rule_kept`).
+                self.transfer_sheet_open = false;
+                let ops = vec![Rules::write_rule(TransferRule::of(Some(&chosen.stored)))];
+                self.keeping = Some(ops.clone());
+                return vec![secrets::effect(ops)];
+            }
             H::VaultsTold(told) => {
                 let switched = self.vault_changed(&told);
                 let was_none = self.none;
@@ -337,6 +351,44 @@ impl Home {
             }
         }
         Vec::new()
+    }
+
+    /// The device store answered the rule's write. THE PASS SERVICE READS THE SAME
+    /// CACHE, so the answer is folded in before it is told: a rule that stuck is
+    /// a new constraint on every window the OS holds, and the service asks for
+    /// them again and decides a pass, in this call (the Backup page does the
+    /// same).
+    fn rule_kept(&mut self, batched: &wire::SecretBatched, ctx: &Ctx) {
+        let Some(ops) = self.keeping.take() else {
+            return;
+        };
+        self.secrets.absorb(&ops, &batched.answers);
+        if batched.answers.len() >= ops.len() && batched.answers.iter().all(|answer| answer.ok) {
+            self.secrets
+                .conductor()
+                .ask(ctx, wire::pass_asked::Ask::RuleChanged);
+        }
+    }
+
+    /// The sheet behind the gear, while it is open: the rule as the device store
+    /// holds it, in the order the Backup page lists the choices.
+    fn transfer_sheet(&self, locale: Locale) -> Option<wire::HomeTransferSheet> {
+        if !self.transfer_sheet_open {
+            return None;
+        }
+        let kept = Rules::read(&self.secrets).rule;
+        Some(wire::HomeTransferSheet {
+            title: rule::title(locale),
+            subtitle: rule::subtitle(locale),
+            choices: TransferRule::ALL
+                .iter()
+                .map(|choice| wire::BackupRuleChoice {
+                    stored: choice.stored().to_owned(),
+                    sentence: choice.sentence(locale),
+                    picked: *choice == kept,
+                })
+                .collect(),
+        })
     }
 
     fn status_pressed(&self) -> Vec<wire::Effect> {
@@ -573,15 +625,19 @@ impl Screen for Home {
             Some(E::DataChanged(_) | E::EnvironmentChanged(_) | E::Lifecycle(_)) => {
                 self.reload(ctx);
             }
-            Some(E::EffectResult(result)) => {
-                if let Some(wire::effect_result::Outcome::Keychain(value)) = result.outcome {
+            Some(E::EffectResult(result)) => match result.outcome {
+                Some(wire::effect_result::Outcome::Keychain(value)) => {
                     self.appearance = if value.found {
                         Appearance::of(&String::from_utf8_lossy(&value.value))
                     } else {
                         Appearance::System
                     };
                 }
-            }
+                Some(wire::effect_result::Outcome::Secrets(batched)) => {
+                    self.rule_kept(&batched, ctx);
+                }
+                _ => {}
+            },
             Some(E::Home(home)) => {
                 if let Some(kind) = home.kind {
                     return self.on_home(kind, ctx);
@@ -626,7 +682,7 @@ impl Screen for Home {
                 } as i32,
                 loading_label: words::home_loading(locale),
                 first_launch: self.none.then(|| first_launch(locale)),
-                transfer_sheet: None,
+                transfer_sheet: self.transfer_sheet(locale),
             }))),
             ..wire::ViewState::default()
         }
