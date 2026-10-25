@@ -88,6 +88,21 @@ message Environment {
 // A timer elapsed (`Event.wake`). Internal to the core: see `next_event`.
 message ScreenWake {}
 
+// A job a screen started with `Ctx::off_thread` finished on its worker thread
+// (`Event.job_done`). Internal to the core, like `ScreenWake`: `next_event`
+// hands it to the runtime and never to a shell.
+message ScreenJobDone {
+  uint64 job = 1;
+  bytes bytes = 2;
+}
+
+// What the asking screen hears when its job is done. Delivered like a timer.
+message OffThreadDone {
+  // The tag the screen gave the job.
+  string tag = 1;
+  bytes bytes = 2;
+}
+
 // The answer to every `ScreenRequest`, and the body of every pushed
 // `Event.screen`: what changed, in one message, so a shell applies one update
 // and draws once.
@@ -187,6 +202,9 @@ message ScreenEvent {
     EnvironmentChanged environment_changed = 5;
     // RUNTIME-ORIGINATED: the app left or returned to the foreground.
     AppLifecycle lifecycle = 7;
+    // RUNTIME-ORIGINATED: a job the screen started off the runtime's lock
+    // (`Ctx::off_thread`) has finished.
+    OffThreadDone off_thread_done = 8;
     // RUNTIME-ORIGINATED: the screen is being popped. Its last chance to write
     // what the member typed (an autosave's pending edit); a shell never sends
     // it, and only its `act`s survive: the view is no longer drawn.
@@ -403,7 +421,6 @@ message Effect {
     StopFollowing stop_following = 202;
     // ---- vault plumbing (1300-1399, lane H2): plumbing_screens.proto ----
     SecretBatch secrets = 1300;
-    CoreCall core_call = 1301;
     SyncedSecretsProbe synced_probe = 1302;
   }
 }
@@ -769,7 +786,6 @@ message EffectResult {
     FolderFollowed folder_followed = 202;
     // ---- vault plumbing (1300-1399, lane H2) ----
     SecretBatched secrets = 1300;
-    CoreCalled core_called = 1301;
     SyncedSecretsStatus synced_status = 1302;
   }
 }
