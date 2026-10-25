@@ -150,13 +150,23 @@ public class MainActivity : FragmentActivity() {
      * (#1135), and the 24 words' sheet's close has every Locker wall re-read
      * `keyed` (#1047 E3).
      */
-    private val agenda: AgendaRoutes by lazy { AgendaRoutes(phoneFollow, health, openWords = { words.openRekey() }) }
+    private val agenda: AgendaRoutes by lazy {
+        AgendaRoutes(
+            phoneFollow,
+            health,
+            openWords = { words.openRekey() },
+            onVaultMade = { words.vaultMade(it) },
+            onWordsShowDone = { backupSheet.reread() },
+        )
+    }
 
-    /** THE 24 WORDS' SHEETS (#1047 E3), over every screen. See `WordsSheets`. */
+    /**
+     * THE 24 WORDS' DOORS (#1047 E3): Home's make and restore controls, Locker's wall and
+     * the More sheet's rows open Rust's `words.*` screens on the activity's stack
+     * (`WordsSheets.push`); pair.laptop is still its sheet.
+     */
     private val words: WordsSheets by lazy {
-        WordsSheets(onEnterClosed = { agenda.foregrounded() }).also {
-            it.camera = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
-        }
+        WordsSheets().also { it.push = { route -> agenda.pushRoute(route) } }
     }
 
     /**

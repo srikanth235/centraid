@@ -1,6 +1,5 @@
 package dev.centraid.android.screens.words
 
-import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -29,17 +28,18 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
 import centraid.screen.v1.PairLaptopEvent
 import centraid.screen.v1.PairLaptopState
-import centraid.screen.v1.WordsShowEvent
-import centraid.screen.v1.WordsShowState
+import centraid.core.v1.WordsPrimary
+import centraid.core.v1.WordsSaveCopy
+import centraid.core.v1.WordsSecondary
+import centraid.core.v1.WordsShowEvent
+import centraid.core.v1.WordsShowState
 import dev.centraid.android.kit.ChoiceStack
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitSpinner
+import dev.centraid.android.kit.NoAutofill
 import dev.centraid.android.kit.OutlineButton
-import dev.centraid.android.kit.OwnerPrompt
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.android.kit.RowSkeleton
@@ -62,22 +62,23 @@ import dev.centraid.android.kit.RowSkeleton
 // ---------------------------------------------------------------------------
 
 /**
- * The owner check is [onVerify]'s, answered `Verified` or `VerifyFailed`.
- * While `check_now` `WordsSheets` runs it before this sheet is up; after a
- * failed check, ASK is drawn and its primary runs it again. This view never
- * sends `Primary` from ASK.
+ * The owner check is Rust's (the generic `OwnerCheck` effect, which the screen
+ * effects perform); while `check_now` nothing is drawn, and after a failed
+ * check ASK is drawn and its primary asks again.
  */
 @Composable
 internal fun WordsShowScreen(
     state: WordsShowState,
     onEvent: (WordsShowEvent) -> Unit,
-    onVerify: (String) -> Unit,
 ) {
+    if (state.check_now) return
+    SecureWindow(state.secure)
+    NoAutofill()
     WordsPage(testTag = "words-show", description = state.accessibility_label) {
         WordsHead(state.title, state.body)
         if (state.words.isNotEmpty()) ShownWords(state.words)
         if (state.save_label.isNotEmpty() && state.words.isNotEmpty()) {
-            SaveCopyButton(state.save_label, state.words.map { it.word })
+            SaveCopyButton(state.save_label) { onEvent(WordsShowEvent(save_copy = WordsSaveCopy())) }
         }
         WordsNotice(state.notice)
         if (state.phase == WordsShowState.Phase.PHASE_LOADING) {
@@ -90,52 +91,10 @@ internal fun WordsShowScreen(
             primaryEnabled = state.primary_label.isNotEmpty(),
             secondary = state.secondary_label,
             prefix = "words-show",
-            onPrimary = {
-                if (state.phase == WordsShowState.Phase.PHASE_ASK) {
-                    onVerify(state.verify_reason)
-                } else {
-                    onEvent(WordsShowEvent(primary = WordsShowEvent.Primary()))
-                }
-            },
-            onSecondary = { onEvent(WordsShowEvent(secondary = WordsShowEvent.Secondary())) },
+            onPrimary = { onEvent(WordsShowEvent(primary = WordsPrimary())) },
+            onSecondary = { onEvent(WordsShowEvent(secondary = WordsSecondary())) },
         )
     }
-}
-
-/**
- * THE PHONE'S OWNER CHECK (R-1047-E10, Q-1047-12's presence posture): the
- * strong biometric with the device credential as its fallback, through
- * Locker's own authenticator table. [onAnswer] is called exactly once: true on
- * success; false on a terminal error or cancel — and a phone with no lock set
- * answers the prompt with `ERROR_NO_DEVICE_CREDENTIAL`, which is a failed
- * check, never a pass. Its second argument says the member dismissed the
- * prompt themself, which closes words.show rather than drawing why. A single
- * unrecognised touch is not an answer: the prompt stays up and says so itself.
- */
-internal fun ownerCheck(activity: FragmentActivity?, reason: String, onAnswer: (Boolean, Boolean) -> Unit) {
-    if (activity == null || reason.isEmpty()) {
-        onAnswer(false, false)
-        return
-    }
-    val callback = object : BiometricPrompt.AuthenticationCallback() {
-        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = onAnswer(true, false)
-
-        override fun onAuthenticationError(errorCode: Int, errString: CharSequence) = onAnswer(
-            false,
-            errorCode == BiometricPrompt.ERROR_USER_CANCELED ||
-                errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON ||
-                errorCode == BiometricPrompt.ERROR_CANCELED,
-        )
-    }
-    val info = BiometricPrompt.PromptInfo.Builder()
-        .setTitle(reason)
-        // NO NEGATIVE BUTTON: `DEVICE_CREDENTIAL` forbids one.
-        .setAllowedAuthenticators(OwnerPrompt.authenticators())
-        .build()
-    val raised = runCatching {
-        BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), callback).authenticate(info)
-    }
-    if (raised.isFailure) onAnswer(false, false)
 }
 
 // ---------------------------------------------------------------------------

@@ -35,7 +35,7 @@ import CentraidShared
 /// answer; what each door does is the shell's existing entry point —
 /// `makeVault()` opens `words.make`, which decides whether this phone mints
 /// words, makes from a seed it holds, or must restore first, and
-/// `openRestore()` opens `words.enter`. Both present the root words sheet over
+/// `openRestore()` opens `words.enter`. Both push the words screens over
 /// this screen, so **cancelling out of either lands back here**, and the gate
 /// goes only when a vault is held — the shelf says so, and Home takes its
 /// place behind the sheet's last screen.

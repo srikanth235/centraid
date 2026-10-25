@@ -259,6 +259,12 @@ final class ScreenStore: ObservableObject {
                 guard let fetched = try? Centraid_Core_V1_OriginalFetched(serializedBytes: bytes.data) else { return }
                 Task { @MainActor in self?.answer(request, .originalFetched(fetched)) }
             }
+        // THE VAULT'S SECRETS (lane H2): the device-only and synchronised stores, and
+        // whether the synchronised one would carry a key to another device.
+        case .secrets(let batch)?:
+            answer(request, .secrets(SecretStores.run(batch)))
+        case .syncedProbe?:
+            answer(request, .syncedStatus(SecretStores.probe()))
         case .keychain(let operation)?:
             answer(request, Self.keychain(operation))
         case .ownerCheck(let check)?:

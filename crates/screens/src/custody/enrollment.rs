@@ -1109,6 +1109,8 @@ enum Awaiting {
     Nothing,
     Secrets,
     Probe,
+    /// A restore is out on a worker thread.
+    Restore,
 }
 
 /// Drives one [`Job`] at a time for a screen.
@@ -1166,6 +1168,16 @@ impl Runner {
         Some(self.drive(env, Some(reply)))
     }
 
+    /// Take a restore's answer from the worker thread. `None` when no restore is
+    /// out.
+    pub fn off_thread(&mut self, done: &wire::OffThreadDone, env: &Env) -> Option<Progress> {
+        if self.awaiting != Awaiting::Restore || done.tag != door::RESTORE {
+            return None;
+        }
+        self.awaiting = Awaiting::Nothing;
+        Some(self.drive(env, Some(Reply::Restored(door::restored(done)))))
+    }
+
     fn drive(&mut self, env: &Env, reply: Option<Reply>) -> Progress {
         let mut reply = reply;
         let mut progress = Progress::default();
@@ -1196,9 +1208,11 @@ impl Runner {
                     self.awaiting = Awaiting::Probe;
                     return progress;
                 }
-                Step::Ask(Ask::Restore(request)) => match door::restore(env.ctx, request) {
-                    door::Sent::Done(result) => reply = Some(Reply::Restored(result)),
-                },
+                Step::Ask(Ask::Restore(request)) => {
+                    door::send_restore(env.ctx, request);
+                    self.awaiting = Awaiting::Restore;
+                    return progress;
+                }
             }
         }
     }

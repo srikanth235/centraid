@@ -71,6 +71,9 @@ dependencies {
     // Locker's unlock (#1047, D-5): `BiometricPrompt` needs a FragmentActivity,
     // which `MainActivity` is for this reason alone.
     implementation(libs.androidx.biometric)
+    // The secret stores' Block Store half (`kit/SecretStores.kt`) and the `Task.await` it uses.
+    implementation(libs.gms.blockstore)
+    implementation(libs.kotlinx.coroutines.play.services)
     // ...and a fragment runtime new enough to take Compose's request codes.
     implementation(libs.androidx.fragment)
     // Pairing's scan (#1047 E6): CameraX frames into ZXing's QR reader.

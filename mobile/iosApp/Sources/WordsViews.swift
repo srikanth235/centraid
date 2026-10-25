@@ -1,4 +1,3 @@
-import LocalAuthentication
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -6,7 +5,7 @@ import UIKit
 import CentraidShared
 
 // THE 24 WORDS, DRAWN (#1047 E2). Two screens over the shared machines:
-// `words.make` (`VaultWordsBridge`) and `words.enter` (`WordsEntryBridge`).
+// `words.make` (`WordsMakeState`) and `words.enter` (`WordsEnterState`), drawn from Rust's view state.
 //
 // **THESE VIEWS DECIDE NOTHING.** Every phase, every word a member reads, when
 // the primary control opens and what a verdict says arrive in the state;
@@ -33,17 +32,14 @@ import CentraidShared
 
 /// MAKE A VAULT, AND ITS 24 WORDS (`VaultWordsState`).
 struct VaultWordsView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_WordsMakeState
+    let send: (Centraid_Core_V1_WordsMakeEvent) -> Void
+    /// The screen is finished (made, left): the shell pops it.
+    let onDone: () -> Void
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_VaultWordsState {
-        (try? Centraid_Screen_V1_VaultWordsState(serializedBytes: data)) ?? .init()
-    }
-
     var body: some View {
-        let state = state
         WordsShield(secure: state.secure) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -86,7 +82,9 @@ struct VaultWordsView: View {
                             .accessibilityIdentifier("words-custody")
                     }
                     if !state.saveLabel.isEmpty, !state.words.isEmpty {
-                        WordsSaveCopyButton(label: state.saveLabel, words: state.words.map(\.word))
+                        WordsSaveCopyButton(label: state.saveLabel) {
+                            send(Self.event { $0.saveCopy = .init() })
+                        }
                     }
 
                     WordsNotice(notice: state.notice)
@@ -132,12 +130,14 @@ struct VaultWordsView: View {
             .background(Theme.color("bg", scheme).ignoresSafeArea())
             .accessibilityIdentifier("words-make")
         }
+        .onAppear { if state.finished { onDone() } }
+        .onChange(of: state.finished) { _, finished in if finished { onDone() } }
     }
 
-    static func event(_ build: (inout Centraid_Screen_V1_VaultWordsEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_VaultWordsEvent()
+    static func event(_ build: (inout Centraid_Core_V1_WordsMakeEvent) -> Void) -> Centraid_Core_V1_WordsMakeEvent {
+        var event = Centraid_Core_V1_WordsMakeEvent()
         build(&event)
-        return event.encoded
+        return event
     }
 }
 
@@ -146,8 +146,9 @@ struct VaultWordsView: View {
 /// TYPE THE 24 WORDS BACK (`WordsEntryState`): a restore onto this phone, or
 /// this phone's own vaults given their key again (Locker's wall).
 struct WordsEntryView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_WordsEnterState
+    let send: (Centraid_Core_V1_WordsEnterEvent) -> Void
+    let onDone: () -> Void
 
     @Environment(\.colorScheme) private var scheme
     @State private var focus: UInt32?
@@ -155,12 +156,7 @@ struct WordsEntryView: View {
     @State private var choosingPhoto = false
     @State private var photo: PhotosPickerItem?
 
-    private var state: Centraid_Screen_V1_WordsEntryState {
-        (try? Centraid_Screen_V1_WordsEntryState(serializedBytes: data)) ?? .init()
-    }
-
     var body: some View {
-        let state = state
         let working = state.phase == .working
         WordsShield(secure: state.secure) {
             ScrollView {
@@ -334,21 +330,27 @@ struct WordsEntryView: View {
                 }
             }
         }
-        .onAppear { if state.phase == .entering, focus == nil { focus = 1 } }
+        .onAppear {
+            // WHAT THIS PHONE CAN SCAN WITH is the shell's to say, once.
+            send(Self.event { $0.capability = .with { $0.camera = PairScanner.available } })
+            if state.finished { onDone() }
+            if state.phase == .entering, focus == nil, !state.cells.isEmpty { focus = 1 }
+        }
+        .onChange(of: state.finished) { _, finished in if finished { onDone() } }
         .onChange(of: state.phase) { _, phase in if phase != .entering { focus = nil } }
     }
 
-    static func event(_ build: (inout Centraid_Screen_V1_WordsEntryEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_WordsEntryEvent()
+    static func event(_ build: (inout Centraid_Core_V1_WordsEnterEvent) -> Void) -> Centraid_Core_V1_WordsEnterEvent {
+        var event = Centraid_Core_V1_WordsEnterEvent()
         build(&event)
-        return event.encoded
+        return event
     }
 }
 
 /// One of the 24 cells: its number, the field, and the list words its prefix
 /// could be — each a tap that sends `SuggestionPicked`.
 private struct EntryCell: View {
-    let cell: Centraid_Screen_V1_WordEntry
+    let cell: Centraid_Core_V1_WordEntry
     let focus: Binding<UInt32?>
     let onEdit: (String) -> Void
     let onPick: (String) -> Void
@@ -409,7 +411,7 @@ private struct EntryCell: View {
 /// One restored vault: its line, and its safety number large and grouped so
 /// it can be read against the laptop's.
 private struct RestoredLine: View {
-    let line: Centraid_Screen_V1_RestoredVaultLine
+    let line: Centraid_Core_V1_RestoredVaultLine
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -476,25 +478,18 @@ private struct StayedRetry: View {
 /// SHOW THE RECOVERY KEY AGAIN (`WordsShowState`, #1047 E5), from the Backup
 /// tab.
 ///
-/// The owner check (`LAContext` `.deviceOwnerAuthentication` — Face ID,
-/// Touch ID or the passcode) is this flow's one duty beyond drawing. While
-/// `check_now` the shell runs it before this sheet is presented
-/// (`ShellModel.wordsShowChanged`); after a failed check, ASK is drawn and
-/// its primary runs it again. It never sends `Primary` from ASK. The words reach the
-/// state only in SHOW, behind the same shield words.make draws; a swipe and
-/// leaving the foreground both send `Dismissed` (the shell's).
+/// The owner check is Rust's to ask (the generic `OwnerCheck` effect, which the
+/// store performs): while `check_now` nothing is drawn; after a failed check,
+/// ASK is drawn and its primary asks again. The words reach the state only in
+/// SHOW, behind the same shield words.make draws.
 struct WordsShowView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_WordsShowState
+    let send: (Centraid_Core_V1_WordsShowEvent) -> Void
+    let onDone: () -> Void
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_WordsShowState {
-        (try? Centraid_Screen_V1_WordsShowState(serializedBytes: data)) ?? .init()
-    }
-
     var body: some View {
-        let state = state
         WordsShield(secure: state.secure) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -504,7 +499,9 @@ struct WordsShowView: View {
                         ShownWords(cells: state.words)
                     }
                     if !state.saveLabel.isEmpty, !state.words.isEmpty {
-                        WordsSaveCopyButton(label: state.saveLabel, words: state.words.map(\.word))
+                        WordsSaveCopyButton(label: state.saveLabel) {
+                            send(Self.event { $0.saveCopy = .init() })
+                        }
                     }
 
                     WordsNotice(notice: state.notice)
@@ -520,13 +517,7 @@ struct WordsShowView: View {
                         primaryEnabled: !state.primaryLabel.isEmpty,
                         secondary: state.secondaryLabel,
                         prefix: "words-show",
-                        onPrimary: {
-                            if state.phase == .ask {
-                                verify(reason: state.verifyReason)
-                            } else {
-                                send(Self.event { $0.primary = .init() })
-                            }
-                        },
+                        onPrimary: { send(Self.event { $0.primary = .init() }) },
                         onSecondary: { send(Self.event { $0.secondary = .init() }) }
                     )
                 }
@@ -539,36 +530,16 @@ struct WordsShowView: View {
             .accessibilityLabel(state.accessibilityLabel)
             .accessibilityIdentifier("words-show")
         }
+        .onAppear { if state.finished { onDone() } }
+        .onChange(of: state.finished) { _, finished in if finished { onDone() } }
+        // A SWIPE AWAY drops the words (leaving the foreground does too, in Rust).
+        .onDisappear { if !state.finished { send(Self.event { $0.dismissed = .init() }) } }
     }
 
-    private func verify(reason: String) {
-        Self.ownerCheck(reason: reason, send: send)
-    }
-
-    /// THE OWNER CHECK. A phone with no passcode cannot evaluate the policy,
-    /// and that is a failed check, never a pass. The member dismissing the
-    /// prompt is `cancelled`, which closes the flow; any other failure keeps
-    /// ASK up with why.
-    static func ownerCheck(reason: String, send: @escaping (Data) -> Void) {
-        LAContext().evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { ok, error in
-            let code = (error as? LAError)?.code
-            let cancelled = code == .userCancel || code == .systemCancel || code == .appCancel
-            DispatchQueue.main.async {
-                send(event { event in
-                    if ok {
-                        event.verified = .init()
-                    } else {
-                        event.verifyFailed = .with { $0.cancelled = cancelled }
-                    }
-                })
-            }
-        }
-    }
-
-    static func event(_ build: (inout Centraid_Screen_V1_WordsShowEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_WordsShowEvent()
+    static func event(_ build: (inout Centraid_Core_V1_WordsShowEvent) -> Void) -> Centraid_Core_V1_WordsShowEvent {
+        var event = Centraid_Core_V1_WordsShowEvent()
         build(&event)
-        return event.encoded
+        return event
     }
 }
 
@@ -690,23 +661,11 @@ private struct WordsCheckboxLabel: View {
 /// because this screen is hosted inside the capture-proof canvas.
 private struct WordsSaveCopyButton: View {
     let label: String
-    let words: [String]
+    let action: () -> Void
 
     var body: some View {
-        KitLink(label: label, identifier: "words-save-copy", action: present)
+        KitLink(label: label, identifier: "words-save-copy", action: action)
             .frame(maxWidth: .infinity)
-    }
-
-    private func present() {
-        let sheet = UIActivityViewController(activityItems: [words.joined(separator: " ")], applicationActivities: nil)
-        sheet.excludedActivityTypes = [.copyToPasteboard, .assignToContact, .addToReadingList, .saveToCameraRoll]
-        let scene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState == .foregroundActive }
-        var top = scene?.windows.first(where: \.isKeyWindow)?.rootViewController
-        while let next = top?.presentedViewController { top = next }
-        sheet.popoverPresentationController?.sourceView = top?.view
-        top?.present(sheet, animated: true)
     }
 }
 
@@ -714,7 +673,7 @@ private struct WordsSaveCopyButton: View {
 /// column. Plain text with selection off and no menu — nothing here can put a
 /// word on the clipboard.
 private struct ShownWords: View {
-    let cells: [Centraid_Screen_V1_WordCell]
+    let cells: [Centraid_Core_V1_WordCell]
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -733,7 +692,7 @@ private struct ShownWords: View {
         .accessibilityIdentifier("words-shown")
     }
 
-    private func column(_ cells: [Centraid_Screen_V1_WordCell]) -> some View {
+    private func column(_ cells: [Centraid_Core_V1_WordCell]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(cells, id: \.position) { cell in
                 HStack(spacing: 8) {
@@ -1023,4 +982,48 @@ final class CaptureProofView: UIView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+}
+
+// MARK: - routes
+
+/// The routes of the 24 words' screens, for the shell's own doors (the vault
+/// switcher, the empty shelf, Locker's wall, the Backup tab). Rust's screens
+/// carry `Route`s in their views; Home is not Rust's yet, so these spell the
+/// same three values until it is.
+enum CustodyRoutes {
+    static func make() -> Centraid_Core_V1_Route {
+        var route = Centraid_Core_V1_Route()
+        route.screen = "words.make"
+        route.wordsMake = Centraid_Core_V1_WordsMakeRoute()
+        return route
+    }
+
+    /// Restore onto this phone; a phone already holding a seed restores from it.
+    static func restore() -> Centraid_Core_V1_Route {
+        enter(purpose: .restore, origin: .unspecified)
+    }
+
+    static func rekey(origin: Centraid_Core_V1_WordsEnterOrigin) -> Centraid_Core_V1_Route {
+        enter(purpose: .rekey, origin: origin)
+    }
+
+    static func show() -> Centraid_Core_V1_Route {
+        var route = Centraid_Core_V1_Route()
+        route.screen = "words.show"
+        route.wordsShow = Centraid_Core_V1_WordsShowRoute()
+        return route
+    }
+
+    private static func enter(
+        purpose: Centraid_Core_V1_WordsEnterPurpose,
+        origin: Centraid_Core_V1_WordsEnterOrigin
+    ) -> Centraid_Core_V1_Route {
+        var route = Centraid_Core_V1_Route()
+        route.screen = "words.enter"
+        route.wordsEnter = .with {
+            $0.purpose = purpose
+            $0.origin = origin
+        }
+        return route
+    }
 }

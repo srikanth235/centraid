@@ -11,17 +11,15 @@
 use std::fmt;
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_core::screens::VaultRequest;
+use prost::Message;
 
 use super::secrets::{SEED_HEX_LENGTH, WORDS};
 use crate::screen::Ctx;
 
 fn phrase(ctx: &Ctx, op: wire::phrase_request::Op) -> Option<wire::PhraseResponse> {
-    let request = wire::Request {
-        kind: Some(wire::request::Kind::Phrase(wire::PhraseRequest {
-            op: Some(op),
-        })),
-    };
-    match ctx.door(&request).ok()?.kind? {
+    let request = VaultRequest::Phrase(wire::PhraseRequest { op: Some(op) });
+    match ctx.vault(request).ok()?.kind? {
         wire::response::Kind::Phrase(answer) => Some(answer),
         _ => None,
     }
@@ -311,27 +309,34 @@ pub fn restore_answer(response: &wire::RestoreResponse) -> RestoreAnswer {
     }
 }
 
-/// Where a restore request went.
-pub enum Sent {
-    /// It already answered.
-    Done(Result<RestoreAnswer, RestoreRefusal>),
+/// The tag a restore's off-thread answer comes back under.
+pub const RESTORE: &str = "restore";
+
+/// Send a restore. It waits on a gateway, so it runs off the runtime's lock
+/// ([`Ctx::vault_async`]) and answers the asking screen as
+/// [`wire::OffThreadDone`] under [`RESTORE`]; [`restored`] reads it.
+pub fn send_restore(ctx: &Ctx, request: wire::RestoreRequest) {
+    ctx.vault_async(RESTORE, VaultRequest::Restore(request));
 }
 
-/// Send a restore. A restore waits on a gateway, so it does not belong on the
-/// screen runtime's lock; the transport is this function's alone.
-pub fn restore(ctx: &Ctx, request: wire::RestoreRequest) -> Sent {
-    let asked = wire::Request {
-        kind: Some(wire::request::Kind::Restore(request)),
+/// What a restore's [`wire::OffThreadDone`] carried.
+#[must_use]
+pub fn restored(done: &wire::OffThreadDone) -> Result<RestoreAnswer, RestoreRefusal> {
+    let Ok(called) = wire::VaultCalled::decode(done.bytes.as_slice()) else {
+        return Err(RestoreRefusal::Unreachable);
     };
-    Sent::Done(match ctx.door(&asked) {
-        Ok(wire::Response {
-            kind: Some(wire::response::Kind::Restore(response)),
-        }) => Ok(restore_answer(&response)),
+    // THE CODE SAYS WHICH REFUSAL (#1047 R3); the detail stays in the logs.
+    if let Some(error) = called.error {
+        return Err(RestoreRefusal::of(error.code()));
+    }
+    match wire::Response::decode(called.response.as_slice())
+        .ok()
+        .and_then(|response| response.kind)
+    {
+        Some(wire::response::Kind::Restore(response)) => Ok(restore_answer(&response)),
         // AN ANSWER WITH NO RESTORE ON IT is read as silence.
-        Ok(_) => Err(RestoreRefusal::Unreachable),
-        // THE CODE SAYS WHICH REFUSAL (#1047 R3); the detail stays in the logs.
-        Err(error) => Err(RestoreRefusal::of(error.code())),
-    })
+        _ => Err(RestoreRefusal::Unreachable),
+    }
 }
 
 // ---------------------------------------------------------------------------

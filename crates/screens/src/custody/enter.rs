@@ -211,6 +211,21 @@ impl Enter {
         }
     }
 
+    fn off_thread(&mut self, done: &wire::OffThreadDone, ctx: &Ctx) -> Vec<wire::Effect> {
+        let keeper = self.keeper.get();
+        let absent = Absent;
+        let keeper: &dyn Keeper = keeper.as_deref().unwrap_or(&absent);
+        let env = Env {
+            ctx,
+            secrets: &self.secrets,
+            keeper,
+        };
+        match self.runner.off_thread(done, &env) {
+            Some(progress) => self.progressed(progress),
+            None => Vec::new(),
+        }
+    }
+
     fn progressed(&mut self, progress: Progress) -> Vec<wire::Effect> {
         if let Some(out) = progress.out {
             // A late answer to a screen that was left changes nothing.
@@ -829,6 +844,7 @@ impl Screen for Enter {
                 self.begin(Job::reload(), ctx)
             }
             Some(E::EffectResult(result)) => self.answered(&result, ctx),
+            Some(E::OffThreadDone(done)) => self.off_thread(&done, ctx),
             Some(E::WordsEnter(event)) => self.event(event, ctx),
             _ => Vec::new(),
         }

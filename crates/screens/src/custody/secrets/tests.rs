@@ -344,3 +344,44 @@ fn nothing_the_cache_holds_reaches_a_debug_line() {
     assert!(!format!("{secrets:?}").contains(SEED));
     assert!(!format!("{:?}", VaultSecrets::remember_seed(SEED, true)).contains(SEED));
 }
+
+#[test]
+#[should_panic(expected = "128 lowercase hex characters")]
+fn writing_a_malformed_seed_is_refused_at_the_call() {
+    let _ = VaultSecrets::remember_seed("not a seed", true);
+}
+
+#[test]
+fn a_saved_copy_is_a_claim_kept_apart_from_the_key() {
+    let secrets = VaultSecrets::new();
+    assert!(!secrets.words_saved());
+    apply(&secrets, &[VaultSecrets::mark_words_saved()]);
+    assert!(secrets.words_saved());
+    // Forgetting the seed forgets the claim, and the words with it.
+    apply(&secrets, &[VaultSecrets::remember_words(&words())]);
+    apply(&secrets, &VaultSecrets::forget_seed());
+    assert!(!secrets.words_saved());
+    assert_eq!(secrets.words(), None);
+    assert_eq!(secrets.seed(), None);
+}
+
+#[test]
+fn a_vaults_own_key_waits_to_be_filed_until_it_is_filed_or_forgotten() {
+    let secrets = VaultSecrets::new();
+    assert!(secrets.pending_filings().is_empty());
+    apply(&secrets, &[secrets.add_pending_filing("0123456789abcdef", "Family")]);
+    apply(&secrets, &[secrets.add_pending_filing("fedcba9876543210", "Work")]);
+    assert_eq!(secrets.pending_filings().len(), 2);
+    // Filing two at once leaves neither standing, not the last one's list.
+    apply(
+        &secrets,
+        &secrets.clear_pending_filings(&[
+            "0123456789abcdef".to_owned(),
+            "fedcba9876543210".to_owned(),
+        ]),
+    );
+    assert!(secrets.pending_filings().is_empty());
+    apply(&secrets, &[secrets.add_pending_filing("0123456789abcdef", "Family")]);
+    apply(&secrets, &secrets.clear_pending_filing("0123456789abcdef"));
+    assert!(secrets.pending_filings().is_empty());
+}
