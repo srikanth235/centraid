@@ -29,7 +29,6 @@ public interface PlatformServices {
     public val networkStatus: NetworkStatus
     public val powerAndLink: PowerAndLink
     public val mediaLibrary: MediaLibrary
-    public val ocr: Ocr
     public val secureRandom: SecureRandom
     public val clock: DeviceClock
 }
@@ -480,11 +479,4 @@ public interface MediaLibrary {
         PHOTO("photo"),
         VIDEO("video"),
     }
-}
-
-/** On-device text recognition. Wave 4 (v0's `centraid-ocr` module). */
-public interface Ocr {
-    public suspend fun available(): Boolean
-
-    public suspend fun recognise(imagePath: String): List<String>
 }

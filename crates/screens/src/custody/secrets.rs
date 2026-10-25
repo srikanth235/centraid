@@ -147,6 +147,10 @@ struct Cache {
 #[derive(Clone, Default)]
 pub struct VaultSecrets {
     cache: Arc<Mutex<Cache>>,
+    /// The pass conductor, shared by the pass service and the Backup screen the
+    /// same way the cache is: reachable from here so `registry(&secrets)` hands
+    /// both the one object.
+    conductor: crate::passes::Conductor,
 }
 
 impl fmt::Debug for VaultSecrets {
@@ -211,6 +215,25 @@ impl VaultSecrets {
         self.cache
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// The pass conductor every clone shares (`crate::passes`).
+    #[must_use]
+    pub fn conductor(&self) -> &crate::passes::Conductor {
+        &self.conductor
+    }
+
+    /// A device-only value the shell last said, for a setting that is not a
+    /// key (the transfer rule; `crate::passes::rule`).
+    #[must_use]
+    pub(crate) fn device_value(&self, key: &str) -> Option<String> {
+        self.device_get(key)
+    }
+
+    /// The op that sets a device-only value; an empty value deletes it.
+    #[must_use]
+    pub(crate) fn device_set(key: &str, value: &str) -> wire::SecretOp {
+        set_device(key, value)
     }
 
     // ---- loading ---------------------------------------------------------

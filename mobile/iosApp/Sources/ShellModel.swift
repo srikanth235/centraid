@@ -104,24 +104,10 @@ final class ShellModel: ObservableObject {
 
     func unmask() { masked = false }
 
-    /// THE FOREGROUND TRIGGER (#1029 W18-6).
-    ///
-    /// The amendment's posture is that the phone drains **in the foreground and
-    /// inside the background window iOS grants**, so the foreground half needs a
-    /// caller and this is it: `CentraidApp`'s scene phase already observes
-    /// `.active` for the switcher mask, and becoming active is the one moment
-    /// worth spending a drain on without asking whether one ran recently.
-    ///
-    /// Fire-and-forget. A member who has just opened Centraid is looking at
-    /// their vault, not at a progress bar for a pass they did not ask for; the
-    /// backup line updates from `backup_status` when the answer lands.
-    ///
-    /// **HELD UNDER A GRACE** (#1080): if the member leaves while the pass is
-    /// running, iOS gives it the background task's seconds to finish its
-    /// current part instead of suspending it mid-part.
+    /// THE FOREGROUND TRIGGER. The pass is Rust's: the scene's `.active` is reported as
+    /// `AppLifecycle` (`CentraidApp`), and the pass scheduler decides that opening the app is
+    /// worth a pass (`passes`). What is left here is Docs following the phone.
     func becameActive() {
-        let grace = ForegroundGrace(name: "dev.centraid.pass.active")
-        home.becameActive(onDone: { _ in grace.end() })
         followPhone()
     }
 
@@ -148,31 +134,6 @@ final class ShellModel: ObservableObject {
         followQuestion = nil
         follow.answer(question: question, keep: keep)
     }
-
-    /// THE APP WENT TO THE BACKGROUND (#1080, the shells).
-    ///
-    /// Two things, in this order. The night's windows are asked for first —
-    /// leaving the app is what arms them, and a one-shot request that was only
-    /// ever resubmitted from inside a handler never ran at all. Then
-    /// `enteredBackground` under the background task's grace, bounded by
-    /// [backgroundPassSeconds]. It FORCES a snapshot, so what the member just
-    /// wrote is sealed before the app is suspended; it waits inside the grace
-    /// for a pass already running ("Back up now", say) rather than being
-    /// refused by it; and it ends like every iOS pass, handing what is sealed
-    /// to the OS to carry. The vault directory's backup exclusion is swept by
-    /// the `didEnterBackground` observer below, not here.
-    func wentToBackground() {
-        BackgroundPasses.resubmitAll()
-        let grace = ForegroundGrace(name: "dev.centraid.pass.background")
-        home.enteredBackground(
-            graceMs: Int64(Self.backgroundPassSeconds * 1000),
-            onDone: { _ in grace.end() }
-        )
-    }
-
-    /// Under the ~30 seconds iOS grants a background task, with room for the
-    /// part in flight to finish after the deadline is read.
-    static let backgroundPassSeconds: TimeInterval = 20
 
     /// THE FIRST-LAUNCH GATE: true once the shelf has read its directory and
     /// the device holds no vault — a fresh install, or the last vault
@@ -309,6 +270,8 @@ final class ShellModel: ObservableObject {
         route.backupHome = .init()
         return route
     }
+    /// THE LINK AND THE CHARGER, reported to the pass scheduler (`PassFacts.swift`).
+    private let links = LinkReporter()
 
     /// THE REGISTERED SCREENS' PORTS AND ROUTES (K5) — `ScreenRegistry.swift`.
     /// Filled once, in `init`, by `AppRegistry.apps`; held for the life of the
@@ -326,6 +289,11 @@ final class ShellModel: ObservableObject {
         store.onContactsLimited = { [weak self] in self?.contactAccessPickerShown = true }
         store.backgroundRegistered = { [weak self] in self?.session?.backgroundRegistered?.boolValue }
         screens = store
+        // THE PASS SCHEDULER'S ROADS (`passes`): a granted window and what the OS uploaded reach
+        // Rust as facts through the store, and the link is reported from the first reading.
+        BackgroundPasses.store = store
+        UploadSettlement.shared.attach(ScreenUploadSink(store))
+        links.start(store)
         // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED (R-ONBOARD-10), and when
         // Home's tile and chat's key slot learn the Locker is open.
         store.onAnnounce = { [weak self] topic in
@@ -442,37 +410,9 @@ final class ShellModel: ObservableObject {
                 ask: { [weak self] question in DispatchQueue.main.async { self?.followQuestion = question } }
             )
             self.chat.attach(session: session)
-            // THE BACKGROUND WINDOWS NOW HAVE SOMETHING TO RUN (#1029 W18-6).
-            //
-            // `BackgroundPasses` registered both handlers at launch — it has to,
-            // before the app finishes launching — but what a pass IS belongs to
-            // `commonMain`, and there was no shelf to drain until this moment.
-            // So the handler is installed here, when the session exists; a
-            // window that opens first waits a bounded time for it and then
-            // completes honestly rather than claiming a pass ran.
-            //
-            // `Bool` in, `Bool` out: the answer is handed straight to
-            // `setTaskCompleted(success:)`.
-            BackgroundPasses.pass = { deadline in
-                await withCheckedContinuation { continuation in
-                    self.home.drain(
-                        deadlineMs: Int64(deadline * 1000),
-                        onDone: { drained in continuation.resume(returning: drained.boolValue) }
-                    )
-                }
-            }
             // THE PINS, NOW THAT THE CORE CAN ANSWER `pins` (#1080).
             self.refreshUploadPins()
-            // AND THE FIRST FOREGROUND PASS. `becameActive` below runs on every
-            // later activation; this is the one at launch, which would otherwise
-            // be missed because the session did not exist when the scene became
-            // active. Held under a grace like every foreground pass.
-            let grace = ForegroundGrace(name: "dev.centraid.pass.launch")
-            self.home.becameActive(onDone: { _ in grace.end() })
         }
-        // THE BACKGROUND MOVER'S SEAM (#1080 §2), before the core opens, so a
-        // relaunch's reports have somewhere to wait.
-        wireUploads()
         // FREE UP SPACE'S HAND ON THE PHOTO LIBRARY (#1080 A20), installed once;
         // `HomeBridge` hands it to the session when the session opens.
         home.installLibraryDeleter(deleter: PhotoLibraryDeleter())
@@ -540,20 +480,11 @@ final class ShellModel: ObservableObject {
 
     // MARK: The background mover's seam (#1080 §2, A6, A11)
     //
-    // EVERY KOTLIN NAME THE MOVER NEEDS IS IN THESE TWO FUNCTIONS: how each
-    // side is handed the other — `BackgroundUploads`, which
-    // `BackgroundUploader` implements, and `UploadEvents`, which the core's
-    // side implements — and how the pinned certificates reach a shell that
-    // must answer a server-trust challenge before any vault is open. Both
-    // `HomeBridge` doors are seam contract A11's.
-
-    /// Hand the core this shell's mover, and take the core's sink for what
-    /// the mover reports. Called at construction, before the core opens.
-    private func wireUploads() {
-        // A11: `HomeBridge.installUploads(uploads: BackgroundUploads): UploadEvents`.
-        let events = home.installUploads(uploads: BackgroundUploader.shared)
-        UploadSettlement.shared.attach(CoreUploadSink(events))
-    }
+    // THE OS-OWNED UPLOADS ARE RUST'S TO DECIDE AND THIS SHELL'S TO CARRY: the pass scheduler
+    // (`passes`) asks for a hand-off batch and gives it to `BackgroundUploader` as an effect, and
+    // what the OS reports comes back as facts through `UploadSettlement`, which holds a relaunch's
+    // reports until `attachScreens` gives it the store. The pinned certificates still reach the
+    // shell here, because a server-trust challenge is answered before any vault is open.
 
     /// Re-read the pinned certificates from the core and keep them where a
     /// cold background launch can read them (`UploadPins`). Called when the

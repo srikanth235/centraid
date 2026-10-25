@@ -54,7 +54,7 @@ public object DrainCopy {
         "If you swipe Centraid away, your phone cancels those uploads until you open it again. " +
             "Low Power Mode pauses them."
 
-    /** Android's floor: the periodic window's network follows the member's rule ([BackgroundWindows]). */
+    /** Android's floor: the periodic window's network follows the member's rule. */
     public const val ANDROID_UNMETERED_SENTENCE: String =
         "Centraid backs up in the background on Wi-Fi, and on cellular when your setting allows it."
 

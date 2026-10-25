@@ -136,6 +136,7 @@ pub mod locker;
 pub mod money;
 pub mod notes;
 pub mod pairing;
+pub mod passes;
 pub mod people;
 pub mod photos;
 pub mod photos_home;

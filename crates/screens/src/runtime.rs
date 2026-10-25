@@ -229,7 +229,8 @@ impl Runtime {
         };
         let ctx = Ctx::new(core, &env);
         let effects = instance.screen.update(event, &ctx);
-        let done = ctx.finish();
+        let mut done = ctx.finish();
+        let signals = std::mem::take(&mut done.signals);
         instance.tables.extend(done.tables);
 
         if !instance.service {
@@ -274,6 +275,29 @@ impl Runtime {
                 instance: id,
                 effect: Some(effect),
             });
+        }
+        // A SIGNAL REACHES THE OTHER SCREENS THAT LISTEN FOR ITS TOPIC, after
+        // this screen's own work is recorded. A screen is never told its own.
+        for topic in signals {
+            let hearing: Vec<u64> = state
+                .instances
+                .iter()
+                .filter(|(other, instance)| **other != id && instance.screen.hears(&topic))
+                .map(|(other, _)| *other)
+                .collect();
+            for other in hearing {
+                Self::dispatch(
+                    state,
+                    core,
+                    other,
+                    wire::ScreenEvent {
+                        kind: Some(wire::screen_event::Kind::Signalled(wire::Signalled {
+                            topic: topic.clone(),
+                        })),
+                    },
+                    out,
+                );
+            }
         }
     }
 
@@ -454,6 +478,22 @@ impl ScreenHost for Runtime {
                     &mut out,
                 );
             }
+            // A FACT THE SHELL REPORTS (the link, a granted window, the vaults
+            // held, an upload the OS finished): every open screen and service
+            // hears it; the pass scheduler is the one that acts.
+            K::ShellFact(fact) => {
+                let fact = fact.clone();
+                Self::broadcast(
+                    &mut state,
+                    core,
+                    |_| {
+                        Some(wire::ScreenEvent {
+                            kind: Some(wire::screen_event::Kind::ShellFact(fact.clone())),
+                        })
+                    },
+                    &mut out,
+                );
+            }
             // THE APP LEFT OR CAME BACK: every open screen hears it (a Locker
             // relocks the instant it leaves the foreground).
             K::Lifecycle(lifecycle) => {
@@ -485,9 +525,12 @@ impl ScreenHost for Runtime {
             &mut state,
             core,
             |instance| {
+                // A SERVICE HEARS EVERY COMMIT: it asks for no table, it is the
+                // thing that reacts to the vault having moved (the pass
+                // scheduler). A screen hears the tables it read.
                 let hit: Vec<String> = tables
                     .iter()
-                    .filter(|table| instance.tables.contains(*table))
+                    .filter(|table| instance.service || instance.tables.contains(*table))
                     .cloned()
                     .collect();
                 (!hit.is_empty()).then_some(wire::ScreenEvent {

@@ -27,6 +27,12 @@ pub trait Screen: Send {
 
     /// The finished state. `instance` and `revision` are stamped by the runtime.
     fn view(&self, ctx: &Ctx) -> wire::ViewState;
+
+    /// Whether this screen wants to hear [`Ctx::signal`] on `topic`. Nothing
+    /// is sent to a screen that does not say so.
+    fn hears(&self, _topic: &str) -> bool {
+        false
+    }
 }
 
 /// The device's locale and zone, as the shell last reported them.
@@ -64,6 +70,7 @@ pub(crate) struct Done {
     pub tables: BTreeSet<String>,
     pub timers: Vec<TimerOp>,
     pub jobs: Vec<(String, centraid_core::screens::OffThreadWork)>,
+    pub signals: Vec<String>,
 }
 
 /// A screen's door to the core, the catalog and the clock.
@@ -217,6 +224,14 @@ impl<'a> Ctx<'a> {
             .borrow_mut()
             .timers
             .push(TimerOp::Cancel(name.to_owned()));
+    }
+
+    /// Tell every OTHER open screen that hears `topic` (see [`Screen::hears`])
+    /// that something it draws or drives changed, as [`wire::Signalled`]. For
+    /// two screens that share an object (the pass conductor) and need to wake
+    /// each other; not a broadcast of data.
+    pub fn signal(&self, topic: &str) {
+        self.done.borrow_mut().signals.push(topic.to_owned());
     }
 
     pub(crate) fn finish(self) -> Done {

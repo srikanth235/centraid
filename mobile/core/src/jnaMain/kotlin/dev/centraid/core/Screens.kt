@@ -12,6 +12,7 @@ import centraid.core.v1.Request
 import centraid.core.v1.ScreenEvent
 import centraid.core.v1.ScreenRequest
 import centraid.core.v1.ScreenUpdate
+import centraid.core.v1.ShellFact
 import centraid.core.v1.SnapshotRequest
 import centraid.core.v1.ViewState
 import kotlinx.coroutines.CoroutineScope
@@ -87,6 +88,13 @@ public class Screens(
     /** Report the app's foreground or background; Rust's screens and the Locker's relock hear it. */
     public suspend fun lifecycle(foreground: Boolean): CoreOutcome<Unit> =
         request(ScreenRequest(lifecycle = AppLifecycle(foreground = foreground)))
+
+    /**
+     * Report a fact about the phone: the link, a background window the OS granted, the vaults
+     * held, an upload the OS finished. The pass scheduler in Rust decides what it means.
+     */
+    public suspend fun shellFact(fact: ShellFact): CoreOutcome<Unit> =
+        request(ScreenRequest(shell_fact = fact))
 
     /** Answer an effect the shell performed. */
     public suspend fun answer(effect: EffectRequest, result: EffectResult): CoreOutcome<Unit> =

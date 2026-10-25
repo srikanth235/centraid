@@ -72,93 +72,6 @@ class CoreBackupDoorsSpec : StringSpec({
 
     fun refusing(code: ErrorCode) = core { Envelope(error = centraid.core.v1.Error(code = code, detail = "logs only")) }
 
-    "the pass carries the rule, the link, the snapshot and the videos' negation" {
-        runTest {
-            val seen = mutableListOf<Request>()
-            val door = CoreDrainDoor {
-                core(seen) { Envelope(response = Response(drain = DrainResponse(stopped = DrainStop.DRAIN_STOP_EMPTY))) }
-            }
-            door.drain(
-                DrainInput(
-                    deadlineMs = 25_000,
-                    rule = TransferRule.WIFI_AND_CELLULAR_PHOTOS,
-                    includeVideos = false,
-                    metered = true,
-                    charging = false,
-                    wantsSnapshot = true,
-                    asked = true,
-                ),
-            )
-            val sent = seen.single().drain.shouldNotBeNull()
-            sent.deadline_ms shouldBe 25_000L
-            sent.rule shouldBe centraid.core.v1.TransferRule.TRANSFER_RULE_WIFI_AND_CELLULAR_PHOTOS
-            sent.metered shouldBe true
-            sent.charging shouldBe false
-            sent.wants_snapshot shouldBe true
-            // THE MEMBER'S TAP CROSSES AS ITS OWN BIT (#1080 A24).
-            sent.asked shouldBe true
-            // INCLUDED IS THE ZERO VALUE: the wire's default is the complete backup.
-            sent.exclude_videos shouldBe true
-            // A SNAPSHOT NOBODY ASKED FOR carries no ask: leaving the screen.
-            door.drain(
-                DrainInput(0, TransferRule.MANUAL, true, metered = false, charging = false, wantsSnapshot = true),
-            )
-            seen.last().drain.shouldNotBeNull().asked shouldBe false
-        }
-    }
-
-    "the pass's answer keeps the gateway's clock and turns raw hashes into hex" {
-        runTest {
-            val door = CoreDrainDoor {
-                core {
-                    Envelope(
-                        response = Response(
-                            drain = DrainResponse(
-                                pending_bytes = 900,
-                                stopped = DrainStop.DRAIN_STOP_DEADLINE,
-                                acked_at_ms = 1_790_000_000_000,
-                                confirmed_parts = 12,
-                                waiting_bytes_parts = 3,
-                                need_bytes = listOf(
-                                    NeedBytes(content_hash = ContentHash.raw(hash)!!, os_ref = "L/1", media_type = "image/heic", size = 7),
-                                    // A HASH OF THE WRONG LENGTH IS DROPPED, never streamed against.
-                                    NeedBytes(content_hash = ByteArray(3).toByteString(), os_ref = "L/2"),
-                                ),
-                            ),
-                        ),
-                    )
-                }
-            }
-            val answer = door.drain(
-                DrainInput(0, TransferRule.WIFI_ONLY, true, metered = false, charging = true, wantsSnapshot = false),
-            ).shouldNotBeNull()
-            answer.stopped shouldBe DrainAnswer.Stopped.DEADLINE
-            answer.ackedAtMs shouldBe 1_790_000_000_000L
-            answer.confirmedParts shouldBe 12
-            answer.waitingBytesParts shouldBe 3
-            answer.needBytes.map { it.contentHash to it.osRef } shouldBe listOf(hash to "L/1")
-        }
-    }
-
-    "a moved vault is an answer, dated by the gateway; every other refusal is no pass" {
-        runTest {
-            val moved = CoreDrainDoor {
-                core {
-                    Envelope(
-                        error = centraid.core.v1.Error(
-                            code = ErrorCode.ERROR_CODE_VAULT_MOVED,
-                            moved = centraid.core.v1.VaultMoved(moved_at_ms = 1_789_000_000_000),
-                        ),
-                    )
-                }
-            }.drain(DrainInput(0, TransferRule.WIFI_ONLY, true, false, true, false)).shouldNotBeNull()
-            moved.stopped shouldBe DrainAnswer.Stopped.MOVED
-            moved.movedAtMs shouldBe 1_789_000_000_000L
-            CoreDrainDoor { refusing(ErrorCode.ERROR_CODE_INVALID_REQUEST) }
-                .drain(DrainInput(0, TransferRule.WIFI_ONLY, true, false, true, false)).shouldBeNull()
-        }
-    }
-
     "the status reads the core's ledger: destinations, counts and why the rest waits" {
         runTest {
             val reading = CoreBackupStatus {
@@ -204,43 +117,6 @@ class CoreBackupDoorsSpec : StringSpec({
             destination.lastSeenMs shouldBe 5L
             // ZERO IS "NEVER" ON THE WIRE.
             destination.lastAckMs.shouldBeNull()
-        }
-    }
-
-    "a handoff is passed to the shell whole: the core's part is the upload, headers and all" {
-        runTest {
-            val parts = CoreBackupDoors {
-                core {
-                    Envelope(
-                        response = Response(
-                            handoff = HandoffResponse(
-                                parts = listOf(
-                                    WireHandoffPart(
-                                        name = hash,
-                                        path = "/spool/$hash",
-                                        url = "https://192.168.1.20:7443/v2/v/vlt/o/$hash",
-                                        method = "PUT",
-                                        headers = listOf(Header("Content-Digest", "blake3=00")),
-                                        size = 1_024,
-                                        gateway_id = "gw-1",
-                                        vault_id = "vlt",
-                                        allows_cellular = true,
-                                    ),
-                                ),
-                            ),
-                        ),
-                    )
-                }
-            }.handoff(maxBytes = 50_000_000, maxParts = 32).shouldNotBeNull()
-            // NOTHING IS RE-SPELLED ON THE WAY: the core's cellular verdict for
-            // the part (A10's `allows_cellular`) reaches the mover as the core
-            // set it, without this door reading it.
-            val part = parts.single()
-            part.allows_cellular shouldBe true
-            part.headers.single().value_ shouldBe "blake3=00"
-            part.gateway_id shouldBe "gw-1"
-            part.vault_id shouldBe "vlt"
-            part.size shouldBe 1_024L
         }
     }
 
@@ -348,24 +224,6 @@ class CoreBackupDoorsSpec : StringSpec({
                     core { Envelope(response = Response(fetch_original = FetchOriginalResponse(outcome = wire))) }
                 }.fetchOriginal(hash).shouldNotBeNull().first shouldBe outcome
             }
-        }
-    }
-
-    "a pass that met a machine that is not the gateway says so, and an unknown stop is unreachable" {
-        runTest {
-            fun stopped(stop: DrainStop) = CoreDrainDoor {
-                core { Envelope(response = Response(drain = DrainResponse(stopped = stop))) }
-            }
-            stopped(DrainStop.DRAIN_STOP_UNTRUSTED)
-                .drain(DrainInput(0, TransferRule.WIFI_ONLY, true, false, true, false)).shouldNotBeNull()
-                .stopped shouldBe DrainAnswer.Stopped.UNTRUSTED
-            stopped(DrainStop.DRAIN_STOP_UNSPECIFIED)
-                .drain(DrainInput(0, TransferRule.WIFI_ONLY, true, false, true, false)).shouldNotBeNull()
-                .stopped shouldBe DrainAnswer.Stopped.UNREACHABLE
-            // A GATEWAY THAT ANSWERED AND REFUSED is its own stop, not an absence (#1080, F1).
-            stopped(DrainStop.DRAIN_STOP_REFUSED)
-                .drain(DrainInput(0, TransferRule.WIFI_ONLY, true, false, true, false)).shouldNotBeNull()
-                .stopped shouldBe DrainAnswer.Stopped.REFUSED
         }
     }
 

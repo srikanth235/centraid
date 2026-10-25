@@ -74,6 +74,7 @@ import dev.centraid.android.screens.people.PeopleEditorScreen
 import dev.centraid.android.screens.people.PeopleHomeScreen
 import dev.centraid.android.screens.people.PeoplePersonScreen
 import dev.centraid.core.CentraidCore
+import dev.centraid.android.backup.PassHost
 import dev.centraid.core.Screens
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.AppIds
@@ -242,6 +243,8 @@ internal class AgendaRoutes(
         val next = Screens(live, home)
         core = live
         screens = next
+        // THE PASS SCHEDULER'S HOST: a window the OS grants reports to this runtime while the app is up.
+        PassHost.live = next
         attached = next.attach()
         home.launch {
             // THE DEVICE'S LOCALE AND ZONE, then the tabs' roots, then any page a

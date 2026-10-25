@@ -29,7 +29,6 @@ public class FakePlatformServices(
     override val networkStatus: FakeNetworkStatus = FakeNetworkStatus(),
     override val powerAndLink: FakePowerAndLink = FakePowerAndLink(),
     override val mediaLibrary: FakeMediaLibrary = FakeMediaLibrary(),
-    override val ocr: FakeOcr = FakeOcr(),
     // NOT A FAKE, and it is the one member here that must not be. A fake CSPRNG
     // that tested green would prove the opposite of what the test is for, so
     // the JVM actual is the real `java.security.SecureRandom` the tests draw
@@ -352,12 +351,6 @@ public class FakeLibraryDeleter(
         handed += items
         done(answer(items))
     }
-}
-
-public class FakeOcr(public var availability: Boolean = false) : Ocr {
-    override suspend fun available(): Boolean = availability
-
-    override suspend fun recognise(imagePath: String): List<String> = emptyList()
 }
 
 /**
