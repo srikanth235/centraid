@@ -56,7 +56,13 @@ import dev.centraid.android.screens.agenda.TodoCatchUpScreen
 import dev.centraid.android.screens.agenda.TodoDetailScreen
 import dev.centraid.android.screens.agenda.TodoListScreen
 import dev.centraid.android.screens.agenda.TodoProjectScreen
+import dev.centraid.android.screens.backup.BackupHomeScreen
 import dev.centraid.android.screens.chat.ChatScreen
+import dev.centraid.android.screens.pairing.PairLaptopPage
+import dev.centraid.android.screens.words.CustodyRoutes
+import dev.centraid.android.screens.words.VaultWordsScreen
+import dev.centraid.android.screens.words.WordsEnterPage
+import dev.centraid.android.screens.words.WordsShowScreen
 import dev.centraid.android.screens.docs.DocsDocumentScreen
 import dev.centraid.android.screens.docs.DocsDriveScreen
 import dev.centraid.android.screens.docs.DocsEditorScreen
@@ -609,12 +615,18 @@ internal class RustRoot(
         val healthMetric = view.health_metric
         val healthWorkout = view.health_workout
         val healthConnect = view.health_connect
+        val pairLaptop = view.pair_laptop
+        val backupHome = view.backup_home
+        val wordsMake = view.words_make
+        val wordsEnter = view.words_enter
+        val wordsShow = view.words_show
 
         // THE SCREEN IS DONE (a cancel committed, the editor saved or left, the task deleted): its page goes.
         val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true ||
             doc?.dismissed == true || peoplePerson?.done == true || healthConnect?.finished == true ||
             lockerItem?.finished == true || lockerEditor?.finished == true || lockerLock?.finished == true ||
-            moneyTarget?.finished == true || moneyImport?.finished == true
+            moneyTarget?.finished == true || moneyImport?.finished == true ||
+            wordsMake?.finished == true || wordsEnter?.finished == true || wordsShow?.finished == true
         LaunchedEffect(done) {
             if (done) back()
         }
@@ -921,6 +933,33 @@ internal class RustRoot(
                 view = trash,
                 onEvent = { send(ScreenEvent(trash = it)) },
                 onBack = back,
+            )
+            // THE VAULT PLUMBING (#1135, lane H2): the backup, the 24 words and pairing a gateway.
+            backupHome != null -> BackupHomeScreen(
+                state = backupHome,
+                onEvent = { send(ScreenEvent(backup_home = it)) },
+                // The rule is written, and the pass service told, by the Backup screen in Rust.
+                onRulePicked = {},
+                onAddDestination = { open(Route(screen = "pair.laptop")) },
+                onShowWords = { open(CustodyRoutes.show()) },
+            )
+            wordsMake != null -> VaultWordsScreen(
+                state = wordsMake,
+                onEvent = { send(ScreenEvent(words_make = it)) },
+            )
+            wordsEnter != null -> WordsEnterPage(
+                state = wordsEnter,
+                onEvent = { send(ScreenEvent(words_enter = it)) },
+            )
+            wordsShow != null -> WordsShowScreen(
+                state = wordsShow,
+                onEvent = { send(ScreenEvent(words_show = it)) },
+            )
+            // PAIRING A GATEWAY: scan or paste its code (`ScanCode` is the effects performer's).
+            pairLaptop != null -> PairLaptopPage(
+                state = pairLaptop,
+                onEvent = { send(ScreenEvent(pair_laptop = it)) },
+                onDone = back,
             )
         }
     }
