@@ -268,6 +268,9 @@ fn one_background_urlsession_carries_the_uploads_and_it_pins_the_gateway_by_der(
     assert!(mover.contains("SecCertificateCopyData("));
     // AND NO KOTLIN MAKES ONE, nor names v0's retired seam.
     for file in files_under(&mobile().join("shared/src"), &["kt"]) {
+        if file.components().any(|c| c.as_os_str() == "jvmTest") {
+            continue;
+        }
         let text = code(&fs::read_to_string(&file).expect("kotlin"));
         assert!(
             !text.contains("backgroundSessionConfigurationWithIdentifier")

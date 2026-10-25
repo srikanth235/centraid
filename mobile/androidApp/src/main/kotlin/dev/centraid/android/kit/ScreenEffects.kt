@@ -24,14 +24,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.content.ContextCompat
 import centraid.core.v1.CameraRead
 import centraid.core.v1.CameraRoll
-import centraid.core.v1.CoreCall
-import centraid.core.v1.CoreCalled
-import centraid.core.v1.Envelope
-import centraid.core.v1.Error
-import centraid.core.v1.ErrorCode
-import centraid.core.v1.Request
-import centraid.core.v1.Response
-import centraid.core.v1.VaultMoved
 import centraid.core.v1.Effect
 import centraid.core.v1.EffectDone
 import centraid.core.v1.EffectFailed
@@ -59,8 +51,6 @@ import dev.centraid.android.screens.people.readContactsSnapshot
 import dev.centraid.android.screens.performExportOriginals
 import dev.centraid.android.screens.photos.PhotosEditRender
 import dev.centraid.core.CentraidCore
-import dev.centraid.core.CoreFailure
-import dev.centraid.core.CoreOutcome
 import dev.centraid.core.Screens
 import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.shell.PhotosDevice
@@ -248,7 +238,6 @@ private suspend fun perform(
         effect.uploads != null -> failed("the OS carries no uploads on this platform")
         // The roll's second stream is the camera roll's (lane I).
         effect.stream_from_library != null -> failed("not performed by this shell")
-        effect.core_call != null -> coreCall(core, effect.core_call!!)
         // THE ORIGINALS OF A PICK, to the share sheet or this phone's photos.
         effect.export_originals != null ->
             runCatching { performExportOriginals(context, core, effect.export_originals!!) }
@@ -484,43 +473,6 @@ private suspend fun keychain(op: KeychainOp): EffectResult {
         else -> failed("unknown keychain operation")
     }
 }
-
-/**
- * ONE CORE REQUEST, PERFORMED FOR RUST: decode it, call the core, hand the response back encoded.
- * A refusal travels as the core's typed `Error`; only a request that cannot be carried at all is a
- * failed effect.
- */
-private suspend fun coreCall(core: CentraidCore, call: CoreCall): EffectResult {
-    val request = runCatching { Request.ADAPTER.decode(call.request.toByteArray()) }.getOrNull()
-        ?: return failed("a core call carried no request")
-    return when (val outcome = core.call(Envelope(request_id = 0, request = request))) {
-        is CoreOutcome.Answered -> {
-            val response = outcome.value.response ?: return failed("the core answered no response")
-            EffectResult(core_called = CoreCalled(response = ByteString.of(*Response.ADAPTER.encode(response))))
-        }
-        is CoreOutcome.Failed -> {
-            val failure = outcome.failure
-            if (failure is CoreFailure.Refused) {
-                EffectResult(
-                    core_called = CoreCalled(
-                        error = Error(
-                            code = ErrorCode.fromValue(failure.code) ?: ErrorCode.ERROR_CODE_UNSPECIFIED,
-                            detail = failure.detail,
-                            diagnostic_id = failure.diagnosticId,
-                            sentence = failure.sentence,
-                            moved = failure.movedAtMs?.let { VaultMoved(moved_at_ms = it) },
-                        ),
-                    ),
-                )
-            } else {
-                failed("the core could not be reached")
-            }
-        }
-    }
-}
-
-/** [coreCall] for the headless pass host, which performs no other effect that needs the UI. */
-internal suspend fun coreCallFor(core: CentraidCore, call: CoreCall): EffectResult = coreCall(core, call)
 
 /** The platform hands one effect may need, so [perform] keeps one parameter for them. */
 private class Doors(

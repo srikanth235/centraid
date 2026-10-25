@@ -10,12 +10,15 @@
 //!
 //! **A door that waits on a gateway is never called from `update`**: the runtime
 //! lock is held across `update`, and a pass takes minutes. A pass, a probe, a
-//! hand-off and a settle ride the shell's off-thread call and come back as
-//! events (see [`Calls`]).
+//! hand-off and a settle run off the lock (`Ctx::vault_async`, or the same on
+//! another vault's core when `Holdings` has one) and come back as
+//! `OffThreadDone` events tagged `drain:<vault>`, `reconcile:<vault>`,
+//! `handoff:<vault>` and `settle`.
 
 use std::collections::VecDeque;
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_core::screens::VaultRequest;
 use prost::Message;
 use wire::screen_event::Kind as E;
 
@@ -56,55 +59,11 @@ enum Kind {
     Count,
     Stream,
     Load,
-    Call,
-}
-
-/// One door call in flight and what its answer is for.
-#[derive(Clone, Debug)]
-enum Call {
-    Drain(String),
-    Reconcile(String),
-    Handoff(String),
-    Settle,
-}
-
-/// The off-thread door.
-///
-/// One call is in flight at a time here, in the order asked; the answer to a
-/// `CoreCall` carries no tag, so a second in flight could not be told from the
-/// first. A pass over two vaults is sequential in the conductor anyway; a pass
-/// on one vault and a hand-off on another wait their turn.
-#[derive(Default)]
-struct Calls {
-    queue: VecDeque<(Call, String, wire::Request)>,
-    in_flight: Option<Call>,
-}
-
-impl Calls {
-    fn push(&mut self, call: Call, vault: &str, request: wire::Request) -> Option<wire::Effect> {
-        self.queue.push_back((call, vault.to_owned(), request));
-        self.next()
-    }
-
-    fn next(&mut self) -> Option<wire::Effect> {
-        if self.in_flight.is_some() {
-            return None;
-        }
-        let (call, vault, request) = self.queue.pop_front()?;
-        self.in_flight = Some(call);
-        Some(wire::Effect {
-            kind: Some(wire::effect::Kind::CoreCall(wire::CoreCall {
-                request: request.encode_to_vec(),
-                vault_id: vault,
-            })),
-        })
-    }
 }
 
 struct Service {
     secrets: VaultSecrets,
     conductor: Conductor,
-    calls: Calls,
     outstanding: VecDeque<Kind>,
     loading: Option<Vec<wire::SecretOp>>,
     /// What arrived before the device store was read: replayed in order once it
@@ -123,7 +82,6 @@ impl Service {
         Self {
             secrets,
             conductor,
-            calls: Calls::default(),
             outstanding: VecDeque::new(),
             loading: None,
             deferred: Vec::new(),
@@ -160,11 +118,12 @@ impl Service {
                     out,
                 ),
                 Action::Drain { vault, request } => {
+                    self.conductor.record_pass(&vault, &request);
                     self.call(
-                        Call::Drain(vault.clone()),
+                        ctx,
+                        format!("drain:{vault}"),
                         &vault,
-                        wire::request::Kind::Drain(request),
-                        out,
+                        VaultRequest::Drain(request),
                     );
                 }
                 Action::Stream { vault, needs } => self.effect(
@@ -180,31 +139,31 @@ impl Service {
                     out,
                 ),
                 Action::Reconcile { vault } => self.call(
-                    Call::Reconcile(vault.clone()),
+                    ctx,
+                    format!("reconcile:{vault}"),
                     &vault,
-                    wire::request::Kind::Reconcile(wire::ReconcileRequest {}),
-                    out,
+                    VaultRequest::Reconcile(wire::ReconcileRequest {}),
                 ),
                 Action::Handoff {
                     vault,
                     max_bytes,
                     max_parts,
                 } => self.call(
-                    Call::Handoff(vault.clone()),
+                    ctx,
+                    format!("handoff:{vault}"),
                     &vault,
-                    wire::request::Kind::Handoff(wire::HandoffRequest {
+                    VaultRequest::Handoff(wire::HandoffRequest {
                         max_bytes,
                         max_parts,
                     }),
-                    out,
                 ),
                 Action::Settle { vault, settled } => self.call(
-                    Call::Settle,
+                    ctx,
+                    "settle".to_owned(),
                     &vault,
-                    wire::request::Kind::Settle(wire::SettleRequest {
+                    VaultRequest::Settle(wire::SettleRequest {
                         settled: vec![settled],
                     }),
-                    out,
                 ),
                 Action::UploadsPending => self.effect(
                     Kind::Count,
@@ -249,19 +208,14 @@ impl Service {
         }
     }
 
-    fn call(
-        &mut self,
-        call: Call,
-        vault: &str,
-        kind: wire::request::Kind,
-        out: &mut Vec<wire::Effect>,
-    ) {
-        if let Some(effect) = self
-            .calls
-            .push(call, vault, wire::Request { kind: Some(kind) })
-        {
-            self.outstanding.push_back(Kind::Call);
-            out.push(effect);
+    /// Run one door off the lock and hear it as `OffThreadDone{tag}`. A vault the
+    /// shelf holds a core for runs on THAT core; any other (and every vault, until
+    /// the shelf is wired) runs on the core the screens run on.
+    fn call(&mut self, ctx: &Ctx, tag: String, vault: &str, request: VaultRequest) {
+        self.conductor.record_call(&tag, &request);
+        match self.conductor.core_of(vault) {
+            Some(handle) => ctx.off_thread(&tag, move |_| vault_called(&handle, request)),
+            None => ctx.vault_async(&tag, request),
         }
     }
 
@@ -384,10 +338,6 @@ impl Service {
                 self.answered(&[Kind::Stream]);
                 self.conductor.streamed(streamed.landed)
             }
-            Some(Outcome::CoreCalled(called)) => {
-                self.answered(&[Kind::Call]);
-                self.called(&called)
-            }
             // THE WALK ENDED, OR THE SHELL HAS NONE TO WALK: the pass runs either way.
             Some(Outcome::Done(_)) => {
                 if self.answered(&[Kind::Walk]).is_some() {
@@ -402,13 +352,11 @@ impl Service {
                 Kind::Noted,
                 Kind::Count,
                 Kind::Stream,
-                Kind::Call,
                 Kind::Load,
             ]) {
                 Some(Kind::Walk) => self.conductor.walked(),
                 Some(Kind::Count) => self.conductor.pending(MAX_IN_FLIGHT_FULL),
                 Some(Kind::Stream) => self.conductor.streamed(0),
-                Some(Kind::Call) => self.called_failed(),
                 Some(Kind::Load) => {
                     self.loading = None;
                     self.replay(ctx, out);
@@ -421,47 +369,40 @@ impl Service {
         self.perform(actions, ctx, out);
     }
 
-    /// Read the shell's answer to the call in flight and feed the conductor.
-    fn called(&mut self, called: &wire::CoreCalled) -> Vec<Action> {
-        let answer = match &called.error {
-            Some(error) => Err(error.clone()),
-            None => Ok(wire::Response::decode(called.response.as_slice()).unwrap_or_default()),
+    /// A door that ran off the lock answered: read it and feed the conductor.
+    fn done(&mut self, done: &wire::OffThreadDone) -> Vec<Action> {
+        let answer = match wire::VaultCalled::decode(done.bytes.as_slice()) {
+            Ok(called) => match called.error {
+                Some(error) => Err(error),
+                None => Ok(wire::Response::decode(called.response.as_slice()).unwrap_or_default()),
+            },
+            // A JOB THAT NEVER PRODUCED AN ANSWER is a door that refused.
+            Err(_) => Err(wire::Error::default()),
         };
-        let Some(call) = self.calls.in_flight.take() else {
-            return Vec::new();
-        };
-        match call {
-            Call::Drain(vault) => self.conductor.drained(&vault, &Drained::of(answer)),
-            Call::Reconcile(vault) => {
+        let (kind, vault) = done.tag.split_once(':').unwrap_or((done.tag.as_str(), ""));
+        match kind {
+            "drain" => self.conductor.drained(vault, &Drained::of(answer)),
+            "reconcile" => {
                 let reachable = match answer {
                     Ok(wire::Response {
                         kind: Some(wire::response::Kind::Reconcile(probe)),
                     }) => Some(probe.reachable),
                     _ => None,
                 };
-                self.conductor.reconciled(&vault, reachable)
+                self.conductor.reconciled(vault, reachable)
             }
-            Call::Handoff(vault) => {
+            "handoff" => {
                 let parts = match answer {
                     Ok(wire::Response {
                         kind: Some(wire::response::Kind::Handoff(batch)),
                     }) => batch.parts,
                     _ => Vec::new(),
                 };
-                self.conductor.handed_off(&vault, parts)
+                self.conductor.handed_off(vault, parts)
             }
-            Call::Settle => Vec::new(),
+            // A SETTLE IS RECORDED IN THE LEDGER AND ANSWERS NOTHING THE PASS NEEDS.
+            _ => Vec::new(),
         }
-    }
-
-    /// The effect that carries the call itself failed: the shell could not run
-    /// it. A pass that did not run is `Unavailable`.
-    fn called_failed(&mut self) -> Vec<Action> {
-        let error = wire::Error::default();
-        self.called(&wire::CoreCalled {
-            response: Vec::new(),
-            error: Some(error),
-        })
     }
 
     /// Replay what waited for the device store.
@@ -471,18 +412,25 @@ impl Service {
             self.handle(event, ctx, out);
         }
     }
-
-    /// The next call, once one answered.
-    fn pump_calls(&mut self, out: &mut Vec<wire::Effect>) {
-        if let Some(effect) = self.calls.next() {
-            self.outstanding.push_back(Kind::Call);
-            out.push(effect);
-        }
-    }
 }
 
 /// An unanswered count is treated as the OS being full: nothing is handed off.
 const MAX_IN_FLIGHT_FULL: u32 = super::conductor::MAX_IN_FLIGHT;
+
+/// `Ctx::vault_async`'s answer, produced on another vault's core.
+fn vault_called(handle: &centraid_core::Handle, request: VaultRequest) -> Vec<u8> {
+    let called = match handle.call(&request.into_request()) {
+        Ok(response) => wire::VaultCalled {
+            response: response.encode_to_vec(),
+            error: None,
+        },
+        Err(refusal) => wire::VaultCalled {
+            response: Vec::new(),
+            error: Some(refusal.to_wire()),
+        },
+    };
+    called.encode_to_vec()
+}
 
 fn uploads(op: wire::uploads_op::Op) -> wire::Effect {
     wire::Effect {
@@ -509,9 +457,10 @@ impl Screen for Service {
                     self.load(&mut out);
                 }
             }
-            E::EffectResult(result) => {
-                self.result(result, ctx, &mut out);
-                self.pump_calls(&mut out);
+            E::EffectResult(result) => self.result(result, ctx, &mut out),
+            E::OffThreadDone(done) => {
+                let actions = self.done(&done);
+                self.perform(actions, ctx, &mut out);
             }
             other => {
                 if self.secrets.loaded() {

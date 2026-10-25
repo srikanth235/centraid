@@ -145,7 +145,6 @@ public class IosPlatformServices : PlatformServices {
     // different answers about one link.
     override val powerAndLink: PowerAndLink = IosPowerAndLink(network)
     override val mediaLibrary: MediaLibrary = IosMediaLibrary()
-    override val ocr: Ocr = IosOcr()
     override val secureRandom: SecureRandom = IosSecureRandom()
     override val clock: DeviceClock = IosDeviceClock()
 }
@@ -1138,13 +1137,6 @@ internal fun NSData.toByteArray(): ByteArray {
     val out = ByteArray(size)
     out.usePinned { pinned -> platform.posix.memcpy(pinned.addressOf(0), bytes, length) }
     return out
-}
-
-/** Wave 4. Vision is not wired yet, and saying so beats a stub. */
-public class IosOcr : Ocr {
-    override suspend fun available(): Boolean = false
-
-    override suspend fun recognise(imagePath: String): List<String> = emptyList()
 }
 
 /**

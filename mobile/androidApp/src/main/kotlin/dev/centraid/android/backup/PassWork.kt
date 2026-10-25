@@ -235,7 +235,7 @@ internal object PassHost {
 
     /**
      * THE EFFECTS A PASS ASKS FOR, with no UI: the windows, the long run, the camera roll's walk
-     * (a window has no time for one) and the core's own doors. Anything else is answered
+     * (a window has no time for one). Anything else is answered
      * `failed`, by value, so the service that asked is never left waiting.
      */
     private suspend fun performHeadless(context: Context, screens: Screens, request: EffectRequest) {
@@ -252,7 +252,6 @@ internal object PassHost {
                 EffectResult(pass_noted = PassNoted())
             }
             effect?.camera_roll != null -> EffectResult(done = EffectDone())
-            effect?.core_call != null -> dev.centraid.android.kit.coreCallFor(screens.core, effect.core_call!!)
             else -> EffectResult(failed = EffectFailed(reason = "not performed by this shell"))
         }
         screens.answer(request, result)

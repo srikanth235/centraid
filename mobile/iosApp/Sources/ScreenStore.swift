@@ -303,10 +303,6 @@ final class ScreenStore: ObservableObject {
             }
         case .keychain(let operation)?:
             answer(request, Self.keychain(operation))
-        case .coreCall(let call)?:
-            // A DOOR THAT WAITS ON A GATEWAY (a pass, a pairing, a restore) runs here, off Rust's
-            // lock, and its answer returns to the screen that asked.
-            Task { [core] in answer(request, await Self.coreCall(call, core: core)) }
         // THE PASS SCHEDULER (#1135, `passes`): Rust decides which windows exist, when a pass ran
         // and what the OS carries; this performs and answers.
         case .scheduleWindows(let schedule)?:
@@ -541,26 +537,6 @@ final class ScreenStore: ObservableObject {
         default:
             return .failed(failure("unknown keychain operation"))
         }
-    }
-
-    /// ONE CORE REQUEST, PERFORMED FOR RUST: decode it, call the core, hand the response back
-    /// encoded. A refusal travels as the core's typed `Error`; only a request that cannot be
-    /// carried at all is a failed effect.
-    private static func coreCall(
-        _ call: Centraid_Core_V1_CoreCall,
-        core: any ScreenCore
-    ) async -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
-        var called = Centraid_Core_V1_CoreCalled()
-        do {
-            let request = try Centraid_Core_V1_Request(serializedBytes: call.request)
-            called.response = try await core.call(request).serializedData()
-        } catch let refusal as SessionScreenCore.Failure {
-            guard case .refused(let error) = refusal else { return .failed(failure("a malformed core answer")) }
-            called.error = error
-        } catch {
-            return .failed(failure("a core call could not be carried: \(error)"))
-        }
-        return .coreCalled(called)
     }
 
     #if os(iOS)

@@ -79,7 +79,6 @@ public class AndroidPlatformServices(context: Context) : PlatformServices {
     override val networkStatus: NetworkStatus = AndroidNetworkStatus(context)
     override val powerAndLink: PowerAndLink = AndroidPowerAndLink(context)
     override val mediaLibrary: MediaLibrary = AndroidMediaLibrary(context)
-    override val ocr: Ocr = AndroidOcr()
     override val secureRandom: SecureRandom = AndroidSecureRandom()
     override val clock: DeviceClock = AndroidDeviceClock()
 }
@@ -684,13 +683,6 @@ public class AndroidMediaLibrary(private val context: Context) : MediaLibrary {
         /** `crates/media/src/renditions.rs`' quality. */
         const val JPEG_QUALITY = 80
     }
-}
-
-/** Wave 4. ML Kit is not a dependency yet, and saying so beats a stub. */
-public class AndroidOcr : Ocr {
-    override suspend fun available(): Boolean = false
-
-    override suspend fun recognise(imagePath: String): List<String> = emptyList()
 }
 
 /**

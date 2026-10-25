@@ -70,7 +70,43 @@ pub const DEBUG_FAULT_COMMAND: &str = "debug.panic";
 pub const OWNER_DEVICE: &str = "this-device";
 
 /// The type a shell holds. Opaque across the C ABI.
+///
+/// A cheap clone of one [`HandleState`]: a job that must outlive a call (the
+/// screen runtime's `off_thread`) takes its own `Handle` and the core stays
+/// one, whoever holds it.
+#[derive(Clone)]
 pub struct Handle {
+    state: Arc<HandleState>,
+}
+
+impl std::ops::Deref for Handle {
+    type Target = HandleState;
+
+    fn deref(&self) -> &HandleState {
+        &self.state
+    }
+}
+
+impl Handle {
+    fn new(make: impl FnOnce(std::sync::Weak<HandleState>) -> HandleState) -> Handle {
+        Handle {
+            state: Arc::new_cyclic(|me| make(me.clone())),
+        }
+    }
+
+    /// The handle a [`HandleState`] belongs to; `None` once the last `Handle`
+    /// is gone.
+    #[must_use]
+    pub fn of(state: &HandleState) -> Option<Handle> {
+        state.me.upgrade().map(|state| Handle { state })
+    }
+}
+
+/// Everything a [`Handle`] is. Public only so `Handle` can deref to it.
+#[doc(hidden)]
+pub struct HandleState {
+    /// This state's own `Arc`, so `&self` can mint a [`Handle`].
+    me: std::sync::Weak<HandleState>,
     /// THE VAULT, WHEN THERE IS ONE.
     ///
     /// `None` is a core opened at a path with no file and `create: false` —
@@ -263,12 +299,14 @@ impl Core {
             None => None,
             Some((seed, index)) => Some(crate::phone::Keyring::derive(&seed, index)?),
         };
-        Ok(Handle {
+        let registry = Arc::new(Registry::with_system_commands()?);
+        Ok(Handle::new(|me| HandleState {
+            me,
             plane: crate::phone::Plane::of(&path).with_ceiling(spool_ceiling),
             path,
             keys,
             vault: Arc::new(Mutex::new(vault)),
-            registry: Arc::new(Registry::with_system_commands()?),
+            registry,
             ui_thread_name,
             events: Arc::new(EventQueue::new()),
             staging: crate::stage::Staging::default(),
@@ -286,7 +324,7 @@ impl Core {
             locker: Arc::new(Mutex::new(None)),
             assist: crate::assist::Hub::new(),
             screens: std::sync::OnceLock::new(),
-        })
+        }))
     }
 
     /// Open (or create) the file and put the content store beside it.
@@ -353,7 +391,7 @@ impl Core {
     }
 }
 
-impl Handle {
+impl HandleState {
     /// The event queue, so a producer (sync, the applier) can push to it.
     #[must_use]
     pub fn events(&self) -> Arc<EventQueue> {
@@ -649,6 +687,11 @@ impl Handle {
                         (Some(wire::event::Kind::Wake(_)), host) => {
                             if let Some(host) = host {
                                 host.wake(self);
+                            }
+                        }
+                        (Some(wire::event::Kind::JobDone(done)), host) => {
+                            if let Some(host) = host {
+                                host.job_done(self, done.job, done.bytes.clone());
                             }
                         }
                         (Some(wire::event::Kind::Change(change)), Some(host)) => {

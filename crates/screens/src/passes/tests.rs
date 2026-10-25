@@ -47,6 +47,9 @@ fn held(id: &str, drainable: bool) -> Held {
     }
 }
 
+/// How many of the items asked for a stream lands.
+type Landed = Box<dyn FnMut(&[wire::NeedBytes]) -> u32>;
+
 /// A conductor plus the shell it is driven against.
 struct Sim {
     conductor: Conductor,
@@ -64,7 +67,7 @@ struct Sim {
     /// What the core answers to a drain.
     answer: Box<dyn FnMut(&wire::DrainRequest) -> Drained>,
     /// How many items a stream lands.
-    land: Box<dyn FnMut(&[wire::NeedBytes]) -> u32>,
+    land: Landed,
     /// Drains held until the test releases them.
     hold: bool,
     held_drains: Vec<String>,
@@ -110,7 +113,7 @@ impl Sim {
                     self.conductor.walked()
                 }
                 Action::Drain { vault, request } => {
-                    self.seen.push((vault.clone(), request.clone()));
+                    self.seen.push((vault.clone(), request));
                     self.order
                         .push(if request.asked { "pass asked" } else { "pass" }.to_owned());
                     if self.hold {
@@ -1049,7 +1052,6 @@ fn the_answer_keeps_the_gateways_clock_and_drops_a_hash_of_the_wrong_length() {
                     ..Default::default()
                 },
             ],
-            ..Default::default()
         })
     });
     let actions = sim.conductor.trigger(Reason::Scheduled, 20_000);

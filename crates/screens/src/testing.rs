@@ -10,7 +10,6 @@ use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_core::{Core, CoreConfig, Handle};
-use prost::Message;
 
 use crate::runtime::Runtime;
 use crate::screen::{Ctx, Environment};
@@ -314,7 +313,7 @@ impl Driver {
     /// sheet) is tested through when no screen carries its events yet.
     pub fn with_ctx<R>(&self, body: impl FnOnce(&Ctx) -> R) -> R {
         let environment = Environment::default();
-        body(&Ctx::new(&self.handle, &environment))
+        body(&Ctx::new(&*self.handle, &environment))
     }
 
     /// Answer the oldest pending effect.
@@ -339,27 +338,18 @@ impl Driver {
     /// stays in [`Self::effects`] for the test to answer. Answering one can
     /// raise the next, so this loops. Returns how many it answered.
     ///
-    /// # Panics
-    /// When a core call's request does not decode (a screen bug).
     pub fn serve(&mut self, shell: &mut FakeShell) -> usize {
         let mut answered = 0;
         while let Some(at) = self.effects.iter().position(|request| {
             matches!(
                 request.effect.as_ref().and_then(|e| e.kind.as_ref()),
-                Some(
-                    wire::effect::Kind::Secrets(_)
-                        | wire::effect::Kind::CoreCall(_)
-                        | wire::effect::Kind::SyncedProbe(_)
-                )
+                Some(wire::effect::Kind::Secrets(_) | wire::effect::Kind::SyncedProbe(_))
             )
         }) {
             let request = self.effects.remove(at);
             let outcome = match request.effect.and_then(|e| e.kind) {
                 Some(wire::effect::Kind::Secrets(batch)) => {
                     wire::effect_result::Outcome::Secrets(shell.batch(&batch))
-                }
-                Some(wire::effect::Kind::CoreCall(call)) => {
-                    wire::effect_result::Outcome::CoreCalled(self.core_call(&call))
                 }
                 Some(wire::effect::Kind::SyncedProbe(_)) => {
                     wire::effect_result::Outcome::SyncedStatus(wire::SyncedSecretsStatus {
@@ -379,22 +369,6 @@ impl Driver {
             answered += 1;
         }
         answered
-    }
-
-    /// What a shell's `CoreCall` performer does: decode, call, encode.
-    fn core_call(&self, call: &wire::CoreCall) -> wire::CoreCalled {
-        let request = wire::Request::decode(call.request.as_slice())
-            .expect("a core call carries an encoded Request");
-        match self.handle.call(&request) {
-            Ok(response) => wire::CoreCalled {
-                response: response.encode_to_vec(),
-                error: None,
-            },
-            Err(refusal) => wire::CoreCalled {
-                response: Vec::new(),
-                error: Some(refusal.to_wire()),
-            },
-        }
     }
 
     /// Drain pushed events for up to `wait`, applying every screen update, and

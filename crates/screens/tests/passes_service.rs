@@ -52,10 +52,15 @@ impl Screen for Probe {
     }
 }
 
+/// The pass service is the first instance the runtime opens.
+const SERVICE: u64 = 1;
+
 struct Rig {
     driver: Driver,
     shell: FakeShell,
     secrets: VaultSecrets,
+    /// The doors the service asked of the core and nobody has answered, oldest first.
+    calls: std::collections::VecDeque<(String, wire::Request)>,
 }
 
 impl Rig {
@@ -90,6 +95,7 @@ impl Rig {
             driver: Driver::with_runtime(runtime),
             shell,
             secrets,
+            calls: std::collections::VecDeque::new(),
         }
     }
 
@@ -134,35 +140,61 @@ impl Rig {
         );
     }
 
-    /// The `drain` the service asked for, without answering it.
-    fn drain(&self) -> (wire::DrainRequest, String) {
-        let at = self.position(is_call).expect("a core call was asked");
-        let Some(wire::effect::Kind::CoreCall(call)) = self.driver.effects[at]
-            .effect
-            .as_ref()
-            .and_then(|e| e.kind.clone())
-        else {
-            unreachable!()
-        };
-        let request = wire::Request::decode(call.request.as_slice()).expect("a request");
-        let Some(wire::request::Kind::Drain(drain)) = request.kind else {
-            panic!("the call was {request:?}");
-        };
-        (drain, call.vault_id)
+    /// Pick up the doors asked since last looked.
+    fn pull(&mut self) {
+        self.calls.extend(self.secrets.conductor().take_issued());
     }
 
+    /// Whether a door is waiting for an answer.
+    fn has_call(&mut self) -> bool {
+        self.pull();
+        !self.calls.is_empty()
+    }
+
+    /// The oldest door asked and not answered.
+    fn front(&mut self) -> wire::request::Kind {
+        self.pull();
+        self.calls
+            .front()
+            .and_then(|(_, request)| request.kind.clone())
+            .expect("a door was asked")
+    }
+
+    /// The `drain` the service asked for, without answering it.
+    fn drain(&mut self) -> (wire::DrainRequest, String) {
+        self.pull();
+        let (tag, request) = self
+            .calls
+            .iter()
+            .find(|(tag, _)| tag.starts_with("drain:"))
+            .expect("a drain was asked");
+        let Some(wire::request::Kind::Drain(drain)) = request.kind.clone() else {
+            panic!("the call was {request:?}");
+        };
+        (drain, tag.trim_start_matches("drain:").to_owned())
+    }
+
+    /// Answer the oldest door asked, as the off-thread job would.
     fn answer_call(&mut self, response: Result<wire::Response, wire::Error>) {
-        let outcome = match response {
-            Ok(response) => wire::CoreCalled {
+        self.pull();
+        let (tag, _) = self.calls.pop_front().expect("a door was asked");
+        let called = match response {
+            Ok(response) => wire::VaultCalled {
                 response: response.encode_to_vec(),
                 error: None,
             },
-            Err(error) => wire::CoreCalled {
+            Err(error) => wire::VaultCalled {
                 response: Vec::new(),
                 error: Some(error),
             },
         };
-        self.answer(is_call, wire::effect_result::Outcome::CoreCalled(outcome));
+        self.driver.send(
+            SERVICE,
+            E::OffThreadDone(wire::OffThreadDone {
+                tag,
+                bytes: called.encode_to_vec(),
+            }),
+        );
     }
 
     fn answer_drain(&mut self, response: wire::DrainResponse) {
@@ -220,10 +252,6 @@ fn is_walk(effect: &wire::Effect) -> bool {
         Some(wire::effect::Kind::CameraRoll(roll))
             if roll.action == wire::camera_roll::Action::ImportNow as i32
     )
-}
-
-fn is_call(effect: &wire::Effect) -> bool {
-    matches!(&effect.kind, Some(wire::effect::Kind::CoreCall(_)))
 }
 
 fn is_schedule(effect: &wire::Effect) -> bool {
@@ -284,7 +312,7 @@ fn nothing_runs_until_the_device_store_has_been_read() {
         .call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
             foreground: true,
         }));
-    assert!(!rig.has(is_call) && !rig.has(is_walk));
+    assert!(!rig.has_call() && !rig.has(is_walk));
     rig.driver.serve(&mut rig.shell);
     assert!(rig.has(is_schedule) && rig.has(is_walk));
 }
@@ -314,7 +342,7 @@ fn the_launch_asks_for_the_windows_walks_the_roll_and_then_passes() {
     assert!(scheduled.windows[1].requires_charging);
     // THE ROLL IS WALKED FIRST; THE PASS WAITS FOR IT.
     assert!(rig.has(is_walk));
-    assert!(!rig.has(is_call));
+    assert!(!rig.has_call());
     rig.walk();
     let (drain, vault) = rig.drain();
     assert_eq!(vault, "");
@@ -391,7 +419,7 @@ fn a_reported_link_replaces_the_expensive_guess() {
         metered_known: true,
         charging_known: true,
     }));
-    assert!(!rig.has(is_call));
+    assert!(!rig.has_call());
     rig.fact(wire::shell_fact::Fact::Asked(wire::PassAsked {
         ask: wire::pass_asked::Ask::BackUpNow as i32,
     }));
@@ -555,7 +583,7 @@ fn a_library_that_lands_nothing_ends_the_pass_at_once() {
         |e| matches!(&e.kind, Some(wire::effect::Kind::StreamFromLibrary(_))),
         wire::effect_result::Outcome::LibraryStreamed(wire::LibraryStreamed { landed: 0 }),
     );
-    assert!(!rig.has(is_call));
+    assert!(!rig.has_call());
     assert!(!rig.secrets.conductor().facts().running);
 }
 
@@ -727,12 +755,12 @@ fn a_commit_is_a_pass_and_a_burst_of_them_is_one_more_at_the_end_of_the_debounce
     write(&mut rig, 2);
     write(&mut rig, 3);
     rig.driver.pump(Duration::from_millis(50));
-    assert!(!rig.has(is_call));
+    assert!(!rig.has_call());
     // ...AND ONE PASS RUNS WHEN THE WINDOW ENDS.
     rig.driver.pump(Duration::from_millis(500));
-    assert!(rig.has(is_call));
+    assert!(rig.has_call());
     rig.answer_drain(empty());
-    assert!(!rig.has(is_call));
+    assert!(!rig.has_call());
 }
 
 #[test]
@@ -801,19 +829,8 @@ fn part(name: &str) -> wire::HandoffPart {
     }
 }
 
-fn request_of(rig: &Rig) -> wire::request::Kind {
-    let at = rig.position(is_call).expect("a call");
-    let Some(wire::effect::Kind::CoreCall(call)) = rig.driver.effects[at]
-        .effect
-        .as_ref()
-        .and_then(|e| e.kind.clone())
-    else {
-        unreachable!()
-    };
-    wire::Request::decode(call.request.as_slice())
-        .expect("request")
-        .kind
-        .expect("kind")
+fn request_of(rig: &mut Rig) -> wire::request::Kind {
+    rig.front()
 }
 
 #[test]
@@ -823,7 +840,7 @@ fn on_ios_the_os_session_draining_hands_the_next_batch_off_in_the_contracts_orde
     rig.first_pass(empty());
     // The pass itself ended with a probe (every iOS pass does); answer it away.
     assert!(matches!(
-        request_of(&rig),
+        request_of(&mut rig),
         wire::request::Kind::Reconcile(_)
     ));
     rig.answer_call(Ok(wire::Response {
@@ -838,7 +855,7 @@ fn on_ios_the_os_session_draining_hands_the_next_batch_off_in_the_contracts_orde
     rig.fact(wire::shell_fact::Fact::Drained(wire::UploadsDrained {}));
     // RECONCILE, THEN THE OS'S COUNT, THEN HANDOFF, THEN ENQUEUE.
     assert!(matches!(
-        request_of(&rig),
+        request_of(&mut rig),
         wire::request::Kind::Reconcile(_)
     ));
     rig.answer_call(Ok(wire::Response {
@@ -852,7 +869,7 @@ fn on_ios_the_os_session_draining_hands_the_next_batch_off_in_the_contracts_orde
         |e| matches!(uploads_op(e), Some(wire::uploads_op::Op::Pending(_))),
         wire::effect_result::Outcome::UploadsState(wire::UploadsState { pending: 30 }),
     );
-    let wire::request::Kind::Handoff(handoff) = request_of(&rig) else {
+    let wire::request::Kind::Handoff(handoff) = request_of(&mut rig) else {
         panic!("a handoff");
     };
     // THE OS HOLDS 30 OF 32: ROOM FOR 2.
@@ -900,7 +917,7 @@ fn on_ios_a_finished_task_settles_in_its_own_vault() {
         vault_id: "gone".to_owned(),
         ..Default::default()
     }));
-    let wire::request::Kind::Settle(settle) = request_of(&rig) else {
+    let wire::request::Kind::Settle(settle) = request_of(&mut rig) else {
         panic!("a settle");
     };
     assert_eq!(settle.settled.len(), 1);
@@ -922,16 +939,19 @@ fn changing_the_rule_on_ios_lets_go_of_every_upload_the_os_holds() {
 
 #[test]
 fn the_real_core_answers_the_launch_pass_without_a_gateway() {
-    // NO GATEWAY IS PAIRED: the core answers its own `drain`, whatever it says,
-    // and the conductor reads it without a hand-built answer.
+    // NO GATEWAY IS PAIRED: the core answers its own `drain` off the runtime's
+    // lock, whatever it says, and the conductor reads it from the pushed event
+    // without a hand-built answer.
     let mut rig = Rig::new();
     rig.launch();
     rig.take_windows();
     rig.walk();
-    let mut shell = rig.shell.clone();
-    rig.driver.serve(&mut shell);
+    assert!(rig.secrets.conductor().facts().running);
+    rig.driver.pump(Duration::from_secs(10));
     assert!(rig.last("").is_some(), "the pass ended in an outcome");
     assert!(!rig.secrets.conductor().facts().running);
+    // AND THE NEXT WINDOW WAS ASKED FOR on that path too.
+    assert!(rig.has(is_schedule));
 }
 
 #[test]
@@ -951,7 +971,7 @@ fn a_repeated_lifecycle_is_not_a_transition() {
     rig.take_windows();
     // A SHELL THAT RE-REPORTS THE FOREGROUND buys no walk and no pass.
     lifecycle(&mut rig, true);
-    assert!(!rig.has(is_walk) && !rig.has(is_call));
+    assert!(!rig.has(is_walk) && !rig.has_call());
 }
 
 #[test]
@@ -962,7 +982,7 @@ fn a_probe_the_core_cannot_answer_yet_is_no_answer_and_hands_nothing_off() {
     // NOT_YET_AVAILABLE IS NO ANSWER, never a fact: nothing is enqueued and no
     // window is asked for on its account.
     assert!(matches!(
-        request_of(&rig),
+        request_of(&mut rig),
         wire::request::Kind::Reconcile(_)
     ));
     rig.answer_call(Err(wire::Error {
@@ -998,4 +1018,51 @@ fn a_finished_import_is_a_pass_and_asks_for_a_window_soon() {
     assert!(!rig.has(is_walk));
     let (drain, _) = rig.drain();
     assert!(!drain.wants_snapshot && !drain.asked);
+}
+
+/// The shelf's seam: two vaults, one resting. The open one runs on its own core.
+struct Shelf {
+    handle: centraid_core::Handle,
+}
+
+impl passes::Holdings for Shelf {
+    fn held(&self) -> Vec<passes::Held> {
+        vec![
+            passes::Held {
+                vault_id: "aa".to_owned(),
+                drainable: true,
+            },
+            passes::Held {
+                vault_id: "resting".to_owned(),
+                drainable: false,
+            },
+        ]
+    }
+
+    fn core(&self, vault_id: &str) -> Option<centraid_core::Handle> {
+        (vault_id == "aa").then(|| self.handle.clone())
+    }
+}
+
+#[test]
+fn a_vault_the_shelf_holds_a_core_for_is_passed_on_that_core_and_a_resting_one_is_skipped() {
+    let mut rig = Rig::new();
+    let shelf = Shelf {
+        handle: rig.driver.handle.clone(),
+    };
+    rig.secrets
+        .conductor()
+        .use_holdings(std::sync::Arc::new(shelf));
+    rig.launch();
+    rig.take_windows();
+    rig.walk();
+    let (_, vault) = rig.drain();
+    assert_eq!(vault, "aa");
+    rig.driver.pump(Duration::from_secs(10));
+    assert!(rig.last("aa").is_some(), "the held vault's pass ended");
+    assert!(
+        rig.last("resting").is_none(),
+        "a resting vault is not woken"
+    );
+    assert!(rig.secrets.conductor().facts().in_flight.is_empty());
 }

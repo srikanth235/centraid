@@ -59,6 +59,9 @@ struct State {
     selected: String,
     nav_revision: u64,
     timers: BTreeMap<(u64, String), Instant>,
+    /// Jobs running off the lock: the instance that asked and the tag it gave.
+    jobs: BTreeMap<u64, (u64, String)>,
+    next_job: u64,
     env: Environment,
     started: bool,
 }
@@ -92,6 +95,8 @@ impl Runtime {
                 selected,
                 nav_revision: 0,
                 timers: BTreeMap::new(),
+                jobs: BTreeMap::new(),
+                next_job: 1,
                 env: Environment::default(),
                 started: false,
             }),
@@ -191,6 +196,7 @@ impl Runtime {
             out.closed.push(id);
         }
         state.timers.retain(|(owner, _), _| *owner != id);
+        state.jobs.retain(|_, (owner, _)| *owner != id);
     }
 
     /// Tell a screen it is being popped: its last chance to write what the
@@ -254,6 +260,12 @@ impl Runtime {
                     state.timers.remove(&(id, name));
                 }
             }
+        }
+        for (tag, work) in done.jobs {
+            let job = state.next_job;
+            state.next_job += 1;
+            state.jobs.insert(job, (id, tag));
+            core.off_thread(job, work);
         }
         for effect in effects {
             let effect_id = state.next_effect;
@@ -526,6 +538,28 @@ impl ScreenHost for Runtime {
                         tables: hit,
                     })),
                 })
+            },
+            &mut out,
+        );
+        if !Self::empty(&out) {
+            core.push(out);
+        }
+    }
+
+    fn job_done(&self, core: &dyn ScreenCtx, job: u64, bytes: Vec<u8>) {
+        let mut state = self.lock();
+        let Some((id, tag)) = state.jobs.remove(&job) else {
+            return;
+        };
+        let mut out = wire::ScreenUpdate::default();
+        Self::dispatch(
+            &mut state,
+            core,
+            id,
+            wire::ScreenEvent {
+                kind: Some(wire::screen_event::Kind::OffThreadDone(
+                    wire::OffThreadDone { tag, bytes },
+                )),
             },
             &mut out,
         );

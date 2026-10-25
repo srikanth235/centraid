@@ -93,6 +93,8 @@ pub const MAX_IN_FLIGHT: u32 = 32;
 /// The topic the conductor signals when its facts moved; the Backup screen
 /// hears it (see `Ctx::signal`).
 pub const TOPIC: &str = "passes";
+/// How many asked doors [`Conductor::take_issued`] keeps.
+const ISSUED_KEPT: usize = 64;
 
 /// One vault the phone holds.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -107,6 +109,12 @@ pub struct Held {
 pub trait Holdings: Send + Sync {
     /// Every vault this device holds, foreground first.
     fn held(&self) -> Vec<Held>;
+
+    /// The core of one held vault, when the shelf has it open; `None` runs the
+    /// call on the core the screens run on.
+    fn core(&self, _vault_id: &str) -> Option<centraid_core::Handle> {
+        None
+    }
 }
 
 /// Why a pass stopped (`DrainStop`), plus the one refusal that is an answer.
@@ -299,6 +307,8 @@ pub struct Facts {
     pub running: bool,
     /// The vaults a pass is in flight on.
     pub busy: BTreeSet<String>,
+    /// What the pass in flight on each vault was asked (its deadline, rule and link).
+    pub in_flight: BTreeMap<String, wire::DrainRequest>,
     /// Each vault's last pass, in this process.
     pub last: BTreeMap<String, Pass>,
     /// The vaults whose last answer was `MOVED`: the shelf freezes them.
@@ -438,6 +448,10 @@ struct Inner {
     handoff: Option<Handoff>,
     handoff_queue: VecDeque<String>,
     inbox: VecDeque<wire::pass_asked::Ask>,
+    /// The pass in flight on each vault and what it was asked.
+    in_flight: BTreeMap<String, wire::DrainRequest>,
+    /// The last doors asked of the core, newest last, for diagnostics and tests.
+    issued: VecDeque<(String, wire::Request)>,
 }
 
 /// The pass conductor. Cheap to clone: every clone is the same state, so the
@@ -491,6 +505,8 @@ impl Conductor {
                 handoff: None,
                 handoff_queue: VecDeque::new(),
                 inbox: VecDeque::new(),
+                in_flight: BTreeMap::new(),
+                issued: VecDeque::new(),
             })),
         }
     }
@@ -500,6 +516,36 @@ impl Conductor {
     }
 
     // ---- what the service tells it --------------------------------------------
+
+    /// The pass on `vault` was asked with `request`.
+    pub(crate) fn record_pass(&self, vault: &str, request: &wire::DrainRequest) {
+        self.lock().in_flight.insert(vault.to_owned(), *request);
+    }
+
+    /// A door was asked of the core under `tag`.
+    pub(crate) fn record_call(&self, tag: &str, request: &centraid_core::screens::VaultRequest) {
+        let mut inner = self.lock();
+        inner
+            .issued
+            .push_back((tag.to_owned(), request.clone().into_request()));
+        while inner.issued.len() > ISSUED_KEPT {
+            inner.issued.pop_front();
+        }
+    }
+
+    /// The core of `vault`, when the shelf has one.
+    pub(crate) fn core_of(&self, vault: &str) -> Option<centraid_core::Handle> {
+        let holdings = self.lock().holdings.clone()?;
+        holdings.core(vault)
+    }
+
+    /// The doors asked of the core since this was last called, oldest first.
+    /// For diagnostics and tests: production never reads it, and it keeps only
+    /// the last [`ISSUED_KEPT`].
+    #[must_use]
+    pub fn take_issued(&self) -> Vec<(String, wire::Request)> {
+        self.lock().issued.drain(..).collect()
+    }
 
     /// How long a commit or a link change is held back by the debounce.
     pub fn set_debounce(&self, debounce: Duration) {
@@ -559,6 +605,7 @@ impl Conductor {
                 .any(|run| run.reason == Reason::BackUpNow),
             running: !inner.runs.is_empty(),
             busy: inner.busy.clone(),
+            in_flight: inner.in_flight.clone(),
             last: inner.last.clone(),
             moved: inner.moved.clone(),
             registration: inner.registration,
@@ -769,6 +816,7 @@ impl Conductor {
         let mut inner = self.lock();
         let mut out = Vec::new();
         inner.busy.remove(vault);
+        inner.in_flight.remove(vault);
         // THE NEXT WINDOW IS ASKED FOR ON EVERY PATH.
         out.push(Action::Schedule);
         let Some(id) = inner.runs.iter().find_map(|(id, run)| {

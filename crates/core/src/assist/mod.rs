@@ -72,7 +72,7 @@ use centraid_assist::{
 };
 
 use crate::error::{CoreError, Result};
-use crate::handle::Handle;
+use crate::handle::HandleState as Handle;
 
 pub mod attach;
 pub mod door;
