@@ -127,7 +127,7 @@ impl Screen for Search {
             Phase::Loading => Some(Content::Loading(wire::Loading { first_load: true })),
             Phase::Failed => Some(Content::Failure(read::failure(locale))),
             Phase::Denied => Some(Content::Denied(fold::denied(locale))),
-            Phase::Ready(answer) => Some(Content::Data(self.data(locale, answer))),
+            Phase::Ready(answer) => Some(Content::Data(Box::new(self.data(locale, answer)))),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::MoneySearch(
