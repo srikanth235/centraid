@@ -16,6 +16,7 @@ import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.nav.HealthEntry
 import dev.centraid.shared.nav.NotesEntry
 import dev.centraid.shared.nav.PeopleEntry
+import dev.centraid.shared.nav.PhotosEntry
 import dev.centraid.shared.nav.ScreenMoves
 import dev.centraid.shared.nav.ScreenOpenings
 import dev.centraid.shared.nav.applying
@@ -41,31 +42,29 @@ class AppRoutingSpec : StringSpec({
     val home = Destination.Home
 
     "a move drops the top (never the floor), then pushes; spelled, it is the same openings in order" {
-        val stack = NavStack().push(Destination.PhotosHome())
-        val lightbox = Destination.PhotoLightbox("a1", listOf("a1", "a2"))
+        val photos = PhotosEntry.home()
+        val lightbox = PhotosEntry.lightbox("a1")
+        val stack = NavStack().push(photos)
         stack.applying(NavMove.swap(lightbox)).entries shouldContainExactly listOf(home, lightbox)
         stack.applying(NavMove.Pop).entries shouldContainExactly listOf(home)
         NavStack().applying(NavMove.Pop).entries shouldContainExactly listOf(home)
-        stack.applying(NavMove.push(lightbox)).entries shouldContainExactly
-            listOf(home, Destination.PhotosHome(), lightbox)
+        stack.applying(NavMove.push(lightbox)).entries shouldContainExactly listOf(home, photos, lightbox)
 
-        val spelled = ScreenMoves.of(NavMove(dropsTop = true, pushes = listOf(Destination.PhotosHome(), lightbox)))
+        val spelled = ScreenMoves.of(NavMove(dropsTop = true, pushes = listOf(photos, lightbox)))
         spelled.shouldNotBeNull()
         spelled.dropsTop shouldBe true
-        spelled.openings.map { it.screenId } shouldContainExactly listOf(ScreenIds.PHOTOS_GRID, ScreenIds.PHOTOS_LIGHTBOX)
+        spelled.openings.map { Route.ADAPTER.decode(it.event) } shouldContainExactly listOf(photos.route, lightbox.route)
         // Half a move is no move: a page no route spells spells nothing.
         ScreenMoves.of(NavMove(pushes = listOf(lightbox, Destination.Settings))).shouldBeNull()
         ScreenMoves.of(null).shouldBeNull()
     }
 
-    "every page a routing names is spelled on the id its screen registers under" {
-        val ids = mapOf(
-            Destination.PhotosHome() to ScreenIds.PHOTOS_GRID,
-            Destination.PhotoLightbox("a1") to ScreenIds.PHOTOS_LIGHTBOX,
-            PeopleEntry.home() to ScreenIds.RUST_SCREEN,
-            HealthEntry.home() to ScreenIds.RUST_SCREEN,
-        )
-        ids.forEach { (destination, id) -> ScreenOpenings.of(destination).shouldNotBeNull().screenId shouldBe id }
+    "every app's page opens as a Rust screen carrying its route" {
+        listOf(PhotosEntry.home(), PhotosEntry.lightbox("a1"), PeopleEntry.home(), HealthEntry.home()).forEach { destination ->
+            val opening = ScreenOpenings.of(destination).shouldNotBeNull()
+            opening.screenId shouldBe ScreenIds.RUST_SCREEN
+            Route.ADAPTER.decode(opening.event) shouldBe destination.route
+        }
     }
 
     // --- Notes -----------------------------------------------------------
