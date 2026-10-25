@@ -621,6 +621,9 @@ message MoneySearchData {
   optional EmptyState empty = 3;
   // The spelling the index searched for instead, when it corrected the term.
   string corrected = 4;
+  // THE ASK (the owner's ruling: Ask in every search): hands the term to the
+  // assistant, scoped to Money. Offered on a match and on none.
+  optional SearchAsk ask = 5;
 }
 
 message MoneySearchEvent {
