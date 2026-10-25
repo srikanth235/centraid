@@ -3,7 +3,7 @@
 // The app catalogue, the resolved identity marks and the shared icon
 // silhouettes, lowered from packages/design (#1020, wave A). A hand-edited
 // copy of this table is a lowering with no drift gate, which is what
-// `git diff --exit-code design copy mobile` in the mobile-jvm gate step
+// `git diff --exit-code design mobile` in the emitters gate step
 // exists to prevent.
 
 package dev.centraid.design

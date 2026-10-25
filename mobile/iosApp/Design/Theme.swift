@@ -2,7 +2,7 @@
 //
 // The native lowering of packages/design (#1020, D-1020-E6). A hand-edited
 // copy of this table is a fourth lowering with no drift gate, which is what
-// `git diff --exit-code design copy mobile` in the mobile-jvm gate step
+// `git diff --exit-code design mobile` in the emitters gate step
 // exists to prevent.
 //
 // THE FACE TABLE BELOW IS EMITTED TOO, and so are the .ttf files it names:

@@ -1,6 +1,6 @@
 {
   "$generatedBy": "contracts/tools/export-native-theme.ts",
-  "$note": "The native lowering of packages/design, emitted for the KMP shared module and for SwiftUI. Regenerate with `bun contracts/tools/export-native-theme.ts && bun run format`; `git diff --exit-code design copy mobile` is the drift check (#1020).",
+  "$note": "The native lowering of packages/design, emitted for Compose and SwiftUI. Regenerate with `bun contracts/tools/export-native-theme.ts && bun run format`; `git diff --exit-code design mobile` is the drift check (#1020).",
   "colorRoleContract": {
     "accent": "--accent",
     "accentDeep": "--accent-deep",

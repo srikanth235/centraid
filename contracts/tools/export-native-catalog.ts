@@ -14,7 +14,7 @@
 //
 //   bun contracts/tools/export-native-theme.ts   (calls this emitter)
 //   bun run format
-//   git diff --exit-code design copy mobile
+//   git diff --exit-code design mobile
 //
 // WHAT CROSSES, AND WHY IT IS NOT A DECISION.
 //
@@ -54,6 +54,14 @@ import {
 import type { NativeScheme } from "../../packages/design/src/native.ts";
 
 const SCHEMES: readonly NativeScheme[] = ["light", "dark"];
+
+/**
+ * Where the Kotlin design tables live: the Android shell's own source tree,
+ * package `dev.centraid.design` (#1135). The Swift tables are
+ * `mobile/iosApp/Design/`.
+ */
+export const KOTLIN_DESIGN_DIR =
+  "mobile/androidApp/src/main/kotlin/dev/centraid/android/design";
 
 interface Channels {
   r: number;
@@ -153,7 +161,7 @@ const header = (): string =>
     `// The app catalogue, the resolved identity marks and the shared icon`,
     `// silhouettes, lowered from packages/design (#1020, wave A). A hand-edited`,
     `// copy of this table is a lowering with no drift gate, which is what`,
-    `// \`git diff --exit-code design copy mobile\` in the mobile-jvm gate step`,
+    `// \`git diff --exit-code design mobile\` in the emitters gate step`,
     `// exists to prevent.`,
     ``,
   ].join("\n");
@@ -361,18 +369,9 @@ export function emitNativeCatalog(repositoryRoot: string): {
     ""
   );
 
-  mkdirSync(
-    path.join(
-      repositoryRoot,
-      "mobile/shared/src/commonMain/kotlin/dev/centraid/design"
-    ),
-    { recursive: true }
-  );
+  mkdirSync(path.join(repositoryRoot, KOTLIN_DESIGN_DIR), { recursive: true });
   writeFileSync(
-    path.join(
-      repositoryRoot,
-      "mobile/shared/src/commonMain/kotlin/dev/centraid/design/Catalog.kt"
-    ),
+    path.join(repositoryRoot, KOTLIN_DESIGN_DIR, "Catalog.kt"),
     `${kotlin.join("\n")}`
   );
 
