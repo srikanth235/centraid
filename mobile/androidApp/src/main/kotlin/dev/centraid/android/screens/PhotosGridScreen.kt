@@ -420,7 +420,7 @@ private fun SelectionVerb(
  * or do, so a library with photographs and an import that is done draws no line
  * at all, and "Import now" is offered only over an empty library. This view
  * decides none of it; a remedy's tap is an event, and the shell performs it when
- * Rust asks (`PerformScreenEffects`).
+ * Rust asks (`session/ShellEffects.kt`).
  */
 @Composable
 private fun BackupBanner(banner: PhotosHomeImportBanner, onEvent: (PhotosHomeEvent) -> Unit) {

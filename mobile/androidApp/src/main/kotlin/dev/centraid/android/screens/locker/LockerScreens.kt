@@ -116,7 +116,7 @@ import dev.centraid.android.theme.centraidType
 // and every route here is Rust's (`crates/screens/src/locker`): this file draws
 // a `ViewState` arm and forwards what the member did as a `ScreenEvent`. The
 // OS prompt, the file pickers and the clipboard are generic effects
-// (`PerformScreenEffects`); the capture shield is `SecureWindow(state.secure)`.
+// (`session/ShellEffects.kt`, `kit/ScreenEffects.kt`); the capture shield is `SecureWindow(state.secure)`.
 //
 // THE WALL COVERS A SCREEN WHOLE: a view with `wall` set draws the wall and
 // nothing of the screen under it.

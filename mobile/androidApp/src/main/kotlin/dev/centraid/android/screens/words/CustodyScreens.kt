@@ -52,8 +52,8 @@ import dev.centraid.android.kit.RowSkeleton
 // control is enabled arrive in the state. What is theirs is what only a
 // platform can do: the owner check behind words.show's ASK primary
 // ([ownerCheck]), and the camera behind pair.laptop's `ScanTapped`
-// ([PairScanner], shown by `WordsSheets`). The capture duty for the shown
-// words is `WordsSheets`' (FLAG_SECURE on both windows while `secure`); a
+// ([PairScanner], raised by the `ScanCode` effect). The capture duty for the
+// shown words is [SecureWindow]'s (FLAG_SECURE while `secure`); a
 // shown word is plain `Text` with no `SelectionContainer`, so it cannot be
 // copied.
 

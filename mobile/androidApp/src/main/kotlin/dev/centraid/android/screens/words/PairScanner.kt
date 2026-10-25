@@ -69,7 +69,7 @@ import dev.centraid.android.kit.OutlineButton
  * model and downloads nothing; `ALSO_INVERTED` reads the laptop's square when a
  * dark terminal draws it light-on-dark.
  *
- * The CAMERA grant is `WordsSheets`' to ask for, at the moment the member
+ * The CAMERA grant is [CodeScanDoor]'s to ask for, at the moment the member
  * tapped Scan and never before; this dialog is drawn only once it is held.
  * [onPhoto] closes it for the photo picker; [onCancel] closes it; the paste
  * field is still there.

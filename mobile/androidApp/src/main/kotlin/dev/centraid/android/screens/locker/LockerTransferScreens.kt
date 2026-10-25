@@ -48,7 +48,7 @@ import dev.centraid.android.theme.centraidType
  * `locker.export`: the lede in the net register, what leaves, the format, where
  * it goes, and Write the file. THE VIEW DECIDES NOTHING AND NEVER SEES THE FILE:
  * the confirm, the owner check (`OwnerCheck`) and the save sheet (`SaveFile`)
- * are Rust's three asks in order, performed by `PerformScreenEffects`; the file
+ * are Rust's three asks in order, performed by `kit/ScreenEffects.kt`; the file
  * goes from the core to the system's save sheet and nowhere else.
  */
 @Composable

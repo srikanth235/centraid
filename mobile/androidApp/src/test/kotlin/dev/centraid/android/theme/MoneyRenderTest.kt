@@ -9,9 +9,6 @@ import org.junit.Test
 /**
  * ONE MONEY LAW, THIS SHELL'S HALF (K5): the real [formatMoney] over every case
  * in `contracts/screens/money-render.json`, on the JVM with no device.
- *
- * `:shared`'s `KitTimeMoneyCopySpec` mirrors the function; this runs the
- * function itself, so the mirror and the shell cannot drift apart unnoticed.
  */
 class MoneyRenderTest {
     private val fixture: String by lazy {

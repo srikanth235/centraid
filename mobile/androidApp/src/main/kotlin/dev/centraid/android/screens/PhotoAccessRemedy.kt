@@ -6,10 +6,9 @@ import android.os.Build
 /*
  * THE PHOTO GRANT (D-1025-S7-75; #1135). Which remedy the banner offers, and its
  * words, are Rust's (`PhotosHomeImportBanner`); performing it is
- * `PerformScreenEffects`' (`CameraRoll`: the system prompt, this app's page in
- * Settings, the selected-photos grant). What is left here is the set of
- * permissions that prompt asks for, and the activity's own launcher uses it too
- * (a vault just made asks once).
+ * the session's (`session/ShellEffects.kt`: `CameraRoll` and `LibraryPermission`,
+ * the system prompt, this app's page in Settings, the selected-photos grant).
+ * What is left here is the set of permissions that prompt asks for.
  */
 
 /**

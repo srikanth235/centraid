@@ -112,8 +112,8 @@ import dev.centraid.android.theme.LocalCentraidTokens
 // do — `screen.proto`'s three platform duties for the words:
 //
 // 1. Capture: `FLAG_SECURE` on every window the words are drawn in, set and
-//    cleared with `secure` (`WordsSheets`: the activity's window and the
-//    sheet's own dialog window, which does not inherit a flag set later).
+//    cleared with `secure` (`kit/SecureWindow.kt`, counted with any other
+//    holder of the activity's window).
 // 2. No clipboard: a shown word is plain `Text` with no `SelectionContainer`,
 //    so it cannot be selected or copied; a word field ([WordField]) has no
 //    text toolbar (no Paste, Copy, Cut or Select all) and a clipboard that
@@ -124,8 +124,7 @@ import dev.centraid.android.theme.LocalCentraidTokens
 //    the visible-password variation on the `EditorInfo` — which Compose's
 //    `KeyboardOptions` cannot express, so [NoLearning] adds them where the
 //    input connection is made. Autofill
-//    sees no field here: `ContentDataType.None` on every field, and the
-//    sheet's view is excluded from the autofill structure (`WordsSheets`).
+//    sees no field here: `ContentDataType.None` on every field.
 
 // ---------------------------------------------------------------------------
 // words.make — make a vault, and its 24 words
