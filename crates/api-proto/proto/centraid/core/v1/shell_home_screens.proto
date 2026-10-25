@@ -336,6 +336,28 @@ message HomeState {
   HomeScheme scheme = 7;
   // "Loading".
   string loading_label = 8;
+  // THE FIRST-LAUNCH GATE: set when the phone holds no vault (`content` is then
+  // the `Failure`), and drawn in place of Home. Its doors are `MakePressed` and
+  // `RestorePressed`.
+  optional HomeFirstLaunch first_launch = 9;
+}
+
+// What a phone that holds no vault opens onto: every app's mark as one house,
+// one sentence and two doors, and the slides a shell may page through first.
+message HomeFirstLaunch {
+  string body = 1;
+  string make_label = 2;
+  string restore_label = 3;
+  // The app ids the house's marks are drawn from: Home's tiles, in Home's order.
+  repeated string apps = 4;
+  repeated HomeFirstLaunchSlide slides = 5;
+  string next_label = 6;
+  string skip_label = 7;
+}
+
+message HomeFirstLaunchSlide {
+  string title = 1;
+  string body = 2;
 }
 
 message HomeEvent {

@@ -181,6 +181,67 @@ fn a_phone_with_no_vault_is_a_failed_home_with_no_empty_tiles() {
 }
 
 #[test]
+fn a_phone_with_no_vault_opens_onto_the_first_launch_gate_and_its_doors_make_and_restore() {
+    let (mut d, i) = started();
+    assert!(state(&d, i).first_launch.is_none());
+    tell(
+        &mut d,
+        i,
+        H::VaultsTold(wire::home_event::VaultsTold {
+            none: true,
+            ..Default::default()
+        }),
+    );
+    let gate = state(&d, i).first_launch.expect("the gate is drawn");
+    assert_eq!(
+        gate.body,
+        "Apps and an assistant on this phone, backed up to your own devices."
+    );
+    assert_eq!(
+        (gate.make_label.as_str(), gate.restore_label.as_str()),
+        ("Get started", "Restore backup")
+    );
+    // THE HOUSE IS HOME'S ROSTER: every tile's app, in Home's order.
+    assert_eq!(
+        gate.apps,
+        shell::policy::ORDER
+            .iter()
+            .map(|a| (*a).to_owned())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(gate.slides.len(), 3);
+    assert!(!gate.next_label.is_empty() && !gate.skip_label.is_empty());
+    for (event, wanted) in [
+        (
+            H::Make(wire::home_event::MakePressed {}),
+            wire::vault_command::Kind::Make(true),
+        ),
+        (
+            H::Restore(wire::home_event::RestorePressed {}),
+            wire::vault_command::Kind::Restore(true),
+        ),
+    ] {
+        d.effects.clear();
+        tell(&mut d, i, event);
+        let asked = d
+            .effects
+            .last()
+            .and_then(|e| e.effect.as_ref())
+            .and_then(|e| e.kind.as_ref());
+        assert_eq!(
+            asked,
+            Some(&wire::effect::Kind::VaultCommand(wire::VaultCommand {
+                kind: Some(wanted)
+            }))
+        );
+    }
+    // A vault made: the gate goes.
+    let founded = vault("v1", "Personal");
+    tell(&mut d, i, told(&founded, std::slice::from_ref(&founded)));
+    assert!(state(&d, i).first_launch.is_none());
+}
+
+#[test]
 fn the_lockup_is_worded_from_the_vault_the_shell_names() {
     let (mut d, i) = started();
     let personal = vault("v1", "Personal");

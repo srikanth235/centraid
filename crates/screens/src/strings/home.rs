@@ -15,6 +15,17 @@ catalog! {
     plain band_chat = ("Chat", "Chat");
     plain band_current_spoken = ("current place", "current place");
     plain band_home = ("Home", "Home");
+    plain first_launch_body = ("Apps and an assistant on this phone, backed up to your own devices.", "Apps and an assistant on this phone, backed up to your own devices.");
+    plain first_launch_house_title = ("Apps on this phone", "Apps on this phone");
+    plain first_launch_house_body = ("Photos, notes, documents, money and more, with no account to make.", "Photos, notes, documents, money and more, with no account to make.");
+    plain first_launch_assistant_title = ("An assistant on this phone", "An assistant on this phone");
+    plain first_launch_assistant_body = ("Ask about your own things. It runs on this phone.", "Ask about your own things. It runs on this phone.");
+    plain first_launch_backup_title = ("Encrypted backups", "Encrypted backups");
+    plain first_launch_backup_body = ("Pair a backup device. It keeps a copy it can't open.", "Pair a backup device. It keeps a copy it can't open.");
+    plain first_launch_next = ("Next", "Next");
+    plain first_launch_skip = ("Skip", "Skip");
+    plain first_launch_make = ("Get started", "Get started");
+    plain first_launch_restore = ("Restore backup", "Restore backup");
     plain home_day_one_body = ("Add photos and documents to get started.", "Add photos and documents to get started.");
     plain home_day_one_title = ("Nothing in here yet", "Nothing in here yet");
     plain home_loading = ("Loading", "Loading");
