@@ -84,7 +84,11 @@ fn every_icon_key_a_screen_names_resolves() {
     let mut seen = 0usize;
     let mut missing = Vec::new();
     for file in &files {
-        let rel = file.strip_prefix(&root).unwrap_or(file).display().to_string();
+        let rel = file
+            .strip_prefix(&root)
+            .unwrap_or(file)
+            .display()
+            .to_string();
         // The strings catalogue holds words, not keys.
         if rel.starts_with("strings") {
             continue;
