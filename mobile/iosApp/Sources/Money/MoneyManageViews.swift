@@ -12,30 +12,28 @@ import CentraidShared
 // MARK: - money.accounts
 
 struct MoneyAccountsView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_MoneyAccountsState
+    let send: (Centraid_Core_V1_MoneyAccountsEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
 
-    private var state: Centraid_Screen_V1_MoneyAccountsState {
-        (try? Centraid_Screen_V1_MoneyAccountsState(serializedBytes: data)) ?? .init()
-    }
-
-    private func event(_ build: (inout Centraid_Screen_V1_MoneyAccountsEvent) -> Void) -> Data {
-        moneyEvent(Centraid_Screen_V1_MoneyAccountsEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_MoneyAccountsEvent) -> Void) -> Centraid_Core_V1_MoneyAccountsEvent {
+        var event = Centraid_Core_V1_MoneyAccountsEvent()
+        build(&event)
+        return event
     }
 
     var body: some View {
-        let state = state
         let content = state.readContent
         let addLabel = content.loaded?.addLabel ?? ""
-        let open = state.hasEditor && state.sheet == .editor
-        let sheetBinding = moneySheetBinding(open) {
+        let isOpen = state.hasEditor && state.sheet == .editor
+        let sheetBinding = moneySheetBinding(isOpen) {
             send(event { $0.sheetClosed = .init() })
         }
         // A confirm over an open sheet is presented BY that sheet; a SwiftUI view
         // presents one sheet at a time. On its own it is the page's.
         let nestedConfirm = moneySheetBinding(state.hasConfirm) { send(event { $0.confirmDismissed = .init() }) }
-        let pageConfirm = moneySheetBinding(state.hasConfirm && !open) { send(event { $0.confirmDismissed = .init() }) }
+        let pageConfirm = moneySheetBinding(state.hasConfirm && !isOpen) { send(event { $0.confirmDismissed = .init() }) }
         PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
             RoomTrailing(action: addLabel.isEmpty ? nil : RoomAction(
                 iconKey: "Plus",
@@ -49,7 +47,7 @@ struct MoneyAccountsView: View {
                 onRetry: { send(event { $0.refreshed = .init() }) }
             ) { accounts in
                 if accounts.hasEmpty {
-                    EmptyStateView(accounts.empty, onAction: { send(event { $0.add = .init() }) })
+                    EmptyStateView(accounts.empty.legacy, onAction: { send(event { $0.add = .init() }) })
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) { page(accounts) }
@@ -59,7 +57,7 @@ struct MoneyAccountsView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 MoneyStatusFoot(
-                    status: MoneyWords.line(state.hasStatus ? state.status : nil, write: state.write),
+                    status: MoneyWords.line(state.hasStatus ? state.status : nil),
                     identifier: "money-accounts-status"
                 )
             }
@@ -72,16 +70,16 @@ struct MoneyAccountsView: View {
     }
 
     @ViewBuilder
-    private func confirm(_ state: Centraid_Screen_V1_MoneyAccountsState) -> some View {
+    private func confirm(_ state: Centraid_Core_V1_MoneyAccountsState) -> some View {
         ConfirmSheet(
-            state.confirm,
+                state.confirm.legacy,
             onConfirm: { send(event { $0.confirmAccepted = .init() }) },
             onDismiss: { send(event { $0.confirmDismissed = .init() }) }
         )
     }
 
     @ViewBuilder
-    private func page(_ accounts: Centraid_Screen_V1_MoneyAccountsData) -> some View {
+    private func page(_ accounts: Centraid_Core_V1_MoneyAccountsData) -> some View {
         if !accounts.netWorth.isEmpty {
             MoneyNetWorthCard(label: accounts.netWorthLabel, figures: accounts.netWorth, note: accounts.netWorthNote)
         }
@@ -99,7 +97,7 @@ struct MoneyAccountsView: View {
     }
 
     @ViewBuilder
-    private func editorSheet(_ state: Centraid_Screen_V1_MoneyAccountsState) -> some View {
+    private func editorSheet(_ state: Centraid_Core_V1_MoneyAccountsState) -> some View {
         if state.hasEditor {
             let editor = state.editor
             MoneyFormSheet(
@@ -148,32 +146,30 @@ struct MoneyAccountsView: View {
 // MARK: - money.rules
 
 struct MoneyRulesView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_MoneyRulesState
+    let send: (Centraid_Core_V1_MoneyRulesEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
 
-    private var state: Centraid_Screen_V1_MoneyRulesState {
-        (try? Centraid_Screen_V1_MoneyRulesState(serializedBytes: data)) ?? .init()
+    private func event(_ build: (inout Centraid_Core_V1_MoneyRulesEvent) -> Void) -> Centraid_Core_V1_MoneyRulesEvent {
+        var event = Centraid_Core_V1_MoneyRulesEvent()
+        build(&event)
+        return event
     }
 
-    private func event(_ build: (inout Centraid_Screen_V1_MoneyRulesEvent) -> Void) -> Data {
-        moneyEvent(Centraid_Screen_V1_MoneyRulesEvent.self, build)
-    }
-
-    private func sheetIsOpen(_ state: Centraid_Screen_V1_MoneyRulesState) -> Bool {
+    private func sheetIsOpen(_ state: Centraid_Core_V1_MoneyRulesState) -> Bool {
         state.hasEditor && (state.sheet == .editor || state.sheet == .category || state.sheet == .account)
     }
 
     var body: some View {
-        let state = state
         let content = state.readContent
         let addLabel = content.loaded?.addLabel ?? ""
-        let open = sheetIsOpen(state)
-        let sheetBinding = moneySheetBinding(open) { send(event { $0.sheetClosed = .init() }) }
+        let isOpen = sheetIsOpen(state)
+        let sheetBinding = moneySheetBinding(isOpen) { send(event { $0.sheetClosed = .init() }) }
         // A confirm over an open sheet is presented BY that sheet; a SwiftUI view
         // presents one sheet at a time. On its own it is the page's.
         let nestedConfirm = moneySheetBinding(state.hasConfirm) { send(event { $0.confirmDismissed = .init() }) }
-        let pageConfirm = moneySheetBinding(state.hasConfirm && !open) { send(event { $0.confirmDismissed = .init() }) }
+        let pageConfirm = moneySheetBinding(state.hasConfirm && !isOpen) { send(event { $0.confirmDismissed = .init() }) }
         PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
             RoomTrailing(action: addLabel.isEmpty ? nil : RoomAction(
                 iconKey: "Plus",
@@ -187,7 +183,7 @@ struct MoneyRulesView: View {
                 onRetry: { send(event { $0.refreshed = .init() }) }
             ) { rules in
                 if rules.hasEmpty {
-                    EmptyStateView(rules.empty, onAction: { send(event { $0.add = .init() }) })
+                    EmptyStateView(rules.empty.legacy, onAction: { send(event { $0.add = .init() }) })
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) { page(rules) }
@@ -197,7 +193,7 @@ struct MoneyRulesView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 MoneyStatusFoot(
-                    status: MoneyWords.line(state.hasStatus ? state.status : nil, write: state.write),
+                    status: MoneyWords.line(state.hasStatus ? state.status : nil),
                     identifier: "money-rules-status"
                 )
             }
@@ -210,7 +206,7 @@ struct MoneyRulesView: View {
     }
 
     @ViewBuilder
-    private func page(_ rules: Centraid_Screen_V1_MoneyRulesData) -> some View {
+    private func page(_ rules: Centraid_Core_V1_MoneyRulesData) -> some View {
         MoneyNote(text: rules.limitLine)
         ForEach(Array(rules.rows.enumerated()), id: \.offset) { _, row in
             let ruleID = row.ruleID
@@ -229,7 +225,7 @@ struct MoneyRulesView: View {
     }
 
     @ViewBuilder
-    private func sheetContent(_ state: Centraid_Screen_V1_MoneyRulesState, rules: Centraid_Screen_V1_MoneyRulesData?) -> some View {
+    private func sheetContent(_ state: Centraid_Core_V1_MoneyRulesState, rules: Centraid_Core_V1_MoneyRulesData?) -> some View {
         let editor = state.editor
         if state.sheet == .category {
             MoneyChoiceSheet(
@@ -297,9 +293,9 @@ struct MoneyRulesView: View {
     }
 
     @ViewBuilder
-    private func confirm(_ state: Centraid_Screen_V1_MoneyRulesState) -> some View {
+    private func confirm(_ state: Centraid_Core_V1_MoneyRulesState) -> some View {
         ConfirmSheet(
-            state.confirm,
+                state.confirm.legacy,
             onConfirm: { send(event { $0.confirmAccepted = .init() }) },
             onDismiss: { send(event { $0.confirmDismissed = .init() }) }
         )
@@ -309,19 +305,18 @@ struct MoneyRulesView: View {
 // MARK: - money.categories
 
 struct MoneyCategoriesView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_MoneyCategoriesState
+    let send: (Centraid_Core_V1_MoneyCategoriesEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
 
-    private var state: Centraid_Screen_V1_MoneyCategoriesState {
-        (try? Centraid_Screen_V1_MoneyCategoriesState(serializedBytes: data)) ?? .init()
+    private func event(_ build: (inout Centraid_Core_V1_MoneyCategoriesEvent) -> Void) -> Centraid_Core_V1_MoneyCategoriesEvent {
+        var event = Centraid_Core_V1_MoneyCategoriesEvent()
+        build(&event)
+        return event
     }
 
-    private func event(_ build: (inout Centraid_Screen_V1_MoneyCategoriesEvent) -> Void) -> Data {
-        moneyEvent(Centraid_Screen_V1_MoneyCategoriesEvent.self, build)
-    }
-
-    private func sheetIsOpen(_ state: Centraid_Screen_V1_MoneyCategoriesState) -> Bool {
+    private func sheetIsOpen(_ state: Centraid_Core_V1_MoneyCategoriesState) -> Bool {
         switch state.sheet {
         case .add, .row, .merge: return true
         default: return false
@@ -329,13 +324,12 @@ struct MoneyCategoriesView: View {
     }
 
     var body: some View {
-        let state = state
         let content = state.readContent
         let addLabel = content.loaded?.addLabel ?? ""
-        let open = sheetIsOpen(state)
-        let sheetBinding = moneySheetBinding(open) { send(event { $0.sheetClosed = .init() }) }
+        let isOpen = sheetIsOpen(state)
+        let sheetBinding = moneySheetBinding(isOpen) { send(event { $0.sheetClosed = .init() }) }
         let nestedConfirm = moneySheetBinding(state.hasConfirm) { send(event { $0.confirmDismissed = .init() }) }
-        let pageConfirm = moneySheetBinding(state.hasConfirm && !open) { send(event { $0.confirmDismissed = .init() }) }
+        let pageConfirm = moneySheetBinding(state.hasConfirm && !isOpen) { send(event { $0.confirmDismissed = .init() }) }
         PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
             RoomTrailing(action: addLabel.isEmpty ? nil : RoomAction(
                 iconKey: "Plus",
@@ -349,7 +343,7 @@ struct MoneyCategoriesView: View {
                 onRetry: { send(event { $0.refreshed = .init() }) }
             ) { categories in
                 if categories.hasEmpty {
-                    EmptyStateView(categories.empty)
+                    EmptyStateView(categories.empty.legacy)
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) { page(categories) }
@@ -359,7 +353,7 @@ struct MoneyCategoriesView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 MoneyStatusFoot(
-                    status: MoneyWords.line(state.hasStatus ? state.status : nil, write: state.write),
+                    status: MoneyWords.line(state.hasStatus ? state.status : nil),
                     identifier: "money-categories-status"
                 )
             }
@@ -372,7 +366,7 @@ struct MoneyCategoriesView: View {
     }
 
     @ViewBuilder
-    private func page(_ categories: Centraid_Screen_V1_MoneyCategoriesData) -> some View {
+    private func page(_ categories: Centraid_Core_V1_MoneyCategoriesData) -> some View {
         ForEach(Array(categories.groups.enumerated()), id: \.offset) { _, group in
             MoneySection(title: group.label)
             ForEach(Array(group.rows.enumerated()), id: \.offset) { _, row in
@@ -389,7 +383,7 @@ struct MoneyCategoriesView: View {
     }
 
     @ViewBuilder
-    private func sheetContent(_ state: Centraid_Screen_V1_MoneyCategoriesState, categories: Centraid_Screen_V1_MoneyCategoriesData?) -> some View {
+    private func sheetContent(_ state: Centraid_Core_V1_MoneyCategoriesState, categories: Centraid_Core_V1_MoneyCategoriesData?) -> some View {
         if let categories {
             switch state.sheet {
             case .add:
@@ -441,9 +435,9 @@ struct MoneyCategoriesView: View {
     }
 
     @ViewBuilder
-    private func confirm(_ state: Centraid_Screen_V1_MoneyCategoriesState) -> some View {
+    private func confirm(_ state: Centraid_Core_V1_MoneyCategoriesState) -> some View {
         ConfirmSheet(
-            state.confirm,
+                state.confirm.legacy,
             onConfirm: { send(event { $0.confirmAccepted = .init() }) },
             onDismiss: { send(event { $0.confirmDismissed = .init() }) }
         )

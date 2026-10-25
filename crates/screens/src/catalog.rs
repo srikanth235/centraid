@@ -5,11 +5,11 @@
 // converts it into the request. A stale file fails `cargo xtask screens-catalog --check`.
 
 #![cfg_attr(rustfmt, rustfmt::skip)]
-#![allow(clippy::all, clippy::pedantic, missing_docs)]
+#![allow(clippy::all, clippy::pedantic, missing_docs, unused_imports)]
 
 use centraid_api_proto::core_v1 as wire;
 
-use crate::field::{Field, flag, put_field, real, text, whole};
+use crate::field::{Field, blob, flag, null, put_field, real, text, whole};
 
 pub mod act {
     use super::*;
@@ -1927,6 +1927,51 @@ pub mod act {
                 value.request()
             }
         }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum RevealUse {
+            #[default]
+            Show,
+            Copy,
+        }
+        impl RevealUse {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Show => "show",
+                    Self::Copy => "copy",
+                }
+            }
+        }
+
+        /// Receipt the reveal of ONE sealed field through locker.reveal_receipt, the record of who looked. It returns a receipt id and never the secret: the phone core opens the field behind the unlock and hands the plaintext only to the card or screen that asked, never to the model. Running it again only writes another receipt, so it is its own inverse.
+        #[derive(Clone, Debug, Default)]
+        pub struct Reveal {
+            pub columns: String,
+            pub item_id: String,
+            pub kind: String,
+            pub object_type: String,
+            pub field_id: Option<String>,
+            pub r#use: Option<RevealUse>,
+        }
+        impl Reveal {
+            pub const NAME: &str = "reveal";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("columns".to_owned(), text(self.columns));
+                map.insert("item_id".to_owned(), text(self.item_id));
+                map.insert("kind".to_owned(), text(self.kind));
+                map.insert("object_type".to_owned(), text(self.object_type));
+                if let Some(it) = self.field_id { map.insert("field_id".to_owned(), text(it)); }
+                if let Some(it) = self.r#use { map.insert("use".to_owned(), text(it.wire())); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Reveal> for wire::ActRequest {
+            fn from(value: Reveal) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod money {
@@ -2206,7 +2251,7 @@ pub mod act {
         /// File transactions under a category, or clear it.
         #[derive(Clone, Debug, Default)]
         pub struct Categorize {
-            pub category_id: String,
+            pub category_id: Option<String>,
             pub ids: String,
         }
         impl Categorize {
@@ -2214,7 +2259,7 @@ pub mod act {
             pub fn request(self) -> wire::ActRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("category_id".to_owned(), text(self.category_id));
+                map.insert("category_id".to_owned(), match self.category_id { Some(it) => text(it), None => null() });
                 map.insert("ids".to_owned(), text(self.ids));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -2312,7 +2357,7 @@ pub mod act {
         /// Plan an amount for a category in a month; an amount of null removes the plan.
         #[derive(Clone, Debug, Default)]
         pub struct SetTarget {
-            pub amount_minor: i64,
+            pub amount_minor: Option<i64>,
             pub category_id: String,
             pub month: String,
             pub carry: Option<bool>,
@@ -2323,7 +2368,7 @@ pub mod act {
             pub fn request(self) -> wire::ActRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("amount_minor".to_owned(), whole(self.amount_minor));
+                map.insert("amount_minor".to_owned(), match self.amount_minor { Some(it) => whole(it), None => null() });
                 map.insert("category_id".to_owned(), text(self.category_id));
                 map.insert("month".to_owned(), text(self.month));
                 if let Some(it) = self.carry { map.insert("carry".to_owned(), flag(it)); }
@@ -2584,6 +2629,45 @@ pub mod act {
         }
         impl From<ArchiveCategory> for wire::ActRequest {
             fn from(value: ArchiveCategory) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum UnarchiveCategoryFlag {
+            #[default]
+            Starred,
+            Pinned,
+            Archived,
+        }
+        impl UnarchiveCategoryFlag {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Starred => "starred",
+                    Self::Pinned => "pinned",
+                    Self::Archived => "archived",
+                }
+            }
+        }
+
+        /// Bring an archived category back: it can be chosen again. Send flag `archived`.
+        #[derive(Clone, Debug, Default)]
+        pub struct UnarchiveCategory {
+            pub flag: UnarchiveCategoryFlag,
+            pub category_id: String,
+        }
+        impl UnarchiveCategory {
+            pub const NAME: &str = "unarchive-category";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("flag".to_owned(), text(self.flag.wire()));
+                map.insert("id".to_owned(), text(self.category_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<UnarchiveCategory> for wire::ActRequest {
+            fn from(value: UnarchiveCategory) -> Self {
                 value.request()
             }
         }
@@ -3400,7 +3484,7 @@ pub mod act {
         #[derive(Clone, Debug, Default)]
         pub struct SetReminder {
             pub important_date_id: String,
-            pub reminders: String,
+            pub reminders: Option<String>,
         }
         impl SetReminder {
             pub const NAME: &str = "set-reminder";
@@ -3408,7 +3492,7 @@ pub mod act {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("id".to_owned(), text(self.important_date_id));
-                map.insert("reminders".to_owned(), text(self.reminders));
+                map.insert("reminders".to_owned(), match self.reminders { Some(it) => text(it), None => null() });
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
@@ -4739,6 +4823,24 @@ pub mod load {
             }
         }
 
+        /// What deserves a second look, from metadata alone: items the member flagged compromised, logins whose address is not https, cards past their expiry and cards expiring within the month. Weak and reused passwords are not scored (a secret is never read to judge it). Reads the first 2,000 live and archived items and says when it stopped.
+        #[derive(Clone, Debug, Default)]
+        pub struct Review {
+        }
+        impl Review {
+            pub const NAME: &str = "review";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Review> for wire::LoadRequest {
+            fn from(value: Review) -> Self {
+                value.request()
+            }
+        }
+
         /// Trashed items with their purge dates (secret-free row shape); on the phone the kit's one trash screen reads them.
         #[derive(Clone, Debug, Default)]
         pub struct Trash {
@@ -4782,6 +4884,81 @@ pub mod load {
     pub mod money {
         use super::*;
         pub const APP: &str = "money";
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum ImportPlanSource {
+            #[default]
+            Csv,
+            Ofx,
+        }
+        impl ImportPlanSource {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Csv => "csv",
+                    Self::Ofx => "ofx",
+                }
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum ImportPlanDateOrder {
+            #[default]
+            Mdy,
+            Dmy,
+            Ymd,
+        }
+        impl ImportPlanDateOrder {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Mdy => "mdy",
+                    Self::Dmy => "dmy",
+                    Self::Ymd => "ymd",
+                }
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum ImportPlanSign {
+            #[default]
+            DebitsNegative,
+            DebitsPositive,
+        }
+        impl ImportPlanSign {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::DebitsNegative => "debits_negative",
+                    Self::DebitsPositive => "debits_positive",
+                }
+            }
+        }
+
+        /// What a bank statement would do if it were imported: every row's verdict (new, already in, a possible duplicate, repeated in the file, unreadable), the totals, the balance it states and the command input that publishes it. The file is read once and dropped; nothing is written.
+        #[derive(Clone, Debug, Default)]
+        pub struct ImportPlan {
+            pub content: Vec<u8>,
+            pub source: ImportPlanSource,
+            pub account_id: Option<String>,
+            pub date_order: Option<ImportPlanDateOrder>,
+            pub sign: Option<ImportPlanSign>,
+        }
+        impl ImportPlan {
+            pub const NAME: &str = "import-plan";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("content".to_owned(), blob(self.content));
+                map.insert("source".to_owned(), text(self.source.wire()));
+                if let Some(it) = self.account_id { map.insert("account_id".to_owned(), text(it)); }
+                if let Some(it) = self.date_order { map.insert("date_order".to_owned(), text(it.wire())); }
+                if let Some(it) = self.sign { map.insert("sign".to_owned(), text(it.wire())); }
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<ImportPlan> for wire::LoadRequest {
+            fn from(value: ImportPlan) -> Self {
+                value.request()
+            }
+        }
 
         /// The Spending screen for a month: spent per currency against the plan, each category's planned, carried-in, spent and left, uncategorised rows, in/out/net, what was left out (transfers, rows dated after today) and the month-end forecast. Every figure is derived at read time and per currency.
         #[derive(Clone, Debug, Default)]

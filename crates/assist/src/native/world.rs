@@ -236,6 +236,10 @@ fn nonempty(value: Option<String>) -> Option<Val> {
     value.filter(|text| !text.is_empty()).map(Val::Text)
 }
 
+/// The instant the baseline migration seeds Money's stock categories
+/// (`contracts/migrations/001_baseline.sql`): a category created then is vocabulary, not a row.
+const STOCK_CATEGORIES_AT: &str = "2026-10-21T00:00:00.000Z";
+
 impl World {
     #[must_use]
     pub fn row(&self, key: &Key) -> Option<&Row> {
@@ -328,6 +332,7 @@ impl World {
         world.load_documents(door, &flags)?;
         world.load_locker(door, &flags)?;
         world.load_transactions(door, at)?;
+        world.load_money_lists(door)?;
         world.load_links(door)?;
         // an edge is kept when both of its ends are rows the model talks about
         let rows = &world.rows;
@@ -793,7 +798,7 @@ impl World {
         let floor = first.to_string();
         let rows = door.table_where(
             "txn",
-            "id, account_id, currency, posted_on, amount_minor, status, category_id",
+            "id, account_id, currency, posted_on, amount_minor, status, category_id, transfer_id",
             "posted_on",
             "id",
             "posted_on >= ?",
@@ -855,6 +860,12 @@ impl World {
                     .and_then(|category| category_names.get(&category).cloned())
                     .map(Val::Text),
             );
+            // the other half of a transfer: an unlink is taken back by linking it again
+            put(
+                &mut fields,
+                "transfer",
+                nonempty(text(transaction, "transfer_id")),
+            );
             let status = match text(transaction, "status").as_deref() {
                 Some("void") => "void",
                 _ => "posted",
@@ -868,6 +879,148 @@ impl World {
             });
             row.extra.remove("purge_at");
             self.insert(row);
+        }
+        Ok(())
+    }
+
+    /// Money's lists (#1135): the accounts, the categories, the monthly targets and the rules,
+    /// read as stored. A rule has no entity row: its name is the text it matches, and a budget
+    /// row is the category's target for one month, so its id is `<category>:<month>`.
+    fn load_money_lists(&mut self, door: &dyn Door) -> Result<(), String> {
+        let account_entities = entities(door, "account")?;
+        for account in door.table(
+            "account",
+            "id, type, currency, opening_minor, on_budget",
+            "id",
+            "id",
+        )? {
+            let id = text(&account, "id").unwrap_or_default();
+            let Some(entity) = account_entities.get(&id) else {
+                continue;
+            };
+            let currency = text(&account, "currency").unwrap_or_else(|| self.currency.clone());
+            let mut fields = BTreeMap::new();
+            if let Some(value) = Kind::Account
+                .spec()
+                .field("type")
+                .and_then(|field| field.model_value(&text(&account, "type").unwrap_or_default()))
+            {
+                fields.insert("type", Val::Enum(value));
+            }
+            fields.insert("currency", Val::Text(currency.clone()));
+            fields.insert(
+                "opening",
+                Val::Money(int(&account, "opening_minor").unwrap_or_default(), currency),
+            );
+            fields.insert(
+                "on_budget",
+                Val::Bool(int(&account, "on_budget") != Some(0)),
+            );
+            self.insert(Row::of(Kind::Account, &id, entity, fields));
+        }
+        let category_entities = entities(door, "category")?;
+        let titles: BTreeMap<String, String> = category_entities
+            .iter()
+            .filter_map(|(id, row)| Some((id.clone(), text(row, "title")?)))
+            .collect();
+        for concept in door.table_where(
+            "concept",
+            "id, key, parent_id",
+            "id",
+            "id",
+            "kind = ?",
+            &["category".to_owned()],
+        )? {
+            let id = text(&concept, "id").unwrap_or_default();
+            let Some(entity) = category_entities.get(&id) else {
+                continue;
+            };
+            // THE STOCK VOCABULARY IS NOT THE MEMBER'S ROWS: forty-odd names the baseline seeds
+            // would answer every selector that shares a word with them ("rent" finds a category).
+            // A transaction names its category as a field; a category the member made is a row.
+            if text(entity, "created_at").as_deref() == Some(STOCK_CATEGORIES_AT) {
+                continue;
+            }
+            let mut fields = BTreeMap::new();
+            put(&mut fields, "key", nonempty(text(&concept, "key")));
+            put(
+                &mut fields,
+                "group",
+                text(&concept, "parent_id")
+                    .and_then(|parent| titles.get(&parent).cloned())
+                    .map(Val::Text),
+            );
+            self.insert(Row::of(Kind::Category, &id, entity, fields));
+        }
+        for budget in door.table(
+            "budget",
+            "category_id, month, amount_minor, currency, carry",
+            "month",
+            "category_id",
+        )? {
+            let category = text(&budget, "category_id").unwrap_or_default();
+            let month = text(&budget, "month").unwrap_or_default();
+            let currency = text(&budget, "currency").unwrap_or_else(|| self.currency.clone());
+            let mut fields = BTreeMap::new();
+            fields.insert(
+                "amount",
+                Val::Money(
+                    int(&budget, "amount_minor").unwrap_or_default(),
+                    currency.clone(),
+                ),
+            );
+            fields.insert("currency", Val::Text(currency));
+            fields.insert("carry", Val::Bool(int(&budget, "carry") == Some(1)));
+            let id = format!("{category}:{month}");
+            self.insert(Row {
+                kind: Kind::Budget,
+                name: format!(
+                    "{} {month}",
+                    titles.get(&category).cloned().unwrap_or_default()
+                ),
+                id,
+                date: None,
+                fields,
+                trashed: false,
+                created: String::new(),
+                updated: String::new(),
+                extra: BTreeMap::new(),
+            });
+        }
+        for rule in door.table(
+            "rule",
+            "id, pattern, category_id, position, created_at",
+            "position",
+            "id",
+        )? {
+            let id = text(&rule, "id").unwrap_or_default();
+            let pattern: serde_json::Value =
+                serde_json::from_str(&text(&rule, "pattern").unwrap_or_default())
+                    .unwrap_or(serde_json::Value::Null);
+            let matched = pattern["text"].as_str().unwrap_or_default().to_owned();
+            let mut fields = BTreeMap::new();
+            put(
+                &mut fields,
+                "category",
+                text(&rule, "category_id")
+                    .and_then(|category| titles.get(&category).cloned())
+                    .map(Val::Text),
+            );
+            fields.insert(
+                "position",
+                Val::Num(int(&rule, "position").unwrap_or_default()),
+            );
+            self.insert(Row {
+                kind: Kind::Rule,
+                name: matched,
+                id,
+                date: stamp(text(&rule, "created_at")),
+                fields,
+                trashed: false,
+                created: text(&rule, "created_at").unwrap_or_default(),
+                updated: String::new(),
+                extra: BTreeMap::new(),
+            });
         }
         Ok(())
     }

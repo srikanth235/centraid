@@ -25,7 +25,7 @@ import okio.ByteString.Companion.encodeUtf8
  * vault never opens one — nor should it: the session is the member's presence,
  * proved by the phone's owner check. So [Enrollment.make] records the key as
  * pending ([VaultSecrets.addPendingFiling]) and [filePending] runs each time a
- * Locker unlocks (`LockerGate`); it files into the vault in front only when
+ * Locker unlocks (`LockerEntry.unlocked`); it files into the vault in front only when
  * that vault is on the member's own key, and clears what the core took.
  *
  * `locker.add_item` seals `content` like every Locker secret. The invoke key

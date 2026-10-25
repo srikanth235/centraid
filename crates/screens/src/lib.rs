@@ -9,6 +9,8 @@ pub mod catalog;
 pub mod docs;
 pub mod field;
 pub mod kit;
+pub mod locker;
+pub mod money;
 pub mod notes;
 pub mod proof;
 pub mod registry;
@@ -30,6 +32,8 @@ pub fn standard() -> Runtime {
         Registry::default()
             .with(proof::NAME, proof::build)
             .merge(agenda::registry())
+            .merge(locker::registry())
+            .merge(money::registry())
             .merge(docs::registry())
             .merge(notes::registry()),
         vec![

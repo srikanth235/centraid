@@ -2,68 +2,63 @@ import SwiftUI
 
 import CentraidShared
 
+/// The item page's events, built once.
+enum LockerItemEvents {
+    static func make(_ build: (inout Centraid_Core_V1_LockerItemEvent) -> Void) -> Centraid_Core_V1_LockerItemEvent {
+        var event = Centraid_Core_V1_LockerItemEvent()
+        build(&event)
+        return event
+    }
+}
+
 /// ONE LOCKER ITEM (#1047; the handoff's field row recipe): its sections of
 /// field rows — plain metadata shows its value, a sealed cell shows its mask
 /// and offers Reveal and Copy, a revealed one counts down and offers Copy and
 /// Conceal — its tags, its memo, and its verbs.
 ///
 /// **THE VIEW DECIDES NOTHING**, and it NEVER makes a revealed value
-/// selectable: a copy is the Copy verb's, performed local-only and expiring
-/// by `LockerClipboardSeam`. Leaving by any route is `onDeparted`, whose
-/// `Left` conceals what was shown.
+/// selectable: a copy is the Copy verb's, a sensitive clip with a deadline the
+/// shell keeps (`ClipboardSet`). Leaving by any route is Rust's `Left`, which
+/// conceals what was shown. A verb tap names its row and verb; opening an
+/// address is Rust's `OpenUrl` effect.
 struct LockerItemView: View {
-    let data: Data
-    let lock: Data
-    let send: (Data) -> Void
-    let sendLock: (Data) -> Void
+    let state: Centraid_Core_V1_LockerItemState
+    let send: (Centraid_Core_V1_LockerItemEvent) -> Void
+    let sendWall: (Centraid_Core_V1_LockerWallEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
+    let onWords: () -> Void
     let onBack: () -> Void
-    let onDeparted: () -> Void
 
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.openURL) private var openURL
 
-    private var state: Centraid_Screen_V1_LockerItemState {
-        (try? Centraid_Screen_V1_LockerItemState(serializedBytes: data)) ?? .init()
-    }
-
-    static func event(_ build: (inout Centraid_Screen_V1_LockerItemEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_LockerItemEvent()
-        build(&event)
-        return event.encoded
-    }
-
-    private func content(_ state: Centraid_Screen_V1_LockerItemState) -> ScreenContent<Centraid_Screen_V1_LockerItemData> {
+    private var content: ScreenContent<Centraid_Core_V1_LockerItemData> {
         switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
+        case .loading?, nil: return .loading(true)
         case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .denied(denied)?: return .gated(denied)
         case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
         }
     }
 
     var body: some View {
-        let state = state
-        let secure = Centraid_Screen_V1_LockerLockState.of(lock).secure
-        LockerCovered(lock: lock, sendLock: sendLock, onBack: onBack) {
-            // THE ITEM'S NAME NEVER SITS IN THE NAVIGATION BAR while the gate
-            // says `secure`: the bar is outside the secure canvas, and the page
+        LockerCovered(wall: state.hasWall ? state.wall : nil, backLabel: state.chrome.backLabel, send: sendWall, onWords: onWords, onBack: onBack) {
+            // THE ITEM'S NAME NEVER SITS IN THE NAVIGATION BAR while the Locker
+            // is `secure`: the bar is outside the secure canvas, and the page
             // already draws the title in its shielded header.
-            PushedPage(title: secure ? "" : state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
+            PushedPage(title: state.secure ? "" : state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
                 if !state.chrome.editLabel.isEmpty {
                     ToolbarVerb(label: state.chrome.editLabel, identifier: "locker-item-edit") {
-                        send(Self.event { $0.edit = .init() })
+                        if state.chrome.hasEditRoute { open(state.chrome.editRoute) }
                     }
                 }
             } content: {
-                // THE ITEM IS SHIELDED FROM CAPTURE while the gate says `secure`.
-                LockerShield(lock: lock) {
+                LockerShield(secure: state.secure) {
                     ReadStateView(
-                        content: content(state),
-                        onRetry: { send(Self.event { $0.refreshed = .init() }) }
+                        content: content,
+                        onRetry: { send(LockerItemEvents.make { $0.refreshed = .init() }) }
                     ) { item in
                         if item.hasGone {
-                            EmptyStateView(item.gone)
+                            EmptyStateView(item.gone.legacy)
                         } else {
                             ScrollView {
                                 LazyVStack(alignment: .leading, spacing: 0) { page(item) }
@@ -74,8 +69,8 @@ struct LockerItemView: View {
                 }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if state.hasStatus {
-                        StatusLineView(status: state.status, identifier: "locker-item-status") {
-                            send(Self.event { $0.statusActed = .init() })
+                        StatusLineView(status: state.status.legacy, identifier: "locker-item-status") {
+                            send(LockerItemEvents.make { $0.statusActed = .init() })
                         }
                         .padding(.vertical, 4)
                         .background(Theme.color("bg", scheme))
@@ -83,36 +78,31 @@ struct LockerItemView: View {
                 }
             }
         }
-        .modifier(LockerClipboardRunner(clip: state.hasClipboard ? state.clipboard : nil) { token in
-            send(Self.event { $0.clipboardDone = .with { $0.token = token } })
-        })
         .sheet(isPresented: Binding(
             get: { state.hasConfirm },
-            set: { open in if !open, state.hasConfirm { send(Self.event { $0.dismissed = .init() }) } }
+            set: { isOpen in if !isOpen, state.hasConfirm { send(LockerItemEvents.make { $0.dismissed = .init() }) } }
         )) {
-            LockerShield(lock: lock) {
+            LockerShield(secure: state.secure) {
                 ConfirmSheet(
-                    state.confirm,
-                    onConfirm: { send(Self.event { $0.confirmed = .init() }) },
-                    onDismiss: { send(Self.event { $0.dismissed = .init() }) }
+                    state.confirm.legacy,
+                    onConfirm: { send(LockerItemEvents.make { $0.confirmed = .init() }) },
+                    onDismiss: { send(LockerItemEvents.make { $0.dismissed = .init() }) }
                 )
             }
             .modifier(SheetPresentation(detents: ConfirmSheet.detents))
         }
         .sheet(isPresented: Binding(
             get: { state.hasMemo },
-            set: { open in if !open, state.hasMemo { send(Self.event { $0.memoClosed = .init() }) } }
+            set: { isOpen in if !isOpen, state.hasMemo { send(LockerItemEvents.make { $0.memoClosed = .init() }) } }
         )) {
             // A SHEET IS ITS OWN PRESENTATION: the root switcher mask does not
-            // reach it, so an open Locker's memo carries its own shield — the
-            // room in the secure canvas, and its presentation (which cannot
-            // climb out of the canvas's controller) stated again outside it.
-            LockerShield(lock: lock) {
+            // reach it, so an open Locker's memo carries its own shield.
+            LockerShield(secure: state.secure) {
                 LockerMemoSheetView(
                     memo: state.memo,
-                    onType: { text in send(Self.event { $0.memoTyped = .with { $0.text = text } }) },
-                    onSave: { send(Self.event { $0.memoSaved = .init() }) },
-                    onClose: { send(Self.event { $0.memoClosed = .init() }) }
+                    onType: { text in send(LockerItemEvents.make { $0.memoTyped = .with { $0.text = text } }) },
+                    onSave: { send(LockerItemEvents.make { $0.memoSaved = .init() }) },
+                    onClose: { send(LockerItemEvents.make { $0.memoClosed = .init() }) }
                 )
             }
             .modifier(SheetPresentation())
@@ -121,9 +111,9 @@ struct LockerItemView: View {
         // sealed value is typed into a secure entry, shielded like the memo.
         .sheet(isPresented: Binding(
             get: { state.hasFieldSheet },
-            set: { open in if !open, state.hasFieldSheet { send(Self.event { $0.fieldClosed = .init() }) } }
+            set: { isOpen in if !isOpen, state.hasFieldSheet { send(LockerItemEvents.make { $0.fieldClosed = .init() }) } }
         )) {
-            LockerShield(lock: lock) {
+            LockerShield(secure: state.secure) {
                 LockerFieldSheetView(sheet: state.fieldSheet, send: send)
             }
             .modifier(SheetPresentation())
@@ -131,24 +121,23 @@ struct LockerItemView: View {
         // THE PASSKEY'S NAME (#1047 T2): the memo sheet's shape.
         .sheet(isPresented: Binding(
             get: { state.hasPasskeyName },
-            set: { open in if !open, state.hasPasskeyName { send(Self.event { $0.passkeyNameClosed = .init() }) } }
+            set: { isOpen in if !isOpen, state.hasPasskeyName { send(LockerItemEvents.make { $0.passkeyNameClosed = .init() }) } }
         )) {
-            LockerShield(lock: lock) {
+            LockerShield(secure: state.secure) {
                 LockerMemoSheetView(
                     memo: state.passkeyName,
                     identifier: "locker-passkey-name",
-                    onType: { text in send(Self.event { $0.passkeyNameTyped = .with { $0.text = text } }) },
-                    onSave: { send(Self.event { $0.passkeyNameSaved = .init() }) },
-                    onClose: { send(Self.event { $0.passkeyNameClosed = .init() }) }
+                    onType: { text in send(LockerItemEvents.make { $0.passkeyNameTyped = .with { $0.text = text } }) },
+                    onSave: { send(LockerItemEvents.make { $0.passkeyNameSaved = .init() }) },
+                    onClose: { send(LockerItemEvents.make { $0.passkeyNameClosed = .init() }) }
                 )
             }
             .modifier(SheetPresentation())
         }
-        .onDisappear(perform: onDeparted)
     }
 
     @ViewBuilder
-    private func page(_ item: Centraid_Screen_V1_LockerItemData) -> some View {
+    private func page(_ item: Centraid_Core_V1_LockerItemData) -> some View {
         HStack(spacing: 12) {
             LockerTypeChip(letters: item.typeChip)
             VStack(alignment: .leading, spacing: 2) {
@@ -160,7 +149,7 @@ struct LockerItemView: View {
                     .foregroundStyle(Theme.color("textSoft", scheme))
             }
             Spacer(minLength: 0)
-            ForEach(Array(item.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
+            ForEach(Array(item.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip.legacy) }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.top, 8)
@@ -169,7 +158,9 @@ struct LockerItemView: View {
         ForEach(Array(item.sections.enumerated()), id: \.offset) { _, section in
             if !section.title.isEmpty { SectionHeader(title: section.title) }
             ForEach(section.rows, id: \.key) { row in
-                LockerFieldRowView(row: row) { verb in tapped(row, verb) }
+                LockerFieldRowView(row: row) { verb in
+                    send(LockerItemEvents.make { $0.verb = .with { $0.key = row.key; $0.verb = verb.key } })
+                }
             }
             if !section.note.isEmpty { LockerNote(text: section.note) }
         }
@@ -183,7 +174,7 @@ struct LockerItemView: View {
                         .padding(.horizontal, -CentraidGeometry.pageMargin)
                 }
                 if !item.memoAction.isEmpty {
-                    KitOutlineButton(label: item.memoAction) { send(Self.event { $0.memoOpened = .init() }) }
+                    KitOutlineButton(label: item.memoAction) { send(LockerItemEvents.make { $0.memoOpened = .init() }) }
                         .accessibilityIdentifier("locker-item-memo")
                 }
             }
@@ -197,7 +188,7 @@ struct LockerItemView: View {
                         label: action.label,
                         destructive: action.destructive,
                         identifier: "locker-item-action-\(action.key)",
-                        onTap: { send(Self.event { $0.action = .with { $0.key = action.key } }) }
+                        onTap: { send(LockerItemEvents.make { $0.action = .with { $0.key = action.key } }) }
                     )
                 }
             }
@@ -205,23 +196,13 @@ struct LockerItemView: View {
             .padding(.top, 12)
         }
     }
-
-    /// A row's verb. `open` is the shell's — the address, handed to the OS;
-    /// every other verb is the machine's.
-    private func tapped(_ row: Centraid_Screen_V1_LockerFieldRow, _ verb: Centraid_Screen_V1_LockerVerb) {
-        if verb.key == LockerItemMachine.shared.VERB_OPEN, let url = URL(string: row.value), url.scheme != nil {
-            openURL(url)
-            return
-        }
-        send(Self.event { $0.verb = .with { $0.key = row.key; $0.verb = verb.key } })
-    }
 }
 
-/// THE FIELD ROW WITH VERBS. The value is never selectable; a sealed one is
-/// its dot run in `textSoft`.
+/// THE FIELD ROW WITH VERBS. The value is never selectable; a sealed one is its
+/// dot run in `textSoft`.
 struct LockerFieldRowView: View {
-    let row: Centraid_Screen_V1_LockerFieldRow
-    let onVerb: (Centraid_Screen_V1_LockerVerb) -> Void
+    let row: Centraid_Core_V1_LockerFieldRow
+    let onVerb: (Centraid_Core_V1_LockerVerb) -> Void
 
     @Environment(\.colorScheme) private var scheme
 
@@ -274,38 +255,9 @@ struct LockerFieldRowView: View {
     }
 }
 
-/// A ONE-TIME CODE'S LIFE (Q-1047-16): a small ring that empties as the step
-/// runs out. The seconds are also in the row's note, so the ring is
-/// decoration and hidden from VoiceOver.
-struct LockerCountdownRing: View {
-    let countdown: Centraid_Screen_V1_LockerCountdown
-
-    @Environment(\.colorScheme) private var scheme
-
-    private var fraction: Double {
-        guard countdown.period > 0 else { return 0 }
-        return min(1, Double(countdown.secondsLeft) / Double(countdown.period))
-    }
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(Theme.color("line", scheme), lineWidth: 2)
-            Circle()
-                .trim(from: 0, to: fraction)
-                .stroke(Theme.color(countdown.secondsLeft <= 5 ? "net" : "textSoft", scheme), style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .animation(.linear(duration: 1), value: fraction)
-        }
-        .frame(width: 14, height: 14)
-        .accessibilityHidden(true)
-        .accessibilityIdentifier("locker-code-countdown")
-    }
-}
-
 /// THE MEMO SHEET: one field, Save as the sheet's one ink button, Cancel.
 struct LockerMemoSheetView: View {
-    let memo: Centraid_Screen_V1_LockerMemoSheet
+    let memo: Centraid_Core_V1_LockerMemoSheet
     var identifier: String = "locker-memo"
     let onType: (String) -> Void
     let onSave: () -> Void
@@ -329,32 +281,31 @@ struct LockerMemoSheetView: View {
     }
 }
 
-/// ONE CUSTOM FIELD (#1047 T2; `LockerFieldSheet`): its section, its label,
-/// its kind on a new field, and its value — a secure entry when sealed,
-/// never autocorrected, never suggested, out of the keyboard's learning.
-/// Save is the sheet's one ink button, offered only when the machine says;
-/// otherwise its reason stands where the status goes.
+/// ONE CUSTOM FIELD (#1047 T2; `LockerFieldSheet`): its section, its label, its
+/// kind on a new field, and its value — a secure entry when sealed, never
+/// autocorrected, never suggested, out of the keyboard's learning. Save is the
+/// sheet's one ink button, offered only when Rust says; otherwise its reason
+/// stands where the status goes.
 struct LockerFieldSheetView: View {
-    let sheet: Centraid_Screen_V1_LockerFieldSheet
-    let send: (Data) -> Void
+    let sheet: Centraid_Core_V1_LockerFieldSheet
+    let send: (Centraid_Core_V1_LockerItemEvent) -> Void
 
     @Environment(\.colorScheme) private var scheme
 
     private func typed(_ key: String) -> (String) -> Void {
-        { value in send(LockerItemView.event { $0.fieldTyped = .with { $0.key = key; $0.value = value } }) }
+        { value in send(LockerItemEvents.make { $0.fieldTyped = .with { $0.key = key; $0.value = value } }) }
     }
 
-    /// REMOVE, WHERE THE FIELD CAN BE REMOVED, THEN CANCEL: Save's alternatives,
-    /// drawn under it in its stack.
+    /// REMOVE, WHERE THE FIELD CAN BE REMOVED, THEN CANCEL: Save's alternatives.
     private var alternatives: [SheetOutline] {
         var outlines: [SheetOutline] = []
         if !sheet.removeLabel.isEmpty {
             outlines.append(SheetOutline(label: sheet.removeLabel, tone: "net", identifier: "locker-field-remove") {
-                send(LockerItemView.event { $0.fieldRemoved = .init() })
+                send(LockerItemEvents.make { $0.fieldRemoved = .init() })
             })
         }
         outlines.append(SheetOutline(label: sheet.cancelLabel, identifier: "locker-field-cancel") {
-            send(LockerItemView.event { $0.fieldClosed = .init() })
+            send(LockerItemEvents.make { $0.fieldClosed = .init() })
         })
         return outlines
     }
@@ -364,7 +315,7 @@ struct LockerFieldSheetView: View {
             title: sheet.title,
             status: sheet.blocked,
             primary: sheet.canSave ? SheetPrimary(label: sheet.saveLabel) {
-                send(LockerItemView.event { $0.fieldSaved = .init() })
+                send(LockerItemEvents.make { $0.fieldSaved = .init() })
             } : nil,
             outlines: alternatives,
             titleIdentifier: "locker-field-sheet"
@@ -380,7 +331,7 @@ struct LockerFieldSheetView: View {
             if !sheet.kinds.isEmpty {
                 labelled(sheet.kindLabel) {
                     LockerChoicePills(choices: sheet.kinds, identifier: "locker-field-kind") { key in
-                        send(LockerItemView.event { $0.fieldKind = .with { $0.key = key } })
+                        send(LockerItemEvents.make { $0.fieldKind = .with { $0.key = key } })
                     }
                     .padding(.horizontal, -CentraidGeometry.pageMargin)
                 }

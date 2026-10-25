@@ -30,6 +30,8 @@ package centraid.core.v1;
 import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/docs_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/locker_screens.proto";
+import "centraid/core/v1/money_screens.proto";
 import "centraid/core/v1/notes_screens.proto";
 import "centraid/core/v1/route.proto";
 
@@ -49,7 +51,16 @@ message ScreenRequest {
     // The device's locale and time zone. Rust formats every string and civil
     // reading from these; a shell reports them at start and when they change.
     Environment environment = 4;
+    // The app went to the background or came back. The runtime tells every open
+    // screen (`AppLifecycle`): a Locker relocks the instant it leaves.
+    AppLifecycle lifecycle = 5;
   }
+}
+
+// iOS `scenePhase == .background` (NOT `.inactive`, which a system prompt
+// causes); Android `ON_STOP` (NOT `ON_PAUSE`).
+message AppLifecycle {
+  bool foreground = 1;
 }
 
 message SnapshotRequest {}
@@ -161,6 +172,8 @@ message ScreenEvent {
     DataChanged data_changed = 4;
     // RUNTIME-ORIGINATED: the locale or zone changed.
     EnvironmentChanged environment_changed = 5;
+    // RUNTIME-ORIGINATED: the app left or returned to the foreground.
+    AppLifecycle lifecycle = 7;
     // RUNTIME-ORIGINATED: the screen is being popped. Its last chance to write
     // what the member typed (an autosave's pending edit); a shell never sends
     // it, and only its `act`s survive: the view is no longer drawn.
@@ -174,6 +187,24 @@ message ScreenEvent {
     TodoProjectEvent todo_project = 104;
     TodoDetailEvent todo_detail = 105;
     TodoCatchUpEvent todo_catch_up = 106;
+    // ---- locker (400-499) ----
+    LockerWallEvent locker_wall = 400;
+    LockerHomeEvent locker_home = 401;
+    LockerItemEvent locker_item = 402;
+    LockerEditorEvent locker_editor = 403;
+    LockerAccessEvent locker_access = 404;
+    LockerExportEvent locker_export = 405;
+    LockerImportEvent locker_import = 406;
+    // ---- money (500-599) ----
+    MoneyHomeEvent money_home = 500;
+    MoneyTransactionEvent money_transaction = 501;
+    MoneyTargetEvent money_target = 502;
+    MoneySearchEvent money_search = 503;
+    MoneyRecurringEvent money_recurring = 504;
+    MoneyAccountsEvent money_accounts = 505;
+    MoneyCategoriesEvent money_categories = 506;
+    MoneyRulesEvent money_rules = 507;
+    MoneyImportEvent money_import = 508;
     // ---- docs (200-299) ----
     DocsDriveEvent docs_drive = 200;
     DocsDocumentEvent docs_document = 201;
@@ -220,6 +251,24 @@ message ViewState {
     TodoProjectState todo_project = 104;
     TodoDetailState todo_detail = 105;
     TodoCatchUpState todo_catch_up = 106;
+    // ---- locker (400-499) ----
+    LockerHomeState locker_home = 400;
+    LockerItemState locker_item = 401;
+    LockerEditorState locker_editor = 402;
+    LockerAccessState locker_access = 403;
+    LockerExportState locker_export = 404;
+    LockerImportState locker_import = 405;
+    LockerLockState locker_lock = 406;
+    // ---- money (500-599) ----
+    MoneyHomeState money_home = 500;
+    MoneyTransactionState money_transaction = 501;
+    MoneyTargetState money_target = 502;
+    MoneySearchState money_search = 503;
+    MoneyRecurringState money_recurring = 504;
+    MoneyAccountsState money_accounts = 505;
+    MoneyCategoriesState money_categories = 506;
+    MoneyRulesState money_rules = 507;
+    MoneyImportState money_import = 508;
     // ---- docs (200-299) ----
     DocsDriveState docs_drive = 200;
     DocsDocumentState docs_document = 201;
@@ -261,6 +310,14 @@ message Effect {
     ScheduleNotification schedule_notification = 11;
     CalendarRead calendar_read = 12;
     PhoneWatch phone_watch = 13;
+    // The phone's own owner check: biometric, device passcode as fallback.
+    OwnerCheck owner_check = 14;
+    // Let the member choose a file and hand its bytes back.
+    PickBytes pick_bytes = 15;
+    // Hand bytes to the OS save sheet, the only place a file is written.
+    SaveFile save_file = 16;
+    // Tell the shell something happened it may act on (a Locker unlock).
+    Announce announce = 17;
     // Open a page now, wherever the member is: the shell pushes `route` as a
     // tapped row's route is pushed. For a screen that makes a thing and
     // opens it (a document just filed).
@@ -276,6 +333,12 @@ message ClipboardSet {
   string text = 1;
   // A secret is marked so the OS keeps it out of clipboard history.
   bool sensitive = 2;
+  // When the clip must be gone, in milliseconds from the set; 0 keeps it. A
+  // shell persists the DEADLINE with the clip, so a process killed before the
+  // Rust timer fires still clears it: it clears a stale clip it finds on its
+  // next launch. The Rust timer's `ClipboardClear` is the same clear while the
+  // app lives.
+  uint64 clear_after_ms = 3;
 }
 
 // Clears the clipboard only if it still holds what the core put there.
@@ -364,6 +427,81 @@ message PhoneWatch {
   bool on = 2;
 }
 
+// THE OWNER CHECK: iOS `LAContext().evaluatePolicy(.deviceOwnerAuthentication,
+// localizedReason: reason)`; Android `BiometricPrompt` with
+// `setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)`,
+// `setTitle(title)` and `setSubtitle(subtitle)` and no negative button. With
+// `ask` false it only reads what this phone can do (`OwnerChecked.available`,
+// `biometry`) and raises nothing.
+message OwnerCheck {
+  bool ask = 1;
+  string reason = 2;
+  string title = 3;
+  string subtitle = 4;
+}
+
+// What this phone can do, as its shell reads it.
+enum Biometry {
+  BIOMETRY_UNSPECIFIED = 0;
+  // A passcode and no biometric enrolled.
+  BIOMETRY_PASSCODE = 1;
+  BIOMETRY_FACE = 2;
+  BIOMETRY_FINGERPRINT = 3;
+  // Touch ID's name for the same thing.
+  BIOMETRY_TOUCH = 4;
+  BIOMETRY_OPTIC = 5;
+}
+
+message OwnerChecked {
+  // A passcode is set, so the check can succeed.
+  bool available = 1;
+  Biometry biometry = 2;
+  Outcome outcome = 3;
+
+  enum Outcome {
+    OUTCOME_UNSPECIFIED = 0;
+    // The member passed the check.
+    OUTCOME_SUCCEEDED = 1;
+    // The member dismissed it. Not a failure.
+    OUTCOME_CANCELLED = 2;
+    // Not recognised, or the prompt errored.
+    OUTCOME_FAILED = 3;
+    // No passcode is set (`LAError.passcodeNotSet`; `ERROR_NO_DEVICE_CREDENTIAL`).
+    OUTCOME_UNAVAILABLE = 4;
+    // Too many attempts (`LAError.biometryLockout`; `ERROR_LOCKOUT*`).
+    OUTCOME_LOCKED_OUT = 5;
+    // Nothing was asked (`ask` was false).
+    OUTCOME_NOT_ASKED = 6;
+  }
+}
+
+// Ask the member for one small file and read it whole (a Locker import, a bank
+// statement). Docs' `PickFile` is the other one: it stages a large file.
+message PickBytes {
+  // Media types or extensions the picker offers; empty is any file.
+  repeated string accept = 1;
+}
+
+// The picked file. The bytes are the member's own and may be secrets in the
+// clear: Rust holds them only as long as the screen that asked.
+message BytesPicked {
+  bool cancelled = 1;
+  string name = 2;
+  string media_type = 3;
+  bytes content = 4;
+}
+
+message SaveFile {
+  string name = 1;
+  string media_type = 2;
+  bytes content = 3;
+}
+
+message Announce {
+  // `locker.unlocked`.
+  string topic = 1;
+}
+
 message EffectResult {
   uint64 effect_id = 1;
   oneof outcome {
@@ -374,6 +512,8 @@ message EffectResult {
     KeychainValue keychain = 6;
     CalendarSnapshot calendar = 7;
     PhoneChanged phone_changed = 8;
+    BytesPicked bytes_picked = 9;
+    OwnerChecked owner_checked = 10;
     // ---- docs (200-299): files ----
     FilePicked file_picked = 200;
     FileProgress file_progress = 201;
@@ -388,6 +528,8 @@ message EffectFailed {
   // member reads.
   string reason = 1;
   bool denied = 2;
+  // The member dismissed it (a save sheet): not a failure.
+  bool cancelled = 3;
 }
 
 message PhotosPicked {

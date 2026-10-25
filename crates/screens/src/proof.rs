@@ -100,6 +100,8 @@ impl Screen for Counter {
                             kind: Some(wire::effect::Kind::ClipboardSet(wire::ClipboardSet {
                                 text,
                                 sensitive: false,
+                                clear_after_ms: u64::try_from(self.clear_after.as_millis())
+                                    .unwrap_or(u64::MAX),
                             })),
                         },
                         wire::Effect {

@@ -33,10 +33,33 @@ impl Driver {
     /// When the scratch vault cannot be made; this is test support.
     #[must_use]
     pub fn with_runtime(runtime: Runtime) -> Self {
+        Self::opened(runtime, false)
+    }
+
+    /// [`Self::with_runtime`] over a core that holds the vault's keys, so a
+    /// Locker session can open (the all-`abandon` words' seed).
+    ///
+    /// # Panics
+    /// When the scratch vault cannot be made.
+    #[must_use]
+    pub fn keyed(runtime: Runtime) -> Self {
+        Self::opened(runtime, true)
+    }
+
+    fn opened(runtime: Runtime, keyed: bool) -> Self {
         let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the scratch directory is made");
-        let handle =
-            Core::open(CoreConfig::new(dir.join("vault.db"))).expect("a core opens with create");
+        let config = CoreConfig::new(dir.join("vault.db"));
+        let config = if keyed {
+            let words = ["abandon"; 23].join(" ") + " art";
+            let seed = centraid_identity::RecoveryPhrase::parse(&words)
+                .expect("the words parse")
+                .seed();
+            config.with_seed(seed, 0)
+        } else {
+            config
+        };
+        let handle = Core::open(config).expect("a core opens with create");
         handle
             .open_own_bytes(dir.join("vault.bytes"))
             .expect("the byte store opens");

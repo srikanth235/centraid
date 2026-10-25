@@ -28,6 +28,9 @@
 //!   "transactions": [{"key":"coffee","account":"checking","date":"2026-09-30","amount":-4.5,
 //!                  "name":"Blue Bottle","description":"BLUE BOTTLE #12","category":"food.dining",
 //!                  "void":true}],
+//!   "transfers": [{"a":"out","b":"in"}],
+//!   "categories": [{"key":"pets","name":"Pets fund"}],
+//!   "rules":     [{"key":"coffee_rule","match":"contains","text":"BLUE BOTTLE","category":"food.dining"}],
 //!   "links":     [{"from":"cabin","to":"neha"}]
 //! }
 //! ```
@@ -188,6 +191,9 @@ const SECTIONS: &[&str] = &[
     "locker",
     "accounts",
     "transactions",
+    "transfers",
+    "categories",
+    "rules",
     "links",
 ];
 
@@ -531,11 +537,15 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         )?;
         let key = str_of(row, "key").ok_or("an account needs a key")?;
         if accounts
-            .insert(key.to_owned(), (id, account_currency, name.to_owned()))
+            .insert(
+                key.to_owned(),
+                (id.clone(), account_currency, name.to_owned()),
+            )
             .is_some()
         {
             return Err(format!("the account key \"{key}\" is used twice"));
         }
+        seeder.key(row, Kind::Account, id)?;
     }
     for (index, row) in rows(world, "transactions").iter().enumerate() {
         seeder.clock_for(row, "created")?;
@@ -584,6 +594,41 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             seeder.run("txn.void", json!({"id": id}))?;
         }
         seeder.key(row, Kind::Transaction, id)?;
+    }
+    for transfer in rows(world, "transfers") {
+        let (Some(a), Some(b)) = (str_of(transfer, "a"), str_of(transfer, "b")) else {
+            return Err(format!("a transfer needs a and b: {transfer}"));
+        };
+        let (a, b) = (
+            seeder.id(a, Kind::Transaction)?,
+            seeder.id(b, Kind::Transaction)?,
+        );
+        seeder.run("txn.link_transfer", json!({"id": a, "other_id": b}))?;
+    }
+    for row in rows(world, "categories") {
+        seeder.clock_for(row, "created")?;
+        let name = str_of(row, "name").ok_or("a category needs a name")?;
+        let made = seeder.run("category.add", json!({"title": name}))?;
+        let id = made["id"]
+            .as_str()
+            .ok_or("category.add answered no id")?
+            .to_owned();
+        seeder.key(row, Kind::Category, id)?;
+    }
+    for row in rows(world, "rules") {
+        seeder.clock_for(row, "created")?;
+        let id = seeder.mint();
+        let category = str_of(row, "category").ok_or("a rule needs a category")?;
+        seeder.run(
+            "rule.add",
+            json!({
+                "id": id,
+                "match": str_of(row, "match").unwrap_or("contains"),
+                "text": str_of(row, "text").ok_or("a rule needs text")?,
+                "category_id": format!("category:{category}"),
+            }),
+        )?;
+        seeder.key(row, Kind::Rule, id)?;
     }
     for link in rows(world, "links") {
         let (Some(from), Some(to)) = (str_of(link, "from"), str_of(link, "to")) else {

@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 34] = [
+const PROTOS: [&str; 36] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/command.proto",
@@ -84,6 +84,8 @@ const PROTOS: [&str; 34] = [
     "proto/centraid/core/v1/route.proto",
     "proto/centraid/core/v1/kit_screens.proto",
     "proto/centraid/core/v1/agenda_screens.proto",
+    "proto/centraid/core/v1/locker_screens.proto",
+    "proto/centraid/core/v1/money_screens.proto",
     "proto/centraid/core/v1/docs_screens.proto",
     "proto/centraid/core/v1/notes_screens.proto",
     "proto/centraid/core/v1/screens.proto",
@@ -118,6 +120,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.AgendaEditorState.content.data")
         .boxed(".centraid.core.v1.TodoDetailState.content.data")
         .boxed(".centraid.core.v1.TodoProjectState.content.data")
+        .boxed(".centraid.core.v1.LockerHomeState.content.data")
+        .boxed(".centraid.core.v1.LockerItemState.content.data")
+        .boxed(".centraid.core.v1.LockerEditorState.content.data")
+        .boxed(".centraid.core.v1.LockerExportState.content.data")
+        .boxed(".centraid.core.v1.LockerImportState.content.data")
+        .boxed(".centraid.core.v1.MoneyHomeState.content.data")
+        .boxed(".centraid.core.v1.MoneyTransactionState.content.data")
+        .boxed(".centraid.core.v1.MoneyTargetState.content.data")
+        .boxed(".centraid.core.v1.MoneyImportState.content.data")
+        .boxed(".centraid.core.v1.MoneyCategoriesState.content.data")
+        .boxed(".centraid.core.v1.MoneyAccountsState.content.data")
+        .boxed(".centraid.core.v1.MoneyRulesState.content.data")
         // Home is by far the largest view state.
         .boxed(".centraid.core.v1.ViewState.kind.agenda_home")
         .boxed(".centraid.core.v1.ViewState.kind.docs_drive")
@@ -144,15 +158,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.AppQueryResponse.answer.agenda_event")
         // One Locker item is thirty-one fields and its sidecars (#1047).
         .boxed(".centraid.core.v1.AppQueryResponse.answer.locker_item")
-        .boxed(".centraid.screen.v1.LockerHomeState.content.data")
-        .boxed(".centraid.screen.v1.LockerItemState.content.data")
-        .boxed(".centraid.screen.v1.LockerEditorState.content.data")
         // An export's file and an import's plan ride the session's answer
         // (#1047 T2); boxed so every other session step stays small.
         .boxed(".centraid.core.v1.LockerSessionResponse.exported")
         .boxed(".centraid.core.v1.LockerSessionResponse.import_plan")
-        .boxed(".centraid.screen.v1.LockerExportState.content.data")
-        .boxed(".centraid.screen.v1.LockerImportState.content.data")
         // Money's screens (#1099): the five whose data arm dwarfs its siblings.
         .boxed(".centraid.screen.v1.MoneyHomeState.content.data")
         .boxed(".centraid.screen.v1.MoneyTransactionState.content.data")

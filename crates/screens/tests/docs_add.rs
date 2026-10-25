@@ -198,6 +198,7 @@ fn a_refusal_is_a_failure_with_try_again_a_held_file_refiles_none_repicks() {
         O::Failed(wire::EffectFailed {
             reason: "boom".to_owned(),
             denied: false,
+            ..Default::default()
         }),
     );
     assert_eq!(
@@ -223,6 +224,7 @@ fn a_scanner_refused_the_camera_says_where_to_turn_it_on_not_that_a_file_failed(
         O::Failed(wire::EffectFailed {
             reason: "camera".to_owned(),
             denied: true,
+            ..Default::default()
         }),
     );
     assert_eq!(
@@ -237,6 +239,7 @@ fn a_scanner_refused_the_camera_says_where_to_turn_it_on_not_that_a_file_failed(
         O::Failed(wire::EffectFailed {
             reason: docs::drive::UNAVAILABLE.to_owned(),
             denied: false,
+            ..Default::default()
         }),
     );
     assert_eq!(
@@ -285,6 +288,7 @@ fn following_a_folder_asks_the_shell_and_lists_the_answer() {
         O::Failed(wire::EffectFailed {
             reason: "no access".to_owned(),
             denied: false,
+            ..Default::default()
         }),
     );
     assert_eq!(

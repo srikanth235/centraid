@@ -267,6 +267,7 @@ struct CentraidApp: App {
                 switch phase {
                 case .active:
                     shell.unmask()
+                    shell.screens?.lifecycle(foreground: true)
                     // AND DRAIN. The amendment's foreground half (#1029 W18-6):
                     // the phone backs up while the member is in the app, not
                     // only in the windows iOS grants. `ShelfDrain` refuses a
@@ -281,6 +282,10 @@ struct CentraidApp: App {
                 // switcher open — nothing the OS keeps.
                 case .background:
                     shell.mask()
+                    // LEAVING THE FOREGROUND RELOCKS THE LOCKER: the core does it,
+                    // and every open screen hears it (`.background`, never `.inactive`).
+                    shell.screens?.lifecycle(foreground: false)
+                    LockerEntry.shared.setOpen(opened: false)
                     // words.show drops its words on leaving (#1047 E5).
                     shell.leftForeground()
                     // AND ARM THE NIGHT (#1080): resubmit both background

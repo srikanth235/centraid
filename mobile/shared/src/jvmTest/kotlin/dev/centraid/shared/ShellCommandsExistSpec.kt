@@ -127,7 +127,7 @@ class ShellCommandsExistSpec : StringSpec({
             "person.edit", // a `const val EDIT_COMMAND`
             "locker.add_item", // a bare `const val COMMAND`
             "entity.purge", // an argument to a trash spec
-            "locker.edit_item", // an `if` branch
+            "vault.rename", // an `if` branch
             "thread.clear", // an argument to a helper
         ).forEach { command ->
             withClue(command) {
@@ -140,9 +140,11 @@ class ShellCommandsExistSpec : StringSpec({
         // code quotes on a line that is not a comment must be one the scan
         // saw, so a pattern that stopped matching a shape drops a name it is
         // answerable for, whatever number of commands the shell uses this month.
-        // `nav/ScreenIds.kt` is left out: what it spells is a screen id by
-        // definition, and `locker.export` is both a screen and a command.
-        val quoted = sharedSources(mobileRoot).filterNot { (name, _) -> name.endsWith("nav/ScreenIds.kt") }.flatMap { (_, text) ->
+        // `nav/ScreenIds.kt` and `nav/LockerEntry.kt` are left out: what they spell is a
+        // screen id by definition (the entry builds Rust's `Route`s), and `locker.export`
+        // is both a screen and a command.
+        val screenOnly = listOf("nav/ScreenIds.kt", "nav/LockerEntry.kt")
+        val quoted = sharedSources(mobileRoot).filterNot { (name, _) -> screenOnly.any(name::endsWith) }.flatMap { (_, text) ->
             text.lineSequence().filterNot { it.trim().let { l -> l.startsWith("//") || l.startsWith("*") || l.startsWith("/*") } }
                 .flatMap { line -> dotted.findAll(line).map { it.groupValues[1] } }.toList()
         }.toSet()
