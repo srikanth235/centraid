@@ -916,7 +916,7 @@ fn a_phone_that_will_not_wake_centraid_says_so_in_the_platforms_terms() {
     android.serve();
     assert_eq!(
         android.data().background_notice,
-        "Centraid cannot catch up in the background on this device."
+        "Centraid cannot catch up in the background on this phone."
     );
     assert_eq!(Page::open(both()).data().background_notice, "");
 }

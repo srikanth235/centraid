@@ -1,4 +1,4 @@
-//! Locker's sentences (`locker.*`), moved here from `copy/locker.json` (#1135).
+//! Locker's sentences (`locker.*`), their one source (#1135).
 //! A sentence with a hole (`{field}`, `{n}`) is filled with `strings::fill`.
 
 catalog! {

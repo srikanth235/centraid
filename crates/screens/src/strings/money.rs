@@ -1,5 +1,4 @@
-//! Money's sentences, one entry per key of the copy source (`copy/money.json`), named as it
-//! names them. A sentence with a hole (`{n}`, `{month}`) is filled with `strings::fill`.
+//! Money's sentences. A sentence with a hole (`{n}`, `{month}`) is filled with `strings::fill`.
 
 catalog! {
     plain accounts_empty = ("No accounts yet.", "No accounts yet.");

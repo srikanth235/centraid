@@ -1,6 +1,6 @@
 //! The 24 words' sentences (`words.make`, `words.enter`, `words.show`) and what
-//! this phone says about where its recovery key is kept, moved here from
-//! `copy/words.json` and `SyncedSecrets` (#1135). A sentence with a hole
+//! this phone says about where its recovery key is kept, the only source of
+//! them (#1135). A sentence with a hole
 //! (`{name}`, `{n}`, `{index}`, `{rows}`) is filled with `strings::fill`.
 //! The pairing screen's sentences are `strings::pair`'s.
 

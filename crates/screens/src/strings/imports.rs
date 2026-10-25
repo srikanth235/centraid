@@ -1,5 +1,5 @@
-//! The phone imports' sentences (`copy/photos.json`'s camera-roll lines, `copy/shared.json`'s
-//! "Open {name}", `copy/tasks.json`'s reminders lines that the importers did not already own).
+//! The phone imports' sentences: the camera-roll lines, "Open {name}" and the reminders lines
+//! that the importers did not already own.
 //! The contacts, calendar and reminders outcome lines are `strings::people`, `strings::agenda` and
 //! `strings::task`'s; the camera roll's grant sentences are `strings::photos`'.
 

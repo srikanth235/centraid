@@ -1,6 +1,5 @@
 //! Docs' sentences (`docs.*` screens): the words the drive, a document, its
-//! versions, its editor and the add flow are made of. Keys keep the names the
-//! copy source (`copy/docs.json`) gave them, lowercased; the trash's and the
+//! versions, its editor and the add flow are made of. The trash's and the
 //! autosave line's are the kit's (`strings::shared`).
 
 catalog! {

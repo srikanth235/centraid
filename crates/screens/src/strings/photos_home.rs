@@ -1,7 +1,7 @@
 //! Sentences of `photos.home` and of the pieces Photos' screens share that no
-//! `copy/photos.json` key covers: how a fetched original ended, a copy handed to
+//! `strings::photos` key covers: how a fetched original ended, a copy handed to
 //! the platform, "Keep originals" and "Free up space", and the library's own
-//! small words. Keys keep the names the Kotlin constants they replace had.
+//! small words.
 
 catalog! {
     // How fetching one original back ended (`SharedCopy.FETCH_*`).

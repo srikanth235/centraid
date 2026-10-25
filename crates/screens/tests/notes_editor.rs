@@ -393,7 +393,7 @@ fn the_powerbox_reads_link_targets_grouped_by_domain() {
     assert_eq!(sheet.search_placeholder, "Search everything");
     assert_eq!(
         sheet.foot,
-        "Locker items link by name; their secrets stay sealed."
+        "Locker items link by name; their secrets stay locked."
     );
     send_editor(
         &mut d,

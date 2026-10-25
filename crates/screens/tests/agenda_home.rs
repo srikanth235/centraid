@@ -1584,7 +1584,7 @@ fn day_on_today_draws_the_overdue_group_with_its_verb_and_the_notice_an_absence_
     assert_eq!(overdue.rows[0].due_label, "16 days ago");
     assert!(overdue.rows[0].overdue);
     let notice = data.notice.as_ref().expect("the absence notice");
-    assert_eq!(notice.sentence, "You were away 16 days · 1 task came due");
+    assert_eq!(notice.sentence, "You were away 16 days; 1 task came due");
     assert_eq!(notice.verb_label, "Reschedule");
     assert_eq!(notice.verb_key, "catch_up");
     // BOTH VERBS OPEN CATCH UP.
@@ -1600,7 +1600,7 @@ fn day_on_today_draws_the_overdue_group_with_its_verb_and_the_notice_an_absence_
     r.settle();
     assert_eq!(
         r.data().notice.as_ref().unwrap().sentence,
-        "You were away 16 days · 2 tasks came due"
+        "You were away 16 days; 2 tasks came due"
     );
 
     // ANOTHER ANCHOR: none of it.

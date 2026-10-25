@@ -8,6 +8,8 @@ import test from "node:test";
 import {
   bannedIn,
   capFor,
+  catalogStrings,
+  scanCatalog,
   compareBudget,
   lintCopy,
   lintString,
@@ -165,6 +167,9 @@ test("lintCopy reads strings only and honours the budget", () => {
   const root = mkdtempSync(path.join(tmpdir(), "copy-lint-"));
   try {
     mkdirSync(path.join(root, "copy"));
+    mkdirSync(path.join(root, "crates/screens/src/strings"), {
+      recursive: true,
+    });
     writeFileSync(
       path.join(root, "copy/a.json"),
       JSON.stringify({
@@ -186,8 +191,54 @@ test("lintCopy reads strings only and honours the budget", () => {
     assert.equal(stale.under.length, 1);
 
     assert.deepEqual(lintCopy(path.join(root, "nowhere"), {}).missing, [
+      "crates/screens/src/strings",
       "copy",
     ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a catalogue row reads across lines, inside catalog! only, once per key", () => {
+  const source = [
+    '//! plain doc_quote = ("Please ignore", "Please ignore");',
+    "catalog! {",
+    '    plain x_note = ("Please wait", "Please wait");',
+    "    // a comment row",
+    "    counted y_title = (",
+    '        "{n} \\"thing\\"",',
+    '        "{n} things"',
+    "    );",
+    "}",
+  ].join("\n");
+  assert.deepEqual(catalogStrings(source), {
+    X_NOTE: ["Please wait", "Please wait"],
+    Y_TITLE: ['{n} "thing"', "{n} things"],
+  });
+  const twice =
+    'catalog! {\n    counted z_note = ("Please wait", "Simply please wait");\n}';
+  assert.deepEqual(
+    scanCatalog(twice).map((f) => [f.key, f.rule]),
+    [["Z_NOTE", "copy-banned-word"]]
+  );
+});
+
+test("lintCopy reads the Rust catalogue as well as copy/", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "copy-lint-rs-"));
+  try {
+    mkdirSync(path.join(root, "copy"));
+    mkdirSync(path.join(root, "crates/screens/src/strings"), {
+      recursive: true,
+    });
+    writeFileSync(
+      path.join(root, "crates/screens/src/strings/a.rs"),
+      'catalog! {\n    plain x_note = ("Please wait", "Please wait");\n}\n'
+    );
+    const found = lintCopy(root, {});
+    assert.deepEqual(
+      found.over.map((o) => o.file),
+      ["crates/screens/src/strings/a.rs"]
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

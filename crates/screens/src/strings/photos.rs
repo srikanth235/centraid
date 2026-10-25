@@ -1,7 +1,5 @@
-//! Photos' own sentences, every one of `copy/photos.json` under the key the copy
-//! source gave it (lower-cased). The screens' own words (a selection bar's
-//! count, a batch confirm) are the counted entries at the foot, made from the
-//! same source sentences.
+//! Photos' own sentences. The screens' own words (a selection bar's count, a
+//! batch confirm) are the counted entries at the foot.
 //!
 //! A sentence with a hole (`{count}`, `{noun}`) is filled with
 //! [`crate::strings::fill`]. A lane that needs a sentence the source lacks adds

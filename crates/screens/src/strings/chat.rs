@@ -1,5 +1,5 @@
 //! The chat's sentences (the on-device assistant). The write-proposal sentences the assistant
-//! itself composes ("Done.", "Proposed: …") are the core's (`copy/chat.json`, `SAID_*`); these are
+//! itself composes ("Done.", "Proposed: …") are the core's (`copy/chat.json`, `SAID_*`, read by `crates/assist`); these are
 //! the ones the screen says.
 
 catalog! {

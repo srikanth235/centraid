@@ -86,7 +86,7 @@ fn the_new_photographs_title_is_the_caption_or_an_edited_file_name() {
         editor::saved_title(en, "IMG_0042.JPG"),
         "IMG_0042-edited.jpg"
     );
-    assert_eq!(editor::saved_title(en, ""), "photograph-edited.jpg");
+    assert_eq!(editor::saved_title(en, ""), "photo-edited.jpg");
     assert_eq!(editor::saved_title(en, "a b.c"), "a b.c");
 }
 

@@ -1,7 +1,6 @@
 //! The sentences of the backup's line and its screen (#1135, lane H2): "Backed up
 //! 2 minutes ago", what waits and why, the gateways' last word, the controls'
-//! labels and what the last act did. Keys keep the names the copy source
-//! (`copy/shared.json`) gave them. A thing is "backed up" only once a gateway
+//! labels and what the last act did. A thing is "backed up" only once a gateway
 //! acknowledged it and the phone recorded that (#1080): no sentence here says
 //! more than that.
 

@@ -4,8 +4,8 @@
 //! in it is here.
 
 catalog! {
-    plain away_notice_one = ("You were away {days} days · 1 task came due", "You were away {days} days · 1 task came due");
-    plain away_notice_many = ("You were away {days} days · {n} tasks came due", "You were away {days} days · {n} tasks came due");
+    plain away_notice_one = ("You were away {days} days; 1 task came due", "You were away {days} days; 1 task came due");
+    plain away_notice_many = ("You were away {days} days; {n} tasks came due", "You were away {days} days; {n} tasks came due");
     counted event_count = ("{n} event", "{n} events");
     plain from_day = ("From {day}", "From {day}");
     plain lands_in = ("Add to {place}", "Add to {place}");
@@ -29,7 +29,7 @@ mod tests {
                 &away_notice_many(Locale::En),
                 &[("days", "16"), ("n", "34")]
             ),
-            "You were away 16 days · 34 tasks came due"
+            "You were away 16 days; 34 tasks came due"
         );
         assert_eq!(
             fill(&lands_in(Locale::En), &[("place", "Inbox")]),

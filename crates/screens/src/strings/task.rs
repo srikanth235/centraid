@@ -1,6 +1,5 @@
 //! The to-do half of Agenda's sentences: rows, groups, the task page, filing,
-//! Catch up. Keys keep the names the copy source (`copy/tasks.json`) gave them;
-//! `task` stays here only as the word a person reads.
+//! Catch up. `task` is here only as the word a person reads.
 
 catalog! {
     plain add = ("Add", "Add");

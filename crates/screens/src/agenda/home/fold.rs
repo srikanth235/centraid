@@ -578,7 +578,7 @@ fn overdue_group(locale: Locale, held: &Held, ctx: &rows::Context) -> Option<wir
         .next()
 }
 
-/// "You were away 16 days · 34 tasks came due", when the core names an absence.
+/// "You were away 16 days; 34 tasks came due", when the core names an absence.
 fn notice_of(locale: Locale, held: &Held) -> Option<wire::TodoNotice> {
     let catch_up = held.catch_up.as_ref().filter(|catch_up| catch_up.absent)?;
     let template = if catch_up.overdue == 1 {
@@ -1094,7 +1094,7 @@ mod tests {
         });
         assert_eq!(
             notice_of(Locale::En, &held).unwrap().sentence,
-            "You were away 16 days · 34 tasks came due"
+            "You were away 16 days; 34 tasks came due"
         );
         held.catch_up = Some(wire::TasksCatchUp {
             away_days: 9,
@@ -1104,7 +1104,7 @@ mod tests {
         });
         assert_eq!(
             notice_of(Locale::En, &held).unwrap().sentence,
-            "You were away 9 days · 1 task came due"
+            "You were away 9 days; 1 task came due"
         );
         held.catch_up = Some(wire::TasksCatchUp {
             away_days: 3,

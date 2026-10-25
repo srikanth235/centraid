@@ -1,6 +1,4 @@
-//! Health's fixed sentences (#1135). `copy/health.json` stays the Kotlin copy source for Home's tile,
-//! which stays on that side until the shell lane ports Home. Every sentence a Health screen shows is
-//! one of these; the ones with a hole in them are filled with [`crate::strings::fill`].
+//! Health's fixed sentences (#1135). Every sentence a Health screen shows is one of these; the ones with a hole in them are filled with [`crate::strings::fill`].
 
 catalog! {
     plain app_title = ("Health", "Health");

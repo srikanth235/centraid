@@ -1,5 +1,4 @@
 //! Agenda's own sentences: the band, the day bar, events, the editor, the More sheet.
-//! Keys keep the names the copy source (`copy/agenda.json`) gave them.
 
 catalog! {
     plain a11y_cancel = ("Cancel this event", "Cancel this event");

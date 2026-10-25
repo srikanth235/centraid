@@ -1,5 +1,5 @@
-//! The pairing screen's sentences (`pair.laptop`), moved here from
-//! `copy/words.json` (#1135). A sentence with a hole (`{who}`) is filled with
+//! The pairing screen's sentences (`pair.laptop`), their one source
+//! (#1135). A sentence with a hole (`{who}`) is filled with
 //! `strings::fill`. The words every screen shares (Done, Cancel, Try again) are
 //! `strings::shared`'s.
 

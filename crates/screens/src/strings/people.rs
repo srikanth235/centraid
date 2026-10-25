@@ -1,5 +1,4 @@
-//! People's fixed sentences (`copy/people.json` stays the Kotlin copy source for the Home tile, which is the
-//! shell lane's to port). Every sentence a People screen shows is one of these; the ones with a hole in
+//! People's fixed sentences. Every sentence a People screen shows is one of these; the ones with a hole in
 //! them are filled with [`crate::strings::fill`].
 
 catalog! {

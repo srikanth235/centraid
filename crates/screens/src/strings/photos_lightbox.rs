@@ -1,5 +1,5 @@
 //! The one-photograph screens' own sentences (lightbox, editor, duplicates and
-//! its review): the ones `copy/photos.json` does not carry.
+//! its review): the ones `strings::photos` does not carry.
 
 catalog! {
     plain denied_title = ("Photos cannot read this vault", "Photos cannot read this vault");
@@ -36,7 +36,7 @@ catalog! {
         "Centraid could not read the edited photo.",
         "Centraid could not read the edited photo."
     );
-    plain edit_fallback_name = ("photograph", "photograph");
+    plain edit_fallback_name = ("photo", "photo");
     plain not_in_vault = ("This photo is not in a vault yet.", "This photo is not in a vault yet.");
     plain utc = ("UTC", "UTC");
     plain captured_fact = ("{when} · {zone}", "{when} · {zone}");

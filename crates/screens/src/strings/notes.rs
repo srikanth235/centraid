@@ -1,6 +1,4 @@
-//! Notes' fixed sentences (`copy/notes.json` is the Kotlin copy source for the
-//! Home tile, which stays on that side until the shell lane ports it). Every
-//! sentence a Notes screen shows is one of these; the ones with a hole in them
+//! Notes' fixed sentences. Every sentence a Notes screen shows is one of these; the ones with a hole in them
 //! are filled with [`crate::strings::fill`].
 
 catalog! {
@@ -109,8 +107,8 @@ catalog! {
     plain notebooks_title = ("Notebooks", "Notebooks");
     plain pin = ("Pin", "Pin");
     plain powerbox_foot = (
-        "Locker items link by name; their secrets stay sealed.",
-        "Locker items link by name; their secrets stay sealed."
+        "Locker items link by name; their secrets stay locked.",
+        "Locker items link by name; their secrets stay locked."
     );
     plain remove_tag = ("Remove tag", "Remove tag");
     plain tag_placeholder = ("Add a tag", "Add a tag");

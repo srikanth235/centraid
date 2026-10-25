@@ -1,4 +1,4 @@
-//! Sentences of `backup.home` that `copy/shared.json` does not hold (#1135, lane
+//! Sentences of `backup.home` that `strings::backup` does not hold (#1135, lane
 //! H2): the transfer rule's three choices, where the recovery key is kept on
 //! each platform, why the phone will not wake Centraid, what a pass is told in
 //! words, and the claims the line may make. The line's own sentences are
@@ -24,7 +24,7 @@ catalog! {
 
     // WHY THE PHONE WILL NOT WAKE CENTRAID when the platform refused every window.
     plain background_off_ios = ("Background App Refresh is off, so Centraid only catches up when you open it.", "Background App Refresh is off, so Centraid only catches up when you open it.");
-    plain background_off_android = ("Centraid cannot catch up in the background on this device.", "Centraid cannot catch up in the background on this device.");
+    plain background_off_android = ("Centraid cannot catch up in the background on this phone.", "Centraid cannot catch up in the background on this phone.");
 
     // WHAT A MEMBER IS TOLD ABOUT A PASS (`DrainCopy`): one sentence per reason it
     // stopped. A window that ran out with bytes left is the ordinary case for a

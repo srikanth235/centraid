@@ -787,7 +787,7 @@ fn registration_is_worded_for_what_the_os_took() {
     );
     assert_eq!(
         none.sentence(en, "android"),
-        "Centraid cannot catch up in the background on this device."
+        "Centraid cannot catch up in the background on this phone."
     );
 }
 

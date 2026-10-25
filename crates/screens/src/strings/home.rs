@@ -1,8 +1,6 @@
 //! HOME'S OWN SENTENCES (#1135): the springboard, its tiles and day-one page,
-//! the vault switcher and the band, every one of `copy/shared.json`'s `HOME_*`,
-//! `BAND_*`, `VAULTS_*` and the search's under the key the copy gave it
-//! (lower-cased), plus the tile sentences the app copies have and the app string
-//! modules here do not (Agenda's, Docs', Notes', People's, Health's). A tile's
+//! the vault switcher, the band and the search, plus the tile sentences the app
+//! string modules here do not have (Agenda's, Docs', Notes', People's, Health's). A tile's
 //! sentence an app module already has (Locker's, Money's, Photos') is read from
 //! there, not restated.
 
@@ -15,6 +13,8 @@ catalog! {
     plain band_chat = ("Chat", "Chat");
     plain band_current_spoken = ("current place", "current place");
     plain band_home = ("Home", "Home");
+    plain home_day_one_body = ("Add photos and documents to get started.", "Add photos and documents to get started.");
+    plain home_day_one_title = ("Nothing in here yet", "Nothing in here yet");
     plain first_launch_body = ("Apps and an assistant on this phone, backed up to your own devices.", "Apps and an assistant on this phone, backed up to your own devices.");
     plain first_launch_house_title = ("Apps on this phone", "Apps on this phone");
     plain first_launch_house_body = ("Photos, notes, documents, money and more, with no account to make.", "Photos, notes, documents, money and more, with no account to make.");
@@ -26,8 +26,6 @@ catalog! {
     plain first_launch_skip = ("Skip", "Skip");
     plain first_launch_make = ("Get started", "Get started");
     plain first_launch_restore = ("Restore backup", "Restore backup");
-    plain home_day_one_body = ("Add photos and documents to get started.", "Add photos and documents to get started.");
-    plain home_day_one_title = ("Nothing in here yet", "Nothing in here yet");
     plain home_loading = ("Loading", "Loading");
     plain home_no_vault = ("No vault is open.", "No vault is open.");
     plain home_search_chat_group = ("Chats", "Chats");

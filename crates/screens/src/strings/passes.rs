@@ -51,7 +51,7 @@ catalog! {
         "Background App Refresh is off, so Centraid only catches up when you open it."
     );
     plain background_none_android = (
-        "Centraid cannot catch up in the background on this device.",
-        "Centraid cannot catch up in the background on this device."
+        "Centraid cannot catch up in the background on this phone.",
+        "Centraid cannot catch up in the background on this phone."
     );
 }

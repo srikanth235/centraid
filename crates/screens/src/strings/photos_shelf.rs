@@ -1,7 +1,6 @@
 //! Sentences of `photos.shelf`, `photos.picker` and `photos.places` that no
-//! `copy/photos.json` key covers: each shelf's own title and empty sentence, the
-//! trash's rule, and the album's small words. Keys keep the names the Kotlin
-//! constants they replace had.
+//! `strings::photos` key covers: each shelf's own title and empty sentence, the
+//! trash's rule, and the album's small words.
 
 catalog! {
     plain title_videos = ("Videos", "Videos");

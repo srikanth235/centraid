@@ -42,8 +42,8 @@ function json<T>(file: string): T {
 // Question 2 is the one with a real failure mode behind it. `Icon.swift` reads
 // `CentraidCatalog.icons[iconKey] ?? []` and `Icon.kt` reads
 // `.icons[iconKey].orEmpty()`, so a misspelled key draws NOTHING and nothing
-// throws — the silent blank mark `CatalogSpec` was written after. That spec and
-// `IconSilhouetteTests` cover the keys the Kotlin POLICIES name; this file
+// throws — the silent blank mark `CatalogSpec` was written after. `native-emission.test.ts` and
+// `IconSilhouetteTests` cover the keys the band and the lockup name; this file
 // covers the string literals typed into the view layer and the emitted table
 // itself, neither of which needs a JVM or an Xcode toolchain to read.
 
@@ -55,15 +55,14 @@ const SHELL_ROOTS = [
   "mobile/iosApp/Sources",
   "mobile/iosApp/Design",
   "mobile/androidApp/src",
-  "mobile/shared/src/commonMain",
 ];
 
 /** The ONLY two files permitted to carry silhouette path data, and both are
  *  generated. Hand-editing either is caught elsewhere — the gate's `emitters`
- *  step and the `mobile-jvm` profile both regenerate and fail on a diff. */
+ *  step regenerates and fails on a diff. */
 const EMITTED_CATALOGUES = new Set([
   "mobile/iosApp/Design/Catalog.swift",
-  "mobile/shared/src/commonMain/kotlin/dev/centraid/design/Catalog.kt",
+  "mobile/androidApp/src/main/kotlin/dev/centraid/android/design/Catalog.kt",
 ]);
 
 const SHELL_EXTENSIONS = [".swift", ".kt"];
@@ -138,7 +137,7 @@ describe("single icon registry", () => {
     // `Icon.swift` and `Icon.kt` both fall back to an EMPTY path list, so a key
     // the table does not hold renders a blank chip and nothing fails. These are
     // the keys typed into the views rather than declared in a Kotlin policy —
-    // the half `CatalogSpec` cannot enumerate.
+    // the half `native-emission.test.ts` does not enumerate.
     const literal = /iconKey\s*[:=]\s*"(?<key>[^"]+)"/gu;
     const named = new Map<string, string>();
     for (const file of walkShellSources()) {
