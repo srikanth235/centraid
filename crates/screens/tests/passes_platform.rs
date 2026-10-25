@@ -11,7 +11,7 @@
 //! | a `BGTaskScheduler` identifier is in the plist, `project.yml` and the Swift shell | the app TERMINATES on launch with no backup and nothing a member can report |
 //! | every BGTask handler completes the task on the expiration path too | the task is killed and the app is penalised in scheduling: a backup that gets rarer every time it fails |
 //! | the Android worker is a CONCRETE class | WorkManager accepts the work, reports it enqueued, and every run fails inside the framework |
-//! | the unique work is UPDATEd, not KEPT | a shipped build's unrunnable request is preserved for ever |
+//! | the unique work is migrated in place, not kept | a shipped build's unrunnable request is preserved for ever |
 //! | ONE background `URLSession`, the iOS shell's, pinning by DER | two sessions under one identifier are undefined; a session trusting a CA trusts whoever holds a certificate for the address |
 //! | the windows' names are the ones Rust schedules | a window the shell maps to nothing never runs |
 
@@ -226,8 +226,18 @@ fn the_unique_work_name_is_kept_and_the_policy_is_what_migrates_the_broken_entry
         "androidApp/src/main/kotlin/dev/centraid/android/backup/PassWork.kt",
     ));
     assert!(android.contains("enqueueUniquePeriodicWork("));
-    assert!(android.contains("ExistingPeriodicWorkPolicy.UPDATE"));
-    assert!(!android.contains("ExistingPeriodicWorkPolicy.KEEP"));
+    // The policy the periodic request is enqueued under is the one that migrates it in place.
+    let policies: BTreeSet<String> = android
+        .split("ExistingPeriodicWorkPolicy.")
+        .skip(1)
+        .map(|rest| {
+            rest.chars()
+                .take_while(|c| c.is_ascii_alphabetic())
+                .collect::<String>()
+                .to_ascii_lowercase()
+        })
+        .collect();
+    assert_eq!(policies, BTreeSet::from(["update".to_owned()]));
 }
 
 #[test]

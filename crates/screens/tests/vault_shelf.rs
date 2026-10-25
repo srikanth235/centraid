@@ -371,18 +371,16 @@ fn the_first_vault_gets_the_starter_rows_and_the_second_does_not() {
     let mut phone = Phone::new();
     phone.launch();
     phone.shelf.found(None, "First");
+    // The starter notes are ordinary rows of Notes: read through its library query.
     let rows = |phone: &Phone| {
         let core = phone.shelf.foreground_core().expect("a core in front");
-        core.with_vault(|vault| {
-            Ok(vault.read(|connection| {
-                Ok(
-                    connection.query_row("SELECT COUNT(*) FROM entity", [], |row| {
-                        row.get::<_, i64>(0)
-                    })?,
-                )
-            })?)
-        })
-        .expect("a count")
+        let mut request = centraid_screens::catalog::load::notes::Library::default().request();
+        request.zone = "UTC".to_owned();
+        let answer = core.load(&request).expect("the library reads");
+        match answer.answer.and_then(|a| a.answer) {
+            Some(wire::app_query_response::Answer::NotesLibrary(library)) => library.notes.len(),
+            other => panic!("a library answered {other:?}"),
+        }
     };
     let first = rows(&phone);
     phone.shelf.found(None, "Second");
