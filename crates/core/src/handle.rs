@@ -167,7 +167,10 @@ pub struct Handle {
     pub(crate) assist: crate::assist::Hub,
     /// THE SCREEN RUNTIME, once a shell-facing library has attached one
     /// (#1135, lane C2): see [`crate::screens`].
-    screens: std::sync::OnceLock<Arc<dyn crate::screens::ScreenHost>>,
+    pub(crate) screens: std::sync::OnceLock<Arc<dyn crate::screens::ScreenHost>>,
+    /// This handle, weakly, once it is shared ([`Handle::shared`]): what a job that outlives
+    /// the call that started it holds (`ScreenCtx::spawn`).
+    pub(crate) me: std::sync::OnceLock<std::sync::Weak<Handle>>,
 }
 
 /// THE CLOCK AND ID SOURCE A CORE WAS OPENED WITH, kept for the life of the
@@ -286,6 +289,7 @@ impl Core {
             locker: Arc::new(Mutex::new(None)),
             assist: crate::assist::Hub::new(),
             screens: std::sync::OnceLock::new(),
+            me: std::sync::OnceLock::new(),
         })
     }
 
@@ -573,6 +577,16 @@ impl Handle {
                 request,
             )
         })
+    }
+
+    /// Share this handle, so work the core starts (a screen's off-thread job) can hold it past
+    /// the call that started it. The shells hold the `Arc`; a handle that was never shared runs
+    /// no off-thread job and says so.
+    #[must_use]
+    pub fn shared(self) -> Arc<Self> {
+        let shared = Arc::new(self);
+        let _ = shared.me.set(Arc::downgrade(&shared));
+        shared
     }
 
     /// Attach the screen runtime. Once per core: a second attach is ignored,

@@ -19,6 +19,9 @@ use centraid_api_proto::core_v1 as wire;
 use crate::error::Result;
 use crate::handle::Handle;
 
+/// A screen's slow work: what it returns is delivered to the screen that started it.
+pub type Job = Box<dyn FnOnce(&dyn ScreenCtx) -> Vec<u8> + Send + 'static>;
+
 /// What a screen runtime may ask of the core.
 pub trait ScreenCtx {
     /// The one read.
@@ -70,9 +73,9 @@ pub trait ScreenCtx {
         })
     }
 
-    /// One BOUNDED assistant call (status, start, cancel, clear, suggest, confirm,
-    /// dismiss, documents). A load or a send blocks for seconds and rides the
-    /// `AssistCall` effect instead. A door with no assistant says so.
+    /// One assistant call. A load or a send blocks for seconds, so a screen makes those from a
+    /// job ([`ScreenCtx::spawn`]); the rest are bounded and are made inline. A door with no
+    /// assistant says so.
     ///
     /// # Errors
     /// Whatever [`Handle::call`] refuses with.
@@ -80,6 +83,19 @@ pub trait ScreenCtx {
         let _ = request;
         Err(crate::error::CoreError::Unsupported {
             type_url: "assist".to_owned(),
+        })
+    }
+
+    /// Run `job` on the core's own thread pool, off the runtime lock, and hand what it returns to
+    /// the screen `instance` as [`wire::OffThreadDone`] tagged `tag`. The job gets this door, so it
+    /// can call anything a screen can. A door that cannot outlive a call refuses.
+    ///
+    /// # Errors
+    /// [`crate::CoreError::Unavailable`] when the door cannot hold the job.
+    fn spawn(&self, instance: u64, tag: String, job: Job) -> Result<()> {
+        let _ = (instance, tag, job);
+        Err(crate::error::CoreError::Unavailable {
+            reason: "this door cannot run a job past the call".to_owned(),
         })
     }
 
@@ -104,6 +120,11 @@ pub trait ScreenHost: Send + Sync {
 
     /// These tables changed: re-render the screens that read them.
     fn changed(&self, ctx: &dyn ScreenCtx, tables: &[String]);
+
+    /// A job a screen started finished: tell it.
+    fn job_done(&self, ctx: &dyn ScreenCtx, instance: u64, tag: &str, bytes: Vec<u8>) {
+        let _ = (ctx, instance, tag, bytes);
+    }
 
     /// The assistant's running turn said something: tell the screens that listen.
     fn assist(&self, ctx: &dyn ScreenCtx, event: &wire::AssistEvent) {
@@ -173,6 +194,24 @@ impl ScreenCtx for Handle {
                 type_url: "assist".to_owned(),
             }),
         }
+    }
+
+    fn spawn(&self, instance: u64, tag: String, job: Job) -> Result<()> {
+        let me = self
+            .me
+            .get()
+            .and_then(std::sync::Weak::upgrade)
+            .ok_or_else(|| crate::error::CoreError::Unavailable {
+                reason: "this handle is not shared, so it can run no job past a call".to_owned(),
+            })?;
+        let runtime = self.runtime_handle()?;
+        runtime.spawn_blocking(move || {
+            let bytes = job(&*me);
+            if let Some(host) = me.screens.get() {
+                host.job_done(&*me, instance, &tag, bytes);
+            }
+        });
+        Ok(())
     }
 
     fn push(&self, update: wire::ScreenUpdate) {

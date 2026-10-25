@@ -26,6 +26,7 @@ catalog! {
     plain close = ("Close", "Close");
     plain composer_placeholder = ("Ask your vault", "Ask your vault");
     plain confirm = ("Confirm", "Confirm");
+    plain copied = ("Copied", "Copied");
     plain copy = ("Copy", "Copy");
     plain current_chat = ("Open chat", "Open chat");
     plain delete = ("Delete", "Delete");
@@ -82,6 +83,8 @@ catalog! {
     plain rename_title = ("Rename chat", "Rename chat");
     plain retry = ("Try again", "Try again");
     plain save = ("Save", "Save");
+    plain scope_all = ("All apps", "All apps");
+    plain scope_label = ("Chat scope", "Chat scope");
     plain send = ("Send", "Send");
     plain size_line = ("{size} download", "{size} download");
     plain stop = ("Stop", "Stop");

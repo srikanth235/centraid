@@ -480,3 +480,28 @@ fn a_confirm_that_needs_locker_open_asks_the_owner_check_and_confirms_again_once
     assert_eq!(announced, ["locker.unlocked"]);
     let _ = DRY_CLEANING;
 }
+
+#[test]
+fn a_search_asks_as_a_page_of_its_own_and_the_question_is_put_once_the_chat_is_ready() {
+    let mut chat = Chat::ready(script(&read_tasks()));
+    chat.driver.handle.assist().host().install(script(&read_tasks()));
+    let id = chat.driver.push(centraid_screens::chat::TAB, centraid_screens::chat::routes::ask("Tell me about “tasks”", "agenda"));
+    // the shell's first event for any chat instance: it names the models directory
+    chat.driver.send(id, wire::screen_event::Kind::Chat(wire::ChatEvent {
+        kind: Some(C::Opened(wire::chat_event::Opened {
+            app: String::new(),
+            models_dir: "/nowhere/models".to_owned(),
+            ..Default::default()
+        })),
+    }));
+    for _ in 0..200 {
+        chat.driver.pump(std::time::Duration::from_millis(40));
+        let Some(wire::view_state::Kind::Chat(state)) = &chat.driver.view(id).kind else { panic!() };
+        if state.messages.len() == 2 && !state.streaming {
+            assert_eq!(state.scope_app, "agenda");
+            assert_eq!(state.messages[0].text, "Tell me about “tasks”");
+            return;
+        }
+    }
+    panic!("the asked question was never put");
+}

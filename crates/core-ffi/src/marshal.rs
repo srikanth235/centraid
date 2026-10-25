@@ -242,7 +242,7 @@ pub unsafe fn handle_of<'handle>(handle: *mut Handle) -> Option<&'handle Handle>
         return None;
     }
     // SAFETY: non-null, and the caller promised it came from `centraid_open`
-    // (which boxes a `Handle`) and is not closed. `Handle` is `Sync`, so a
+    // (which shares a `Handle` in an `Arc`) and is not closed. `Handle` is `Sync`, so a
     // shared reference from two threads is sound — which is the reentrancy
     // clause, held here rather than by a lock.
     Some(unsafe { &*handle })

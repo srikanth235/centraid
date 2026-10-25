@@ -290,6 +290,16 @@ impl Chat {
             }),
             attach_pick_photo_title: words::attach_pick_photo(locale),
             close_label: words::close(locale),
+            copied_label: words::copied(locale),
+            scope_all_label: words::scope_all(locale),
+            scope_label: words::scope_label(locale),
+            scopes: super::scopable_apps()
+                .into_iter()
+                .map(|app| wire::ChatScopeOption {
+                    app: app.to_owned(),
+                    name: super::turn::app_name(app),
+                })
+                .collect(),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::Chat(Box::new(state))),

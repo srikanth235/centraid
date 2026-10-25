@@ -106,7 +106,7 @@ impl Chat {
                 self.vision.phase = VisionPhase::Loading;
                 self.vision.bytes = known;
                 self.vision.error = None;
-                self.load_vision()
+                self.load_vision(ctx)
             }
             _ => {
                 self.vision.phase = if self.wants_reader() {
@@ -121,15 +121,17 @@ impl Chat {
         }
     }
 
-    fn load_vision(&mut self) -> Vec<wire::Effect> {
+    fn load_vision(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         let (model_path, projector_path) = (self.model_path(), self.projector_path());
-        vec![self.call(
+        self.call(
+            ctx,
             Await::LoadVision,
             Ask::Load(wire::AssistLoadRequest {
                 model_path,
                 projector_path,
             }),
-        )]
+        );
+        Vec::new()
     }
 
     pub(super) fn vision_loaded(&mut self, state: Option<wire::AssistVisionState>) -> Vec<wire::Effect> {
@@ -155,14 +157,14 @@ impl Chat {
         Vec::new()
     }
 
-    pub(super) fn vision_finished(&mut self, ok: bool) -> Vec<wire::Effect> {
+    pub(super) fn vision_finished(&mut self, ok: bool, ctx: &Ctx) -> Vec<wire::Effect> {
         if self.vision.phase != VisionPhase::Downloading {
             return Vec::new();
         }
         self.vision.progress = None;
         if ok {
             self.vision.phase = VisionPhase::Loading;
-            self.load_vision()
+            self.load_vision(ctx)
         } else {
             self.vision.phase = VisionPhase::Needs;
             self.vision.error = Some(Fail::DownloadStopped);

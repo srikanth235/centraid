@@ -138,7 +138,8 @@ impl Chat {
                 .map(wired)
                 .collect(),
         });
-        vec![self.call(Await::Send(turn), request)]
+        self.call(ctx, Await::Send(turn), request);
+        Vec::new()
     }
 
     pub(super) fn stopped(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {

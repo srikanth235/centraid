@@ -11,9 +11,9 @@
 //!
 //! A BOUNDED assistant call (status, start, suggest, cancel, clear, confirm, dismiss,
 //! documents) is made inline through `Ctx::assist`. The two that block for seconds, loading the
-//! model and sending a turn, ride the `AssistCall` effect: the shell runs them off its UI
-//! thread and answers `assist_answered`. While a turn runs the core routes each of its stream
-//! events here as `ScreenEvent.assist` ([`Screen::hears_assist`]).
+//! model and sending a turn, run from `Ctx::off_thread` on the core's pool, off the runtime lock,
+//! and come back as `OffThreadDone`; the shell carries none of it. While a turn runs the core
+//! routes each of its stream events here as `ScreenEvent.assist` ([`Screen::hears_assist`]).
 //!
 //! ## The phases are the model's, not the thread's
 //!
@@ -59,13 +59,16 @@ use model::Chat;
 /// The screen's registered name.
 pub const HOME: &str = "chat.home";
 
+/// A search's Ask opened as a page of its own: the same chat, with the question waiting.
+pub const ASK: &str = "chat.ask";
+
 /// The tab the chat is the root of.
 pub const TAB: &str = "chat";
 
 /// The chat's screen.
 #[must_use]
 pub fn registry() -> Registry {
-    Registry::default().with(HOME, build)
+    Registry::default().with(HOME, build).with(ASK, build_ask)
 }
 
 fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
@@ -75,9 +78,30 @@ fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     })
 }
 
+/// `chat.ask`: a chat in the asked scope with the question waiting; the shell's `opened` event
+/// (it carries the models directory) starts it, and the question is put once the chat is ready.
+fn build_ask(route: &wire::Route) -> Option<Box<dyn Screen>> {
+    let Some(wire::route::Args::Ask(ask)) = &route.args else {
+        return None;
+    };
+    Some(Box::new(Chat::asking(&scope_of(&ask.scope), &ask.question)))
+}
+
 /// The routes the chat hands to a shell.
 pub mod routes {
     use super::{HOME, wire};
+
+    /// A search's Ask as a page: `question` put to a chat in `scope`.
+    #[must_use]
+    pub fn ask(question: &str, scope: &str) -> wire::Route {
+        wire::Route {
+            screen: super::ASK.to_owned(),
+            args: Some(wire::route::Args::Ask(wire::ShellAskRoute {
+                question: question.to_owned(),
+                scope: scope.to_owned(),
+            })),
+        }
+    }
 
     /// The Chat tab's root.
     #[must_use]
@@ -114,6 +138,7 @@ impl Screen for Chat {
                 None => Vec::new(),
             },
             Some(S::Assist(heard)) => self.on_stream(&heard, ctx),
+            Some(S::OffThreadDone(done)) => self.job_done(&done.tag, &done.bytes, ctx),
             Some(S::EffectResult(result)) => self.on_effect(result, ctx),
             Some(S::DataChanged(_)) => self.on_data_changed(ctx),
             Some(S::EnvironmentChanged(_)) => Vec::new(),

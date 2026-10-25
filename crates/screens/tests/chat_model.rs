@@ -90,10 +90,10 @@ fn a_model_on_the_phone_is_loaded_then_a_session_started_then_suggestions_asked_
         models_dir: dir.display().to_string(),
         ..wire::chat_event::Opened::default()
     }));
-    // The load blocks for seconds, so it is an effect the shell performs.
+    // The load blocks for seconds, so it runs on the core's pool and the chat shows the wait.
     assert_eq!(chat.state().phase(), Phase::Loading);
     assert_eq!(chat.state().model_step.clone().unwrap().status_line, "Loading model");
-    assert_eq!(chat.driver.effects.len(), 1);
+    assert!(chat.driver.effects.is_empty(), "the shell carries none of it");
     chat.perform();
     let state = chat.state();
     assert_eq!(state.phase(), Phase::Ready);

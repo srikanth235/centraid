@@ -81,6 +81,8 @@ message Route {
     ChatRoute chat = 1600;
     // ---- the shell: phone imports (1700-1899) ----
     ImportsRoute imports = 1700;
+    // ---- the shell (1000-1999): search's Ask (H1's arm, byte-identical) ----
+    ShellAskRoute ask = 1002;
   }
 }
 
@@ -526,4 +528,11 @@ message ChatRoute {}
 // vault (a photograph offered to two vaults is two imports).
 message ImportsRoute {
   string vault_id = 1;
+}
+
+// `chat.ask`: a search's Ask hands the term to the assistant. The chat opens with
+// `question` put to it, in `scope` (an app id, or empty for every app).
+message ShellAskRoute {
+  string question = 1;
+  string scope = 2;
 }

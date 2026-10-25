@@ -69,6 +69,8 @@ pub(crate) struct Done {
     pub timers: Vec<TimerOp>,
     /// Events for other open screens, by registered name (`Ctx::post`).
     pub posts: Vec<(String, centraid_api_proto::core_v1::ScreenEvent)>,
+    /// Slow work to run off the runtime lock (`Ctx::off_thread`).
+    pub jobs: Vec<(String, centraid_core::screens::Job)>,
 }
 
 /// A screen's door to the core, the catalog and the clock.
@@ -191,6 +193,21 @@ impl<'a> Ctx<'a> {
             .borrow_mut()
             .timers
             .push(TimerOp::Cancel(name.to_owned()));
+    }
+
+    /// Run `job` on the core's thread pool, off the runtime lock (a model load, a whole turn),
+    /// and deliver what it returns to this screen as `ScreenEvent.off_thread_done` tagged `tag`.
+    /// The job gets the core's door, so it can call anything a screen can. A core that cannot
+    /// run it delivers the same event with no bytes, so a screen has one failure path.
+    pub fn off_thread(
+        &self,
+        tag: &str,
+        job: impl FnOnce(&dyn ScreenCtx) -> Vec<u8> + Send + 'static,
+    ) {
+        self.done
+            .borrow_mut()
+            .jobs
+            .push((tag.to_owned(), Box::new(job)));
     }
 
     /// Hand `event` to every open screen registered as `screen` (a picker returning its pick to

@@ -129,61 +129,19 @@ impl Chat {
         self.perform();
     }
 
-    /// The oldest pending `AssistCall`, taken out of the effect queue.
-    fn take_call(&mut self) -> Option<(wire::EffectRequest, wire::AssistRequest)> {
-        let at = self.driver.effects.iter().position(|request| {
-            matches!(
-                request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
-                Some(wire::effect::Kind::AssistCall(_))
-            )
-        })?;
-        let request = self.driver.effects.remove(at);
-        let Some(wire::effect::Kind::AssistCall(call)) =
-            request.effect.clone().and_then(|effect| effect.kind)
-        else {
-            unreachable!()
-        };
-        Some((request, call.request.expect("a call carries its request")))
-    }
-
-    /// Run the call the way a shell does and send its answer back; the turn's stream is routed by
-    /// the core while it runs, and pumped here as the shell's event thread would.
-    pub fn answer_call(&mut self, events_first: bool) -> bool {
-        let Some((request, call)) = self.take_call() else {
-            return false;
-        };
-        let answer = self.driver.handle.call(&wire::Request {
-            kind: Some(wire::request::Kind::Assist(call)),
-        });
-        let outcome = match answer {
-            Ok(wire::Response {
-                kind: Some(wire::response::Kind::Assist(response)),
-                ..
-            }) => wire::effect_result::Outcome::AssistAnswered(response),
-            _ => wire::effect_result::Outcome::Failed(wire::EffectFailed::default()),
-        };
-        let reply = |chat: &mut Self| {
-            chat.driver.send(
-                request.instance,
-                S::EffectResult(wire::EffectResult {
-                    effect_id: request.effect_id,
-                    outcome: Some(outcome.clone()),
-                }),
-            );
-        };
-        if events_first {
-            self.driver.pump(Duration::from_millis(60));
-            reply(self);
-        } else {
-            reply(self);
-            self.driver.pump(Duration::from_millis(60));
-        }
-        true
-    }
-
-    /// Perform every assistant call the screen asked for.
+    /// Let the core's jobs and stream finish, as the shell's event thread would: pump until the
+    /// chat is neither loading nor streaming and a last pump brings nothing.
     pub fn perform(&mut self) {
-        while self.answer_call(true) {}
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        loop {
+            self.driver.pump(Duration::from_millis(40));
+            let state = self.state();
+            let busy = state.phase() == wire::chat_state::Phase::Loading || state.streaming;
+            if !busy && self.driver.pump(Duration::from_millis(40)) == 0 {
+                return;
+            }
+            assert!(std::time::Instant::now() < deadline, "the chat never settled");
+        }
     }
 
     /// The effects of kind `pick` the screen has asked for and nobody answered.

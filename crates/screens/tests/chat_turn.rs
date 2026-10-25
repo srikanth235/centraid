@@ -2,7 +2,6 @@
 
 mod chat_support;
 
-use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_assist::testing::ScriptedModel;
@@ -50,50 +49,27 @@ fn a_question_streams_into_the_thread_and_settles_once_with_its_thread_named() {
 }
 
 #[test]
-fn the_answer_to_the_send_call_settles_the_turn_whichever_comes_first() {
+fn a_turn_settles_once_and_what_arrives_after_it_changes_nothing() {
     let mut chat = ready();
     chat.event(C::Sent(wire::chat_event::Sent { text: "tasks?".to_owned() }));
     // While the turn runs the thread already shows the question and a streaming answer.
     assert!(chat.state().streaming);
     assert_eq!(chat.state().activity, "Thinking");
-    // The answer before the stream: settled by the call; the stream that follows is dropped.
-    assert!(chat.answer_call(false));
-    let state = chat.state();
-    assert_eq!(state.messages.len(), 2);
-    assert_eq!(state.messages[1].text, FOUND_TASKS);
-    assert_eq!(state.messages[1].cards.len(), 6);
-    assert!(!state.streaming);
-}
-
-#[test]
-fn the_stream_alone_draws_the_activity_the_cards_and_the_sentence_as_they_come() {
-    let mut chat = ready();
-    chat.event(C::Sent(wire::chat_event::Sent { text: "tasks?".to_owned() }));
-    // Run the call, pump the stream, but hold the call's answer back.
-    let (request, call) = {
-        let at = chat.driver.effects.iter().position(|r| {
-            matches!(r.effect.as_ref().and_then(|e| e.kind.as_ref()), Some(wire::effect::Kind::AssistCall(_)))
-        }).expect("a send");
-        let request = chat.driver.effects.remove(at);
-        let Some(wire::effect::Kind::AssistCall(call)) = request.effect.clone().and_then(|e| e.kind) else {
-            unreachable!()
-        };
-        (request, call.request.unwrap())
-    };
-    let sent = chat.driver.handle.call(&wire::Request { kind: Some(wire::request::Kind::Assist(call)) }).unwrap();
-    chat.driver.pump(Duration::from_millis(60));
-    let state = chat.state();
-    // The terminal event settled the turn.
-    assert_eq!(state.messages[1].text, FOUND_TASKS);
-    assert!(!state.streaming);
-    // The call's answer arriving second changes nothing and adopts the thread.
-    let Some(wire::response::Kind::Assist(response)) = sent.kind else { panic!() };
-    chat.driver.send(request.instance, S::EffectResult(wire::EffectResult {
-        effect_id: request.effect_id,
-        outcome: Some(wire::effect_result::Outcome::AssistAnswered(response)),
+    chat.perform();
+    let before = chat.state().clone();
+    assert_eq!(before.messages[1].text, FOUND_TASKS);
+    assert!(!before.thread_id.is_empty());
+    // a late failure of the same turn, and a late token of it, are not heard
+    chat.driver.send(chat.id, S::OffThreadDone(wire::OffThreadDone {
+        tag: "send:1".to_owned(),
+        bytes: Vec::new(),
     }));
-    assert_eq!(chat.state().messages.len(), 2);
-    assert!(!chat.state().thread_id.is_empty());
+    chat.driver.send(chat.id, S::Assist(wire::AssistEvent {
+        session_id: 1,
+        turn_id: 1,
+        kind: Some(wire::assist_event::Kind::Token(wire::AssistToken { text: "LATE".to_owned() })),
+    }));
+    assert_eq!(chat.state(), &before);
 }
 
 #[test]

@@ -16,7 +16,7 @@ use crate::screen::{Ctx, Environment};
 
 /// A core plus what a shell would have drawn from it.
 pub struct Driver {
-    pub handle: Handle,
+    pub handle: std::sync::Arc<Handle>,
     /// The latest view of every open instance.
     pub views: BTreeMap<u64, wire::ViewState>,
     pub navigation: Option<wire::Navigation>,
@@ -60,7 +60,9 @@ impl Driver {
         } else {
             config
         };
-        let handle = Core::open(config).expect("a core opens with create");
+        let handle = Core::open(config)
+            .expect("a core opens with create")
+            .shared();
         handle
             .open_own_bytes(dir.join("vault.bytes"))
             .expect("the byte store opens");
@@ -224,7 +226,7 @@ impl Driver {
     /// sheet) is tested through when no screen carries its events yet.
     pub fn with_ctx<R>(&self, body: impl FnOnce(&Ctx) -> R) -> R {
         let environment = Environment::default();
-        body(&Ctx::new(&self.handle, &environment))
+        body(&Ctx::new(&*self.handle, &environment))
     }
 
     /// Answer the oldest pending effect.

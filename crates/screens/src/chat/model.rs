@@ -1,6 +1,7 @@
 //! What the chat knows, the model's phases, and the events that are not a turn's.
 
 use centraid_api_proto::core_v1 as wire;
+use prost::Message;
 use wire::assist_request::Kind as Ask;
 use wire::chat_event::Kind as E;
 use wire::chat_state::Phase;
@@ -263,6 +264,17 @@ pub(super) fn assist(kind: Ask) -> wire::AssistRequest {
 }
 
 impl Chat {
+    /// A chat opened by a search's Ask: scoped, with the question waiting for the model.
+    pub fn asking(scope: &str, question: &str) -> Self {
+        Self {
+            scope: scope.to_owned(),
+            waiting: (!question.trim().is_empty()).then(|| Waiting {
+                question: question.trim().to_owned(),
+            }),
+            ..Self::default()
+        }
+    }
+
     /// A model path in the shell's models directory.
     pub fn model_path(&self) -> String {
         asset::path(&self.models_dir, &asset::MODEL)
@@ -282,12 +294,21 @@ impl Chat {
         self.ready() && !self.running
     }
 
-    /// A call the shell performs off the UI thread; its answer returns as `assist_answered`.
-    pub fn call(&mut self, wait: Await, kind: Ask) -> wire::Effect {
+    /// A call that blocks for seconds (a model load, a whole turn) runs on the core's pool, off
+    /// the runtime lock; its answer returns as `OffThreadDone` ([`Chat::job_done`]).
+    pub fn call(&mut self, ctx: &Ctx, wait: Await, kind: Ask) {
+        let tag = match wait {
+            Await::Load => "load".to_owned(),
+            Await::LoadVision => "load-vision".to_owned(),
+            Await::Send(turn) => format!("send:{turn}"),
+        };
         self.awaiting.push(wait);
-        effect(wire::effect::Kind::AssistCall(wire::AssistCall {
-            request: Some(assist(kind)),
-        }))
+        let request = assist(kind);
+        ctx.off_thread(&tag, move |core| {
+            core.assist(&request)
+                .map(|answer| answer.encode_to_vec())
+                .unwrap_or_default()
+        });
     }
 
     pub fn on_event(&mut self, event: E, ctx: &Ctx) -> Vec<wire::Effect> {
@@ -345,7 +366,13 @@ impl Chat {
             self.vault_name = opened.vault_name;
         }
         let untouched = self.messages.is_empty() && self.thread_id.is_empty();
-        let asked = super::scope_of(&opened.app);
+        // A chat made by a search's Ask already has its scope: the shell's first `opened` only
+        // starts it.
+        let asked = if !self.opened && self.waiting.is_some() {
+            self.scope.clone()
+        } else {
+            super::scope_of(&opened.app)
+        };
         let rescope = self.opened && self.scope != asked && (opened.scope_chosen || untouched);
         if self.opened && !rescope {
             let mut effects = Vec::new();
@@ -364,8 +391,10 @@ impl Chat {
         let threads = std::mem::take(&mut self.threads);
         let models_dir = std::mem::take(&mut self.models_dir);
         let vault_name = std::mem::take(&mut self.vault_name);
+        let waiting = self.waiting.take();
         *self = Self {
             opened: true,
+            waiting,
             scope: asked,
             models_dir,
             vault_name,
@@ -405,7 +434,7 @@ impl Chat {
                 self.phase = Phase::Loading;
                 // The projector belongs to the loaded model: a model about to be loaded has none.
                 self.vision = self.vision.unloaded();
-                self.load_effect()
+                self.load_effect(ctx)
             }
             Some(wire::AssistModelState::Loading) => {
                 self.phase = Phase::Loading;
@@ -421,15 +450,17 @@ impl Chat {
         }
     }
 
-    fn load_effect(&mut self) -> Vec<wire::Effect> {
+    fn load_effect(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         let model_path = self.model_path();
-        vec![self.call(
+        self.call(
+            ctx,
             Await::Load,
             Ask::Load(wire::AssistLoadRequest {
                 model_path,
                 projector_path: String::new(),
             }),
-        )]
+        );
+        Vec::new()
     }
 
     fn loaded(&mut self, state: Option<wire::AssistModelState>, ctx: &Ctx) -> Vec<wire::Effect> {
@@ -561,7 +592,7 @@ impl Chat {
 
     fn download_finished(&mut self, vision: bool, ok: bool, ctx: &Ctx) -> Vec<wire::Effect> {
         if vision {
-            return self.vision_finished(ok);
+            return self.vision_finished(ok, ctx);
         }
         if self.phase != Phase::Downloading {
             return Vec::new();
@@ -569,7 +600,7 @@ impl Chat {
         if ok {
             self.phase = Phase::Loading;
             self.progress = None;
-            self.load_effect()
+            self.load_effect(ctx)
         } else {
             self.phase = Phase::NeedsModel;
             self.progress = None;
@@ -590,49 +621,41 @@ impl Chat {
     pub fn on_effect(&mut self, result: wire::EffectResult, ctx: &Ctx) -> Vec<wire::Effect> {
         use wire::effect_result::Outcome as O;
         match result.outcome {
-            Some(O::AssistAnswered(answer)) => self.assist_answered(answer, ctx),
-            Some(O::Failed(_)) => self.call_failed(ctx),
             Some(O::OwnerChecked(checked)) => self.owner_checked(&checked, ctx),
             Some(O::LibraryPhotoPicked(picked)) => self.library_photo_picked(picked, ctx),
             _ => Vec::new(),
         }
     }
 
-    fn assist_answered(&mut self, answer: wire::AssistResponse, ctx: &Ctx) -> Vec<wire::Effect> {
+    /// A job finished: its bytes are the encoded `AssistResponse`, or nothing when the call
+    /// itself failed (the one failure path).
+    pub fn job_done(&mut self, tag: &str, bytes: &[u8], ctx: &Ctx) -> Vec<wire::Effect> {
         use wire::assist_response::Kind as K;
-        match answer.kind {
-            Some(K::Status(status)) => {
-                let state = wire::AssistModelState::try_from(status.state).ok();
-                let vision = wire::AssistVisionState::try_from(status.vision).ok();
-                match self.awaiting.iter().position(|w| matches!(w, Await::Load | Await::LoadVision)) {
-                    Some(at) => {
-                        let wait = self.awaiting.remove(at);
-                        if wait == Await::LoadVision {
-                            self.vision_loaded(vision)
-                        } else {
-                            self.loaded(state, ctx)
-                        }
-                    }
-                    None => Vec::new(),
-                }
+        let answer = if bytes.is_empty() {
+            None
+        } else {
+            wire::AssistResponse::decode(bytes).ok()
+        };
+        let wait = match tag {
+            "load" => Await::Load,
+            "load-vision" => Await::LoadVision,
+            send => match send.strip_prefix("send:").and_then(|turn| turn.parse().ok()) {
+                Some(turn) => Await::Send(turn),
+                None => return Vec::new(),
+            },
+        };
+        self.awaiting.retain(|held| *held != wait);
+        match (wait, answer.and_then(|answer| answer.kind)) {
+            (Await::Load, Some(K::Status(status))) => {
+                self.loaded(wire::AssistModelState::try_from(status.state).ok(), ctx)
             }
-            Some(K::Sent(sent)) => {
-                self.awaiting.retain(|w| *w != Await::Send(sent.turn_id));
-                self.settled(sent.turn_id, Some(sent), ctx)
+            (Await::Load, _) => self.loaded(None, ctx),
+            (Await::LoadVision, Some(K::Status(status))) => {
+                self.vision_loaded(wire::AssistVisionState::try_from(status.vision).ok())
             }
-            _ => Vec::new(),
-        }
-    }
-
-    /// The call itself failed: nothing the core said, so the oldest wait is told it got no answer.
-    fn call_failed(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        if self.awaiting.is_empty() {
-            return Vec::new();
-        }
-        match self.awaiting.remove(0) {
-            Await::Load => self.loaded(None, ctx),
-            Await::LoadVision => self.vision_loaded(None),
-            Await::Send(turn) => self.settled(turn, None, ctx),
+            (Await::LoadVision, _) => self.vision_loaded(None),
+            (Await::Send(turn), Some(K::Sent(sent))) => self.settled(turn, Some(sent), ctx),
+            (Await::Send(turn), _) => self.settled(turn, None, ctx),
         }
     }
 

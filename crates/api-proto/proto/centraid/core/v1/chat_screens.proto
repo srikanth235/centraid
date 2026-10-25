@@ -101,6 +101,13 @@ message ChatState {
   ChatDocumentSheet document_sheet = 52;
   string attach_pick_photo_title = 53;
   string close_label = 54;
+  // "Copied", said beside a message after Copy.
+  string copied_label = 55;
+  // The composer's scope menu: "All apps", its accessibility label, and the eight
+  // scopable apps in menu order with the name each reads as.
+  string scope_all_label = 56;
+  string scope_label = 57;
+  repeated ChatScopeOption scopes = 58;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -111,6 +118,11 @@ message ChatState {
     PHASE_READY = 5;
     PHASE_UNAVAILABLE = 6;
   }
+}
+
+message ChatScopeOption {
+  string app = 1;
+  string name = 2;
 }
 
 message ChatDrawerSearch {

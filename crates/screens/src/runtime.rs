@@ -222,6 +222,7 @@ impl Runtime {
             out.views.push(view);
         }
 
+        let mut pending_failures: Vec<String> = Vec::new();
         for op in done.timers {
             match op {
                 TimerOp::Start(name, after) => {
@@ -245,6 +246,27 @@ impl Runtime {
             for target in targets {
                 Self::dispatch(state, core, target, post.clone(), out);
             }
+        }
+        // SLOW WORK the screen started runs on the core's pool, off this lock; a core that
+        // cannot hold it answers at once with nothing, so the screen has one failure path.
+        for (tag, job) in done.jobs {
+            if core.spawn(id, tag.clone(), job).is_err() {
+                pending_failures.push(tag);
+            }
+        }
+        for tag in pending_failures {
+            Self::dispatch(
+                state,
+                core,
+                id,
+                wire::ScreenEvent {
+                    kind: Some(wire::screen_event::Kind::OffThreadDone(wire::OffThreadDone {
+                        tag,
+                        bytes: Vec::new(),
+                    })),
+                },
+                out,
+            );
         }
         for effect in effects {
             let effect_id = state.next_effect;
@@ -467,6 +489,27 @@ impl ScreenHost for Runtime {
                         tables: hit,
                     })),
                 })
+            },
+            &mut out,
+        );
+        if !Self::empty(&out) {
+            core.push(out);
+        }
+    }
+
+    fn job_done(&self, core: &dyn ScreenCtx, instance: u64, tag: &str, bytes: Vec<u8>) {
+        let mut state = self.lock();
+        let mut out = wire::ScreenUpdate::default();
+        // The screen may have been popped while its job ran: then nobody is told.
+        Self::dispatch(
+            &mut state,
+            core,
+            instance,
+            wire::ScreenEvent {
+                kind: Some(wire::screen_event::Kind::OffThreadDone(wire::OffThreadDone {
+                    tag: tag.to_owned(),
+                    bytes,
+                })),
             },
             &mut out,
         );
