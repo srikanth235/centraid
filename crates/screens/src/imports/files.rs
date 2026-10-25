@@ -23,9 +23,10 @@
 //! during a pass queues exactly one more. **A pass never runs for a vault that follows no folder**
 //! (the vault holds no `files` origin): a foreground pass never imports into a vault that never
 //! picked one. A read that has not answered in two minutes is abandoned, so one stuck read cannot
-//! hold the follow for good. Nothing is held for a question: the vault decides what a file gone
-//! from a complete read does, so the KMP "keep or trash?" question for a vanished origin is gone
-//! with the Kotlin follower (no source produces one).
+//! hold the follow for good. A complete read that lost at least five followed files and more than
+//! half of them is sent as partial, so nothing is trashed for it: a sync glitch looks like a mass
+//! delete, and Keep is the default (R-1127-9). The member is not asked; the KMP "keep or trash?"
+//! question went with the Kotlin follower.
 //!
 //! ## What the shell relays
 //!
@@ -294,10 +295,10 @@ impl Files {
                 } else {
                     squash(&folder.label)
                 },
+                whole: listing.complete && !vanished(&held.stats, &todo),
                 todo,
                 records: Vec::new(),
                 refused: 0,
-                whole: listing.complete,
                 held: held.stats.clone(),
             });
         }
@@ -566,4 +567,20 @@ impl Screen for Files {
             ..wire::ViewState::default()
         }
     }
+}
+
+/// THE FEWEST FOLLOWED FILES A READ MUST LOSE BEFORE IT IS DOUBTED (R-1127-9).
+const VANISHED_AT_LEAST: usize = 5;
+
+/// A complete read that lost at least [`VANISHED_AT_LEAST`] of the files the vault follows here,
+/// and more than half of them, looks like a mass delete and is most likely a sync glitch (a cloud
+/// folder not yet downloaded, an unmounted card). Such a read is sent as partial, so the vault
+/// trashes nothing: Keep is the default (R-1127-9). An ordinary removal of a few files is not
+/// doubted.
+fn vanished(held: &[(String, String)], listed: &VecDeque<wire::FolderFile>) -> bool {
+    let lost = held
+        .iter()
+        .filter(|(path, _)| !listed.iter().any(|file| file.path == *path))
+        .count();
+    lost >= VANISHED_AT_LEAST && lost * 2 > held.len()
 }
