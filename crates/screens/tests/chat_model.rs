@@ -363,3 +363,33 @@ fn attaching_waits_for_a_thread_and_not_while_a_turn_runs() {
     assert!(chat.state().pending.is_empty());
     chat.perform();
 }
+
+// ONE APP IS ONE WORD (#1128): the roster lists the apps a card may name and each is a scope.
+// `thread.save_turn`'s schema, the assistant's `App` and the screen's scope list all read that one
+// constant, and no app word is in the vault's DDL (principle 6 of the model).
+
+#[test]
+fn the_scopes_are_the_vaults_roster_and_the_ddl_holds_no_app_word() {
+    let roster: Vec<&str> = centraid_vault::roster::APPS.iter().map(|app| app.id).collect();
+    assert_eq!(roster, centraid_screens::chat::scopable_apps());
+    assert!(roster.iter().all(|app| centraid_screens::chat::scope_of(app) == *app));
+    let ddl_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../contracts/schema/vault-ddl.sql");
+    let ddl = std::fs::read_to_string(ddl_path).expect("the vault DDL");
+    // `thread.scope` is a bare column; the command holds it to the roster.
+    let thread = ddl
+        .split("CREATE TABLE thread (")
+        .nth(1)
+        .and_then(|rest| rest.split(") STRICT;").next())
+        .expect("the thread table");
+    assert!(thread.contains("scope TEXT,") && !thread.contains("CHECK"));
+    // `health` is also the word of a phone store a followed origin names (`follow.system`); it is
+    // the one roster word the DDL spells, as a store and never as an app.
+    let outside_stores: String = ddl
+        .lines()
+        .filter(|line| !line.contains("system IN ("))
+        .collect::<Vec<_>>()
+        .join("\n");
+    for app in &roster {
+        assert!(!outside_stores.contains(&format!("'{app}'")), "{app}");
+    }
+}
