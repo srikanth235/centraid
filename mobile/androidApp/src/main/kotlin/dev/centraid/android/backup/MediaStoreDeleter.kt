@@ -39,13 +39,16 @@ import java.util.concurrent.Executors
  * process ([Waiting]), because the result is delivered to the NEW activity's
  * launcher, registered under the same key.
  *
- * Two rules, each with its reason:
+ * Three rules, each with its reason:
  *
  * 1. **The collection is the item's media type** (A20): `video/…` names
  *    `MediaStore.Video`, anything else `MediaStore.Images`. A ref whose walker
  *    prefix (`image:` / `video:`) names the other collection is skipped, never
  *    guessed at.
- * 2. **What is reported is what the request removed.** On a yes each asked row
+ * 2. **A row that changed since it was backed up is kept.** The store's `SIZE`
+ *    must equal the size the core backed up (`LibraryDeleteItem.size`); an item
+ *    edited in place, or a row the store no longer has, is left out of the request.
+ * 3. **What is reported is what the request removed.** On a yes each asked row
  *    is looked up again, and only a row the store no longer answers for is
  *    reported deleted. The member's no is `declined`; anything else is `error`.
  */
@@ -75,7 +78,11 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) {
 
     @RequiresApi(Build.VERSION_CODES.R)
     private fun ask(items: List<LibraryDeleteItem>, done: (LibraryDeleted) -> Unit) {
-        val asked = items.mapNotNull { item -> uriOf(item)?.let { item to it } }
+        val asked = items.mapNotNull { item ->
+            val uri = uriOf(item) ?: return@mapNotNull null
+            // RULE 2.
+            if (sizeOf(uri) != item.size) null else item to uri
+        }
         // NOTHING TO ASK ABOUT asks nothing: no dialog for zero items.
         if (asked.isEmpty()) {
             done(NOTHING)
@@ -111,7 +118,7 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) {
             return
         }
         io.execute {
-            // RULE 2.
+            // RULE 3.
             val gone = waiting.asked.filter { (_, uri) -> !exists(uri) }.map { (item, _) -> item.content_hash }
             waiting.done(LibraryDeleted(deleted_hashes = gone))
         }
@@ -126,6 +133,15 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) {
         val id = ref.removePrefix(VIDEO_REF).removePrefix(IMAGE_REF).toLongOrNull() ?: return null
         val base = if (video) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         return ContentUris.withAppendedId(base, id)
+    }
+
+    /** The store's own size for a row, or null when it answers nothing for it. */
+    private fun sizeOf(uri: Uri): Long? = try {
+        resolver.query(uri, arrayOf(MediaStore.MediaColumns.SIZE), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
+        }
+    } catch (refused: SecurityException) {
+        null
     }
 
     /** Whether the store still answers for a row. A refusal reads as "still there". */
