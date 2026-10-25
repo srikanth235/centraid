@@ -587,10 +587,12 @@ impl HandleState {
     /// # Errors
     /// Whatever `load` refuses with; [`CoreError::Unpaired`] with no file.
     pub fn load(&self, request: &wire::LoadRequest) -> Result<wire::LoadResponse> {
-        // The shell's own catalogue is not one of the eight apps and some of
-        // what it reads is the phone's ledger, not a vault table (`shell`).
+        // Some of the shell's reads are the phone's own ledger (the backup's
+        // status, the held vaults), not a vault table: they need the handle.
         if request.app == crate::shell::ID {
-            return crate::shell::load(self, request);
+            if let Some(answer) = crate::phone::shell_reads::load(self, request) {
+                return answer;
+            }
         }
         self.with_vault(|vault| crate::load::load(vault, request))
     }

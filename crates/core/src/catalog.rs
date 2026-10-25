@@ -77,9 +77,22 @@ pub(crate) const APPS: [App; 8] = [
     ),
 ];
 
-/// The app of that id, or `None`.
+/// THE SHELL'S OWN CATALOGUE: what Home, search, the chat's history and the vault's plumbing read
+/// and write, which is not one app's. It is addressed like an app (`load("shell", ..)`,
+/// `act("shell", ..)`) and is not one of the eight [`APPS`]: the assistant's catalogue and the
+/// training harness carry the eight and never this.
+pub(crate) const SHELL: App = App {
+    id: crate::shell::ID,
+    manifest: crate::shell::manifest,
+    actions: &crate::shell::ACTIONS,
+};
+
+/// The app of that id (or the shell), or `None`.
 pub(crate) fn app(id: &str) -> Option<App> {
-    APPS.iter().find(|app| app.id == id).copied()
+    APPS.iter()
+        .find(|app| app.id == id)
+        .copied()
+        .or_else(|| (id == SHELL.id).then_some(SHELL))
 }
 
 #[cfg(test)]
