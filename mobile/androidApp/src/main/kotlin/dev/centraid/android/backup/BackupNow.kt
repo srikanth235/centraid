@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import dev.centraid.android.session.AppSession
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -139,13 +140,13 @@ public object BackupNow {
     }
 
     /**
-     * THE BODY BOTH RUN: nothing but the process kept alive. The pass is Rust's (`passes`): the
-     * member's "Back up now" starts it and `LongRun` starts this, so the job exists to hold the
-     * process for exactly that run; [stop] ends it when the run does, and [BUDGET_MS] bounds a job
-     * nobody is watching.
+     * THE BODY BOTH RUN: the process's session held, nothing else. The pass is Rust's (`passes`):
+     * the member's "Back up now" starts it and `LongRun` starts this, so the job exists to hold the
+     * process and its one core for exactly that run, even once the activity is gone; [stop] ends it
+     * when the run does, and [BUDGET_MS] bounds a job nobody is watching.
      */
     internal suspend fun run(context: Context): Boolean {
-        delay(BUDGET_MS)
+        AppSession.use(context) { delay(BUDGET_MS) }
         return false
     }
 }
