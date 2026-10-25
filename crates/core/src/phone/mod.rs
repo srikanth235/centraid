@@ -39,6 +39,7 @@
 //! writes its vault perfectly well and cannot back up, which is an honest
 //! state a shell draws ("unlock to back up") and not a failure.
 
+pub(crate) mod backup_reads;
 pub mod drain;
 pub mod fetch;
 pub mod link;

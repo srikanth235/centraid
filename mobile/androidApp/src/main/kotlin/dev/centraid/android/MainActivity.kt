@@ -62,7 +62,7 @@ import dev.centraid.shared.kit.KitWords
 import dev.centraid.shared.kit.PhoneImport
 import dev.centraid.android.backup.MediaStoreDeleter
 import dev.centraid.android.backup.ProcessSession
-import dev.centraid.android.screens.backup.BackupSheets
+import dev.centraid.android.screens.backup.BackupRoute
 import dev.centraid.android.screens.backup.writeTransferRule
 import dev.centraid.android.kit.TransferRulesSheet
 import dev.centraid.android.screens.HomeScreen
@@ -150,7 +150,13 @@ public class MainActivity : FragmentActivity() {
      * (#1135), and the 24 words' sheet's close has every Locker wall re-read
      * `keyed` (#1047 E3).
      */
-    private val agenda: AgendaRoutes by lazy { AgendaRoutes(phoneFollow, health, openWords = { words.openRekey() }) }
+    private val agenda: AgendaRoutes by lazy { AgendaRoutes(
+            phoneFollow,
+            health,
+            openWords = { words.openRekey() },
+            openPair = { words.openPair(camera = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) },
+            openShowWords = { words.openShow() },
+        ) }
 
     /** THE 24 WORDS' SHEETS (#1047 E3), over every screen. See `WordsSheets`. */
     private val words: WordsSheets by lazy {
@@ -171,8 +177,6 @@ public class MainActivity : FragmentActivity() {
      */
     private val health: AndroidHealth by lazy { AndroidHealth(this) }
 
-    /** THE BACKUP SCREEN'S SHEET (#1080), over every screen. See `BackupSheets`. */
-    private val backupSheet: BackupSheets by lazy { BackupSheets() }
 
     /**
      * FREE UP SPACE'S HAND ON MEDIASTORE (#1080 A20). A FIELD, NEVER `lazy`: its
@@ -374,7 +378,6 @@ public class MainActivity : FragmentActivity() {
                         // without a tap — and a host routed twice re-reads twice.
                         routes.forEach { it.attach(opened, scope) }
                         words.attach(opened, scope)
-                        backupSheet.attach(opened)
                         phoneFollow.attach(opened)
                         opened.installLibraryDeleter(libraryDeleter)
                         value = opened
@@ -613,10 +616,11 @@ public class MainActivity : FragmentActivity() {
                         onRestoreVaults = { words.openRestore() },
                         vaultStatus = vaultStatus,
                         // HOME'S BACKUP LINE AND THE BAND'S BACKUP TAB OPEN THE
-                        // BACKUP TAB (#1080, R-ONBOARD-9): the backup devices
-                        // and the 24 words live there. "Add a backup device"
-                        // and "Show my 24 words" open their sheets over it.
-                        onOpenBackup = { backupSheet.open() },
+                        // BACKUP SCREEN (#1080, R-ONBOARD-9): a Rust page
+                        // (`backup.home`) pushed like any other, where the backup
+                        // devices and the 24 words live. "Add a backup device" and
+                        // "Show my 24 words" open their sheets over it.
+                        onOpenBackup = { stack = stack.push(Destination.RustScreen(BackupRoute.home)) },
                         searchPlaceholder = homeSearch.placeholder,
                         onOpenSearch = { stack = stack.push(homeSearch.open()) },
                         // THE APPEARANCE KEY (R-CHROME-7): flipped against
@@ -629,22 +633,11 @@ public class MainActivity : FragmentActivity() {
                                 appearance = Appearance.read(store)
                             }
                         },
-                        backupShown = backupSheet.showing,
-                        onOpenHome = { backupSheet.close() },
-                        backupTab = {
-                            backupSheet.Tab(
-                                onAddDestination = {
-                                    words.openPair(
-                                        camera = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY),
-                                    )
-                                },
-                                onShowWords = { words.openShow() },
-                            )
-                        },
                     )
-                    // A PAIRING THAT CLOSED OVER THE BACKUP TAB: read again,
-                    // so the new backup device's row is there.
-                    LaunchedEffect(words.showing) { if (words.showing == null) backupSheet.reread() }
+                    // A PAIRING OR THE KEY'S SHEET THAT CLOSED OVER THE BACKUP SCREEN: it reads
+                    // again (Rust's screens hear the foreground return as their cue to
+                    // read the stores), so the new device's row and the saved key are there.
+                    LaunchedEffect(words.showing) { if (words.showing == null) agenda.foregrounded() }
                     if (rulesOpen) {
                         TransferRulesSheet(
                             choices = TransferRule.entries.map {
@@ -674,9 +667,6 @@ public class MainActivity : FragmentActivity() {
                 }
                 // THE 24 WORDS' SHEET, over whatever is drawn (#1047 E3).
                 words.Sheets()
-                // THE BACKUP TAB'S NOTIFICATION GRANT, registered at the root
-                // whether or not the tab is shown (`BackupSheets.Registered`).
-                backupSheet.Registered()
                 }
             }
         }

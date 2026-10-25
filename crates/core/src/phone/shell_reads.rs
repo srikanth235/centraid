@@ -14,6 +14,8 @@ pub(crate) fn load(
     handle: &HandleState,
     request: &wire::LoadRequest,
 ) -> Option<Result<wire::LoadResponse>> {
-    let _ = (handle, request);
-    None
+    match request.query.as_str() {
+        super::backup_reads::STATUS => Some(super::backup_reads::status(handle)),
+        _ => None,
+    }
 }

@@ -48,6 +48,8 @@ import dev.centraid.android.screens.docs.rememberDocsPickers
 import dev.centraid.shared.nav.DocsEntry
 import dev.centraid.shared.nav.HealthEntry
 import dev.centraid.android.screens.RouteNav
+import dev.centraid.android.screens.backup.BackupHomeScreen
+import dev.centraid.android.screens.backup.writeTransferRule
 import dev.centraid.android.screens.locker.LockerAccessScreen
 import dev.centraid.android.screens.locker.LockerEditorScreen
 import dev.centraid.android.screens.locker.LockerExportScreen
@@ -116,6 +118,9 @@ internal class AgendaRoutes(
     private val phone: AndroidPhoneFollow,
     private val health: AndroidHealth,
     private val openWords: () -> Unit = {},
+    /** The Backup screen's two hand-offs: the pairing page, and the recovery key behind the passcode. */
+    private val openPair: () -> Unit = {},
+    private val openShowWords: () -> Unit = {},
 ) : AppRoutes {
     private var session: HomeSession? = null
     private var scope: CoroutineScope? = null
@@ -191,6 +196,7 @@ internal class AgendaRoutes(
                 docs = pickers,
                 health = health,
                 openRoute = { route -> nav.push(Destination.RustScreen(route)) },
+                backgroundRegistered = { session?.backgroundRegistration?.value?.registered },
             )
             // THE APP LEAVING THE FOREGROUND RELOCKS THE LOCKER: the core does it, every open screen hears it.
             val owner = LocalLifecycleOwner.current
@@ -327,6 +333,7 @@ internal class AgendaRoutes(
         val healthWorkout = view.health_workout
         val healthConnect = view.health_connect
         val pairLaptop = view.pair_laptop
+        val backupHome = view.backup_home
 
         // THE SCREEN IS DONE (a cancel committed, the editor saved or left, the task deleted): its page goes.
         val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true ||
@@ -338,6 +345,15 @@ internal class AgendaRoutes(
         }
 
         when {
+            // THE BACKUP SCREEN (#1135, lane H2): the rule's change reaches the session
+            // that owns the background windows until the pass service does.
+            backupHome != null -> BackupHomeScreen(
+                state = backupHome,
+                onEvent = { send(ScreenEvent(backup_home = it)) },
+                onRulePicked = { picked -> nav.scope.launch { writeTransferRule(session, picked) } },
+                onAddDestination = openPair,
+                onShowWords = openShowWords,
+            )
             home != null -> AgendaHomeScreen(
                 state = home,
                 onEvent = { send(ScreenEvent(agenda_home = it)) },
@@ -608,7 +624,7 @@ internal class AgendaRoutes(
          * shell lane replaces the KMP one.
          */
         const val TAB = "agenda"
-        val PREFIXES = listOf("agenda.", "docs.", "notes.", "people.", "health.", "locker.", "money.", "pair.")
+        val PREFIXES = listOf("agenda.", "docs.", "notes.", "people.", "health.", "locker.", "money.", "pair.", "backup.")
     }
 }
 

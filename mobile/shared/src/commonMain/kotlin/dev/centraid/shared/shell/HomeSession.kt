@@ -167,6 +167,9 @@ public class HomeSession private constructor(
 
     private val registration = MutableStateFlow<BackgroundTasks.Registration?>(null)
 
+    /** Whether the OS took a background window, or null before it answered: Rust's `BackgroundProbe`. */
+    public val backgroundRegistered: Boolean? get() = registration.value?.registered
+
     /**
      * "BACK UP NOW" (#1080, the three controls): a snapshot and everything
      * that can move, inside the platform's long-run envelope — a foreground

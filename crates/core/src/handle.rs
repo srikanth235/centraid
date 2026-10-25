@@ -556,6 +556,14 @@ impl HandleState {
             session.settle(request_id);
         }
         self.forget_cancel(request_id);
+        // THE LEDGER MOVED, WHETHER OR NOT THE DOOR SUCCEEDED: a pass that
+        // stopped on an unreachable gateway still recorded what it did. A
+        // screen reading `backup-status` hears it as a change to
+        // [`crate::phone::backup_reads::TABLE`].
+        if crate::phone::backup_reads::moves_the_ledger(request) {
+            crate::events::ChangeFeed::new(self.events())
+                .tables_changed(&[crate::phone::backup_reads::TABLE.to_owned()]);
+        }
         answer
     }
 
@@ -589,10 +597,10 @@ impl HandleState {
     pub fn load(&self, request: &wire::LoadRequest) -> Result<wire::LoadResponse> {
         // Some of the shell's reads are the phone's own ledger (the backup's
         // status, the held vaults), not a vault table: they need the handle.
-        if request.app == crate::shell::ID {
-            if let Some(answer) = crate::phone::shell_reads::load(self, request) {
-                return answer;
-            }
+        if request.app == crate::shell::ID
+            && let Some(answer) = crate::phone::shell_reads::load(self, request)
+        {
+            return answer;
         }
         self.with_vault(|vault| crate::load::load(vault, request))
     }
@@ -849,6 +857,18 @@ impl HandleState {
         body(held.as_ref())
     }
 
+    /// The backup's standing as the ledger and the vault say it: the one
+    /// reading behind the `backup_status` door and the shell's `backup-status`
+    /// query. It dials nobody.
+    ///
+    /// # Errors
+    /// The ledger's or the spool's refusal, or a vault that will not read.
+    pub(crate) fn backup_standing(&self) -> Result<wire::BackupStatusResponse> {
+        self.with_vault_if_any(|vault| {
+            crate::phone::backup_status(&self.plane, vault, self.keys.as_ref())
+        })
+    }
+
     /// Whether this core holds a copy of the vault.
     ///
     /// The fact a shell draws its first screen from, alongside
@@ -1042,9 +1062,7 @@ impl HandleState {
             // A STATUS READ ANSWERS WITH OR WITHOUT A VAULT: the ledger is
             // beside the file, and the content counts need the file.
             K::BackupStatus(_) => Ok(response(wire::response::Kind::BackupStatus(
-                self.with_vault_if_any(|vault| {
-                    crate::phone::backup_status(&self.plane, vault, self.keys.as_ref())
-                })?,
+                self.backup_standing()?,
             ))),
             // THE 24 WORDS NEED NO VAULT EITHER (#1047 E1): a first launch
             // mints them before there is a vault to found, and a restore

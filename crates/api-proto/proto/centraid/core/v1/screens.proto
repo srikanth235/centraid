@@ -266,6 +266,8 @@ message ScreenEvent {
     PairLaptopEvent pair_laptop = 1400;
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
+    // ---- backup (1450-1499, lane H2) ----
+    BackupHomeEvent backup_home = 1450;
   }
 }
 
@@ -349,6 +351,8 @@ message ViewState {
     PairLaptopState pair_laptop = 1400;
     // ---- the kit (900-999) ----
     TrashView trash = 900;
+    // ---- backup (1450-1499, lane H2) ----
+    BackupHomeState backup_home = 1450;
   }
 }
 
@@ -411,6 +415,8 @@ message Effect {
     // ---- vault plumbing (1300-1399, lane H2): plumbing_screens.proto ----
     SecretBatch secrets = 1300;
     SyncedSecretsProbe synced_probe = 1302;
+    // ---- backup (1350-1369, lane H2): backup_screens.proto ----
+    BackgroundProbe background_probe = 1350;
   }
 }
 
@@ -779,6 +785,8 @@ message EffectResult {
     // ---- vault plumbing (1300-1399, lane H2) ----
     SecretBatched secrets = 1300;
     SyncedSecretsStatus synced_status = 1302;
+    // ---- backup (1350-1369, lane H2) ----
+    BackgroundStatus background_status = 1350;
   }
 }
 

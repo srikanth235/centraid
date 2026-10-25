@@ -1,6 +1,254 @@
-// BACKUP (#1135, lane H2): this file's messages are the lane worker's. See
-// `plumbing_screens.proto` for the arm ranges.
+// BACKUP (#1135, lane H2): the Backup screen, the line Home draws over it, and
+// the one effect it asks of the shell. See `plumbing_screens.proto` for the arm
+// ranges; this file's are 1450-1499 (route, event and view arms) and 1350-1369
+// (effects and their answers).
+//
+// "Backed up" means a gateway acknowledged it and the phone recorded that
+// (#1080): the line never says more than the ledger holds, and every sentence
+// here is finished in Rust (`crates/screens/src/backup`).
 
 syntax = "proto3";
 
 package centraid.core.v1;
+
+import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/phone.proto";
+import "centraid/core/v1/route.proto";
+
+// THE BACKUP'S STANDING, as the shell's `backup-status` query answers it
+// (`crates/core/src/shell/backup.rs`): the core's reading of its own ledger, and
+// this phone's wall clock at the moment it was read. The clock is for "2
+// minutes ago" only; every time inside `status` that a gateway acknowledged is
+// on the GATEWAY's clock, because an acknowledgement is not something this
+// phone's clock can make.
+message ShellBackupStatus {
+  BackupStatusResponse status = 1;
+  int64 now_ms = 2;
+}
+
+// ---------------------------------------------------------------------------
+// The line: Home's status and the top of the Backup screen
+// ---------------------------------------------------------------------------
+
+// One reason items wait, with how many.
+message BackupWaitingRow {
+  Reason reason = 1;
+  uint64 count = 2;
+  // "12 waiting for Wi-Fi".
+  string sentence = 3;
+
+  // The numbers are the core's `WaitReason`, so a shell reading either sees
+  // one value.
+  enum Reason {
+    REASON_UNSPECIFIED = 0;
+    REASON_WIFI = 1;
+    REASON_CHARGER = 2;
+    REASON_GATEWAY = 3;
+    // iCloud-only originals, fetched only under the rule and inside a window.
+    REASON_ICLOUD = 4;
+    // The core is waiting for the shell to stream an item's bytes.
+    REASON_BYTES = 5;
+    REASON_WINDOW = 6;
+    // An original the MANUAL rule holds until the member taps "Back up now"
+    // (#1080 A24).
+    REASON_ASK = 7;
+    // The machine that answered at a gateway's address is not the gateway this
+    // phone pinned.
+    REASON_UNTRUSTED = 8;
+    // The gateway answered and refused a write for its own reason, a full disk
+    // or a quota.
+    REASON_REFUSED = 9;
+    // The gateway no longer knows this phone's token: pair it again.
+    REASON_PAIR_AGAIN = 10;
+  }
+}
+
+message BackupLine {
+  // When a gateway last acknowledged this vault's records (the snapshot's
+  // head), on the GATEWAY's clock. Zero: never.
+  int64 records_as_of_ms = 1;
+  // Photos, videos, documents and their derivatives a gateway acknowledged,
+  // and how many the vault knows.
+  uint64 confirmed = 2;
+  uint64 total = 3;
+  repeated BackupWaitingRow waiting = 4;
+  // The vault moved to another phone; this one is read-only.
+  bool frozen = 5;
+  // No gateway is paired: the line offers pairing instead of a status.
+  bool unpaired = 6;
+  // The line, finished: "Backed up 2 minutes ago." Empty draws no line.
+  string sentence = 7;
+  // Its second clause, or empty: "1,203 of 1,240 photos and files".
+  string detail = 8;
+  Tone tone = 9;
+  string accessibility_label = 10;
+  // THE LINE IN A FEW WORDS, for the vault lockup's second line where Home
+  // draws it: "Backed up 2 minutes ago", "Not backed up". `sentence` is the
+  // Backup screen's.
+  string status = 11;
+  // EVERY GATEWAY THIS PHONE IS PAIRED WITH REFUSED ITS TOKEN: `sentence` and
+  // `status` say to pair again.
+  bool pair_again = 12;
+
+  enum Tone {
+    TONE_UNSPECIFIED = 0;
+    // Backed up, or catching up on its own.
+    TONE_QUIET = 1;
+    // Something waits on the member: a gateway, a setting.
+    TONE_ATTENTION = 2;
+    // Moved to another phone, or nothing is backed up at all.
+    TONE_URGENT = 3;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// backup.home
+// ---------------------------------------------------------------------------
+
+// One gateway this vault backs up to (#1080 ruling 8: the pairing record is a
+// list). A gateway id names a DESTINATION; a vault is mounted by its own id.
+message BackupDestinationRow {
+  string gateway_id = 1;
+  string label = 2;
+  // Where it was last reached and when, finished:
+  // "192.168.1.20:7443 · Reached 2 minutes ago".
+  string detail = 3;
+  string accessibility_label = 4;
+  // This gateway refused the phone's token: `detail` says to pair it again.
+  bool pair_again = 5;
+}
+
+// One choice of the transfer rule, with the sentence a member reads.
+message BackupRuleChoice {
+  // The word the phone keeps: `wifi-only`, `wifi-and-cellular-photos`,
+  // `manual`. Sent back on `RuleChosen`.
+  string stored = 1;
+  string sentence = 2;
+  bool picked = 3;
+}
+
+// THE PAGE'S ONE INK BUTTON (DESIGN.md: at most one per view), named once for
+// both shells.
+enum BackupInk {
+  BACKUP_INK_UNSPECIFIED = 0;
+  // The state draws no button worth an Ink fill.
+  BACKUP_INK_NONE = 1;
+  // `key_show_label`, while `key_warning` stands.
+  BACKUP_INK_SHOW_KEY = 2;
+  // `add_destination_label`, with nothing paired.
+  BACKUP_INK_ADD_DESTINATION = 3;
+  // `back_up_now_label`.
+  BACKUP_INK_BACK_UP_NOW = 4;
+}
+
+message BackupHomeState {
+  oneof body {
+    Loading loading = 1;
+    Failure failure = 2;
+    BackupHomeData data = 3;
+  }
+}
+
+message BackupHomeData {
+  string title = 1;
+  BackupLine line = 2;
+  // "Backup devices"; empty while none is paired.
+  string devices_heading = 3;
+  repeated BackupDestinationRow destinations = 4;
+  // "Add backup device": empty on a vault that moved (it comes back by a
+  // restore, which starts from the head).
+  string add_destination_label = 5;
+  // Where it goes: the pairing page.
+  Route add_destination = 6;
+  // One label for every row's forget control; empty on a vault that moved (the
+  // core refuses it, because the gateway's row is where the moved mark lives).
+  string forget_label = 7;
+  // The rule's heading and its three choices.
+  string rule_label = 8;
+  repeated BackupRuleChoice rule_choices = 9;
+  bool include_videos = 10;
+  string include_videos_label = 11;
+  // "Back up now"; empty with nothing paired (a dead primary above "Add backup
+  // device" put the one useful act second).
+  string back_up_now_label = 12;
+  bool back_up_now_enabled = 13;
+  // A "Back up now" run is in progress; `progress` says so in words.
+  bool backing_up_now = 14;
+  string progress = 15;
+  // Why battery saving can hold backups back, and the label of the control that
+  // lets Centraid run. Empty until a backlog has stood for a day; a shell draws
+  // them only where the platform says the app is held back (Android's battery
+  // optimisation list).
+  string battery_sentence = 16;
+  string battery_label = 17;
+  // What the last act did, or why it could not: one clause, never a toast.
+  string notice = 18;
+  // The phone will not wake Centraid in the background, and what that means.
+  string background_notice = 19;
+
+  // THE RECOVERY KEY: where it is, in one sentence, under `key_heading`. Empty
+  // heading: this phone holds no key and the section is not drawn.
+  string key_heading = 20;
+  string key_line = 21;
+  // The key is on this phone alone and the member has not said they saved a
+  // copy: `key_line` is a warning, drawn as one.
+  bool key_warning = 22;
+  // "Show recovery key"; empty when this phone has no words to show (its key
+  // came through the keychain).
+  string key_show_label = 23;
+  Route key_show = 24;
+  // "Keep my key off iCloud Keychain" while `key_synced`, "Save my key in iCloud
+  // Keychain" while not. Empty where the platform will not synchronise.
+  string key_sync_label = 25;
+  bool key_synced = 26;
+  BackupInk ink = 27;
+}
+
+message BackupHomeEvent {
+  oneof kind {
+    BackUpNow back_up_now = 1;
+    SetIncludeVideos set_include_videos = 2;
+    // Forgets at once: it drops this phone's pairing and nothing the gateway
+    // holds, and pairing again undoes it.
+    ForgetDestination forget_destination = 3;
+    // Move the recovery key into the keychain, or out of it.
+    SetKeySync set_key_sync = 4;
+    RuleChosen rule_chosen = 5;
+    Retry retry = 6;
+  }
+
+  message BackUpNow {}
+
+  message SetIncludeVideos {
+    bool include = 1;
+  }
+
+  message ForgetDestination {
+    string gateway_id = 1;
+  }
+
+  message SetKeySync {
+    bool on = 1;
+  }
+
+  message RuleChosen {
+    // `BackupRuleChoice.stored`.
+    string stored = 1;
+  }
+
+  message Retry {}
+}
+
+// ---------------------------------------------------------------------------
+// Effects
+// ---------------------------------------------------------------------------
+
+// Ask the platform whether it will wake Centraid in the background (iOS
+// Background App Refresh, Android's work scheduler): the shell answers with
+// what it last registered, without registering anything.
+message BackgroundProbe {}
+
+message BackgroundStatus {
+  // The platform took at least one window.
+  bool registered = 1;
+}

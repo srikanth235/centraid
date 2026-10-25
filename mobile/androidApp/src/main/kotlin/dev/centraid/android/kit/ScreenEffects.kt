@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.content.ContextCompat
+import centraid.core.v1.BackgroundStatus
 import centraid.core.v1.CameraRead
 import centraid.core.v1.CodeScanned
 import centraid.core.v1.CameraRoll
@@ -94,6 +95,8 @@ internal fun PerformScreenEffects(
     docs: DocsPickers? = null,
     health: AndroidHealth? = null,
     openRoute: ((Route) -> Unit)? = null,
+    /** Whether the platform took a background window, as the session last registered it; null before it says. */
+    backgroundRegistered: (() -> Boolean?)? = null,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -131,7 +134,12 @@ internal fun PerformScreenEffects(
                 val effect = request.effect
                 val doors = Doors(fileDoors, { picker.launch(arrayOf("*/*")) }, { saver.launch(it) }, onAnnounce)
                 val answer: (EffectResult) -> Unit = { result -> launch { screens.answer(request, result) } }
-                val result = if (effect?.health_read != null) {
+                val result = if (effect?.background_probe != null) {
+                    // THE PLATFORM'S LAST WORD on whether it will wake Centraid; nothing is registered by asking.
+                    val registered = backgroundRegistered?.invoke()
+                    if (registered == null) failed("not performed by this shell")
+                    else EffectResult(background_status = BackgroundStatus(registered = registered))
+                } else if (effect?.health_read != null) {
                     health?.snapshot(effect.health_read!!) { healthLauncher?.launch(it) }
                         ?: failed("not performed by this shell")
                 } else if (effect?.scan_code != null) {

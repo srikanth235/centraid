@@ -227,11 +227,9 @@ final class ShellModel: ObservableObject {
     @Published var wordsEntryState = Data()
     /// `words.show`'s and `pair.laptop`'s last states (#1047 E5), as bytes.
     @Published var wordsShowState = Data()
-    /// Bumped on each open of the Backup tab: `BackupView` scrolls to its top.
+    /// Bumped on each open of the Backup tab: `BackupHomeView` scrolls to its top.
     @Published var backupScrollTop = 0
     @Published var pairLaptopState = Data()
-    /// The Backup screen's last state, as bytes (#1080).
-    @Published var backupState = Data()
 
     /// The root custody sheet: the two words screens (#1047 E2), and the two
     /// the More sheet's rows open (#1047 E5) — showing the words again, and
@@ -296,10 +294,21 @@ final class ShellModel: ObservableObject {
     /// The owner check is on screen, so a second `check_now` waits for it.
     private var ownerChecking = false
     private let pairLaptop = PairLaptopBridge()
-    /// THE BACKUP SCREEN'S BRIDGE (#1080, seam contract A11), held for the
-    /// same reason. Its shape — `observe`, `open`, `send`, `attach` — is every
-    /// kit bridge's.
-    private let backup = BackupBridge()
+    /// THE BACKUP TAB'S ENTRY: the Rust screen `backup.home` the tab draws in
+    /// place of the springboard. Interim hosting like every Rust page here: the
+    /// shell opens the route on Rust's stack once (`openRust`) and the shell
+    /// lane replaces the tab with the stack Rust holds. A vault switch makes a
+    /// new entry, because the screen belongs to the core in front.
+    var backupEntry = RustEntry.make(ShellModel.backupRoute)
+
+    /// The route of the Backup screen. Rust builds every other route; this one
+    /// is spelled here only while the tab is hosted by the shell.
+    private static var backupRoute: Centraid_Core_V1_Route {
+        var route = Centraid_Core_V1_Route()
+        route.screen = "backup.home"
+        route.backupHome = .init()
+        return route
+    }
 
     /// THE REGISTERED SCREENS' PORTS AND ROUTES (K5) — `ScreenRegistry.swift`.
     /// Filled once, in `init`, by `AppRegistry.apps`; held for the life of the
@@ -315,6 +324,7 @@ final class ShellModel: ObservableObject {
         let store = ScreenStore(core: core)
         store.onOpenRoute = { [weak self] route in self?.open(route) }
         store.onContactsLimited = { [weak self] in self?.contactAccessPickerShown = true }
+        store.backgroundRegistered = { [weak self] in self?.session?.backgroundRegistered?.boolValue }
         screens = store
         // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED (R-ONBOARD-10), and when
         // Home's tile and chat's key slot learn the Locker is open.
@@ -360,7 +370,7 @@ final class ShellModel: ObservableObject {
         defer { rustOpening.remove(entry.token) }
         guard let instance = await screens.open(tab: RustScreens.tab(for: entry.route), route: entry.route) else { return }
         // Popped while the push was in flight: Rust is told at once.
-        guard path.contains(.rust(entry)) else {
+        guard path.contains(.rust(entry)) || entry == backupEntry else {
             screens.popped(tab: RustScreens.tab(for: entry.route), instance: instance)
             return
         }
@@ -404,7 +414,6 @@ final class ShellModel: ObservableObject {
         wordsEntry.observe { [weak self] bytes in self?.wordsEntryChanged(bytes.data) }
         wordsShow.observe { [weak self] bytes in self?.wordsShowChanged(bytes.data) }
         pairLaptop.observe { [weak self] bytes in self?.pairLaptopChanged(bytes.data) }
-        backup.observe { [weak self] bytes in self?.backupChanged(bytes.data) }
         // ONE LINE PER APP lives in `AppRegistry.apps`, not here.
         for app in AppRegistry.apps { app.register(into: self) }
         // HOME'S SEARCH (R-CHROME-6): Home's own screen, not an app's.
@@ -432,7 +441,6 @@ final class ShellModel: ObservableObject {
                 ],
                 ask: { [weak self] question in DispatchQueue.main.async { self?.followQuestion = question } }
             )
-            self.backup.attach(session: session)
             self.chat.attach(session: session)
             // THE BACKGROUND WINDOWS NOW HAVE SOMETHING TO RUN (#1029 W18-6).
             //
@@ -631,7 +639,6 @@ final class ShellModel: ObservableObject {
     /// had open — but only onto an empty thread: a conversation in progress is
     /// never re-scoped by a glance at an app.
     func openChatTab(asking question: String? = nil, thread: String? = nil, title: String = "") {
-        leaveBackupTab()
         tab = .chat
         if !lastVisitedApp.isEmpty, chat.state.messages.isEmpty {
             chatScope = lastVisitedApp
@@ -675,7 +682,6 @@ final class ShellModel: ObservableObject {
     }
 
     func openHomeTab() {
-        leaveBackupTab()
         tab = .home
         // Chat keeps its thread, but not an open drawer: coming back to a
         // drawer left open would read as the app having forgotten the chat.
@@ -696,8 +702,9 @@ final class ShellModel: ObservableObject {
         let hadChat = chat.opened
         chat.vaultChanged(to: id)
         if hadChat, !chat.opened, tab == .chat { chat.open(app: chatScope, vaultName: foregroundVaultName) }
-        // THE BACKUP TAB IS THE VAULT IN FRONT'S: another vault, another read.
-        if tab == .backup { readBackup() }
+        // THE BACKUP SCREEN IS THE VAULT IN FRONT'S: another vault, another core,
+        // another screen.
+        backupEntry = RustEntry.make(ShellModel.backupRoute)
     }
 
     /// A RESULT CARD WAS TAPPED: push the real row's route over the thread.
@@ -863,9 +870,9 @@ final class ShellModel: ObservableObject {
 
     // MARK: The Backup screen (#1080)
 
-    /// OPEN THE BACKUP SCREEN: Home's backup line. The member's rule is read
-    /// as it opens — the store is the authority, and the screen draws the same
-    /// three sentences the Home header's sheet does.
+    /// OPEN THE BACKUP SCREEN: Home's backup line. The screen itself is Rust's
+    /// (`backup.home`): it reads the rule from the phone's store and the line from
+    /// the core as it opens.
     func openBackup() {
         // EVERY OPEN STARTS AT THE TOP, and the tab pressed again scrolls
         // back there: the title is never left under the vault's lockup.
@@ -873,31 +880,19 @@ final class ShellModel: ObservableObject {
         guard tab != .backup else { return }
         chat.toggleDrawer(false)
         tab = .backup
-        readBackup()
     }
 
-    /// THE BACKUP TAB'S READ: the rule's three sentences from the store, and
-    /// the screen's `Opened`, which reads the line and the destinations.
-    private func readBackup() {
-        transferRuleChoices = home.transferRuleChoices().map {
-            (stored: $0.stored, sentence: $0.sentence)
-        }
-        home.transferRule { [weak self] stored in self?.transferRule = stored }
-        backup.open()
-    }
-
-    /// LEAVING THE BACKUP TAB tells its machine the screen is gone, as a
-    /// swipe told the sheet it was.
-    private func leaveBackupTab() {
-        if tab == .backup { sendBackup(BackupEvents.dismissed()) }
-    }
-
-    func sendBackup(_ event: Data) {
-        backup.send(event: event.kotlin)
+    /// The Backup screen reads again: a sheet that closed over it may have
+    /// changed what it shows (the key was marked saved, a device was paired).
+    private func rereadBackup() {
+        guard let screens, let instance = rustInstances[backupEntry.token] else { return }
+        var event = Centraid_Core_V1_BackupHomeEvent()
+        event.retry = .init()
+        screens.send(instance, .backupHome(event))
     }
 
     /// "ADD A BACKUP DEVICE" IS PAIRING: `pair.laptop` opens over the Backup
-    /// tab, with its scan and its paste field. The tab reads again when the
+    /// tab, with its scan and its paste field. The screen reads again when the
     /// pairing closes (`pairLaptopChanged`), so the new device's row is there.
     func addBackupDestination() {
         openPairLaptop()
@@ -908,20 +903,10 @@ final class ShellModel: ObservableObject {
         openShowWords()
     }
 
-    /// The Backup screen's state arrived.
-    ///
-    /// A run in flight holds no grace of its own here: the screen's state
-    /// stops describing a run once the screen is dismissed, and leaving the
-    /// app runs `enteredBackground`, which waits for a running pass inside its
-    /// own grace ([wentToBackground]). The screen stays awake for the run
-    /// through the core's own `backlog` hook, not through this shell.
-    private func backupChanged(_ data: Data) {
-        let before = BackupScreenModel(decoding: backupState)
-        backupState = data
-        let now = BackupScreenModel(decoding: data)
-        // A GATEWAY FORGOTTEN OR ADDED CHANGES THE PINS: the mover must never
-        // trust a certificate this phone no longer pairs with.
-        if before.destinations.map(\.id) != now.destinations.map(\.id) { refreshUploadPins() }
+    /// A GATEWAY FORGOTTEN OR ADDED CHANGES THE PINS: the mover must never trust
+    /// a certificate this phone no longer pairs with.
+    func backupDestinationsChanged() {
+        refreshUploadPins()
     }
 
     func sendWordsShow(_ event: Data) {
@@ -971,7 +956,7 @@ final class ShellModel: ObservableObject {
         if state.phase == .closed, wordsSheet == .show {
             wordsSheet = nil
             // "I'VE SAVED IT" quiets the recovery key's warning (R-ONBOARD-10).
-            if tab == .backup { readBackup() }
+            if tab == .backup { rereadBackup() }
         }
     }
 
@@ -985,7 +970,7 @@ final class ShellModel: ObservableObject {
         if state.phase == .paired, before != .paired { refreshUploadPins() }
         if state.phase == .closed, wordsSheet == .pair {
             wordsSheet = nil
-            if tab == .backup { readBackup() }
+            if tab == .backup { rereadBackup() }
         }
     }
 

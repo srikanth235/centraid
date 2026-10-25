@@ -255,7 +255,7 @@ public class WordsShowFlow(
  * `words.show`'s BRIDGE — Swift holds bytes, Compose the `StateFlow`.
  *
  * A shell presents it from the Backup tab's "Show recovery key"
- * (`BackupScreenState.key_show_label`) and:
+ * (`BackupHomeData.key_show_label`) and:
  *
  * 1. calls [open];
  * 2. in PHASE_ASK, on the primary control, runs the owner check with
