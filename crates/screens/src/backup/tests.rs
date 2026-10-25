@@ -18,7 +18,7 @@ use wire::screen_event::Kind as E;
 
 use super::line::{self, STALE_MS};
 use super::reading::Reading;
-use super::{claim, freeze, home, routes};
+use super::{claim, doors, freeze, home, routes};
 use crate::custody::secrets::{self, VaultSecrets};
 use crate::screen::{Ctx, Environment, Screen, TimerOp};
 use crate::strings::{Locale, backup as words, backup_home, fill};
@@ -131,6 +131,8 @@ struct Page {
     shell: FakeShell,
     /// Effects asked and not yet answered.
     effects: Vec<wire::Effect>,
+    /// The tags of the off-thread jobs asked and not yet answered, oldest first.
+    jobs: Vec<String>,
     /// Whether the platform took a background window.
     background: bool,
     timers: Vec<(String, bool)>,
@@ -156,6 +158,7 @@ impl Page {
             screen: home::build(&routes::home(), &VaultSecrets::new()).expect("the screen builds"),
             shell,
             effects: Vec::new(),
+            jobs: Vec::new(),
             background: true,
             timers: Vec::new(),
         }
@@ -172,12 +175,14 @@ impl Page {
     fn send(&mut self, event: E) {
         let ctx = Ctx::new(&self.fake, &self.env);
         let effects = self.screen.update(wire::ScreenEvent { kind: Some(event) }, &ctx);
-        for op in ctx.finish().timers {
+        let done = ctx.finish();
+        for op in done.timers {
             match op {
                 TimerOp::Start(name, _) => self.timers.push((name, true)),
                 TimerOp::Cancel(name) => self.timers.push((name, false)),
             }
         }
+        self.jobs.extend(done.jobs.into_iter().map(|(tag, _)| tag));
         self.effects.extend(effects);
     }
 
@@ -219,36 +224,19 @@ impl Page {
         }
     }
 
-    /// The calls asked of the shell, decoded.
-    fn calls(&self) -> Vec<wire::Request> {
-        self.effects
-            .iter()
-            .filter_map(|effect| match &effect.kind {
-                Some(wire::effect::Kind::CoreCall(call)) => {
-                    Some(wire::Request::decode(call.request.as_slice()).expect("a request"))
-                }
-                _ => None,
-            })
-            .collect()
-    }
-
-    /// Answer the oldest call with `response`.
-    fn answer_call(&mut self, response: Option<wire::response::Kind>) {
-        let at = self
-            .effects
-            .iter()
-            .position(|effect| matches!(effect.kind, Some(wire::effect::Kind::CoreCall(_))))
-            .expect("a call is waiting");
-        self.effects.remove(at);
-        let called = wire::CoreCalled {
+    /// Answer the oldest job with `response`: what the core answered, or nothing
+    /// when it refused.
+    fn answer_job(&mut self, response: Option<wire::response::Kind>) {
+        let tag = self.jobs.remove(0);
+        let called = wire::VaultCalled {
             response: response
                 .map(|kind| wire::Response { kind: Some(kind) }.encode_to_vec())
                 .unwrap_or_default(),
             error: None,
         };
-        self.send(E::EffectResult(wire::EffectResult {
-            effect_id: 0,
-            outcome: Some(wire::effect_result::Outcome::CoreCalled(called)),
+        self.send(E::OffThreadDone(wire::OffThreadDone {
+            tag,
+            bytes: called.encode_to_vec(),
         }));
     }
 
@@ -851,7 +839,7 @@ fn a_vault_that_moved_offers_no_forget_no_add_and_a_forget_sent_anyway_asks_noth
             gateway_id: "gw-1".to_owned(),
         },
     ));
-    assert!(page.calls().is_empty());
+    assert!(page.jobs.is_empty());
     let live = Page::open(both()).data();
     assert_eq!(live.forget_label, words::backup_forget(EN));
     assert_eq!(live.add_destination_label, words::backup_add_destination(EN));
@@ -866,7 +854,7 @@ fn back_up_now_needs_a_gateway_a_vault_that_has_not_moved_and_no_run_already_goi
     assert!(!data.back_up_now_enabled);
     assert_eq!(data.back_up_now_label, "");
     unpaired.say(tap.clone());
-    assert!(unpaired.calls().is_empty());
+    assert!(unpaired.jobs.is_empty());
 
     let mut frozen = Page::open(wire::BackupStatusResponse {
         frozen: true,
@@ -874,28 +862,21 @@ fn back_up_now_needs_a_gateway_a_vault_that_has_not_moved_and_no_run_already_goi
     });
     assert!(!frozen.data().back_up_now_enabled);
     frozen.say(tap.clone());
-    assert!(frozen.calls().is_empty());
+    assert!(frozen.jobs.is_empty());
 
     let mut running = Page::open(wire::BackupStatusResponse {
         content_confirmed: 7,
         ..both()
     });
     running.say(tap.clone());
-    let calls = running.calls();
-    assert_eq!(calls.len(), 1);
-    let Some(wire::request::Kind::Drain(drain)) = &calls[0].kind else {
-        panic!("a pass was asked for: {calls:?}");
-    };
-    // THE MEMBER'S OWN TAP and a snapshot now, under the rule and videos bit shown.
-    assert!(drain.asked && drain.wants_snapshot);
-    assert_eq!(drain.rule, wire::TransferRule::WifiOnly as i32);
-    assert!(!drain.exclude_videos);
+    // ONE PASS ASKED FOR, under its own tag, off the runtime's lock.
+    assert_eq!(running.jobs, vec![doors::PASS.to_owned()]);
     let data = running.data();
     assert!(data.backing_up_now && !data.back_up_now_enabled);
     assert_eq!(data.progress, "Backing up — 7 of 10 photos and files");
     // A SECOND PRESS STARTS NOTHING HERE: the run is already going.
     running.say(tap.clone());
-    assert_eq!(running.calls().len(), 1);
+    assert_eq!(running.jobs.len(), 1);
     // NOTHING LEFT TO COUNT is said plainly, never "all 10" while it runs.
     let mut whole = Page::open(both());
     whole.say(tap);
@@ -914,7 +895,7 @@ fn a_run_that_ends_is_re_read_because_what_it_moved_is_the_lines_to_say() {
     assert!(page.timers.contains(&(super::home::PROGRESS_TIMER_NAME.to_owned(), true)));
     let reads = page.reads();
     page.set_status(both());
-    page.answer_call(None);
+    page.answer_job(None);
     assert_eq!(page.reads(), reads + 1);
     let data = page.data();
     assert!(!data.backing_up_now);
@@ -1030,18 +1011,6 @@ fn the_rule_and_the_videos_bit_are_written_as_the_member_set_them() {
         },
     ));
     assert!(page.data().rule_choices[0].picked);
-    // Written, the pass is asked for under them.
-    page.say(wire::backup_home_event::Kind::SetIncludeVideos(
-        wire::backup_home_event::SetIncludeVideos { include: false },
-    ));
-    page.say(wire::backup_home_event::Kind::BackUpNow(
-        wire::backup_home_event::BackUpNow {},
-    ));
-    let Some(wire::request::Kind::Drain(drain)) = &page.calls()[0].kind else {
-        panic!("a pass");
-    };
-    assert!(drain.exclude_videos);
-    assert_eq!(drain.rule, wire::TransferRule::WifiOnly as i32);
 }
 
 #[test]
@@ -1067,20 +1036,12 @@ fn forgetting_asks_nothing_reaches_only_a_gateway_the_screen_draws_and_says_whet
             gateway_id: id.to_owned(),
         })
     };
-    let asked = |page: &Page| {
-        page.calls()
-            .into_iter()
-            .filter_map(|request| match request.kind {
-                Some(wire::request::Kind::ForgetDestination(forget)) => Some(forget.gateway_id),
-                _ => None,
-            })
-            .collect::<Vec<_>>()
-    };
+    let asked = |page: &Page| page.jobs.clone();
     let mut page = Page::open(both());
     page.say(forget("gw-9"));
     assert!(asked(&page).is_empty());
     page.say(forget("gw-1"));
-    assert_eq!(asked(&page), vec!["gw-1"]);
+    assert_eq!(asked(&page), vec!["backup.forget:gw-1"]);
     let answer = |forgotten, revoked| {
         Some(wire::response::Kind::ForgetDestination(
             wire::ForgetDestinationResponse { forgotten, revoked },
@@ -1088,7 +1049,7 @@ fn forgetting_asks_nothing_reaches_only_a_gateway_the_screen_draws_and_says_whet
     };
     page.set_status(status(vec![nas()]));
     let reads = page.reads();
-    page.answer_call(answer(true, true));
+    page.answer_job(answer(true, true));
     // RE-READ, and the gateway's refusal of this phone said.
     assert_eq!(page.reads(), reads + 1);
     assert_eq!(page.data().notice, "Forgot Home laptop. It now refuses this phone.");
@@ -1098,7 +1059,7 @@ fn forgetting_asks_nothing_reaches_only_a_gateway_the_screen_draws_and_says_whet
     // live there, so the member is told how to end it.
     let mut page = Page::open(both());
     page.say(forget("gw-2"));
-    page.answer_call(answer(true, false));
+    page.answer_job(answer(true, false));
     assert_eq!(
         page.data().notice,
         fill(
@@ -1110,12 +1071,12 @@ fn forgetting_asks_nothing_reaches_only_a_gateway_the_screen_draws_and_says_whet
 
     let mut page = Page::open(both());
     page.say(forget("gw-1"));
-    page.answer_call(answer(false, false));
+    page.answer_job(answer(false, false));
     assert_eq!(page.data().notice, "Couldn't forget Home laptop. Try again.");
     // No answer at all (no core, a refusal) is not forgotten.
     let mut page = Page::open(both());
     page.say(forget("gw-1"));
-    page.answer_call(None);
+    page.answer_job(None);
     assert_eq!(page.data().notice, "Couldn't forget Home laptop. Try again.");
 }
 
@@ -1324,4 +1285,65 @@ fn nothing_the_screen_says_carries_the_words_themselves() {
     let text = String::from_utf8_lossy(&encoded);
     assert!(!text.contains("abandon"));
     assert!(!text.contains(SEED));
+}
+
+// ---- what the doors are asked ---------------------------------------------
+
+#[test]
+fn a_pass_is_asked_for_under_the_rule_and_videos_bit_the_screen_shows_by_the_members_own_tap() {
+    use centraid_core::screens::VaultRequest;
+    use super::rule::TransferRule;
+    let drain = |rule, include| match doors::pass_request(rule, include) {
+        VaultRequest::Drain(drain) => drain,
+        other => panic!("not a pass: {other:?}"),
+    };
+    let wifi = drain(TransferRule::WifiOnly, true);
+    // THE MEMBER'S OWN TAP and a snapshot now: `asked` is set by nothing else.
+    assert!(wifi.asked && wifi.wants_snapshot);
+    assert_eq!(wifi.rule, wire::TransferRule::WifiOnly as i32);
+    assert!(!wifi.exclude_videos, "videos are included by default");
+    // THE LINK IS NOT THE SCREEN'S TO KNOW: the conservative reading, no deadline.
+    assert!(wifi.metered && !wifi.charging);
+    assert_eq!(wifi.deadline_ms, 0);
+    let manual = drain(TransferRule::Manual, false);
+    assert_eq!(manual.rule, wire::TransferRule::Manual as i32);
+    assert!(manual.exclude_videos, "include videos off is exclude_videos on");
+    assert_eq!(
+        drain(TransferRule::WifiAndCellularPhotos, true).rule,
+        wire::TransferRule::WifiAndCellularPhotos as i32
+    );
+}
+
+#[test]
+fn a_forget_names_the_gateway_and_its_answer_finds_it_by_tag() {
+    use centraid_core::screens::VaultRequest;
+    let VaultRequest::ForgetDestination(forget) = doors::forget_request("gw-7") else {
+        panic!("a forget");
+    };
+    assert_eq!(forget.gateway_id, "gw-7");
+    assert_eq!(doors::forget_tag("gw-7"), "backup.forget:gw-7");
+    // A tag this screen did not ask is not its answer.
+    assert_eq!(doors::done("other", &[]), None);
+    assert_eq!(doors::done(doors::PASS, &[]), Some(doors::Done::Pass));
+    // A refusal, or bytes that are not an answer, are not forgotten.
+    let refused = wire::VaultCalled {
+        response: Vec::new(),
+        error: Some(centraid_api_proto::core_v1::Error::default()),
+    };
+    assert_eq!(
+        doors::done("backup.forget:gw-7", &refused.encode_to_vec()),
+        Some(doors::Done::Forgot {
+            gateway_id: "gw-7".to_owned(),
+            forgotten: false,
+            revoked: false
+        })
+    );
+    assert_eq!(
+        doors::done("backup.forget:gw-7", b"\xff\xff"),
+        Some(doors::Done::Forgot {
+            gateway_id: "gw-7".to_owned(),
+            forgotten: false,
+            revoked: false
+        })
+    );
 }

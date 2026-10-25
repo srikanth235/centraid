@@ -35,6 +35,9 @@ final class ScreenStore: ObservableObject {
 
     /// Told when Rust announces something the shell may act on (`locker.unlocked`).
     var onAnnounce: ((String) -> Void)?
+    /// WHETHER THE PLATFORM TOOK A BACKGROUND WINDOW, as the session last registered
+    /// it (`BackgroundProbe`); nil before it says. Asking registers nothing.
+    var backgroundRegistered: (() -> Bool?)?
 
     private let core: any ScreenCore
     private var closed: Set<UInt64> = []
@@ -261,6 +264,14 @@ final class ScreenStore: ObservableObject {
             }
         case .keychain(let operation)?:
             answer(request, Self.keychain(operation))
+        case .backgroundProbe?:
+            if let registered = backgroundRegistered?() {
+                var status = Centraid_Core_V1_BackgroundStatus()
+                status.registered = registered
+                answer(request, .backgroundStatus(status))
+            } else {
+                answer(request, .failed(Self.failure("this shell has not registered its background windows")))
+            }
         case .ownerCheck(let check)?:
             Task {
                 let outcome = await OwnerCheckPerformer.run(check)

@@ -125,7 +125,7 @@ public fun HomeScreen(
     backupShown: Boolean = false,
     /** The band's Home, pressed on the Backup tab. */
     onOpenHome: () -> Unit = {},
-    /** The Backup tab's screen (`BackupSheets.Tab`). */
+    /** The Backup tab's screen; Rust's `backup.home` is pushed as a page now, so Home passes none. */
     backupTab: @Composable () -> Unit = {},
     /** Home's search bar's words: the search screen's own placeholder (R-CHROME-6). */
     searchPlaceholder: String = "",

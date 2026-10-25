@@ -105,8 +105,6 @@ struct Backup {
     /// finds its job.
     in_flight: Option<(Job, Vec<wire::SecretOp>)>,
     waiting: VecDeque<Job>,
-    /// The off-thread calls asked, oldest first, by tag.
-    calls: VecDeque<String>,
 }
 
 impl Backup {
@@ -124,7 +122,6 @@ impl Backup {
             notice: Notice::None,
             in_flight: None,
             waiting: VecDeque::new(),
-            calls: VecDeque::new(),
         }
     }
 
@@ -307,14 +304,14 @@ impl Backup {
         self.backing_up_now = true;
         self.notice = Notice::None;
         ctx.start_timer(PROGRESS_TIMER, PROGRESS_EVERY);
-        self.calls.push_back(doors::PASS.to_owned());
-        vec![doors::call(&doors::pass_request(
-            self.rule,
-            self.include_videos,
-        ))]
+        ctx.vault_async(
+            doors::PASS,
+            doors::pass_request(self.rule, self.include_videos),
+        );
+        Vec::new()
     }
 
-    fn forget(&mut self, gateway_id: &str) -> Vec<wire::Effect> {
+    fn forget(&mut self, gateway_id: &str, ctx: &Ctx) -> Vec<wire::Effect> {
         // ONLY A GATEWAY THE SCREEN IS DRAWING can be forgotten from it, and none
         // on a vault that moved.
         if self.frozen()
@@ -326,8 +323,8 @@ impl Backup {
             return Vec::new();
         }
         self.notice = Notice::None;
-        self.calls.push_back(doors::forget_tag(gateway_id));
-        vec![doors::call(&doors::forget_request(gateway_id))]
+        ctx.vault_async(&doors::forget_tag(gateway_id), doors::forget_request(gateway_id));
+        Vec::new()
     }
 
     fn set_key_sync(&mut self, on: bool, ctx: &Ctx) -> Vec<wire::Effect> {
@@ -363,23 +360,16 @@ impl Backup {
                 self.notice = Notice::None;
                 self.run(Job::Rule(rule))
             }
-            Some(B::ForgetDestination(forget)) => self.forget(&forget.gateway_id),
+            Some(B::ForgetDestination(forget)) => self.forget(&forget.gateway_id, ctx),
             Some(B::SetKeySync(set)) => self.set_key_sync(set.on, ctx),
             Some(B::Retry(_)) => self.open(ctx),
             None => Vec::new(),
         }
     }
 
-    /// An off-thread call came back.
-    fn call_done(&mut self, called: &wire::CoreCalled, ctx: &Ctx) {
-        let Some(tag) = self.calls.pop_front() else {
-            return;
-        };
-        let done = if tag == doors::PASS {
-            Done::Pass
-        } else if let Some(gateway_id) = tag.strip_prefix("backup.forget:") {
-            doors::forgot(gateway_id, called)
-        } else {
+    /// An off-thread job came back.
+    fn job_done(&mut self, done: &wire::OffThreadDone, ctx: &Ctx) {
+        let Some(done) = doors::done(&done.tag, &done.bytes) else {
             return;
         };
         match done {
@@ -411,7 +401,7 @@ impl Backup {
         self.read(ctx);
     }
 
-    fn on_result(&mut self, result: wire::EffectResult, ctx: &Ctx) -> Vec<wire::Effect> {
+    fn on_result(&mut self, result: wire::EffectResult) -> Vec<wire::Effect> {
         use wire::effect_result::Outcome as O;
         match result.outcome {
             Some(O::Secrets(batched)) => self.secrets_answered(&batched),
@@ -421,10 +411,6 @@ impl Backup {
             }
             Some(O::BackgroundStatus(status)) => {
                 self.registered = Some(status.registered);
-                Vec::new()
-            }
-            Some(O::CoreCalled(called)) => {
-                self.call_done(&called, ctx);
                 Vec::new()
             }
             // A probe the shell could not perform is an answer of "unknown": the
@@ -649,7 +635,11 @@ impl Screen for Backup {
             // have been turned off meanwhile, and the key is read from the stores
             // each time.
             Some(E::Lifecycle(lifecycle)) if lifecycle.foreground => self.open(ctx),
-            Some(E::EffectResult(result)) => self.on_result(result, ctx),
+            Some(E::EffectResult(result)) => self.on_result(result),
+            Some(E::OffThreadDone(done)) => {
+                self.job_done(&done, ctx);
+                Vec::new()
+            }
             _ => Vec::new(),
         }
     }

@@ -324,6 +324,7 @@ final class ShellModel: ObservableObject {
         let store = ScreenStore(core: core)
         store.onOpenRoute = { [weak self] route in self?.open(route) }
         store.onContactsLimited = { [weak self] in self?.contactAccessPickerShown = true }
+        store.backgroundRegistered = { [weak self] in self?.session?.backgroundRegistered?.boolValue }
         screens = store
         // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED (R-ONBOARD-10), and when
         // Home's tile and chat's key slot learn the Locker is open.

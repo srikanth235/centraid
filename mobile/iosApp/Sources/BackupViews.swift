@@ -163,6 +163,9 @@ struct BackupHomeView: View {
         }
         .background(Theme.color("bg", scheme).ignoresSafeArea())
         .accessibilityIdentifier("backup-screen")
+        // A GATEWAY FORGOTTEN OR ADDED CHANGES THE PINS: the mover must never trust a
+        // certificate this phone no longer pairs with.
+        .onChange(of: model.destinations.map(\.gatewayID)) { _, _ in shell.backupDestinationsChanged() }
     }
 
     private static let top = "backup-top"

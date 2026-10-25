@@ -123,6 +123,14 @@ private struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
+        case .backupHome(let state)?:
+            BackupHomeView(
+                state: state,
+                shell: shell,
+                send: { store.send(instance, .backupHome($0)) },
+                onAddDestination: { shell.addBackupDestination() },
+                onShowWords: { shell.backupShowWords() }
+            )
         case .photosHome(let state)?:
             PhotosHomeView(
                 state: state,
