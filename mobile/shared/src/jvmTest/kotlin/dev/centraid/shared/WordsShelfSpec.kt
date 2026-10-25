@@ -3,28 +3,17 @@ package dev.centraid.shared
 import centraid.core.v1.Envelope
 import centraid.core.v1.ErrorCode
 import centraid.core.v1.Page
-import centraid.core.v1.PhraseMinted
-import centraid.core.v1.PhraseResponse
-import centraid.core.v1.RestoreRequest
-import centraid.core.v1.RestoreResponse
-import centraid.core.v1.RestoredVault
 import centraid.core.v1.Response
 import centraid.core.v1.Row
-import centraid.core.v1.UnclaimedVault
 import centraid.core.v1.Value
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreConfiguration
-import dev.centraid.shared.custody.CorePhraseDoor
 import dev.centraid.shared.custody.PairRefusal
 import dev.centraid.shared.custody.PairResult
-import dev.centraid.shared.custody.RestoreRefusal
-import dev.centraid.shared.custody.RestoreResult
-import dev.centraid.shared.custody.UnclaimedVaultAt
 import dev.centraid.shared.custody.VaultSecrets
 import dev.centraid.shared.platform.FakePlatformServices
 import dev.centraid.shared.shell.Shelf
 import dev.centraid.shared.sync.CorePairDoor
-import dev.centraid.shared.sync.CoreRestoreDoor
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldBeNull
@@ -173,103 +162,6 @@ class WordsShelfSpec : StringSpec({
     }
 
     // --- the doors -------------------------------------------------------------
-
-    "the phrase door returns the core's words and nothing it cannot vouch for" {
-        runTest {
-            val words = List(24) { "abandon" }
-            val door = CorePhraseDoor {
-                CentraidCore.answering(Dispatchers.Unconfined) {
-                    Envelope(response = Response(phrase = PhraseResponse(minted = PhraseMinted(words = words))))
-                }
-            }
-            door.mint() shouldBe words
-            val short = CorePhraseDoor {
-                CentraidCore.answering(Dispatchers.Unconfined) {
-                    Envelope(response = Response(phrase = PhraseResponse(minted = PhraseMinted(words = words.take(12)))))
-                }
-            }
-            short.mint().shouldBeNull()
-            CorePhraseDoor { null }.seed(words).shouldBeNull()
-        }
-    }
-
-    "the restore door carries every vault's path and index, and nothing from the support log" {
-        runTest {
-            val door = CoreRestoreDoor {
-                CentraidCore.answering(Dispatchers.Unconfined) {
-                    Envelope(
-                        response = Response(
-                            restore = RestoreResponse(
-                                vaults = listOf(RestoredVault(vault_id = "id", index = 2, path = "/v/x/vault.db", rows = 7, safety_number = "1 2")),
-                                gap_scanned = 20,
-                                unclaimed = listOf(UnclaimedVault(index = 3, vault_id = "ef".repeat(32), reason = "logs only")),
-                            ),
-                        ),
-                    )
-                }
-            }
-            val answer = door.restore(List(24) { "abandon" }, null).shouldBeInstanceOf<RestoreResult.Restored>().answer
-            answer.vaults.single().index shouldBe 2
-            // A VAULT THAT STAYED WITH THE OLD PHONE (R-1047-R5) is carried by
-            // index and id; the core's reason is a support log and is not.
-            answer.unclaimed shouldBe listOf(UnclaimedVaultAt(index = 3, vaultId = "ef".repeat(32)))
-            answer.toString() shouldNotContain "logs only"
-            answer.vaults.single().path shouldBe "/v/x/vault.db"
-            answer.toString() shouldNotContain "/v/x/vault.db"
-        }
-    }
-
-    "the seed doors ask the core with all 64 bytes, and the retry with the named indices" {
-        runTest {
-            var asked: RestoreRequest? = null
-            val door = CoreRestoreDoor {
-                CentraidCore.answering(Dispatchers.Unconfined) { envelope ->
-                    asked = envelope.request?.restore
-                    Envelope(response = Response(restore = RestoreResponse(vaults = listOf(RestoredVault(index = 1, path = "/v/y/vault.db")))))
-                }
-            }
-            val code = """{"v":2,"gw":"gw-1"}"""
-            val answer = door.restoreStayed("cd".repeat(64), code, listOf(1, 3))
-                .shouldBeInstanceOf<RestoreResult.Restored>().answer
-            answer.vaults.single().index shouldBe 1
-            asked?.indices shouldBe listOf(1, 3)
-            asked?.phrase shouldBe ""
-            asked?.seed?.size shouldBe 64
-            // THE PAIRING CODE CROSSES AS THE TEXT IT IS (#1080 A1).
-            asked?.payload shouldBe code
-            // THE HELD-SEED RESTORE rides the same 64 bytes, and reached the core
-            // too: a seed read as a 32-byte endpoint id never did.
-            door.restoreSeed("cd".repeat(64), null).shouldBeInstanceOf<RestoreResult.Restored>()
-            asked?.seed?.size shouldBe 64
-            asked?.indices shouldBe emptyList()
-            CoreRestoreDoor { null }.restoreStayed("not hex", null, listOf(1)) shouldBe
-                RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
-        }
-    }
-
-    "the restore door says which refusal by the core's code, never a bare silence" {
-        runTest {
-            fun refusing(code: ErrorCode?) = CoreRestoreDoor {
-                CentraidCore.answering(Dispatchers.Unconfined) {
-                    Envelope(error = code?.let { centraid.core.v1.Error(code = it, detail = "logs only") })
-                }
-            }
-            val words = List(24) { "abandon" }
-            // A SNAPSHOT THIS PHONE REFUSED is not a laptop that did not answer
-            // (#1047 R3): the census refusal arrives as INTERNAL.
-            refusing(ErrorCode.ERROR_CODE_INTERNAL).restore(words, null) shouldBe
-                RestoreResult.Refused(RestoreRefusal.DID_NOT_CHECK)
-            refusing(ErrorCode.ERROR_CODE_UNAUTHORIZED).restore(words, null) shouldBe
-                RestoreResult.Refused(RestoreRefusal.NOT_TAKEN)
-            refusing(ErrorCode.ERROR_CODE_PEER_UNREACHABLE).restore(words, null) shouldBe
-                RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
-            // AN ANSWER WITH NO RESTORE ON IT, and no core, are read as silence.
-            refusing(null).restore(words, null) shouldBe RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
-            CoreRestoreDoor { null }.restore(words, null) shouldBe RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
-            CoreRestoreDoor { null }.restoreSeed("not hex", null) shouldBe
-                RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
-        }
-    }
 
     "the pair door answers the safety number and the destination, and nothing secret" {
         runTest {

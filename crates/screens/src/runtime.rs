@@ -64,6 +64,9 @@ struct State {
     next_job: u64,
     env: Environment,
     started: bool,
+    /// Topics screens announced during the update in flight, relayed to every
+    /// open screen by [`Runtime::settle`].
+    announced: Vec<String>,
 }
 
 /// The screen runtime.
@@ -99,6 +102,7 @@ impl Runtime {
                 next_job: 1,
                 env: Environment::default(),
                 started: false,
+                announced: Vec::new(),
             }),
         }
     }
@@ -268,6 +272,9 @@ impl Runtime {
             core.off_thread(job, work);
         }
         for effect in effects {
+            if let Some(wire::effect::Kind::Announce(note)) = &effect.kind {
+                state.announced.push(note.topic.clone());
+            }
             let effect_id = state.next_effect;
             state.next_effect += 1;
             out.effects.push(wire::EffectRequest {
@@ -408,6 +415,31 @@ impl Runtime {
         }
     }
 
+    /// RELAY WHAT SCREENS ANNOUNCED. An `Announce` is the shell's to act on
+    /// (Locker's unlock, for one); the runtime also tells every open screen,
+    /// services included, so a screen that must follow (a vault's own key is
+    /// filed in Locker after an unlock) hears it in the same call and needs
+    /// nothing back from the shell. An announcement a screen makes while
+    /// hearing one is relayed in turn.
+    fn settle(state: &mut State, core: &dyn ScreenCtx, out: &mut wire::ScreenUpdate) {
+        while !state.announced.is_empty() {
+            for topic in std::mem::take(&mut state.announced) {
+                Self::broadcast(
+                    state,
+                    core,
+                    |_| {
+                        Some(wire::ScreenEvent {
+                            kind: Some(wire::screen_event::Kind::Announced(wire::Announced {
+                                topic: topic.clone(),
+                            })),
+                        })
+                    },
+                    out,
+                );
+            }
+        }
+    }
+
     fn empty(update: &wire::ScreenUpdate) -> bool {
         update.navigation.is_none()
             && update.views.is_empty()
@@ -510,6 +542,7 @@ impl ScreenHost for Runtime {
                 );
             }
         }
+        Self::settle(&mut state, core, &mut out);
         // The first call also carries the opened roots, so a snapshot is not a
         // second round trip: `start` filled `out` already.
         if out.navigation.is_none() && !out.views.is_empty() && state.nav_revision == 1 {
@@ -541,6 +574,7 @@ impl ScreenHost for Runtime {
             },
             &mut out,
         );
+        Self::settle(&mut state, core, &mut out);
         if !Self::empty(&out) {
             core.push(out);
         }
@@ -592,6 +626,7 @@ impl ScreenHost for Runtime {
                 &mut out,
             );
         }
+        Self::settle(&mut state, core, &mut out);
         if !Self::empty(&out) {
             core.push(out);
         }

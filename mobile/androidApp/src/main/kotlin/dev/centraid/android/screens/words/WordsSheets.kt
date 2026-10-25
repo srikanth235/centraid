@@ -3,40 +3,24 @@ package dev.centraid.android.screens.words
 import android.Manifest
 import android.content.pm.PackageManager
 import android.view.WindowManager
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import centraid.core.v1.Route
 import centraid.screen.v1.PairLaptopEvent
 import centraid.screen.v1.PairLaptopState
-import centraid.screen.v1.VaultWordsEvent
-import centraid.screen.v1.VaultWordsState
-import centraid.screen.v1.WordsEntryEvent
-import centraid.screen.v1.WordsEntryState
-import centraid.screen.v1.WordsShowEvent
-import centraid.screen.v1.WordsShowState
 import dev.centraid.android.kit.NoAutofill
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.shared.custody.PairLaptopBridge
-import dev.centraid.shared.custody.VaultWordsBridge
-import dev.centraid.shared.custody.WordsEntryBridge
-import dev.centraid.shared.custody.WordsShowBridge
 import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -44,49 +28,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * THE CUSTODY SCREENS, AT THE ROOT (#1047 E3, E6). One sheet over whatever is
- * drawn — Home's make-vault and restore doors, Locker's "Enter your 24 words"
- * wall, and the More sheet's two custody rows (words.show and pair.laptop) —
- * so it is the activity's and not an app's route.
- *
- * It holds the four bridges for the activity's life and decides only which
- * sheet is up: a door opens one, and the machine's `PHASE_CLOSED` (seen after
- * an open in this sitting) takes it down. `RestoreTapped` is an INTENT the
- * make machine ignores: the shell closes words.make and opens words.enter for
- * the restore the state's `restore_purpose` names in its place (iOS
- * `ShellModel.sendVaultWords`).
- *
- * The platform halves are here too: words.show's owner check and its
- * `Dismissed` on leaving the foreground, and pair.laptop's camera and the
- * CAMERA grant it asks for at the moment Scan is tapped.
+ * THE CUSTODY DOORS, AT THE ROOT (#1047 E3, E6; #1135). The 24 words' screens
+ * (`words.make`, `words.enter`, `words.show`) are Rust's and are pushed like any
+ * Rust route ([push], which `MainActivity` points at the Agenda routes' stack);
+ * this class keeps the doors that open them (Home's make-vault and restore
+ * controls, Locker's "Enter your 24 words" wall, the More sheet's rows) under
+ * their old names, and the one sheet that is still a sheet: pair.laptop's, with
+ * its camera and the CAMERA grant it asks for at the moment Scan is tapped.
  */
-public class WordsSheets(
-    /** words.enter closed: the Locker gate re-reads `keyed` (a re-key may have landed). */
-    private val onEnterClosed: () -> Unit,
-) {
-    public enum class Sheet { MAKE, ENTER, SHOW, PAIR }
+public class WordsSheets {
+    public enum class Sheet { PAIR }
 
-    private val make = VaultWordsBridge()
-    private val enter = WordsEntryBridge()
-    private val show = WordsShowBridge()
     private val pair = PairLaptopBridge()
 
-    /**
-     * words.show's owner check is up. Its prompt may stop this activity (the
-     * device credential on API 29 and below is an activity of its own), and
-     * that is not the member leaving: `Dismissed` waits for the answer.
-     */
-    private var verifying = false
-
-    /**
-     * Whether this phone has a camera to scan a pairing code with: the restore
-     * carries it in `Opened.camera`, as pairing's [openPair] does.
-     */
-    public var camera: Boolean
-        get() = enter.camera
-        set(value) {
-            enter.camera = value
-        }
+    /** Push a Rust route onto the activity's stack. Set by `MainActivity`. */
+    public var push: (Route) -> Unit = {}
 
     /** Which sheet is up, if any. */
     public var showing: Sheet? by mutableStateOf(null)
@@ -109,60 +65,17 @@ public class WordsSheets(
         return sentence
     }
 
+    /** A vault was made (`WordsMakeState.made_line`, once per make). */
+    public fun vaultMade(sentence: String) {
+        made = (made.first + 1) to sentence
+    }
+
     private var attached = false
-    private var makeLive = false
-    private var enterLive = false
-    private var showLive = false
     private var pairLive = false
 
     public fun attach(session: HomeSession, scope: CoroutineScope) {
-        make.attach(session)
-        enter.attach(session)
-        show.attach(session)
         pair.attach(session)
         attached = true
-        // A VAULT WAS MADE: its own signal, once per make — the closed state
-        // that carries the sentence is followed at once by the dismissal, and
-        // a state collector can be conflated past it.
-        scope.launch { make.made.collect { sentence -> made = (made.first + 1) to sentence } }
-        scope.launch {
-            make.states.collect { state ->
-                if (state.phase != VaultWordsState.Phase.PHASE_CLOSED) {
-                    makeLive = true
-                    if (makePending && showing == null && asksMember(state.phase)) {
-                        makePending = false
-                        showing = Sheet.MAKE
-                    }
-                } else if (makeLive) {
-                    makeLive = false
-                    makePending = false
-                    if (showing == Sheet.MAKE) showing = null
-                }
-            }
-        }
-        scope.launch {
-            enter.states.collect { state ->
-                if (state.phase != WordsEntryState.Phase.PHASE_CLOSED) {
-                    enterLive = true
-                } else if (enterLive) {
-                    enterLive = false
-                    if (showing == Sheet.ENTER) showing = null
-                    // THE GATE RE-READS `keyed` ON ITS NEXT EVENT: a re-key that
-                    // just landed turns "Enter your 24 words" into "Unlock with …".
-                    onEnterClosed()
-                }
-            }
-        }
-        scope.launch {
-            show.states.collect { state ->
-                if (state.phase != WordsShowState.Phase.PHASE_CLOSED) {
-                    showLive = true
-                } else if (showLive) {
-                    showLive = false
-                    if (showing == Sheet.SHOW) showing = null
-                }
-            }
-        }
         scope.launch {
             pair.states.collect { state ->
                 if (state.phase != PairLaptopState.Phase.PHASE_CLOSED) {
@@ -175,84 +88,29 @@ public class WordsSheets(
         }
     }
 
-    /**
-     * MAKE A VAULT, THROUGH ITS WORDS: what the make-vault control does now.
-     *
-     * THE SHEET RISES ONLY WHEN THE MEMBER HAS SOMETHING TO DO. A first vault
-     * on a synced store is minted, kept unshown and made with no question
-     * (R-ONBOARD-10), so a sheet raised at the tap drew "Making your vault"
-     * for a moment and fell again before Home — a flicker. The states
-     * collector raises it at a phase that asks the member ([asksMember]); a
-     * make that never asks lands on Home with no sheet (iOS
-     * `ShellModel.makeVault`).
-     */
+    /** MAKE A VAULT, THROUGH ITS WORDS: `words.make` decides what this phone needs. */
     public fun makeVault() {
-        if (!attached) return
-        makePending = true
-        make.open()
+        push(CustodyRoutes.make())
     }
 
-    /** A make is under way and its sheet is not up yet. */
-    private var makePending = false
-
-    /** words.make's phases that need the member: a name, the key, a failure, a restore. */
-    private fun asksMember(phase: VaultWordsState.Phase): Boolean = when (phase) {
-        VaultWordsState.Phase.PHASE_CHOOSE,
-        VaultWordsState.Phase.PHASE_SHOW,
-        VaultWordsState.Phase.PHASE_FAILED,
-        VaultWordsState.Phase.PHASE_RESTORE_FIRST,
-        -> true
-        else -> false
-    }
-
-    /** RESTORE ONTO THIS PHONE (PURPOSE_RESTORE). */
+    /** RESTORE ONTO THIS PHONE: a phone already holding a seed restores from it. */
     public fun openRestore() {
-        if (!attached) return
-        enter.openRestore()
-        showing = Sheet.ENTER
+        push(CustodyRoutes.restore())
     }
 
-    /** HAND THE WORDS BACK (PURPOSE_REKEY): Locker's wall's `WordsTapped`. */
+    /** HAND THE WORDS BACK: Locker's wall's `WordsTapped`. */
     public fun openRekey() {
-        if (!attached) return
-        enter.openRekey()
-        showing = Sheet.ENTER
+        push(CustodyRoutes.rekey(centraid.core.v1.WordsEnterOrigin.WORDS_ENTER_ORIGIN_LOCKER))
     }
 
     /** The same re-key from pair.laptop's `WordsTapped`, in pairing's words (#1047 F5). */
     private fun openRekeyForPairing() {
-        if (!attached) return
-        enter.openRekeyForPairing()
-        showing = Sheet.ENTER
+        push(CustodyRoutes.rekey(centraid.core.v1.WordsEnterOrigin.WORDS_ENTER_ORIGIN_PAIRING))
     }
 
-    /** SHOW THE 24 WORDS AGAIN: the More sheet's `WordsCopy.SHOW_AGAIN_ROW`. */
+    /** SHOW THE 24 WORDS AGAIN: the More sheet's row. Rust asks the owner check first. */
     public fun openShow() {
-        if (!attached) return
-        showRequested = true
-        show.open()
-    }
-
-    /**
-     * words.show was opened and has not closed. NO SHEET BEFORE THE CHECK:
-     * the machine opens in ASK with `check_now`, [ShowCheck] runs the owner
-     * check, and the sheet goes up only once the machine has something to
-     * draw.
-     */
-    private var showRequested by mutableStateOf(false)
-
-    @Composable
-    private fun ShowCheck() {
-        val state by show.states.collectAsStateWithLifecycle()
-        val activity = LocalActivity.current as? FragmentActivity
-        LaunchedEffect(state, showRequested) {
-            if (!showRequested) return@LaunchedEffect
-            when {
-                state.phase == WordsShowState.Phase.PHASE_CLOSED -> showRequested = false
-                state.check_now -> verify(activity, state.verify_reason)
-                state.phase != WordsShowState.Phase.PHASE_UNSPECIFIED && showing == null -> showing = Sheet.SHOW
-            }
-        }
+        push(CustodyRoutes.show())
     }
 
     /**
@@ -265,72 +123,29 @@ public class WordsSheets(
         showing = Sheet.PAIR
     }
 
-    private fun sendMake(event: VaultWordsEvent) {
-        // WHICH RESTORE IS THE STATE'S (#1047 E4): RESTORE_FIRST means this
-        // phone holds a seed, so words.enter opens RESTORE_HELD — no words
-        // to type, only the laptop's address. Read before the event moves it.
-        val purpose = make.states.value.restore_purpose
-        make.forward(event)
-        if (event.restore != null) {
-            showing = Sheet.ENTER
-            make.forward(VaultWordsEvent(dismissed = VaultWordsEvent.Dismissed()))
-            if (purpose == WordsEntryState.Purpose.PURPOSE_RESTORE_HELD) enter.openRestoreHeld() else enter.openRestore()
-        }
-    }
-
     /**
      * pair.laptop's events. `WordsTapped` IS AN INTENT: the machine closes the
      * pairing and the shell opens words.enter's re-key in its place — the
-     * door Locker's wall has (#1047 E1). The sheet is swapped before the
-     * machine's CLOSED arrives, so that arrival leaves the words sheet up.
+     * door Locker's wall has (#1047 E1).
      */
     private fun sendPair(event: PairLaptopEvent) {
         pair.forward(event)
         if (event.words != null) openRekeyForPairing()
     }
 
-    /** words.show's owner check, answered as the machine's event. */
-    private fun verify(activity: FragmentActivity?, reason: String) {
-        if (verifying) return
-        verifying = true
-        ownerCheck(activity, reason) { ok, cancelled ->
-            verifying = false
-            show.forward(
-                if (ok) {
-                    WordsShowEvent(verified = WordsShowEvent.Verified())
-                } else {
-                    WordsShowEvent(verify_failed = WordsShowEvent.VerifyFailed(cancelled = cancelled))
-                },
-            )
-        }
-    }
-
-    /**
-     * THE SHEET WAS SWIPED AWAY (or backed out of). words.make, words.show
-     * and pair.laptop hear `Dismissed`; words.enter has no dismissal of its
-     * own and its way out is its Cancel — offered only while ENTERING.
-     */
+    /** THE SHEET WAS SWIPED AWAY (or backed out of): pair.laptop hears `Dismissed`. */
     private fun swipedAway(sheet: Sheet) {
         showing = null
         when (sheet) {
-            Sheet.MAKE -> make.forward(VaultWordsEvent(dismissed = VaultWordsEvent.Dismissed()))
-            Sheet.ENTER -> enter.forward(WordsEntryEvent(secondary = WordsEntryEvent.Secondary()))
-            Sheet.SHOW -> show.forward(WordsShowEvent(dismissed = WordsShowEvent.Dismissed()))
             Sheet.PAIR -> pair.forward(PairLaptopEvent(dismissed = PairLaptopEvent.Dismissed()))
         }
     }
 
     @Composable
     public fun Sheets() {
-        ShowCheck()
         val sheet = showing ?: return
-        val makeState by make.states.collectAsStateWithLifecycle()
-        val enterState by enter.states.collectAsStateWithLifecycle()
-        val showState by show.states.collectAsStateWithLifecycle()
         val pairState by pair.states.collectAsStateWithLifecycle()
-        val activity = LocalActivity.current as? FragmentActivity
         val context = LocalContext.current
-        LeftForeground(sheet)
         // THE CAMERA, ASKED FOR WHEN SCAN IS TAPPED AND NEVER BEFORE. A
         // refusal leaves the paste field, which is the whole screen without
         // a camera anyway.
@@ -353,58 +168,35 @@ public class WordsSheets(
             if (uri != null) {
                 scope.launch {
                     val code = withContext(Dispatchers.Default) { runCatching { readSquare(context, uri) }.getOrNull() }
-                    scanned(scanFor, code)
+                    scanned(code)
                 }
             }
         }
-        // WHICH SHEET ASKED: the restore's code field scans as pairing does.
-        scanFor = sheet
         val pickPhoto = {
             photo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
-        val secure = when (sheet) {
-            Sheet.MAKE -> makeState.secure
-            Sheet.ENTER -> enterState.secure
-            Sheet.SHOW -> showState.secure
-            Sheet.PAIR -> false
-        }
-        // A SWIPE IS A WAY OUT ONLY WHERE THE MACHINE HEARS ONE: not while the
-        // key is kept or the vault made, and not while words.enter works.
-        val swipeable = when (sheet) {
-            Sheet.MAKE -> makeState.phase != VaultWordsState.Phase.PHASE_CHECKING &&
-                makeState.phase != VaultWordsState.Phase.PHASE_MAKING
-            Sheet.ENTER -> enterState.phase == WordsEntryState.Phase.PHASE_ENTERING
-            // words.show can always be left: leaving drops the words.
-            Sheet.SHOW -> true
-            // Not while the core is pairing.
-            Sheet.PAIR -> pairState.phase != PairLaptopState.Phase.PHASE_PAIRING
-        }
-        SecureWindow(secure)
+        // Not swipeable while the core is pairing.
+        val swipeable = pairState.phase != PairLaptopState.Phase.PHASE_PAIRING
         SheetRoom(
             title = "",
             onDismiss = { swipedAway(sheet) },
             swipeable = swipeable,
-            secure = secure,
+            secure = false,
             expanded = true,
         ) {
             NoAutofill()
-            when (sheet) {
-                Sheet.MAKE -> VaultWordsScreen(makeState, ::sendMake)
-                Sheet.ENTER -> WordsEntryScreen(enterState, enter::forward, onScan = scan, onPhoto = pickPhoto)
-                Sheet.SHOW -> WordsShowScreen(showState, show::forward) { reason -> verify(activity, reason) }
-                Sheet.PAIR -> PairLaptopScreen(pairState, ::sendPair, onScan = scan, onPhoto = pickPhoto)
-            }
+            PairLaptopScreen(pairState, ::sendPair, onScan = scan, onPhoto = pickPhoto)
         }
-        if (scanning && (sheet == Sheet.PAIR || sheet == Sheet.ENTER)) {
+        if (scanning) {
             PairScanner(
-                photoLabel = if (sheet == Sheet.PAIR) pairState.photo_label else enterState.photo_label,
+                photoLabel = pairState.photo_label,
                 onRead = { payload ->
                     scanning = false
-                    scanned(sheet, payload)
+                    scanned(payload)
                 },
                 onPhoto = {
                     scanning = false
-                    if (sheet == Sheet.PAIR) pair.forward(PairLaptopEvent(photo = PairLaptopEvent.PhotoTapped()))
+                    pair.forward(PairLaptopEvent(photo = PairLaptopEvent.PhotoTapped()))
                     pickPhoto()
                 },
                 onCancel = { scanning = false },
@@ -412,48 +204,15 @@ public class WordsSheets(
         }
     }
 
-    /** The sheet the last scan was opened from; a photo's answer goes back to it. */
-    private var scanFor: Sheet? = null
-
-    /** A scan's answer — the square's text, or null for a photo with none — to the sheet that asked. */
-    private fun scanned(sheet: Sheet?, code: String?) {
-        when (sheet) {
-            Sheet.PAIR -> pair.forward(
-                if (code != null) {
-                    PairLaptopEvent(scanned = PairLaptopEvent.Scanned(payload = code))
-                } else {
-                    PairLaptopEvent(unread = PairLaptopEvent.PhotoUnread())
-                },
-            )
-            Sheet.ENTER -> enter.forward(
-                if (code != null) {
-                    WordsEntryEvent(scanned = WordsEntryEvent.Scanned(payload = code))
-                } else {
-                    WordsEntryEvent(unread = WordsEntryEvent.PhotoUnread())
-                },
-            )
-            else -> Unit
-        }
-    }
-
-    /**
-     * words.show DROPS ITS WORDS WHEN THE APP LEAVES THE FOREGROUND, as a
-     * swipe would: `Dismissed` on `ON_STOP` — but not while the owner check's
-     * own prompt is up, which is not leaving.
-     */
-    @Composable
-    private fun LeftForeground(sheet: Sheet) {
-        val owner = LocalLifecycleOwner.current
-        val current by rememberUpdatedState(sheet)
-        DisposableEffect(owner) {
-            val observer = LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_STOP && current == Sheet.SHOW && !verifying) {
-                    show.forward(WordsShowEvent(dismissed = WordsShowEvent.Dismissed()))
-                }
-            }
-            owner.lifecycle.addObserver(observer)
-            onDispose { owner.lifecycle.removeObserver(observer) }
-        }
+    /** A scan's answer — the square's text, or null for a photo with none. */
+    private fun scanned(code: String?) {
+        pair.forward(
+            if (code != null) {
+                PairLaptopEvent(scanned = PairLaptopEvent.Scanned(payload = code))
+            } else {
+                PairLaptopEvent(unread = PairLaptopEvent.PhotoUnread())
+            },
+        )
     }
 }
 

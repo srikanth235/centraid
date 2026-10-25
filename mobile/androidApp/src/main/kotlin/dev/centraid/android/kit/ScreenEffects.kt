@@ -95,6 +95,8 @@ internal fun PerformScreenEffects(
     /** This app's tab: when set, only its instances' effects are performed here (two apps share one core). */
     tab: String? = null,
     onAnnounce: (String) -> Unit = {},
+    /** Also perform the effects of services (screens in no tab, `custody.filing`): one host does. */
+    services: Boolean = false,
     docs: DocsPickers? = null,
     health: AndroidHealth? = null,
     openRoute: ((Route) -> Unit)? = null,
@@ -126,9 +128,11 @@ internal fun PerformScreenEffects(
         screens.effects.collect { request ->
             // TWO APPS' RUNTIMES SHARE ONE CORE, so each hears every push: an effect for
             // another app's screen is that app's performer's to answer.
-            if (tab != null && screens.navigation.value?.tabs?.firstOrNull { it.tab == tab }
-                    ?.entries?.none { it.instance == request.instance } != false
-            ) {
+            val tabs = screens.navigation.value?.tabs.orEmpty()
+            val mine = tabs.firstOrNull { it.tab == tab }?.entries?.any { it.instance == request.instance } == true
+            // A SERVICE (custody.filing) is in no tab: the one host that says so performs its effects.
+            val service = services && tabs.none { stack -> stack.entries.any { it.instance == request.instance } }
+            if (tab != null && !mine && !service) {
                 return@collect
             }
             // ONE COROUTINE PER EFFECT: a permission dialog waits for the member
@@ -275,6 +279,11 @@ private suspend fun perform(
             EffectResult(original_fetched = OriginalFetched.ADAPTER.decode(answer.await()))
         }
         effect.owner_check != null -> OwnerPrompt.check(context, effect.owner_check!!)
+        // THE VAULT'S SECRETS (lane H2): the device-only and synchronised stores, and
+        // whether the synchronised one would carry a key to another device.
+        effect.secrets != null ->
+            EffectResult(secrets = withContext(Dispatchers.IO) { SecretStores.run(context, effect.secrets!!) })
+        effect.synced_probe != null -> EffectResult(synced_status = SecretStores.probe(context))
         effect.pick_bytes != null -> doors.files.pick(context, doors.launchPicker)
         effect.save_file != null -> doors.files.save(context, effect.save_file!!, doors.launchSaver)
         effect.announce != null -> {

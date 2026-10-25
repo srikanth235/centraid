@@ -118,23 +118,13 @@ struct CentraidApp: App {
             .modifier(ContactAccessPickerHost(shell: shell))
             // THE QUESTION A HELD ACCOUNT OR CALENDAR LEAVES (#1127, R-1127-9).
             .modifier(PhoneFollowQuestionHost(shell: shell))
-            // THE 24 WORDS (#1047 E2): `words.make` and `words.enter`, one
-            // sheet at the root so Locker's wall can raise it from any depth.
-            // A swipe is allowed only where the machine has a way out to hear.
+            // THE ROOT SHEET: pairing (the 24 words' screens are Rust's and are
+            // pushed like any Rust route).
             .sheet(item: Binding(
                 get: { shell.wordsSheet },
                 set: { if $0 == nil { shell.wordsSwipedAway() } }
             )) { sheet in
                 switch sheet {
-                case .make:
-                    VaultWordsView(data: shell.vaultWordsState, send: { shell.sendVaultWords($0) })
-                        .interactiveDismissDisabled(!shell.vaultWordsSwipeable)
-                case .enter:
-                    WordsEntryView(data: shell.wordsEntryState, send: { shell.sendWordsEntry($0) })
-                        .interactiveDismissDisabled(!shell.wordsEntrySwipeable)
-                // words.show's swipe is its Dismissed, always heard.
-                case .show:
-                    WordsShowView(data: shell.wordsShowState, send: { shell.sendWordsShow($0) })
                 case .pair:
                     PairLaptopView(data: shell.pairLaptopState, send: { shell.sendPairLaptop($0) })
                         .interactiveDismissDisabled(!shell.pairLaptopSwipeable)
@@ -170,8 +160,8 @@ struct CentraidApp: App {
                     // and every open screen hears it (`.background`, never `.inactive`).
                     shell.screens?.lifecycle(foreground: false)
                     LockerEntry.shared.setOpen(opened: false)
-                    // words.show drops its words on leaving (#1047 E5).
-                    shell.leftForeground()
+                    // (words.show hears the same lifecycle and drops its words; the pass service
+                    // hears it too and runs the background pass under the grace.)
                 case .inactive:
                     break
                 @unknown default:

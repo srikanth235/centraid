@@ -1,6 +1,5 @@
 package dev.centraid.android.screens.words
 
-import android.content.Intent
 import android.os.Build
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
@@ -35,10 +34,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -52,7 +49,6 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalTextToolbar
@@ -74,13 +70,24 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.RestoredVaultLine
-import centraid.screen.v1.VaultWordsEvent
-import centraid.screen.v1.VaultWordsState
-import centraid.screen.v1.WordCell
-import centraid.screen.v1.WordEntry
-import centraid.screen.v1.WordsEntryEvent
-import centraid.screen.v1.WordsEntryState
+import centraid.core.v1.WordsEndpointTyped
+import centraid.core.v1.RestoredVaultLine
+import centraid.core.v1.WordsSuggestionPicked
+import centraid.core.v1.WordCell
+import centraid.core.v1.WordEntry
+import centraid.core.v1.WordsWordTyped
+import centraid.core.v1.WordsEnterEvent
+import centraid.core.v1.WordsEnterState
+import centraid.core.v1.WordsMakeEvent
+import centraid.core.v1.WordsMakeState
+import centraid.core.v1.WordsNameTyped
+import centraid.core.v1.WordsOwnToggled
+import centraid.core.v1.WordsPrimary
+import centraid.core.v1.WordsRestoreTapped
+import centraid.core.v1.WordsRetry
+import centraid.core.v1.WordsSaveCopy
+import centraid.core.v1.WordsSecondary
+import centraid.core.v1.WordsUseWords
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ChoiceStack
 import dev.centraid.android.kit.InkButton
@@ -89,12 +96,12 @@ import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.design.copy.WordsCopy
 import dev.centraid.android.kit.KitSpinner
+import dev.centraid.android.kit.NoAutofill
 import dev.centraid.android.theme.LocalCentraidTokens
 
 // THE 24 WORDS, DRAWN (#1047 E3). Two screens over the shared machines:
-// `words.make` (`VaultWordsBridge`) and `words.enter` (`WordsEntryBridge`).
+// `words.make` and `words.enter`, drawn from Rust's view state.
 //
 // **THESE VIEWS DECIDE NOTHING.** Every phase, every word a member reads, when
 // the primary control opens and what a verdict says arrive in the state; the
@@ -122,7 +129,9 @@ import dev.centraid.android.theme.LocalCentraidTokens
 // ---------------------------------------------------------------------------
 
 @Composable
-internal fun VaultWordsScreen(state: VaultWordsState, onEvent: (VaultWordsEvent) -> Unit) {
+internal fun VaultWordsScreen(state: WordsMakeState, onEvent: (WordsMakeEvent) -> Unit) {
+    SecureWindow(state.secure)
+    NoAutofill()
     WordsPage(testTag = "words-make", description = state.accessibility_label) {
         WordsHead(state.title, state.body)
         // CHOOSE (R-1047-E18): the vault's name, and whether it gets its own
@@ -133,12 +142,12 @@ internal fun VaultWordsScreen(state: VaultWordsState, onEvent: (VaultWordsEvent)
                 value = state.name,
                 enabled = true,
                 name = true,
-                onEdit = { text -> onEvent(VaultWordsEvent(name = VaultWordsEvent.NameTyped(text = text))) },
+                onEdit = { text -> onEvent(WordsMakeEvent(name = WordsNameTyped(text = text))) },
             )
         }
         if (state.own_label.isNotEmpty()) {
             WordsCheckbox(state.own_label, state.own_on, testTag = "words-make-own") { on ->
-                onEvent(VaultWordsEvent(own = VaultWordsEvent.OwnToggled(on = on)))
+                onEvent(WordsMakeEvent(own = WordsOwnToggled(on = on)))
             }
         }
         if (state.words.isNotEmpty()) ShownWords(state.words)
@@ -151,10 +160,10 @@ internal fun VaultWordsScreen(state: VaultWordsState, onEvent: (VaultWordsEvent)
             )
         }
         if (state.save_label.isNotEmpty() && state.words.isNotEmpty()) {
-            SaveCopyButton(state.save_label, state.words.map { it.word })
+            SaveCopyButton(state.save_label) { onEvent(WordsMakeEvent(save_copy = WordsSaveCopy())) }
         }
         WordsNotice(state.notice)
-        if (state.phase == VaultWordsState.Phase.PHASE_CHECKING || state.phase == VaultWordsState.Phase.PHASE_MAKING) {
+        if (state.phase == WordsMakeState.Phase.PHASE_CHECKING || state.phase == WordsMakeState.Phase.PHASE_MAKING) {
             Box(Modifier.fillMaxWidth().testTag("words-making"), contentAlignment = Alignment.Center) {
                 KitSpinner()
             }
@@ -166,12 +175,12 @@ internal fun VaultWordsScreen(state: VaultWordsState, onEvent: (VaultWordsEvent)
                 primaryEnabled = state.primary_enabled,
                 secondary = state.secondary_label,
                 prefix = "words-make",
-                onPrimary = { onEvent(VaultWordsEvent(primary = VaultWordsEvent.Primary())) },
-                onSecondary = { onEvent(VaultWordsEvent(secondary = VaultWordsEvent.Secondary())) },
+                onPrimary = { onEvent(WordsMakeEvent(primary = WordsPrimary())) },
+                onSecondary = { onEvent(WordsMakeEvent(secondary = WordsSecondary())) },
             )
             // ONE INK BUTTON: with the primary drawn, restoring is the outline.
             if (state.restore_label.isNotEmpty()) {
-                val restore = { onEvent(VaultWordsEvent(restore = VaultWordsEvent.RestoreTapped())) }
+                val restore = { onEvent(WordsMakeEvent(restore = WordsRestoreTapped())) }
                 if (state.primary_label.isEmpty()) {
                     InkButton(label = state.restore_label, testTag = "words-make-restore", onPress = restore)
                 } else {
@@ -184,7 +193,7 @@ internal fun VaultWordsScreen(state: VaultWordsState, onEvent: (VaultWordsEvent)
 
 /**
  * A CHECKBOX on the words screens: the make flow's "Give this vault its own
- * recovery key" (`VaultWordsState.own_label`).
+ * recovery key" (`WordsMakeState.own_label`).
  */
 @Composable
 private fun WordsCheckbox(label: String, on: Boolean, testTag: String, onToggle: (Boolean) -> Unit) {
@@ -211,27 +220,19 @@ private fun WordsCheckbox(label: String, on: Boolean, testTag: String, onToggle:
 }
 
 /**
- * SAVE A COPY (`VaultWordsState.save_label`). The words leave as one line of
- * text through the system chooser, so the member picks where they live — a
- * password manager, Files, a note only they can open. The machine hears
- * nothing back. Duty 2 above (no clipboard) is relaxed here, on the member's
- * own tap: the chooser carries the system's own Copy, which Android gives an
- * app no way to remove.
+ * SAVE A COPY (`WordsMakeState.save_label`). A tap sends `SaveCopy`; Rust answers
+ * with the generic `Share` effect (the words as one line through the system
+ * chooser), so the member picks where they live — a password manager, Files, a
+ * note only they can open. Duty 2 above (no clipboard) is relaxed there, on the
+ * member's own tap: the chooser carries the system's own Copy.
  */
 @Composable
-internal fun SaveCopyButton(label: String, words: List<String>) {
-    val context = LocalContext.current
+internal fun SaveCopyButton(label: String, onPress: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
             .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
-            .clickable {
-                val send = Intent(Intent.ACTION_SEND)
-                    .setType("text/plain")
-                    .putExtra(Intent.EXTRA_SUBJECT, WordsCopy.SAVE_SUBJECT)
-                    .putExtra(Intent.EXTRA_TEXT, words.joinToString(" "))
-                runCatching { context.startActivity(Intent.createChooser(send, label)) }
-            }
+            .clickable(onClick = onPress)
             .testTag("words-save-copy")
             .semantics { role = Role.Button },
         contentAlignment = Alignment.Center,
@@ -286,12 +287,12 @@ internal fun ShownWords(cells: List<WordCell>) {
 
 @Composable
 internal fun WordsEntryScreen(
-    state: WordsEntryState,
-    onEvent: (WordsEntryEvent) -> Unit,
+    state: WordsEnterState,
+    onEvent: (WordsEnterEvent) -> Unit,
     onScan: () -> Unit = {},
     onPhoto: () -> Unit = {},
 ) {
-    val working = state.phase == WordsEntryState.Phase.PHASE_WORKING
+    val working = state.phase == WordsEnterState.Phase.PHASE_WORKING
     val requesters = remember { mutableMapOf<Int, FocusRequester>() }
     var focus by remember { mutableStateOf<Int?>(null) }
     val focusManager = LocalFocusManager.current
@@ -309,11 +310,11 @@ internal fun WordsEntryScreen(
     // would pull the member away from the notice to the top of the page.
     var placed by remember { mutableStateOf(false) }
     LaunchedEffect(state.phase) {
-        if (state.phase == WordsEntryState.Phase.PHASE_ENTERING && !placed) {
+        if (state.phase == WordsEnterState.Phase.PHASE_ENTERING && !placed) {
             placed = true
             focus = 1
         }
-        if (state.phase != WordsEntryState.Phase.PHASE_ENTERING) {
+        if (state.phase != WordsEnterState.Phase.PHASE_ENTERING) {
             focus = null
             leaveFields()
         }
@@ -338,7 +339,7 @@ internal fun WordsEntryScreen(
                         enabled = !working,
                         requester = requesters.getOrPut(cell.position) { FocusRequester() },
                         onEdit = { text ->
-                            onEvent(WordsEntryEvent(typed = WordsEntryEvent.WordTyped(position = cell.position, text = text)))
+                            onEvent(WordsEnterEvent(typed = WordsWordTyped(position = cell.position, text = text)))
                             // A SPACE IS HOW A MEMBER MOVES ON: the keyboard goes
                             // at once — in this callback, not after a recomposition
                             // or the machine's answer — to the cell the next letter
@@ -354,7 +355,7 @@ internal fun WordsEntryScreen(
                             }
                         },
                         onPick = { word ->
-                            onEvent(WordsEntryEvent(picked = WordsEntryEvent.SuggestionPicked(position = cell.position, word = word)))
+                            onEvent(WordsEnterEvent(picked = WordsSuggestionPicked(position = cell.position, word = word)))
                             moveTo(cell.position + 1)
                         },
                         onNext = { moveTo(cell.position + 1) },
@@ -381,7 +382,7 @@ internal fun WordsEntryScreen(
                 label = state.endpoint_label,
                 value = state.endpoint,
                 enabled = !working,
-                onEdit = { text -> onEvent(WordsEntryEvent(endpoint = WordsEntryEvent.EndpointTyped(text = text))) },
+                onEdit = { text -> onEvent(WordsEnterEvent(endpoint = WordsEndpointTyped(text = text))) },
             )
         }
         // THE CODE IS SCANNED AS WELL AS PASTED, as pairing's is: the camera,
@@ -404,11 +405,11 @@ internal fun WordsEntryScreen(
         for ((index, line) in state.restored.withIndex()) RestoredLine(line, index)
         for ((index, line) in state.stayed.withIndex()) StayedLine(line, index)
         if (state.retry_label.isNotEmpty()) {
-            StayedRetry(state.retry_label) { onEvent(WordsEntryEvent(retry = WordsEntryEvent.Retry())) }
+            StayedRetry(state.retry_label) { onEvent(WordsEnterEvent(retry = WordsRetry())) }
         }
         if (state.words_label.isNotEmpty()) {
             StayedRetry(state.words_label, testTag = "words-use-words") {
-                onEvent(WordsEntryEvent(use_words = WordsEntryEvent.UseWords()))
+                onEvent(WordsEnterEvent(use_words = WordsUseWords()))
             }
         }
         WordsControls(
@@ -418,11 +419,11 @@ internal fun WordsEntryScreen(
             prefix = "words-enter",
             onPrimary = {
                 leaveFields()
-                onEvent(WordsEntryEvent(primary = WordsEntryEvent.Primary()))
+                onEvent(WordsEnterEvent(primary = WordsPrimary()))
             },
             onSecondary = {
                 leaveFields()
-                onEvent(WordsEntryEvent(secondary = WordsEntryEvent.Secondary()))
+                onEvent(WordsEnterEvent(secondary = WordsSecondary()))
             },
         )
     }
@@ -430,7 +431,7 @@ internal fun WordsEntryScreen(
 
 /**
  * One of the 24 cells: its number, the field, and the list words its prefix
- * could be — each a tap that sends `SuggestionPicked`.
+ * could be — each a tap that sends `WordsSuggestionPicked`.
  */
 @Composable
 private fun EntryCell(
@@ -577,7 +578,7 @@ private fun RestoredLine(line: RestoredVaultLine, index: Int) {
 }
 
 /**
- * One vault that stayed with the other phone (`WordsEntryState.stayed`,
+ * One vault that stayed with the other phone (`WordsEnterState.stayed`,
  * R-1047-R5): the machine's sentence behind a `seam` rule — "not yet, and not
  * wrong" (DESIGN.md), since the vault is safe where it is. The retry under the
  * list is [StayedRetry].

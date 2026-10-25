@@ -9,17 +9,9 @@ import centraid.core.v1.LockerItemRoute
 import centraid.core.v1.LockerLockRoute
 import centraid.core.v1.Route
 import dev.centraid.shared.chat.ChatSlots
-import dev.centraid.shared.custody.OwnKeyFiling
-import dev.centraid.shared.custody.VaultSecrets
-import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.shell.HomeReads
-import dev.centraid.shared.shell.HomeSession
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -47,7 +39,6 @@ public object LockerEntry {
     private const val UNLOCK_WAIT_MS: Long = 120_000L
 
     private val open = MutableStateFlow(false)
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /** Set by the shell: push [lock] on its stack. Unset, a card that needs the key stays sealed. */
     public var pushLock: (() -> Unit)? = null
@@ -83,20 +74,12 @@ public object LockerEntry {
     }
 
     /**
-     * An UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED (R-ONBOARD-10): the core seals a Locker
-     * secret only while the session is open. The shell calls this when Rust announces
-     * `locker.unlocked`.
+     * The shell heard Rust announce `locker.unlocked`: Home's tile and chat's key slot learn the
+     * Locker is open. (A vault's own key is filed in Locker by Rust: `custody.filing` hears the
+     * same announcement.)
      */
-    public fun unlocked(session: HomeSession) {
+    public fun unlocked() {
         open.value = true
-        scope.launch {
-            val services = platformServices()
-            runCatching {
-                OwnKeyFiling.filePending(session, VaultSecrets(services.secureStore, services.syncedSecrets)) {
-                    services.secureRandom.bytes(16)
-                }
-            }
-        }
     }
 
     /** Fill Home's tile and chat's slot. Called once at launch. */
