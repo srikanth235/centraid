@@ -23,13 +23,9 @@ import kotlinx.coroutines.launch
  * search. Inside Locker a row carries the `Route` Rust built; these are the only
  * routes the shell spells, because the caller holds an id and no row.
  *
- * It also keeps the one thing that still reaches Locker from KMP until the shell
- * lane ports Home: Home's tile asks whether the Locker is open
- * ([HomeReads.lockerOpen]). Chat's confirm card asks for the key itself now (the
- * owner check is an effect and the session a core step), so nothing here waits on
- * an unlock. The session is the core's and the wall is Rust's; this only mirrors
- * one fact the shell hears: Rust announced an unlock, a Locker view carried a
- * wall, or the app left the foreground.
+ * It also files the vault's own key when Rust announces an unlock. Chat's confirm
+ * card asks for the key itself (the owner check is an effect and the session a
+ * core step), so nothing here waits on an unlock.
  *
  * INTERIM: the shell lane (#1135) deletes this file.
  */
@@ -42,9 +38,6 @@ public object LockerEntry {
 
     private val open = MutableStateFlow(false)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
-    /** Set by the shell: push [lock] on its stack. Nothing asks for it since chat unlocks itself (H1 removes it). */
-    public var pushLock: (() -> Unit)? = null
 
     private fun route(screenId: String): Route = Route(screen = screenId)
 
@@ -91,10 +84,5 @@ public object LockerEntry {
                 }
             }
         }
-    }
-
-    /** Fill Home's tile. Called once at launch. */
-    public fun install() {
-        HomeReads.lockerOpen = { open.value }
     }
 }

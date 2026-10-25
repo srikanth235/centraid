@@ -743,7 +743,12 @@ private fun AttachmentChip(chip: ChatAttachment, removeLabel: String, onRemove: 
     ) {
         Box(Modifier.size(36.dp).background(centraidColor("skel")), contentAlignment = Alignment.Center) {
             if (thumbnail != null) {
-                Image(thumbnail.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                Image(
+                    thumbnail.asImageBitmap(),
+                    contentDescription = null, // decorative: the chip's label beside it names the attachment
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
             } else {
                 CentraidIcon(
                     if (chip.kind == ChatAttachment.Kind.KIND_DOCUMENT) "FileText" else "Image",

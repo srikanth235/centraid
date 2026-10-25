@@ -477,9 +477,6 @@ internal class RustRoot(
             next.environment(Locale.getDefault().toLanguageTag(), TimeZone.getDefault().id)
             next.start()
             next.navigate(NavEvent(pop_to_root = NavPopToRoot(tab = TAB)))
-            // ENTERING LOCKER FROM CHAT'S KEY SLOT: the one place a lock page is pushed.
-            LockerEntry.install()
-            LockerEntry.pushLock = { tellHome(HomeEvent(entry_asked = HomeEvent.EntryAsked(entry = HomeEvent.EntryAsked.Entry.ENTRY_LOCKER_LOCK))) }
         }
         // A PHOTOS HOME THAT OPENS LATER IS TOLD WHAT THE ROLL ALREADY SAID.
         home.launch {

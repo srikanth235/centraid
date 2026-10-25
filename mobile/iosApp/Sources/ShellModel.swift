@@ -337,16 +337,10 @@ final class ShellModel: ObservableObject {
         store.onContactsLimited = { [weak self] in self?.contactAccessPickerShown = true }
         screens = store
         // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED (R-ONBOARD-10), and when
-        // Home's tile and chat's key slot learn the Locker is open.
+        // An unlock is when the vault's own key can be filed (R-ONBOARD-10).
         store.onAnnounce = { [weak self] topic in
             guard topic == "locker.unlocked", let session = self?.session else { return }
             LockerEntry.shared.unlocked(session: session)
-        }
-        LockerEntry.shared.install()
-        LockerEntry.shared.pushLock = { [weak self] in
-            Task { @MainActor in
-                self?.screens?.sendHome(.entryAsked(.with { $0.entry = .lockerLock }))
-            }
         }
         Task {
             await store.start()
@@ -698,7 +692,7 @@ final class ShellModel: ObservableObject {
 
     /// Remember the scope a route gives the Chat tab.
     private func noteVisit(_ route: Route) {
-        guard let app = ChatRouting.app(of: route), app != "chat" else { return }
+        guard let app = ChatRouting.app(of: route), app != BandPolicy.shared.PLACE_CHAT else { return }
         // Rust keeps the ids that are chat scopes and opens every app's otherwise (`chat::scope_of`).
         lastVisitedApp = app
     }
