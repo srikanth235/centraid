@@ -24,7 +24,6 @@ use wire::notes_editor_event::Kind as N;
 use wire::screen_event::Kind as E;
 
 use super::{Phase, denied, fold, routes};
-use crate::agenda;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::autosave::{Autosave, Draft};
@@ -671,10 +670,7 @@ impl Screen for Editor {
         // SEND TO AGENDA: To-do's quick add, the words waiting in it (the Inbox
         // is where they land). Nothing is written until the member adds them.
         if !agenda_words.trim().is_empty() {
-            state.send_to_agenda = Some(agenda::routes::home(
-                wire::AgendaDestination::Todo,
-                agenda_words.trim(),
-            ));
+            state.send_to_agenda = Some(routes::send_to_agenda(agenda_words.trim()));
         }
         wire::ViewState {
             kind: Some(wire::view_state::Kind::NotesEditor(state)),

@@ -112,6 +112,20 @@ pub mod routes {
         }
     }
 
+    /// Agenda's To-do quick add with `title` waiting in it: the "Send to
+    /// Agenda" door. Built as the wire route Agenda's home registers under
+    /// (`agenda.home`), because a screen never names another app's module.
+    #[must_use]
+    pub fn send_to_agenda(title: &str) -> wire::Route {
+        route(
+            "agenda.home",
+            wire::route::Args::AgendaHome(wire::AgendaHomeRoute {
+                destination: wire::AgendaDestination::Todo as i32,
+                quick_add_title: title.to_owned(),
+            }),
+        )
+    }
+
     /// Notes' home on `place`; a notebook id (or `unfiled_only`) filters the
     /// Notes place, and `notebook_name` rides along for the heading.
     #[must_use]
