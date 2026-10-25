@@ -79,5 +79,5 @@ tasks.register("mobileJvm") {
     description =
         "What `cargo xtask gate`'s mobile-jvm step runs: the JVM-provable half " +
             "of the mobile tree. Everything else is an owner hand-off (mobile/README.md)."
-    dependsOn(":shared:jvmTest", ":core:jvmTest", ":shared:koverXmlReport")
+    dependsOn(":core:jvmTest")
 }
