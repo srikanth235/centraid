@@ -92,6 +92,9 @@ pub fn route(row: &RowRef, parent: &str, among: &[RowRef]) -> Option<wire::Route
         ("money", "transaction") => Some(money::routes::transaction(id, parent)),
         ("health", "workout") => Some(health::routes::workout(id, parent)),
         ("locker", "locker_item") => Some(locker_item(row, parent)),
+        // A kind with no page of its own opens its app. Locker is the exception: a
+        // row it does not name is not a reason to open the vault's secrets.
+        ("locker", _) => None,
         (app, _) => app_home(app),
     }
 }
@@ -147,6 +150,117 @@ mod tests {
     }
 
     #[test]
+    fn notes_rows_route_by_their_kind_a_note_to_its_editor_a_notebook_to_the_home_filtered_to_it() {
+        let note = route(&RowRef::new("notes", "note", "n1", "Plans"), "", &[]).unwrap();
+        let Some(wire::route::Args::NotesEditor(editor)) = note.args else {
+            panic!("not an editor");
+        };
+        assert_eq!(editor.note_id, "n1");
+        let book = route(&RowRef::new("notes", "notebook", "nb", "Cabin"), "", &[]).unwrap();
+        let Some(wire::route::Args::NotesHome(home)) = book.args else {
+            panic!("not a home");
+        };
+        assert_eq!(
+            (home.notebook_id.as_str(), home.notebook_name.as_str()),
+            ("nb", "Cabin")
+        );
+        assert_eq!(app_home("notes").unwrap().screen, notes::HOME);
+    }
+
+    #[test]
+    fn docs_rows_carry_the_pushing_pages_title_as_their_back_word() {
+        let folder = route(&RowRef::new("docs", "folder", "f1", "Taxes"), "Search", &[]).unwrap();
+        let Some(wire::route::Args::DocsDrive(drive)) = folder.args else {
+            panic!("not a drive");
+        };
+        assert_eq!(drive.destination, wire::DocsDestination::Folders as i32);
+        assert_eq!(
+            (
+                drive.folder_id.as_str(),
+                drive.folder_name.as_str(),
+                drive.parent.as_str()
+            ),
+            ("f1", "Taxes", "Search")
+        );
+        assert_eq!(
+            route(
+                &RowRef::new("docs", "document", "d1", "Lease"),
+                "Search",
+                &[]
+            ),
+            Some(docs::routes::document("d1", "Lease", "Search"))
+        );
+    }
+
+    #[test]
+    fn agenda_rows_route_by_their_kind_and_an_occurrence_carries_its_instance() {
+        let task = route(&RowRef::new("agenda", "task", "t1", ""), "", &[]).unwrap();
+        assert_eq!(task, agenda::routes::task("t1"));
+        let project = route(&RowRef::new("agenda", "project", "p1", "Garden"), "", &[]).unwrap();
+        assert_eq!(project, agenda::routes::project("p1", "Garden"));
+        let mut row = RowRef::new("agenda", "event", "e1", "");
+        row.qualifier = "2026-10-17".to_owned();
+        let event = route(&row, "", &[]).unwrap();
+        let Some(wire::route::Args::AgendaEvent(args)) = event.args else {
+            panic!("not an event");
+        };
+        assert_eq!(
+            (args.event_id.as_str(), args.instance_key.as_str()),
+            ("e1", "2026-10-17")
+        );
+        // A kind with no page opens Agenda's home, on Day.
+        let home = route(&RowRef::new("agenda", "tag", "x", ""), "", &[]).unwrap();
+        let Some(wire::route::Args::AgendaHome(args)) = home.args else {
+            panic!("not a home");
+        };
+        assert_eq!(args.destination, wire::AgendaDestination::Day as i32);
+    }
+
+    #[test]
+    fn health_and_people_rows_and_the_apps_that_open_their_home() {
+        assert_eq!(
+            route(&RowRef::new("health", "workout", "w1", ""), "Today", &[]),
+            Some(health::routes::workout("w1", "Today"))
+        );
+        // A day's total has no page of its own: it opens Health's front door.
+        assert_eq!(
+            route(
+                &RowRef::new("health", "daily_figure", "2026-10-20", ""),
+                "",
+                &[]
+            )
+            .unwrap()
+            .screen,
+            health::HOME
+        );
+        assert_eq!(
+            route(&RowRef::new("people", "tag", "x", ""), "", &[]),
+            app_home("people")
+        );
+        assert!(route(&RowRef::new("money", "tag", "x", ""), "", &[]).is_some());
+        assert!(route(&RowRef::new("photos", "tag", "x", ""), "", &[]).is_some());
+        assert!(route(&RowRef::new("weather", "forecast", "x", ""), "", &[]).is_none());
+        // A row Locker does not name is not a reason to open it.
+        assert!(route(&RowRef::new("locker", "tag", "x", ""), "", &[]).is_none());
+        // The tile's own door is the Locker's home.
+        assert_eq!(app_home("locker").unwrap().screen, locker::HOME);
+    }
+
+    #[test]
+    fn a_container_opens_where_its_app_opens_it() {
+        let cases = [
+            ("notes", "notebook", notes::HOME),
+            ("photos", "album", photos::SHELF),
+            ("agenda", "project", agenda::PROJECT),
+            ("docs", "folder", docs::DRIVE),
+        ];
+        for (app, entity, screen) in cases {
+            let opened = route(&RowRef::new(app, entity, "c1", "Cabin"), "", &[]).unwrap();
+            assert_eq!(opened.screen, screen, "{app} {entity}");
+        }
+    }
+
+    #[test]
     fn a_lightbox_pages_through_the_photographs_beside_it() {
         let row = RowRef::new("photos", "photo", "b", "");
         let among = [
@@ -191,6 +305,26 @@ mod tests {
         row.qualifier = "export:".to_owned();
         assert_eq!(screen(route(&row, "", &[])), locker::EXPORT);
         // A reveal naming no column is only the item.
+        // no action, an unknown one, or one with no field: the plain card, never a crash
+        for plain in [
+            "",
+            "wipe:password",
+            "reveal:",
+            "reveal",
+            ":password",
+            "2026-10-08",
+        ] {
+            row.qualifier = plain.to_owned();
+            let Some(wire::Route {
+                args: Some(wire::route::Args::LockerItem(item)),
+                ..
+            }) = route(&row, "Chat", &[])
+            else {
+                panic!("not an item for `{plain}`");
+            };
+            assert!(item.follow.is_empty(), "`{plain}` follows nothing");
+            assert_eq!(item.parent, "Chat");
+        }
         row.qualifier = "reveal:".to_owned();
         let Some(wire::Route {
             args: Some(wire::route::Args::LockerItem(item)),
