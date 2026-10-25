@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// The access history's events, built once.
 enum LockerAccessEvents {
     static func make(_ build: (inout Centraid_Core_V1_LockerAccessEvent) -> Void) -> Centraid_Core_V1_LockerAccessEvent {

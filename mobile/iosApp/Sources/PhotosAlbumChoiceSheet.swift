@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// "ADD TO ALBUM", drawn from the core's `PhotosAlbumChoice` (#1135): the
 /// lightbox, the library and a shelf each hold one in Rust, so this draws the
 /// sheet and sends its events and decides nothing. A refused list arrives empty

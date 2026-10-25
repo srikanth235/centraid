@@ -220,7 +220,7 @@ struct AgendaHomeView: View {
                     onAction: offersImport ? nil : { if state.hasNewEvent { open(state.newEvent) } }
                 )
                 if offersImport {
-                    CalendarImportButton(identifier: "kit-empty-import", send: send)
+                    CalendarImportButton(label: home.importLabel, identifier: "kit-empty-import", send: send)
                 }
             }
         } else {
@@ -263,11 +263,13 @@ enum AgendaEvents {
 /// (`ImportRequested`; Rust asks this shell to read the calendar through the
 /// `CalendarRead` effect).
 private struct CalendarImportButton: View {
+    /// Rust's words (`import_label`, "Import calendar").
+    let label: String
     let identifier: String
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
 
     var body: some View {
-        KitOutlineButton(label: importLabel(.calendar)) {
+        KitOutlineButton(label: label) {
             send(AgendaEvents.make { $0.importRequested = .init() })
         }
         .accessibilityIdentifier(identifier)
@@ -339,7 +341,7 @@ private struct AgendaList: View {
                         // birthdays): the phone's calendar is offered quietly above
                         // them, at the point of use.
                         if home.importSource == .calendar {
-                            CalendarImportButton(identifier: "agenda-import", send: send)
+                            CalendarImportButton(label: home.importLabel, identifier: "agenda-import", send: send)
                                 .padding(.horizontal, CentraidGeometry.pageMargin)
                                 .padding(.vertical, 8)
                         }

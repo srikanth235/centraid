@@ -2,8 +2,6 @@ import SwiftUI
 import AVFoundation
 import UIKit
 
-import CentraidShared
-
 /// THE DRIVE — All · Folders · Starred, More as a sheet; and, pushed over it,
 /// a folder's page (#1046, #1135).
 ///
@@ -136,7 +134,6 @@ struct DocsDriveView: View {
         }
         .onAppear {
             reportPermissions()
-            reportFollowed()
         }
     }
 
@@ -456,23 +453,6 @@ struct DocsDriveView: View {
         send(Self.event { $0.permission = .with { $0.surface = .camera; $0.permission = camera } })
         // The document picker needs no grant: it runs out of process.
         send(Self.event { $0.permission = .with { $0.surface = .files; $0.permission = .granted } })
-    }
-
-    /// THE FOLDERS FOLLOWED, REPORTED (law 4): the More sheet lists them.
-    private func reportFollowed() {
-        DocsFollow.shared.followed { folders in
-            send(Self.event {
-                $0.followedChanged = .with {
-                    $0.followed = folders.map { folder -> Centraid_Core_V1_DocsFollowed in
-                        var followed = Centraid_Core_V1_DocsFollowed()
-                        followed.originID = folder.phoneOrigin
-                        followed.name = folder.name
-                        followed.documents = folder.documents
-                        return followed
-                    }
-                }
-            })
-        }
     }
 
     private func sheetBinding(_ state: Centraid_Core_V1_DocsDriveState) -> Binding<Bool> {

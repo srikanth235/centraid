@@ -36,7 +36,7 @@ enum PhotoEffects {
         guard let bytes = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
             return failed("the edited photo could not be read")
         }
-        guard let handle = await stage(bytes, mediaType: "image/jpeg", core: core) else {
+        guard case let .staged(handle) = await StageDoor.stage(core, bytes: bytes, StageDoor.Begin(mediaType: "image/jpeg")) else {
             return failed("the edited photo could not be staged")
         }
         var done = Centraid_Core_V1_EditRendered()
@@ -46,46 +46,6 @@ enum PhotoEffects {
         done.height = UInt32(height)
         done.byteSize = handle.byteSize
         return .editRendered(done)
-    }
-
-    /// THE STAGE DOOR, in three frames: begin, the chunks the core's ceiling
-    /// allows, end. The core hashes and stores; the screen's `upload` claims.
-    private static func stage(
-        _ bytes: Data,
-        mediaType: String,
-        core: any ScreenCore
-    ) async -> Centraid_Core_V1_StageHandle? {
-        func send(_ kind: Centraid_Core_V1_StageRequest.OneOf_Kind) async -> Centraid_Core_V1_StageResponse? {
-            var stage = Centraid_Core_V1_StageRequest()
-            stage.kind = kind
-            var request = Centraid_Core_V1_Request()
-            request.kind = .stage(stage)
-            guard let response = try? await core.call(request), case let .stage(answer)? = response.kind
-            else { return nil }
-            return answer
-        }
-        var begin = Centraid_Core_V1_StageBegin()
-        begin.mediaType = mediaType
-        begin.byteSize = UInt64(bytes.count)
-        begin.source = .owned
-        guard let begun = await send(.begin(begin)), case let .begun(opened)? = begun.kind else { return nil }
-        let ceiling = max(1, Int(opened.chunkBytes))
-        var sequence: UInt64 = 0
-        var offset = 0
-        while offset < bytes.count {
-            let end = min(bytes.count, offset + ceiling)
-            var chunk = Centraid_Core_V1_StageChunk()
-            chunk.stagingID = opened.stagingID
-            chunk.seq = sequence
-            chunk.payload = bytes.subdata(in: offset..<end)
-            guard await send(.chunk(chunk)) != nil else { return nil }
-            sequence += 1
-            offset = end
-        }
-        var finish = Centraid_Core_V1_StageEnd()
-        finish.stagingID = opened.stagingID
-        guard let ended = await send(.end(finish)), case let .handle(handle)? = ended.kind else { return nil }
-        return handle
     }
 
     private static func failed(_ reason: String) -> Centraid_Core_V1_EffectResult.OneOf_Outcome {

@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 // THE CONTROLS (DESIGN.md "The controls (mobile)").
 //
 // Chrome is the platform's; content is the kit's. The navigation bar draws its

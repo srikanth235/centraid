@@ -1,8 +1,6 @@
 import SwiftUI
 import UIKit
 
-import CentraidShared
-
 // THE LIBRARY'S DRAWING, IN SWIFTUI (#1029, photos port — v0's `PhotoTimeline.tsx`,
 // `PhotoGrainView.tsx`, `ScrubRail.tsx`, `TimelineGrainControl.tsx`; #1135).
 //
@@ -65,7 +63,6 @@ struct PhotosLibraryBody: View {
     let library: Centraid_Core_V1_PhotosLibrary
     let send: (Centraid_Core_V1_PhotosHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
-    let onResume: () -> Void
     /// WHERE THE MEMBER IS STANDING (capture-local `YYYY-MM-DD`), written as the
     /// list scrolls, so a grain switch can land on the same stretch of time.
     @Binding var visibleDay: String
@@ -126,10 +123,8 @@ struct PhotosLibraryBody: View {
         // day, and the list moves to it once.
         .onChange(of: library.placeDay) { _, day in land(on: day) }
         .onChange(of: library.grain) { _, _ in land(on: library.placeDay) }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            // WHAT BROUGHT THE MEMBER BACK FROM SETTINGS: the grant is read again.
-            if state.hasImportBanner, state.importBanner.remedy != .unspecified { onResume() }
-        }
+        // WHAT BROUGHT THE MEMBER BACK FROM SETTINGS is heard in Rust: coming forward walks the
+        // camera roll, whose head reads the grant again and tells this home.
     }
 
     @ViewBuilder

@@ -5,7 +5,7 @@ import Foundation
 // Lifted out of `HomeView.swift` so a port renders an amount by naming the kit and
 // never by reaching into Home. `contracts/screens/money-render.json` is the law
 // both shells answer to: `MoneyRenderTests` asserts this renderer against it and
-// the JVM `MoneyRenderSpec` asserts Android's `formatMoney`, so the two cannot
+// Android's `MoneyRenderTest` asserts its `formatMoney`, so the two cannot
 // drift. An EMPTY locale means the device's, which no fixture can pin.
 
 /// THE ONE SWIFT FORMATTER, for every surface that draws an amount, and the

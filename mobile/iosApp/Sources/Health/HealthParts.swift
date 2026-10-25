@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 // HEALTH'S SHARED DRAWING PARTS (#1129, #1135).
 //
 // Every word, number and unit here is the state's, and every length is the state's basis points
@@ -307,7 +305,7 @@ struct HealthBarChart: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        let hue = scheme.centraidMarks[AppIds.shared.HEALTH]?.hue ?? Theme.color("text", scheme)
+        let hue = scheme.centraidMarks["health"]?.hue ?? Theme.color("text", scheme)
         let spacing: CGFloat = data.bars.count > 14 ? 3 : 8
         VStack(alignment: .leading, spacing: 8) {
             GeometryReader { proxy in

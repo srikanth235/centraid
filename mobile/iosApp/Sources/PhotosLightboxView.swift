@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// What a lightbox view sends: one arm of `PhotosLightboxEvent`.
 typealias PhotosLightboxSend = Centraid_Core_V1_PhotosLightboxEvent.OneOf_Kind
 

@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// `health.workout` — one workout (#1129, #1135), on the kit.
 ///
 /// **THE VIEW DECIDES NOTHING.** The kind, the title, when, each figure the store measured with

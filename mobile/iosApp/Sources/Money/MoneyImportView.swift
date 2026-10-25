@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// `money.import` — pick a statement, read the plan, publish (#1099).
 ///
 /// The file, the account a CSV goes into, then the plan the core made of it,

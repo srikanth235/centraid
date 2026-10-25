@@ -6,8 +6,6 @@ import SwiftUI
 import UIKit
 #endif
 
-import CentraidShared
-
 /// THE PHOTO EDITOR — crop, rotate, straighten, flip (#1135): `photos.editor`,
 /// drawn. The Compose twin is `PhotosEditorScreen.kt`. Everything this view
 /// SAYS is Rust's (the status line, the two live labels, the refusal, the ratio

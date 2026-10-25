@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// The item page's events, built once.
 enum LockerItemEvents {
     static func make(_ build: (inout Centraid_Core_V1_LockerItemEvent) -> Void) -> Centraid_Core_V1_LockerItemEvent {

@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// SEARCH, IN SWIFTUI (#1029, the photos port; #1135).
 ///
 /// Four states behind one destination, and the distinction the whole screen

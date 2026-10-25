@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// `money.home` — Spending · Activity · Cash flow, More a sheet (#1099), on the kit.
 ///
 /// **THE VIEW DECIDES NOTHING.** `MoneyHomeState` carries the band, the chips,
@@ -10,7 +8,7 @@ import CentraidShared
 /// `ReadStateView` owns loading, failure and the denied gate (no band while
 /// denied). The header's Plus is the app's create verb: rows enter by import.
 /// Search is a door (R-CHROME-2): the bar never opens in place, it pushes the
-/// search page. Where each intent leads is `MoneyScreens.routeIntent`.
+/// search page. Where each intent leads is Rust's (`crates/screens`).
 struct MoneyHomeView: View {
     let data: Data
     let send: (Data) -> Void

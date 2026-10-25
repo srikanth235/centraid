@@ -1,8 +1,6 @@
 import SwiftProtobuf
 import SwiftUI
 
-import CentraidShared
-
 // MONEY'S SHARED DRAWING PARTS (#1099).
 //
 // Every word here is the state's. An amount is the vault's `Money{minor,

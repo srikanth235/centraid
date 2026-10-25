@@ -81,7 +81,7 @@ final class LibraryDeletionTests: XCTestCase {
     }
 
     func testTheVersionIsSpelledTheWayTheWalkerSpellsIt() {
-        // `IosMediaLibrary.modifiedMillisOf`: seconds * 1000, truncated.
+        // `PhoneLibrary`'s own spelling of a version: seconds * 1000, truncated.
         XCTAssertEqual(LibraryDeletion.modifiedMillis(Date(timeIntervalSince1970: 1_760_000_000.5)), 1_760_000_000_500)
         XCTAssertEqual(LibraryDeletion.modifiedMillis(nil), 0)
     }

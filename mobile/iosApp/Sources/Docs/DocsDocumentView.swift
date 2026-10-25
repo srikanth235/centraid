@@ -2,8 +2,6 @@ import AVKit
 import PDFKit
 import SwiftUI
 
-import CentraidShared
-
 /// ONE DOCUMENT'S PAGE (#1046, #1135): its surface — the reader (text), the
 /// stage (image, video, PDF), facts only, or gone — then its path, facts, a row
 /// to its version history, activity, and the verbs Rust offers.

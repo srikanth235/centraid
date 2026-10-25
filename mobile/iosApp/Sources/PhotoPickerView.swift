@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// ADDING PHOTOGRAPHS TO AN ALBUM, drawn from the core's `PhotosPickerState`
 /// (#1135): the library as a grid with what the album already holds drawn as
 /// taken, the one filled button, and the sentence "an album points to a photo
@@ -55,6 +53,7 @@ struct PhotoPickerView: View {
                             cells: data.cells.map(\.tile),
                             selected: Set(data.cells.filter(\.picked).map(\.tile.photoID)),
                             taken: Set(data.cells.filter(\.taken).map(\.tile.photoID)),
+                            takenLabel: data.takenLabel,
                             onTap: { identifier in event { $0.pick = .with { $0.photoID = identifier } } }
                         )
                         if data.canShowMore {

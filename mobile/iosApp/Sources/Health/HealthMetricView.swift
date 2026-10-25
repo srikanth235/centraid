@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// `health.metric` — one metric over a week, a month or a year (#1129, #1135), on the kit.
 ///
 /// **THE VIEW DECIDES NOTHING.** The segments, the caption, the average and its unit, the line

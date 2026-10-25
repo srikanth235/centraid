@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// PLACES — THE SHELF AND THE PLOT, ON ONE SCREEN, drawn from the core's
 /// `PhotosPlacesState` (#1135). Cards or a map is a parameter Rust holds; the
 /// control at the top swaps the body over rows already on screen. A row carries

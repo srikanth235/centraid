@@ -1,7 +1,6 @@
 import Combine
 import Contacts
 import EventKit
-import CentraidShared
 import Foundation
 import Security
 import SwiftProtobuf
@@ -12,9 +11,11 @@ import PhotosUI
 import UIKit
 #endif
 
-/// WHAT THE STORE TALKS TO: the core, or whatever carries its bytes (`Core`).
+/// WHAT THE STORE TALKS TO: the core (`Core`), or a test's stand-in for it.
 protocol ScreenCore: Sendable {
     func call(_ request: Centraid_Core_V1_Request) async throws -> Centraid_Core_V1_Response
+    /// The same call on a lane of its own (`Core.Lane`): the stage door's bytes.
+    func call(_ request: Centraid_Core_V1_Request, lane: Core.Lane) async throws -> Centraid_Core_V1_Response
     var updates: AsyncStream<Centraid_Core_V1_ScreenUpdate> { get }
 }
 
@@ -33,11 +34,8 @@ final class ScreenStore: ObservableObject {
     @Published private(set) var navigation: Centraid_Core_V1_Navigation?
     @Published private(set) var views: [UInt64: Centraid_Core_V1_ViewState] = [:]
 
-    /// Told when Rust announces something the shell may act on (`locker.unlocked`).
+    /// Told when Rust announces something the shell may act on (a gateway paired).
     var onAnnounce: ((String) -> Void)?
-    /// WHETHER THE PLATFORM TOOK A BACKGROUND WINDOW, as the session last registered
-    /// it (`BackgroundProbe`); nil before it says. Asking registers nothing.
-    var backgroundRegistered: (() -> Bool?)?
 
     private let core: any ScreenCore
     private var closed: Set<UInt64> = []
@@ -49,25 +47,16 @@ final class ScreenStore: ObservableObject {
     /// OPEN A PAGE NOW, wherever the member is (`OpenRoute`): the shell pushes the
     /// route as it pushes a tapped row's route. Set by `ShellModel`.
     var onOpenRoute: ((Centraid_Core_V1_Route) -> Void)?
-    /// WHAT HOME ASKED OF THE SHELF (`VaultCommand`): switch, make, restore, forget,
-    /// rename, or open a settings door. The vault files are the shell's; which and
-    /// when is Rust's. Set by `ShellModel`.
-    var onVaultCommand: ((Centraid_Core_V1_VaultCommand) -> Void)?
     /// Home's `scheme` moved (the member's light/dark choice, which Rust keeps).
     var onHomeScheme: ((Centraid_Core_V1_HomeScheme) -> Void)?
-    /// Home's first view arrived: the shell tells it what the shelf already holds.
+    /// Home's first view arrived: the shell tells it the phone's scheme.
     var onHomeAppeared: (() -> Void)?
     private var homeTold: UInt64?
     /// An import over iOS's limited contact access: the shell raises the system's picker.
     var onContactsLimited: (() -> Void)?
+    /// THE LINK NOW, for the camera roll's `LinkRead` (`LinkReporter.reading`).
+    var linkReading: (() -> Centraid_Core_V1_LinkReading)?
 
-    /// THE CAMERA ROLL AND THE PHOTOS DEVICE (#1135, lane D): the roll, the free-up
-    /// flow and an original back from the gateway are the shell's, not a screen's.
-    /// Rust asks for them as effects and learns the grant and each pass's progress
-    /// as events, which this forwards to every Photos home that is open.
-    var photos: PhotosDevice? {
-        didSet { if photos != nil, oldValue == nil { observePhotos() } }
-    }
     /// THE PASS SCHEDULER'S WINDOWS (`passes` in Rust): a granted background window waits
     /// here, by name, for `PassWindowDone`, which carries the answer `setTaskCompleted` takes.
     private var windowWaiters: [String: CheckedContinuation<Bool, Never>] = [:]
@@ -76,28 +65,27 @@ final class ScreenStore: ObservableObject {
     #if os(iOS)
     private var backgroundGrace: ForegroundGrace?
     #endif
-    /// What the roll last said (the grant, the pass), replayed to a Photos home
-    /// that opens after it said so.
-    private var rollEvents: [Int: Centraid_Core_V1_PhotosHomeEvent] = [:]
-    private var rollTold: Set<UInt64> = []
+    /// EACH SCREEN'S EFFECTS, PERFORMED IN THE ORDER IT ASKED (`docs/screens.md`, phone
+    /// imports): a service tells its answers apart by what they answer, so a cursor write that is
+    /// answered after the wait behind it would be taken for the wait. One queue per instance; an
+    /// effect that answers more than once and for long (a model download, a browse, a pick)
+    /// answers through its own callback and does not hold the queue.
+    private var queues: [UInt64: [Centraid_Core_V1_EffectRequest]] = [:]
+    private var running: Set<UInt64> = []
+    /// The `words.make` instances whose made vault the made-vault imports were told of.
+    private var madeTold: Set<UInt64> = []
 
     init(core: any ScreenCore) {
         self.core = core
-    }
-
-    private func observePhotos() {
-        photos?.observe { [weak self] bytes in
-            guard let event = try? Centraid_Core_V1_PhotosHomeEvent(serializedBytes: bytes.data) else { return }
-            Task { @MainActor in self?.rollSaid(event) }
+        #if os(iOS)
+        // THE PHOTO LIBRARY CHANGED while the app is in view: a nudge to the camera roll.
+        LibraryWatcher.shared.onChange = { [weak self] in
+            var event = Centraid_Core_V1_ImportsCameraRollEvent()
+            event.libraryChanged = .init()
+            self?.sendRoot(RustScreens.cameraRollTab, .importsCameraRoll(event))
         }
-    }
-
-    /// The roll said something: keep it, and tell every Photos home on screen.
-    private func rollSaid(_ event: Centraid_Core_V1_PhotosHomeEvent) {
-        rollEvents[event.permissionKey] = event
-        for instance in views.keys where views[instance]?.isPhotosHome == true {
-            send(instance, .photosHome(event))
-        }
+        LibraryWatcher.shared.registerIfAllowed()
+        #endif
     }
 
     /// Apply the core's pushed updates for as long as it lives, then open the
@@ -169,13 +157,46 @@ final class ScreenStore: ObservableObject {
         report(.expired(expired))
     }
 
-    /// Report the device's locale, zone and OS; Rust formats from them.
+    /// Report the device's locale, zone and OS, and that Photos deletes from the
+    /// library behind its own confirmation; Rust formats from them and offers
+    /// "Free up space" only where the platform can.
     func reportEnvironment() {
         var environment = Centraid_Core_V1_Environment()
         environment.locale = Locale.current.identifier
         environment.zone = TimeZone.current.identifier
         environment.platform = "ios"
+        environment.libraryDeletes = true
         Task { await request(.environment(environment)) }
+    }
+
+    /// THE OS WANTS ITS MEMORY BACK: the shelf closes every vault's core but the one in front.
+    func memoryWarning() {
+        Task { await request(.memoryWarning(Centraid_Core_V1_MemoryWarning())) }
+    }
+
+    /// THE CERTIFICATES THE BACKGROUND MOVER PINS: the core's `pins`, read from the ledger of
+    /// the vault in front; nil when it would not answer.
+    func pins() async -> [Centraid_Core_V1_Destination]? {
+        var request = Centraid_Core_V1_Request()
+        request.kind = .pins(Centraid_Core_V1_PinsRequest())
+        guard let response = try? await core.call(request), case let .pins(answer)? = response.kind else { return nil }
+        return answer.destinations
+    }
+
+    /// Send `event` to the root of `tab`: the phone imports' hidden tabs, which the shell
+    /// tells only what the platform alone knows.
+    func sendRoot(_ tab: String, _ event: Centraid_Core_V1_ScreenEvent.OneOf_Kind) {
+        guard let root = entries(of: tab).first?.instance else { return }
+        send(root, event)
+    }
+
+    /// THE MADE VAULT'S ONE LINE (`imports.made`, the root of its hidden tab): what came in,
+    /// and the app it opens. Nil before it has a view.
+    var madeLine: Centraid_Core_V1_ImportsMadeState? {
+        guard let root = entries(of: RustScreens.madeTab).first?.instance,
+            case let .importsMade(state)? = views[root]?.kind
+        else { return nil }
+        return state
     }
 
     /// Push a route onto a tab and answer the instance Rust opened for it, or
@@ -249,6 +270,7 @@ final class ScreenStore: ObservableObject {
         for id in update.closed {
             closed.insert(id)
             views[id] = nil
+            queues[id] = nil
             // A BROWSE LASTS AS LONG AS THE SCREEN THAT ASKED FOR IT.
             GatewayBrowsing.shared.stop(id)
         }
@@ -262,19 +284,45 @@ final class ScreenStore: ObservableObject {
                     onHomeAppeared?()
                 }
             }
-            // A PHOTOS HOME THAT OPENS AFTER THE ROLL SPOKE is told what it said.
-            if view.isPhotosHome, rollTold.insert(view.instance).inserted {
-                for event in rollEvents.values { send(view.instance, .photosHome(event)) }
+            // A VAULT WAS JUST MADE: the made-vault imports hear it (the photo prompt, then
+            // the contacts, the calendar and the reminders, each its own ask).
+            if case let .wordsMake(make)? = view.kind, make.finished, !make.madeLine.isEmpty,
+                madeTold.insert(view.instance).inserted
+            {
+                var made = Centraid_Core_V1_ImportsMadeEvent()
+                made.made = .with { $0.reminders = true }
+                sendRoot(RustScreens.madeTab, .importsMade(made))
             }
         }
-        for effect in update.effects { perform(effect) }
+        for effect in update.effects { enqueue(effect) }
+    }
+
+    /// Queue `request` behind what its screen asked before, and run the queue.
+    private func enqueue(_ request: Centraid_Core_V1_EffectRequest) {
+        queues[request.instance, default: []].append(request)
+        drain(request.instance)
+    }
+
+    private func drain(_ instance: UInt64) {
+        guard !running.contains(instance), var queue = queues[instance], !queue.isEmpty else { return }
+        let next = queue.removeFirst()
+        queues[instance] = queue
+        running.insert(instance)
+        Task {
+            await perform(next)
+            running.remove(instance)
+            drain(instance)
+        }
     }
 
     // MARK: - effects
 
-    /// Perform what Rust asked and answer it by `effect_id`. An answer may come
-    /// later (a calendar read); a screen popped meanwhile tolerates it.
-    private func perform(_ request: Centraid_Core_V1_EffectRequest) {
+    /// Perform what Rust asked and answer it by `effect_id`. Returns once the one answer is
+    /// given; an effect that answers later, or more than once, answers through its own callback
+    /// and returns at once, so its screen's next effect is not held behind a member's pick. A
+    /// screen popped meanwhile tolerates a late answer.
+    private func perform(_ request: Centraid_Core_V1_EffectRequest) async {
+        let done = Centraid_Core_V1_EffectResult.OneOf_Outcome.done(Centraid_Core_V1_EffectDone())
         switch request.effect.kind {
         #if os(iOS)
         case .clipboardSet(let set)?:
@@ -291,60 +339,66 @@ final class ScreenStore: ObservableObject {
             } else {
                 UIPasteboard.general.string = set.text
             }
-            answer(request, .done(Centraid_Core_V1_EffectDone()))
+            answer(request, done)
         case .clipboardClear(let clear)?:
             // Only what the core put there: never clear something the member copied since.
             if UIPasteboard.general.string == clear.expectedText { UIPasteboard.general.string = "" }
-            answer(request, .done(Centraid_Core_V1_EffectDone()))
+            answer(request, done)
         case .haptic(let haptic)?:
             Self.play(haptic.kind)
-            answer(request, .done(Centraid_Core_V1_EffectDone()))
+            answer(request, done)
         case .share(let share)?:
             Self.present(share)
-            answer(request, .done(Centraid_Core_V1_EffectDone()))
+            answer(request, done)
         case .openURL(let link)?:
             if let url = URL(string: link.url) {
                 UIApplication.shared.open(url)
-                answer(request, .done(Centraid_Core_V1_EffectDone()))
+                answer(request, done)
             } else {
                 answer(request, .failed(Self.failure("not a URL")))
             }
         case .exportOriginals(let export)?:
             // THE ORIGINALS OF A PICK, to the share sheet or this phone's photos.
-            Task { [core] in
-                let outcome = await ShelfCopyExport.run(export, core: core)
-                answer(request, outcome)
-            }
+            answer(request, await ShelfCopyExport.run(export, core: core))
         case .openMap(let map)?:
             var components = URLComponents(string: "https://maps.apple.com/")
             components?.queryItems = [URLQueryItem(name: "q", value: map.query)]
             if let url = components?.url {
                 UIApplication.shared.open(url)
-                answer(request, .done(Centraid_Core_V1_EffectDone()))
+                answer(request, done)
             } else {
                 answer(request, .failed(Self.failure("not an address")))
             }
-        #endif
         case .cameraRoll(let roll)?:
-            answer(request, performCameraRoll(roll))
-        case .freeUpSpace(let space)?:
-            guard let photos else {
-                answer(request, .failed(Self.failure("this shell has no photos device")))
-                return
-            }
-            photos.freeUp(free: space.action == .free) { [weak self] bytes in
-                guard let facts = try? Centraid_Core_V1_FreeUpFacts(serializedBytes: bytes.data) else { return }
-                Task { @MainActor in self?.answer(request, .freeUpFacts(facts)) }
-            }
-        case .fetchOriginal(let fetch)?:
-            guard let photos else {
-                answer(request, .failed(Self.failure("this shell has no photos device")))
-                return
-            }
-            photos.fetchOriginal(contentHash: fetch.contentHash) { [weak self] bytes in
-                guard let fetched = try? Centraid_Core_V1_OriginalFetched(serializedBytes: bytes.data) else { return }
-                Task { @MainActor in self?.answer(request, .originalFetched(fetched)) }
-            }
+            answer(request, Self.cameraRoll(roll))
+        // THE PHONE IMPORTS (#1135, `imports`): the library, its link, its stage and its
+        // derivatives; the folders; the reminders. Every decision is Rust's.
+        case .libraryPermission(let permission)?:
+            var read = Centraid_Core_V1_LibraryPermissionRead()
+            read.permission = permission.ask ? await PhoneLibrary.requestPermission() : PhoneLibrary.permission()
+            answer(request, .libraryPermissionRead(read))
+        case .rollPage(let page)?:
+            let paged = await Task.detached(priority: .utility) {
+                await PhoneLibrary.page(cursor: page.cursor, limit: Int(page.limit))
+            }.value
+            answer(request, .rollPaged(paged))
+        case .libraryStage(let stage)?:
+            answer(request, .libraryStaged(await PhoneLibrary.stage(stage, core: core)))
+        case .libraryDerivatives(let derivatives)?:
+            await PhoneLibrary.derivatives(derivatives, core: core)
+            answer(request, done)
+        case .libraryDelete(let delete)?:
+            answer(request, .libraryDeleted(await PhotoLibraryDeleter.delete(delete)))
+        #endif
+        case .linkRead?:
+            answer(request, .linkReading(linkReading?() ?? Self.unknownLink))
+        case .foldersRead(let read)?:
+            let listing = await Task.detached(priority: .utility) { FolderReader.list(read) }.value
+            answer(request, .foldersListing(listing))
+        case .stageFolderFile(let file)?:
+            answer(request, .folderFileStaged(await FolderReader.stage(file, core: core)))
+        case .remindersRead(let read)?:
+            answer(request, await PhoneReminders.snapshot(read))
         // THE VAULT'S SECRETS (lane H2): the device-only and synchronised stores, and
         // whether the synchronised one would carry a key to another device.
         case .secrets(let batch)?:
@@ -354,13 +408,17 @@ final class ScreenStore: ObservableObject {
         case .keychain(let operation)?:
             answer(request, Self.keychain(operation))
         case .backgroundProbe?:
-            if let registered = backgroundRegistered?() {
+            #if os(iOS)
+            if let registered = BackgroundPasses.registered {
                 var status = Centraid_Core_V1_BackgroundStatus()
                 status.registered = registered
                 answer(request, .backgroundStatus(status))
             } else {
                 answer(request, .failed(Self.failure("this shell has not registered its background windows")))
             }
+            #else
+            answer(request, .failed(Self.failure("no background windows on this platform")))
+            #endif
         // THE PASS SCHEDULER (#1135, `passes`): Rust decides which windows exist, when a pass ran
         // and what the OS carries; this performs and answers.
         case .scheduleWindows(let schedule)?:
@@ -369,13 +427,13 @@ final class ScreenStore: ObservableObject {
             #else
             answer(request, .failed(Self.failure("no background windows on this platform")))
             #endif
-        case .passWindowDone(let done)?:
+        case .passWindowDone(let finished)?:
             #if os(iOS)
-            if done.window == "entered-background" {
+            if finished.window == "entered-background" {
                 backgroundGrace?.end()
                 backgroundGrace = nil
             }
-            windowWaiters.removeValue(forKey: done.window)?.resume(returning: done.drained)
+            windowWaiters.removeValue(forKey: finished.window)?.resume(returning: finished.drained)
             #endif
             answer(request, .passNoted(Centraid_Core_V1_PassNoted()))
         case .longRun(let run)?:
@@ -390,17 +448,11 @@ final class ScreenStore: ObservableObject {
             #else
             answer(request, .failed(Self.failure("the OS carries no uploads on this platform")))
             #endif
-        case .streamFromLibrary?:
-            // The roll's second stream is the camera roll's (lane I); a shell that has none lands nothing.
-            answer(request, .failed(Self.failure("not performed by this shell")))
         case .ownerCheck(let check)?:
-            Task {
-                let outcome = await OwnerCheckPerformer.run(check)
-                answer(request, outcome)
-            }
+            answer(request, await OwnerCheckPerformer.run(check))
         case .announce(let note)?:
             onAnnounce?(note.topic)
-            answer(request, .done(Centraid_Core_V1_EffectDone()))
+            answer(request, done)
         #if os(iOS)
         case .pickBytes(let pick)?:
             FilePerformer.pick(pick) { [weak self] outcome in self?.answer(request, outcome) }
@@ -415,42 +467,41 @@ final class ScreenStore: ObservableObject {
                 self?.answer(request, outcome)
             }
         case .calendarRead(let read)?:
-            Task {
-                let outcome = await PhoneCalendar.snapshot(read)
-                answer(request, outcome)
-            }
+            answer(request, await PhoneCalendar.snapshot(read))
         case .contactsRead(let read)?:
-            Task {
-                let outcome = await PhoneContacts.snapshot(read)
-                answer(request, outcome)
-                if read.askPermission, PhoneContacts.limited { onContactsLimited?() }
-            }
+            answer(request, await PhoneContacts.snapshot(read))
+            if read.askPermission, PhoneContacts.limited { onContactsLimited?() }
         case .phoneWatch(let watch)?:
             self.watch(request, watch)
         // PHOTOS' ONE-PHOTOGRAPH PAGES (#1135): the camera the original's header
         // names, and the editor's pixel work.
         case .readCamera(let read)?:
-            Task { answer(request, await PhotoEffects.camera(read)) }
+            answer(request, await PhotoEffects.camera(read))
         #if os(iOS)
         case .renderEdit(let render)?:
-            Task { answer(request, await PhotoEffects.renderEdit(render, core: core)) }
+            answer(request, await PhotoEffects.renderEdit(render, core: core))
         #endif
         // HEALTH'S STORE (#1135): read over the window Rust placed, for the types it names.
         case .healthRead(let read)?:
-            Task {
-                let outcome = await HealthKitReader.snapshot(read)
-                answer(request, outcome)
-            }
+            answer(request, await HealthKitReader.snapshot(read))
         case .openRoute(let open)?:
             onOpenRoute?(open.route)
-            answer(request, .done(Centraid_Core_V1_EffectDone()))
+            answer(request, done)
         case .vaultCommand(let command)?:
-            onVaultCommand?(command)
-            answer(request, .done(Centraid_Core_V1_EffectDone()))
+            // THE SHELF IS RUST'S: only the platform's own doors reach a shell (Settings, for a
+            // notification grant or a low disk).
+            #if os(iOS)
+            if case let .open(destination)? = command.kind, destination == .phone || destination == .notifications,
+                let url = URL(string: UIApplication.openSettingsURLString)
+            {
+                UIApplication.shared.open(url)
+            }
+            #endif
+            answer(request, done)
         // DOCS' FILES (#1135): the file picker and scanner (answered more than once under
         // one effect: progress, then the file), and the folder picker.
         case .pickFile(let pick)?:
-            DocsFiles.shared.pick(pick.kind) { outcome in
+            DocsFiles.shared.pick(pick.kind, core: core) { outcome in
                 Task { @MainActor [weak self] in self?.answer(request, outcome) }
             }
         case .followFolder?:
@@ -458,34 +509,34 @@ final class ScreenStore: ObservableObject {
                 Task { @MainActor [weak self] in self?.answer(request, outcome) }
             }
         case .stopFollowing(let stop)?:
-            DocsFollow.shared.stop(stop.origin) { outcome in
-                Task { @MainActor [weak self] in self?.answer(request, outcome) }
-            }
+            DocsFollow.shared.stop(stop.origin) { outcome in answer(request, outcome) }
         // THE MODEL'S (OR THE PHOTO READER'S) DOWNLOAD: the shell owns the transfer, and the chat
         // hears progress and the end as events (`ChatModel`).
         case .modelDownload(let download)?:
             ChatModelDownloader.shared.start(ChatAsset(download))
-            answer(request, .done(Centraid_Core_V1_EffectDone()))
+            answer(request, done)
         #if os(iOS)
         case .pickLibraryPhoto?:
             LibraryPhotoPerformer.pick { [weak self] outcome in self?.answer(request, outcome) }
         #endif
         default:
-            // Platform work this build does not perform yet: say so, by value.
+            // Platform work this build does not perform: say so, by value.
             answer(request, .failed(Self.failure("not performed by this shell")))
         }
     }
 
-    /// WHAT A SCREEN ASKED OF THE CAMERA ROLL. The prompt and a pass are the
-    /// device's (`PhotosDevice`); Settings and iOS's limited selection are this
-    /// app's own pages, which only the platform can open.
-    private func performCameraRoll(_ roll: Centraid_Core_V1_CameraRoll) -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
+    /// A link the platform has not described yet: expensive, which Rust reads as "wait".
+    private static var unknownLink: Centraid_Core_V1_LinkReading {
+        var reading = Centraid_Core_V1_LinkReading()
+        reading.platformRefused = true
+        return reading
+    }
+
+    /// THE PLATFORM'S OWN PHOTO PAGES: Settings, and iOS's limited selection. The prompt and a
+    /// walk are the camera roll's, in Rust.
+    private static func cameraRoll(_ roll: Centraid_Core_V1_CameraRoll) -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
         #if os(iOS)
         switch roll.action {
-        case .askPermission:
-            photos?.perform(action: PhotosDevice.Companion.shared.ACTION_ASK_PERMISSION)
-        case .importNow:
-            photos?.perform(action: PhotosDevice.Companion.shared.ACTION_IMPORT_NOW)
         case .openSettings:
             if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
         case .manageSelection:
@@ -496,7 +547,7 @@ final class ScreenStore: ObservableObject {
                 PHPhotoLibrary.shared().presentLimitedLibraryPicker(from: root)
             }
         default:
-            return .failed(Self.failure("no camera roll action"))
+            return .failed(failure("no camera roll action"))
         }
         #endif
         return .done(Centraid_Core_V1_EffectDone())
@@ -644,22 +695,6 @@ final class ScreenStore: ObservableObject {
     #endif
 }
 
-
-extension Centraid_Core_V1_ViewState {
-    /// Whether this is a Photos home, the screen the camera roll talks to.
-    var isPhotosHome: Bool {
-        if case .photosHome? = kind { return true }
-        return false
-    }
-}
-
-extension Centraid_Core_V1_PhotosHomeEvent {
-    /// Which of the roll's two facts this event carries, so the latest of each is kept.
-    var permissionKey: Int {
-        if case .permission? = kind { return 0 }
-        return 1
-    }
-}
 
 extension Centraid_Core_V1_HomeState {
     /// An app's tile, whose `route` is the app's front door.

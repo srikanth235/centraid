@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 // THE BACKUP SCREEN (`backup.home`; #1080, #1135). Home's half of the backup is
 // the vault lockup's status line (`VaultHeader`, R-ONBOARD-11).
 //
@@ -12,9 +10,9 @@ import CentraidShared
 // the page's one Ink button, whether "Back up now" may be pressed and whether
 // the vault moved. A view that needs one the state does not carry has a gap in
 // the screen (`crates/screens/src/backup`), never a computation here. What is the
-// view's is what only a platform can do: hand pairing a new gateway to the
-// pairing page, and the recovery key to `words.show`. The Android twin is
-// `BackupScreens.kt`; the two read the same names.
+// view's is pushing the routes the state carries (the pairing page,
+// `words.show`). The Android twin is `BackupScreens.kt`; the two read the same
+// names.
 
 /// THE BACKUP SCREEN: where the backup stands, the three controls, the gateways
 /// this phone backs up to and where the recovery key is.
@@ -22,11 +20,10 @@ struct BackupHomeView: View {
     let state: Centraid_Core_V1_BackupHomeState
     @ObservedObject var shell: ShellModel
     let send: (Centraid_Core_V1_BackupHomeEvent) -> Void
-    /// Pairing another gateway is the pairing page's scan or paste.
-    let onAddDestination: () -> Void
-    /// THE RECOVERY KEY, from the screen that is about getting the vault back:
-    /// `words.show`, over the passcode.
-    let onShowWords: () -> Void
+    /// Push a route the state carries: pairing another gateway
+    /// (`add_destination`), and THE RECOVERY KEY from the screen that is about
+    /// getting the vault back (`key_show`, `words.show` over the passcode).
+    let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
 
     private func event(_ build: (inout Centraid_Core_V1_BackupHomeEvent) -> Void) -> Centraid_Core_V1_BackupHomeEvent {
@@ -72,11 +69,11 @@ struct BackupHomeView: View {
                     // a verb that is not the page's one thing to do is the outline.
                     if !paired && !model.addDestinationLabel.isEmpty {
                         if model.ink == .addDestination {
-                            KitInkButton(label: model.addDestinationLabel, action: onAddDestination)
+                            KitInkButton(label: model.addDestinationLabel) { open(model.addDestination) }
                                 .padding(.top, 8)
                                 .accessibilityIdentifier("backup-add-destination")
                         } else {
-                            KitOutlineButton(label: model.addDestinationLabel, action: onAddDestination)
+                            KitOutlineButton(label: model.addDestinationLabel) { open(model.addDestination) }
                                 .padding(.top, 8)
                                 .accessibilityIdentifier("backup-add-destination")
                         }
@@ -165,7 +162,7 @@ struct BackupHomeView: View {
         .accessibilityIdentifier("backup-screen")
         // A GATEWAY FORGOTTEN OR ADDED CHANGES THE PINS: the mover must never trust a
         // certificate this phone no longer pairs with.
-        .onChange(of: model.destinations.map(\.gatewayID)) { _, _ in shell.backupDestinationsChanged() }
+        .onChange(of: model.destinations.map(\.gatewayID)) { _, _ in shell.refreshUploadPins() }
     }
 
     private static let top = "backup-top"
@@ -198,10 +195,10 @@ struct BackupHomeView: View {
                     }
                     if !model.keyShowLabel.isEmpty {
                         if model.ink == .showKey {
-                            KitInkButton(label: model.keyShowLabel, action: onShowWords)
+                            KitInkButton(label: model.keyShowLabel) { open(model.keyShow) }
                                 .accessibilityIdentifier("backup-show-key")
                         } else {
-                            KitOutlineButton(label: model.keyShowLabel, action: onShowWords)
+                            KitOutlineButton(label: model.keyShowLabel) { open(model.keyShow) }
                                 .accessibilityIdentifier("backup-show-key")
                         }
                     }
@@ -293,7 +290,7 @@ struct BackupHomeView: View {
             }
             // ANOTHER BACKUP DEVICE, once one is paired: the secondary form.
             if !model.addDestinationLabel.isEmpty {
-                KitOutlineButton(label: model.addDestinationLabel, action: onAddDestination)
+                KitOutlineButton(label: model.addDestinationLabel) { open(model.addDestination) }
                     .padding(.top, 12)
                     .accessibilityIdentifier("backup-add-destination")
             }
@@ -307,10 +304,8 @@ struct BackupHomeView: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(model.ruleChoices, id: \.stored) { choice in
                 Button {
+                    // THE PASS SERVICE HEARS THE WRITE: the windows follow the rule.
                     send(event { $0.ruleChosen = .with { $0.stored = choice.stored } })
-                    // THE BACKGROUND WINDOWS FOLLOW THE RULE: until the pass
-                    // service owns them, the session that does is told.
-                    shell.setTransferRule(choice.stored)
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         RuleMark(picked: choice.picked)

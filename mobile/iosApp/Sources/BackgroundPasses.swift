@@ -52,10 +52,9 @@ import UIKit
 enum BackgroundPasses {
     /// The short window: iOS grants a `BGAppRefreshTask` seconds, not minutes.
     ///
-    /// These two identifiers are `IosBackgroundTasks.PERMITTED_IDENTIFIERS` in
-    /// `mobile/shared/src/iosMain/.../PlatformServices.ios.kt` and the
-    /// `BGTaskSchedulerPermittedIdentifiers` array in `project.yml`. One fact in
-    /// three files; `BackgroundIdentifierSpec` compares all three.
+    /// These two identifiers are the `BGTaskSchedulerPermittedIdentifiers` array
+    /// in `project.yml` too: one fact in two files, and a submit of an identifier
+    /// the plist does not list terminates the app.
     static let refreshIdentifier = "dev.centraid.sync-pass"
 
     /// The long one: minutes, on power, with a network.
@@ -75,8 +74,7 @@ enum BackgroundPasses {
     /// install the pass before it completes honestly without one.
     static let installWaitSeconds: TimeInterval = 20
 
-    /// Fifteen minutes, the same floor `IosBackgroundTasks.EARLIEST_SECONDS`
-    /// uses and the same one WorkManager enforces on the Android half.
+    /// Fifteen minutes, the floor WorkManager enforces on the Android half too.
     static let earliestSeconds: TimeInterval = 15 * 60
 
     /// THE SCREEN STORE, SET BY THE SHELL once the core exists: the road to the pass
@@ -92,6 +90,10 @@ enum BackgroundPasses {
     }
 
     @MainActor private static var waiters: [UUID: CheckedContinuation<ScreenStore?, Never>] = [:]
+
+    /// WHETHER THE OS TOOK EVERY WINDOW RUST LAST ASKED FOR (`BackgroundProbe`): nil
+    /// before the first `ScheduleWindows`, false when Background App Refresh refused one.
+    @MainActor private(set) static var registered: Bool?
 
     /// Install both handlers. **Called once, at launch, before any submit.**
     static func register() {
@@ -116,6 +118,7 @@ enum BackgroundPasses {
             }
         }
         answer.refusal = refusals.joined(separator: "; ")
+        registered = answer.refused.isEmpty
         return answer
     }
 

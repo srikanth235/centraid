@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 // LOCKER'S SHARED PARTS (#1047, #1135): the wall, the item row, the choice
 // pills and the quiet note. Every word is Rust's (`crates/screens/src/locker`).
 

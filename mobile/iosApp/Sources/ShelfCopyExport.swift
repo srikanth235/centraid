@@ -5,8 +5,6 @@ import Photos
 import UIKit
 import UniformTypeIdentifiers
 
-import CentraidShared
-
 /// THE ORIGINALS OF A PICK, HANDED TO THE PLATFORM (#1135): the generic
 /// `ExportOriginals` performer. "Send a copy" puts copies in the system share
 /// sheet; "Download original" puts them in this device's photo library. Neither
@@ -55,7 +53,7 @@ enum ShelfCopyExport {
         guard !originals.isEmpty else { return exported(.noneHere) }
         switch export.mode {
         case .send:
-            guard let files = await prepare(originals, keepLocation: export.keepLocation) else {
+            guard let files = await prepare(originals, keepLocation: export.keepLocation, export: export) else {
                 return exported(.locationNotRemovable)
             }
             await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
@@ -63,7 +61,7 @@ enum ShelfCopyExport {
             }
             return exported(.done, handed: files.count)
         case .save:
-            let saved = await saveToLibrary(originals)
+            let saved = await saveToLibrary(originals, export: export)
             return saved < 0 ? exported(.failed) : exported(.done, handed: saved)
         default:
             var failed = Centraid_Core_V1_EffectFailed()
@@ -129,7 +127,11 @@ enum ShelfCopyExport {
     /// Copies in the temporary directory, named by type so the receiver can
     /// open them, the location taken out unless the member kept it. Nil when a
     /// file's location could not be taken out.
-    private static func prepare(_ originals: [LocatedOriginal], keepLocation: Bool) async -> [URL]? {
+    private static func prepare(
+        _ originals: [LocatedOriginal],
+        keepLocation: Bool,
+        export: Centraid_Core_V1_ExportOriginals
+    ) async -> [URL]? {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("copies", isDirectory: true)
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -137,7 +139,7 @@ enum ShelfCopyExport {
         var files: [URL] = []
         for (index, original) in originals.enumerated() {
             let source = URL(fileURLWithPath: original.path)
-            let target = folder.appendingPathComponent(name(for: original, index: index))
+            let target = folder.appendingPathComponent(name(for: original, index: index, export: export))
             let copied: Bool
             if keepLocation {
                 copied = (try? FileManager.default.copyItem(at: source, to: target)) != nil
@@ -198,10 +200,10 @@ enum ShelfCopyExport {
 
     /// Into this device's photo library. The count saved, or -1 when the
     /// library refused (no access, or the write failed).
-    private static func saveToLibrary(_ originals: [LocatedOriginal]) async -> Int {
+    private static func saveToLibrary(_ originals: [LocatedOriginal], export: Centraid_Core_V1_ExportOriginals) async -> Int {
         let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         guard status == .authorized || status == .limited else { return -1 }
-        guard let files = await prepare(originals, keepLocation: true) else { return -1 }
+        guard let files = await prepare(originals, keepLocation: true, export: export) else { return -1 }
         defer { files.forEach { try? FileManager.default.removeItem(at: $0) } }
         do {
             try await PHPhotoLibrary.shared().performChanges {
@@ -216,10 +218,11 @@ enum ShelfCopyExport {
         }
     }
 
-    /// `Photo 1.jpg`, `Video 2.mov` — the extension from the media type the
-    /// byte door reported, because the vault's own file is named by its hash.
-    private static func name(for original: LocatedOriginal, index: Int) -> String {
-        let stem = original.isVideo ? PhotosCopy.shared.PHOTOS_CELL_VIDEO : PhotosCopy.shared.PHOTOGRAPH
+    /// `Photo 1.jpg`, `Video 2.mov`: the stems are Rust's (`ExportOriginals`), the
+    /// extension from the media type the byte door reported, because the
+    /// vault's own file is named by its hash.
+    private static func name(for original: LocatedOriginal, index: Int, export: Centraid_Core_V1_ExportOriginals) -> String {
+        let stem = original.isVideo ? export.videoStem : export.photoStem
         let fallback = original.isVideo ? "mov" : "jpg"
         let ext = UTType(mimeType: original.mediaType)?.preferredFilenameExtension ?? fallback
         return "\(stem) \(index + 1).\(ext)"

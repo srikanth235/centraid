@@ -24,18 +24,17 @@ actor Core {
         case refused(Centraid_Core_V1_Error)
     }
 
-    /// `centraid_open`'s JSON configuration (`crates/core-ffi/src/lib.rs`). The
-    /// seed is the only secret in it and is never logged.
+    /// `centraid_open`'s JSON configuration (`crates/core-ffi/src/lib.rs`): the
+    /// DIRECTORY the phone's vaults live in, never a vault (`{"shelf": dir}`,
+    /// `CoreConfig::fronting`). The core opened over it holds no vault of its
+    /// own; the Rust shelf opens every vault under it, keys each from the phone's
+    /// secrets and sends every call about a vault to the one in front. A debug
+    /// build's demo seed is the only secret in it and is never logged.
     struct Configuration: Encodable {
-        struct Vault: Encodable {
-            let seed: String
-            let index: Int
-        }
-        var path: String
-        var create = true
+        var shelf: String
+        var devSeed: String?
         var uiThreadName = "main"
         var expectedIdentity: String?
-        var vault: Vault?
     }
 
     /// The handle pointer, carried across queues. The core serialises its own
@@ -45,8 +44,20 @@ actor Core {
     }
 
     private let raw: Raw
+    /// THE SCREEN RUNTIME'S LANE: one request at a time, in the order sent, so a
+    /// push is never overtaken by the event it opened the screen for.
     private let calls = DispatchQueue(label: "dev.centraid.core.call")
+    /// THE BYTES' LANE: a stage streams a photograph or a document in many
+    /// calls, and none of them may hold a tap behind it. The core serialises
+    /// what must be serial itself.
+    private let bulk = DispatchQueue(label: "dev.centraid.core.bulk")
     private var closed = false
+
+    /// Which queue a call waits on.
+    enum Lane {
+        case screens
+        case bulk
+    }
 
     /// Screen updates the core pushed, in order: the stream ends when the core
     /// closes or is poisoned.
@@ -60,7 +71,8 @@ actor Core {
         updateSink = sink
     }
 
-    /// Open a core over a vault file. Blocking: call from a background task.
+    /// Open the front core over the vault directory. Blocking: call from a
+    /// background task (the core asserts it is not on the UI thread).
     static func open(_ configuration: Configuration) throws -> Core {
         let json = try JSONEncoder().encode(configuration)
         var handle: OpaquePointer?
@@ -78,12 +90,18 @@ actor Core {
 
     /// One request, one answer, off the caller's thread.
     func call(_ request: Centraid_Core_V1_Request) async throws -> Centraid_Core_V1_Response {
+        try await call(request, lane: .screens)
+    }
+
+    /// One request on `lane`.
+    func call(_ request: Centraid_Core_V1_Request, lane: Lane) async throws -> Centraid_Core_V1_Response {
         var envelope = Centraid_Core_V1_Envelope()
         envelope.body = .request(request)
         let bytes = try envelope.serializedData()
         let raw = self.raw
+        let queue = lane == .bulk ? bulk : calls
         return try await withCheckedThrowingContinuation { continuation in
-            calls.async {
+            queue.async {
                 continuation.resume(with: Result { try Core.callSync(raw, bytes) })
             }
         }

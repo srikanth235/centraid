@@ -3,9 +3,9 @@ import Foundation
 import Photos
 #endif
 
-import CentraidShared
-
-// FREE UP SPACE'S HAND ON THE PHOTO LIBRARY (#1080 A19, A20).
+// FREE UP SPACE'S HAND ON THE PHOTO LIBRARY (#1080 A19, A20; the `LibraryDelete`
+// effect, #1135). Rust chose what to free (the core's `releasable`) and tells the
+// core what went (`released`); this file deletes, and says which.
 //
 // The core never deletes from the library; this file is the one place on iOS
 // that does, and only behind Photos' own confirmation:
@@ -17,8 +17,8 @@ import CentraidShared
 //
 // 1. **AN ASSET GOES WHOLE, OR NOT AT ALL.** A Live Photo is two rows in the
 //    vault: the still under the asset's `localIdentifier`, and its movie under
-//    the same identifier plus `#pairedVideo` (`LibraryRefs.PAIRED_VIDEO`, which
-//    this file must spell the same way). Deleting the asset deletes both, so a
+//    the same identifier plus `#pairedVideo` (`LibraryRefs`, the spelling the
+//    walker minted). Deleting the asset deletes both, so a
 //    Live Photo goes only when the core offered both rows, and an asset never
 //    goes on its movie's row alone.
 // 2. **AN EDITED ASSET GOES ONLY WHEN THE GATEWAY HAS THE VERSION THE LIBRARY
@@ -43,27 +43,24 @@ import CentraidShared
 // photograph's backup, and this is only the member's own Free up space.
 
 /// The pure half, so a test can show each rule refuse without the library.
-/// Its ref spellings are `LibraryRefs` (commonMain), restated.
+/// Its ref spellings are the walker's (`LibraryRefs`, `PhoneLibrary.swift`).
 enum LibraryDeletion {
-    /// `LibraryRefs.PAIRED_VIDEO`: the suffix a Live Photo's movie row carries.
-    static let pairedVideoSuffix = "#pairedVideo"
-    /// `LibraryRefs.CAMERA`: the camera's own file under an edit.
-    static let cameraSuffix = "#camera"
-    /// `LibraryRefs`' rendition marker: `<identifier>#r<millis>`.
-    static let renditionMarker = "#r"
+    /// The suffix a Live Photo's movie row carries.
+    static let pairedVideoSuffix = LibraryRefs.pairedVideoSuffix
+    /// The camera's own file under an edit.
+    static let cameraSuffix = LibraryRefs.cameraSuffix
 
     /// The asset an `os_ref` names: everything before the first `#`.
     static func assetIdentifier(of ref: String) -> String {
-        ref.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ref
+        LibraryRefs.identifier(of: ref)
     }
 
     /// The version a rendition's ref was read at, or nil for any other ref.
     static func witness(of ref: String) -> Int64? {
-        guard let marker = ref.range(of: renditionMarker) else { return nil }
-        return Int64(ref[marker.upperBound...])
+        LibraryRefs.witness(of: ref)
     }
 
-    /// `modificationDate` as `IosMediaLibrary` writes it into a ref: epoch
+    /// `modificationDate` as the walker writes it into a ref: epoch
     /// milliseconds, truncated; a missing date reads as zero.
     static func modifiedMillis(_ date: Date?) -> Int64 {
         guard let date else { return 0 }
@@ -112,23 +109,11 @@ enum LibraryDeletion {
 }
 
 #if canImport(Photos)
-/// THE KOTLIN-VISIBLE HALF (seam contract A20): `LibraryDeleter` is
-/// `commonMain`'s interface and this is its iOS implementation, installed once
-/// through `HomeBridge.installLibraryDeleter` (`ShellModel.init`).
-final class PhotoLibraryDeleter: NSObject, LibraryDeleter {
-    /// Photos confirms every deletion itself; a library this app may not
-    /// change offers nothing to free.
-    func capability() -> DeleteCapability {
-        switch PHPhotoLibrary.authorizationStatus(for: .readWrite) {
-        case .authorized, .limited:
-            return DeleteCapability.systemConfirmation
-        default:
-            return DeleteCapability.none
-        }
-    }
-
-    func delete(items: [ReleasableItem], done: @escaping (DeleteOutcome) -> Void) {
-        let offered = Set(items.map(\.osRef))
+/// THE PLATFORM'S HALF: delete the assets the items name, behind Photos' own
+/// confirmation, and answer which items went (`LibraryDeleted`).
+enum PhotoLibraryDeleter {
+    static func delete(_ asked: Centraid_Core_V1_LibraryDelete) async -> Centraid_Core_V1_LibraryDeleted {
+        let offered = Set(asked.items.map(\.osRef))
         let identifiers = Array(Set(offered.map { LibraryDeletion.assetIdentifier(of: $0) }))
         var doomed: [PHAsset] = []
         var going: Set<String> = []
@@ -144,26 +129,28 @@ final class PhotoLibraryDeleter: NSObject, LibraryDeleter {
             doomed.append(asset)
             going.insert(asset.localIdentifier)
         }
+        var deleted = Centraid_Core_V1_LibraryDeleted()
         // NOTHING TO ASK ABOUT asks nothing: no alert for zero items.
-        guard !doomed.isEmpty else {
-            done(DeleteOutcome(deleted: [], declined: false, error: nil))
-            return
-        }
+        guard !doomed.isEmpty else { return deleted }
         let assets = doomed as NSArray
-        let removing = going
-        PHPhotoLibrary.shared().performChanges({
-            PHAssetChangeRequest.deleteAssets(assets)
-        }, completionHandler: { success, error in
-            switch LibraryDeletion.answer(success: success, error: error) {
-            case .deleted:
-                let gone = items.filter { removing.contains(LibraryDeletion.assetIdentifier(of: $0.osRef)) }
-                done(DeleteOutcome(deleted: gone.map(\.contentHash), declined: false, error: nil))
-            case .declined:
-                done(DeleteOutcome(deleted: [], declined: true, error: nil))
-            case let .failed(words):
-                done(DeleteOutcome(deleted: [], declined: false, error: words))
-            }
-        })
+        let answer: LibraryDeletion.Answer = await withCheckedContinuation { continuation in
+            PHPhotoLibrary.shared().performChanges({
+                PHAssetChangeRequest.deleteAssets(assets)
+            }, completionHandler: { success, error in
+                continuation.resume(returning: LibraryDeletion.answer(success: success, error: error))
+            })
+        }
+        switch answer {
+        case .deleted:
+            deleted.deletedHashes = asked.items
+                .filter { going.contains(LibraryDeletion.assetIdentifier(of: $0.osRef)) }
+                .map(\.contentHash)
+        case .declined:
+            deleted.declined = true
+        case let .failed(words):
+            deleted.error = words ?? ""
+        }
+        return deleted
     }
 }
 #endif

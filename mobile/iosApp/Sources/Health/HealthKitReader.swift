@@ -6,7 +6,7 @@ import HealthKit
 ///
 /// **NOTHING IS EVER WRITTEN.** Authorization is `toShare: []` (`HealthAccess.request`), the
 /// entitlement's access list is empty, the bundle declares no `NSHealthUpdateUsageDescription`,
-/// and nothing under `Sources/` saves or deletes a HealthKit object — `HealthKitReadOnlySpec`
+/// and nothing under `Sources/` saves or deletes a HealthKit object — `healthkit-read-only` (`cargo xtask rules`)
 /// reads all four.
 ///
 /// **ASKS ONLY WHEN THE EFFECT SAYS SO.** `ask_permission` is the member's Connect tap; a pass
@@ -263,7 +263,7 @@ enum HealthKitReader {
     }
 
     /// THE KIND'S SWIFT CASE NAME, the word `crates/screens/src/health/kinds.rs` keys on. Its names ARE the
-    /// table's iOS keys (`HealthKitReadOnlySpec` compares them); a kind the table does not name is
+    /// table's iOS keys (the `healthkit-read-only` rule compares them); a kind the table does not name is
     /// `other`.
     static func kind(_ type: HKWorkoutActivityType) -> String {
         switch type {

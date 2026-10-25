@@ -3,14 +3,13 @@ import Foundation
 /// THE READ LAW, AS A SWIFT ENUM — FOUR CASES, NEVER TWO (K5).
 ///
 /// Loading, a failure with its sentence and remedy, a denial with its receipt,
-/// or data. Swift's `Optional` would collapse two of these, exactly as Kotlin's
-/// nullable would, so every screen decoder maps its state's `content` oneof onto
+/// or data. Swift's `Optional` would collapse two of these, so every screen
+/// decoder maps its state's `content` oneof onto
 /// this and every view switches over it through `ReadStateView` — the one place
 /// the four shapes are drawn.
 ///
-/// `.denied` is the kit's `Denied` (title, body, receipt), the arm
-/// `ReadContent.Denied` carries on the Kotlin side. A screen whose proto has no
-/// denied arm simply never produces it.
+/// `.denied` is the kit's `Denied` (title, body, receipt). A screen whose proto
+/// has no denied arm simply never produces it.
 enum ScreenContent<Value> {
     case loading(Bool)
     case failure(String, String)

@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// A PHOTO SHELF, drawn from the core's `PhotosShelfState` (#1135): favourites,
 /// videos, the archive, the trash, an album, a place, the photographs with no
 /// place. `crates/screens/src/photos/shelf.rs` decides everything a member reads

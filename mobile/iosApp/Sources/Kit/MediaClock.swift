@@ -3,9 +3,8 @@ import Foundation
 /// A PLAYER'S TIME, as `m:ss` (and `h:mm:ss` past the hour): the one format a
 /// photo tile's duration badge, the lightbox's scrubber and its spoken position
 /// share, so a clip is the same length everywhere it is named. A length of a
-/// stream the player has not loaded (NaN, infinite) is nought. Moved here with the
-/// shared module's retirement (#1135); the byte formatter it sat beside is the
-/// core's (`photos_bytes_many`), not a view's.
+/// stream the player has not loaded (NaN, infinite) is nought (#1135). A byte
+/// count is the core's to word (`photos_bytes_many`), not a view's.
 enum MediaClock {
     /// `1:04`, `12:07`, `1:02:03`; a negative length is `0:00`.
     static func of(seconds: Int64) -> String {

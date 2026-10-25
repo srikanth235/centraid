@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 // THE ROOMS (K5; DESIGN.md "The seven rooms (mobile)").
 //
 // A mobile screen is one of seven rooms and nothing else. The room owns the
@@ -25,7 +23,7 @@ import CentraidShared
 struct SearchSlot {
     let field: Centraid_Screen_V1_SearchField
     let placeholder: String
-    var closeLabel: String = KitWords.shared.CLOSE_SEARCH
+    var closeLabel: String = KitWords.CLOSE_SEARCH
     let onOpen: () -> Void
     let onTerm: (String) -> Void
     let onClose: () -> Void
@@ -324,7 +322,7 @@ struct PushedPage<Trailing: View, Content: View>: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(KitWords.shared.backTo(parent: parentTitle))
+                    .accessibilityLabel(KitWords.backTo(parent: parentTitle))
                     .accessibilityIdentifier("kit-pushed-back")
                 }
                 ToolbarItem(placement: .topBarTrailing) { trailing() }
@@ -337,13 +335,12 @@ struct PushedPage<Trailing: View, Content: View>: View {
 ///
 /// There is no Save. The machine saves on its own debounce; Done only leaves,
 /// and leaving is the flush — `onDeparted` runs when the room goes off screen
-/// by any route (Done, a pop, Home), and the registry forwards it to the
-/// bridge's `departed()`, which sends the machine's `Left` so unsaved words
-/// are written without closing the bridge.
+/// by any route (Done, a pop, Home), for a page that has something to say
+/// then; the screen itself writes unsaved words when it closes.
 struct EditorRoom<Trailing: View, Content: View>: View {
     let title: String
     let status: Centraid_Screen_V1_Autosave
-    var closeLabel: String = KitWords.shared.DONE
+    var closeLabel: String = KitWords.DONE
     let onClose: () -> Void
     let onDeparted: () -> Void
     let trailing: () -> Trailing
@@ -354,7 +351,7 @@ struct EditorRoom<Trailing: View, Content: View>: View {
     init(
         title: String,
         status: Centraid_Screen_V1_Autosave,
-        closeLabel: String = KitWords.shared.DONE,
+        closeLabel: String = KitWords.DONE,
         onClose: @escaping () -> Void,
         onDeparted: @escaping () -> Void,
         @ViewBuilder trailing: @escaping () -> Trailing,

@@ -64,14 +64,49 @@ targets:
         # times over.
         PRODUCT_MODULE_NAME: CentraidApp
         # THE C ABI AS A SWIFT MODULE (#1135, lane C2): `import CentraidCoreC`
-        # in `Sources/Core.swift`. The five symbols resolve from the archive
-        # `CentraidShared` links today. WHEN `mobile/shared` IS DELETED, this
-        # target links `libcentraid_core_ffi.a` itself with the same flags
-        # `shared/build.gradle.kts` passes (`-Wl,-u,_centraid_{open,call,
-        # next_event,free,close}`, the archive, and the system frameworks
-        # listed there); linking it now would put two copies of the core in a
-        # static (release) link. `mobile/scripts/ios-core.sh` builds the slices.
+        # in `Sources/Core.swift`, over the committed header
+        # `crates/core-ffi/include/centraid.h`.
         SWIFT_INCLUDE_PATHS: $(SRCROOT)/CoreBridge
+        # THE CORE, LINKED BY THE APP ITSELF (#1135): `libcentraid_core_ffi.a`,
+        # the slice `mobile/scripts/ios-core.sh` builds for the SDK and
+        # architecture being built (`target/<triple>/debug/`).
+        #
+        # `-u` ON EACH OF THE FIVE SYMBOLS, NOT `-force_load` OF THE ARCHIVE.
+        # Apple's linker drops the members of a static archive nothing in the
+        # link references, and a C function Swift imports is a reference only
+        # where Swift calls it; `-u` makes the five the references, so the
+        # members that define them load with what they reach. `-force_load`
+        # loads EVERY member, and the archive carries llama.cpp's `common`
+        # library, whose downloader references `httplib::*`, which the archive
+        # does not bundle: a force-loaded link fails on those undefined symbols.
+        #
+        # THE SYSTEM FRAMEWORKS THE RUST SIDE CALLS, which a Rust staticlib does
+        # not record for its consumer (`rustc --print native-static-libs`):
+        # iroh's `netwatch` calls `SCDynamicStore*` and `SCNetworkReachability*`
+        # (`SystemConfiguration`, `Network`); rustls' platform verifier reaches
+        # `SecTrust*` (`Security`); ggml's Metal backend calls `MTL*` and `MTK*`
+        # and uses libc++ (`Metal`, `MetalKit`, `Foundation`, `Accelerate`,
+        # `-lc++`).
+        #
+        # THE ARCHIVE IS A BUILT FILE AND XCODE DOES NOT KNOW IT IS STALE:
+        # re-run `ios-core.sh` after every `crates/core` change
+        # (`docs/traps/stale-core-slice.md`).
+        CENTRAID_CORE_LINK: >-
+          -Wl,-u,_centraid_open -Wl,-u,_centraid_call -Wl,-u,_centraid_next_event
+          -Wl,-u,_centraid_free -Wl,-u,_centraid_close
+          -framework SystemConfiguration -framework Network -framework Security
+          -framework Metal -framework MetalKit -framework Foundation -framework Accelerate
+          -lc++
+        CENTRAID_CORE_TARGET: $(SRCROOT)/../../target
+        "OTHER_LDFLAGS[sdk=iphoneos*]": >-
+          $(inherited) $(CENTRAID_CORE_LINK)
+          $(CENTRAID_CORE_TARGET)/aarch64-apple-ios/debug/libcentraid_core_ffi.a
+        "OTHER_LDFLAGS[sdk=iphonesimulator*][arch=arm64]": >-
+          $(inherited) $(CENTRAID_CORE_LINK)
+          $(CENTRAID_CORE_TARGET)/aarch64-apple-ios-sim/debug/libcentraid_core_ffi.a
+        "OTHER_LDFLAGS[sdk=iphonesimulator*][arch=x86_64]": >-
+          $(inherited) $(CENTRAID_CORE_LINK)
+          $(CENTRAID_CORE_TARGET)/x86_64-apple-ios/debug/libcentraid_core_ffi.a
     sources:
       - path: Sources
       - path: Design
@@ -121,11 +156,6 @@ targets:
           - $(SRCROOT)/.generated/protos.output.xcfilelist
     dependencies:
       - package: SwiftProtobuf
-      # THE SHARED FRAMEWORK. Dynamic in debug and static in release, which the
-      # Gradle side decides (`mobile/shared/build.gradle.kts`); from Xcode's
-      # point of view it is one XCFramework either way.
-      - framework: ../shared/build/XCFrameworks/debug/CentraidShared.xcframework
-        embed: true
     # WITHOUT THIS THE KEYCHAIN IS DEAD AND PAIRING CANNOT PERSIST (#1025).
     #
     # `IosSecureStore` is where this device's endpoint secret lives, and every
@@ -154,7 +184,7 @@ targets:
         # chooses on Connect are ordinary read types and need nothing more.
         # There is no share type anywhere in this bundle: the usage string
         # below is `NSHealthShareUsageDescription` alone, and
-        # `HealthKitReadOnlySpec` fails on an `NSHealthUpdateUsageDescription`,
+        # `healthkit-read-only` (`cargo xtask rules`) fails on an `NSHealthUpdateUsageDescription`,
         # a non-empty access list, or a `toShare` that is not `[]`. The
         # simulator seeder that writes test data is its own project
         # (`HealthSeeder/project.yml`) and never part of this one.
@@ -211,9 +241,9 @@ targets:
         # array did not, and the first `submitTaskRequest` on a generated build
         # would have killed the app on launch.
         #
-        # BOTH IDENTIFIERS, and they are `IosBackgroundTasks.PERMITTED_IDENTIFIERS`
-        # in `mobile/shared/src/iosMain/.../PlatformServices.ios.kt`. One fact in
-        # three files, and `BackgroundIdentifierSpec` is what compares them.
+        # BOTH IDENTIFIERS, and they are `BackgroundPasses.refreshIdentifier` and
+        # `.processingIdentifier` in `Sources/BackgroundPasses.swift`: one fact in two
+        # files, and the plist is xcodegen's output of this one.
         BGTaskSchedulerPermittedIdentifiers:
           - dev.centraid.sync-pass
           - dev.centraid.upload-pass

@@ -1,8 +1,6 @@
 import Foundation
 import Network
 
-import CentraidShared
-
 // THE iOS HALF OF Q-1080-D3: ASK THE LAN WHERE A GATEWAY WENT.
 //
 // Rust decides WHEN to browse (the screen that asked, `BrowseGateways`), WHICH
@@ -10,9 +8,7 @@ import CentraidShared
 // `crates/screens/src/pairing/matching.rs`) and what the core does with the
 // answer (`refresh_destination` dials each offered address with the pinned
 // certificate and keeps only the ones that answer as that gateway). This file
-// is only the browse: `GatewayBrowsing` performs the effect over `NWBrowser`,
-// and `BonjourGatewayBrowser` is the same browse for the KMP side's
-// `GatewayRediscovery` while it lasts.
+// is only the browse: `GatewayBrowsing` performs the effect over `NWBrowser`.
 //
 // THE PHONE ONLY BROWSES. `NWBrowser` sends a multicast query and reads its
 // answers; nothing here is an `NWListener`, and nothing accepts a connection.
@@ -38,23 +34,23 @@ import CentraidShared
 // all a browse that found less, never one that hangs or raises.
 //
 // NOTHING HERE IS TRUSTED. An address in a sighting is what some machine on
-// the network said; `GatewayMatch.normalise` drops names, loopback,
+// the network said; Rust's `pairing::matching` drops names, loopback,
 // multicast and IPv6 link-local ones, and the core proves identity by the
 // pinned certificate and `/v2/info` before it keeps any.
 
 /// THE BROWSE'S PURE RULES — what a TXT record must carry to be worth a
-/// connection, and how a resolved endpoint is spelled for `GatewayMatch`.
+/// connection, and how a resolved endpoint is spelled for `pairing::matching`.
 enum GatewayBrowse {
-    /// The service type `serve` advertises (`GatewayMatch.SERVICE_TYPE`),
+    /// The service type `serve` advertises (Rust's `pairing::matching`),
     /// which `NSBonjourServices` must list or iOS refuses the browse.
     static let serviceType = "_centraid-gateway._tcp"
 
-    /// The TXT key carrying the gateway's id (`GatewayMatch.ID_KEY`).
+    /// The TXT key carrying the gateway's id (Rust's `pairing::matching`).
     static let idKey = "gw"
 
     /// Whether a TXT record claims an id at all. This is only the filter that
     /// decides what is worth connecting to; whether the id is the paired
-    /// gateway's is `GatewayMatch`'s, and whether the machine IS that gateway
+    /// gateway's is Rust's (`pairing::matching`), and whether the machine IS that gateway
     /// is the core's.
     static func claimsGateway(_ txt: [String: String]) -> Bool {
         txt.contains { key, value in
@@ -65,7 +61,7 @@ enum GatewayBrowse {
 
     /// `a.b.c.d:port` or `[v6]:port`, with an interface scope (`%en0`)
     /// removed, or nil for a host that is a name. A scoped link-local address
-    /// is spelled without its scope and so dropped by `GatewayMatch`, which is
+    /// is spelled without its scope and so dropped by `pairing::matching`, which is
     /// the rule: it cannot be dialled from an advertisement's own words.
     static func spelling(host: NWEndpoint.Host, port: NWEndpoint.Port) -> String? {
         switch host {
@@ -95,8 +91,7 @@ struct FoundService {
     var key: String { "\(endpoint)" }
 }
 
-/// One advertisement as resolved, the platform-neutral twin of the shared
-/// module's `GatewaySighting`.
+/// One advertisement as resolved: what a `GatewaySighting` carries to Rust.
 struct ResolvedService: Equatable {
     let serviceName: String
     let txt: [String: String]
@@ -289,27 +284,6 @@ final class ConnectionResolver: AddressResolver {
         connections.removeAll()
     }
 }
-
-/// THE KOTLIN-VISIBLE HALF: `GatewayBrowser` is `commonMain`'s interface
-/// (`sync/GatewayDiscovery.kt`) and this is its iOS implementation, installed
-/// once through `HomeBridge.installGatewayBrowser` (`ShellModel.init`).
-final class BonjourGatewayBrowser: NSObject, GatewayBrowser {
-    func browse(windowMs: Int64, done: @escaping ([GatewaySighting]) -> Void) {
-        let run = GatewayBrowseRun(
-            finder: NWServiceFinder(),
-            resolver: ConnectionResolver(),
-            window: TimeInterval(max(windowMs, 0)) / 1000
-        ) { found in
-            let sightings = found.map {
-                GatewaySighting(serviceName: $0.serviceName, txt: $0.txt, addresses: $0.addresses)
-            }
-            // On the main queue, as every shell callback into Kotlin is.
-            DispatchQueue.main.async { done(sightings) }
-        }
-        run.start()
-    }
-}
-
 
 // MARK: - the `BrowseGateways` effect
 

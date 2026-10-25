@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// THE NEAR-DUPLICATE SETS (#1135): `photos.duplicates`, drawn. A list of
 /// DECISIONS, not of photographs: each row is the way in to `photos.duplicate_review`,
 /// where the member sees the copies side by side and picks the one that survives.

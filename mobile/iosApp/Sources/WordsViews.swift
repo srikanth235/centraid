@@ -2,8 +2,6 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
-import CentraidShared
-
 // THE 24 WORDS, DRAWN (#1047 E2). Two screens over the shared machines:
 // `words.make` (`WordsMakeState`) and `words.enter` (`WordsEnterState`), drawn from Rust's view state.
 //
@@ -982,48 +980,4 @@ final class CaptureProofView: UIView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-}
-
-// MARK: - routes
-
-/// The routes of the 24 words' screens, for the shell's own doors (the vault
-/// switcher, the empty shelf, Locker's wall, the Backup tab). Rust's screens
-/// carry `Route`s in their views; Home is not Rust's yet, so these spell the
-/// same three values until it is.
-enum CustodyRoutes {
-    static func make() -> Centraid_Core_V1_Route {
-        var route = Centraid_Core_V1_Route()
-        route.screen = "words.make"
-        route.wordsMake = Centraid_Core_V1_WordsMakeRoute()
-        return route
-    }
-
-    /// Restore onto this phone; a phone already holding a seed restores from it.
-    static func restore() -> Centraid_Core_V1_Route {
-        enter(purpose: .restore, origin: .unspecified)
-    }
-
-    static func rekey(origin: Centraid_Core_V1_WordsEnterOrigin) -> Centraid_Core_V1_Route {
-        enter(purpose: .rekey, origin: origin)
-    }
-
-    static func show() -> Centraid_Core_V1_Route {
-        var route = Centraid_Core_V1_Route()
-        route.screen = "words.show"
-        route.wordsShow = Centraid_Core_V1_WordsShowRoute()
-        return route
-    }
-
-    private static func enter(
-        purpose: Centraid_Core_V1_WordsEnterPurpose,
-        origin: Centraid_Core_V1_WordsEnterOrigin
-    ) -> Centraid_Core_V1_Route {
-        var route = Centraid_Core_V1_Route()
-        route.screen = "words.enter"
-        route.wordsEnter = .with {
-            $0.purpose = purpose
-            $0.origin = origin
-        }
-        return route
-    }
 }

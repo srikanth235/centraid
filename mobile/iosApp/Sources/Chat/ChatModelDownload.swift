@@ -69,7 +69,7 @@ enum ChatModelStore {
 /// THE MODEL AND PROJECTOR DOWNLOADS, ON AN ORDINARY SESSION.
 ///
 /// Not a background `URLSession`: the app has exactly ONE, the upload mover's
-/// (`BackgroundUploads.swift`, #1080 ruling 2, held by `BackgroundPassLawSpec`), and `AppDelegate`
+/// (`BackgroundUploads.swift`, #1080 ruling 2), and `AppDelegate`
 /// answers any other session's events at once. So a transfer runs while the app does and one the
 /// system ends with the app is started again from the step's "Download model" (`start` picks up a
 /// task this launch still holds).

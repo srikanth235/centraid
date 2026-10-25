@@ -36,6 +36,19 @@ final class LinkReporter {
         report()
     }
 
+    /// THE LINK NOW, for the camera roll's `LinkRead`: online and metered as the platform said,
+    /// and `platform_refused` before it said anything. Which original may cross it is Rust's.
+    var reading: Centraid_Core_V1_LinkReading {
+        var reading = Centraid_Core_V1_LinkReading()
+        if let path {
+            reading.online = path.status == .satisfied
+            reading.metered = path.isExpensive || path.isConstrained
+        } else {
+            reading.platformRefused = true
+        }
+        return reading
+    }
+
     /// One reading of the link and the charger, as the platform gave it.
     private func report() {
         var link = Centraid_Core_V1_LinkChanged()

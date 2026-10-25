@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// The editor's events, built once.
 enum LockerEditorEvents {
     static func make(_ build: (inout Centraid_Core_V1_LockerEditorEvent) -> Void) -> Centraid_Core_V1_LockerEditorEvent {

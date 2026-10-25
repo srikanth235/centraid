@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// `health.connect` — what Health may read, and the one Ink button (#1129, #1135), on the kit.
 ///
 /// **THE VIEW DECIDES NOTHING.** The headline, the lede, a switch a type with its words, the

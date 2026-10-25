@@ -3,8 +3,6 @@ import ImageIO
 import SwiftUI
 import UIKit
 
-import CentraidShared
-
 /// THE STAGE — the photograph, and the three gestures a member reaches it by
 /// (#1029 photos port; v0's `MediaPage.tsx` and `lightbox-gestures.ts`). The
 /// Compose twin is `PhotosLightboxStage.kt`.

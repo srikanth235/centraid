@@ -117,7 +117,7 @@ struct UploadTag: Codable, Equatable {
 }
 
 /// One part the core handed off, in this file's own terms — so the delegate
-/// and its tests never need the Kotlin types.
+/// and its tests never need the wire types.
 struct UploadOrder: Equatable {
     let name: String
     let path: String
@@ -227,7 +227,7 @@ enum UploadOutcome {
 /// not secrets, and they are kept in one property list beside the vaults:
 /// under `Documents`, which `VaultFileProtection.secure` sweeps out of iCloud
 /// backup and into `completeUntilFirstUserAuthentication` (R-1029-8). A file
-/// at that level is not a vault (`Shelf` lists `<dir>/*/vault.db`).
+/// at that level is not a vault (the Rust shelf lists `<dir>/*/vault.db`).
 final class UploadPins: @unchecked Sendable {
     struct Pin: Codable, Equatable {
         /// The gateway certificate's DER, as the core kept it at `pair`.
@@ -309,13 +309,12 @@ final class UploadPins: @unchecked Sendable {
 
 /// THE ONE BACKGROUND SESSION.
 ///
-/// Non-isolated and locked, because Kotlin may call [enqueue] from any thread;
+/// Non-isolated and locked, because [enqueue] may be called from any thread;
 /// the session's delegate queue is the MAIN queue, so every callback below is
-/// on the main thread — which is what lets a report cross into Kotlin, whose
-/// suspend functions are callable from Swift on the main thread only.
+/// on the main thread, where the store that reports it to Rust lives.
 final class BackgroundUploader: NSObject, @unchecked Sendable {
     /// Not a `BGTaskScheduler` identifier: a background session needs no
-    /// `Info.plist` key, and `BackgroundIdentifierSpec` does not list it.
+    /// `Info.plist` key, and `project.yml` does not list it.
     static let identifier = "dev.centraid.uploads"
 
     static let shared = BackgroundUploader(pins: UploadPins(at: UploadPins.defaultLocation))
@@ -557,9 +556,9 @@ protocol UploadSink: AnyObject {
 
 /// THE ORDERED, MAIN-ACTOR ROAD FROM THE OS TO THE CORE.
 ///
-/// Every report is chained behind the one before it, because a Kotlin
-/// suspend call is awaited and two awaited calls started together would land
-/// in either order. iOS's completion handler for a relaunch is held here and
+/// Every report is chained behind the one before it, because a report to
+/// Rust is awaited and two awaited calls started together would land in
+/// either order. iOS's completion handler for a relaunch is held here and
 /// called once the core has settled and chained the next batch — or after
 /// [finishWithinSeconds], whichever is first, because iOS suspends an app
 /// that keeps it longer and stops relaunching one that never answers.

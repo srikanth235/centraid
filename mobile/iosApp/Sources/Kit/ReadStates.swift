@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 // THE FOUR READ SHAPES, DRAWN ONCE (K5; DESIGN.md "The seven rooms").
 //
 // The room owns the empty, loading and error states; the app supplies the
@@ -26,7 +24,7 @@ struct ReadStateView<Value, Skeleton: View, Content: View>: View {
         content: ScreenContent<Value>,
         @ViewBuilder skeleton: @escaping () -> Skeleton,
         onRetry: (() -> Void)?,
-        retryLabel: String = KitWords.shared.RETRY,
+        retryLabel: String = KitWords.RETRY,
         @ViewBuilder data: @escaping (Value) -> Content
     ) {
         self.content = content
@@ -54,9 +52,9 @@ extension ReadStateView where Skeleton == RowSkeleton {
     /// The common case: a list, so its skeleton is rows.
     init(
         content: ScreenContent<Value>,
-        loadingLabel: String = KitWords.shared.OPENING,
+        loadingLabel: String = KitWords.OPENING,
         onRetry: (() -> Void)?,
-        retryLabel: String = KitWords.shared.RETRY,
+        retryLabel: String = KitWords.RETRY,
         @ViewBuilder data: @escaping (Value) -> Content
     ) {
         self.init(
@@ -79,7 +77,7 @@ extension ReadStateView where Skeleton == RowSkeleton {
 struct RowSkeleton: View {
     var rows: Int = 8
     var meta: Bool = true
-    var label: String = KitWords.shared.OPENING
+    var label: String = KitWords.OPENING
 
     @Environment(\.colorScheme) private var scheme
 
@@ -124,7 +122,7 @@ struct RowSkeleton: View {
 struct FailureView: View {
     let sentence: String
     let remedy: String
-    var retryLabel: String = KitWords.shared.RETRY
+    var retryLabel: String = KitWords.RETRY
     let onRetry: (() -> Void)?
 
     @Environment(\.colorScheme) private var scheme

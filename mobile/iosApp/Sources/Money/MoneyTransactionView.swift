@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// `money.transaction` — one transaction, its facts, the two offers the app
 /// proposes (a transfer, a rule) and the actions (#1099).
 ///

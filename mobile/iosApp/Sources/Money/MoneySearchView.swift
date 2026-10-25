@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// `money.search` — the search bar's page (R-CHROME-2; #1099).
 ///
 /// Home's bar is a door and never a field: it pushes this page, whose field is
@@ -36,7 +34,7 @@ struct MoneySearchView: View {
                 CentraidSearchField(
                     field: field(state),
                     placeholder: state.placeholder,
-                    closeLabel: state.clearLabel_p.isEmpty ? KitWords.shared.CLOSE_SEARCH : state.clearLabel_p,
+                    closeLabel: state.clearLabel_p.isEmpty ? KitWords.CLOSE_SEARCH : state.clearLabel_p,
                     identifier: "money-search",
                     onTerm: { term in send(event { $0.term = .with { $0.term = term } }) },
                     onClose: { send(event { $0.cleared = .init() }) }

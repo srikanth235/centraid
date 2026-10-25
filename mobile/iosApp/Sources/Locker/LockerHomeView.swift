@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// The home's events, built once.
 enum LockerHomeEvents {
     static func make(_ build: (inout Centraid_Core_V1_LockerHomeEvent) -> Void) -> Centraid_Core_V1_LockerHomeEvent {

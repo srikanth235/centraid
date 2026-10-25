@@ -10,9 +10,8 @@ import Foundation
 /// replace what is typed; an echo taken back drops every keystroke since
 /// ("Body of the alk note", the #1047 walk). One per field, remembered with it.
 ///
-/// A class, as it was in the shared module: a field holds one in `@State` and it
-/// remembers across the view's updates. Moved here with the shared module's
-/// retirement (#1135); `TypedTextTests` holds the cases it was written against.
+/// A class: a field holds one in `@State` and it remembers across the view's
+/// updates (#1135). `TypedTextTests` holds the cases it was written against.
 final class TypedText {
     /// Sent and not yet heard back, oldest first.
     private var inFlight: [String] = []

@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 // HOME, DRAWN FROM RUST (#1135, lane H1). The springboard is a Rust screen
 // (`crates/screens/src/shell`): it reads one tile per app, grades the grid,
 // words every tile and the lockup, and carries the route each tile opens.
@@ -28,8 +26,8 @@ extension Centraid_Core_V1_ViewState {
     }
 }
 
-/// The place the band is showing: Home's springboard, or Chat/Backup drawn in
-/// its place (those two are still hosted by `ShellModel.tab`).
+/// The place the band is showing, as Rust selects it: Home's springboard, or the
+/// chat's or the backup's tab root drawn in its place.
 struct HomeView: View {
     @ObservedObject var shell: ShellModel
     /// The Chat composer has the keyboard (`ChatView` reports it).
@@ -55,32 +53,22 @@ private struct HomeRoot: View {
         store.homeInstance.flatMap { store.views[$0] }?.homeState
     }
 
-    /// THE BAND'S PLACES: Rust's (`Navigation.band`, which carries the Chat place now that the
-    /// `chat` tab is registered), plus TRANSITIONALLY the Backup place this shell still hosts
-    /// itself. Lane H2 registers it as a Rust tab, after which the insert below is deleted.
+    /// THE BAND'S PLACES, Rust's (`Navigation.band`): the words, the marks and which is lit.
     private var places: [BandPlace] {
-        let active = shell.tab == .chat ? BandPolicy.shared.PLACE_CHAT : shell.tab == .backup ? BandPolicy.shared.PLACE_BACKUP : BandPolicy.shared.PLACE_HOME
-        var places = (store.navigation?.band.tabs ?? []).map { tab in
+        (store.navigation?.band.tabs ?? []).map { tab in
             BandPlace(
                 id: tab.tab,
                 label: tab.label,
-                spoken: tab.tab == active ? tab.spoken : tab.label,
+                spoken: tab.spoken,
                 iconKey: tab.iconKey,
-                selected: tab.tab == active
+                selected: tab.selected
             )
         }
-        if !places.contains(where: { $0.id == BandPolicy.shared.PLACE_BACKUP }) {
-            places.append(
-                BandPlace(
-                    id: BandPolicy.shared.PLACE_BACKUP,
-                    label: HomeWords.shared.BAND_BACKUP,
-                    spoken: HomeWords.shared.BAND_BACKUP_SPOKEN + (active == BandPolicy.shared.PLACE_BACKUP ? ", " + SharedCopy.shared.BAND_CURRENT_SPOKEN : ""),
-                    iconKey: "Backup",
-                    selected: active == BandPolicy.shared.PLACE_BACKUP
-                )
-            )
-        }
-        return places
+    }
+
+    /// The root of the backup tab, once Rust has opened it.
+    private var backupRoot: UInt64? {
+        store.entries(of: RustScreens.backupTab).first?.instance
     }
 
     var body: some View {
@@ -100,31 +88,21 @@ private struct HomeRoot: View {
                 // does, under the vault's lockup: the backup it describes is
                 // that vault's, and the band stays where it is.
                 VaultHeader(bar: home.bar, shell: shell, store: store)
-                RustScreenHost(shell: shell, entry: shell.backupEntry)
-                    .id(shell.backupEntry.token)
+                if let backupRoot {
+                    RustScreenView(shell: shell, store: store, instance: backupRoot, entry: nil)
+                        .id(backupRoot)
+                } else {
+                    BarePaper()
+                }
             } else {
                 homeContent(home)
             }
 
             // A SIBLING OF THE PAGE, NEVER INSIDE IT: the band is never scrolled away.
-            ShellBanner(shell: shell)
+            ShellBanner(shell: shell, store: store)
             if !(shell.tab == .chat && chatTyping) {
-                HomeBand(places: places) { target in
-                    // A place whose tab Rust holds is selected by Rust.
-                    if target != BandPolicy.shared.PLACE_HOME, !store.entries(of: target).isEmpty { store.selectTab(target) }
-                    switch target {
-                    case BandPolicy.shared.PLACE_HOME: shell.openHomeTab()
-                    // PRESSED WHILE CHAT IS SHOWING it only shuts the drawer.
-                    case BandPolicy.shared.PLACE_CHAT:
-                        if shell.tab == .chat {
-                            shell.chat.toggleDrawer(false)
-                        } else {
-                            shell.openChatTab()
-                        }
-                    case BandPolicy.shared.PLACE_BACKUP: shell.openBackup()
-                    default: break
-                    }
-                }
+                // A PLACE IS SELECTED BY RUST; pressed again while Chat shows, it shuts the drawer.
+                HomeBand(places: places) { target in shell.select(place: target) }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -139,9 +117,17 @@ private struct HomeRoot: View {
         // may have moved without a table changing.
         .onAppear { store.sendHome(.shown(.init())) }
         .environment(\.homeLoadingLabel, home.loadingLabel)
-        // THE TRANSFER RULES (#1025 S4), reached from the "originals waiting" line.
-        .sheet(isPresented: $shell.transferRulesOpen) {
-            TransferRulesSheet(shell: shell)
+        // THE TRANSFER RULES (#1025 S4), reached from the "originals waiting" line: Rust's
+        // sheet (`HomeState.transfer_sheet`); dismissing it tells Rust.
+        .sheet(
+            isPresented: Binding(
+                get: { home.hasTransferSheet },
+                set: { open in
+                    if !open { store.sendHome(.transferRulesClosed(.init())) }
+                }
+            )
+        ) {
+            TransferRulesSheet(sheet: home.transferSheet, store: store)
         }
         // A REAL BINDING: dismissing shuts the sheet in Rust, which owns it.
         .sheet(
@@ -229,8 +215,8 @@ private let hairline = CentraidGeometry.hairline
 /// dictionary and not `"c" + key.capitalized` because the string form would
 /// hand any key at all to `Theme.color`, which trips a `preconditionFailure`
 /// correctly for a role that does not exist — the wrong failure for a launcher
-/// tile drawing whatever a producer sent. `PartyHueWheelSpec` asserted every key
-/// has a role in the emitted table and that both view trees name all eight.
+/// tile drawing whatever a producer sent. `crates/screens/tests/shell_home.rs` asserts
+/// both view trees name all eight.
 private let partyHueRoles: [String: String] = [
     "rose": "cRose",
     "amber": "cAmber",

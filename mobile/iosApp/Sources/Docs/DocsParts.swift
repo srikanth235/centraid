@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 // DOCS' PIECES, SHARED BY THE DRIVE AND THE DOCUMENT PAGE (#1046, #1135). The
 // sheet (one oneof: actions, choices, labels, new folder), the document row and
 // the inline rename. Every word and every enabled flag is Rust's

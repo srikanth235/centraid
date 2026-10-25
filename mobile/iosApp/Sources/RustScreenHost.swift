@@ -1,4 +1,3 @@
-import CentraidShared
 import SwiftUI
 
 // THE SHELL'S ONE PLACE THAT DRAWS A SCREEN RUST OWNS (#1135).
@@ -9,21 +8,22 @@ import SwiftUI
 // the view below, which switches on `ViewState.kind`. The views add no copy,
 // format nothing, count nothing and start no timer; they send `ScreenEvent`s.
 //
-// THE STACK: Rust holds one (tab `home`, rooted at Home); the shell's `path` mirrors it. An entry
-// pushed onto it sends `NavPush` (`ShellModel.openRust`), and leaving it by any
-// route sends `NavPopped` (`ShellModel.rustPopped`). The shell lane replaces
-// this with the stack Rust holds (`ProofStackView`).
+// THE STACK: Rust holds one per tab (`home`, rooted at Home; `chat`; `backup`); the shell's
+// `path` mirrors the home tab's. An entry pushed onto it sends `NavPush`
+// (`ShellModel.openRust`), and leaving it by any route sends `NavPopped`
+// (`ShellModel.rustPopped`).
 
+/// THE TABS RUST REGISTERS (`centraid_screens::standard`), by the ids it names
+/// them with: the three places of the band, and the phone imports' three hidden
+/// roots, which the band leaves out and the shell tells what only it knows.
 enum RustScreens {
-    /// The screen id the shared side spells a Rust route under (`ScreenOpening.screenId`);
-    /// its event is the encoded `centraid.core.v1.Route`.
-    static let id = ScreenIds.shared.RUST_SCREEN
-    /// The tab Home is the root of. Rust owns the stack: every page, whichever
-    /// app's, is pushed on this tab, so back returns to Home.
-    static let homeTab = BandPolicy.shared.PLACE_HOME
-
-    /// The tab Rust keeps a route's screens' stack under: always Home's.
-    static func tab(for route: Centraid_Core_V1_Route) -> String { homeTab }
+    /// The tab Home is the root of: every page, whichever app's, is pushed on it,
+    /// so back returns to Home.
+    static let homeTab = "home"
+    static let chatTab = "chat"
+    static let backupTab = "backup"
+    static let cameraRollTab = "imports-camera-roll"
+    static let madeTab = "imports-made"
 }
 
 /// ONE PUSH OF A RUST ROUTE: the route Rust built and a token unique to the
@@ -60,21 +60,40 @@ struct RustScreenHost: View {
     }
 }
 
-/// One instance's view state, drawn by its kind.
-private struct RustScreenView: View {
+/// One instance's view state, drawn by its kind: a page on the shell's stack
+/// (`entry`), or a tab's root drawn in Home's place (`entry` nil), which never pops.
+struct RustScreenView: View {
     let shell: ShellModel
     @ObservedObject var store: ScreenStore
     let instance: UInt64
-    let entry: RustEntry
+    let entry: RustEntry?
 
     /// This entry leaves the stack (a finished screen, a back control).
     private func pop() {
-        guard shell.path.last == .rust(entry) else { return }
+        guard let entry, shell.path.last == .rust(entry) else { return }
         shell.path.removeLast()
+    }
+
+    /// THE WORDS' DOOR ON A LOCKER WALL: the re-key page Rust names (`LockerWall.words_route`).
+    private var wordsRoute: Centraid_Core_V1_Route? {
+        let wall: Centraid_Core_V1_LockerWall?
+        switch store.views[instance]?.kind {
+        case .lockerHome(let state)?: wall = state.hasWall ? state.wall : nil
+        case .lockerItem(let state)?: wall = state.hasWall ? state.wall : nil
+        case .lockerEditor(let state)?: wall = state.hasWall ? state.wall : nil
+        case .lockerAccess(let state)?: wall = state.hasWall ? state.wall : nil
+        case .lockerExport(let state)?: wall = state.hasWall ? state.wall : nil
+        case .lockerImport(let state)?: wall = state.hasWall ? state.wall : nil
+        case .lockerLock(let state)?: wall = state.hasWall ? state.wall : nil
+        default: wall = nil
+        }
+        guard let wall, wall.hasWordsRoute else { return nil }
+        return wall.wordsRoute
     }
 
     var body: some View {
         let open: (Centraid_Core_V1_Route) -> Void = { shell.open($0) }
+        let words: () -> Void = { if let route = wordsRoute { shell.open(route) } }
         switch store.views[instance]?.kind {
         // THE 24 WORDS (lane H2): made, typed back and shown again. Each is
         // finished by Rust (`finished`), and the shell pops it.
@@ -82,28 +101,20 @@ private struct RustScreenView: View {
             VaultWordsView(
                 state: state,
                 send: { store.send(instance, .wordsMake($0)) },
-                onDone: {
-                    guard shell.path.last == .rust(entry) else { return }
-                    if !state.madeLine.isEmpty { shell.vaultMade(state.madeLine) }
-                    pop()
-                }
+                onDone: pop
             )
         case .wordsEnter(let state)?:
             WordsEntryView(
                 state: state,
                 send: { store.send(instance, .wordsEnter($0)) },
-                onDone: {
-                    guard shell.path.last == .rust(entry) else { return }
-                    pop()
-                    shell.wordsEnterFinished()
-                }
+                onDone: pop
             )
         case .wordsShow(let state)?:
             WordsShowView(
                 state: state,
                 send: { store.send(instance, .wordsShow($0)) },
                 onDone: {
-                    guard shell.path.last == .rust(entry) else { return }
+                    guard let entry, shell.path.last == .rust(entry) else { return }
                     pop()
                     shell.wordsShowFinished()
                 }
@@ -169,16 +180,14 @@ private struct RustScreenView: View {
                 state: state,
                 shell: shell,
                 send: { store.send(instance, .backupHome($0)) },
-                onAddDestination: { shell.addBackupDestination() },
-                onShowWords: { shell.backupShowWords() }
+                open: open
             )
         case .photosHome(let state)?:
             PhotosHomeView(
                 state: state,
                 send: { store.send(instance, .photosHome($0)) },
                 open: open,
-                onHome: { shell.path.removeAll() },
-                onResume: { store.photos?.opened() }
+                onHome: { shell.path.removeAll() }
             )
         case .photosShelf(let state)?:
             PhotoShelfView(
@@ -205,7 +214,7 @@ private struct RustScreenView: View {
                 send: { store.send(instance, .lockerHome($0)) },
                 sendWall: { store.send(instance, .lockerWall($0)) },
                 open: open,
-                onWords: { shell.openRekey() },
+                onWords: words,
                 onHome: { shell.path.removeAll() }
             )
         case .lockerItem(let state)?:
@@ -214,7 +223,7 @@ private struct RustScreenView: View {
                 send: { store.send(instance, .lockerItem($0)) },
                 sendWall: { store.send(instance, .lockerWall($0)) },
                 open: open,
-                onWords: { shell.openRekey() },
+                onWords: words,
                 onBack: pop
             )
         case .lockerEditor(let state)?:
@@ -222,7 +231,7 @@ private struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .lockerEditor($0)) },
                 sendWall: { store.send(instance, .lockerWall($0)) },
-                onWords: { shell.openRekey() },
+                onWords: words,
                 onClose: pop
             )
         case .lockerAccess(let state)?:
@@ -230,7 +239,7 @@ private struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .lockerAccess($0)) },
                 sendWall: { store.send(instance, .lockerWall($0)) },
-                onWords: { shell.openRekey() },
+                onWords: words,
                 onBack: pop
             )
         case .lockerExport(let state)?:
@@ -238,7 +247,7 @@ private struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .lockerExport($0)) },
                 sendWall: { store.send(instance, .lockerWall($0)) },
-                onWords: { shell.openRekey() },
+                onWords: words,
                 onBack: pop
             )
         case .lockerImport(let state)?:
@@ -246,14 +255,14 @@ private struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .lockerImport($0)) },
                 sendWall: { store.send(instance, .lockerWall($0)) },
-                onWords: { shell.openRekey() },
+                onWords: words,
                 onBack: pop
             )
         case .lockerLock(let state)?:
             LockerLockPageView(
                 state: state,
                 sendWall: { store.send(instance, .lockerWall($0)) },
-                onWords: { shell.openRekey() },
+                onWords: words,
                 onClose: pop
             )
         case .moneyHome(let state)?:

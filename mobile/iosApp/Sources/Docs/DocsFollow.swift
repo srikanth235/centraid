@@ -1,18 +1,17 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-import CentraidShared
-
-/// FOLLOWING A FOLDER, THE IOS HALF (#1127, R-1127-7; `DocsFollowBridge`'s header).
+/// FOLLOWING A FOLDER, THE IOS HALF (#1127, R-1127-7; #1135).
 ///
 /// Three things only the shell can do: raise the system's FOLDER picker (only the member's own
 /// "Follow a folder" tap does; a following pass never asks the OS for anything), keep the access
-/// the member granted (a security-scoped bookmark per folder, [FolderAccess]), and list a folder
-/// ([FolderFollowReader]). What is followed, what a changed file is, and what a vanished folder
-/// asks are the shared code's.
+/// the member granted (a security-scoped bookmark per folder, [FolderAccess]), and read a folder
+/// (`FoldersRead`, `StageFolderFile`, [FolderReader]). What is followed, what a changed file is
+/// and what a vanished folder means are Rust's (`imports.files`, `crates/screens/src/imports`).
 ///
-/// The persisted access is the SHELL's and lives in `UserDefaults`, one bookmark per origin id;
-/// the vault holds only the origin and its links (R-1127-1: nothing is written to the folder).
+/// The persisted access is the SHELL's and lives in `UserDefaults`, one bookmark per origin
+/// (`folder:<uuid>`, minted here); the vault holds only the origin and its links (R-1127-1:
+/// nothing is written to the folder).
 enum FolderAccess {
     private static let prefix = "docs.folder.bookmark."
     private static let lock = NSLock()
@@ -87,33 +86,32 @@ enum FolderAccess {
     }
 }
 
-/// THE FOLLOWER'S FOLDER READER (#1127): a LISTING of every followed folder, off the main thread,
-/// over access the member already granted. No bytes are read here; a file's [PhoneFile.open] is
-/// called by the pass only for a file that is new or whose size or modification time moved.
+/// THE FOLLOWER'S FOLDER READER (#1127): `FoldersRead` answered with a LISTING of every folder
+/// Rust names, over access the member already granted, and `StageFolderFile` streamed through the
+/// stage door. No bytes are read by a listing.
 ///
-/// - A folder with no usable bookmark is LEFT OUT of `origins`, which is how the shared engine
-///   learns it is gone and asks (R-1127-9).
+/// - A folder with no usable bookmark is LEFT OUT of the listing, which is how Rust learns it is
+///   gone.
 /// - **A listing that failed part-way, or met an iCloud placeholder (`.name.icloud`: a file whose
 ///   bytes are not on this phone, listed under another name), is not complete**, so it trashes
 ///   nothing: a file that is merely not here yet must not look removed (R-1127-3).
-/// - Hidden files and folders, packages (`.app`, `.pages`…) and non-regular files are skipped.
-final class FolderFollowReader: NSObject, FilesReader {
-    func read(followed: [String], deliver: @escaping (FilesRead?) -> Void) {
-        Task.detached(priority: .utility) { deliver(Self.list(followed)) }
-    }
-
+/// - Hidden files and folders, packages (`.app`, `.pages`…) and non-regular files are skipped, and
+///   a file whose bytes are not on this phone is not listed.
+enum FolderReader {
     private static let keys: [URLResourceKey] = [
         .isRegularFileKey, .isDirectoryKey, .isPackageKey, .fileSizeKey,
         .contentModificationDateKey, .typeIdentifierKey, .ubiquitousItemDownloadingStatusKey,
     ]
 
-    static func list(_ followed: [String]) -> FilesRead {
-        var files: [PhoneFile] = []
-        var origins: [PhoneOriginRef] = []
-        var complete = true
-        for origin in followed {
+    static func list(_ read: Centraid_Core_V1_FoldersRead) -> Centraid_Core_V1_FoldersListing {
+        var listing = Centraid_Core_V1_FoldersListing()
+        listing.deviceID = PhoneCalendar.deviceID
+        listing.complete = true
+        for origin in read.origins {
             guard let root = FolderAccess.resolve(origin: origin) else { continue }
-            origins.append(FilesImport.shared.folder(origin: origin, name: root.lastPathComponent))
+            var folder = Centraid_Core_V1_FolderListed()
+            folder.origin = origin
+            folder.label = root.lastPathComponent
             var failed = false
             guard let walk = FileManager.default.enumerator(
                 at: root,
@@ -124,18 +122,18 @@ final class FolderFollowReader: NSObject, FilesReader {
                     return true
                 }
             ) else {
-                complete = false
+                listing.complete = false
                 continue
             }
             let rootParts = root.pathComponents
             for case let url as URL in walk {
                 let name = url.lastPathComponent
                 guard let values = try? url.resourceValues(forKeys: Set(keys)) else {
-                    complete = false
+                    listing.complete = false
                     continue
                 }
                 if name.hasPrefix(".") {
-                    if name.hasSuffix(".icloud") { complete = false }
+                    if name.hasSuffix(".icloud") { listing.complete = false }
                     if values.isDirectory == true { walk.skipDescendants() }
                     continue
                 }
@@ -146,41 +144,53 @@ final class FolderFollowReader: NSObject, FilesReader {
                 guard values.isRegularFile == true else { continue }
                 let parts = url.pathComponents
                 guard parts.count > rootParts.count, Array(parts.prefix(rootParts.count)) == rootParts else {
-                    complete = false
+                    listing.complete = false
                     continue
                 }
-                let relative = parts.dropFirst(rootParts.count).joined(separator: "/")
                 let local = values.ubiquitousItemDownloadingStatus.map { $0 == .current || $0 == .downloaded } ?? true
-                let path = url.path
-                files.append(PhoneFile(
-                    origin: origin,
-                    path: relative,
-                    size: Int64(values.fileSize ?? 0),
-                    modifiedMs: Int64((values.contentModificationDate?.timeIntervalSince1970 ?? 0) * 1000),
-                    mediaType: values.typeIdentifier.flatMap { UTType($0)?.preferredMIMEType } ?? "",
-                    open: { local ? PhoneFileSources.shared.atPath(path: path) : nil }
-                ))
+                guard local else {
+                    listing.complete = false
+                    continue
+                }
+                var file = Centraid_Core_V1_FolderFile()
+                file.path = parts.dropFirst(rootParts.count).joined(separator: "/")
+                file.size = UInt64(max(values.fileSize ?? 0, 0))
+                file.modifiedMs = Int64((values.contentModificationDate?.timeIntervalSince1970 ?? 0) * 1000)
+                file.mediaType = values.typeIdentifier.flatMap { UTType($0)?.preferredMIMEType } ?? ""
+                folder.files.append(file)
             }
-            if failed { complete = false }
+            if failed { listing.complete = false }
+            listing.folders.append(folder)
         }
-        return FilesRead(files: files, origins: origins, complete: complete)
+        return listing
+    }
+
+    /// One followed file, streamed through the stage door. Not `ok` when it would not open or
+    /// read, or the core refused.
+    static func stage(_ asked: Centraid_Core_V1_StageFolderFile, core: any ScreenCore) async -> Centraid_Core_V1_FolderFileStaged {
+        var staged = Centraid_Core_V1_FolderFileStaged()
+        guard let root = FolderAccess.resolve(origin: asked.origin), !asked.path.contains("..") else { return staged }
+        let url = root.appendingPathComponent(asked.path)
+        if case let .staged(handle) = await StageDoor.stage(core, file: url.path, mediaType: asked.mediaType) {
+            staged.ok = true
+            staged.contentHash = handle.contentHash
+            staged.byteSize = handle.byteSize
+        }
+        return staged
     }
 }
 
-/// THE FOLDER PICKER (#1127; the `FollowFolder` and `StopFollowing` effects, #1135).
-/// Rust asks; this raises the system's folder picker, keeps the access the member grants,
-/// tells the vault (`DocsFollowBridge`) and answers: `FolderFollowed` with the origin and the
-/// name the phone gives the folder, `EffectDone` for a closed picker, `EffectFailed` for a
-/// refusal (Rust says the sentence). What is followed is the shared follower engine's.
+/// THE FOLDER PICKER (#1127; the `FollowFolder` and `StopFollowing` effects, #1135). Rust asks;
+/// this raises the system's folder picker, keeps the access the member grants under an origin it
+/// mints (`folder:<uuid>`), and answers `FolderFollowed` with the origin and the name the phone
+/// gives the folder, `EffectDone` for a closed picker, `EffectFailed` for a refusal (Rust words
+/// it). The Docs drive tells the follower; nothing is told from here.
 @MainActor
 final class DocsFollow: ObservableObject {
     static let shared = DocsFollow()
 
     /// The folder picker is up.
     @Published var picking = false
-
-    weak var shell: ShellModel?
-    let bridge = DocsScreens.followBridge
 
     private var answer: ((Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void)?
 
@@ -190,54 +200,27 @@ final class DocsFollow: ObservableObject {
         picking = true
     }
 
-    /// The folders the vault follows now, for the drive's More sheet.
-    func followed(_ deliver: @escaping ([FollowedFolder]) -> Void) {
-        bridge.followed { folders in
-            DispatchQueue.main.async { deliver(folders) }
-        }
-    }
-
     func picked(_ result: Result<[URL], Swift.Error>) {
         switch result {
         case let .failure(error):
             if (error as NSError).code == NSUserCancelledError { done() } else { fail() }
         case let .success(urls):
             guard let url = urls.first else { return done() }
-            if FolderAccess.following(url) != nil {
-                // Already followed: a pass over it is the most the tap can mean.
-                shell?.followFolders()
-                return done()
-            }
-            let origin = bridge.mintOrigin()
+            // PICKED TWICE IS NOT A SECOND ORIGIN: the folder's own origin is answered again.
+            let origin = FolderAccess.following(url) ?? "folder:\(UUID().uuidString.lowercased())"
             guard FolderAccess.remember(origin: origin, url: url) else { return fail() }
-            let name = url.lastPathComponent
-            bridge.follow(origin: origin, name: name) { [weak self] ok in
-                DispatchQueue.main.async {
-                    guard let self else { return }
-                    if ok.boolValue {
-                        self.shell?.followFolders()
-                        var followed = Centraid_Core_V1_FolderFollowed()
-                        followed.origin = origin
-                        followed.name = name
-                        self.answer?(.folderFollowed(followed))
-                        self.answer = nil
-                    } else {
-                        FolderAccess.forget(origin: origin)
-                        self.fail()
-                    }
-                }
-            }
+            var followed = Centraid_Core_V1_FolderFollowed()
+            followed.origin = origin
+            followed.name = url.lastPathComponent
+            answer?(.folderFollowed(followed))
+            answer = nil
         }
     }
 
-    /// "Stop following": the vault forgets the links and keeps every document; then the access goes.
-    func stop(_ origin: String, answer: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void) {
-        bridge.stop(origin: origin) { ok in
-            DispatchQueue.main.async {
-                if ok.boolValue { FolderAccess.forget(origin: origin) }
-                answer(.done(Centraid_Core_V1_EffectDone()))
-            }
-        }
+    /// "Stop following": the vault forgets the links (Rust) and every document stays; the access goes.
+    func stop(_ origin: String, answer: (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void) {
+        FolderAccess.forget(origin: origin)
+        answer(.done(Centraid_Core_V1_EffectDone()))
     }
 
     private func done() {

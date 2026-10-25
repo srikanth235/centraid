@@ -4,18 +4,16 @@ import SwiftUI
 import UniformTypeIdentifiers
 import VisionKit
 
-import CentraidShared
-
 /// PICKING A FILE FOR THE DRIVE'S ADD SHEET (#1047, R-1047-Q4; the `PickFile`
 /// effect, #1135). Two things only the shell can do, and nothing else:
 ///
 /// - **The picker and the scanner.** Upload is the system file importer (the
 ///   picked file copied into this app's temporary directory), Scan is
 ///   VisionKit's document camera (the pages written to one PDF).
-/// - **The bytes.** The copy is streamed through the stage door
-///   (`StageFileBridge`, the camera roll's door) so a 900 MB scan never exists
-///   in memory at once, and the answer carries the hash the core named. Filing
-///   the document, naming it, and opening its page are Rust's.
+/// - **The bytes.** The copy is streamed through the stage door (`StageDoor`)
+///   so a 900 MB scan never exists in memory at once, and the answer carries
+///   the hash the core named. Filing the document, naming it, and opening its
+///   page are Rust's.
 ///
 /// Exactly one of `FilePicked`, `EffectDone` (the member closed the picker) or
 /// `EffectFailed` per ask, with `FileProgress` while the bytes move. A refused
@@ -29,8 +27,8 @@ final class DocsFiles: ObservableObject {
     /// The document camera is up.
     @Published var scanning = false
 
-    /// Stages the copy; attached with the session (`DocsScreens.register`).
-    let stage = DocsScreens.stageBridge
+    /// The core the copy is staged into, given with the ask.
+    private var core: (any ScreenCore)?
 
     private var kind: Centraid_Core_V1_PickFile.Kind = .upload
     private var answer: ((Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void)?
@@ -38,8 +36,10 @@ final class DocsFiles: ObservableObject {
     /// Rust asked for a file: raise the picker or the scanner.
     func pick(
         _ kind: Centraid_Core_V1_PickFile.Kind,
+        core: any ScreenCore,
         answer: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
     ) {
+        self.core = core
         self.kind = kind
         self.answer = answer
         if kind == .scan {
@@ -100,34 +100,33 @@ final class DocsFiles: ObservableObject {
     // MARK: Staging
 
     private func stage(_ path: String, name: String, mediaType: String) {
+        guard let core else { return fail("no vault is open") }
         let answer = answer
-        stage.stage(
-            path: path,
-            mediaType: mediaType.isEmpty ? "application/octet-stream" : mediaType,
-            progress: { sent, total in
+        self.answer = nil
+        Task {
+            let outcome = await StageDoor.stage(core, file: path, mediaType: mediaType) { sent, total in
                 var progress = Centraid_Core_V1_FileProgress()
-                progress.stagedBytes = UInt64(truncating: sent)
-                progress.totalBytes = UInt64(truncating: total)
+                progress.stagedBytes = sent
+                progress.totalBytes = total
                 progress.name = name
-                answer?(.fileProgress(progress))
-            },
-            staged: { blob, size in
-                DocsFileCopies.discard(path)
+                Task { @MainActor in answer?(.fileProgress(progress)) }
+            }
+            DocsFileCopies.discard(path)
+            switch outcome {
+            case let .staged(handle):
                 var picked = Centraid_Core_V1_FilePicked()
-                picked.blob = blob
-                picked.byteSize = UInt64(truncating: size)
+                picked.blob = handle.contentHash
+                picked.byteSize = handle.byteSize
                 picked.name = name
                 picked.mediaType = mediaType
                 answer?(.filePicked(picked))
-            },
-            refused: { reason in
-                DocsFileCopies.discard(path)
+            case .refused:
+                // The sentence is Rust's: a refusal is said by the screen that asked.
                 var failed = Centraid_Core_V1_EffectFailed()
-                failed.reason = reason
+                failed.reason = "the core refused the file"
                 answer?(.failed(failed))
             }
-        )
-        self.answer = nil
+        }
     }
 
     private func done() {
@@ -144,7 +143,7 @@ final class DocsFiles: ObservableObject {
     }
 }
 
-/// THE PICKER AND THE SCANNER, hosted at the app's root (`DocsScreens.global`):
+/// THE PICKER AND THE SCANNER, hosted at the app's root (`CentraidApp`):
 /// a view carries one importer, and a pick can be asked for wherever the member is.
 struct DocsFilesRoot: View {
     @ObservedObject var model = DocsFiles.shared

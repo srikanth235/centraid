@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// THE TWO FACTS TRUE ON EVERY ROUTE: which vault, and how it stands
 /// (#1020, wave A; v0 `screens/home/VaultHeader.tsx`).
 ///
@@ -147,7 +145,7 @@ struct VaultHeader: View {
                         label: bar.transferRulesLabel,
                         identifier: "home-transfer-rules"
                     ) {
-                        shell.openTransferRules()
+                        store.sendHome(.transferRulesPressed(.init()))
                     }
                 }
                 if onHome, bar.hasSearchRoute {
@@ -236,44 +234,37 @@ private extension Color {
     }
 }
 
-/// THE MEMBER'S TRANSFER RULE, AS A SHEET (#1025 S4, D-1025-S7-60).
-///
-/// Three choices, each a plain SENTENCE rather than a label — a member
-/// deciding how their phone spends money is owed something they can act on,
-/// and "Wi-Fi only" is a label that does not say what it governs. The
-/// sentences come from the shell's own copy source in `commonMain`
-/// (`TransferRule`), so this shell and the Android one cannot word the same
-/// choice two ways.
+/// THE MEMBER'S TRANSFER RULE, AS A SHEET (#1025 S4, D-1025-S7-60): Rust's
+/// (`HomeState.transfer_sheet`). Three choices, each a plain SENTENCE rather than
+/// a label — a member deciding how their phone spends money is owed something
+/// they can act on — the same three the Backup page draws, from the same store.
+/// The tick is the store's answer, never the tap.
 ///
 /// **It sets the rule and starts nothing.** A member who has just chosen to
 /// spend less must not be answered by a pass that spends; the new rule governs
-/// the next window.
+/// the next window, and what the OS already holds is cancelled in Rust.
 struct TransferRulesSheet: View {
-    @ObservedObject var shell: ShellModel
+    let sheet: Centraid_Core_V1_HomeTransferSheet
+    @ObservedObject var store: ScreenStore
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         SheetRoom(
-            title: PhotosCopy.shared.TRANSFER_TITLE,
-            primary: SheetPrimary(label: KitWords.shared.DONE) { dismiss() }
+            title: sheet.title,
+            primary: SheetPrimary(label: KitWords.DONE) { store.sendHome(.transferRulesClosed(.init())) }
         ) {
-            Text(PhotosCopy.shared.TRANSFER_SUBTITLE)
+            Text(sheet.subtitle)
                 .centraidType("small")
                 .foregroundStyle(Theme.color("textSoft", scheme))
 
             VStack(spacing: 0) {
-                ForEach(shell.transferRuleChoices, id: \.stored) { choice in
-                    // THE SELECTION IS THE STORE'S ANSWER, not the tap: an
-                    // unknown word settles to the conservative default, and a
-                    // tick on a row the next launch would not tick is worse
-                    // than a tap that appears to do nothing.
+                ForEach(sheet.choices, id: \.stored) { choice in
                     SheetRow(
                         label: choice.sentence,
-                        selected: shell.transferRule == choice.stored,
+                        selected: choice.picked,
                         identifier: "transfer-rule-\(choice.stored)"
                     ) {
-                        shell.setTransferRule(choice.stored)
+                        store.sendHome(.transferRuleChosen(.with { $0.stored = choice.stored }))
                     }
                 }
             }

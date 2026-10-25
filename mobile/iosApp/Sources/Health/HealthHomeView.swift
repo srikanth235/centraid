@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// `health.home` — Today · Trends · Workouts, More a sheet (#1129, #1135), on the kit.
 ///
 /// **THE VIEW DECIDES NOTHING.** `HealthHomeState` carries the band, the segments, the chips,
@@ -39,14 +37,14 @@ struct HealthHomeView: View {
             )
         }
         AppPlace(
-            app: AppIds.shared.HEALTH,
+            app: "health",
             title: chrome.title,
             trailing: nil,
             chips: chips,
             showsBand: !content.isDenied && !state.band.isEmpty
         ) {
             AppBand(
-                app: AppIds.shared.HEALTH,
+                app: "health",
                 tabs: state.band.map { tab in
                     BandView(
                         label: tab.label,

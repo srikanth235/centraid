@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// Export's and import's events, built once.
 enum LockerExportEvents {
     static func make(_ build: (inout Centraid_Core_V1_LockerExportEvent) -> Void) -> Centraid_Core_V1_LockerExportEvent {

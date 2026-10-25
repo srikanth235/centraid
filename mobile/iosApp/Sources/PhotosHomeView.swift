@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// PHOTOS' ROOT, IN SWIFTUI (#1135, lane D): the library, Collections and Search,
 /// drawn from the view state Rust sends for `photos.home`.
 ///
@@ -26,8 +24,6 @@ struct PhotosHomeView: View {
     let send: (Centraid_Core_V1_PhotosHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     let onHome: () -> Void
-    /// The app came back to the front: read the camera-roll grant again.
-    let onResume: () -> Void
 
     /// The day at the top of the library, for a grain switch to land on.
     @State private var visibleDay = ""
@@ -161,7 +157,6 @@ struct PhotosHomeView: View {
                     library: state.library,
                     send: send,
                     open: open,
-                    onResume: onResume,
                     visibleDay: $visibleDay
                 )
             } else {
@@ -179,8 +174,9 @@ struct PhotosHomeView: View {
 /// vault and says so; where the backup to a gateway stands is Home's backup line
 /// and the Backup screen. A DENIED grant changes this line and never the library —
 /// the difference between a member seeing the photographs they own and a member
-/// seeing an empty screen with a Settings link. A remedy's tap is an event; the
-/// shell performs it when Rust asks (`ScreenStore`, the `CameraRoll` effect).
+/// seeing an empty screen with a Settings link. A remedy's tap is an event: the
+/// prompt is the camera roll's, in Rust, and Settings and iOS's limited
+/// selection are the shell's (`ScreenStore`, the `CameraRoll` effect).
 /// Nothing here blames the member.
 struct PhotosBackupBanner: View {
     @Environment(\.colorScheme) private var scheme

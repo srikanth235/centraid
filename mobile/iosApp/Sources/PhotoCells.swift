@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// ONE CELL RENDERER, FOR EVERY SURFACE THAT DRAWS PHOTOGRAPHS.
 ///
 /// The library grid, a shelf, the picker and search hits all draw the same
@@ -26,6 +24,8 @@ struct PhotoCellsGrid: View {
     /// a photograph they added last week should find it, and find out why it
     /// will not tick.
     var taken: Set<String> = []
+    /// What a taken cell is spoken as, Rust's ("Already in this album").
+    var takenLabel = ""
     var minimumCell: CGFloat = 96
     var onTap: ((String) -> Void)?
     /// The download arrow. Both ids, because they answer different questions:
@@ -39,6 +39,7 @@ struct PhotoCellsGrid: View {
                     cell: cell,
                     isSelected: selected.contains(cell.photoID),
                     isTaken: taken.contains(cell.photoID),
+                    takenLabel: takenLabel,
                     onTap: onTap,
                     onFetch: onFetch
                 )
@@ -55,6 +56,7 @@ struct PhotoCellSquare: View {
     let cell: Centraid_Core_V1_PhotoTile
     var isSelected = false
     var isTaken = false
+    var takenLabel = ""
     var onTap: ((String) -> Void)?
     var onFetch: ((String, String) -> Void)?
 
@@ -88,7 +90,7 @@ struct PhotoCellSquare: View {
                 // putting it" — so the taken dot is the muted ink.
                 if isTaken {
                     PhotoSelectionDot(selected: true, muted: true)
-                        .accessibilityLabel(PhotosCopy.shared.PHOTOS_ALREADY_IN_ALBUM)
+                        .accessibilityLabel(takenLabel)
                 } else if isSelected {
                     PhotoSelectionDot(selected: true)
                 }
@@ -158,7 +160,7 @@ struct PhotoTile: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel(cell.accessibilityLabel)
             .accessibilityAddTraits(selected ? [.isImage, .isButton, .isSelected] : [.isImage, .isButton])
-            .accessibilityAction(named: selecting ? PhotosCopy.shared.PHOTOS_SELECT : PhotosCopy.shared.PHOTOS_OPEN, onTap)
+            .accessibilityAction(named: selecting ? KitWords.SELECT : KitWords.OPEN, onTap)
             .accessibilityIdentifier(path ?? "photos.tile.\(cell.photoID)")
     }
 }

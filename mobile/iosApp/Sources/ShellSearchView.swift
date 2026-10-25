@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// HOME'S SEARCH, DRAWN FROM RUST (#1135, lane H1; R-CHROME-6). The screen is
 /// `home.search` (`crates/screens/src/shell/search.rs`): it asks the vault once
 /// through the shell's named query, groups the hits by app, words every row and

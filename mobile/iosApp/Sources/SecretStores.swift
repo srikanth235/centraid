@@ -9,12 +9,12 @@ import Security
 // earlier build wrote are found after the update. Rust never spells a prefix:
 //
 // * DEVICE: `kSecClassGenericPassword`, service `centraid.v1.`, account
-//   `centraid.v1.<key>`, `AfterFirstUnlockThisDeviceOnly` (what `IosSecureStore`
-//   wrote). Never in iCloud Keychain and never in an encrypted backup.
+//   `centraid.v1.<key>`, `AfterFirstUnlockThisDeviceOnly`, as earlier builds
+//   wrote it. Never in iCloud Keychain and never in an encrypted backup.
 // * SYNCED: service `centraid.v1.synced.`, account `<key>`, `kSecAttrSynchronizable`
 //   true, `AfterFirstUnlock` WITHOUT `ThisDeviceOnly` (the two go together; a
-//   synchronizable item with a device-only accessibility is refused). What
-//   `IosSyncedSecrets` wrote: the seed and the seeds of vaults on their own words.
+//   synchronizable item with a device-only accessibility is refused): the seed
+//   and the seeds of vaults on their own words.
 //
 // A write is DELETE THEN ADD (`SecItemAdd` answers duplicate rather than
 // replacing), an empty value deletes (an empty secret that reads back as

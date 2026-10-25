@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// COLLECTIONS, IN SWIFTUI (#1029, the photos port; #1135).
 ///
 /// The hub: every surface this miniapp has that is not the library or search is

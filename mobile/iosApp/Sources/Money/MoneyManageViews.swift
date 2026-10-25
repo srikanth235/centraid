@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 // THE THREE PAGES THAT MANAGE WHAT MONEY KNOWS (#1099): accounts, rules, categories.
 //
 // Each is a list with the app's create verb in the header, and its forms are

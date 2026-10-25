@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 // PAIR WITH A GATEWAY, DRAWN (#1135) — `pair.laptop` as a Rust screen.
 //
 // **THIS VIEW DECIDES NOTHING.** The phase, every sentence, whether the primary
