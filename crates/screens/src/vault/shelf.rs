@@ -64,7 +64,7 @@ use super::types::{Effected, Foreground, Found, FoundRefusal, Restored};
 use crate::custody::keeper::Keeper;
 use crate::custody::secrets::{VaultKey, VaultSecrets};
 use crate::passes::{Held, Holdings};
-use crate::strings::{self, Locale};
+use crate::strings::{self, Locale, custody as custody_words, fill};
 
 /// What the demo seed's vaults are indexed at: `seed-demo-vault` seals under the
 /// public all-`abandon` words at index 0.
@@ -135,6 +135,9 @@ struct Inner {
     /// index at or below it.
     spent: Option<u32>,
     surveyed: Vec<Surveyed>,
+    /// What the last vault made says, once, for Home's status line: taken by
+    /// [`Shelf::take_outcome`].
+    outcome: Option<String>,
 }
 
 /// What the shelf needs from the core that fronts it.
@@ -406,6 +409,23 @@ impl Shelf {
             })
     }
 
+    /// The ids of the vaults the survey named, for reading the per-vault keys an
+    /// earlier build wrote under names built from them.
+    #[must_use]
+    pub fn surveyed_ids(&self) -> Vec<String> {
+        self.lock()
+            .surveyed
+            .iter()
+            .map(|surveyed| surveyed.vault_id.clone())
+            .collect()
+    }
+
+    /// What making a vault says, once: "{name} is on this phone, and your
+    /// recovery key brings it back." Home's status line takes it.
+    pub fn take_outcome(&self) -> Option<String> {
+        self.lock().outcome.take()
+    }
+
     /// Forget every marker the secret store is seen to hold, and answer the
     /// writes for those it is not (a shell that lost them). Called when the app
     /// goes to the background and before each found.
@@ -575,6 +595,14 @@ impl Shelf {
             }
         };
         self.pump(&vault_id, &core);
+        inner.outcome = Some(fill(
+            &if own.is_some() {
+                custody_words::made_own_body(Locale::En)
+            } else {
+                custody_words::made_body(Locale::En)
+            },
+            &[("name", &named)],
+        ));
         inner.holdings.push(Holding {
             vault_id: vault_id.clone(),
             path,

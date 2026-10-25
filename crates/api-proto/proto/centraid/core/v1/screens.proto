@@ -300,6 +300,11 @@ message ScreenEvent {
     // ---- the vault shelf (1560-1599, lane H2): vault_screens.proto ----
     // RUNTIME-ORIGINATED from `ScreenRequest.memory_warning`.
     MemoryWarning memory_warning = 1560;
+    // RUNTIME-ORIGINATED, to services only: a screen asked the shelf for
+    // something (Home's `VaultCommand` effect, which never reaches a shell).
+    VaultCommand vault_commanded = 1561;
+    // RUNTIME-ORIGINATED, to services only: a screen was opened.
+    ScreenOpened screen_opened = 1562;
     // ---- the shell (1000-1999): Home 1000-1299 ----
     HomeEvent home = 1000;
     HomeSearchEvent home_search = 1001;

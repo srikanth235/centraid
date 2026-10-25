@@ -78,7 +78,18 @@ struct State {
     /// Topics screens announced during the update in flight, relayed to every
     /// open screen by [`Runtime::settle`].
     announced: Vec<String>,
+    /// The shelf commands screens issued during the update in flight
+    /// (`VaultCommand` effects), relayed to the services by
+    /// [`Runtime::settle`]: the shelf is Rust's, so they never reach a shell.
+    commands: Vec<wire::VaultCommand>,
+    /// The route names of the screens opened during the update in flight,
+    /// relayed to the services by [`Runtime::settle`].
+    opened: Vec<String>,
 }
+
+/// How many times one call lets the services answer what the last answer
+/// left to settle.
+const SETTLE_ROUNDS: usize = 8;
 
 /// The screen runtime.
 pub struct Runtime {
@@ -117,6 +128,8 @@ impl Runtime {
                 foreground: None,
                 switch: None,
                 announced: Vec::new(),
+                commands: Vec::new(),
+                opened: Vec::new(),
             }),
         }
     }
@@ -196,6 +209,9 @@ impl Runtime {
             .ok_or_else(|| Self::bad(format!("no screen is registered as `{}`", route.screen)))?;
         let id = state.next_instance;
         state.next_instance += 1;
+        if !service {
+            state.opened.push(route.screen.clone());
+        }
         state.instances.insert(
             id,
             Instance {
@@ -266,6 +282,7 @@ impl Runtime {
         let effects = instance.screen.update(event, &ctx);
         let mut done = ctx.finish();
         let signals = std::mem::take(&mut done.signals);
+        let tells = std::mem::take(&mut done.tells);
         instance.tables.extend(done.tables);
         if let Some(vault_id) = done.switch {
             state.switch = Some(vault_id);
@@ -309,6 +326,19 @@ impl Runtime {
             core.off_thread(job, work);
         }
         for effect in effects {
+            // WHEN THE CORE IS THE DOOR TO A SHELF, THE SHELF IS RUST'S: a
+            // screen's request of it (Home's switch, make, restore, forget and
+            // rename) is the shelf service's to perform and never reaches a
+            // shell. The platform's own doors (`Open`: the transfer rules, the
+            // notification settings) do. A core that holds one vault has no
+            // shelf, and the shell performs them all.
+            if let Some(wire::effect::Kind::VaultCommand(command)) = &effect.kind
+                && !matches!(command.kind, Some(wire::vault_command::Kind::Open(_)))
+                && core.vaults().is_some()
+            {
+                state.commands.push(command.clone());
+                continue;
+            }
             if let Some(wire::effect::Kind::Announce(note)) = &effect.kind {
                 state.announced.push(note.topic.clone());
             }
@@ -353,6 +383,21 @@ impl Runtime {
                     },
                     out,
                 );
+            }
+        }
+        // A TELL REACHES EVERY OPEN SCREEN OF THE NAME it was addressed to, after
+        // this screen's own work is recorded.
+        for (screen, event) in tells {
+            let named: Vec<u64> = state
+                .instances
+                .iter()
+                .filter(|(other, instance)| {
+                    **other != id && !instance.service && instance.route.screen == screen
+                })
+                .map(|(other, _)| *other)
+                .collect();
+            for other in named {
+                Self::dispatch(state, core, other, event.clone(), out);
             }
         }
     }
@@ -534,14 +579,26 @@ impl Runtime {
         out.navigation = Some(Self::navigation(state));
     }
 
-    /// RELAY WHAT SCREENS ANNOUNCED. An `Announce` is the shell's to act on
-    /// (Locker's unlock, for one); the runtime also tells every open screen,
-    /// services included, so a screen that must follow (a vault's own key is
-    /// filed in Locker after an unlock) hears it in the same call and needs
-    /// nothing back from the shell. An announcement a screen makes while
-    /// hearing one is relayed in turn.
-    fn settle(state: &mut State, core: &dyn ScreenCtx, out: &mut wire::ScreenUpdate) {
-        while !state.announced.is_empty() {
+    /// SETTLE WHAT AN UPDATE LEFT BEHIND, until nothing is left.
+    ///
+    /// * **Announcements.** An `Announce` is the shell's to act on (Locker's
+    ///   unlock, for one); the runtime also tells every open screen, services
+    ///   included, so a screen that must follow (a vault's own key is filed in
+    ///   Locker after an unlock) hears it in the same call and needs nothing
+    ///   back from the shell.
+    /// * **The shelf.** A screen's request of it (`VaultCommand`) and the
+    ///   opening of a screen are told to the services, whose job the shelf is;
+    ///   a switch they ask for is followed here ([`Self::follow_foreground`]),
+    ///   which opens the roots again, which the services are told.
+    ///
+    /// An announcement or a command made while hearing one is relayed in turn;
+    /// a screen that never stops asking is cut off after [`SETTLE_ROUNDS`].
+    fn settle(&self, state: &mut State, core: &dyn ScreenCtx, out: &mut wire::ScreenUpdate) {
+        for _ in 0..SETTLE_ROUNDS {
+            self.follow_foreground(state, core, out);
+            if state.announced.is_empty() && state.commands.is_empty() && state.opened.is_empty() {
+                return;
+            }
             for topic in std::mem::take(&mut state.announced) {
                 Self::broadcast(
                     state,
@@ -551,6 +608,34 @@ impl Runtime {
                             kind: Some(wire::screen_event::Kind::Announced(wire::Announced {
                                 topic: topic.clone(),
                             })),
+                        })
+                    },
+                    out,
+                );
+            }
+            for command in std::mem::take(&mut state.commands) {
+                Self::broadcast(
+                    state,
+                    core,
+                    |instance| {
+                        instance.service.then(|| wire::ScreenEvent {
+                            kind: Some(wire::screen_event::Kind::VaultCommanded(command.clone())),
+                        })
+                    },
+                    out,
+                );
+            }
+            for screen in std::mem::take(&mut state.opened) {
+                Self::broadcast(
+                    state,
+                    core,
+                    |instance| {
+                        instance.service.then(|| wire::ScreenEvent {
+                            kind: Some(wire::screen_event::Kind::ScreenOpened(
+                                wire::ScreenOpened {
+                                    screen: screen.clone(),
+                                },
+                            )),
                         })
                     },
                     out,
@@ -680,8 +765,7 @@ impl ScreenHost for Runtime {
                 &mut out,
             ),
         }
-        self.follow_foreground(&mut state, core, &mut out);
-        Self::settle(&mut state, core, &mut out);
+        self.settle(&mut state, core, &mut out);
         // The first call also carries the opened roots, so a snapshot is not a
         // second round trip: `start` filled `out` already.
         if out.navigation.is_none() && !out.views.is_empty() && state.nav_revision == 1 {
@@ -716,7 +800,7 @@ impl ScreenHost for Runtime {
             },
             &mut out,
         );
-        Self::settle(&mut state, core, &mut out);
+        self.settle(&mut state, core, &mut out);
         if !Self::empty(&out) {
             core.push(out);
         }
@@ -739,7 +823,7 @@ impl ScreenHost for Runtime {
             },
             &mut out,
         );
-        self.follow_foreground(&mut state, core, &mut out);
+        self.settle(&mut state, core, &mut out);
         if !Self::empty(&out) {
             core.push(out);
         }
@@ -769,8 +853,7 @@ impl ScreenHost for Runtime {
                 &mut out,
             );
         }
-        self.follow_foreground(&mut state, core, &mut out);
-        Self::settle(&mut state, core, &mut out);
+        self.settle(&mut state, core, &mut out);
         if !Self::empty(&out) {
             core.push(out);
         }

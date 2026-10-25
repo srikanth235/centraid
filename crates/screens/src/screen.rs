@@ -74,6 +74,9 @@ pub(crate) struct Done {
     /// [`Ctx::switch_vault`].
     pub switch: Option<String>,
     pub signals: Vec<String>,
+    /// Events for every open screen registered under a name, see
+    /// [`Ctx::tell_screen`].
+    pub tells: Vec<(String, wire::ScreenEvent)>,
 }
 
 /// A screen's door to the core, the catalog and the clock.
@@ -255,6 +258,17 @@ impl<'a> Ctx<'a> {
     /// each other; not a broadcast of data.
     pub fn signal(&self, topic: &str) {
         self.done.borrow_mut().signals.push(topic.to_owned());
+    }
+
+    /// Send `event` to every open screen registered under `screen` (a route
+    /// name), after this update is recorded. For a service that tells a screen
+    /// what it holds and cannot know which instances exist (a Home told what
+    /// the shelf holds); the event is delivered as any other.
+    pub fn tell_screen(&self, screen: &str, event: wire::ScreenEvent) {
+        self.done
+            .borrow_mut()
+            .tells
+            .push((screen.to_owned(), event));
     }
 
     pub(crate) fn finish(self) -> Done {

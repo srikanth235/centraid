@@ -70,7 +70,10 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
             .merge(backup::registry(&secrets))
             .merge(passes::registry(&secrets))
             .merge(vault::registry(&shelf, &secrets)),
-        vec![(shell::TAB.to_owned(), shell::routes::home())],
+        vec![
+            (shell::TAB.to_owned(), shell::routes::home()),
+            (shell::band::BACKUP.to_owned(), backup::routes::home()),
+        ],
     )
     .with_band(shell::band::view)
     .with_services([passes::services(), custody::services(), vault::services()].concat());

@@ -241,6 +241,38 @@ fn the_demo_seed_never_overrides_an_index_already_recorded() {
 }
 
 #[test]
+fn a_store_that_lists_only_what_it_indexed_still_opens_each_vault_keyed_by_id() {
+    // An upgraded Android install wrote `vault-index.<id>` before the store
+    // indexed names: a list never answers it, a get does, and the launch asks
+    // for each by id once the survey knows the ids.
+    let dir = scratch();
+    let id = lay_down(&dir, "a", "A");
+    let own_id = lay_down(&dir, "b", "B");
+    let mut phone = Phone::on(&dir, None);
+    phone.keep_seed();
+    let own = "ab12ab12ab12ab12";
+    phone
+        .shell
+        .synced
+        .insert(format!("vault-seed.{own}"), own_seed());
+    phone
+        .shell
+        .synced
+        .insert("vault-seeds".to_owned(), format!("{own}\tB"));
+    phone.record_index(&id, 2);
+    phone.record_index(&own_id, 0);
+    phone
+        .shell
+        .device
+        .insert(format!("vault-own.{own_id}"), own.to_owned());
+    phone.launch_blind();
+    assert!(phone.held(&id).keyed);
+    assert!(phone.held(&own_id).keyed);
+    assert!(phone.held(&own_id).own_words);
+    assert_eq!(phone.secrets.vault_index(&id), Some(2));
+}
+
+#[test]
 fn a_launch_value_that_is_not_a_seed_is_no_seed() {
     let dir = scratch();
     let id = lay_down(&dir, "a", "A");

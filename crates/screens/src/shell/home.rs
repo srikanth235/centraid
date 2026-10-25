@@ -166,15 +166,10 @@ fn select(tab: &str) -> wire::Effect {
     }))
 }
 
-/// The Backup place: the runtime selects the `backup` tab when one is registered, and the
-/// command is the host's door to its native place until then. Opening it twice is a no-op.
+/// The Backup place: the runtime selects the `backup` tab, which the standard
+/// runtime registers (`backup::routes::home`). Opening it twice is a no-op.
 fn open_backup() -> Vec<wire::Effect> {
-    vec![
-        select(super::band::BACKUP),
-        command(wire::vault_command::Kind::Open(
-            wire::home_status::Destination::Backup as i32,
-        )),
-    ]
+    vec![select(super::band::BACKUP)]
 }
 
 impl Home {

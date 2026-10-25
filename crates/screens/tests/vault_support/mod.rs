@@ -127,6 +127,22 @@ impl Phone {
         }
     }
 
+    /// A phone running the standard runtime (Home, every app, the backup, the
+    /// words and the shelf's service) over `dir`.
+    pub fn standard(dir: &Path) -> Self {
+        let (runtime, shelf) = centraid_screens::assemble();
+        let secrets = shelf.secrets();
+        let driver = Driver::shelved(runtime, &shelf, dir, None);
+        Self {
+            driver,
+            shelf,
+            secrets,
+            shell: FakeShell::default(),
+            dir: dir.to_path_buf(),
+            _scratch: None,
+        }
+    }
+
     /// A phone over `dir` whose runtime is `build`'s: the screens a test wants
     /// beside the shelf's own service.
     pub fn running(dir: &Path, build: impl FnOnce(&Arc<Shelf>, &VaultSecrets) -> Runtime) -> Self {
@@ -187,6 +203,41 @@ impl Phone {
     pub fn launch(&mut self) {
         self.driver.start();
         self.driver.serve(&mut self.shell);
+    }
+
+    /// [`Self::launch`] on a platform whose store LISTS only the names it has
+    /// indexed (Android's): a list never answers a per-vault key
+    /// (`vault-index.<id>`, `vault-own.<id>`); a get does.
+    pub fn launch_blind(&mut self) {
+        self.driver.start();
+        while let Some(at) = self.driver.effects.iter().position(|request| {
+            matches!(
+                request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+                Some(wire::effect::Kind::Secrets(_))
+            )
+        }) {
+            let request = self.driver.effects.remove(at);
+            let Some(wire::effect::Kind::Secrets(batch)) = request.effect.and_then(|e| e.kind)
+            else {
+                unreachable!("a secrets effect was picked");
+            };
+            let mut answered = self.shell.batch(&batch);
+            for (op, answer) in batch.ops.iter().zip(answered.answers.iter_mut()) {
+                if op.op == wire::secret_op::Op::List as i32 {
+                    answer.entries.retain(|entry| {
+                        !entry.key.starts_with("vault-index.")
+                            && !entry.key.starts_with("vault-own.")
+                    });
+                }
+            }
+            self.driver.send(
+                request.instance,
+                wire::screen_event::Kind::EffectResult(wire::EffectResult {
+                    effect_id: request.effect_id,
+                    outcome: Some(wire::effect_result::Outcome::Secrets(answered)),
+                }),
+            );
+        }
     }
 
     /// Perform `writes` as a shell would and fold the answers into the cache,

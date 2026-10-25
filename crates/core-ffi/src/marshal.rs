@@ -349,6 +349,29 @@ mod tests {
         );
     }
 
+    /// THE SHELL HANDS OVER A DIRECTORY, NOT A VAULT (#1135, lane H2): the core
+    /// that opens is the front of a shelf, holds no vault and is never created.
+    #[test]
+    fn a_shelf_is_a_directory_and_the_front_core_is_never_created() {
+        let config = config_from_json(
+            br#"{"shelf":"/data/vaults","create":true,"devSeed":"ab","uiThreadName":"main"}"#,
+        )
+        .expect("it parses");
+        let shelf = config.shelf.as_ref().expect("a shelf");
+        assert_eq!(shelf.dir, std::path::PathBuf::from("/data/vaults"));
+        assert_eq!(shelf.dev_seed.as_deref(), Some("ab"));
+        assert!(!config.create, "the front is never a file");
+        assert_eq!(
+            config.path,
+            std::path::PathBuf::from("/data/vaults/custody-probe.sqlite3")
+        );
+        assert_eq!(config.ui_thread_name.as_deref(), Some("main"));
+        assert!(
+            config_from_json(br#"{"shelf":"  "}"#).is_err(),
+            "a blank directory names no shelf"
+        );
+    }
+
     /// A `role` A SHELL STILL SENDS IS IGNORED, NOT REFUSED (#1029 §1).
     ///
     /// An older shell against a newer core is the version-skew case the

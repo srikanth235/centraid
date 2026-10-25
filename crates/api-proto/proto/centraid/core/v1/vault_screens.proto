@@ -10,8 +10,9 @@
 // `holdings` through the table name `shelf` (`DataChanged`).
 //
 // Arms of this lane's shell block: AppQueryResponse 1540-1599 (this file takes
-// 1540), ScreenRequest and ScreenEvent 1560 (`MemoryWarning`). No ViewState or
-// Effect arm is used.
+// 1540), ScreenRequest 1560 (`MemoryWarning`), ScreenEvent 1560-1562
+// (`MemoryWarning`, `VaultCommand`, `ScreenOpened`). No ViewState or Effect arm
+// is used.
 
 syntax = "proto3";
 
@@ -66,3 +67,10 @@ message HeldFrozen {
 // `ScreenRequest.memory_warning`, heard by every screen and service as
 // `ScreenEvent.memory_warning`.
 message MemoryWarning {}
+
+// A screen was opened, as the runtime tells the services (never a screen): the
+// shelf's service answers by telling a Home what the shelf holds. Carries the
+// route's screen name, not an instance, because a service tells by name.
+message ScreenOpened {
+  string screen = 1;
+}

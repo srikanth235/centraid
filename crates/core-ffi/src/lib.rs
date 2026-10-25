@@ -80,6 +80,14 @@ pub const CENTRAID_TIMEOUT: i32 = -5;
 /// is read once at startup by a human-written call site and being able to log
 /// it verbatim — the seed aside — is worth more than the encoding.
 ///
+/// **A shell opens a DIRECTORY, not a vault** (#1135, lane H2):
+/// `{"shelf": "<dir>", "devSeed": "<128 hex>"?, "uiThreadName": "..."?,
+/// "expectedIdentity": "<digest>"?}`. The handle it gets back holds no vault of
+/// its own: the library opens every vault under `<dir>` itself (one directory
+/// each), keys each from the phone's secrets, keeps them, and sends every call
+/// that is about a vault to the one in front. `path`, `create` and `vault` are
+/// not read in this form; a debug build's demo seed is `devSeed`.
+///
 /// `expectedIdentity` is the artifact digest the SHELL's build recorded for the
 /// core it intends to load. A mismatch is refused here, before a handle exists
 /// and before one query is answered from the wrong schema (#1020 Artifacts,
