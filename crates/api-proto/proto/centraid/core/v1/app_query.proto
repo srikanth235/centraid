@@ -46,6 +46,7 @@ import "centraid/core/v1/notes.proto";
 import "centraid/core/v1/people.proto";
 import "centraid/core/v1/photos.proto";
 import "centraid/core/v1/tasks.proto";
+import "centraid/core/v1/vault_screens.proto";
 import "centraid/core/v1/vault_search.proto";
 
 message AppQueryRequest {
@@ -213,6 +214,9 @@ message AppQueryResponse {
     HealthWorkouts health_workouts = 123;
     HealthWorkout health_workout = 124;
     HealthFollowView health_follow_view = 125;
+    // THE SHELL'S OWN ANSWERS (lane H2 takes 1540-1599; see `vault_screens.proto`).
+    // The vaults this phone holds: `shell.holdings`.
+    Holdings holdings = 1540;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }

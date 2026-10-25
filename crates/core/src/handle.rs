@@ -204,6 +204,13 @@ pub struct HandleState {
     /// THE SCREEN RUNTIME, once a shell-facing library has attached one
     /// (#1135, lane C2): see [`crate::screens`].
     screens: std::sync::OnceLock<Arc<dyn crate::screens::ScreenHost>>,
+    /// THE DIRECTORY OF VAULTS THIS CORE IS THE DOOR TO, when it is one
+    /// (#1135, lane H2): see [`crate::vaults`]. Read once by whoever builds the
+    /// shelf ([`Self::shelf_config`]).
+    shelf_config: Option<crate::config::ShelfConfig>,
+    /// THE SHELF, once the screen runtime built one: the vaults a shell's calls
+    /// are routed to.
+    vaults: std::sync::OnceLock<Arc<dyn crate::vaults::Vaults>>,
 }
 
 /// THE CLOCK AND ID SOURCE A CORE WAS OPENED WITH, kept for the life of the
@@ -239,6 +246,7 @@ impl Core {
             expected_digest,
             seed,
             spool_ceiling,
+            shelf: shelf_config,
         } = config;
         // BEFORE THE FILE IS TOUCHED. A stale core that opened the vault and
         // then refused would have already run whatever migration its own
@@ -324,6 +332,8 @@ impl Core {
             locker: Arc::new(Mutex::new(None)),
             assist: crate::assist::Hub::new(),
             screens: std::sync::OnceLock::new(),
+            shelf_config,
+            vaults: std::sync::OnceLock::new(),
         }))
     }
 
@@ -545,6 +555,9 @@ impl HandleState {
     pub fn call(&self, request: &wire::Request) -> Result<wire::Response> {
         self.assert_not_on_the_ui_thread();
         self.check_open()?;
+        if let Some(front) = self.foreground_for(request) {
+            return front.call(request);
+        }
         let kind = request_kind(request);
         let request_id = {
             let mut session = self.lock_session();
@@ -568,6 +581,9 @@ impl HandleState {
     pub fn call_with_id(&self, request: &wire::Request, request_id: u64) -> Result<wire::Response> {
         self.assert_not_on_the_ui_thread();
         self.check_open()?;
+        if let Some(front) = self.foreground_for(request) {
+            return front.call_with_id(request, request_id);
+        }
         let kind = request_kind(request);
         {
             let mut session = self.lock_session();
@@ -587,6 +603,9 @@ impl HandleState {
     /// # Errors
     /// Whatever `load` refuses with; [`CoreError::Unpaired`] with no file.
     pub fn load(&self, request: &wire::LoadRequest) -> Result<wire::LoadResponse> {
+        if let Some(front) = self.foreground_for_load(request) {
+            return front.load(request);
+        }
         // Some of the shell's reads are the phone's own ledger (the backup's
         // status, the held vaults), not a vault table: they need the handle.
         if request.app == crate::shell::ID {
@@ -603,6 +622,9 @@ impl HandleState {
     /// # Errors
     /// Whatever `act` refuses with; [`CoreError::Unpaired`] with no file.
     pub fn act(&self, request: &wire::ActRequest) -> Result<wire::ActResponse> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return front.act(request);
+        }
         let changes = crate::events::ChangeFeed::new(self.events());
         let owner = self.owner();
         self.with_vault(|vault| {
@@ -626,6 +648,53 @@ impl HandleState {
         let _ = self.screens.set(host);
     }
 
+    /// The directory of vaults this core is the door to, when it was opened as
+    /// one ([`crate::CoreConfig::fronting`]).
+    #[must_use]
+    pub fn shelf_config(&self) -> Option<&crate::config::ShelfConfig> {
+        self.shelf_config.as_ref()
+    }
+
+    /// Attach the shelf. Once per core: a second attach is ignored.
+    pub fn attach_vaults(&self, vaults: Arc<dyn crate::vaults::Vaults>) {
+        let _ = self.vaults.set(vaults);
+    }
+
+    /// The shelf, when this core is the door to one.
+    #[must_use]
+    pub fn vaults(&self) -> Option<&Arc<dyn crate::vaults::Vaults>> {
+        self.vaults.get()
+    }
+
+    /// THE VAULT IN FRONT, when this core is a shelf's door and the phone holds
+    /// one. A core that is not a door answers its own requests, and so does a
+    /// door with nothing in front: it holds no vault, so a read says
+    /// [`CoreError::Unpaired`] as it always did.
+    pub(crate) fn foreground_if_shelved(&self) -> Option<Handle> {
+        self.vaults.get()?.foreground_core()
+    }
+
+    /// Where `request` goes: the vault in front, unless it is the front's own
+    /// business — the screen runtime (it lives here and reads through the
+    /// vault in front), the words and a restore (they need no vault), the
+    /// handshake, and the shelf's own read.
+    fn foreground_for(&self, request: &wire::Request) -> Option<Handle> {
+        use wire::request::Kind as K;
+        self.vaults.get()?;
+        match &request.kind {
+            None | Some(K::Hello(_) | K::Screen(_) | K::Phrase(_) | K::Restore(_)) => None,
+            Some(K::Load(load)) => self.foreground_for_load(load),
+            Some(_) => self.foreground_if_shelved(),
+        }
+    }
+
+    fn foreground_for_load(&self, request: &wire::LoadRequest) -> Option<Handle> {
+        if crate::phone::shell_reads::is_front_read(request) {
+            return None;
+        }
+        self.foreground_if_shelved()
+    }
+
     /// Cancel an in-flight **unbounded** operation.
     ///
     /// A bounded read is refused rather than cancelled, and the refusal is
@@ -636,6 +705,9 @@ impl HandleState {
     /// read finishing.
     pub fn cancel(&self, request_id: u64) -> Result<()> {
         self.check_open()?;
+        if let Some(front) = self.foreground_if_shelved() {
+            return front.cancel(request_id);
+        }
         // `Session::cancel` already holds the three answers: `Ok(false)` for an
         // id nobody is waiting for, `Err(NotCancellable)` for a bounded read,
         // `Ok(true)` for an unbounded one. Re-deriving them here would be a
@@ -718,6 +790,10 @@ impl HandleState {
     pub fn close(&self) {
         self.closed.store(true, Ordering::SeqCst);
         self.events.close();
+        // THE VAULTS THE SHELF HOLDS GO WITH THE DOOR TO THEM.
+        if let Some(vaults) = self.vaults.get() {
+            vaults.close_all();
+        }
     }
 
     /// CLOSE THE FILE ITSELF, so what is on disk is the whole vault.
@@ -755,6 +831,12 @@ impl HandleState {
             Some(vault) => Ok(vault.finish()?),
             None => Ok(()),
         }
+    }
+
+    /// Zero the Locker session now, if one is unlocked: the rule for leaving the
+    /// foreground, and for a vault the member switched away from.
+    pub fn relock(&self) {
+        crate::locker::phone::relock(&self.locker);
     }
 
     /// Whether this handle is closed.
@@ -802,6 +884,9 @@ impl HandleState {
         &self,
         request: &wire::LockerSessionRequest,
     ) -> Result<wire::LockerSessionResponse> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return front.locker_session(request);
+        }
         let changes = crate::events::ChangeFeed::new(self.events());
         self.with_vault(|vault| {
             crate::locker::phone::answer(
@@ -1088,6 +1173,12 @@ impl HandleState {
                     && !lifecycle.foreground
                 {
                     crate::locker::phone::relock(&self.locker);
+                    // EVERY HELD VAULT'S SESSION, not only the one in front.
+                    if let Some(vaults) = self.vaults.get() {
+                        for core in vaults.awake() {
+                            core.relock();
+                        }
+                    }
                 }
                 Ok(response(wire::response::Kind::Screen(Box::new(
                     host.call(self, request)?,

@@ -140,6 +140,7 @@ pub mod photos_lightbox;
 pub mod photos_shelf;
 pub mod shared;
 pub mod task;
+pub mod vault;
 
 /// A sentence with holes (`{name}`) filled in, once, by name. A hole the
 /// sentence lacks is ignored and a hole left unfilled stays visible in the

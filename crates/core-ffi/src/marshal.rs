@@ -99,6 +99,35 @@ pub fn config_from_json(bytes: &[u8]) -> Result<CoreConfig, CoreError> {
         serde_json::from_str(text).map_err(|error| CoreError::InvalidRequest {
             detail: format!("the open configuration is not JSON: {error}"),
         })?;
+    // A SHELF'S DOOR (#1135, lane H2): `{"shelf": "<dir>"}` opens the core that
+    // fronts every vault under the directory and holds none itself. The shell
+    // names no vault file and no `path`; `create` is ignored (the front is
+    // never a file) and so is `vault` (the shelf keys each vault it opens).
+    let shelf = parsed
+        .get("shelf")
+        .and_then(serde_json::Value::as_str)
+        .filter(|dir| !dir.trim().is_empty())
+        .map(|dir| {
+            let mut shelf = centraid_core::ShelfConfig::new(dir);
+            shelf.dev_seed = parsed
+                .get("devSeed")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned);
+            shelf
+        });
+    if let Some(shelf) = shelf {
+        let mut config = CoreConfig::fronting(shelf);
+        config.ui_thread_name = parsed
+            .get("uiThreadName")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned);
+        config.expected_digest = parsed
+            .get("expectedIdentity")
+            .and_then(serde_json::Value::as_str)
+            .filter(|digest| !digest.trim().is_empty())
+            .map(str::to_owned);
+        return Ok(config);
+    }
     let path = parsed
         .get("path")
         .and_then(serde_json::Value::as_str)
@@ -154,6 +183,7 @@ pub fn config_from_json(bytes: &[u8]) -> Result<CoreConfig, CoreError> {
         // is bounded by its free space and 2 GiB, and a smaller ceiling is a
         // drill's (`CoreConfig::with_spool_ceiling`).
         spool_ceiling: None,
+        shelf: None,
     };
     // DEFAULTS TO CREATING, because a shell that named a path and said nothing
     // else is founding a vault there — which is what the phone does now

@@ -25,6 +25,7 @@ pub mod runtime;
 pub mod screen;
 pub mod strings;
 pub mod testing;
+pub mod vault;
 
 pub use registry::Registry;
 pub use runtime::Runtime;
@@ -35,10 +36,18 @@ pub use screen::{Ctx, Environment, Screen};
 /// real ones as it ports Home and the other apps.
 #[must_use]
 pub fn standard() -> Runtime {
+    assemble().0
+}
+
+/// [`standard`], and the shelf of vaults its screens and the core share
+/// (`vault`): the shell's core is bound to it by [`attach`].
+#[must_use]
+pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
     // The vault plumbing's one cache of what the shell keeps secret: custody,
     // pairing, the backup screen and the pass service all read the same one.
     let secrets = custody::secrets::VaultSecrets::new();
-    Runtime::new(
+    let shelf = vault::Shelf::new(&secrets);
+    let runtime = Runtime::new(
         Registry::default()
             .with(proof::NAME, proof::build)
             .merge(agenda::registry())
@@ -52,7 +61,8 @@ pub fn standard() -> Runtime {
             .merge(custody::registry(&secrets))
             .merge(pairing::registry(&secrets))
             .merge(backup::registry(&secrets))
-            .merge(passes::registry(&secrets)),
+            .merge(passes::registry(&secrets))
+            .merge(vault::registry(&shelf, &secrets)),
         vec![
             ("proof".to_owned(), proof::route()),
             (
@@ -68,10 +78,25 @@ pub fn standard() -> Runtime {
             ),
         ],
     )
-    .with_services(passes::services())
+    .with_services(
+        passes::services()
+            .into_iter()
+            .chain(vault::services())
+            .collect(),
+    );
+    (runtime, shelf)
 }
 
 /// Attach [`standard`] to a core. `centraid_open` calls this.
 pub fn attach(handle: &centraid_core::Handle) {
-    handle.attach_screens(std::sync::Arc::new(standard()));
+    attach_with(handle, std::sync::Arc::new(vault::default_prepare));
+}
+
+/// [`attach`], with how each core the shelf opens is made ready (the byte
+/// store, an engine the core crate cannot link). A core opened as the door to a
+/// shelf of vaults is bound to the shelf; any other is a single-vault core.
+pub fn attach_with(handle: &centraid_core::Handle, prepare: vault::Prepare) {
+    let (runtime, shelf) = assemble();
+    handle.attach_screens(std::sync::Arc::new(runtime));
+    shelf.bind(handle, prepare);
 }

@@ -64,6 +64,9 @@ pub(crate) struct Done {
     pub tables: BTreeSet<String>,
     pub timers: Vec<TimerOp>,
     pub jobs: Vec<(String, centraid_core::screens::OffThreadWork)>,
+    /// The vault the screen asked to bring to the front, see
+    /// [`Ctx::switch_vault`].
+    pub switch: Option<String>,
 }
 
 /// A screen's door to the core, the catalog and the clock.
@@ -174,6 +177,26 @@ impl<'a> Ctx<'a> {
             };
             called.encode_to_vec()
         });
+    }
+
+    /// The vaults this phone holds, when the core is the door to a shelf of
+    /// them (`centraid_core::vaults`): which are held and drainable, and a way
+    /// to reach the core of one that is not in front.
+    #[must_use]
+    pub fn vaults(&self) -> Option<std::sync::Arc<dyn centraid_core::vaults::Vaults>> {
+        self.core.vaults()
+    }
+
+    /// BRING THE VAULT `vault_id` TO THE FRONT, when this update is done.
+    ///
+    /// Every screen of a tab is told it is being left, so what the member typed
+    /// is written to the vault it was typed in; then the vault is brought to
+    /// the front and each tab's root is closed and opened again, so no screen
+    /// shows one vault's rows over another's. A vault nothing holds, or whose
+    /// file will not reopen, leaves the phone where it was. The shell sees an
+    /// ordinary update: instances closed, new views, a new navigation.
+    pub fn switch_vault(&self, vault_id: &str) {
+        self.done.borrow_mut().switch = Some(vault_id.to_owned());
     }
 
     /// The locale every string is made in.

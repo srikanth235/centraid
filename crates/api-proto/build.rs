@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 47] = [
+const PROTOS: [&str; 48] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/command.proto",
@@ -103,6 +103,9 @@ const PROTOS: [&str; 47] = [
     "proto/centraid/core/v1/pair_screens.proto",
     "proto/centraid/core/v1/backup_screens.proto",
     "proto/centraid/core/v1/passes_screens.proto",
+    // The vaults this phone holds (#1135, lane H2): the `holdings` query's
+    // answer, imported by `app_query.proto`.
+    "proto/centraid/core/v1/vault_screens.proto",
     "proto/centraid/core/v1/screens.proto",
     // The on-device chat: a session, a question and a stream of events, over
     // reads an app already answers. Its own file because a turn is neither a

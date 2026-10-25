@@ -132,50 +132,49 @@ pub unsafe extern "C" fn centraid_open(
         // be replaced by a copy from a gateway. There is no gateway to take a
         // copy from and no inbound endpoint on this device, so the open is the
         // open: the file, the migrations, the handle.
+        let handle = Core::open(config)?;
+        // HOW A CORE IS MADE READY, for this one and for every vault a shelf
+        // opens behind it (#1135, lane H2): the shell hands over a directory and
+        // never sees a second core, so the library prepares each.
         //
         // **THE CORE OWNS ITS BYTE STORE** (#1029 W6, hand-off 2; #1080).
         // `<vault>.bytes` beside the file, a directory of files named by their
         // hash, with the backup ledger beside the vault behind the same door —
-        // see `Handle::open_own_bytes`. On a phone there is nobody else to
-        // open it.
+        // see `Handle::open_own_bytes`. On a phone there is nobody else to open
+        // it. **A STORE THAT WILL NOT OPEN IS NOT A FAILED OPEN**: the vault's
+        // rows are readable and every text write still lands; what a shell gets
+        // is the honest state it had before — photographs refused by name.
         //
-        // **A STORE THAT WILL NOT OPEN IS NOT A FAILED OPEN.** The vault's rows
-        // are readable and every text write still lands; what a shell gets is
-        // the honest state it had before — photographs refused by name. An open
-        // that failed over a byte store would take a member's notes down with
-        // their camera roll.
-        let path = config.path.clone();
-        let handle = Core::open(config)?;
-        // THE SCREEN RUNTIME RIDES THE SAME FIVE SYMBOLS (#1135, lane C2):
-        // events go in through `centraid_call`, view states come out of
-        // `centraid_next_event`. Attaching adds no export.
-        centraid_screens::attach(&handle);
+        // **A CORE THAT HOLDS NO VAULT OWNS NO BYTES** (#1080): the front, and a
+        // core opened `create: false` over a path that is never a file, would
+        // otherwise leave a vault's side files for a vault that does not exist.
+        //
         // ONE MODEL SLOT PER PROCESS, WITH THE ENGINE IN IT. A phone holds
         // several vault handles and one half-gigabyte model, so every handle
         // shares the host `centraid-assist-llama` built (and registered its
         // loader on) the first time anybody asked. Without this line — which is
         // the `llama` feature, off in the PR gate's workspace build — a model
         // file is `NO_ENGINE`: there, and nothing to read it with.
-        #[cfg(feature = "llama")]
-        handle
-            .assist()
-            .use_host(centraid_assist_llama::process_host());
-        // **A CORE THAT HOLDS NO VAULT OWNS NO BYTES** (#1080, the simulator
-        // run: `custody-probe.backup.db` and `custody-probe.bytes` in
-        // Documents). The core the words and a restore are asked through is
-        // opened `create: false` over a path that is never a file; the byte
-        // store and the ledger beside that path would be a vault's side files
-        // for a vault that does not exist. A restore lays each vault down at
-        // a path of its own and opens its own store there
-        // (`phone::restore`), and a vault-less handle never acquires one.
-        if handle.holds_a_replica()
-            && let Err(error) = handle.open_own_bytes(path.with_extension("bytes"))
-        {
-            tracing::warn!(
-                "the byte store did not open; this core holds text and refuses \
-                 photographs by name: {error}"
-            );
-        }
+        let prepare = |handle: &Handle| {
+            #[cfg(feature = "llama")]
+            handle
+                .assist()
+                .use_host(centraid_assist_llama::process_host());
+            if handle.holds_a_replica()
+                && let Err(error) = handle.open_own_bytes(handle.path().with_extension("bytes"))
+            {
+                tracing::warn!(
+                    "the byte store did not open; this core holds text and refuses \
+                     photographs by name: {error}"
+                );
+            }
+        };
+        // THE SCREEN RUNTIME RIDES THE SAME FIVE SYMBOLS (#1135, lane C2):
+        // events go in through `centraid_call`, view states come out of
+        // `centraid_next_event`. Attaching adds no export. A core opened as a
+        // shelf's door is bound to the shelf here.
+        centraid_screens::attach_with(&handle, std::sync::Arc::new(prepare));
+        prepare(&handle);
         Ok(handle)
     }));
     match outcome {

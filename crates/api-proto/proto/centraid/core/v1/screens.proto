@@ -71,6 +71,10 @@ message ScreenRequest {
 // causes); Android `ON_STOP` (NOT `ON_PAUSE`).
 message AppLifecycle {
   bool foreground = 1;
+  // The operating system is asking for memory back (iOS
+  // `didReceiveMemoryWarning`, Android `onTrimMemory`): the shelf closes every
+  // vault's core but the one in front. Sent with `foreground` as it stands.
+  bool low_memory = 2;
 }
 
 message SnapshotRequest {}

@@ -1,0 +1,62 @@
+// THE VAULTS THIS PHONE HOLDS (#1135, lane H2): the shelf's roster as the
+// shell's `holdings` query answers it. The shelf lives in Rust
+// (`crates/screens/src/vault`); a shell hands it a directory and draws what
+// this says.
+//
+// There is no lockup message and no switch event: the header's two facts are
+// the first `HeldVault` of `Holdings` (the one with `foreground` set), a
+// switch is the runtime closing and reopening the tabs' roots (an ordinary
+// `ScreenUpdate`), and a change to any of it re-renders every screen that read
+// `holdings` through the table name `shelf` (`DataChanged`).
+//
+// Arms of this lane's shell block: AppQueryResponse 1540-1599 (this file takes
+// 1540). No ScreenEvent, ViewState or Effect arm is used.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// The answer to `shell.holdings`.
+message Holdings {
+  // The shelf has read its directory. False until the first launch pass is
+  // done: an empty roster then means "not read yet", never "holds nothing" —
+  // a first-launch gate that took it for the second would flash on every
+  // launch of a phone that holds a vault.
+  bool loaded = 1;
+  // The vault in front: its id, or empty when the phone holds none.
+  string foreground = 2;
+  // Every held vault: the one in front first, then the directory's order. The
+  // order does not move with a state change, so a row stays under a thumb.
+  repeated HeldVault vaults = 3;
+}
+
+// One vault the phone holds, and how it stands.
+message HeldVault {
+  // The vault's own id, which is what a switch names. Never a path.
+  string vault_id = 1;
+  // The name inside the vault (`vault.name`), the one place it lives.
+  string name = 2;
+  // In front. Exactly one held vault is, when any is held.
+  bool foreground = 3;
+  // Its core is closed to give the operating system its memory back; it wakes
+  // on the next touch. A resting vault is whole and not frozen.
+  bool resting = 4;
+  // Its core was opened with the seed and this vault's index, so Locker can
+  // unlock and a pass can seal. False draws Locker's no-words wall.
+  bool keyed = 5;
+  // The vault is kept on its own 24 words rather than the member's.
+  bool own_words = 6;
+  // Set when the vault moved to another phone: writes are refused, reads are
+  // not, and nothing is deleted or taken back.
+  optional HeldFrozen frozen = 7;
+}
+
+// WHAT THE MEMBER IS OWED WHEN THEY TOUCH A FROZEN VAULT: "N changes since
+// <date>" is made from these two, by `strings::vault::frozen_line`. The count
+// is what this phone still holds that no gateway acknowledged, not a count of
+// what is lost: nothing was.
+message HeldFrozen {
+  // The date part (`YYYY-MM-DD`) of the instant the line dates from.
+  string since = 1;
+  uint64 unacked = 2;
+}

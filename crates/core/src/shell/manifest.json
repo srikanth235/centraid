@@ -6,6 +6,17 @@
   "version": "0.1.0",
   "queries": [
     {
+      "name": "holdings",
+      "kind": "vault",
+      "figures": ["loaded", "foreground", "vaults"],
+      "description": "(vault plumbing, lane H2) The vaults this phone holds: each one's id, name and how it stands (in front, resting, keyed, kept on its own words, frozen with the date and the count of changes no gateway acknowledged), the one in front first. Answered by the shelf, not by a vault: it is the one shell read the front core keeps for itself.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "chats",
       "kind": "chat_thread",
       "figures": ["threads", "corrected"],
