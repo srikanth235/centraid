@@ -62,6 +62,12 @@ impl Rediscovery {
         self.browsing
     }
 
+    /// Refreshes asked of the core and not yet answered.
+    #[must_use]
+    pub fn pending(&self) -> usize {
+        self.pending
+    }
+
     /// How many gateways the core refreshed since the browse began.
     #[must_use]
     pub fn refreshed(&self) -> usize {
@@ -101,7 +107,12 @@ impl Rediscovery {
             if candidates.is_empty() {
                 continue;
             }
-            door::refresh(ctx, &format!("{TAG_PREFIX}{}", gateway.gateway_id), &gateway.gateway_id, candidates);
+            door::refresh(
+                ctx,
+                &format!("{TAG_PREFIX}{}", gateway.gateway_id),
+                &gateway.gateway_id,
+                candidates,
+            );
             self.pending += 1;
         }
     }

@@ -73,8 +73,9 @@ pub fn candidates(
             offered.push(address);
         }
     }
-    let (v6, v4): (Vec<String>, Vec<String>) =
-        offered.into_iter().partition(|address| address.starts_with('['));
+    let (v6, v4): (Vec<String>, Vec<String>) = offered
+        .into_iter()
+        .partition(|address| address.starts_with('['));
     v4.into_iter().chain(v6).take(MAX_CANDIDATES).collect()
 }
 
@@ -179,7 +180,10 @@ mod tests {
     fn a_sighting_is_a_gateways_only_by_the_id_in_its_txt_record() {
         let named = format!("centraid-gateway-{}", &id()[..8]);
         assert!(is_gateway(&sighting(&named, Some(&id()), &[]), &id()));
-        assert!(is_gateway(&sighting("anything", Some(&id().to_uppercase()), &[]), &id()));
+        assert!(is_gateway(
+            &sighting("anything", Some(&id().to_uppercase()), &[]),
+            &id()
+        ));
         // THE NAME IS NOT AN IDENTITY: the right name with no id, or with
         // another gateway's, is nobody's.
         assert!(!is_gateway(&sighting(&named, None, &[]), &id()));
@@ -213,14 +217,25 @@ mod tests {
             sighting(
                 "a",
                 Some(&id()),
-                &["[2001:db8::7]:7443", "192.168.1.44:7443", "192.168.1.44:7443"],
+                &[
+                    "[2001:db8::7]:7443",
+                    "192.168.1.44:7443",
+                    "192.168.1.44:7443",
+                ],
             ),
             sighting("b", Some(&other()), &["192.168.1.99:7443"]),
-            sighting("c", Some(&id()), &["192.168.1.20:7443", "laptop.local:7443"]),
+            sighting(
+                "c",
+                Some(&id()),
+                &["192.168.1.20:7443", "laptop.local:7443"],
+            ),
         ];
         assert_eq!(
             candidates(&id(), &["192.168.1.20:7443".to_owned()], &sightings),
-            vec!["192.168.1.44:7443".to_owned(), "[2001:db8::7]:7443".to_owned()]
+            vec![
+                "192.168.1.44:7443".to_owned(),
+                "[2001:db8::7]:7443".to_owned()
+            ]
         );
         assert_eq!(
             candidates(&other(), &[], &sightings),
@@ -231,8 +246,14 @@ mod tests {
 
     #[test]
     fn an_address_is_offered_only_as_an_ip_literal_the_core_can_dial() {
-        assert_eq!(normalise("192.168.1.44:7443").as_deref(), Some("192.168.1.44:7443"));
-        assert_eq!(normalise("[2001:DB8::7]:7443").as_deref(), Some("[2001:db8::7]:7443"));
+        assert_eq!(
+            normalise("192.168.1.44:7443").as_deref(),
+            Some("192.168.1.44:7443")
+        );
+        assert_eq!(
+            normalise("[2001:DB8::7]:7443").as_deref(),
+            Some("[2001:db8::7]:7443")
+        );
         for bad in [
             "laptop.local:7443",
             "192.168.1.44",

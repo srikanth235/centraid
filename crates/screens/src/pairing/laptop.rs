@@ -306,7 +306,10 @@ impl Laptop {
             // code would be asking for what cannot work.
             Phase::Failed if barred => String::new(),
             Phase::Failed | Phase::Waiting | Phase::Pairing => words::ask(locale),
-            Phase::Paired => self.answer.as_ref().map_or_else(String::new, |answer| paired_line(locale, answer)),
+            Phase::Paired => self
+                .answer
+                .as_ref()
+                .map_or_else(String::new, |answer| paired_line(locale, answer)),
             _ => String::new(),
         };
         let entering = matches!(phase, Phase::Waiting | Phase::Failed) && !barred;
@@ -330,11 +333,23 @@ impl Laptop {
             phase: phase as i32,
             title,
             body,
-            payload: if entering { self.payload.clone() } else { String::new() },
-            payload_label: if entering { words::paste_label(locale) } else { String::new() },
+            payload: if entering {
+                self.payload.clone()
+            } else {
+                String::new()
+            },
+            payload_label: if entering {
+                words::paste_label(locale)
+            } else {
+                String::new()
+            },
             // ONE SCAN, ON EVERY PHONE: the camera, which offers a photo too;
             // without one (the simulator), the photo picker.
-            scan_label: if entering { words::scan(locale) } else { String::new() },
+            scan_label: if entering {
+                words::scan(locale)
+            } else {
+                String::new()
+            },
             // THE WAY OUT OF NEEDS_WORDS: a vault that opened without its words
             // gets them back through re-key. A phone with no vault has no words
             // to enter, so no door.
@@ -350,8 +365,16 @@ impl Laptop {
                 !primary.is_empty()
             },
             primary_label: primary,
-            secondary_label: if entering { shared::kit_cancel(locale) } else { String::new() },
-            progress: if phase == Phase::Pairing { words::pairing(locale) } else { String::new() },
+            secondary_label: if entering {
+                shared::kit_cancel(locale)
+            } else {
+                String::new()
+            },
+            progress: if phase == Phase::Pairing {
+                words::pairing(locale)
+            } else {
+                String::new()
+            },
             safety_number: match (&phase, &self.answer) {
                 (Phase::Paired, Some(answer)) => answer.safety_number.clone(),
                 _ => String::new(),
