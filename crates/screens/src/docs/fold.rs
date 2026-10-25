@@ -420,6 +420,10 @@ fn stage(
         },
         accessibility_label: format!("{title}, {}", row.kind_name),
         bytes_path: answer.bytes_path.clone(),
+        play_label: words::player_play(locale),
+        pause_label: words::player_pause(locale),
+        position_label: words::player_position(locale),
+        position_value: words::player_position_value(locale),
     }
 }
 

@@ -702,6 +702,13 @@ message DocsStage {
   // platform's renderer, picked by `media`. The core sets it only when the
   // bytes are here and the type may be drawn inline. EMPTY when `held` is false.
   string bytes_path = 7;
+  // THE PLAYER'S WORDS, for an audio or a video file: the play and pause
+  // control, and its position spoken ("{position} of {duration}", filled by the
+  // shell with the platform's own times).
+  string play_label = 8;
+  string pause_label = 9;
+  string position_label = 10;
+  string position_value = 11;
 
   enum Media {
     MEDIA_UNSPECIFIED = 0;

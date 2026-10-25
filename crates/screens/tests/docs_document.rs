@@ -119,6 +119,11 @@ fn a_document_over_bytes_this_device_does_not_hold_says_why() {
     assert!(!stage.held);
     assert!(!stage.absent_reason.is_empty());
     assert_eq!(stage.accessibility_label, "Lease.pdf, PDF");
+    // The player's words are Rust's, for an audio or a video file the stage plays.
+    assert_eq!(
+        (stage.play_label.as_str(), stage.pause_label.as_str()),
+        ("Play", "Pause")
+    );
     // No Edit on a stage.
     assert!(!keys(d.view(i)).contains(&"edit".to_owned()));
 }

@@ -3,6 +3,10 @@
 //! autosave line's are the kit's (`strings::shared`).
 
 catalog! {
+    plain player_pause = ("Pause", "Pause");
+    plain player_play = ("Play", "Play");
+    plain player_position = ("Position", "Position");
+    plain player_position_value = ("{position} of {duration}", "{position} of {duration}");
     plain action_edit = ("Edit", "Edit");
     plain action_labels = ("Labels", "Labels");
     plain action_move = ("Move", "Move");
