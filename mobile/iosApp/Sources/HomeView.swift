@@ -171,6 +171,8 @@ private struct HomeRoot: View {
         ) {
             VaultSheet(sheet: home.sheet, store: store)
         }
+        // THE PHONE'S SCHEME MOVED while the app is in front: Home is told it.
+        .onChange(of: scheme) { _, _ in shell.tellPhoneScheme() }
     }
 
     /// HOME'S OWN PLACE: the lockup, the ribbon and the three branches.

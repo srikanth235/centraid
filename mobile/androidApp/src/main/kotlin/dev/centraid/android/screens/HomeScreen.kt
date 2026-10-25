@@ -188,7 +188,7 @@ public fun HomeScreen(
             Band(band, runtimeTabs, backupShown, onOpenBackup, onOpenHome, onSelectTab)
             return@Column
         }
-        StatusRibbon(state.status, onEvent)
+        StatusRibbon(state.status, onEvent, hasBackupTab, onOpenBackup)
         val data = state.data_
         // THE PAGE TAKES THE SLACK, THE BAND TAKES ITS OWN HEIGHT. The band is
         // never scrolled away, so it is a sibling of the scrolling page and not
@@ -494,7 +494,12 @@ private fun SwitcherAction(label: String, iconKey: String, testTag: String, onPr
  * door: a press sends `status` and Rust says where it goes.
  */
 @Composable
-private fun StatusRibbon(status: HomeStatus?, onEvent: (HomeEvent) -> Unit) {
+private fun StatusRibbon(
+    status: HomeStatus?,
+    onEvent: (HomeEvent) -> Unit,
+    hasBackupTab: Boolean,
+    onOpenBackup: () -> Unit,
+) {
     // A RIBBON WITH NOTHING TO SAY IS NOT DRAWN: since All apps left it
     // (R-ONBOARD-11) it carries nothing else, and an empty band above the grid
     // reads as something that failed to render.
@@ -505,7 +510,12 @@ private fun StatusRibbon(status: HomeStatus?, onEvent: (HomeEvent) -> Unit) {
             .fillMaxWidth()
             .heightIn(min = if (loud) 40.dp else 32.dp)
             .clickable(enabled = status.action.isNotEmpty()) {
-                onEvent(HomeEvent(status = HomeEvent.StatusPressed()))
+                // UNTIL RUST REGISTERS A BACKUP TAB the native place is the only door.
+                if (status.destination == HomeStatus.Destination.DESTINATION_BACKUP && !hasBackupTab) {
+                    onOpenBackup()
+                } else {
+                    onEvent(HomeEvent(status = HomeEvent.StatusPressed()))
+                }
             }
             .padding(horizontal = PAGE_MARGIN)
             .testTag("home-status")

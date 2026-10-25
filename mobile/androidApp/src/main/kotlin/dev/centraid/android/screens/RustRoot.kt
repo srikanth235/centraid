@@ -185,6 +185,8 @@ internal class RustRoot(
             }
         }
         ensureScreens()
+        // A VAULT MADE OR SWITCHED LATER gets a runtime on its own core.
+        scope.launch { session.state.collect { ensureScreens() } }
     }
 
     /**

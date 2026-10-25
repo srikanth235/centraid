@@ -166,6 +166,17 @@ fn select(tab: &str) -> wire::Effect {
     }))
 }
 
+/// The Backup place: the runtime selects the `backup` tab when one is registered, and the
+/// command is the host's door to its native place until then. Opening it twice is a no-op.
+fn open_backup() -> Vec<wire::Effect> {
+    vec![
+        select(super::band::BACKUP),
+        command(wire::vault_command::Kind::Open(
+            wire::home_status::Destination::Backup as i32,
+        )),
+    ]
+}
+
 impl Home {
     /// Read every tile, in one pass. Nothing to read on a phone with no vault.
     fn reload(&mut self, ctx: &Ctx) {
@@ -205,7 +216,7 @@ impl Home {
     fn on_home(&mut self, event: H, ctx: &Ctx) -> Vec<wire::Effect> {
         let locale = ctx.locale();
         match event {
-            H::Backup(_) => return vec![select(super::band::BACKUP)],
+            H::Backup(_) => return open_backup(),
             H::Status(_) => return self.status_pressed(),
             H::Appearance(_) => {
                 self.appearance = self.appearance.toggled(self.phone_dark);
@@ -308,7 +319,7 @@ impl Home {
             return Vec::new();
         };
         match status.destination() {
-            D::Backup => vec![select(super::band::BACKUP)],
+            D::Backup => open_backup(),
             D::Phone | D::Notifications => {
                 vec![command(wire::vault_command::Kind::Open(status.destination))]
             }

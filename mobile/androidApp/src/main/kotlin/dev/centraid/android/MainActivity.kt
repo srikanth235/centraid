@@ -1,15 +1,10 @@
 package dev.centraid.android
 
-import dev.centraid.android.screens.PhotosGridScreen
-import dev.centraid.android.theme.centraidType
-import dev.centraid.android.kit.KitGeometry
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.runtime.setValue
-import androidx.compose.material3.Text
-import androidx.compose.foundation.layout.padding
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity

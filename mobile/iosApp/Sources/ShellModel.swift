@@ -1271,7 +1271,8 @@ final class ShellModel: ObservableObject {
         case let .rename(rename)?: renameVault(vaultID: rename.vaultID, name: rename.name)
         case let .open(destination)?:
             // The phone's own grant is changed in Settings (a notification or a
-            // low-disk door); the backup tab is a tab Rust selects itself.
+            // low-disk door); the backup place is native until Rust registers a tab.
+            if destination == .backup { openBackup() }
             if destination == .phone || destination == .notifications,
                 let url = URL(string: UIApplication.openSettingsURLString) {
                 UIApplication.shared.open(url)
