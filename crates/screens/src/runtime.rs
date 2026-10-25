@@ -462,6 +462,31 @@ impl ScreenHost for Runtime {
         }
     }
 
+    fn assist(&self, core: &dyn ScreenCtx, event: &wire::AssistEvent) {
+        let mut state = self.lock();
+        let mut out = wire::ScreenUpdate::default();
+        let ids: Vec<u64> = state
+            .instances
+            .iter()
+            .filter(|(_, instance)| instance.screen.hears_assist())
+            .map(|(id, _)| *id)
+            .collect();
+        for id in ids {
+            Self::dispatch(
+                &mut state,
+                core,
+                id,
+                wire::ScreenEvent {
+                    kind: Some(wire::screen_event::Kind::Assist(event.clone())),
+                },
+                &mut out,
+            );
+        }
+        if !Self::empty(&out) {
+            core.push(out);
+        }
+    }
+
     fn wake(&self, core: &dyn ScreenCtx) {
         let mut state = self.lock();
         let now = Instant::now();

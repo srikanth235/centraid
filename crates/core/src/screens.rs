@@ -70,6 +70,19 @@ pub trait ScreenCtx {
         })
     }
 
+    /// One BOUNDED assistant call (status, start, cancel, clear, suggest, confirm,
+    /// dismiss, documents). A load or a send blocks for seconds and rides the
+    /// `AssistCall` effect instead. A door with no assistant says so.
+    ///
+    /// # Errors
+    /// Whatever [`Handle::call`] refuses with.
+    fn assist(&self, request: &wire::AssistRequest) -> Result<wire::AssistResponse> {
+        let _ = request;
+        Err(crate::error::CoreError::Unsupported {
+            type_url: "assist".to_owned(),
+        })
+    }
+
     /// Push a finished update to the shell's event stream.
     fn push(&self, update: wire::ScreenUpdate);
 
@@ -91,6 +104,11 @@ pub trait ScreenHost: Send + Sync {
 
     /// These tables changed: re-render the screens that read them.
     fn changed(&self, ctx: &dyn ScreenCtx, tables: &[String]);
+
+    /// The assistant's running turn said something: tell the screens that listen.
+    fn assist(&self, ctx: &dyn ScreenCtx, event: &wire::AssistEvent) {
+        let _ = (ctx, event);
+    }
 
     /// A [`ScreenCtx::wake_after`] elapsed: fire the timers that are due.
     fn wake(&self, ctx: &dyn ScreenCtx);
@@ -139,6 +157,22 @@ impl ScreenCtx for Handle {
 
     fn locker(&self, request: &wire::LockerSessionRequest) -> Result<wire::LockerSessionResponse> {
         Handle::locker_session(self, request)
+    }
+
+    fn assist(&self, request: &wire::AssistRequest) -> Result<wire::AssistResponse> {
+        match Handle::call(
+            self,
+            &wire::Request {
+                kind: Some(wire::request::Kind::Assist(request.clone())),
+            },
+        )?
+        .kind
+        {
+            Some(wire::response::Kind::Assist(answer)) => Ok(answer),
+            _ => Err(crate::error::CoreError::Unsupported {
+                type_url: "assist".to_owned(),
+            }),
+        }
     }
 
     fn push(&self, update: wire::ScreenUpdate) {

@@ -28,6 +28,7 @@ syntax = "proto3";
 package centraid.core.v1;
 
 import "centraid/core/v1/agenda_screens.proto";
+import "centraid/core/v1/assist.proto";
 import "centraid/core/v1/docs_screens.proto";
 import "centraid/core/v1/health_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
@@ -186,6 +187,10 @@ message ScreenEvent {
     // what the member typed (an autosave's pending edit); a shell never sends
     // it, and only its `act`s survive: the view is no longer drawn.
     Left left = 6;
+    // RUNTIME-ORIGINATED: the assistant's running turn said something (a token,
+    // the cards, the answer). Only a screen that opts in (`hears_assist`, the
+    // chat) hears it; a shell never sends it.
+    AssistEvent assist = 8;
     CounterEvent counter = 10;
     // ---- agenda (100-199) ----
     AgendaHomeEvent agenda_home = 100;
@@ -360,6 +365,9 @@ message Effect {
     SaveFile save_file = 16;
     // Tell the shell something happened it may act on (a Locker unlock).
     Announce announce = 17;
+    // Run a blocking assistant call (a model load, a whole turn) off the UI
+    // thread and answer its response.
+    AssistCall assist_call = 30;
     // ---- photos (#1135, lane D) ----
     FetchOriginal fetch_original = 21;
     ExportOriginals export_originals = 22;
@@ -736,11 +744,22 @@ message EffectResult {
     EditRendered edit_rendered = 14;
     CameraRead camera_read = 15;
     ContactsSnapshot contacts = 16;
+    AssistResponse assist_answered = 30;
     // ---- docs (200-299): files ----
     FilePicked file_picked = 200;
     FileProgress file_progress = 201;
     FolderFollowed folder_followed = 202;
   }
+}
+
+// PERFORM ONE `Request.assist` ON A BACKGROUND THREAD and answer
+// `EffectResult.assist_answered` with its response (`EffectFailed` when the call
+// failed). The two calls that block for seconds, loading the model and sending a
+// turn, ride this: a screen's `update` holds the runtime lock and must not wait
+// on them. The turn's stream does not ride the answer; the core routes each
+// `AssistEvent` to the screen as `ScreenEvent.assist`.
+message AssistCall {
+  AssistRequest request = 1;
 }
 
 message EffectDone {}

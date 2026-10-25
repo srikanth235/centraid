@@ -646,6 +646,12 @@ impl Handle {
                                 host.wake(self);
                             }
                         }
+                        // THE ASSISTANT'S STREAM goes to the screens that listen
+                        // (the chat) and is swallowed: a shell with a runtime
+                        // draws the turn from the view state it pushes.
+                        (Some(wire::event::Kind::Assist(assist)), Some(host)) => {
+                            host.assist(self, assist);
+                        }
                         (Some(wire::event::Kind::Change(change)), Some(host)) => {
                             host.changed(self, std::slice::from_ref(&change.table));
                             return Ok(Some(event));

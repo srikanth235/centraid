@@ -25,6 +25,12 @@ pub trait Screen: Send {
 
     /// The finished state. `instance` and `revision` are stamped by the runtime.
     fn view(&self, ctx: &Ctx) -> wire::ViewState;
+
+    /// Whether the assistant's stream is for this screen (`ScreenEvent.assist`):
+    /// only the chat says yes, so a token does not wake every open screen.
+    fn hears_assist(&self) -> bool {
+        false
+    }
 }
 
 /// The device's locale and zone, as the shell last reported them.
@@ -120,6 +126,14 @@ impl<'a> Ctx<'a> {
     /// Whatever the core refuses with.
     pub fn content_urls(&self, request: &wire::ContentUrlRequest) -> Result<wire::ContentUrls> {
         self.core.content_urls(request)
+    }
+
+    /// One bounded assistant call; see `ScreenCtx::assist`.
+    ///
+    /// # Errors
+    /// Whatever the core refuses with.
+    pub fn assist(&self, request: &wire::AssistRequest) -> Result<wire::AssistResponse> {
+        self.core.assist(request)
     }
 
     /// One step of the Locker session. The tables are untouched: the session is
