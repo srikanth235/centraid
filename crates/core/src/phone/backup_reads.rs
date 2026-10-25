@@ -1,5 +1,6 @@
 //! THE BACKUP'S STANDING, AS THE SHELL ASKS IT (#1135, lane H2): the
-//! `backup-status` query behind the Backup screen and Home's line.
+//! `backup-status` query behind the Backup screen and Home's line, offered by
+//! [`super::shell_reads`].
 //!
 //! The reading is the phone's own ledger (`phone::backup_status`) and the
 //! content counts from the vault: it dials nobody, so drawing a line never
@@ -12,19 +13,19 @@
 use centraid_api_proto::core_v1 as wire;
 
 use crate::error::Result;
-use crate::handle::Handle;
+use crate::handle::HandleState;
 
 /// The query's name in `manifest.json`.
-pub const STATUS: &str = "backup-status";
+pub(crate) const STATUS: &str = "backup-status";
 
 /// The pseudo-table a change event names when the backup ledger moved.
-pub const TABLE: &str = "backup";
+pub(crate) const TABLE: &str = "backup";
 
 /// Whether answering `request` can have moved the backup ledger: a pass, a
 /// pairing, a forget, an address refresh, the operating system's report of an
 /// upload, a reconcile, a handoff, or the library items the platform deleted.
 #[must_use]
-pub fn moves_the_ledger(request: &wire::Request) -> bool {
+pub(crate) fn moves_the_ledger(request: &wire::Request) -> bool {
     use wire::request::Kind as K;
     matches!(
         request.kind,
@@ -46,7 +47,7 @@ pub fn moves_the_ledger(request: &wire::Request) -> bool {
 ///
 /// # Errors
 /// The ledger's or the spool's refusal, or a vault that will not read.
-pub fn status(handle: &Handle) -> Result<wire::LoadResponse> {
+pub(crate) fn status(handle: &HandleState) -> Result<wire::LoadResponse> {
     let standing = handle.backup_standing()?;
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
