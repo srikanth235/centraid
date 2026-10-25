@@ -64,6 +64,8 @@ public fun PhotoCellsGrid(
      * not tick.
      */
     taken: Set<String> = emptySet(),
+    /** What a taken cell says after its own label ("Already in this album"), Rust's words. */
+    takenLabel: String = "",
     minimumCell: Int = 96,
     onTap: ((String) -> Unit)? = null,
     onFetch: ((assetId: String, contentHash: String) -> Unit)? = null,
@@ -83,6 +85,7 @@ public fun PhotoCellsGrid(
                 cell = cell,
                 isSelected = cell.photo_id in selected,
                 isTaken = cell.photo_id in taken,
+                takenLabel = takenLabel,
                 onTap = onTap,
                 onFetch = onFetch,
             )
@@ -96,11 +99,13 @@ public fun PhotoCellSquare(
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
     isTaken: Boolean = false,
+    takenLabel: String = "",
     onTap: ((String) -> Unit)? = null,
     onFetch: ((assetId: String, contentHash: String) -> Unit)? = null,
 ) {
     val path = cell.thumbnail_path
     val label = cell.accessibility_label
+    val spoken = if (isTaken && takenLabel.isNotEmpty()) "$label, $takenLabel" else label
     Box(
         modifier
             .aspectRatio(1f)
@@ -113,7 +118,7 @@ public fun PhotoCellSquare(
                     Modifier
                 },
             )
-            .semantics { contentDescription = label },
+            .semantics { contentDescription = spoken },
     ) {
         if (!path.isNullOrEmpty()) ContentImage(path) else Text(text = label)
         // WHAT THIS DEVICE HAS OF THIS PHOTOGRAPH, ON TOP OF IT (#1025 S5,
