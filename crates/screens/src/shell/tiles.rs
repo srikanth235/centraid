@@ -274,6 +274,13 @@ struct Due {
 }
 
 impl Due {
+    fn none() -> Self {
+        Self {
+            count: 0,
+            title: String::new(),
+        }
+    }
+
     fn of(board: &wire::TasksBoard) -> Self {
         use wire::TasksGroupKind as Kind;
         let count = board
@@ -409,24 +416,24 @@ fn after_line(
 
 /// THE NEXT EVENT AND WHAT IS OWED, from Agenda's own upcoming window and its
 /// Today board: the next occurrence of whatever repeats is the core's
-/// recurrence engine's to say, so nothing here expands a series.
+/// recurrence engine's to say, so nothing here expands a series. A DUE READ THAT
+/// DID NOT LAND COSTS THE TILE ITS DUE LINE AND NOTHING ELSE: the events are the
+/// tile, the owed tasks ride on it.
 fn agenda(ctx: &Ctx) -> Made {
-    let Reading::Data(board) = read::read(
-        ctx,
-        load::agenda::Board {
-            limit: 100,
-            view: Some(load::agenda::BoardView::Today),
-            project_id: None,
-        },
-        |answer| match answer {
-            Answer::TasksBoard(board) => Some(board),
-            _ => None,
-        },
-    ) else {
+    // TODAY IS THE CORE'S: an unbounded day-context names it in the device's zone.
+    let Reading::Data(context) =
+        read::read(
+            ctx,
+            load::agenda::DayContext::default(),
+            |answer| match answer {
+                Answer::AgendaDayContext(context) => Some(context),
+                _ => None,
+            },
+        )
+    else {
         return unknown();
     };
-    // TODAY IS THE CORE'S: the board names it in the device's zone.
-    let Some(to) = civil::plus_days(&board.today, WINDOW_DAYS + 1).and_then(|day| midnight(&day))
+    let Some(to) = civil::plus_days(&context.today, WINDOW_DAYS + 1).and_then(|day| midnight(&day))
     else {
         return unknown();
     };
@@ -443,14 +450,30 @@ fn agenda(ctx: &Ctx) -> Made {
     ) else {
         return unknown();
     };
-    agenda_tile(ctx.locale(), &upcoming, &board)
+    let board = read::read(
+        ctx,
+        load::agenda::Board {
+            limit: 100,
+            view: Some(load::agenda::BoardView::Today),
+            project_id: None,
+        },
+        |answer| match answer {
+            Answer::TasksBoard(board) => Some(board),
+            _ => None,
+        },
+    );
+    agenda_tile(ctx.locale(), &upcoming, board.data())
 }
 
 /// The count is the occurrences of the next [`COUNT_DAYS`] days plus what is
 /// owed today, so the header agrees with the lines beneath it.
-fn agenda_tile(locale: Locale, upcoming: &wire::AgendaUpcoming, board: &wire::TasksBoard) -> Made {
+fn agenda_tile(
+    locale: Locale,
+    upcoming: &wire::AgendaUpcoming,
+    board: Option<&wire::TasksBoard>,
+) -> Made {
     let (today, now) = (upcoming.today.as_str(), upcoming.now_local.as_str());
-    let owed = Due::of(board);
+    let owed = board.map_or(Due::none(), Due::of);
     let live: Vec<&wire::AgendaEvent> = upcoming
         .events
         .iter()
@@ -969,7 +992,7 @@ mod tests {
     }
 
     fn agenda_of(events: Vec<wire::AgendaEvent>) -> Made {
-        agenda_tile(Locale::En, &upcoming(events), &board(&[], &[]))
+        agenda_tile(Locale::En, &upcoming(events), Some(&board(&[], &[])))
     }
 
     fn agenda_body(made: &Made) -> &wire::home_tile_body::Agenda {
@@ -996,7 +1019,10 @@ mod tests {
                 "2026-06-15T14:00",
                 "2026-06-15T15:00",
             )]),
-            &board(&["File the taxes"], &["Call Mum", "Water the plants"]),
+            Some(&board(
+                &["File the taxes"],
+                &["Call Mum", "Water the plants"],
+            )),
         );
         assert_eq!(made.status, Status::Content);
         let body = agenda_body(&made);
@@ -1016,7 +1042,11 @@ mod tests {
 
     #[test]
     fn tasks_due_and_no_event_is_content_whose_headline_says_there_is_no_event() {
-        let made = agenda_tile(Locale::En, &upcoming(vec![]), &board(&[], &["Call Mum"]));
+        let made = agenda_tile(
+            Locale::En,
+            &upcoming(vec![]),
+            Some(&board(&[], &["Call Mum"])),
+        );
         assert_eq!(made.status, Status::Content);
         let body = agenda_body(&made);
         assert_eq!(body.title, "No events coming up");
@@ -1027,6 +1057,20 @@ mod tests {
         );
         // NOT "0" over "1 due": the count agrees with the line.
         assert_eq!(count(&made), 1);
+    }
+
+    #[test]
+    fn a_due_read_that_did_not_land_costs_the_tile_its_due_line_and_nothing_else() {
+        let events = vec![timed("e", "Dentist", "2026-06-15T14:00", "")];
+        let made = agenda_tile(Locale::En, &upcoming(events), None);
+        assert_eq!(made.status, Status::Content);
+        let body = agenda_body(&made);
+        assert_eq!(body.title, "Dentist");
+        assert_eq!((body.due_count, body.due_label.as_str()), (0, ""));
+        // And with no event either, the tile says nothing is coming rather than inventing a due line.
+        let none = agenda_tile(Locale::En, &upcoming(vec![]), None);
+        assert_eq!(none.status, Status::Empty);
+        assert_eq!(count(&none), 0);
     }
 
     #[test]

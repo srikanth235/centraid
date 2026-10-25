@@ -592,3 +592,54 @@ fn a_dismissal_carries_no_id_changes_no_vault_and_asks_the_shelf_nothing() {
     tell(&mut d, i, H::Vault(wire::home_event::VaultPressed {}));
     assert!(d.effects.is_empty());
 }
+
+#[test]
+fn home_reads_again_when_a_table_a_tile_read_moves_with_no_pull_and_no_gesture() {
+    use centraid_screens::catalog::act;
+    use centraid_screens::field::Keyed;
+    let (mut d, i) = started();
+    let notes = |d: &Driver| tile(&data(d, i), "notes").count.expect("a count").value;
+    let before = notes(&d);
+    let response = d.act(
+        wire::ActRequest::from(act::notes::CreateNote {
+            title: "Added from another surface".to_owned(),
+            body: "A note the Notes tile has not heard of".to_owned(),
+            ..Default::default()
+        })
+        .keyed("home-reload-1"),
+    );
+    assert_eq!(
+        response.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        response.reason
+    );
+    // The change event reaches Home through the tables its tiles recorded.
+    d.pump(std::time::Duration::from_secs(2));
+    assert_eq!(notes(&d), before + 1, "the Notes tile moved on its own");
+}
+
+/// THE SEAM THE HUE CORPUS CANNOT SEE (`crates/design/tests/corpus.rs` holds every
+/// row of the wheel): both native Home views turn a face's hue key into a colour
+/// role. A hue spelled in one shell and forgotten in the other draws nothing on
+/// Compose and traps on SwiftUI, and neither failure looks like a missing token.
+/// This reads the SOURCE, because the Swift half has no other enforcer on a
+/// machine with no Xcode. (Ported from the shared module's `PartyHueWheelSpec`.)
+#[test]
+fn both_native_home_views_name_all_eight_hue_roles_and_the_solved_foreground() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let views = [
+        "mobile/iosApp/Sources/HomeView.swift",
+        "mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/HomeScreen.kt",
+    ];
+    for view in views {
+        let source = std::fs::read_to_string(root.join(view)).expect("a native Home view");
+        for key in centraid_design::IDENTITY_HUE_KEYS {
+            let role = format!("c{}{}", key[..1].to_uppercase(), &key[1..]);
+            assert!(source.contains(&role), "{view} never names {role}");
+        }
+        // And the solved foreground, without which a saturated disc keeps the ink
+        // that failed contrast on it.
+        assert!(source.contains("textInv"), "{view} never names textInv");
+    }
+}

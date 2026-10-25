@@ -26,10 +26,10 @@ import kotlinx.coroutines.withTimeoutOrNull
  * search. Inside Locker a row carries the `Route` Rust built; these are the only
  * routes the shell spells, because the caller holds an id and no row.
  *
- * It also keeps the two things that still reach Locker from KMP until the shell
- * lane ports Home and chat: Home's tile asks whether the Locker is open
- * ([HomeReads.lockerOpen]), and chat's confirm card asks for the key
- * ([ChatSlots.unlockLocker]) — which pushes Rust's wall page and waits for it.
+ * It also keeps the one thing that still reaches Locker from KMP until chat is
+ * Rust's: chat's confirm card asks for the key ([ChatSlots.unlockLocker]), which
+ * pushes Rust's wall page and waits for it. (Home's tile asks the core's session
+ * itself, `shell/tiles.rs`.)
  * The session is the core's and the wall is Rust's; this only mirrors one fact
  * the shell hears: Rust announced an unlock, a Locker view carried a wall, or the
  * app left the foreground.
@@ -98,7 +98,7 @@ public object LockerEntry {
         }
     }
 
-    /** Fill Home's tile and chat's slot. Called once at launch. */
+    /** Fill chat's slot. Called once at launch. */
     public fun install() {
         ChatSlots.unlockLocker = {
             if (open.value) {
