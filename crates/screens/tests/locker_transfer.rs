@@ -267,7 +267,6 @@ fn the_trash_lists_what_went_and_is_behind_the_lock() {
     // Locked, the trash says the Locker is locked.
     d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
         foreground: false,
-        ..Default::default()
     }));
     d.send(
         id,

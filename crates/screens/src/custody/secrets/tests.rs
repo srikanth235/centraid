@@ -344,3 +344,76 @@ fn nothing_the_cache_holds_reaches_a_debug_line() {
     assert!(!format!("{secrets:?}").contains(SEED));
     assert!(!format!("{:?}", VaultSecrets::remember_seed(SEED, true)).contains(SEED));
 }
+
+#[test]
+#[should_panic(expected = "128 lowercase hex characters")]
+fn writing_a_malformed_seed_is_refused_at_the_call() {
+    let _ = VaultSecrets::remember_seed("not a seed", true);
+}
+
+#[test]
+fn a_saved_copy_is_a_claim_kept_apart_from_the_key() {
+    let secrets = VaultSecrets::new();
+    assert!(!secrets.words_saved());
+    apply(&secrets, &[VaultSecrets::mark_words_saved()]);
+    assert!(secrets.words_saved());
+    // Forgetting the seed forgets the claim, and the words with it.
+    apply(&secrets, &[VaultSecrets::remember_words(&words())]);
+    apply(&secrets, &VaultSecrets::forget_seed());
+    assert!(!secrets.words_saved());
+    assert_eq!(secrets.words(), None);
+    assert_eq!(secrets.seed(), None);
+}
+
+#[test]
+fn a_vaults_own_key_waits_to_be_filed_until_it_is_filed_or_forgotten() {
+    let secrets = VaultSecrets::new();
+    assert!(secrets.pending_filings().is_empty());
+    apply(
+        &secrets,
+        &[secrets.add_pending_filing("0123456789abcdef", "Family")],
+    );
+    apply(
+        &secrets,
+        &[secrets.add_pending_filing("fedcba9876543210", "Work")],
+    );
+    assert_eq!(secrets.pending_filings().len(), 2);
+    // Filing two at once leaves neither standing, not the last one's list.
+    apply(
+        &secrets,
+        &secrets
+            .clear_pending_filings(&["0123456789abcdef".to_owned(), "fedcba9876543210".to_owned()]),
+    );
+    assert!(secrets.pending_filings().is_empty());
+    apply(
+        &secrets,
+        &[secrets.add_pending_filing("0123456789abcdef", "Family")],
+    );
+    apply(&secrets, &secrets.clear_pending_filing("0123456789abcdef"));
+    assert!(secrets.pending_filings().is_empty());
+}
+
+#[test]
+fn a_store_that_cannot_list_a_vaults_keys_is_asked_for_them_by_id() {
+    let secrets = VaultSecrets::new();
+    secrets.absorb(&VaultSecrets::load_ops(), &[listing(&[]), listing(&[])]);
+    let ids = vec!["v1".to_owned(), "v2".to_owned()];
+    let ops = VaultSecrets::hydrate_ops(&ids);
+    assert_eq!(ops.len(), 4);
+    let held = |value: &str| wire::SecretAnswer {
+        ok: true,
+        found: true,
+        value: value.as_bytes().to_vec(),
+        ..Default::default()
+    };
+    secrets.absorb(
+        &ops,
+        &[held("2"), refused(), refused(), held("abcdabcdabcdabcd")],
+    );
+    assert_eq!(secrets.vault_index("v1"), Some(2));
+    assert_eq!(secrets.vault_index("v2"), None);
+    assert_eq!(
+        secrets.own_seed_of("v2").as_deref(),
+        Some("abcdabcdabcdabcd")
+    );
+}

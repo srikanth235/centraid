@@ -47,6 +47,10 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
     // pairing, the backup screen and the pass service all read the same one.
     let secrets = custody::secrets::VaultSecrets::new();
     let shelf = vault::Shelf::new(&secrets);
+    // The words screens found, restore and re-key through the shelf, and the
+    // pass service asks it which vaults are held and for one's own core.
+    let keeper = custody::keeper::KeeperSlot::with(shelf.clone());
+    secrets.conductor().use_holdings(shelf.clone());
     let runtime = Runtime::new(
         Registry::default()
             .with(proof::NAME, proof::build)
@@ -58,7 +62,7 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
             .merge(notes::registry())
             .merge(people::registry())
             .merge(photos::registry())
-            .merge(custody::registry(&secrets))
+            .merge(custody::registry_with(&secrets, &keeper))
             .merge(pairing::registry(&secrets))
             .merge(backup::registry(&secrets))
             .merge(passes::registry(&secrets))
@@ -78,12 +82,7 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
             ),
         ],
     )
-    .with_services(
-        passes::services()
-            .into_iter()
-            .chain(vault::services())
-            .collect(),
-    );
+    .with_services([passes::services(), custody::services(), vault::services()].concat());
     (runtime, shelf)
 }
 

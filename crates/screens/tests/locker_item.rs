@@ -109,7 +109,6 @@ fn relocking_wipes_a_revealed_value_and_the_page() {
     verb(&mut d, id, "password", "reveal");
     d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
         foreground: false,
-        ..Default::default()
     }));
     let state = item(&d, id);
     assert!(state.wall.is_some() && state.content.is_none() && !state.secure);
@@ -412,7 +411,6 @@ fn leaving_with_changes_asks_first_and_a_relock_closes_the_editor() {
     assert!(editor(&d, id).confirm.unwrap().destructive && !editor(&d, id).finished);
     d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
         foreground: false,
-        ..Default::default()
     }));
     let state = editor(&d, id);
     assert!(

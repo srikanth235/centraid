@@ -70,6 +70,9 @@ struct State {
     foreground: Option<String>,
     /// A vault a screen asked to bring to the front during this call.
     switch: Option<String>,
+    /// Topics screens announced during the update in flight, relayed to every
+    /// open screen by [`Runtime::settle`].
+    announced: Vec<String>,
 }
 
 /// The screen runtime.
@@ -107,6 +110,7 @@ impl Runtime {
                 started: false,
                 foreground: None,
                 switch: None,
+                announced: Vec::new(),
             }),
         }
     }
@@ -242,7 +246,8 @@ impl Runtime {
         };
         let ctx = Ctx::new(core, &env);
         let effects = instance.screen.update(event, &ctx);
-        let done = ctx.finish();
+        let mut done = ctx.finish();
+        let signals = std::mem::take(&mut done.signals);
         instance.tables.extend(done.tables);
         if let Some(vault_id) = done.switch {
             state.switch = Some(vault_id);
@@ -286,6 +291,9 @@ impl Runtime {
             core.off_thread(job, work);
         }
         for effect in effects {
+            if let Some(wire::effect::Kind::Announce(note)) = &effect.kind {
+                state.announced.push(note.topic.clone());
+            }
             let effect_id = state.next_effect;
             state.next_effect += 1;
             out.effects.push(wire::EffectRequest {
@@ -293,6 +301,29 @@ impl Runtime {
                 instance: id,
                 effect: Some(effect),
             });
+        }
+        // A SIGNAL REACHES THE OTHER SCREENS THAT LISTEN FOR ITS TOPIC, after
+        // this screen's own work is recorded. A screen is never told its own.
+        for topic in signals {
+            let hearing: Vec<u64> = state
+                .instances
+                .iter()
+                .filter(|(other, instance)| **other != id && instance.screen.hears(&topic))
+                .map(|(other, _)| *other)
+                .collect();
+            for other in hearing {
+                Self::dispatch(
+                    state,
+                    core,
+                    other,
+                    wire::ScreenEvent {
+                        kind: Some(wire::screen_event::Kind::Signalled(wire::Signalled {
+                            topic: topic.clone(),
+                        })),
+                    },
+                    out,
+                );
+            }
         }
     }
 
@@ -473,6 +504,31 @@ impl Runtime {
         out.navigation = Some(Self::navigation(state));
     }
 
+    /// RELAY WHAT SCREENS ANNOUNCED. An `Announce` is the shell's to act on
+    /// (Locker's unlock, for one); the runtime also tells every open screen,
+    /// services included, so a screen that must follow (a vault's own key is
+    /// filed in Locker after an unlock) hears it in the same call and needs
+    /// nothing back from the shell. An announcement a screen makes while
+    /// hearing one is relayed in turn.
+    fn settle(state: &mut State, core: &dyn ScreenCtx, out: &mut wire::ScreenUpdate) {
+        while !state.announced.is_empty() {
+            for topic in std::mem::take(&mut state.announced) {
+                Self::broadcast(
+                    state,
+                    core,
+                    |_| {
+                        Some(wire::ScreenEvent {
+                            kind: Some(wire::screen_event::Kind::Announced(wire::Announced {
+                                topic: topic.clone(),
+                            })),
+                        })
+                    },
+                    out,
+                );
+            }
+        }
+    }
+
     fn empty(update: &wire::ScreenUpdate) -> bool {
         update.navigation.is_none()
             && update.views.is_empty()
@@ -543,6 +599,22 @@ impl ScreenHost for Runtime {
                     &mut out,
                 );
             }
+            // A FACT THE SHELL REPORTS (the link, a granted window, the vaults
+            // held, an upload the OS finished): every open screen and service
+            // hears it; the pass scheduler is the one that acts.
+            K::ShellFact(fact) => {
+                let fact = fact.clone();
+                Self::broadcast(
+                    &mut state,
+                    core,
+                    |_| {
+                        Some(wire::ScreenEvent {
+                            kind: Some(wire::screen_event::Kind::ShellFact(fact.clone())),
+                        })
+                    },
+                    &mut out,
+                );
+            }
             // THE APP LEFT OR CAME BACK: every open screen hears it (a Locker
             // relocks the instant it leaves the foreground).
             K::Lifecycle(lifecycle) => {
@@ -558,8 +630,23 @@ impl ScreenHost for Runtime {
                     &mut out,
                 );
             }
+            // THE OPERATING SYSTEM WANTS ITS MEMORY BACK: the shelf's service
+            // rests every vault but the one in front.
+            K::MemoryWarning(_) => Self::broadcast(
+                &mut state,
+                core,
+                |_| {
+                    Some(wire::ScreenEvent {
+                        kind: Some(wire::screen_event::Kind::MemoryWarning(
+                            wire::MemoryWarning {},
+                        )),
+                    })
+                },
+                &mut out,
+            ),
         }
         self.follow_foreground(&mut state, core, &mut out);
+        Self::settle(&mut state, core, &mut out);
         // The first call also carries the opened roots, so a snapshot is not a
         // second round trip: `start` filled `out` already.
         if out.navigation.is_none() && !out.views.is_empty() && state.nav_revision == 1 {
@@ -578,9 +665,12 @@ impl ScreenHost for Runtime {
             &mut state,
             core,
             |instance| {
+                // A SERVICE HEARS EVERY COMMIT: it asks for no table, it is the
+                // thing that reacts to the vault having moved (the pass
+                // scheduler). A screen hears the tables it read.
                 let hit: Vec<String> = tables
                     .iter()
-                    .filter(|table| instance.tables.contains(*table))
+                    .filter(|table| instance.service || instance.tables.contains(*table))
                     .cloned()
                     .collect();
                 (!hit.is_empty()).then_some(wire::ScreenEvent {
@@ -591,6 +681,7 @@ impl ScreenHost for Runtime {
             },
             &mut out,
         );
+        Self::settle(&mut state, core, &mut out);
         if !Self::empty(&out) {
             core.push(out);
         }
@@ -644,6 +735,7 @@ impl ScreenHost for Runtime {
             );
         }
         self.follow_foreground(&mut state, core, &mut out);
+        Self::settle(&mut state, core, &mut out);
         if !Self::empty(&out) {
             core.push(out);
         }

@@ -10,7 +10,8 @@
 // `holdings` through the table name `shelf` (`DataChanged`).
 //
 // Arms of this lane's shell block: AppQueryResponse 1540-1599 (this file takes
-// 1540). No ScreenEvent, ViewState or Effect arm is used.
+// 1540), ScreenRequest and ScreenEvent 1560 (`MemoryWarning`). No ViewState or
+// Effect arm is used.
 
 syntax = "proto3";
 
@@ -60,3 +61,8 @@ message HeldFrozen {
   string since = 1;
   uint64 unacked = 2;
 }
+
+// The operating system is asking for its memory back. Sent by the shell as
+// `ScreenRequest.memory_warning`, heard by every screen and service as
+// `ScreenEvent.memory_warning`.
+message MemoryWarning {}

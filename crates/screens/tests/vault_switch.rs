@@ -456,7 +456,6 @@ fn leaving_the_foreground_relocks_every_held_vault_and_a_switch_relocks_the_one_
         .driver
         .call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
             foreground: false,
-            ..Default::default()
         }));
     assert_eq!(state(&core_a), wire::LockerSessionState::Locked as i32);
     assert_eq!(state(&core_b), wire::LockerSessionState::Locked as i32);
@@ -465,12 +464,9 @@ fn leaving_the_foreground_relocks_every_held_vault_and_a_switch_relocks_the_one_
 #[test]
 fn the_os_asking_for_memory_rests_every_vault_but_the_one_in_front_and_the_roster_says_so() {
     let (mut phone, a, b, _seen, _dir) = two_vaults();
-    phone
-        .driver
-        .call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
-            foreground: true,
-            low_memory: true,
-        }));
+    phone.driver.call(wire::screen_request::Kind::MemoryWarning(
+        wire::MemoryWarning {},
+    ));
     phone.driver.pump(Duration::from_millis(500));
     assert!(!phone.held(&a).resting);
     assert!(phone.held(&b).resting);

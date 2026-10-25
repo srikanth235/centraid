@@ -147,6 +147,10 @@ struct Cache {
 #[derive(Clone, Default)]
 pub struct VaultSecrets {
     cache: Arc<Mutex<Cache>>,
+    /// The pass conductor, shared by the pass service and the Backup screen the
+    /// same way the cache is: reachable from here so `registry(&secrets)` hands
+    /// both the one object.
+    conductor: crate::passes::Conductor,
 }
 
 impl fmt::Debug for VaultSecrets {
@@ -213,6 +217,25 @@ impl VaultSecrets {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
+    /// The pass conductor every clone shares (`crate::passes`).
+    #[must_use]
+    pub fn conductor(&self) -> &crate::passes::Conductor {
+        &self.conductor
+    }
+
+    /// A device-only value the shell last said, for a setting that is not a
+    /// key (the transfer rule; `crate::passes::rule`).
+    #[must_use]
+    pub(crate) fn device_value(&self, key: &str) -> Option<String> {
+        self.device_get(key)
+    }
+
+    /// The op that sets a device-only value; an empty value deletes it.
+    #[must_use]
+    pub(crate) fn device_set(key: &str, value: &str) -> wire::SecretOp {
+        set_device(key, value)
+    }
+
     // ---- loading ---------------------------------------------------------
 
     /// Whether the shell's secrets have been read once.
@@ -229,6 +252,27 @@ impl VaultSecrets {
             device(wire::secret_op::Op::List, "", ""),
             synced(wire::secret_op::Op::List, "", ""),
         ]
+    }
+
+    /// The ops that read what a store cannot enumerate: the per-vault keys an
+    /// earlier build wrote under names built from a vault's id (the Android
+    /// store lists only names it has indexed). Send them after the load, once
+    /// the shelf knows the vault ids, then [`Self::absorb`] the answers.
+    #[must_use]
+    pub fn hydrate_ops(vault_ids: &[String]) -> Vec<wire::SecretOp> {
+        vault_ids
+            .iter()
+            .flat_map(|id| {
+                [
+                    device(wire::secret_op::Op::Get, &format!("{INDEX_PREFIX}{id}"), ""),
+                    device(
+                        wire::secret_op::Op::Get,
+                        &format!("{OWN_VAULT_PREFIX}{id}"),
+                        "",
+                    ),
+                ]
+            })
+            .collect()
     }
 
     /// Fold the shell's answers to `ops` into the cache. The answers are in the
@@ -718,6 +762,18 @@ impl VaultSecrets {
             .pending_filings()
             .into_iter()
             .filter(|(entry, _)| entry != id)
+            .collect();
+        vec![set_device(PENDING_FILINGS, &write_index(&kept))]
+    }
+
+    /// Every entry in `ids` was filed, or forgotten: one write, so a batch
+    /// clearing several does not leave the last one's list standing.
+    #[must_use]
+    pub fn clear_pending_filings(&self, ids: &[String]) -> Vec<wire::SecretOp> {
+        let kept: Vec<_> = self
+            .pending_filings()
+            .into_iter()
+            .filter(|(entry, _)| !ids.contains(entry))
             .collect();
         vec![set_device(PENDING_FILINGS, &write_index(&kept))]
     }

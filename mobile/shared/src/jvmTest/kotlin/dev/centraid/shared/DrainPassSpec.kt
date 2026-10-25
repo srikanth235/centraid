@@ -3,21 +3,14 @@ package dev.centraid.shared
 import dev.centraid.shared.sync.DrainAnswer
 import dev.centraid.shared.sync.DrainClaim
 import dev.centraid.shared.sync.DrainCopy
-import dev.centraid.shared.sync.DrainDoor
-import dev.centraid.shared.sync.DrainInput
-import dev.centraid.shared.sync.DrainPass
-import dev.centraid.shared.sync.TransferRule
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.test.runTest
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * THE PASS, AND THE CLAIM IT IS ALLOWED TO MAKE (#1029 W18-2, W18-3).
+ * THE CLAIM A PASS'S ANSWER IS ALLOWED TO MAKE (#1029 W18-2, W18-3). The pass itself — the
+ * try-lock, the refusal of a second pass, the next window on every path — is Rust's now
+ * (`crates/screens/tests/passes_service.rs`); the words and the claim are the Backup screen's.
  *
  * This spec inherits the invariant `CustodyAndBackupClaimSpec` held over the
  * retired `URLSession` seam — **the UI never claims backup the gateway has not
@@ -26,94 +19,6 @@ import java.util.concurrent.atomic.AtomicInteger
  * is the whole reason this file exists in the same commit.
  */
 class DrainPassSpec : StringSpec({
-
-    fun door(answer: DrainAnswer?) = DrainDoor { answer }
-
-    fun input(deadlineMs: Long = 25_000) = DrainInput(
-        deadlineMs = deadlineMs,
-        rule = TransferRule.WIFI_ONLY,
-        includeVideos = true,
-        metered = false,
-        charging = true,
-        wantsSnapshot = false,
-    )
-
-    "a pass answers what the core answered, and nothing it worked out itself" {
-        runTest {
-            val answer = DrainAnswer(
-                pendingBytes = 0,
-                stopped = DrainAnswer.Stopped.EMPTY,
-                ackedAtMs = 1_700_000_000_000,
-                confirmedParts = 41,
-            )
-            val outcome = DrainPass(door(answer)).run(input())
-            outcome shouldBe DrainPass.Outcome.Ran(answer)
-        }
-    }
-
-    "the pass hands the core exactly the input it was given" {
-        runTest {
-            // THE RULE CROSSES (#1080): a pass that dropped it would be the core
-            // planning a member's bill under a rule the member never chose.
-            val seen = mutableListOf<DrainInput>()
-            val asked = input(deadlineMs = 9_000).copy(
-                rule = TransferRule.WIFI_AND_CELLULAR_PHOTOS,
-                includeVideos = false,
-                metered = true,
-                charging = false,
-                wantsSnapshot = true,
-            )
-            DrainPass(DrainDoor { seen += it; null }).run(asked)
-            seen shouldBe listOf(asked)
-        }
-    }
-
-    "no core to ask is not a failure and is not a sentence" {
-        runTest {
-            DrainPass(door(null)).run(input()) shouldBe DrainPass.Outcome.Unavailable
-        }
-    }
-
-    "a second pass while one runs is REFUSED, and the door is called once" {
-        runTest {
-            // BOTH TRIGGERS FIRE TOGETHER ALL THE TIME: the app becomes active
-            // while a background window is still draining. A queued second pass
-            // would spend a member's data twice for no new bytes.
-            val entered = CompletableDeferred<Unit>()
-            val release = CompletableDeferred<Unit>()
-            val calls = AtomicInteger(0)
-            val slow = DrainDoor {
-                calls.incrementAndGet()
-                entered.complete(Unit)
-                release.await()
-                DrainAnswer(0, DrainAnswer.Stopped.EMPTY, ackedAtMs = 1)
-            }
-            val pass = DrainPass(slow)
-            coroutineScope {
-                val first = async { pass.run(input(60_000)) }
-                entered.await()
-                pass.busy shouldBe true
-                pass.run(input(60_000)) shouldBe DrainPass.Outcome.Busy
-                release.complete(Unit)
-                first.await()
-            }
-            pass.busy shouldBe false
-            calls.get() shouldBe 1
-        }
-    }
-
-    "the next window is asked for on every path, including one that stopped short" {
-        runTest {
-            // A `BGTaskRequest` IS ONE-SHOT. A pass that only resubmitted when it
-            // emptied the spool would run once in the life of an install, which
-            // reads to a member as "it worked the first day".
-            val asked = AtomicInteger(0)
-            val unreachable = DrainAnswer(900, DrainAnswer.Stopped.UNREACHABLE)
-            DrainPass(door(unreachable)) { asked.incrementAndGet() }.run(input())
-            DrainPass(door(null)) { asked.incrementAndGet() }.run(input())
-            asked.get() shouldBe 2
-        }
-    }
 
     "the claim is never 'backed up' without an acknowledgement" {
         // THE UMBRELLA'S UI INVARIANT. Everything below has run a pass; only the

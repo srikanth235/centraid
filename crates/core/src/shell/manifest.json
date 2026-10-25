@@ -70,6 +70,28 @@
         "properties": {},
         "additionalProperties": false
       }
+    },
+    {
+      "name": "backup-status",
+      "kind": "backup",
+      "figures": [
+        "destinations",
+        "acked_at_ms",
+        "last_snapshot_ms",
+        "content_total",
+        "content_confirmed",
+        "pending_bytes",
+        "spool_bytes",
+        "waiting",
+        "frozen",
+        "now_ms"
+      ],
+      "description": "(backup, lane H2) Where this vault's backup stands, read from the phone's own ledger without dialling anyone: the gateways it is paired with, when one last acknowledged the head (the gateway's clock), how many photos and files are confirmed of how many the vault knows, what waits and why, and this phone's clock for wording. Re-read whenever a pass, a pairing or a forget moves the ledger, or the vault's files change.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
     }
   ],
   "actions": [

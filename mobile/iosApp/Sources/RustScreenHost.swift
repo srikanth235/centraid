@@ -75,6 +75,38 @@ private struct RustScreenView: View {
     var body: some View {
         let open: (Centraid_Core_V1_Route) -> Void = { shell.open($0) }
         switch store.views[instance]?.kind {
+        // THE 24 WORDS (lane H2): made, typed back and shown again. Each is
+        // finished by Rust (`finished`), and the shell pops it.
+        case .wordsMake(let state)?:
+            VaultWordsView(
+                state: state,
+                send: { store.send(instance, .wordsMake($0)) },
+                onDone: {
+                    guard shell.path.last == .rust(entry) else { return }
+                    if !state.madeLine.isEmpty { shell.vaultMade(state.madeLine) }
+                    pop()
+                }
+            )
+        case .wordsEnter(let state)?:
+            WordsEntryView(
+                state: state,
+                send: { store.send(instance, .wordsEnter($0)) },
+                onDone: {
+                    guard shell.path.last == .rust(entry) else { return }
+                    pop()
+                    shell.wordsEnterFinished()
+                }
+            )
+        case .wordsShow(let state)?:
+            WordsShowView(
+                state: state,
+                send: { store.send(instance, .wordsShow($0)) },
+                onDone: {
+                    guard shell.path.last == .rust(entry) else { return }
+                    pop()
+                    shell.wordsShowFinished()
+                }
+            )
         case .agendaHome(let state)?:
             AgendaHomeView(
                 state: state,
@@ -122,6 +154,14 @@ private struct RustScreenView: View {
                 send: { store.send(instance, .todoCatchUp($0)) },
                 open: open,
                 onBack: pop
+            )
+        case .backupHome(let state)?:
+            BackupHomeView(
+                state: state,
+                shell: shell,
+                send: { store.send(instance, .backupHome($0)) },
+                onAddDestination: { shell.addBackupDestination() },
+                onShowWords: { shell.backupShowWords() }
             )
         case .photosHome(let state)?:
             PhotosHomeView(
@@ -367,6 +407,13 @@ private struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .trash($0)) },
                 onBack: pop
+            )
+        // PAIRING A GATEWAY (#1135).
+        case .pairLaptop(let state)?:
+            PairLaptopPageView(
+                state: state,
+                send: { store.send(instance, .pairLaptop($0)) },
+                onDone: pop
             )
         // PHOTOS' ONE-PHOTOGRAPH PAGES (#1135).
         case .photosLightbox(let state)?:

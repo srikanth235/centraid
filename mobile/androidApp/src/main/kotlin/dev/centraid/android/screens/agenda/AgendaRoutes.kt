@@ -48,6 +48,8 @@ import dev.centraid.android.screens.docs.rememberDocsPickers
 import dev.centraid.shared.nav.DocsEntry
 import dev.centraid.shared.nav.HealthEntry
 import dev.centraid.android.screens.RouteNav
+import dev.centraid.android.screens.backup.BackupHomeScreen
+import dev.centraid.android.screens.backup.writeTransferRule
 import dev.centraid.android.screens.locker.LockerAccessScreen
 import dev.centraid.android.screens.locker.LockerEditorScreen
 import dev.centraid.android.screens.locker.LockerExportScreen
@@ -55,6 +57,7 @@ import dev.centraid.android.screens.locker.LockerHomeScreen
 import dev.centraid.android.screens.locker.LockerImportScreen
 import dev.centraid.android.screens.locker.LockerItemScreen
 import dev.centraid.android.screens.locker.LockerLockPage
+import dev.centraid.android.screens.pairing.PairLaptopPage
 import dev.centraid.android.screens.money.MoneyAccountsScreen
 import dev.centraid.android.screens.money.MoneyCategoriesScreen
 import dev.centraid.android.screens.money.MoneyHomeScreen
@@ -68,9 +71,13 @@ import dev.centraid.android.screens.notes.NotesEditorScreen
 import dev.centraid.android.screens.notes.NotesHistoryScreen
 import dev.centraid.android.screens.notes.NotesHomeScreen
 import dev.centraid.android.screens.people.PeopleEditorScreen
+import dev.centraid.android.screens.words.VaultWordsScreen
+import dev.centraid.android.screens.words.WordsEnterPage
+import dev.centraid.android.screens.words.WordsShowScreen
 import dev.centraid.android.screens.people.PeopleHomeScreen
 import dev.centraid.android.screens.people.PeoplePersonScreen
 import dev.centraid.core.CentraidCore
+import dev.centraid.android.backup.PassHost
 import dev.centraid.core.Screens
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.AppIds
@@ -115,6 +122,13 @@ internal class AgendaRoutes(
     private val phone: AndroidPhoneFollow,
     private val health: AndroidHealth,
     private val openWords: () -> Unit = {},
+    /** The Backup screen's two hand-offs: the pairing page, and the recovery key behind the passcode. */
+    private val openPair: () -> Unit = {},
+    private val openShowWords: () -> Unit = {},
+    /** A vault was made (`words.make`'s `made_line`): Home's status line takes the sentence. */
+    private val onVaultMade: (String) -> Unit = {},
+    /** `words.show` finished: the Backup tab reads again ("I've saved it" quiets its warning). */
+    private val onWordsShowDone: () -> Unit = {},
 ) : AppRoutes {
     private var session: HomeSession? = null
     private var scope: CoroutineScope? = null
@@ -157,8 +171,17 @@ internal class AgendaRoutes(
         ensureScreens()
     }
 
+    /** Push a Rust route (a custody door) from outside composition. */
+    fun pushRoute(route: Route) {
+        val nav = globalNav ?: return
+        nav.scope.launch { nav.push(Destination.RustScreen(route)) }
+    }
+
+    private var globalNav: RouteNav? = null
+
     @Composable
     override fun Global(nav: RouteNav) {
+        globalNav = nav
         // EVERY MOVE OF THE STACK is compared with what Rust holds.
         val stack = nav.stack
         LaunchedEffect(stack) {
@@ -178,18 +201,21 @@ internal class AgendaRoutes(
         }
         val runtime = screens
         if (runtime != null) {
-            // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED, and when Home's tile learns the Locker is open.
+            // AN UNLOCK is when Home's tile learns the Locker is open.
             val pickers = rememberDocsPickers(docsFiles, onFollowed = { phone.requested(PhoneSource.FILES) })
             PerformScreenEffects(
                 runtime,
                 phone,
                 tab = TAB,
+                // (Rust files a vault's own key itself: `custody.filing` hears the same announcement.)
                 onAnnounce = { topic ->
-                    if (topic == "locker.unlocked") session?.let { LockerEntry.unlocked(it) }
+                    if (topic == "locker.unlocked") LockerEntry.unlocked()
                 },
+                services = true,
                 docs = pickers,
                 health = health,
                 openRoute = { route -> nav.push(Destination.RustScreen(route)) },
+                backgroundRegistered = { session?.backgroundRegistration?.value?.registered },
             )
             // THE APP LEAVING THE FOREGROUND RELOCKS THE LOCKER: the core does it, every open screen hears it.
             val owner = LocalLifecycleOwner.current
@@ -235,6 +261,8 @@ internal class AgendaRoutes(
         val next = Screens(live, home)
         core = live
         screens = next
+        // THE PASS SCHEDULER'S HOST: a window the OS grants reports to this runtime while the app is up.
+        PassHost.live = next
         attached = next.attach()
         home.launch {
             // THE DEVICE'S LOCALE AND ZONE, then the tabs' roots, then any page a
@@ -325,17 +353,38 @@ internal class AgendaRoutes(
         val healthMetric = view.health_metric
         val healthWorkout = view.health_workout
         val healthConnect = view.health_connect
+        val pairLaptop = view.pair_laptop
+        val backupHome = view.backup_home
+        val wordsMake = view.words_make
+        val wordsEnter = view.words_enter
+        val wordsShow = view.words_show
 
         // THE SCREEN IS DONE (a cancel committed, the editor saved or left, the task deleted): its page goes.
         val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true ||
             doc?.dismissed == true || peoplePerson?.done == true || healthConnect?.finished == true ||
             lockerItem?.finished == true || lockerEditor?.finished == true || lockerLock?.finished == true ||
-            moneyTarget?.finished == true || moneyImport?.finished == true
+            moneyTarget?.finished == true || moneyImport?.finished == true ||
+            wordsMake?.finished == true || wordsEnter?.finished == true || wordsShow?.finished == true
         LaunchedEffect(done) {
-            if (done && nav.stack.current === entry) nav.pop()
+            if (done && nav.stack.current === entry) {
+                // THE 24 WORDS' SCREENS finish themselves; what they leave behind is the shell's.
+                wordsMake?.takeIf { it.finished && it.made_line.isNotEmpty() }?.let { onVaultMade(it.made_line) }
+                if (wordsEnter?.finished == true) foregrounded()
+                if (wordsShow?.finished == true) onWordsShowDone()
+                nav.pop()
+            }
         }
 
         when {
+            // THE BACKUP SCREEN (#1135, lane H2): the rule's change reaches the session
+            // that owns the background windows until the pass service does.
+            backupHome != null -> BackupHomeScreen(
+                state = backupHome,
+                onEvent = { send(ScreenEvent(backup_home = it)) },
+                onRulePicked = { picked -> nav.scope.launch { writeTransferRule(session, picked) } },
+                onAddDestination = openPair,
+                onShowWords = openShowWords,
+            )
             home != null -> AgendaHomeScreen(
                 state = home,
                 onEvent = { send(ScreenEvent(agenda_home = it)) },
@@ -377,6 +426,18 @@ internal class AgendaRoutes(
                 onEvent = { send(ScreenEvent(todo_catch_up = it)) },
                 onOpen = open,
                 onBack = back,
+            )
+            wordsMake != null -> VaultWordsScreen(
+                state = wordsMake,
+                onEvent = { send(ScreenEvent(words_make = it)) },
+            )
+            wordsEnter != null -> WordsEnterPage(
+                state = wordsEnter,
+                onEvent = { send(ScreenEvent(words_enter = it)) },
+            )
+            wordsShow != null -> WordsShowScreen(
+                state = wordsShow,
+                onEvent = { send(ScreenEvent(words_show = it)) },
             )
             lockerHome != null -> LockerHomeScreen(
                 state = lockerHome,
@@ -565,6 +626,12 @@ internal class AgendaRoutes(
                 onEvent = { send(ScreenEvent(trash = it)) },
                 onBack = back,
             )
+            // PAIRING A GATEWAY: scan or paste its code (`ScanCode` is the effects performer's).
+            pairLaptop != null -> PairLaptopPage(
+                state = pairLaptop,
+                onEvent = { send(ScreenEvent(pair_laptop = it)) },
+                onDone = back,
+            )
         }
     }
 
@@ -600,7 +667,7 @@ internal class AgendaRoutes(
          * shell lane replaces the KMP one.
          */
         const val TAB = "agenda"
-        val PREFIXES = listOf("agenda.", "docs.", "notes.", "people.", "health.", "locker.", "money.")
+        val PREFIXES = listOf("agenda.", "docs.", "notes.", "people.", "health.", "locker.", "money.", "pair.", "backup.", "words.")
     }
 }
 

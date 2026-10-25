@@ -136,6 +136,29 @@ impl Driver {
         Self::opened(runtime, true)
     }
 
+    /// A core that holds no vault at all: the file is not there and is not
+    /// made, as on a phone that has not made one yet. A screen that needs the
+    /// vault is refused `Unpaired`.
+    ///
+    /// # Panics
+    /// When the scratch directory cannot be made.
+    #[must_use]
+    pub fn unfounded(runtime: Runtime) -> Self {
+        let dir = centraid_ontology::scratch::scratch_dir();
+        std::fs::create_dir_all(&dir).expect("the scratch directory is made");
+        let handle = Core::open(CoreConfig::new(dir.join("vault.db")).opening_existing())
+            .expect("a core opens with no vault");
+        handle.attach_screens(std::sync::Arc::new(runtime));
+        Self {
+            handle,
+            views: BTreeMap::new(),
+            navigation: None,
+            effects: Vec::new(),
+            closed: Vec::new(),
+            _dir: dir,
+        }
+    }
+
     fn opened(runtime: Runtime, keyed: bool) -> Self {
         let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the scratch directory is made");

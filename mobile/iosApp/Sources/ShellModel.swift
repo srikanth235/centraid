@@ -104,24 +104,10 @@ final class ShellModel: ObservableObject {
 
     func unmask() { masked = false }
 
-    /// THE FOREGROUND TRIGGER (#1029 W18-6).
-    ///
-    /// The amendment's posture is that the phone drains **in the foreground and
-    /// inside the background window iOS grants**, so the foreground half needs a
-    /// caller and this is it: `CentraidApp`'s scene phase already observes
-    /// `.active` for the switcher mask, and becoming active is the one moment
-    /// worth spending a drain on without asking whether one ran recently.
-    ///
-    /// Fire-and-forget. A member who has just opened Centraid is looking at
-    /// their vault, not at a progress bar for a pass they did not ask for; the
-    /// backup line updates from `backup_status` when the answer lands.
-    ///
-    /// **HELD UNDER A GRACE** (#1080): if the member leaves while the pass is
-    /// running, iOS gives it the background task's seconds to finish its
-    /// current part instead of suspending it mid-part.
+    /// THE FOREGROUND TRIGGER. The pass is Rust's: the scene's `.active` is reported as
+    /// `AppLifecycle` (`CentraidApp`), and the pass scheduler decides that opening the app is
+    /// worth a pass (`passes`). What is left here is Docs following the phone.
     func becameActive() {
-        let grace = ForegroundGrace(name: "dev.centraid.pass.active")
-        home.becameActive(onDone: { _ in grace.end() })
         followPhone()
     }
 
@@ -148,31 +134,6 @@ final class ShellModel: ObservableObject {
         followQuestion = nil
         follow.answer(question: question, keep: keep)
     }
-
-    /// THE APP WENT TO THE BACKGROUND (#1080, the shells).
-    ///
-    /// Two things, in this order. The night's windows are asked for first —
-    /// leaving the app is what arms them, and a one-shot request that was only
-    /// ever resubmitted from inside a handler never ran at all. Then
-    /// `enteredBackground` under the background task's grace, bounded by
-    /// [backgroundPassSeconds]. It FORCES a snapshot, so what the member just
-    /// wrote is sealed before the app is suspended; it waits inside the grace
-    /// for a pass already running ("Back up now", say) rather than being
-    /// refused by it; and it ends like every iOS pass, handing what is sealed
-    /// to the OS to carry. The vault directory's backup exclusion is swept by
-    /// the `didEnterBackground` observer below, not here.
-    func wentToBackground() {
-        BackgroundPasses.resubmitAll()
-        let grace = ForegroundGrace(name: "dev.centraid.pass.background")
-        home.enteredBackground(
-            graceMs: Int64(Self.backgroundPassSeconds * 1000),
-            onDone: { _ in grace.end() }
-        )
-    }
-
-    /// Under the ~30 seconds iOS grants a background task, with room for the
-    /// part in flight to finish after the deadline is read.
-    static let backgroundPassSeconds: TimeInterval = 20
 
     /// THE FIRST-LAUNCH GATE: true once the shelf has read its directory and
     /// the device holds no vault — a fresh install, or the last vault
@@ -217,21 +178,14 @@ final class ShellModel: ObservableObject {
     /// its own sentence from a peer's words would be the hole in that rule.
     @Published var gatewayStatus = ""
 
-    /// WHICH 24-WORDS SCREEN IS UP (#1047 E2), if any: `words.make` or
-    /// `words.enter`. One sheet at the root for both, so switching from one to
-    /// the other (RESTORE_FIRST's "Restore my vaults") is an item change the
-    /// presentation handles, and Locker's wall can raise it from any depth.
+    /// WHICH ROOT SHEET IS UP, if any. The 24 words' screens (`words.make`,
+    /// `words.enter`, `words.show`) are Rust's and are pushed like any Rust route
+    /// (`open`), not sheets.
     @Published var wordsSheet: WordsSheet?
-    /// `words.make`'s and `words.enter`'s last states, as bytes.
-    @Published var vaultWordsState = Data()
-    @Published var wordsEntryState = Data()
-    /// `words.show`'s and `pair.laptop`'s last states (#1047 E5), as bytes.
-    @Published var wordsShowState = Data()
-    /// Bumped on each open of the Backup tab: `BackupView` scrolls to its top.
+    /// `pair.laptop`'s last state (#1047 E5), as bytes.
+    /// Bumped on each open of the Backup tab: `BackupHomeView` scrolls to its top.
     @Published var backupScrollTop = 0
     @Published var pairLaptopState = Data()
-    /// The Backup screen's last state, as bytes (#1080).
-    @Published var backupState = Data()
 
     /// The root custody sheet: the two words screens (#1047 E2), and the two
     /// the More sheet's rows open (#1047 E5) — showing the words again, and
@@ -239,7 +193,7 @@ final class ShellModel: ObservableObject {
     /// `backup` is the Backup screen (#1080): one sheet at the root like the
     /// custody screens, so "Add a gateway" can swap it for `pair` in place.
     enum WordsSheet: String, Identifiable {
-        case make, enter, show, pair
+        case pair
         var id: String { rawValue }
     }
 
@@ -285,21 +239,25 @@ final class ShellModel: ObservableObject {
     /// for as effects (`ScreenStore`).
     private let photosDevice = PhotosDevice()
 
-    /// THE 24 WORDS' TWO BRIDGES (#1047 E2), held for the life of the shell.
-    private let vaultWords = VaultWordsBridge()
-    private let wordsEntry = WordsEntryBridge()
-    /// `words.show` and `pair.laptop` (#1047 E5), held for the same reason.
-    private let wordsShow = WordsShowBridge()
-    /// words.show was opened from the Backup tab and has not closed: its
-    /// sheet goes up once the owner check has answered.
-    private var showWordsRequested = false
-    /// The owner check is on screen, so a second `check_now` waits for it.
-    private var ownerChecking = false
+    /// `pair.laptop` (#1047 E5), held for the life of the shell.
     private let pairLaptop = PairLaptopBridge()
-    /// THE BACKUP SCREEN'S BRIDGE (#1080, seam contract A11), held for the
-    /// same reason. Its shape — `observe`, `open`, `send`, `attach` — is every
-    /// kit bridge's.
-    private let backup = BackupBridge()
+    /// THE BACKUP TAB'S ENTRY: the Rust screen `backup.home` the tab draws in
+    /// place of the springboard. Interim hosting like every Rust page here: the
+    /// shell opens the route on Rust's stack once (`openRust`) and the shell
+    /// lane replaces the tab with the stack Rust holds. A vault switch makes a
+    /// new entry, because the screen belongs to the core in front.
+    var backupEntry = RustEntry.make(ShellModel.backupRoute)
+
+    /// The route of the Backup screen. Rust builds every other route; this one
+    /// is spelled here only while the tab is hosted by the shell.
+    private static var backupRoute: Centraid_Core_V1_Route {
+        var route = Centraid_Core_V1_Route()
+        route.screen = "backup.home"
+        route.backupHome = .init()
+        return route
+    }
+    /// THE LINK AND THE CHARGER, reported to the pass scheduler (`PassFacts.swift`).
+    private let links = LinkReporter()
 
     /// THE REGISTERED SCREENS' PORTS AND ROUTES (K5) — `ScreenRegistry.swift`.
     /// Filled once, in `init`, by `AppRegistry.apps`; held for the life of the
@@ -315,12 +273,28 @@ final class ShellModel: ObservableObject {
         let store = ScreenStore(core: core)
         store.onOpenRoute = { [weak self] route in self?.open(route) }
         store.onContactsLimited = { [weak self] in self?.contactAccessPickerShown = true }
+        store.backgroundRegistered = { [weak self] in self?.session?.backgroundRegistered?.boolValue }
         screens = store
-        // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED (R-ONBOARD-10), and when
-        // Home's tile and chat's key slot learn the Locker is open.
+        // THE PASS SCHEDULER'S ROADS (`passes`): a granted window and what the OS uploaded reach
+        // Rust as facts through the store, and the link is reported from the first reading.
+        BackgroundPasses.store = store
+        UploadSettlement.shared.attach(ScreenUploadSink(store))
+        links.start(store)
+        // AN UNLOCK is when Home's tile and chat's key slot learn the Locker is open.
+        // (Rust files the key itself: `custody.filing` hears the same announcement.)
         store.onAnnounce = { [weak self] topic in
-            guard topic == "locker.unlocked", let session = self?.session else { return }
-            LockerEntry.shared.unlocked(session: session)
+            switch topic {
+            case "locker.unlocked":
+                LockerEntry.shared.unlocked()
+            // A GATEWAY WAS PAIRED (`pair.laptop`): the mover must hold its certificate.
+            case "backup.destinations":
+                self?.refreshUploadPins()
+            // `pair.laptop` handed over to the words: a re-key, in pairing's terms.
+            case "pair.rekey":
+                self?.openRekeyForPairing()
+            default:
+                break
+            }
         }
         LockerEntry.shared.install()
         LockerEntry.shared.pushLock = { [weak self] in
@@ -349,7 +323,7 @@ final class ShellModel: ObservableObject {
         defer { rustOpening.remove(entry.token) }
         guard let instance = await screens.open(tab: RustScreens.tab(for: entry.route), route: entry.route) else { return }
         // Popped while the push was in flight: Rust is told at once.
-        guard path.contains(.rust(entry)) else {
+        guard path.contains(.rust(entry)) || entry == backupEntry else {
             screens.popped(tab: RustScreens.tab(for: entry.route), instance: instance)
             return
         }
@@ -379,21 +353,7 @@ final class ShellModel: ObservableObject {
         }
         home.observeHoldsNoVault { [weak self] none in self?.holdsNoVaultChanged(none.boolValue) }
         home.appearance { [weak self] stored in self?.appearance = stored }
-        vaultWords.observe { [weak self] bytes in self?.vaultWordsChanged(bytes.data) }
-        // A VAULT WAS MADE (`VaultWordsBridge.made`, once per make): its
-        // sentence stays on the vault sheet, as `found`'s did, and the photos are
-        // asked for once (R-ONBOARD-8). The contacts and the calendar are offered
-        // by People's and Agenda's day-one empty states, which Rust owns (#1135).
-        vaultWords.observeMade { [weak self] sentence in
-            guard let self else { return }
-            self.gatewayStatus = sentence
-            self.photosDevice.askForPhotos {}
-        }
-        wordsEntry.camera = PairScanner.available
-        wordsEntry.observe { [weak self] bytes in self?.wordsEntryChanged(bytes.data) }
-        wordsShow.observe { [weak self] bytes in self?.wordsShowChanged(bytes.data) }
         pairLaptop.observe { [weak self] bytes in self?.pairLaptopChanged(bytes.data) }
-        backup.observe { [weak self] bytes in self?.backupChanged(bytes.data) }
         // ONE LINE PER APP lives in `AppRegistry.apps`, not here.
         for app in AppRegistry.apps { app.register(into: self) }
         // HOME'S SEARCH (R-CHROME-6): Home's own screen, not an app's.
@@ -410,9 +370,6 @@ final class ShellModel: ObservableObject {
             for port in self.ports.values { port.attach(session) }
             self.photosDevice.attach(session: session)
             self.screens?.photos = self.photosDevice
-            self.vaultWords.attach(session: session)
-            self.wordsEntry.attach(session: session)
-            self.wordsShow.attach(session: session)
             self.pairLaptop.attach(session: session)
             self.follow.attach(
                 session: session,
@@ -421,39 +378,10 @@ final class ShellModel: ObservableObject {
                 ],
                 ask: { [weak self] question in DispatchQueue.main.async { self?.followQuestion = question } }
             )
-            self.backup.attach(session: session)
             self.chat.attach(session: session)
-            // THE BACKGROUND WINDOWS NOW HAVE SOMETHING TO RUN (#1029 W18-6).
-            //
-            // `BackgroundPasses` registered both handlers at launch — it has to,
-            // before the app finishes launching — but what a pass IS belongs to
-            // `commonMain`, and there was no shelf to drain until this moment.
-            // So the handler is installed here, when the session exists; a
-            // window that opens first waits a bounded time for it and then
-            // completes honestly rather than claiming a pass ran.
-            //
-            // `Bool` in, `Bool` out: the answer is handed straight to
-            // `setTaskCompleted(success:)`.
-            BackgroundPasses.pass = { deadline in
-                await withCheckedContinuation { continuation in
-                    self.home.drain(
-                        deadlineMs: Int64(deadline * 1000),
-                        onDone: { drained in continuation.resume(returning: drained.boolValue) }
-                    )
-                }
-            }
             // THE PINS, NOW THAT THE CORE CAN ANSWER `pins` (#1080).
             self.refreshUploadPins()
-            // AND THE FIRST FOREGROUND PASS. `becameActive` below runs on every
-            // later activation; this is the one at launch, which would otherwise
-            // be missed because the session did not exist when the scene became
-            // active. Held under a grace like every foreground pass.
-            let grace = ForegroundGrace(name: "dev.centraid.pass.launch")
-            self.home.becameActive(onDone: { _ in grace.end() })
         }
-        // THE BACKGROUND MOVER'S SEAM (#1080 §2), before the core opens, so a
-        // relaunch's reports have somewhere to wait.
-        wireUploads()
         // FREE UP SPACE'S HAND ON THE PHOTO LIBRARY (#1080 A20), installed once;
         // `HomeBridge` hands it to the session when the session opens.
         home.installLibraryDeleter(deleter: PhotoLibraryDeleter())
@@ -521,20 +449,11 @@ final class ShellModel: ObservableObject {
 
     // MARK: The background mover's seam (#1080 §2, A6, A11)
     //
-    // EVERY KOTLIN NAME THE MOVER NEEDS IS IN THESE TWO FUNCTIONS: how each
-    // side is handed the other — `BackgroundUploads`, which
-    // `BackgroundUploader` implements, and `UploadEvents`, which the core's
-    // side implements — and how the pinned certificates reach a shell that
-    // must answer a server-trust challenge before any vault is open. Both
-    // `HomeBridge` doors are seam contract A11's.
-
-    /// Hand the core this shell's mover, and take the core's sink for what
-    /// the mover reports. Called at construction, before the core opens.
-    private func wireUploads() {
-        // A11: `HomeBridge.installUploads(uploads: BackgroundUploads): UploadEvents`.
-        let events = home.installUploads(uploads: BackgroundUploader.shared)
-        UploadSettlement.shared.attach(CoreUploadSink(events))
-    }
+    // THE OS-OWNED UPLOADS ARE RUST'S TO DECIDE AND THIS SHELL'S TO CARRY: the pass scheduler
+    // (`passes`) asks for a hand-off batch and gives it to `BackgroundUploader` as an effect, and
+    // what the OS reports comes back as facts through `UploadSettlement`, which holds a relaunch's
+    // reports until `attachScreens` gives it the store. The pinned certificates still reach the
+    // shell here, because a server-trust challenge is answered before any vault is open.
 
     /// Re-read the pinned certificates from the core and keep them where a
     /// cold background launch can read them (`UploadPins`). Called when the
@@ -620,7 +539,6 @@ final class ShellModel: ObservableObject {
     /// had open — but only onto an empty thread: a conversation in progress is
     /// never re-scoped by a glance at an app.
     func openChatTab(asking question: String? = nil, thread: String? = nil, title: String = "") {
-        leaveBackupTab()
         tab = .chat
         if !lastVisitedApp.isEmpty, chat.state.messages.isEmpty {
             chatScope = lastVisitedApp
@@ -664,7 +582,6 @@ final class ShellModel: ObservableObject {
     }
 
     func openHomeTab() {
-        leaveBackupTab()
         tab = .home
         // Chat keeps its thread, but not an open drawer: coming back to a
         // drawer left open would read as the app having forgotten the chat.
@@ -685,8 +602,9 @@ final class ShellModel: ObservableObject {
         let hadChat = chat.opened
         chat.vaultChanged(to: id)
         if hadChat, !chat.opened, tab == .chat { chat.open(app: chatScope, vaultName: foregroundVaultName) }
-        // THE BACKUP TAB IS THE VAULT IN FRONT'S: another vault, another read.
-        if tab == .backup { readBackup() }
+        // THE BACKUP SCREEN IS THE VAULT IN FRONT'S: another vault, another core,
+        // another screen.
+        backupEntry = RustEntry.make(ShellModel.backupRoute)
     }
 
     /// A RESULT CARD WAS TAPPED: push the real row's route over the thread.
@@ -722,125 +640,70 @@ final class ShellModel: ObservableObject {
     }
 
     /// MAKE A VAULT, THROUGH ITS WORDS. What the make-vault control does now:
-    /// `words.make` decides whether this phone mints words, makes the next
-    /// vault from a seed it already holds, or must restore first. The vault
-    /// switcher goes first — one sheet at a time.
-    ///
-    /// THE SHEET RISES ONLY WHEN THE MEMBER HAS SOMETHING TO DO. A first
-    /// vault on a synced keychain is minted, kept unshown and made with no
-    /// question (R-ONBOARD-10), so a sheet raised at the tap drew "Making your
-    /// vault" for a moment and fell again before Home — a flicker. The sheet
-    /// waits for a phase that asks the member (`asksMember`); a make that
-    /// never asks lands on Home with no sheet at all.
+    /// `words.make` (Rust's) decides whether this phone mints words, makes the
+    /// next vault from a seed it already holds, or must restore first. The
+    /// vault switcher goes first: one sheet at a time.
     func makeVault() {
+        openAfterSwitcher(CustodyRoutes.make())
+    }
+
+    /// A vault was made (`WordsMakeState.made_line`, once per make): its
+    /// sentence stays on the vault sheet, as `found`'s did, and the photos are
+    /// asked for once (R-ONBOARD-8). The contacts and the calendar are offered
+    /// by People's and Agenda's day-one empty states, which Rust owns (#1135).
+    func vaultMade(_ sentence: String) {
+        gatewayStatus = sentence
+        photosDevice.askForPhotos {}
+    }
+
+    /// Open a custody screen once the vault switcher has gone.
+    private func openAfterSwitcher(_ route: Centraid_Core_V1_Route) {
         let wait = closeVaultSwitcher()
-        makePending = true
-        makeReadyAt = Date().addingTimeInterval(wait)
-        vaultWords.open()
-        DispatchQueue.main.asyncAfter(deadline: .now() + wait) { self.presentMakeIfAsked() }
-    }
-
-    /// A make is under way and its sheet is not up yet.
-    private var makePending = false
-    /// Not before the switcher has gone: one sheet at a time.
-    private var makeReadyAt = Date.distantPast
-
-    private func presentMakeIfAsked() {
-        guard makePending, Date() >= makeReadyAt, wordsSheet == nil else { return }
-        let state = (try? Centraid_Screen_V1_VaultWordsState(serializedBytes: vaultWordsState)) ?? .init()
-        if Self.asksMember(state.phase) {
-            makePending = false
-            wordsSheet = .make
+        if wait == 0 {
+            open(route)
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { self.open(route) }
         }
     }
 
-    /// The phases of words.make that need the member: a name to choose, the
-    /// key to see, a failure to retry or close, a restore to start.
-    private static func asksMember(_ phase: Centraid_Screen_V1_VaultWordsState.Phase) -> Bool {
-        switch phase {
-        case .choose, .show, .failed, .restoreFirst: return true
-        default: return false
-        }
-    }
-
-    /// RESTORE ONTO THIS PHONE from the 24 words (`words.enter`,
-    /// PURPOSE_RESTORE): the make-vault sheet's second door, the empty
-    /// shelf's, and words.make's RESTORE_FIRST intent.
+    /// RESTORE ONTO THIS PHONE (`words.enter`): the make-vault sheet's second
+    /// door and the empty shelf's. A phone already holding a seed restores from
+    /// it, with no words typed (Rust decides).
     func openRestore() {
-        let wait = closeVaultSwitcher()
-        wordsEntry.openRestore()
-        DispatchQueue.main.asyncAfter(deadline: .now() + wait) { self.wordsSheet = .enter }
+        openAfterSwitcher(CustodyRoutes.restore())
     }
 
-    /// HAND THE WORDS BACK to this phone's vaults (`words.enter`,
-    /// PURPOSE_REKEY): Locker's wall's `WordsTapped` intent.
+    /// HAND THE WORDS BACK to this phone's vaults (`words.enter`, re-key):
+    /// Locker's wall's `WordsTapped` intent.
     func openRekey() {
-        wordsEntry.openRekey()
-        wordsSheet = .enter
+        open(CustodyRoutes.rekey(origin: .locker))
     }
 
     /// The same re-key from pair.laptop's `WordsTapped`: the screen explains
     /// the words in pairing's terms, not Locker's (#1047 F5).
     private func openRekeyForPairing() {
-        wordsEntry.openRekeyForPairing()
-        wordsSheet = .enter
+        open(CustodyRoutes.rekey(origin: .pairing))
     }
 
-    /// An event for `words.make`. `RestoreTapped` is an INTENT the machine
-    /// ignores: the shell closes words.make (RESTORE_FIRST holds no words)
-    /// and opens words.enter for a restore in its place.
-    func sendVaultWords(_ event: Data) {
-        vaultWords.send(event: event.kotlin)
-        let decoded = (try? Centraid_Screen_V1_VaultWordsEvent(serializedBytes: event)) ?? .init()
-        if case .restore = decoded.kind {
-            // WHICH RESTORE IS THE STATE'S (#1047 E4): RESTORE_FIRST means
-            // this phone holds a seed, so words.enter opens RESTORE_HELD — no
-            // words to type, only the laptop's address.
-            let purpose = ((try? Centraid_Screen_V1_VaultWordsState(serializedBytes: vaultWordsState)) ?? .init()).restorePurpose
-            vaultWords.send(event: VaultWordsView.event { $0.dismissed = .init() }.kotlin)
-            if purpose == .restoreHeld {
-                wordsEntry.openRestoreHeld()
-            } else {
-                wordsEntry.openRestore()
-            }
-            wordsSheet = .enter
-        }
+    /// `words.enter` finished: a Locker wall re-reads `keyed` on its next event, so
+    /// a re-key that just landed turns Locker's "Enter your 24 words" into
+    /// "Unlock with …".
+    func wordsEnterFinished() {
+        screens?.lifecycle(foreground: true)
     }
 
-    func sendWordsEntry(_ event: Data) {
-        wordsEntry.send(event: event.kotlin)
-    }
-
-    /// THE SHEET WAS SWIPED AWAY. words.make hears `Dismissed` (the words are
-    /// dropped); words.enter has no dismissal of its own and its swipe is its
-    /// Cancel — the sheet allows the swipe only while ENTERING.
-    func wordsSwipedAway() {
-        switch wordsSheet {
-        case .make:
-            sendVaultWords(VaultWordsView.event { $0.dismissed = .init() })
-        case .enter:
-            sendWordsEntry(WordsEntryView.event { $0.secondary = .init() })
-        case .show:
-            sendWordsShow(WordsShowView.event { $0.dismissed = .init() })
-        case .pair:
-            sendPairLaptop(PairLaptopView.event { $0.dismissed = .init() })
-        case nil:
-            break
-        }
-        wordsSheet = nil
+    /// `words.show` finished: "I'VE SAVED IT" quiets the recovery key's warning
+    /// (R-ONBOARD-10), so the Backup tab reads again.
+    func wordsShowFinished() {
+        if tab == .backup { readBackup() }
     }
 
     // MARK: The Backup tab's custody controls (#1047 E5, R-ONBOARD-10)
 
     /// SHOW THE RECOVERY KEY AGAIN (`words.show`): the Backup tab's
-    /// `key_show_label`. Any other sheet goes first — one sheet at a time.
-    ///
-    /// NO SHEET BEFORE THE CHECK: the machine opens in ASK with `check_now`,
-    /// `wordsShowChanged` runs the owner check, and the sheet is presented
-    /// only once the machine has something to draw.
+    /// `key_show_label`. Rust asks the owner check before it draws anything.
     func openShowWords() {
-        showWordsRequested = true
-        wordsShow.open()
+        open(CustodyRoutes.show())
     }
 
     /// PAIR WITH THE LAPTOP (`pair.laptop`): the Backup screen's "Add".
@@ -852,9 +715,9 @@ final class ShellModel: ObservableObject {
 
     // MARK: The Backup screen (#1080)
 
-    /// OPEN THE BACKUP SCREEN: Home's backup line. The member's rule is read
-    /// as it opens — the store is the authority, and the screen draws the same
-    /// three sentences the Home header's sheet does.
+    /// OPEN THE BACKUP SCREEN: Home's backup line. The screen itself is Rust's
+    /// (`backup.home`): it reads the rule from the phone's store and the line from
+    /// the core as it opens.
     func openBackup() {
         // EVERY OPEN STARTS AT THE TOP, and the tab pressed again scrolls
         // back there: the title is never left under the vault's lockup.
@@ -862,31 +725,19 @@ final class ShellModel: ObservableObject {
         guard tab != .backup else { return }
         chat.toggleDrawer(false)
         tab = .backup
-        readBackup()
     }
 
-    /// THE BACKUP TAB'S READ: the rule's three sentences from the store, and
-    /// the screen's `Opened`, which reads the line and the destinations.
-    private func readBackup() {
-        transferRuleChoices = home.transferRuleChoices().map {
-            (stored: $0.stored, sentence: $0.sentence)
-        }
-        home.transferRule { [weak self] stored in self?.transferRule = stored }
-        backup.open()
-    }
-
-    /// LEAVING THE BACKUP TAB tells its machine the screen is gone, as a
-    /// swipe told the sheet it was.
-    private func leaveBackupTab() {
-        if tab == .backup { sendBackup(BackupEvents.dismissed()) }
-    }
-
-    func sendBackup(_ event: Data) {
-        backup.send(event: event.kotlin)
+    /// The Backup screen reads again: a sheet that closed over it may have
+    /// changed what it shows (the key was marked saved, a device was paired).
+    private func rereadBackup() {
+        guard let screens, let instance = rustInstances[backupEntry.token] else { return }
+        var event = Centraid_Core_V1_BackupHomeEvent()
+        event.retry = .init()
+        screens.send(instance, .backupHome(event))
     }
 
     /// "ADD A BACKUP DEVICE" IS PAIRING: `pair.laptop` opens over the Backup
-    /// tab, with its scan and its paste field. The tab reads again when the
+    /// tab, with its scan and its paste field. The screen reads again when the
     /// pairing closes (`pairLaptopChanged`), so the new device's row is there.
     func addBackupDestination() {
         openPairLaptop()
@@ -897,24 +748,10 @@ final class ShellModel: ObservableObject {
         openShowWords()
     }
 
-    /// The Backup screen's state arrived.
-    ///
-    /// A run in flight holds no grace of its own here: the screen's state
-    /// stops describing a run once the screen is dismissed, and leaving the
-    /// app runs `enteredBackground`, which waits for a running pass inside its
-    /// own grace ([wentToBackground]). The screen stays awake for the run
-    /// through the core's own `backlog` hook, not through this shell.
-    private func backupChanged(_ data: Data) {
-        let before = BackupScreenModel(decoding: backupState)
-        backupState = data
-        let now = BackupScreenModel(decoding: data)
-        // A GATEWAY FORGOTTEN OR ADDED CHANGES THE PINS: the mover must never
-        // trust a certificate this phone no longer pairs with.
-        if before.destinations.map(\.id) != now.destinations.map(\.id) { refreshUploadPins() }
-    }
-
-    func sendWordsShow(_ event: Data) {
-        wordsShow.send(event: event.kotlin)
+    /// A GATEWAY FORGOTTEN OR ADDED CHANGES THE PINS: the mover must never trust
+    /// a certificate this phone no longer pairs with.
+    func backupDestinationsChanged() {
+        refreshUploadPins()
     }
 
     /// An event for `pair.laptop`. `WordsTapped` is an INTENT: the machine
@@ -928,40 +765,17 @@ final class ShellModel: ObservableObject {
         }
     }
 
-    /// THE APP LEFT THE FOREGROUND: words.show drops its words (`Dismissed`),
-    /// as a swipe would. `.background` only — the owner check's own prompt
-    /// makes the scene inactive, and that is not leaving.
-    func leftForeground() {
-        if wordsSheet == .show {
-            sendWordsShow(WordsShowView.event { $0.dismissed = .init() })
+    /// THE SHEET WAS SWIPED AWAY: only pairing is a root sheet now.
+    func wordsSwipedAway() {
+        if wordsSheet == .pair {
+            sendPairLaptop(PairLaptopView.event { $0.dismissed = .init() })
         }
+        wordsSheet = nil
     }
 
     /// Pairing cannot be swiped away while the core is pairing.
     var pairLaptopSwipeable: Bool {
         ((try? Centraid_Screen_V1_PairLaptopState(serializedBytes: pairLaptopState)) ?? .init()).phase != .pairing
-    }
-
-    private func wordsShowChanged(_ data: Data) {
-        wordsShowState = data
-        let state = (try? Centraid_Screen_V1_WordsShowState(serializedBytes: data)) ?? .init()
-        if state.checkNow, showWordsRequested, !ownerChecking {
-            ownerChecking = true
-            WordsShowView.ownerCheck(reason: state.verifyReason) { [weak self] event in
-                self?.ownerChecking = false
-                self?.sendWordsShow(event)
-            }
-        }
-        if showWordsRequested, !state.checkNow, state.phase != .closed, state.phase != .unspecified,
-           wordsSheet == nil {
-            wordsSheet = .show
-        }
-        if state.phase == .closed { showWordsRequested = false }
-        if state.phase == .closed, wordsSheet == .show {
-            wordsSheet = nil
-            // "I'VE SAVED IT" quiets the recovery key's warning (R-ONBOARD-10).
-            if tab == .backup { readBackup() }
-        }
     }
 
     private func pairLaptopChanged(_ data: Data) {
@@ -974,40 +788,7 @@ final class ShellModel: ObservableObject {
         if state.phase == .paired, before != .paired { refreshUploadPins() }
         if state.phase == .closed, wordsSheet == .pair {
             wordsSheet = nil
-            if tab == .backup { readBackup() }
-        }
-    }
-
-    /// A swipe is a way out only where the machine hears one: not while the
-    /// key is being kept or the vault made, and not while words.enter works.
-    var vaultWordsSwipeable: Bool {
-        let phase = ((try? Centraid_Screen_V1_VaultWordsState(serializedBytes: vaultWordsState)) ?? .init()).phase
-        return phase != .checking && phase != .making
-    }
-
-    var wordsEntrySwipeable: Bool {
-        ((try? Centraid_Screen_V1_WordsEntryState(serializedBytes: wordsEntryState)) ?? .init()).phase == .entering
-    }
-
-    private func vaultWordsChanged(_ data: Data) {
-        vaultWordsState = data
-        let state = (try? Centraid_Screen_V1_VaultWordsState(serializedBytes: data)) ?? .init()
-        if state.phase == .closed {
-            makePending = false
-            if wordsSheet == .make { wordsSheet = nil }
-        } else {
-            presentMakeIfAsked()
-        }
-    }
-
-    private func wordsEntryChanged(_ data: Data) {
-        wordsEntryState = data
-        let state = (try? Centraid_Screen_V1_WordsEntryState(serializedBytes: data)) ?? .init()
-        if state.phase == .closed, wordsSheet == .enter {
-            wordsSheet = nil
-            // A LOCKER WALL RE-READS `keyed` ON ITS NEXT EVENT: a re-key that just
-            // landed turns Locker's "Enter your 24 words" into "Unlock with …".
-            screens?.lifecycle(foreground: true)
+            if tab == .backup { rereadBackup() }
         }
     }
 

@@ -100,14 +100,12 @@ fn leaving_the_foreground_relocks_at_once_and_returning_does_not_prompt() {
     assert_eq!(home_data(&d, id).rows.len(), 1);
     d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
         foreground: false,
-        ..Default::default()
     }));
     let state = home(&d, id);
     assert!(state.wall.is_some() && !state.secure && state.content.is_none());
     let before = d.effects.len();
     d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
         foreground: true,
-        ..Default::default()
     }));
     assert!(effects_of(&d, before).is_empty(), "returning asks nothing");
     assert!(wall_of(&d, id).is_some());

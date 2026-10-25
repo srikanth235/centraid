@@ -22,7 +22,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.content.ContextCompat
+import centraid.core.v1.BackgroundStatus
 import centraid.core.v1.CameraRead
+import centraid.core.v1.CodeScanned
 import centraid.core.v1.CameraRoll
 import centraid.core.v1.Effect
 import centraid.core.v1.EffectDone
@@ -37,14 +39,18 @@ import centraid.core.v1.ImportSource
 import centraid.core.v1.KeychainOp
 import centraid.core.v1.KeychainValue
 import centraid.core.v1.OriginalFetched
+import centraid.core.v1.PassNoted
 import centraid.core.v1.PhoneChanged
 import centraid.core.v1.Route
+import dev.centraid.android.backup.BackupNow
+import dev.centraid.android.backup.PassWork
 import dev.centraid.android.screens.PhotoHandOff
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
 import android.provider.OpenableColumns
 import dev.centraid.android.screens.docs.DocsPickers
 import dev.centraid.android.screens.mediaPermissions
 import dev.centraid.android.screens.people.readContactsSnapshot
+import dev.centraid.android.screens.words.CodeScanDoor
 import dev.centraid.android.screens.performExportOriginals
 import dev.centraid.android.screens.photos.PhotosEditRender
 import dev.centraid.core.CentraidCore
@@ -89,9 +95,13 @@ internal fun PerformScreenEffects(
     /** This app's tab: when set, only its instances' effects are performed here (two apps share one core). */
     tab: String? = null,
     onAnnounce: (String) -> Unit = {},
+    /** Also perform the effects of services (screens in no tab, `custody.filing`): one host does. */
+    services: Boolean = false,
     docs: DocsPickers? = null,
     health: AndroidHealth? = null,
     openRoute: ((Route) -> Unit)? = null,
+    /** Whether the platform took a background window, as the session last registered it; null before it says. */
+    backgroundRegistered: (() -> Boolean?)? = null,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -111,13 +121,18 @@ internal fun PerformScreenEffects(
     val fileDoors = remember { FileDoors() }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> fileDoors.picked(uri) }
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri -> fileDoors.saved(uri) }
+    // PAIRING'S SCAN (`ScanCode`): the camera, or the photo picker on a phone with none.
+    val scanDoor = remember { CodeScanDoor() }
+    scanDoor.Host()
     LaunchedEffect(screens) {
         screens.effects.collect { request ->
             // TWO APPS' RUNTIMES SHARE ONE CORE, so each hears every push: an effect for
             // another app's screen is that app's performer's to answer.
-            if (tab != null && screens.navigation.value?.tabs?.firstOrNull { it.tab == tab }
-                    ?.entries?.none { it.instance == request.instance } != false
-            ) {
+            val tabs = screens.navigation.value?.tabs.orEmpty()
+            val mine = tabs.firstOrNull { it.tab == tab }?.entries?.any { it.instance == request.instance } == true
+            // A SERVICE (custody.filing) is in no tab: the one host that says so performs its effects.
+            val service = services && tabs.none { stack -> stack.entries.any { it.instance == request.instance } }
+            if (tab != null && !mine && !service) {
                 return@collect
             }
             // ONE COROUTINE PER EFFECT: a permission dialog waits for the member
@@ -126,9 +141,17 @@ internal fun PerformScreenEffects(
                 val effect = request.effect
                 val doors = Doors(fileDoors, { picker.launch(arrayOf("*/*")) }, { saver.launch(it) }, onAnnounce)
                 val answer: (EffectResult) -> Unit = { result -> launch { screens.answer(request, result) } }
-                val result = if (effect?.health_read != null) {
+                val result = if (effect?.background_probe != null) {
+                    // THE PLATFORM'S LAST WORD on whether it will wake Centraid; nothing is registered by asking.
+                    val registered = backgroundRegistered?.invoke()
+                    if (registered == null) failed("not performed by this shell")
+                    else EffectResult(background_status = BackgroundStatus(registered = registered))
+                } else if (effect?.health_read != null) {
                     health?.snapshot(effect.health_read!!) { healthLauncher?.launch(it) }
                         ?: failed("not performed by this shell")
+                } else if (effect?.scan_code != null) {
+                    scanDoor.scan(effect.scan_code!!.photo_label)?.let { EffectResult(code_scanned = CodeScanned(text = it)) }
+                        ?: EffectResult(failed = EffectFailed(reason = "scan closed", cancelled = true))
                 } else if (effect?.pick_file != null || effect?.follow_folder != null || effect?.stop_following != null || effect?.open_route != null) {
                     files(effect, docs, openRoute, answer)
                 } else {
@@ -217,6 +240,24 @@ private suspend fun perform(
         effect.open_url != null ->
             start(context, Intent(Intent.ACTION_VIEW, Uri.parse(effect.open_url!!.url)), done)
         effect.keychain != null -> keychain(effect.keychain!!)
+        // A DOOR THAT WAITS ON A GATEWAY (a pass, a pairing, a restore) runs here, off Rust's lock.
+        // THE PASS SCHEDULER (#1135, `passes`): Rust decides which windows exist, when a pass ran
+        // and what is carried; this performs and answers.
+        effect.schedule_windows != null ->
+            EffectResult(windows_scheduled = PassWork.schedule(context, effect.schedule_windows!!.windows))
+        effect.pass_window_done != null -> {
+            PassWork.windowDone(effect.pass_window_done!!.window, effect.pass_window_done!!.drained)
+            EffectResult(pass_noted = PassNoted())
+        }
+        effect.long_run != null -> {
+            // "Back up now": the user-initiated job (or the `dataSync` service) that keeps the process alive.
+            if (effect.long_run!!.start) BackupNow.start(context) else BackupNow.stop(context)
+            EffectResult(pass_noted = PassNoted())
+        }
+        // Android moves a pass's parts in the pass itself; only iOS's session carries them suspended.
+        effect.uploads != null -> failed("the OS carries no uploads on this platform")
+        // The roll's second stream is the camera roll's (lane I).
+        effect.stream_from_library != null -> failed("not performed by this shell")
         // THE ORIGINALS OF A PICK, to the share sheet or this phone's photos.
         effect.export_originals != null ->
             runCatching { performExportOriginals(context, core, effect.export_originals!!) }
@@ -238,6 +279,11 @@ private suspend fun perform(
             EffectResult(original_fetched = OriginalFetched.ADAPTER.decode(answer.await()))
         }
         effect.owner_check != null -> OwnerPrompt.check(context, effect.owner_check!!)
+        // THE VAULT'S SECRETS (lane H2): the device-only and synchronised stores, and
+        // whether the synchronised one would carry a key to another device.
+        effect.secrets != null ->
+            EffectResult(secrets = withContext(Dispatchers.IO) { SecretStores.run(context, effect.secrets!!) })
+        effect.synced_probe != null -> EffectResult(synced_status = SecretStores.probe(context))
         effect.pick_bytes != null -> doors.files.pick(context, doors.launchPicker)
         effect.save_file != null -> doors.files.save(context, effect.save_file!!, doors.launchSaver)
         effect.announce != null -> {

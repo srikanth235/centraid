@@ -5,8 +5,6 @@ import android.os.Looper
 import dev.centraid.shared.custody.DevSeed
 import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.shell.HomeSession
-import dev.centraid.shared.sync.DrainPass
-import dev.centraid.shared.sync.ShelfDrain
 import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -114,15 +112,5 @@ public object ProcessSession {
         } finally {
             release()
         }
-    }
-
-    /**
-     * Every held vault's spool empty after a pass. A vault whose pass was
-     * refused as busy is NOT drained — another pass is still working — and a
-     * device holding nothing is, which is true.
-     */
-    public fun drained(outcomes: List<ShelfDrain.Outcome>): Boolean = outcomes.all {
-        val outcome = it.outcome
-        outcome is DrainPass.Outcome.Ran && outcome.answer.drained
     }
 }

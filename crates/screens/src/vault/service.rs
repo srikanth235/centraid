@@ -145,10 +145,13 @@ impl Screen for Service {
                     }
                 }
             }
-            Some(E::Lifecycle(lifecycle)) if matches!(self.phase, Phase::Ready) => {
-                if lifecycle.low_memory {
+            Some(E::MemoryWarning(_)) => {
+                if matches!(self.phase, Phase::Ready) {
                     self.shelf.rest();
                 }
+                Vec::new()
+            }
+            Some(E::Lifecycle(lifecycle)) if matches!(self.phase, Phase::Ready) => {
                 if lifecycle.foreground {
                     return Vec::new();
                 }

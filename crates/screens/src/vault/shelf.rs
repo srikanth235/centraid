@@ -61,7 +61,9 @@ use centraid_core::{Core, CoreConfig, EventQueue, Handle, Seed};
 
 use super::files::{self, Marker};
 use super::types::{Effected, Foreground, Found, FoundRefusal, Restored};
+use crate::custody::keeper::Keeper;
 use crate::custody::secrets::{VaultKey, VaultSecrets};
+use crate::passes::{Held, Holdings};
 use crate::strings::{self, Locale};
 
 /// What the demo seed's vaults are indexed at: `seed-demo-vault` seals under the
@@ -1042,6 +1044,52 @@ impl Shelf {
                 std::thread::sleep(Duration::from_millis(5));
             }
         });
+    }
+}
+
+/// ENROLLMENT'S SEAM (`custody::keeper`): the words screens found a vault, hold
+/// what a restore laid down and re-key through the shelf.
+impl Keeper for Shelf {
+    fn found(&self, own: Option<&str>, name: &str) -> Effected<Found> {
+        Self::found(self, own, name)
+    }
+
+    fn adopt_restored(&self, restored: &[Restored]) -> Effected<usize> {
+        Self::adopt_restored(self, restored)
+    }
+
+    fn rekey(&self) -> usize {
+        Self::rekey(self)
+    }
+
+    fn indexed_holdings(&self) -> usize {
+        Self::indexed_holdings(self)
+    }
+
+    fn holds_a_vault(&self) -> bool {
+        Self::holds_a_vault(self)
+    }
+
+    fn foreground(&self) -> Option<Foreground> {
+        Self::foreground(self)
+    }
+}
+
+/// THE PASS SERVICE'S SEAM (`passes::conductor`): which vaults are held and
+/// drainable, and a vault's own core to run its pass on.
+impl Holdings for Shelf {
+    fn held(&self) -> Vec<Held> {
+        Vaults::held(self)
+            .into_iter()
+            .map(|held| Held {
+                vault_id: held.vault_id,
+                drainable: held.drainable,
+            })
+            .collect()
+    }
+
+    fn core(&self, vault_id: &str) -> Option<Handle> {
+        Vaults::core_of(self, vault_id)
     }
 }
 

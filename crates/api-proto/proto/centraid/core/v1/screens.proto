@@ -44,6 +44,7 @@ import "centraid/core/v1/money_screens.proto";
 import "centraid/core/v1/notes_screens.proto";
 import "centraid/core/v1/people_screens.proto";
 import "centraid/core/v1/route.proto";
+import "centraid/core/v1/vault_screens.proto";
 
 // ---------------------------------------------------------------------------
 // The door
@@ -64,6 +65,16 @@ message ScreenRequest {
     // The app went to the background or came back. The runtime tells every open
     // screen (`AppLifecycle`): a Locker relocks the instant it leaves.
     AppLifecycle lifecycle = 5;
+    // A fact the shell reports about the phone: the link, a background window
+    // the OS granted, the vaults held, a finished import or restore, an upload
+    // the OS finished (`passes_screens.proto`). The runtime hands it to every
+    // open screen and service as `ScreenEvent.shell_fact`.
+    ShellFact shell_fact = 1500;
+    // The operating system is asking for memory back (iOS
+    // `didReceiveMemoryWarning`, Android `onTrimMemory`). The runtime tells every
+    // open screen and service (`ScreenEvent.memory_warning`); the shelf closes
+    // every vault's core but the one in front.
+    MemoryWarning memory_warning = 1560;
   }
 }
 
@@ -71,10 +82,6 @@ message ScreenRequest {
 // causes); Android `ON_STOP` (NOT `ON_PAUSE`).
 message AppLifecycle {
   bool foreground = 1;
-  // The operating system is asking for memory back (iOS
-  // `didReceiveMemoryWarning`, Android `onTrimMemory`): the shelf closes every
-  // vault's core but the one in front. Sent with `foreground` as it stands.
-  bool low_memory = 2;
 }
 
 message SnapshotRequest {}
@@ -214,6 +221,13 @@ message ScreenEvent {
     // it, and only its `act`s survive: the view is no longer drawn.
     Left left = 6;
     CounterEvent counter = 10;
+    // RUNTIME-ORIGINATED: a screen asked the shell to act on a topic
+    // (`Announce`), and every open screen, services included, hears it.
+    Announced announced = 9;
+    // ---- words (1300-1399, lane H2): custody_screens.proto ----
+    WordsMakeEvent words_make = 1300;
+    WordsEnterEvent words_enter = 1301;
+    WordsShowEvent words_show = 1302;
     // ---- agenda (100-199) ----
     AgendaHomeEvent agenda_home = 100;
     AgendaEventEvent agenda_event = 101;
@@ -266,8 +280,21 @@ message ScreenEvent {
     PeopleHomeEvent people_home = 700;
     PeoplePersonEvent people_person = 701;
     PeopleEditorEvent people_editor = 702;
+    // ---- pairing (1400-1449, lane H2) ----
+    PairLaptopEvent pair_laptop = 1400;
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
+    // ---- backup (1450-1499, lane H2) ----
+    BackupHomeEvent backup_home = 1450;
+    // ---- passes (1500-1599): passes_screens.proto ----
+    // RUNTIME-ORIGINATED from `ScreenRequest.shell_fact`.
+    ShellFact shell_fact = 1500;
+    // RUNTIME-ORIGINATED: another screen called `Ctx::signal`; only a screen
+    // that `hears` the topic is sent it.
+    Signalled signalled = 1501;
+    // ---- the vault shelf (1560-1599, lane H2): vault_screens.proto ----
+    // RUNTIME-ORIGINATED from `ScreenRequest.memory_warning`.
+    MemoryWarning memory_warning = 1560;
   }
 }
 
@@ -279,6 +306,13 @@ message TimerFired {
 }
 
 message EnvironmentChanged {}
+
+// A topic a screen announced (`Announce`), as the runtime relays it to every
+// open screen. The shell performs its own half of the announcement and sends
+// nothing back.
+message Announced {
+  string topic = 1;
+}
 
 message Left {}
 
@@ -295,6 +329,10 @@ message ViewState {
   uint64 revision = 2;
   oneof kind {
     CounterView counter = 10;
+    // ---- words (1300-1399, lane H2) ----
+    WordsMakeState words_make = 1300;
+    WordsEnterState words_enter = 1301;
+    WordsShowState words_show = 1302;
     // ---- agenda (100-199) ----
     AgendaHomeState agenda_home = 100;
     AgendaEventState agenda_event = 101;
@@ -347,8 +385,12 @@ message ViewState {
     PeopleHomeState people_home = 700;
     PeoplePersonState people_person = 701;
     PeopleEditorState people_editor = 702;
+    // ---- pairing (1400-1449, lane H2) ----
+    PairLaptopState pair_laptop = 1400;
     // ---- the kit (900-999) ----
     TrashView trash = 900;
+    // ---- backup (1450-1499, lane H2) ----
+    BackupHomeState backup_home = 1450;
   }
 }
 
@@ -405,9 +447,20 @@ message Effect {
     PickFile pick_file = 200;
     FollowFolder follow_folder = 201;
     StopFollowing stop_following = 202;
+    // ---- pairing (1340-1349, lane H2): pair_screens.proto ----
+    ScanCode scan_code = 1340;
+    BrowseGateways browse_gateways = 1341;
     // ---- vault plumbing (1300-1399, lane H2): plumbing_screens.proto ----
     SecretBatch secrets = 1300;
     SyncedSecretsProbe synced_probe = 1302;
+    // ---- backup (1350-1369, lane H2): backup_screens.proto ----
+    BackgroundProbe background_probe = 1350;
+    // ---- passes (1370-1399, lane H2): passes_screens.proto ----
+    ScheduleWindows schedule_windows = 1370;
+    PassWindowDone pass_window_done = 1371;
+    LongRun long_run = 1372;
+    UploadsOp uploads = 1373;
+    StreamFromLibrary stream_from_library = 1374;
   }
 }
 
@@ -770,9 +823,19 @@ message EffectResult {
     FilePicked file_picked = 200;
     FileProgress file_progress = 201;
     FolderFollowed folder_followed = 202;
+    // ---- pairing (1340-1349, lane H2) ----
+    CodeScanned code_scanned = 1340;
+    GatewaysSighted gateways_sighted = 1341;
     // ---- vault plumbing (1300-1399, lane H2) ----
     SecretBatched secrets = 1300;
     SyncedSecretsStatus synced_status = 1302;
+    // ---- backup (1350-1369, lane H2) ----
+    BackgroundStatus background_status = 1350;
+    // ---- passes (1370-1399, lane H2) ----
+    WindowsScheduled windows_scheduled = 1370;
+    UploadsState uploads_state = 1371;
+    LibraryStreamed library_streamed = 1372;
+    PassNoted pass_noted = 1373;
   }
 }
 

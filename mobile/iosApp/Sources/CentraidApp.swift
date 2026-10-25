@@ -24,7 +24,7 @@ struct CentraidApp: App {
     /// app switcher must not show a member's rows in a snapshot the OS keeps.
     /// And the two BACKUP occasions: arriving runs a pass, and leaving arms the
     /// background windows and runs one more under the grace iOS gives a
-    /// leaving app (`ShellModel.becameActive`, `ShellModel.wentToBackground`).
+    /// leaving app (`ShellModel.becameActive`; the background pass is Rust's, from `AppLifecycle`).
     @Environment(\.scenePhase) private var scenePhase
 
     /// REGISTER THE BACKGROUND HANDLERS BEFORE ANYTHING SUBMITS ONE (#1029 W18-1).
@@ -118,23 +118,13 @@ struct CentraidApp: App {
             .modifier(ContactAccessPickerHost(shell: shell))
             // THE QUESTION A HELD ACCOUNT OR CALENDAR LEAVES (#1127, R-1127-9).
             .modifier(PhoneFollowQuestionHost(shell: shell))
-            // THE 24 WORDS (#1047 E2): `words.make` and `words.enter`, one
-            // sheet at the root so Locker's wall can raise it from any depth.
-            // A swipe is allowed only where the machine has a way out to hear.
+            // THE ROOT SHEET: pairing (the 24 words' screens are Rust's and are
+            // pushed like any Rust route).
             .sheet(item: Binding(
                 get: { shell.wordsSheet },
                 set: { if $0 == nil { shell.wordsSwipedAway() } }
             )) { sheet in
                 switch sheet {
-                case .make:
-                    VaultWordsView(data: shell.vaultWordsState, send: { shell.sendVaultWords($0) })
-                        .interactiveDismissDisabled(!shell.vaultWordsSwipeable)
-                case .enter:
-                    WordsEntryView(data: shell.wordsEntryState, send: { shell.sendWordsEntry($0) })
-                        .interactiveDismissDisabled(!shell.wordsEntrySwipeable)
-                // words.show's swipe is its Dismissed, always heard.
-                case .show:
-                    WordsShowView(data: shell.wordsShowState, send: { shell.sendWordsShow($0) })
                 case .pair:
                     PairLaptopView(data: shell.pairLaptopState, send: { shell.sendPairLaptop($0) })
                         .interactiveDismissDisabled(!shell.pairLaptopSwipeable)
@@ -155,11 +145,8 @@ struct CentraidApp: App {
                 case .active:
                     shell.unmask()
                     shell.screens?.lifecycle(foreground: true)
-                    // AND DRAIN. The amendment's foreground half (#1029 W18-6):
-                    // the phone backs up while the member is in the app, not
-                    // only in the windows iOS grants. `ShelfDrain` refuses a
-                    // second pass while one runs, so an `inactive` → `active`
-                    // flicker costs nothing.
+                    // AND DOCS FOLLOWS THE PHONE. The foreground pass is Rust's:
+                    // the lifecycle above is what the pass scheduler hears.
                     shell.becameActive()
                 // `.background` ONLY, never `.inactive` (R-1047-L1's rule for
                 // the lock, applied to the mask): the Locker's own Face ID
@@ -173,13 +160,8 @@ struct CentraidApp: App {
                     // and every open screen hears it (`.background`, never `.inactive`).
                     shell.screens?.lifecycle(foreground: false)
                     LockerEntry.shared.setOpen(opened: false)
-                    // words.show drops its words on leaving (#1047 E5).
-                    shell.leftForeground()
-                    // AND ARM THE NIGHT (#1080): resubmit both background
-                    // windows and run one pass under the background task's
-                    // grace, so what it seals is handed to the OS to carry
-                    // while the app is suspended.
-                    shell.wentToBackground()
+                    // (words.show hears the same lifecycle and drops its words; the pass service
+                    // hears it too and runs the background pass under the grace.)
                 case .inactive:
                     break
                 @unknown default:

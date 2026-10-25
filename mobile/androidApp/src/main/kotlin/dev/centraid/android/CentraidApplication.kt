@@ -1,10 +1,8 @@
 package dev.centraid.android
 
 import android.app.Application
-import dev.centraid.android.backup.BackupNow
-import dev.centraid.android.backup.ProcessSession
+import dev.centraid.android.backup.LinkFacts
 import dev.centraid.shared.platform.AndroidPlatform
-import dev.centraid.shared.platform.SyncPass
 
 /**
  * ONE CORE PER DEVICE PROCESS, and the one place the context is handed over
@@ -27,25 +25,11 @@ public class CentraidApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         AndroidPlatform.install(this)
-        val app = this
-        // THE PERIODIC WINDOW AND THE EXPEDITED NUDGE (`CentraidSyncWorker`).
-        // WorkManager's stop signal is the deadline: a worker gets about ten
-        // minutes, so the budget is that minus a margin to finish the part in
-        // flight; a pass stopped short resumes next window, because the spool
-        // never loses a sealed part.
-        SyncPass.install {
-            ProcessSession.use(app) { session ->
-                ProcessSession.drained(session.drain.run(SyncPass.WORK_MANAGER_BUDGET_MS))
-            }
-        }
-        // "BACK UP NOW" AND A BACKLOG: what `BackgroundTasks.backlog(start)`
-        // drives on Android — the user-initiated job, or the `dataSync`
-        // foreground service below API 34 (`BackupNow`). Seam contract A11's
-        // hook: `HomeSession.backUpNow` starts it with `true` as the member's
-        // run begins and stops it with `false` however the run ends, so the
-        // job keeps the process alive for exactly that run.
-        SyncPass.installBacklog { start ->
-            if (start) BackupNow.start(app) else BackupNow.stop(app)
-        }
+        // THE PASSES ARE RUST'S (`crates/screens/src/passes`): it asks for the windows
+        // (`ScheduleWindows`) and the long run behind "Back up now" (`LongRun`), and
+        // `CentraidSyncWorker` reports a granted window to it. The application installs only the
+        // context the link reader needs; a worker the OS starts with no Activity opens the
+        // process's session itself (`PassHost`), and this opens nothing.
+        LinkFacts.screensContext = this
     }
 }

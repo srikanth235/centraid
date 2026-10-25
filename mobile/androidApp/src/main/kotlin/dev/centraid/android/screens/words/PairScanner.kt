@@ -1,6 +1,8 @@
 package dev.centraid.android.screens.words
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Handler
@@ -16,9 +18,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
@@ -41,6 +50,10 @@ import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.ReaderException
 import com.google.zxing.common.HybridBinarizer
 import dev.centraid.design.copy.WordsCopy
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import dev.centraid.android.kit.OutlineButton
@@ -208,5 +221,80 @@ internal fun readSquare(context: Context, uri: Uri): String? {
         reader.decodeWithState(BinaryBitmap(HybridBinarizer(source))).text
     } catch (_: ReaderException) {
         null
+    }
+}
+
+/**
+ * THE PERFORMER OF `ScanCode` (#1135): read one QR code. With a camera, the
+ * scanner above (its "choose a photo" control labelled by Rust); with none, the
+ * system photo picker (no grant to ask for: the picker hands back only the one
+ * image chosen). The CAMERA grant is asked for here, at the moment Rust asked
+ * for a scan, never before. A code read is its text; a photo that holds no
+ * square is the empty string (an outcome, not a failure); backing out and a
+ * refused grant are null. This decides nothing and writes no copy.
+ *
+ * [Host] is composed once beside the effect performer; [scan] suspends until
+ * the member answers.
+ */
+internal class CodeScanDoor {
+    private class Ask(val photoLabel: String, val answer: CompletableDeferred<String?>)
+
+    private var ask by mutableStateOf<Ask?>(null)
+
+    suspend fun scan(photoLabel: String): String? {
+        val next = Ask(photoLabel, CompletableDeferred())
+        ask?.answer?.complete(null)
+        ask = next
+        return try {
+            next.answer.await()
+        } finally {
+            if (ask === next) ask = null
+        }
+    }
+
+    @Composable
+    fun Host() {
+        val current = ask
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+        var scanning by remember { mutableStateOf(false) }
+        val finish: (String?) -> Unit = { code ->
+            scanning = false
+            ask?.answer?.complete(code)
+        }
+        val grant = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) scanning = true else finish(null)
+        }
+        val photo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            if (uri == null) {
+                finish(null)
+            } else {
+                scope.launch {
+                    val code = withContext(Dispatchers.Default) { runCatching { readSquare(context, uri) }.getOrNull() }
+                    finish(code.orEmpty())
+                }
+            }
+        }
+        val pickPhoto = { photo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+        LaunchedEffect(current) {
+            if (current == null) return@LaunchedEffect
+            when {
+                !context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) -> pickPhoto()
+                ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED ->
+                    scanning = true
+                else -> grant.launch(Manifest.permission.CAMERA)
+            }
+        }
+        if (current != null && scanning) {
+            PairScanner(
+                photoLabel = current.photoLabel,
+                onRead = { finish(it) },
+                onPhoto = {
+                    scanning = false
+                    pickPhoto()
+                },
+                onCancel = { finish(null) },
+            )
+        }
     }
 }

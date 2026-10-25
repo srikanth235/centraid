@@ -26,7 +26,10 @@ pub(crate) fn load(
     if is_front_read(request) {
         return Some(holdings(handle));
     }
-    None
+    match request.query.as_str() {
+        super::backup_reads::STATUS => Some(super::backup_reads::status(handle)),
+        _ => None,
+    }
 }
 
 /// `shell.holdings`: the vaults this phone holds.

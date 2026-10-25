@@ -48,13 +48,8 @@ struct HomeView: View {
                 // does, under the vault's lockup: the backup it describes is
                 // that vault's, and the band stays where it is.
                 VaultHeader(vault: home.vault, shell: shell, backup: home.backupLine)
-                BackupView(
-                    data: shell.backupState,
-                    shell: shell,
-                    send: { shell.sendBackup($0) },
-                    onAddDestination: { shell.addBackupDestination() },
-                    onShowWords: { shell.backupShowWords() }
-                )
+                RustScreenHost(shell: shell, entry: shell.backupEntry)
+                    .id(shell.backupEntry.token)
             } else {
                 homeContent(home)
             }

@@ -22,6 +22,10 @@ message Route {
   string screen = 1;
   oneof args {
     CounterRoute counter = 10;
+    // ---- words (1300-1399, lane H2) ----
+    WordsMakeRoute words_make = 1300;
+    WordsEnterRoute words_enter = 1301;
+    WordsShowRoute words_show = 1302;
     // ---- agenda (100-199) ----
     AgendaHomeRoute agenda_home = 100;
     AgendaEventRoute agenda_event = 101;
@@ -77,11 +81,54 @@ message Route {
     PeopleEditorRoute people_editor = 702;
     // ---- the kit (900-999) ----
     TrashRoute trash = 900;
+    // ---- backup (1450-1499, lane H2) ----
+    BackupHomeRoute backup_home = 1450;
   }
 }
 
 // The proof screen's route: no arguments.
 message CounterRoute {}
+
+// ---------------------------------------------------------------------------
+// The 24 words (lane H2)
+// ---------------------------------------------------------------------------
+
+// What `words.enter` is for.
+enum WordsEnterPurpose {
+  // Read as a restore.
+  WORDS_ENTER_PURPOSE_UNSPECIFIED = 0;
+  // A fresh install: bring every vault back from the gateway. If this phone
+  // already holds a seed (the keychain carried it) the screen restores from it
+  // with no words typed.
+  WORDS_ENTER_PURPOSE_RESTORE = 1;
+  // This phone's own vaults: hand the words back so they open keyed again
+  // (Locker's wall). Needs no gateway.
+  WORDS_ENTER_PURPOSE_REKEY = 2;
+  // Bring every vault back with the seed this phone ALREADY holds, no words
+  // typed (#1047, Q-1047-18).
+  WORDS_ENTER_PURPOSE_RESTORE_HELD = 3;
+}
+
+// Where a re-key came from. A restore has one door and ignores it.
+enum WordsEnterOrigin {
+  // Read as Locker's: the first re-key door.
+  WORDS_ENTER_ORIGIN_UNSPECIFIED = 0;
+  WORDS_ENTER_ORIGIN_LOCKER = 1;
+  // pair.laptop's NEEDS_WORDS.
+  WORDS_ENTER_ORIGIN_PAIRING = 2;
+}
+
+// `words.make`: make a vault and, on a phone with no key, its 24 words.
+message WordsMakeRoute {}
+
+// `words.enter`: type the words back (restore or re-key).
+message WordsEnterRoute {
+  WordsEnterPurpose purpose = 1;
+  WordsEnterOrigin origin = 2;
+}
+
+// `words.show`: show the recovery key again, after the owner check.
+message WordsShowRoute {}
 
 // ---------------------------------------------------------------------------
 // Agenda
@@ -410,6 +457,9 @@ message PeopleEditorRoute {
 
 // `<app>.trash`: the kit's one trash screen; the screen name says which app.
 message TrashRoute {}
+
+// `backup.home`: the Backup screen. No arguments.
+message BackupHomeRoute {}
 
 // ---------------------------------------------------------------------------
 // Locker
