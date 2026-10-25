@@ -45,7 +45,7 @@ struct PeoplePersonView: View {
             }
         } content: {
             if case let .gone(gone)? = state.content {
-                EmptyStateView(gone.legacy)
+                EmptyStateView(gone)
             } else {
                 ReadStateView(
                     content: content,
@@ -73,7 +73,7 @@ struct PeoplePersonView: View {
             }
         )) {
             ConfirmSheet(
-                state.confirm.legacy,
+                state.confirm,
                 onConfirm: { send(PeopleEvents.person { $0.confirmed = .init() }) },
                 onDismiss: { send(PeopleEvents.person { $0.dismissed = .init() }) }
             )
@@ -212,7 +212,7 @@ private struct PeoplePersonBody: View {
                         .foregroundStyle(Theme.color("textFaint", scheme))
                 }
                 if person.hasDueChip {
-                    StatusChipView(person.dueChip.legacy)
+                    StatusChipView(person.dueChip)
                 }
             }
             Spacer(minLength: 0)
@@ -381,7 +381,7 @@ private struct PeoplePersonSheetView: View {
                     FailureView(sentence: failure.sentence, remedy: failure.remedy, onRetry: nil)
                 case let .choices(choices)?:
                     if choices.hasEmpty {
-                        EmptyStateView(choices.empty.legacy)
+                        EmptyStateView(choices.empty)
                     } else {
                         ScrollView {
                             VStack(spacing: 0) {

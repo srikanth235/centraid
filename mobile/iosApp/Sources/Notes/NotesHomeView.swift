@@ -67,7 +67,7 @@ struct NotesHomeView: View {
                         placeContent
                     }
                 }
-                StatusLineView(status: state.status.legacy, identifier: "notes-status-action") {}
+                StatusLineView(status: state.status, identifier: "notes-status-action") {}
             }
         }
         .sheet(isPresented: sheetShown) {
@@ -81,7 +81,7 @@ struct NotesHomeView: View {
             }
         )) {
             ConfirmSheet(
-                state.confirm.legacy,
+                state.confirm,
                 onConfirm: { send(NotesEvents.home { $0.confirmed = .init() }) },
                 onDismiss: { send(NotesEvents.home { $0.dismissed = .init() }) }
             )
@@ -131,7 +131,7 @@ struct NotesHomeView: View {
     }
 
     private var searchSlot: SearchSlot {
-        var field = Centraid_Screen_V1_SearchField()
+        var field = KitSearchField()
         field.open = state.search.open
         field.term = state.search.term
         field.corrected = state.search.corrected
@@ -185,22 +185,22 @@ struct NotesHomeView: View {
         Group {
             if let results = state.search.hasResults ? state.search.results : nil,
                results.rows.isEmpty, state.search.containers.isEmpty {
-                EmptyStateView(results.empty.legacy)
-                if state.search.hasAsk { SearchAskRow(ask: state.search.ask.legacy) }
+                EmptyStateView(results.empty)
+                if state.search.hasAsk { SearchAskRow(ask: state.search.ask) }
                 Spacer(minLength: 0)
             } else {
                 ScrollView {
                     VStack(spacing: 0) {
                         // THE NOTEBOOKS WHOSE NAME MATCHED come first (#1097).
                         ForEach(state.search.containers, id: \.id) { container in
-                            SearchContainerRow(container: container.legacy) { _ in open(container.route) }
+                            SearchContainerRow(container: container) { _ in open(container.route) }
                         }
                         LazyVStack(spacing: 0) {
                             ForEach(state.search.results.rows, id: \.noteID) { row in
                                 NotesRowView(row: row, menuLabel: "", onTap: { open(row.route) })
                             }
                         }
-                        if state.search.hasAsk { SearchAskRow(ask: state.search.ask.legacy) }
+                        if state.search.hasAsk { SearchAskRow(ask: state.search.ask) }
                     }
                 }
                 .accessibilityIdentifier("notes-search-results")
@@ -214,7 +214,7 @@ struct NotesHomeView: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         ForEach(notebooks.rows, id: \.id) { row in notebookRow(row) }
-                        EmptyStateView(notebooks.empty.legacy, onAction: {
+                        EmptyStateView(notebooks.empty, onAction: {
                             send(NotesEvents.home { $0.formOpened = .with { $0.notebookID = "" } })
                         })
                     }
@@ -231,8 +231,8 @@ struct NotesHomeView: View {
         }
     }
 
-    private func journalListRow(_ row: Centraid_Core_V1_NotesJournalRow) -> Centraid_Screen_V1_ListRow {
-        var list = Centraid_Screen_V1_ListRow()
+    private func journalListRow(_ row: Centraid_Core_V1_NotesJournalRow) -> Centraid_Core_V1_ListRow {
+        var list = Centraid_Core_V1_ListRow()
         list.id = row.noteID
         list.title = row.title
         list.meta = row.meta
@@ -242,7 +242,7 @@ struct NotesHomeView: View {
     }
 
     private func notebookRow(_ row: Centraid_Core_V1_NotesNotebookRow) -> some View {
-        var list = Centraid_Screen_V1_ListRow()
+        var list = Centraid_Core_V1_ListRow()
         list.id = row.id
         list.title = row.title
         list.trailing = row.count
@@ -264,7 +264,7 @@ struct NotesHomeView: View {
     private func journalList(_ journal: Centraid_Core_V1_NotesJournalData) -> some View {
         Group {
             if journal.days.isEmpty {
-                EmptyStateView(journal.empty.legacy)
+                EmptyStateView(journal.empty)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -317,7 +317,7 @@ private struct NotesLibraryList: View {
     var body: some View {
         VStack(spacing: 0) {
             if library.sections.allSatisfy({ $0.rows.isEmpty }) {
-                EmptyStateView(library.empty.legacy, onAction: { open(state.newNote) })
+                EmptyStateView(library.empty, onAction: { open(state.newNote) })
                 Spacer(minLength: 0)
             } else {
                 ScrollView {

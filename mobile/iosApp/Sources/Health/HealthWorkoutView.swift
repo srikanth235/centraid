@@ -33,7 +33,7 @@ struct HealthWorkoutView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         if workout.hasGone {
-                            EmptyStateView(workout.gone.legacy)
+                            EmptyStateView(workout.gone)
                         } else {
                             page(workout)
                         }

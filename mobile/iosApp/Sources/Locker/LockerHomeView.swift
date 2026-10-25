@@ -36,11 +36,10 @@ struct LockerHomeView: View {
         }
     }
 
-    private var searchField: Centraid_Screen_V1_SearchField {
-        var field = Centraid_Screen_V1_SearchField()
+    private var searchField: KitSearchField {
+        var field = KitSearchField()
         field.open = state.search.open
         field.term = state.search.term
-        field.answeredTerm = state.search.answeredTerm
         field.corrected = state.search.corrected
         return field
     }
@@ -137,7 +136,7 @@ struct LockerHomeView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if state.hasStatus {
-                StatusLineView(status: state.status.legacy, identifier: "locker-home-status") {}
+                StatusLineView(status: state.status, identifier: "locker-home-status") {}
                     .padding(.vertical, 4)
                     .background(Theme.color("bg", scheme))
             }
@@ -151,7 +150,7 @@ struct LockerHomeView: View {
         LockerNote(text: home.statusLine)
         if home.hasItemsEmpty {
             EmptyStateView(
-                home.itemsEmpty.legacy,
+                home.itemsEmpty,
                 onAction: home.itemsEmpty.actionLabel.isEmpty ? nil : { open(state.chrome.addRoute) }
             )
         }
@@ -165,7 +164,7 @@ struct LockerHomeView: View {
     private func review(_ home: Centraid_Core_V1_LockerHomeData) -> some View {
         LockerNote(text: home.reviewNote)
         if home.hasReviewClear {
-            EmptyStateView(home.reviewClear.legacy)
+            EmptyStateView(home.reviewClear)
         }
         ForEach(home.review, id: \.key) { section in
             SectionHeader(title: section.head.title, count: section.head.count)
@@ -188,7 +187,7 @@ struct LockerHomeView: View {
     private func search(_ home: Centraid_Core_V1_LockerHomeData) -> some View {
         LockerNote(text: state.chrome.searchNote)
         if home.hasSearchEmpty {
-            EmptyStateView(home.searchEmpty.legacy)
+            EmptyStateView(home.searchEmpty)
         }
         ForEach(home.hits, id: \.itemID) { row in
             LockerRowView(row: row) { open(row.route) }

@@ -43,8 +43,8 @@ struct DocsDriveView: View {
     }
 
     /// Rust's search flag and term, as the kit's field state.
-    private func searchField(_ state: Centraid_Core_V1_DocsDriveState) -> Centraid_Screen_V1_SearchField {
-        var field = Centraid_Screen_V1_SearchField()
+    private func searchField(_ state: Centraid_Core_V1_DocsDriveState) -> KitSearchField {
+        var field = KitSearchField()
         field.open = state.search.open
         field.term = state.search.term
         field.corrected = state.search.corrected
@@ -202,7 +202,7 @@ struct DocsDriveView: View {
                   VStack(alignment: .leading, spacing: 0) {
                     // THE FOLDERS WHOSE NAME MATCHED come first (#1097): each pushes its route.
                     ForEach(drive.containers, id: \.id) { container in
-                        SearchContainerRow(container: container.legacy) { _ in open(container.route) }
+                        SearchContainerRow(container: container) { _ in open(container.route) }
                     }
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if !drive.crumbs.isEmpty, isFolderPage { crumbs(drive.crumbs) }
@@ -212,9 +212,9 @@ struct DocsDriveView: View {
                         if drive.hasEmpty {
                             if drive.mode == .search {
                                 // A SEARCH THAT FOUND NOTHING: the kit's one no-match state.
-                                EmptyStateView(drive.empty.legacy)
+                                EmptyStateView(drive.empty)
                             } else {
-                                EmptyStateView(drive.empty.legacy, onAction: emptyAction(drive.emptyAction))
+                                EmptyStateView(drive.empty, onAction: emptyAction(drive.emptyAction))
                             }
                         } else if state.layout == .grid {
                             grid(drive.rows, state)
@@ -233,7 +233,7 @@ struct DocsDriveView: View {
                         note(drive.truncatedNote)
                     }
                     // THE ASK ROW closes a search's answer, matched or not (#1135).
-                    if state.search.hasAskRow { SearchAskRow(ask: state.search.askRow.legacy) }
+                    if state.search.hasAskRow { SearchAskRow(ask: state.search.askRow) }
                   }
                   .padding(.bottom, 16)
                 }
@@ -246,7 +246,7 @@ struct DocsDriveView: View {
             set: { open in if !open, state.hasConfirm { send(Self.event { $0.dismissed = .init() }) } }
         )) {
             ConfirmSheet(
-                state.confirm.legacy,
+                state.confirm,
                 onConfirm: { send(Self.event { $0.confirmed = .init() }) },
                 onDismiss: { send(Self.event { $0.dismissed = .init() }) }
             )

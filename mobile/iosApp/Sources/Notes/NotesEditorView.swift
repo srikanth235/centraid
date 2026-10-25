@@ -52,7 +52,7 @@ struct NotesEditorView: View {
         let chrome = state.chrome
         EditorRoom(
             title: chrome.title,
-            status: state.autosave.legacy,
+            status: state.autosave,
             closeLabel: chrome.close,
             onClose: onClose,
             onDeparted: {}
@@ -211,7 +211,7 @@ private struct NotesLinkSheet: View {
     var body: some View {
         SheetRoom(title: sheet.title, status: sheet.foot) {
             CentraidSearchField(
-                field: Centraid_Screen_V1_SearchField.with {
+                field: KitSearchField.with {
                     $0.open = true
                     $0.term = sheet.term
                 },
@@ -227,7 +227,7 @@ private struct NotesLinkSheet: View {
                 onRetry: { send(event { $0.refreshed = .init() }) }
             ) { picker in
                 if picker.domains.allSatisfy({ $0.rows.isEmpty }) {
-                    EmptyStateView(picker.empty.legacy)
+                    EmptyStateView(picker.empty)
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 0) {
@@ -279,14 +279,14 @@ struct NotesHistoryView: View {
             EmptyView()
         } content: {
             VStack(spacing: 0) {
-                StatusLineView(status: state.status.legacy, identifier: "notes-history-status") {}
+                StatusLineView(status: state.status, identifier: "notes-history-status") {}
                 ReadStateView(
                     content: content,
                     loadingLabel: state.loadingLabel,
                     onRetry: { send(event { $0.refreshed = .init() }) }
                 ) { history in
                     if history.rows.count <= 1, history.hasEmpty {
-                        EmptyStateView(history.empty.legacy)
+                        EmptyStateView(history.empty)
                     } else {
                         ScrollView {
                             LazyVStack(spacing: 0) {

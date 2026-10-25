@@ -35,7 +35,7 @@ struct PeopleEditorView: View {
         let chrome = state.chrome
         EditorRoom(
             title: chrome.title,
-            status: state.autosave.legacy,
+            status: state.autosave,
             closeLabel: chrome.closeLabel,
             onClose: onClose,
             onDeparted: {}
@@ -43,7 +43,7 @@ struct PeopleEditorView: View {
             EmptyView()
         } content: {
             if case let .gone(gone)? = state.content {
-                EmptyStateView(gone.legacy)
+                EmptyStateView(gone)
             } else {
                 ReadStateView(
                     content: content,

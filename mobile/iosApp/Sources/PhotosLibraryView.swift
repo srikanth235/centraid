@@ -142,7 +142,7 @@ struct PhotosLibraryBody: View {
                 // THE FILTER EMPTIED THE GRID, NOT THE LIBRARY — its own sentence,
                 // never the empty-library copy.
                 if data.hasEmpty {
-                    EmptyStateView(data.empty.legacy)
+                    EmptyStateView(data.empty)
                         .padding(.horizontal, CentraidGeometry.pageMargin)
                 }
             } else if library.grain == .years || library.grain == .months {

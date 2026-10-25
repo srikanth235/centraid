@@ -40,7 +40,7 @@ struct HealthMetricView: View {
                             .frame(maxWidth: .infinity)
                         }
                         if metric.hasEmpty {
-                            EmptyStateView(metric.empty.legacy)
+                            EmptyStateView(metric.empty)
                         } else {
                             page(metric)
                         }

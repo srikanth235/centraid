@@ -87,8 +87,8 @@ struct PhotosHomeView: View {
         }
     }
 
-    private var searchField: Centraid_Screen_V1_SearchField {
-        var field = Centraid_Screen_V1_SearchField()
+    private var searchField: KitSearchField {
+        var field = KitSearchField()
         field.open = searching
         field.term = state.hasSearch ? state.search.query : ""
         field.corrected = state.hasSearch ? state.search.corrected : ""
@@ -145,7 +145,7 @@ struct PhotosHomeView: View {
             // A WRITE THE VAULT REFUSED, or what a copy came to: its own line, never
             // in place of the library — the photographs are still what they were.
             if state.hasStatus, !collecting {
-                StatusLineView(status: state.status.legacy, identifier: "photos-status") {}
+                StatusLineView(status: state.status, identifier: "photos-status") {}
             }
             if searching, state.hasSearch {
                 PhotosSearchBody(search: state.search, send: send, open: open)
@@ -336,7 +336,7 @@ private struct PhotosHomeSheets: ViewModifier {
                 }
             )) {
                 ConfirmSheet(
-                    state.selection.confirm.legacy,
+                    state.selection.confirm,
                     cancelLabel: state.selection.cancelLabel,
                     onConfirm: { send(PhotosHomeEvents.selection { $0.confirmed = .init() }) },
                     onDismiss: { send(PhotosHomeEvents.selection { $0.dismissed = .init() }) }
@@ -354,7 +354,7 @@ private struct PhotosHomeSheets: ViewModifier {
             )) {
                 if state.hasCollections {
                     ConfirmSheet(
-                        state.collections.deleteConfirm.legacy,
+                        state.collections.deleteConfirm,
                         cancelLabel: state.collections.keepLabel,
                         onConfirm: { send(PhotosHomeEvents.make { $0.albumDeleteConfirmed = .init() }) },
                         onDismiss: { send(PhotosHomeEvents.make { $0.albumDeleteDismissed = .init() }) }

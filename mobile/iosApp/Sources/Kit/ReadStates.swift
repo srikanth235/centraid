@@ -164,7 +164,7 @@ struct ScreenFailureView: View {
 /// copy table). The strings are finished in the machine; the action is the
 /// screen's own event, so the view takes a closure.
 struct EmptyStateView: View {
-    let empty: Centraid_Screen_V1_EmptyState
+    let empty: Centraid_Core_V1_EmptyState
     var onAction: (() -> Void)? = nil
     /// The action's accessibility id; a screen whose action is its own thing
     /// (search's "Ask about") names it.
@@ -172,7 +172,7 @@ struct EmptyStateView: View {
 
     @Environment(\.colorScheme) private var scheme
 
-    init(_ empty: Centraid_Screen_V1_EmptyState, actionIdentifier: String = "kit-empty-action", onAction: (() -> Void)? = nil) {
+    init(_ empty: Centraid_Core_V1_EmptyState, actionIdentifier: String = "kit-empty-action", onAction: (() -> Void)? = nil) {
         self.empty = empty
         self.actionIdentifier = actionIdentifier
         self.onAction = onAction
@@ -180,7 +180,7 @@ struct EmptyStateView: View {
 
     /// For a screen whose state carries plain strings rather than the kit message.
     init(headline: String, body: String = "", actionLabel: String = "", onAction: (() -> Void)? = nil) {
-        var empty = Centraid_Screen_V1_EmptyState()
+        var empty = Centraid_Core_V1_EmptyState()
         empty.headline = headline
         empty.body = body
         empty.actionLabel = actionLabel
@@ -216,14 +216,14 @@ struct EmptyStateView: View {
 }
 
 private struct AskChatKey: EnvironmentKey {
-    static let defaultValue: ((Centraid_Screen_V1_SearchAsk) -> Void)? = nil
+    static let defaultValue: ((Centraid_Core_V1_Route) -> Void)? = nil
 }
 
 extension EnvironmentValues {
     /// The shell's "ask the assistant" door, or nil where there is none
-    /// (previews). A search reaches Chat through it, never through a view's
-    /// own routing (#1097, R-1097-30).
-    var askChat: ((Centraid_Screen_V1_SearchAsk) -> Void)? {
+    /// (previews): it pushes the `chat.ask` route the search's `SearchAsk`
+    /// carries (#1097, R-1097-30), and builds none of its own.
+    var askChat: ((Centraid_Core_V1_Route) -> Void)? {
         get { self[AskChatKey.self] }
         set { self[AskChatKey.self] = newValue }
     }
@@ -231,13 +231,13 @@ extension EnvironmentValues {
 
 /// THE ASK ROW AT THE FOOT OF AN APP'S SEARCH ANSWER (#1097, R-1097-30, #1135),
 /// whether or not anything matched. The label, the question and the chat scope
-/// are the machine's (`SearchAsk`); this view only draws the label and hands the
-/// whole row to the shell, which switches to the Chat tab scoped to the app the
-/// member searched from and sends the question. Drawn only where the state holds
+/// are the machine's (`SearchAsk`), and so is the route a tap opens, the
+/// assistant asking the question scoped to the app the member searched from;
+/// this view only draws the label and hands that route to the shell. Drawn only where the state holds
 /// a row (`hasAskRow`): a term typed since, a denial, or an app that offers none
 /// (Locker never does, R-1097-29, and does not draw this view) holds none.
 struct SearchAskRow: View {
-    let ask: Centraid_Screen_V1_SearchAsk
+    let ask: Centraid_Core_V1_SearchAsk
     /// Home records the search as a recent one when its row is pressed.
     var onAsk: (() -> Void)? = nil
     /// A view whose state carries the Ask's finished route (Home's search) pushes it itself and
@@ -248,7 +248,7 @@ struct SearchAskRow: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        if let press = handoff ?? askChat.map({ door in { door(ask) } }) {
+        if let press = handoff ?? (ask.hasRoute ? askChat.map({ door in { door(ask.route) } }) : nil) {
             Button {
                 onAsk?()
                 press()
@@ -282,11 +282,11 @@ struct ScreenEmptyView: View {
 /// nowhere in the app to go. `AppPlace` hides its band when its content is
 /// denied.
 struct DeniedGate: View {
-    let denied: Centraid_Screen_V1_Denied
+    let denied: Centraid_Core_V1_Denied
 
     @Environment(\.colorScheme) private var scheme
 
-    init(_ denied: Centraid_Screen_V1_Denied) { self.denied = denied }
+    init(_ denied: Centraid_Core_V1_Denied) { self.denied = denied }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {

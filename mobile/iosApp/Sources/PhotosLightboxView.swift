@@ -48,7 +48,7 @@ struct PhotosLightboxView: View {
                         .foregroundStyle(Theme.color("onStageSoft", scheme))
                 }
             case let .denied(denied)?:
-                DeniedGate(denied.legacy)
+                DeniedGate(denied)
             case let .failure(failure)?:
                 ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
                     .padding(CentraidGeometry.pageMargin)
@@ -377,7 +377,7 @@ struct PhotosLightboxView: View {
             }
         case .confirm:
             ConfirmSheet(
-                state.confirm.legacy,
+                state.confirm,
                 onConfirm: { send(.confirmed(.init())) },
                 onDismiss: { send(.confirmDismissed(.init())) }
             )

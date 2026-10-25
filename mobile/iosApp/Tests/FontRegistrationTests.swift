@@ -22,8 +22,7 @@ import XCTest
 ///
 /// ## THIS TEST HAS NEVER RUN IN CI
 ///
-/// Same hand-off as `ScreenFixtureTests`: there is no simulator on the machines
-/// that run `cargo xtask gate`, so an owner runs it (`mobile/README.md`). It is
+/// There is no simulator on the machines that run `cargo xtask gate`, so an owner runs it (`mobile/README.md`). It is
 /// written as a complete test rather than a sketch for the same reason.
 final class FontRegistrationTests: XCTestCase {
     /// Every emitted PostScript name resolves to a real face.

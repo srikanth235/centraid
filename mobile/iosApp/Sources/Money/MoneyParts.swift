@@ -37,7 +37,7 @@ extension Centraid_Core_V1_MoneyHomeState {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied.legacy)
+        case let .denied(denied)?: return .denied(denied)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
@@ -49,7 +49,7 @@ extension Centraid_Core_V1_MoneyTransactionState {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied.legacy)
+        case let .denied(denied)?: return .denied(denied)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
@@ -61,7 +61,7 @@ extension Centraid_Core_V1_MoneyTargetState {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied.legacy)
+        case let .denied(denied)?: return .denied(denied)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
@@ -73,7 +73,7 @@ extension Centraid_Core_V1_MoneyRecurringState {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied.legacy)
+        case let .denied(denied)?: return .denied(denied)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
@@ -85,7 +85,7 @@ extension Centraid_Core_V1_MoneyImportState {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied.legacy)
+        case let .denied(denied)?: return .denied(denied)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
@@ -97,7 +97,7 @@ extension Centraid_Core_V1_MoneyAccountsState {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied.legacy)
+        case let .denied(denied)?: return .denied(denied)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
@@ -109,7 +109,7 @@ extension Centraid_Core_V1_MoneyRulesState {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied.legacy)
+        case let .denied(denied)?: return .denied(denied)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
@@ -121,7 +121,7 @@ extension Centraid_Core_V1_MoneyCategoriesState {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied.legacy)
+        case let .denied(denied)?: return .denied(denied)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
@@ -135,7 +135,7 @@ extension Centraid_Core_V1_MoneySearchState {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied.legacy)
+        case let .denied(denied)?: return .denied(denied)
         case let .data(data)?: return .data(data)
         case .resting?, nil: return .loading(true)
         }
@@ -367,7 +367,7 @@ struct MoneyRowView: View {
             meta: MoneyWords.meta(row.categoryLabel, row.meta),
             trailing: MoneyWords.amount(row.amount),
             trailingTone: StatusChipView.ink(row.amountTone, neutral: "text"),
-            chips: row.chips.map(\.legacy),
+            chips: row.chips,
             dimmed: row.dimmed,
             accessibility: MoneyWords.spoken(row.accessibilityLabel, row.amount),
             identifier: "money-row-\(row.txnID)",
@@ -673,7 +673,7 @@ struct MoneyStatusFoot: View {
 
     var body: some View {
         if !status.sentence.isEmpty {
-            StatusLineView(status: status.legacy, identifier: identifier) {}
+            StatusLineView(status: status, identifier: identifier) {}
                 .padding(.vertical, 4)
                 .background(Theme.color("bg", scheme))
         }

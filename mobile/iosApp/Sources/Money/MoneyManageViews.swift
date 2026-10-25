@@ -45,7 +45,7 @@ struct MoneyAccountsView: View {
                 onRetry: { send(event { $0.refreshed = .init() }) }
             ) { accounts in
                 if accounts.hasEmpty {
-                    EmptyStateView(accounts.empty.legacy, onAction: { send(event { $0.add = .init() }) })
+                    EmptyStateView(accounts.empty, onAction: { send(event { $0.add = .init() }) })
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) { page(accounts) }
@@ -70,7 +70,7 @@ struct MoneyAccountsView: View {
     @ViewBuilder
     private func confirm(_ state: Centraid_Core_V1_MoneyAccountsState) -> some View {
         ConfirmSheet(
-                state.confirm.legacy,
+                state.confirm,
             onConfirm: { send(event { $0.confirmAccepted = .init() }) },
             onDismiss: { send(event { $0.confirmDismissed = .init() }) }
         )
@@ -181,7 +181,7 @@ struct MoneyRulesView: View {
                 onRetry: { send(event { $0.refreshed = .init() }) }
             ) { rules in
                 if rules.hasEmpty {
-                    EmptyStateView(rules.empty.legacy, onAction: { send(event { $0.add = .init() }) })
+                    EmptyStateView(rules.empty, onAction: { send(event { $0.add = .init() }) })
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) { page(rules) }
@@ -293,7 +293,7 @@ struct MoneyRulesView: View {
     @ViewBuilder
     private func confirm(_ state: Centraid_Core_V1_MoneyRulesState) -> some View {
         ConfirmSheet(
-                state.confirm.legacy,
+                state.confirm,
             onConfirm: { send(event { $0.confirmAccepted = .init() }) },
             onDismiss: { send(event { $0.confirmDismissed = .init() }) }
         )
@@ -341,7 +341,7 @@ struct MoneyCategoriesView: View {
                 onRetry: { send(event { $0.refreshed = .init() }) }
             ) { categories in
                 if categories.hasEmpty {
-                    EmptyStateView(categories.empty.legacy)
+                    EmptyStateView(categories.empty)
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) { page(categories) }
@@ -435,7 +435,7 @@ struct MoneyCategoriesView: View {
     @ViewBuilder
     private func confirm(_ state: Centraid_Core_V1_MoneyCategoriesState) -> some View {
         ConfirmSheet(
-                state.confirm.legacy,
+                state.confirm,
             onConfirm: { send(event { $0.confirmAccepted = .init() }) },
             onDismiss: { send(event { $0.confirmDismissed = .init() }) }
         )

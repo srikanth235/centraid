@@ -80,7 +80,7 @@ struct HealthHomeView: View {
                     .refreshable { send(event { $0.refreshed = .init() }) }
                     .accessibilityIdentifier("health-home-list")
                 }
-                StatusLineView(status: state.status.legacy, identifier: "health-status-action") {}
+                StatusLineView(status: state.status, identifier: "health-status-action") {}
             }
         }
         .sheet(isPresented: healthSheetBinding(sheetIsOpen(state)) { send(event { $0.sheetClosed = .init() }) }) {
@@ -104,7 +104,7 @@ struct HealthHomeView: View {
     private func page(_ home: Centraid_Core_V1_HealthHomeData, state: Centraid_Core_V1_HealthHomeState) -> some View {
         if home.hasEmpty {
             // NOT CONNECTED: one sentence and Connect, on every tab.
-            EmptyStateView(home.empty.legacy, actionIdentifier: "health-connect-open") {
+            EmptyStateView(home.empty, actionIdentifier: "health-connect-open") {
                 open(home.connect)
             }
         } else {
@@ -204,7 +204,7 @@ struct HealthHomeView: View {
     @ViewBuilder
     private func trends(_ trends: Centraid_Core_V1_HealthTrendsData) -> some View {
         if trends.hasEmpty {
-            EmptyStateView(trends.empty.legacy)
+            EmptyStateView(trends.empty)
         } else {
             HealthNote(text: trends.compareLine)
             ForEach(Array(trends.rows.enumerated()), id: \.offset) { _, row in
@@ -252,7 +252,7 @@ struct HealthHomeView: View {
     @ViewBuilder
     private func workouts(_ workouts: Centraid_Core_V1_HealthWorkoutsData, chrome: Centraid_Core_V1_HealthHomeChrome) -> some View {
         if workouts.hasEmpty {
-            EmptyStateView(workouts.empty.legacy)
+            EmptyStateView(workouts.empty)
         } else {
             ForEach(Array(workouts.sections.enumerated()), id: \.offset) { _, section in
                 VStack(alignment: .leading, spacing: 4) {
@@ -318,7 +318,7 @@ struct HealthHomeView: View {
             }
         case .stop:
             ConfirmSheet(
-                state.stop.legacy,
+                state.stop,
                 cancelLabel: chrome.stopCancel,
                 onConfirm: { send(event { $0.stop = .init() }) },
                 onDismiss: close

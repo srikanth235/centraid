@@ -77,7 +77,7 @@ struct AgendaHomeView: View {
                 ) { home in
                     homeContent(home, state: state)
                 }
-                StatusLineView(status: state.status.legacy, identifier: "agenda-status-action") {
+                StatusLineView(status: state.status, identifier: "agenda-status-action") {
                     send(AgendaEvents.make { $0.statusActed = .init() })
                 }
                 if !content.isDenied {
@@ -178,8 +178,8 @@ struct AgendaHomeView: View {
     }
 
     /// Rust's search flag and term, as the kit's field state.
-    private func searchField(_ state: Centraid_Core_V1_AgendaHomeState) -> Centraid_Screen_V1_SearchField {
-        var field = Centraid_Screen_V1_SearchField()
+    private func searchField(_ state: Centraid_Core_V1_AgendaHomeState) -> KitSearchField {
+        var field = KitSearchField()
         field.open = state.searchOpen
         field.term = state.searchTerm
         field.corrected = state.searchCorrected
@@ -187,8 +187,8 @@ struct AgendaHomeView: View {
     }
 
     /// The day-one empty's words and import door, as the kit's message.
-    private func emptyState(_ home: Centraid_Core_V1_AgendaHomeData) -> Centraid_Screen_V1_EmptyState {
-        var empty = Centraid_Screen_V1_EmptyState()
+    private func emptyState(_ home: Centraid_Core_V1_AgendaHomeData) -> Centraid_Core_V1_EmptyState {
+        var empty = Centraid_Core_V1_EmptyState()
         empty.headline = home.emptyTitle
         empty.body = home.emptyBody
         empty.actionLabel = home.emptyAction
@@ -206,7 +206,7 @@ struct AgendaHomeView: View {
             if home.empty == .noMatch {
                 // A SEARCH THAT FOUND NOTHING: the kit's one no-match state, and the Ask row under it.
                 EmptyStateView(emptyState(home))
-                if state.hasSearchAskRow { SearchAskRow(ask: state.searchAskRow.legacy) }
+                if state.hasSearchAskRow { SearchAskRow(ask: state.searchAskRow) }
             } else {
                 // WHERE THE PHONE HOLDS A CALENDAR, ITS IMPORT IS DAY ONE'S
                 // ACTION, sent to Rust as `ImportRequested`; "Add" stays in
@@ -227,7 +227,7 @@ struct AgendaHomeView: View {
             AgendaList(
                 home: home,
                 chrome: state.chrome,
-                ask: state.hasSearchAskRow ? state.searchAskRow.legacy : nil,
+                ask: state.hasSearchAskRow ? state.searchAskRow : nil,
                 send: send,
                 open: open
             )
@@ -325,7 +325,7 @@ private struct AgendaList: View {
     let home: Centraid_Core_V1_AgendaHomeData
     let chrome: Centraid_Core_V1_AgendaChrome
     /// The search's Ask row, closing the answer (#1135); nil off a search.
-    let ask: Centraid_Screen_V1_SearchAsk?
+    let ask: Centraid_Core_V1_SearchAsk?
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
 
@@ -385,7 +385,7 @@ private struct AgendaSearchContainers: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(containers, id: \.id) { container in
-                SearchContainerRow(container: container.legacy) { _ in open(container.route) }
+                SearchContainerRow(container: container) { _ in open(container.route) }
             }
         }
     }
@@ -476,7 +476,7 @@ private struct AgendaTodoList: View {
             LazyVStack(alignment: .leading, spacing: 0) {
                 TodoCountLine(count: todo.countLabel, window: todo.windowLabel)
                 if !todo.empty.headline.isEmpty {
-                    EmptyStateView(todo.empty.legacy, onAction: { send(AgendaEvents.make { $0.todoEmptyActed = .init() }) })
+                    EmptyStateView(todo.empty, onAction: { send(AgendaEvents.make { $0.todoEmptyActed = .init() }) })
                 }
                 ForEach(todo.groups, id: \.key) { group in
                     AgendaTaskGroup(group: group, chrome: chrome, send: send, open: open, catchUp: nil)
@@ -489,8 +489,8 @@ private struct AgendaTodoList: View {
                             title: row.title,
                             meta: row.meta,
                             trailing: row.trailing,
-                            trailingTone: StatusChipView.ink(row.trailingTone.legacy, neutral: "text"),
-                            chips: row.chips.map(\.legacy),
+                            trailingTone: StatusChipView.ink(row.trailingTone, neutral: "text"),
+                            chips: row.chips,
                             hueKey: row.hueKey.isEmpty ? "" : (KitHue.role(row.hueKey) ?? "cSlate"),
                             dimmed: row.dimmed,
                             pending: row.pending,

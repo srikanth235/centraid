@@ -51,7 +51,7 @@ struct PhotosEditorView: View {
                     .centraidType("small")
                     .foregroundStyle(Theme.color("onStageSoft", scheme))
             case let .denied(denied)?:
-                DeniedGate(denied.legacy)
+                DeniedGate(denied)
             case let .failure(failure)?:
                 VStack(spacing: 12) {
                     ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
@@ -82,7 +82,7 @@ struct PhotosEditorView: View {
             )
         ) {
             ConfirmSheet(
-                state.discard.legacy,
+                state.discard,
                 cancelLabel: state.words.cancel,
                 onConfirm: { send(.discard(.with { $0.discard = true })) },
                 onDismiss: { send(.discard(.with { $0.discard = false })) }

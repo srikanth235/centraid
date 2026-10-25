@@ -191,7 +191,7 @@ struct PhotoShelfView: View {
             set: { shown in if !shown, selection.hasConfirm { select { $0.dismissed = .init() } } }
         )) {
             ConfirmSheet(
-                selection.confirm.legacy,
+                selection.confirm,
                 cancelLabel: state.promptCancelLabel,
                 onConfirm: { select { $0.confirmed = .init() } },
                 onDismiss: { select { $0.dismissed = .init() } }
@@ -202,7 +202,7 @@ struct PhotoShelfView: View {
             set: { shown in if !shown, state.hasConfirm { shelf { $0.promptDismissed = .init() } } }
         )) {
             ConfirmSheet(
-                state.confirm.legacy,
+                state.confirm,
                 cancelLabel: state.promptCancelLabel,
                 onConfirm: { shelf { $0.promptConfirmed = .init() } },
                 onDismiss: { shelf { $0.promptDismissed = .init() } }

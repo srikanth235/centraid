@@ -34,7 +34,7 @@ struct TodoDetailView: View {
     var body: some View {
         EditorRoom(
             title: state.chrome.title,
-            status: state.autosave.legacy,
+            status: state.autosave,
             onClose: onClose,
             onDeparted: {}
         ) {
@@ -45,7 +45,7 @@ struct TodoDetailView: View {
             }
         } content: {
             if case let .gone(gone)? = state.content {
-                EmptyStateView(gone.legacy, onAction: onClose)
+                EmptyStateView(gone, onAction: onClose)
             } else {
                 ReadStateView(
                     content: readContent(state),
@@ -78,7 +78,7 @@ struct TodoDetailView: View {
             set: { open in if !open, state.hasConfirm { send(event { $0.dismissed = .init() }) } }
         )) {
             ConfirmSheet(
-                state.confirm.legacy,
+                state.confirm,
                 cancelLabel: state.chrome.cancel,
                 onConfirm: { send(event { $0.confirmed = .init() }) },
                 onDismiss: { send(event { $0.dismissed = .init() }) }
@@ -159,7 +159,7 @@ struct TodoDetailView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            StatusLineView(status: state.status.legacy, identifier: "tasks-status-action") { send(event { $0.statusActed = .init() }) }
+            StatusLineView(status: state.status, identifier: "tasks-status-action") { send(event { $0.statusActed = .init() }) }
                 .background(Theme.color("bg", scheme))
         }
         .onAppear {

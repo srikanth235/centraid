@@ -33,7 +33,7 @@ struct PhotosDuplicatesView: View {
                 onRetry: { send(.refreshed(.init())) }
             ) { data in
                 if data.hasEmpty {
-                    EmptyStateView(data.empty.legacy)
+                    EmptyStateView(data.empty)
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
@@ -133,7 +133,7 @@ struct PhotosDuplicateReviewView: View {
                     onRetry: { send(.refreshed(.init())) }
                 ) { data in
                     if data.hasEmpty {
-                        EmptyStateView(data.empty.legacy)
+                        EmptyStateView(data.empty)
                     } else {
                         ScrollView {
                             VStack(alignment: .leading, spacing: 12) {

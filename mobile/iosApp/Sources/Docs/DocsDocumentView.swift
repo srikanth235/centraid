@@ -71,7 +71,7 @@ struct DocsDocumentView: View {
                     onRetry: { send(Self.event { $0.refreshed = .init() }) }
                 ) { document in
                     if case let .gone(empty)? = document.surface {
-                        EmptyStateView(empty.legacy)
+                        EmptyStateView(empty)
                     } else {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 0) {
@@ -128,7 +128,7 @@ struct DocsDocumentView: View {
                 set: { open in if !open, state.hasConfirm { send(Self.event { $0.dismissed = .init() }) } }
             )) {
                 ConfirmSheet(
-                    state.confirm.legacy,
+                    state.confirm,
                     onConfirm: { send(Self.event { $0.confirmed = .init() }) },
                     onDismiss: { send(Self.event { $0.dismissed = .init() }) }
                 )
@@ -416,7 +416,7 @@ struct DocsVersionsView: View {
                     onRetry: { send(Self.event { $0.refreshed = .init() }) }
                 ) { data in
                     if data.hasEmpty {
-                        EmptyStateView(data.empty.legacy)
+                        EmptyStateView(data.empty)
                     } else {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 0) {
@@ -483,7 +483,7 @@ struct DocsEditorView: View {
         let chrome = state.chrome
         EditorRoom(
             title: typedTitle.isEmpty ? state.titleHint : typedTitle,
-            status: state.autosave.legacy,
+            status: state.autosave,
             closeLabel: chrome.done,
             onClose: onClose,
             onDeparted: {}

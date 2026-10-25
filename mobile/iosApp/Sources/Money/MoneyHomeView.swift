@@ -48,7 +48,7 @@ struct MoneyHomeView: View {
                 : RoomAction(iconKey: "Plus", label: chrome.addLabel, identifier: "money-add", action: addStatement),
             // A DOOR, NOT A FIELD (R-CHROME-2): the field is never open here.
             search: content.isDenied || chrome.searchPlaceholder.isEmpty ? nil : SearchSlot(
-                field: Centraid_Screen_V1_SearchField(),
+                field: KitSearchField(),
                 placeholder: chrome.searchPlaceholder,
                 onOpen: { open(chrome.searchRoute) },
                 onTerm: { _ in },
@@ -138,7 +138,7 @@ struct MoneyHomeView: View {
     @ViewBuilder
     private func spending(_ spending: Centraid_Core_V1_MoneySpendingData) -> some View {
         if spending.hasEmpty {
-            EmptyStateView(spending.empty.legacy, onAction: addStatement)
+            EmptyStateView(spending.empty, onAction: addStatement)
         } else {
             ForEach(Array(spending.heroes.enumerated()), id: \.offset) { _, hero in
                 MoneyHeroView(hero: hero)
@@ -188,7 +188,7 @@ struct MoneyHomeView: View {
     @ViewBuilder
     private func activity(_ activity: Centraid_Core_V1_MoneyActivityData) -> some View {
         if activity.hasEmpty {
-            EmptyStateView(activity.empty.legacy, onAction: addStatement)
+            EmptyStateView(activity.empty, onAction: addStatement)
         } else {
             if !activity.needsLabel.isEmpty {
                 // THE FILTER THAT LISTS THESE ROWS is the state's own `needs_key`.
@@ -211,7 +211,7 @@ struct MoneyHomeView: View {
     @ViewBuilder
     private func cashflow(_ flow: Centraid_Core_V1_MoneyCashflowData) -> some View {
         if flow.hasEmpty {
-            EmptyStateView(flow.empty.legacy, onAction: addStatement)
+            EmptyStateView(flow.empty, onAction: addStatement)
         } else {
             ForEach(Array(flow.series.enumerated()), id: \.offset) { _, series in
                 MoneySection(title: series.heading)

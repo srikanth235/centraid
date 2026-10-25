@@ -293,23 +293,6 @@ final class ShellModel: ObservableObject {
         screens?.homeView?.bar.vault.name ?? ""
     }
 
-    /// ASK THE ASSISTANT, from an app's search Ask row (#1097, #1135): a page of the chat
-    /// (`chat.ask`) pushed over the stack, scoped to the app the member searched from (`scope`,
-    /// empty is every app) with the question waiting for the model. Home's own search carries the
-    /// finished route in its view state (`ask_route`) and pushes that. TRANSITIONAL: the app
-    /// searches' view states hold the `SearchAsk` and not yet its route.
-    func askChat(_ ask: Centraid_Screen_V1_SearchAsk) {
-        let line = ask.question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !line.isEmpty else { return }
-        var route = Centraid_Core_V1_Route()
-        route.screen = "chat.ask"
-        route.ask = .with {
-            $0.question = line
-            $0.scope = ask.scope
-        }
-        open(route)
-    }
-
     /// THE COMPOSER'S SCOPE MENU: the chat opens on `app`, or on every app when
     /// it is empty. A different scope starts a new thread.
     func setChatScope(_ app: String) {

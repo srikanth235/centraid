@@ -311,10 +311,9 @@ targets:
     # neither that nor `GENERATE_INFOPLIST_FILE`, so `xcodebuild
     # build-for-testing` refused the bundle outright — "does not contain an
     # Info.plist, and GENERATE_INFOPLIST_FILE is not enabled". Every test under
-    # `Tests/` has therefore never been COMPILED, let alone run:
-    # `ScreenFixtureTests` was written in wave A and `FontRegistrationTests`
-    # with the faces, and both were green in the only sense that nothing ever
-    # asked them a question.
+    # `Tests/` had therefore never been COMPILED, let alone run:
+    # `FontRegistrationTests` was written with the faces, and was green in the
+    # only sense that nothing ever asked it a question.
     #
     # `GENERATE_INFOPLIST_FILE` and not an `info:` block, because a test bundle's
     # plist carries nothing this repo chooses — no launch screen, no background

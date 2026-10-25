@@ -43,7 +43,7 @@ struct TodoListView: View {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             TodoCountLine(count: list.countLabel, window: list.windowLabel)
                             if list.groups.isEmpty, list.hasEmpty, !list.empty.headline.isEmpty {
-                                EmptyStateView(list.empty.legacy)
+                                EmptyStateView(list.empty)
                             }
                             ForEach(list.groups, id: \.key) { group in
                                 TodoGroupView(
@@ -62,7 +62,7 @@ struct TodoListView: View {
                     .refreshable { send(event { $0.refreshed = .init() }) }
                     .accessibilityIdentifier("tasks-list")
                 }
-                StatusLineView(status: state.status.legacy, identifier: "tasks-status-action") { send(event { $0.statusActed = .init() }) }
+                StatusLineView(status: state.status, identifier: "tasks-status-action") { send(event { $0.statusActed = .init() }) }
             }
         }
     }
@@ -122,7 +122,7 @@ struct TodoProjectView: View {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             TodoCountLine(count: project.countLabel, window: "")
                             if project.groups.isEmpty, project.hasEmpty, !project.empty.headline.isEmpty {
-                                EmptyStateView(project.empty.legacy)
+                                EmptyStateView(project.empty)
                             }
                             ForEach(project.groups, id: \.key) { group in
                                 TodoGroupView(
@@ -139,7 +139,7 @@ struct TodoProjectView: View {
                     .scrollDismissesKeyboard(.interactively)
                     .accessibilityIdentifier("tasks-project")
                 }
-                StatusLineView(status: state.status.legacy, identifier: "tasks-status-action") { send(event { $0.statusActed = .init() }) }
+                StatusLineView(status: state.status, identifier: "tasks-status-action") { send(event { $0.statusActed = .init() }) }
                 if !content.isDenied {
                     TodoQuickAddBar(
                         quickAdd: state.quickAdd,
@@ -243,7 +243,7 @@ struct TodoCatchUpView: View {
                                     .padding(.top, 8)
                             }
                             if catchUp.piles.isEmpty, catchUp.hasEmpty, !catchUp.empty.headline.isEmpty {
-                                EmptyStateView(catchUp.empty.legacy)
+                                EmptyStateView(catchUp.empty)
                             }
                             ForEach(catchUp.piles, id: \.key) { pile in
                                 SectionHeader(title: pile.title, count: UInt32(pile.meta), verb: pile.verbLabel) {
@@ -270,7 +270,7 @@ struct TodoCatchUpView: View {
                     .refreshable { send(event { $0.refreshed = .init() }) }
                     .accessibilityIdentifier("tasks-catch-up")
                 }
-                StatusLineView(status: state.status.legacy, identifier: "tasks-status-action") { send(event { $0.statusActed = .init() }) }
+                StatusLineView(status: state.status, identifier: "tasks-status-action") { send(event { $0.statusActed = .init() }) }
             }
         }
         .sheet(isPresented: Binding(
@@ -278,7 +278,7 @@ struct TodoCatchUpView: View {
             set: { open in if !open, state.hasConfirm { send(event { $0.dismissed = .init() }) } }
         )) {
             ConfirmSheet(
-                state.confirm.legacy,
+                state.confirm,
                 cancelLabel: state.chrome.cancel,
                 onConfirm: { send(event { $0.confirmed = .init() }) },
                 onDismiss: { send(event { $0.dismissed = .init() }) }

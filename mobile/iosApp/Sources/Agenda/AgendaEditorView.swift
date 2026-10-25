@@ -77,7 +77,7 @@ struct AgendaEditorView: View {
             set: { open in if !open, state.hasConfirm { send(event { $0.confirmDismissed = .init() }) } }
         )) {
             ConfirmSheet(
-                state.confirm.legacy,
+                state.confirm,
                 cancelLabel: chrome.keepEditing,
                 onConfirm: { send(event { $0.confirmed = .init() }) },
                 onDismiss: { send(event { $0.confirmDismissed = .init() }) }

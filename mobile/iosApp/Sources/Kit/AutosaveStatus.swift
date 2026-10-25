@@ -10,15 +10,15 @@ import SwiftUI
 /// `SAVE_STATE_QUEUED` is gone with the explicit save: nothing under autosave
 /// produces a queued phase, so there is no "Waiting for your gateway" here.
 struct AutosaveStatus: View {
-    let autosave: Centraid_Screen_V1_Autosave
+    let autosave: Centraid_Core_V1_Autosave
 
     @Environment(\.colorScheme) private var scheme
 
-    init(_ autosave: Centraid_Screen_V1_Autosave) { self.autosave = autosave }
+    init(_ autosave: Centraid_Core_V1_Autosave) { self.autosave = autosave }
 
     /// The words, for the view and for a test: the machine's own
     /// (`Autosave.label`, set by the kit's law with every phase — #1047).
-    static func label(_ autosave: Centraid_Screen_V1_Autosave) -> String {
+    static func label(_ autosave: Centraid_Core_V1_Autosave) -> String {
         autosave.label
     }
 

@@ -42,8 +42,8 @@ struct ShellSearchView: View {
     }
 
     /// The field as Rust holds it: open at once, with the term typed so far.
-    private var field: Centraid_Screen_V1_SearchField {
-        var field = Centraid_Screen_V1_SearchField()
+    private var field: KitSearchField {
+        var field = KitSearchField()
         field.open = true
         field.term = state.term
         return field
@@ -99,7 +99,7 @@ struct ShellSearchView: View {
                 case let .results(results):
                     if results.hasEmpty {
                         // NOTHING MATCHED: the sentence, and the Ask row under it.
-                        EmptyStateView(results.empty.legacy)
+                        EmptyStateView(results.empty)
                         askRow(results)
                     } else {
                         groups(results)
@@ -118,7 +118,7 @@ struct ShellSearchView: View {
     private func askRow(_ results: Centraid_Core_V1_HomeSearchData) -> some View {
         if results.hasAsk {
             // The Ask's finished route (`chat.ask`) is pushed like any row.
-            SearchAskRow(ask: results.ask.legacy, onAsk: { send(event { $0.committed = .init() }) }) {
+            SearchAskRow(ask: results.ask, onAsk: { send(event { $0.committed = .init() }) }) {
                 if results.hasAskRoute { open(results.askRoute) }
             }
         }
@@ -137,7 +137,7 @@ struct ShellSearchView: View {
                     GroupHeader(group: group)
                     // CONTAINERS FIRST (#1097): the notebook, project, group or folder whose name matched.
                     ForEach(group.containers, id: \.id) { container in
-                        SearchContainerRow(container: container.legacy) { _ in
+                        SearchContainerRow(container: container) { _ in
                             commit(container.hasRoute ? container.route : nil)
                         }
                     }

@@ -80,7 +80,7 @@ struct PeopleHomeView: View {
     // MARK: chrome
 
     private var searchSlot: SearchSlot {
-        var field = Centraid_Screen_V1_SearchField()
+        var field = KitSearchField()
         field.open = state.search.open
         field.term = state.search.term
         field.corrected = state.search.corrected
@@ -145,8 +145,8 @@ struct PeopleHomeView: View {
         let results = state.search.results
         return Group {
             if results.hasEmpty {
-                EmptyStateView(results.empty.legacy)
-                if state.search.hasAsk { SearchAskRow(ask: state.search.ask.legacy) }
+                EmptyStateView(results.empty)
+                if state.search.hasAsk { SearchAskRow(ask: state.search.ask) }
                 Spacer(minLength: 0)
             } else {
                 ScrollView {
@@ -154,7 +154,7 @@ struct PeopleHomeView: View {
                         ForEach(results.rows, id: \.partyID) { row in
                             PeopleRosterRowView(row: row, send: send, open: open)
                         }
-                        if state.search.hasAsk { SearchAskRow(ask: state.search.ask.legacy) }
+                        if state.search.hasAsk { SearchAskRow(ask: state.search.ask) }
                     }
                 }
                 .accessibilityIdentifier("people-search-results")
@@ -198,7 +198,7 @@ private struct PeopleRosterList: View {
                 // WHERE THE PHONE HOLDS CONTACTS, ITS IMPORT IS DAY ONE'S ACTION, sent to Rust as
                 // `ImportContactsTapped`; "Add person" stays in the header.
                 let offersImport = roster.empty.importSource == .contacts
-                EmptyStateView(roster.empty.legacy)
+                EmptyStateView(roster.empty)
                 if offersImport {
                     PeopleImportButton(label: importLabel, send: send)
                 }
@@ -250,7 +250,7 @@ private struct PeopleRosterRowView: View {
             CentraidRow(
                 title: row.name,
                 meta: [row.role, row.meta].filter { !$0.isEmpty }.joined(separator: " · "),
-                chips: row.chips.map(\.legacy),
+                chips: row.chips,
                 accessibility: row.accessibilityLabel,
                 identifier: "people-row-\(row.partyID)",
                 onTap: { open(row.route) }
@@ -279,7 +279,7 @@ private struct PeopleTouchList: View {
     var body: some View {
         if touch.hasEmpty {
             let offersImport = touch.empty.importSource == .contacts
-            EmptyStateView(touch.empty.legacy)
+            EmptyStateView(touch.empty)
             if offersImport {
                 PeopleImportButton(label: importLabel, send: send)
             }

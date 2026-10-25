@@ -21,7 +21,7 @@ import SwiftUI
 /// search is a page of its own (Photos) pushes it from `onOpen` and
 /// never sets `field.open`.
 struct SearchSlot {
-    let field: Centraid_Screen_V1_SearchField
+    let field: KitSearchField
     let placeholder: String
     var closeLabel: String = KitWords.CLOSE_SEARCH
     let onOpen: () -> Void
@@ -339,7 +339,7 @@ struct PushedPage<Trailing: View, Content: View>: View {
 /// then; the screen itself writes unsaved words when it closes.
 struct EditorRoom<Trailing: View, Content: View>: View {
     let title: String
-    let status: Centraid_Screen_V1_Autosave
+    let status: Centraid_Core_V1_Autosave
     var closeLabel: String = KitWords.DONE
     let onClose: () -> Void
     let onDeparted: () -> Void
@@ -350,7 +350,7 @@ struct EditorRoom<Trailing: View, Content: View>: View {
 
     init(
         title: String,
-        status: Centraid_Screen_V1_Autosave,
+        status: Centraid_Core_V1_Autosave,
         closeLabel: String = KitWords.DONE,
         onClose: @escaping () -> Void,
         onDeparted: @escaping () -> Void,

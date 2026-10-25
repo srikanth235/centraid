@@ -32,7 +32,7 @@ struct MoneyImportView: View {
                 onRetry: { send(event { $0.refreshed = .init() }) }
             ) { plan in
                 if plan.hasEmpty {
-                    EmptyStateView(plan.empty.legacy, onAction: { open(plan.accountsRoute) })
+                    EmptyStateView(plan.empty, onAction: { open(plan.accountsRoute) })
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) { page(plan, state: state) }
@@ -152,7 +152,7 @@ struct MoneyImportView: View {
                 title: line.title.isEmpty ? line.lineLabel : line.title,
                 meta: MoneyWords.meta(line.title.isEmpty ? "" : line.lineLabel, line.meta, line.reason),
                 trailing: line.hasAmount_p ? MoneyWords.amount(line.amount) : "",
-                chips: line.hasChip ? [line.chip.legacy] : [],
+                chips: line.hasChip ? [line.chip] : [],
                 accessibility: MoneyWords.spoken(line.accessibilityLabel, line.hasAmount_p ? line.amount : nil),
                 identifier: "money-import-\(statement.key)-\(line.key)"
             )

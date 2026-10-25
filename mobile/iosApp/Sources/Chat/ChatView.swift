@@ -488,7 +488,7 @@ private struct ChatDrawer: View {
             Group {
                 if state.drawerSearch.open {
                     CentraidSearchField(
-                        field: state.drawerSearch.legacy,
+                        field: state.drawerSearch.kitField,
                         placeholder: state.drawerSearchPlaceholder,
                         identifier: "chat-drawer-search",
                         onTerm: onSearchTerm,
@@ -1422,12 +1422,11 @@ extension View {
 
 
 extension Centraid_Core_V1_ChatDrawerSearch {
-    /// The kit's search field draws the drawer's search; it reads these four facts and no more.
-    var legacy: Centraid_Screen_V1_SearchField {
-        var field = Centraid_Screen_V1_SearchField()
+    /// The kit's search field draws the drawer's search; it reads these three facts and no more.
+    var kitField: KitSearchField {
+        var field = KitSearchField()
         field.open = open
         field.term = term
-        field.answeredTerm = term
         field.corrected = corrected
         return field
     }

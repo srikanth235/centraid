@@ -34,7 +34,7 @@ struct PhotosSearchBody: View {
                     if hits.hasEmpty {
                         // NOTHING MATCHED IS NOT NOTHING TYPED. Rust quotes the query
                         // back and says everywhere search looked.
-                        EmptyStateView(hits.empty.legacy)
+                        EmptyStateView(hits.empty)
                             .accessibilityIdentifier("photos-search-no-match")
                     } else {
                         // THE DOORS FIRST (v0 §9: "each one tap from the surface that
@@ -62,7 +62,7 @@ struct PhotosSearchBody: View {
                     EmptyView()
                 }
                 // THE ASK ROW closes the answer, matched or not (#1135).
-                if search.hasAsk { SearchAskRow(ask: search.ask.legacy) }
+                if search.hasAsk { SearchAskRow(ask: search.ask) }
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.vertical, 8)

@@ -61,7 +61,7 @@ struct LockerExportView: View {
                 }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if state.hasStatus {
-                        StatusLineView(status: state.status.legacy, identifier: "locker-export-status") {}
+                        StatusLineView(status: state.status, identifier: "locker-export-status") {}
                             .padding(.vertical, 4)
                             .background(Theme.color("bg", scheme))
                     }
@@ -74,7 +74,7 @@ struct LockerExportView: View {
         )) {
             LockerShield(secure: state.secure) {
                 ConfirmSheet(
-                    state.confirm.legacy,
+                    state.confirm,
                     onConfirm: { send(LockerExportEvents.make { $0.confirmed = .init() }) },
                     onDismiss: { send(LockerExportEvents.make { $0.dismissed = .init() }) }
                 )
@@ -156,7 +156,7 @@ struct LockerImportView: View {
                 }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if state.hasStatus {
-                        StatusLineView(status: state.status.legacy, identifier: "locker-import-status") {}
+                        StatusLineView(status: state.status, identifier: "locker-import-status") {}
                             .padding(.vertical, 4)
                             .background(Theme.color("bg", scheme))
                     }
@@ -184,7 +184,7 @@ struct LockerImportView: View {
             }
         }
         if plan.hasEmpty {
-            EmptyStateView(plan.empty.legacy)
+            EmptyStateView(plan.empty)
         }
         if !plan.rowsLabel.isEmpty {
             SectionHeader(title: plan.rowsLabel)
@@ -202,7 +202,7 @@ struct LockerImportView: View {
                             .lineLimit(2)
                     }
                     Spacer(minLength: 8)
-                    StatusChipView(row.chip.legacy)
+                    StatusChipView(row.chip)
                 }
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .padding(.vertical, 8)

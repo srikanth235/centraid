@@ -51,7 +51,7 @@ struct MoneyTransactionView: View {
         .sheet(isPresented: sheetBinding) { sheetContent(state, transaction: content.loaded) }
         .sheet(isPresented: confirmBinding) {
             ConfirmSheet(
-                state.confirm.legacy,
+                state.confirm,
                 onConfirm: { send(event { $0.confirmAccepted = .init() }) },
                 onDismiss: { send(event { $0.confirmDismissed = .init() }) }
             )
@@ -72,7 +72,7 @@ struct MoneyTransactionView: View {
                 .foregroundStyle(Theme.color("text", scheme))
                 .accessibilityAddTraits(.isHeader)
             HStack(spacing: 6) {
-                ForEach(Array(transaction.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip.legacy) }
+                ForEach(Array(transaction.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -296,7 +296,7 @@ struct MoneyRecurringView: View {
                 onRetry: { send(Centraid_Core_V1_MoneyRecurringEvent.with { $0.refreshed = .init() }) }
             ) { recurring in
                 if recurring.hasEmpty {
-                    EmptyStateView(recurring.empty.legacy)
+                    EmptyStateView(recurring.empty)
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
@@ -305,7 +305,7 @@ struct MoneyRecurringView: View {
                                     title: row.merchant,
                                     meta: MoneyWords.meta(row.meta, row.detail),
                                     trailing: MoneyWords.amount(row.amount),
-                                    chips: row.chips.map(\.legacy),
+                                    chips: row.chips,
                                     accessibility: MoneyWords.spoken(row.accessibilityLabel, row.amount),
                                     identifier: "money-recurring-\(row.key)"
                                 )

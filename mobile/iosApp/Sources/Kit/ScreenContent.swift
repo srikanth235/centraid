@@ -13,7 +13,7 @@ import Foundation
 enum ScreenContent<Value> {
     case loading(Bool)
     case failure(String, String)
-    case denied(Centraid_Screen_V1_Denied)
+    case denied(Centraid_Core_V1_Denied)
     case data(Value)
 }
 
@@ -40,8 +40,13 @@ extension ScreenContent {
         }
     }
 
-    /// A failure message, as the decoders spell it.
-    static func failed(_ failure: Centraid_Screen_V1_ReadFailure) -> ScreenContent<Value> {
+    /// A screen's failed read.
+    static func failed(_ failure: Centraid_Core_V1_Failure) -> ScreenContent<Value> {
         .failure(failure.sentence, failure.remedy)
+    }
+
+    /// A screen's denial.
+    static func gated(_ denied: Centraid_Core_V1_Denied) -> ScreenContent<Value> {
+        .denied(denied)
     }
 }

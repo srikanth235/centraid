@@ -157,7 +157,7 @@ struct LockerRowView: View {
                     }
                 }
                 Spacer(minLength: 8)
-                ForEach(Array(row.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip.legacy) }
+                ForEach(Array(row.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
                 if row.starred {
                     CentraidIconView(iconKey: "Star", tint: Theme.color("textSoft", scheme), size: 14)
                 }

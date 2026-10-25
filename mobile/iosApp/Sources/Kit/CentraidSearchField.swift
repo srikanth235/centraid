@@ -119,6 +119,15 @@ struct BareSearchField: UIViewRepresentable {
         }
     }
 }
+/// WHAT THE SEARCH FIELD DRAWS OF A SCREEN'S SEARCH: whether it is open, the term
+/// Rust holds, and the correction it searched instead (empty for none). Every value
+/// is the state's; the page copies them in.
+struct KitSearchField {
+    var open = false
+    var term = ""
+    var corrected = ""
+}
+
 /// THE SEARCH FIELD AN APP PLACE OPENS UNDER ITS HEADER (K5).
 ///
 /// Its state is the machine's `SearchField`; the text a member types lives
@@ -127,7 +136,7 @@ struct BareSearchField: UIViewRepresentable {
 /// the field from re-sending the term the reducer just published back to it.
 /// Close is its own event, and Rust clears the term and its answer with it.
 struct CentraidSearchField: View {
-    let field: Centraid_Screen_V1_SearchField
+    let field: KitSearchField
     let placeholder: String
     var closeLabel: String = KitWords.CLOSE_SEARCH
     var identifier: String = "kit-search"

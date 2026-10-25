@@ -8,7 +8,7 @@ struct ConfirmSheet: View {
     /// Its detents, named so a host that shields it can state them again.
     static let detents: Set<PresentationDetent> = [.height(280), .medium]
 
-    let confirm: Centraid_Screen_V1_Confirm
+    let confirm: Centraid_Core_V1_Confirm
     var cancelLabel: String = KitWords.CANCEL
     let onConfirm: () -> Void
     let onDismiss: () -> Void
@@ -16,7 +16,7 @@ struct ConfirmSheet: View {
     @Environment(\.colorScheme) private var scheme
 
     init(
-        _ confirm: Centraid_Screen_V1_Confirm,
+        _ confirm: Centraid_Core_V1_Confirm,
         cancelLabel: String = KitWords.CANCEL,
         onConfirm: @escaping () -> Void,
         onDismiss: @escaping () -> Void

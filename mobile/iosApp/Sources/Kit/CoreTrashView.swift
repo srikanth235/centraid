@@ -38,7 +38,7 @@ struct CoreTrashView: View {
                     onRetry: { event { $0.kind = .refreshed(.init()) } }
                 ) { data in
                     if data.rows.isEmpty {
-                        EmptyStateView(data.empty.legacy)
+                        EmptyStateView(data.empty)
                     } else {
                         ScrollView {
                             LazyVStack(spacing: 0) {
@@ -50,7 +50,7 @@ struct CoreTrashView: View {
                                 )
                                 ForEach(data.rows, id: \.id) { row in
                                     TrashRowView(
-                                        row: row.legacy,
+                                        row: row,
                                         onRestore: { event { $0.kind = .restore(.with { $0.id = row.id }) } },
                                         onPurge: { event { $0.kind = .purge(.with { $0.id = row.id }) } }
                                     )
@@ -60,7 +60,7 @@ struct CoreTrashView: View {
                         .refreshable { event { $0.kind = .refreshed(.init()) } }
                     }
                 }
-                StatusLineView(status: state.status.legacy, identifier: "trash-status-action") {}
+                StatusLineView(status: state.status, identifier: "trash-status-action") {}
             }
         }
         .sheet(isPresented: Binding(
@@ -68,7 +68,7 @@ struct CoreTrashView: View {
             set: { open in if !open, state.hasConfirm { event { $0.kind = .dismissed(.init()) } } }
         )) {
             ConfirmSheet(
-                state.confirm.legacy,
+                state.confirm,
                 onConfirm: { event { $0.kind = .confirmed(.init()) } },
                 onDismiss: { event { $0.kind = .dismissed(.init()) } }
             )

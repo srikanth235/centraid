@@ -147,7 +147,7 @@ struct LockerEditorView: View {
             set: { isOpen in if !isOpen, state.hasConfirm { send(LockerEditorEvents.make { $0.dismissed = .init() }) } }
         )) {
             ConfirmSheet(
-                state.confirm.legacy,
+                state.confirm,
                 onConfirm: {
                     concealing = true
                     send(LockerEditorEvents.make { $0.confirmed = .init() })

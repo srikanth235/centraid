@@ -56,7 +56,7 @@ struct LockerItemView: View {
                         onRetry: { send(LockerItemEvents.make { $0.refreshed = .init() }) }
                     ) { item in
                         if item.hasGone {
-                            EmptyStateView(item.gone.legacy)
+                            EmptyStateView(item.gone)
                         } else {
                             ScrollView {
                                 LazyVStack(alignment: .leading, spacing: 0) { page(item) }
@@ -67,7 +67,7 @@ struct LockerItemView: View {
                 }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if state.hasStatus {
-                        StatusLineView(status: state.status.legacy, identifier: "locker-item-status") {
+                        StatusLineView(status: state.status, identifier: "locker-item-status") {
                             send(LockerItemEvents.make { $0.statusActed = .init() })
                         }
                         .padding(.vertical, 4)
@@ -82,7 +82,7 @@ struct LockerItemView: View {
         )) {
             LockerShield(secure: state.secure) {
                 ConfirmSheet(
-                    state.confirm.legacy,
+                    state.confirm,
                     onConfirm: { send(LockerItemEvents.make { $0.confirmed = .init() }) },
                     onDismiss: { send(LockerItemEvents.make { $0.dismissed = .init() }) }
                 )
@@ -147,7 +147,7 @@ struct LockerItemView: View {
                     .foregroundStyle(Theme.color("textSoft", scheme))
             }
             Spacer(minLength: 0)
-            ForEach(Array(item.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip.legacy) }
+            ForEach(Array(item.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.top, 8)
