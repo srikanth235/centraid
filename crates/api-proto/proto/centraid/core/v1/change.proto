@@ -25,7 +25,7 @@ message ChangeEvent {
   repeated RecordKey pk_set = 2;
 
   // 3 WAS `commit_seq`, DELETED (#1029 W5, hand-off 4). The number is retired,
-  // not reused — exactly as `command.proto` retired its own.
+  // not reused — exactly as `envelope.proto` retires its own.
   //
   // It was "the highest commit this event covers", and it existed for ONE
   // reader: a seat's overlay cleared against a commit seq rather than against a

@@ -247,15 +247,11 @@ fn a_photograph_whose_original_is_not_here_cannot_be_saved_and_says_why() {
     // Staged by hash only: the vault has the photograph and not its bytes.
     let hash = centraid_vault::blob::content_digest(b"no bytes here");
     d.handle
-        .call(&wire::Request {
-            kind: Some(wire::request::Kind::Command(wire::Command {
-                name: "blob.stage".to_owned(),
-                input: serde_json::to_vec(&serde_json::json!({ "hash": hash, "size": 13 }))
-                    .expect("json"),
-                invoke_key: format!("editor:stage:{}", kit_act::fresh()),
-                ..Default::default()
-            })),
-        })
+        .command(
+            "blob.stage",
+            &serde_json::json!({ "hash": hash, "size": 13 }),
+            &format!("editor:stage:{}", kit_act::fresh()),
+        )
         .expect("stage");
     let made = d.act(
         act::photos::Upload {

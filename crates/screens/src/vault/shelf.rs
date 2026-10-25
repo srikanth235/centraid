@@ -712,22 +712,13 @@ impl Shelf {
         let Some(core) = self.wake_locked(&mut inner, vault_id) else {
             return false;
         };
-        let input = serde_json::json!({ "name": wanted })
-            .to_string()
-            .into_bytes();
-        let asked = wire::Request {
-            kind: Some(wire::request::Kind::Command(wire::Command {
-                name: "vault.rename".to_owned(),
-                input,
-                invoke_key: format!("shelf:rename:{}", files_token()),
-                ..wire::Command::default()
-            })),
-        };
-        let executed = matches!(
-            core.call(&asked).map(|answer| answer.kind),
-            Ok(Some(wire::response::Kind::Command(ref outcome)))
-                if outcome.status == wire::CommandStatus::Executed as i32
-        );
+        let executed = core
+            .command(
+                "vault.rename",
+                &serde_json::json!({ "name": wanted }),
+                &format!("shelf:rename:{}", files_token()),
+            )
+            .is_ok_and(|outcome| outcome.status == centraid_core::CommandStatus::Executed);
         if !executed {
             return false;
         }

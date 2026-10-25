@@ -77,52 +77,44 @@ impl Scratch {
 
     fn run(&self, name: &str, input: serde_json::Value) -> serde_json::Value {
         self.writes.set(self.writes.get() + 1);
-        let response = self
+        let outcome = self
             .handle
-            .call(&wire::Request {
-                kind: Some(wire::request::Kind::Command(wire::Command {
-                    name: name.to_owned(),
-                    input: serde_json::to_vec(&input).expect("json"),
-                    invoke_key: format!("docs-query-test-{}", self.writes.get()),
-                    ..wire::Command::default()
-                })),
-            })
+            .command(
+                name,
+                &input,
+                &format!("docs-query-test-{}", self.writes.get()),
+            )
             .unwrap_or_else(|error| panic!("{name} refused: {error}"));
-        let Some(wire::response::Kind::Command(outcome)) = response.kind else {
-            panic!("a command answered with something else");
-        };
         assert_eq!(
             outcome.status,
-            wire::CommandStatus::Executed as i32,
-            "{name}: {}",
+            centraid_vault::CommandStatus::Executed,
+            "{name}: {:?}",
             outcome.reason
         );
-        serde_json::from_slice(&outcome.output).expect("the output is JSON")
+        outcome.output
     }
 
     /// A command the vault is expected to refuse: its status and its sentence.
-    fn refused(&self, name: &str, input: serde_json::Value) -> (i32, String) {
+    fn refused(
+        &self,
+        name: &str,
+        input: serde_json::Value,
+    ) -> (centraid_vault::CommandStatus, String) {
         self.writes.set(self.writes.get() + 1);
-        let response = self
+        let outcome = self
             .handle
-            .call(&wire::Request {
-                kind: Some(wire::request::Kind::Command(wire::Command {
-                    name: name.to_owned(),
-                    input: serde_json::to_vec(&input).expect("json"),
-                    invoke_key: format!("docs-query-test-{}", self.writes.get()),
-                    ..wire::Command::default()
-                })),
-            })
+            .command(
+                name,
+                &input,
+                &format!("docs-query-test-{}", self.writes.get()),
+            )
             .unwrap_or_else(|error| panic!("{name} errored rather than refusing: {error}"));
-        let Some(wire::response::Kind::Command(outcome)) = response.kind else {
-            panic!("a command answered with something else");
-        };
         assert_ne!(
             outcome.status,
-            wire::CommandStatus::Executed as i32,
+            centraid_vault::CommandStatus::Executed,
             "{name} was expected to be refused"
         );
-        (outcome.status, outcome.reason)
+        (outcome.status, outcome.reason.unwrap_or_default())
     }
 
     /// A text document written from words, as the Add sheet's Text writes one.

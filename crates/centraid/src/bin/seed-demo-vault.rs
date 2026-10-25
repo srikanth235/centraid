@@ -34,8 +34,8 @@
 //! whose items carry no secret leaves reveal, copy and Review with nothing to
 //! walk, so this core is opened with [`DEMO_WORDS`] at index 0 — the public
 //! BIP39 all-`abandon` vector, printed as `CENTRAID_DEMO_WORDS` — and each
-//! item goes through the shell's own door: a Locker unlock, then
-//! `locker.add_item` through `Handle::call`, which seals the typed secret
+//! item goes through the core's sealing path: a Locker unlock, then
+//! `locker.add_item` through `Handle::command`, which seals the typed secret
 //! under `K` before the command plane sees it. A phone opened with those same
 //! words reveals them; any other words answer `DID_NOT_OPEN`. The secrets are
 //! test values (a published test card number, made-up passwords), never
@@ -256,8 +256,8 @@ fn main() {
             centraid_core::example::seed(vault, &registry, &principal, &|app| wanted.has(app), now)
         })
         .expect("the scenario seeds");
-    // LOCKER THROUGH THE SHELL'S DOOR, not `Vault::execute`: sealing is the
-    // core's, in `Handle::call`, so these writes need the handle free of the
+    // LOCKER THROUGH THE CORE'S SEALING PATH, not `Vault::execute`: sealing is
+    // the core's, in `Handle::command`, so these writes need the handle free of the
     // `with_vault` borrow above.
     if wanted.has("locker") {
         report.refused.extend(seed_locker(&handle));
@@ -574,28 +574,17 @@ fn seed_passkey(handle: &centraid_core::Handle) -> Result<(), String> {
         "user_handle": "owner", "display_name": "Cabin booking", "credential_id": "demo-credential-1",
         "algorithm": "ES256", "private_key": sealed, "key_id": key_id
     });
-    let answer = handle
-        .call(&wire::Request {
-            kind: Some(wire::request::Kind::Command(wire::Command {
-                name: "locker.set_passkey".to_owned(),
-                input: serde_json::to_vec(&input).map_err(|error| error.to_string())?,
-                invoke_key: "seed-demo-locker-passkey".to_owned(),
-                ..wire::Command::default()
-            })),
-        })
+    let outcome = handle
+        .command("locker.set_passkey", &input, "seed-demo-locker-passkey")
         .map_err(|error| error.to_string())?;
-    match answer.kind {
-        Some(wire::response::Kind::Command(outcome))
-            if outcome.status == wire::CommandStatus::Executed as i32 =>
-        {
-            Ok(())
-        }
-        Some(wire::response::Kind::Command(outcome)) => Err(outcome.reason),
-        other => Err(format!("answered as {other:?}")),
+    if outcome.status == centraid_vault::CommandStatus::Executed {
+        Ok(())
+    } else {
+        Err(outcome.reason.unwrap_or_default())
     }
 }
 
-/// Seed Locker through `Handle::call`: unlock, write, relock. Answers the
+/// Seed Locker through the handle: unlock, write (`Handle::command`), relock. Answers the
 /// refusals, in the report's words.
 fn seed_locker(handle: &centraid_core::Handle) -> Vec<String> {
     use wire::locker_session_request::Step;
@@ -613,22 +602,10 @@ fn seed_locker(handle: &centraid_core::Handle) -> Vec<String> {
         return refused;
     }
     for (index, (name, input)) in locker_items().into_iter().enumerate() {
-        let answer = handle.call(&wire::Request {
-            kind: Some(wire::request::Kind::Command(wire::Command {
-                name: name.to_owned(),
-                input: serde_json::to_vec(&input).expect("a seed input is JSON"),
-                invoke_key: format!("seed-demo-locker-{index}"),
-                ..wire::Command::default()
-            })),
-        });
-        let why = match answer.map(|response| response.kind) {
-            Ok(Some(wire::response::Kind::Command(outcome)))
-                if outcome.status == wire::CommandStatus::Executed as i32 =>
-            {
-                continue;
-            }
-            Ok(Some(wire::response::Kind::Command(outcome))) => outcome.reason,
-            Ok(other) => format!("answered as {other:?}"),
+        let answer = handle.command(name, &input, &format!("seed-demo-locker-{index}"));
+        let why = match answer {
+            Ok(outcome) if outcome.status == centraid_vault::CommandStatus::Executed => continue,
+            Ok(outcome) => outcome.reason.unwrap_or_default(),
             Err(error) => error.to_string(),
         };
         eprintln!("seed-demo-vault: {name} refused: {why}");

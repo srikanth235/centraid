@@ -9,7 +9,7 @@
 // ## Why a request kind and not a registered command
 //
 // A turn writes nothing — no row, no receipt, not even one it proposes — and
-// runs a model, so it is neither a command (`command.proto`) nor a page read. It rides the envelope
+// runs a model, so it is neither an `act` (`action.proto`) nor a page read. It rides the envelope
 // the way `phone.proto`'s verbs do, and for the same reason: the reasons it
 // cannot be a command are stated where a shell author reads them.
 //

@@ -347,28 +347,16 @@ pub fn command(
     input: &serde_json::Value,
     key: &str,
 ) -> serde_json::Value {
-    let wire::response::Kind::Command(outcome) = ask(
-        handle,
-        wire::request::Kind::Command(wire::Command {
-            name: name.to_owned(),
-            input: serde_json::to_vec(input).expect("json"),
-            invoke_key: key.to_owned(),
-            ..wire::Command::default()
-        }),
-    ) else {
-        panic!("a command answers");
-    };
+    let outcome = handle
+        .command(name, input, key)
+        .unwrap_or_else(|error| panic!("{name} refused: {error}"));
     assert_eq!(
         outcome.status,
-        wire::CommandStatus::Executed as i32,
-        "{name}: {}",
+        centraid_vault::CommandStatus::Executed,
+        "{name}: {:?}",
         outcome.reason
     );
-    if outcome.output.is_empty() {
-        serde_json::Value::Null
-    } else {
-        serde_json::from_slice(&outcome.output).expect("json")
-    }
+    outcome.output
 }
 
 /// `photo.add` over staged bytes; answers the photograph's id. `kind` is what

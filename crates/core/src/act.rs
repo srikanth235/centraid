@@ -22,8 +22,8 @@
 //!    durable as the write and no second copy of it lives here;
 //! 3. a frozen vault refuses `vault_moved`;
 //! 4. the input is decoded by the manifest's schema and validated against it;
-//! 5. [`crate::api::command`] runs the command, the one write path a screen's
-//!    `Command` request and the chat's confirmed card take too: a Locker secret
+//! 5. [`crate::api::command`] runs the command, the one write path the chat's
+//!    confirmed card and [`crate::Handle::command`] take too: a Locker secret
 //!    is sealed under the open session there, the change feed is told after the
 //!    commit there.
 //!
@@ -135,13 +135,12 @@ pub(crate) fn act(ctx: &Ctx<'_>, request: &wire::ActRequest) -> Result<wire::Act
     }
 
     let input = mint_declared_ids(ctx, &entry.minted, input);
-    let command_request = wire::Command {
+    let command_request = crate::api::Invocation {
         name: command.to_owned(),
         input: serde_json::to_vec(&input).map_err(|error| CoreError::Invariant {
             context: format!("a decoded input is not JSON: {error}"),
         })?,
         invoke_key: request.invoke_key.clone(),
-        ..wire::Command::default()
     };
     let mark = centraid_vault::journal::KeyMark {
         key: &request.invoke_key,
@@ -281,13 +280,12 @@ pub(crate) fn command_keyed(
     if let Some(epoch) = moved_epoch(ctx.plane)? {
         return Ok(refused(vault_moved(epoch), MOVED_SENTENCE.to_owned()));
     }
-    let request = wire::Command {
+    let request = crate::api::Invocation {
         name: command.to_owned(),
         input: serde_json::to_vec(input).map_err(|error| CoreError::Invariant {
             context: format!("an input is not JSON: {error}"),
         })?,
         invoke_key: key.to_owned(),
-        ..wire::Command::default()
     };
     let mark = centraid_vault::journal::KeyMark { key, asked: &asked };
     let outcome = match crate::api::command(

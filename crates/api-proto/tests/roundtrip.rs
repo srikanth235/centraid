@@ -107,11 +107,11 @@ fn every_envelope_body_round_trips() {
             })),
         }),
         envelope::Body::Response(core::Response {
-            kind: Some(core::response::Kind::Command(core::CommandOutcome {
-                status: core::CommandStatus::Executed as i32,
+            kind: Some(core::response::Kind::Act(Box::new(core::ActResponse {
+                status: core::ActStatus::Executed as i32,
                 invocation_id: "inv_1".to_owned(),
-                ..core::CommandOutcome::default()
-            })),
+                ..core::ActResponse::default()
+            }))),
         }),
         envelope::Body::Event(core::Event {
             kind: Some(core::event::Kind::Change(core::ChangeEvent {
@@ -239,23 +239,23 @@ fn an_app_query_and_its_typed_answer_round_trip_with_absence_intact() {
     });
 }
 
-/// A command's input and the screen's state are OPAQUE BYTES, and that is
+/// An act's output and the screen's state are OPAQUE BYTES, and that is
 /// load-bearing: it is mechanism 2 of D-1020-C13, the reason a newer peer's
 /// payload arrives whole even though prost drops unknown FIELDS.
 ///
-/// It used to drive `Intent.input` as well; `intent.proto` is deleted (#1029
-/// §1) and `Command.input` carries the same claim for the verb that survived.
+/// It used to drive `Intent.input` and then the raw command's input; both
+/// requests are deleted (#1029 §1, #1135) and `ActResponse.output` carries the
+/// same claim for the write that survived.
 #[test]
 fn opaque_payloads_survive_byte_for_byte() {
     let payload: Vec<u8> = (0u8..=255).collect();
-    let command = core::Command {
-        name: "notes.create_note".to_owned(),
-        input: payload.clone(),
-        invoke_key: "k1".to_owned(),
-        ..core::Command::default()
+    let acted = core::ActResponse {
+        status: core::ActStatus::Executed as i32,
+        output: payload.clone(),
+        ..core::ActResponse::default()
     };
-    let decoded = core::Command::decode(command.encode_to_vec().as_slice()).expect("decode");
-    assert_eq!(decoded.input, payload);
+    let decoded = core::ActResponse::decode(acted.encode_to_vec().as_slice()).expect("decode");
+    assert_eq!(decoded.output, payload);
 
     let screen = ScreenState {
         screen_id: "photos.grid".to_owned(),

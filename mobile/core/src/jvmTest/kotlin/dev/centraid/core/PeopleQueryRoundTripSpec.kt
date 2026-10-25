@@ -1,9 +1,6 @@
 package dev.centraid.core
 
 import centraid.core.v1.AppQueryRequest
-import centraid.core.v1.Command
-import centraid.core.v1.CommandStatus
-import centraid.core.v1.Envelope
 import centraid.core.v1.PeoplePerson
 import centraid.core.v1.PeoplePersonRequest
 import centraid.core.v1.PeopleRoster
@@ -16,6 +13,7 @@ import centraid.core.v1.PeopleTouch
 import centraid.core.v1.PeopleTouchRequest
 import centraid.core.v1.PeopleTrash
 import centraid.core.v1.PeopleTrashRequest
+import dev.centraid.core.AbiRoundTripSpec.Companion.act
 import dev.centraid.core.AbiRoundTripSpec.Companion.openRealCore
 import dev.centraid.core.AbiRoundTripSpec.Companion.shouldBeAnsweredWith
 import dev.centraid.core.AgendaQueryRoundTripSpec.Companion.appQuery
@@ -27,7 +25,6 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
-import okio.ByteString.Companion.encodeUtf8
 
 /**
  * PEOPLE'S QUERIES, KOTLIN TO RUST AND BACK (#1046).
@@ -38,8 +35,8 @@ import okio.ByteString.Companion.encodeUtf8
  * distance from `today` computed in Rust, because `commonMain` has no calendar.
  *
  * Over JNA, against the real `libcentraid_core_ffi` and the vault
- * `spike-fixture` founded — nothing faked. The writes are `Command` requests,
- * the command plane a screen uses. The fixture vault is shared by every spec in
+ * `spike-fixture` founded — nothing faked. The writes are `act` requests,
+ * the one way a screen writes. The fixture vault is shared by every spec in
  * the run, so each assertion is about the people made here and no others.
  */
 class PeopleQueryRoundTripSpec : StringSpec({
@@ -48,17 +45,17 @@ class PeopleQueryRoundTripSpec : StringSpec({
         val core = openRealCore()
         try {
             val ada = core.write(
-                "person.add",
+                "add-person",
                 """{"title":"Ada Roundtrip","cadence_days":30,"role":"Mentor"}""",
                 key = "people-round-trip-ada",
             )
             val gone = core.write(
-                "person.add",
+                "add-person",
                 """{"title":"Gone Roundtrip","cadence_days":0}""",
                 key = "people-round-trip-gone",
             )
             core.write(
-                "flag.set",
+                "star-person",
                 """{"id":"$ada","flag":"starred"}""",
                 key = "people-round-trip-star",
             )
@@ -66,18 +63,18 @@ class PeopleQueryRoundTripSpec : StringSpec({
             val tomorrow = LocalDate.now(ZoneId.of(TZ)).plusDays(1)
             val monthDay = "%02d-%02d".format(tomorrow.monthValue, tomorrow.dayOfMonth)
             core.write(
-                "person.add_date",
+                "add-important-date",
                 """{"id":"$ada","label":"Birthday","month_day":"$monthDay",""" +
                     """"reminder_on":true}""",
                 key = "people-round-trip-birthday",
             )
             core.write(
-                "person.log_interaction",
+                "log-interaction",
                 """{"id":"$ada","kind":"call","text":"Caught up"}""",
                 key = "people-round-trip-touch",
             )
             core.write(
-                "entity.trash",
+                "trash-person",
                 """{"id":"$gone"}""",
                 key = "people-round-trip-trash",
             )
@@ -175,30 +172,14 @@ class PeopleQueryRoundTripSpec : StringSpec({
             AppQueryRequest(people_trash = PeopleTrashRequest()),
         ) { it.people_trash }
 
-        /** One command through the command plane; answers its `id`, if any. */
-        suspend fun CentraidCore.write(name: String, input: String, key: String): String {
-            var partyId = ""
-            call(
-                Envelope(
-                    request_id = 1,
-                    request = centraid.core.v1.Request(
-                        command = Command(
-                            name = name,
-                            input = input.encodeUtf8(),
-                            invoke_key = key,
-                        ),
-                    ),
-                ),
-            ).shouldBeAnsweredWith { envelope ->
-                val outcome = envelope.response?.command ?: error("a CommandOutcome")
-                outcome.status shouldBe CommandStatus.COMMAND_STATUS_EXECUTED
-                partyId = Regex("\"id\":\"([^\"]+)\"")
-                    .find(outcome.output.utf8())
-                    ?.groupValues
-                    ?.get(1)
-                    .orEmpty()
-            }
-            return partyId
+        /** One write, as a screen makes it (`act` on people); answers its `id`, if any of its output. */
+        suspend fun CentraidCore.write(action: String, input: String, key: String): String {
+            val output = act("people", action, input, key)
+            return Regex("\"id\":\"([^\"]+)\"")
+                .find(output)
+                ?.groupValues
+                ?.get(1)
+                .orEmpty()
         }
     }
 }

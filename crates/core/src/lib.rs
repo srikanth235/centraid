@@ -85,6 +85,8 @@ pub mod vaults;
 
 /// Lane C's generated types, re-exported so a consumer needs one dependency.
 pub use centraid_api_proto::core_v1 as api_proto;
+/// What [`Handle::command`] answers: the vault's own outcome of one run.
+pub use centraid_vault::commands::{CommandOutcome, CommandStatus};
 pub use config::{CoreConfig, ShelfConfig};
 pub use error::{CoreError, Result, sentence_for_code};
 pub use events::{ChangeFeed, EVENT_QUEUE_CAP, EventQueue};

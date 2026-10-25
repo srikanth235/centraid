@@ -448,11 +448,11 @@ fn no_sealed_value_reaches_the_model_an_event_the_thread_the_journal_or_the_inde
     assert_clean("the index", &index, &[TYPED_CREATE, TYPED_EDIT]);
 }
 
-/// THE CHAT'S CONFIRMED CARD AND THE SHELL'S OWN COMMAND ARE ONE WRITE PATH (`api::command`): a
-/// secret typed into a `locker.add_item` is sealed the same way by either, and a shut Locker
-/// refuses both with the same sentence.
+/// THE CHAT'S CONFIRMED CARD AND `Handle::command` ARE ONE WRITE PATH (`api::command`, which a
+/// screen's `act` takes too): a secret typed into a `locker.add_item` is sealed the same way by
+/// either, and a shut Locker refuses both with the same sentence.
 #[test]
-fn a_sealing_command_through_the_door_lands_sealed_exactly_as_a_shell_command_does() {
+fn a_sealing_command_through_the_door_lands_sealed_exactly_as_the_handles_own_does() {
     use centraid_assist::native::{Call, Door as _};
     let seed = centraid_identity::RecoveryPhrase::parse(WORDS)
         .expect("the words parse")
@@ -464,30 +464,25 @@ fn a_sealing_command_through_the_door_lands_sealed_exactly_as_a_shell_command_do
             "item_id": id, "type": "login", "title": id, "password": TYPED_CREATE,
         })
     };
-    let shell = |id: &str| {
-        sample.handle.call(&wire::Request {
-            kind: Some(wire::request::Kind::Command(wire::Command {
-                name: "locker.add_item".to_owned(),
-                input: serde_json::to_vec(&input(id)).unwrap(),
-                invoke_key: format!("shell:{id}"),
-                ..wire::Command::default()
-            })),
-        })
+    let direct = |id: &str| {
+        sample
+            .handle
+            .command("locker.add_item", &input(id), &format!("shell:{id}"))
     };
 
     // shut: both refuse, in the same words, and nothing is written
-    let by_shell = shell("lk-shell").expect_err("a shut Locker refuses the shell");
+    let by_direct = direct("lk-shell").expect_err("a shut Locker refuses the handle");
     let by_door = door
         .act_keyed("pend:0", &Call::bare("locker.add_item"), input("lk-door"))
         .expect_err("a shut Locker refuses the door");
     assert!(
-        by_shell.to_string().contains("Locker is locked") && by_door.contains("Locker is locked"),
-        "{by_shell} / {by_door}"
+        by_direct.to_string().contains("Locker is locked") && by_door.contains("Locker is locked"),
+        "{by_direct} / {by_door}"
     );
 
     // open: both land sealed under the same key, and the member's Locker opens both to the text
     unlock(&sample);
-    shell("lk-shell").expect("the shell's command runs");
+    direct("lk-shell").expect("the handle's command runs");
     let ran = door
         .act_keyed("pend:0", &Call::bare("locker.add_item"), input("lk-door"))
         .expect("the door answers");

@@ -20,8 +20,8 @@
 // ## Why four REQUEST KINDS and not four registered commands
 //
 // Same answer `vault.proto` gives for founding, one layer further out. A
-// `Command` runs through `centraid_vault::commands::Registry`, whose gate order
-// evaluates a `Principal` against `vault.self_id` and ends in a
+// registered command runs through `centraid_vault::commands::Registry`, whose
+// gate order evaluates its principal against `vault.self_id` and ends in a
 // receipt row. **A restore has no vault to be a principal in** — that is the
 // whole of what it is for — and a drain is not a write to the vault at all: it
 // moves sealed ciphertext of what the vault holds out to a gateway. Neither
@@ -54,9 +54,43 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
-// `TransferRule`, the member's one setting for originals, is `SyncWindow`'s
-// selector and the drain's: one enum, so there is one rule.
-import "centraid/core/v1/command.proto";
+// ---------------------------------------------------------- transfer rule --
+
+// WHEN THIS DEVICE MAY FETCH OR SEND ORIGINALS — the member's setting, as one
+// value (#1025 S4, D-1025-S7-60). One per DEVICE and not per vault, because
+// what it governs is a data plan and a phone has one data plan however many
+// vaults it holds. The drain's input and the Photos backup sheet's choice: one
+// enum, so there is one rule.
+//
+// A SELECTOR AND NEVER A BYTE COUNT: the planner admits an item larger than
+// the whole budget on purpose, so a ceiling cannot express "not this tier".
+// The core does every bit of the arithmetic — a Kotlin or Swift copy of the
+// table would be a second rule deciding a member's bill.
+//
+// Thumbnails and previews are NOT in this enum, which is the shape of the
+// ruling rather than an omission: a thumbnail crosses on any link and ahead of
+// everything because it is kilobytes and it is the grid. Only the originals
+// are worth a member's decision.
+//
+// Unspecified is WIFI_ONLY: the default, and the one whose failure mode is a
+// photograph that arrives late rather than a bill.
+enum TransferRule {
+  TRANSFER_RULE_UNSPECIFIED = 0;
+  // Originals wait for a link the member is not paying for.
+  TRANSFER_RULE_WIFI_ONLY = 1;
+  // A photograph's original may cross a metered link; a VIDEO's may not. That
+  // last part is a fixed rule and not a fourth setting: the two differ by
+  // three orders of magnitude, and a member who said "photos on cellular" did
+  // not say "a 900 MB video on cellular".
+  TRANSFER_RULE_WIFI_AND_CELLULAR_PHOTOS = 2;
+  // No original crosses on any link unless the member taps it.
+  //
+  // Not "Wi-Fi off": a member on unlimited fibre may still want a phone that
+  // holds thumbnails and fetches a full-size photograph only when asked,
+  // because the constraint being spent is the device's disk rather than its
+  // data plan.
+  TRANSFER_RULE_MANUAL = 3;
+}
 
 // ------------------------------------------------------------------ drain --
 
@@ -89,7 +123,7 @@ message DrainRequest {
   // THE MEMBER'S TRANSFER RULE, as the shell keeps it (#1080). It decides
   // which ORIGINALS may cross this link, and never whether thumbnails and
   // previews may: they always may, because they are the grid. Unspecified is
-  // WIFI_ONLY (`command.proto`). Videos never cross a metered link, whatever
+  // WIFI_ONLY (`TransferRule` above). Videos never cross a metered link, whatever
   // the rule.
   TransferRule rule = 2;
   // THE LINK IS METERED: cellular, a hotspot, tethering. A shell that cannot

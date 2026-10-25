@@ -254,14 +254,10 @@ struct Writer<'a> {
 impl Writer<'_> {
     /// Seal what `input` carries (the core's one sealing door) and run it.
     fn write(&self, name: &str, input: serde_json::Value) -> Result<serde_json::Value> {
-        let command = wire::Command {
-            name: name.to_owned(),
-            input: serde_json::to_vec(&input).map_err(|error| CoreError::Invariant {
-                context: format!("an import's command is not JSON: {error}"),
-            })?,
-            ..wire::Command::default()
-        };
-        let input = match seal_command(self.vault, self.cell, &command)? {
+        let bytes = serde_json::to_vec(&input).map_err(|error| CoreError::Invariant {
+            context: format!("an import's command is not JSON: {error}"),
+        })?;
+        let input = match seal_command(self.vault, self.cell, name, &bytes)? {
             Some(sealed) => {
                 serde_json::from_slice(&sealed).map_err(|error| CoreError::Invariant {
                     context: format!("a sealed input is not JSON: {error}"),

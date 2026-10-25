@@ -1,8 +1,6 @@
 package dev.centraid.core
 
 import centraid.core.v1.AppQueryRequest
-import centraid.core.v1.Command
-import centraid.core.v1.CommandStatus
 import centraid.core.v1.DocsActivityRequest
 import centraid.core.v1.DocsDocument
 import centraid.core.v1.DocsDocumentRequest
@@ -14,6 +12,7 @@ import centraid.core.v1.DocsSort
 import centraid.core.v1.DocsSurface
 import centraid.core.v1.Envelope
 import centraid.core.v1.Request
+import dev.centraid.core.AbiRoundTripSpec.Companion.act
 import dev.centraid.core.AbiRoundTripSpec.Companion.openRealCore
 import dev.centraid.core.AbiRoundTripSpec.Companion.shouldBeAnsweredWith
 import io.kotest.core.spec.style.StringSpec
@@ -23,7 +22,6 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
-import okio.ByteString.Companion.encodeUtf8
 
 /**
  * DOCS' QUERIES, KOTLIN TO RUST AND BACK (#1046).
@@ -32,7 +30,7 @@ import okio.ByteString.Companion.encodeUtf8
  * its activity are `crates/apps/docs`' folds run in the core; the phone sends
  * a typed `docs_*` arm and Wire decodes a typed answer. Over JNA, against the
  * real `libcentraid_core_ffi` and the vault `spike-fixture` founded — nothing
- * faked. Writes go through `Command` requests, the plane a screen uses.
+ * faked. Writes are `act` requests, the one way a screen writes.
  */
 class DocsQueryRoundTripSpec : StringSpec({
 
@@ -40,37 +38,37 @@ class DocsQueryRoundTripSpec : StringSpec({
         val core = openRealCore()
         try {
             val folder = core.write(
-                "container.create",
+                "create-folder",
                 """{"kind":"folder","title":"Round trip leases"}""",
                 key = "docs-round-trip-folder",
                 field = "id",
             )
             val lease = core.write(
-                "document.create_text",
+                "create-text",
                 """{"title":"Round trip lease","body_text":"rent","folder_id":"$folder"}""",
                 key = "docs-round-trip-lease",
                 field = "id",
             )
             core.write(
-                "document.edit",
+                "edit",
                 """{"id":"$lease","body_text":"rent is due"}""",
                 key = "docs-round-trip-edit",
                 field = "id",
             )
             val blank = core.write(
-                "document.create_text",
+                "create-text",
                 """{"title":"Round trip blank","body_text":""}""",
                 key = "docs-round-trip-blank",
                 field = "id",
             )
             val binned = core.write(
-                "document.create_text",
+                "create-text",
                 """{"title":"Round trip binned","body_text":"old"}""",
                 key = "docs-round-trip-binned",
                 field = "id",
             )
             core.write(
-                "entity.trash",
+                "trash",
                 """{"id":"$binned"}""",
                 key = "docs-round-trip-trash",
                 field = "purge_at",
@@ -177,26 +175,14 @@ class DocsQueryRoundTripSpec : StringSpec({
             return answer!!
         }
 
-        /** One command through the command plane; answers one string field of its output. */
-        suspend fun CentraidCore.write(name: String, input: String, key: String, field: String): String {
-            var value = ""
-            call(
-                Envelope(
-                    request_id = 1,
-                    request = Request(
-                        command = Command(name = name, input = input.encodeUtf8(), invoke_key = key),
-                    ),
-                ),
-            ).shouldBeAnsweredWith { envelope ->
-                val outcome = envelope.response?.command ?: error("a CommandOutcome")
-                outcome.status shouldBe CommandStatus.COMMAND_STATUS_EXECUTED
-                value = Regex("\"$field\":\"([^\"]+)\"")
-                    .find(outcome.output.utf8())
-                    ?.groupValues
-                    ?.get(1)
-                    ?: error("no $field in ${outcome.output.utf8()}")
-            }
-            return value
+        /** One write, as a screen makes it (`act` on docs); answers one string field of its output. */
+        suspend fun CentraidCore.write(action: String, input: String, key: String, field: String): String {
+            val output = act("docs", action, input, key)
+            return Regex("\"$field\":\"([^\"]+)\"")
+                .find(output)
+                ?.groupValues
+                ?.get(1)
+                ?: error("no $field in $output")
         }
     }
 }

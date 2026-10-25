@@ -82,27 +82,21 @@ impl Scratch {
 
     fn run(&self, name: &str, input: serde_json::Value) -> serde_json::Value {
         self.writes.set(self.writes.get() + 1);
-        let response = self
+        let outcome = self
             .handle
-            .call(&wire::Request {
-                kind: Some(wire::request::Kind::Command(wire::Command {
-                    name: name.to_owned(),
-                    input: serde_json::to_vec(&input).expect("json"),
-                    invoke_key: format!("health-query-test-{}", self.writes.get()),
-                    ..wire::Command::default()
-                })),
-            })
+            .command(
+                name,
+                &input,
+                &format!("health-query-test-{}", self.writes.get()),
+            )
             .unwrap_or_else(|error| panic!("{name} errored: {error}"));
-        let Some(wire::response::Kind::Command(outcome)) = response.kind else {
-            panic!("a command answered with something else");
-        };
         assert_eq!(
             outcome.status,
-            wire::CommandStatus::Executed as i32,
-            "{name}: {}",
+            centraid_vault::CommandStatus::Executed,
+            "{name}: {:?}",
             outcome.reason
         );
-        serde_json::from_slice(&outcome.output).expect("the output is JSON")
+        outcome.output
     }
 
     /// A fortnight to today: steps rising by 100 a day from 5,000, seven hours of sleep every

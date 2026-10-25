@@ -22,7 +22,6 @@ import "centraid/core/v1/app_query.proto";
 import "centraid/core/v1/action.proto";
 import "centraid/core/v1/assist.proto";
 import "centraid/core/v1/change.proto";
-import "centraid/core/v1/command.proto";
 import "centraid/core/v1/content.proto";
 import "centraid/core/v1/error.proto";
 import "centraid/core/v1/handshake.proto";
@@ -65,10 +64,17 @@ message Request {
   //                         life. `drain` (15) is the door it stood in for,
   //                         and it is a different message with a deadline and
   //                         an acked txid, so the number does not come back.
-  reserved 10;
+  //
+  // AND THE RAW COMMAND, RETIRED BY THE ONE WRITE (#1135):
+  //   5  `command`        — a registered command by name, with a principal
+  //                         the core never read. Every screen writes through
+  //                         `act` (36), which names an app's action and is
+  //                         answered once per key; a raw name over the ABI
+  //                         was a second write door beside it.
+  reserved 5, 10;
+  reserved "command";
   oneof kind {
     Hello hello = 1;
-    Command command = 5;
     PageRequest page = 6;
     ContentUrlRequest content_urls = 11;
     // A SHELL STREAMS BYTES IN AND THE CORE NAMES THEM (#1025 S4). See
@@ -140,13 +146,15 @@ message Request {
 
 message Response {
   // 4 `log`, 5 `rebootstrap_required`, 6 `snapshot_head`, 7 `outcome`,
-  // 10 `pair` and 11 `devices_list` were the answers to the requests above.
-  // The numbers are retired, not reused.
+  // 10 `pair` and 11 `devices_list` were the answers to the requests above,
+  // and 8 `command` was the raw command's outcome (#1135): `act` (36) answers
+  // every write. The numbers are retired, not reused.
+  reserved 8;
+  reserved "command";
   oneof kind {
     Hello hello = 1;
     UpgradeRequired upgrade_required = 2;
     Unsupported unsupported = 3;
-    CommandOutcome command = 8;
     Page page = 9;
     ContentUrls content_urls = 12;
     StageResponse stage = 13;

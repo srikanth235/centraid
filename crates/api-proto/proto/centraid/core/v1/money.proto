@@ -632,8 +632,8 @@ message MoneyStatementPlan {
   // a successful import.
   optional MoneyImportProfile profile_to_save = 20;
   // Canonical JSON: the `money.import_transactions` input for the rows whose
-  // verdict is NEW (with the statement's checkpoint, if any). Send it as
-  // `Command.input` unchanged. Empty when nothing is new.
+  // verdict is NEW (with the statement's checkpoint, if any). The
+  // `import-transactions` act's input, unchanged. Empty when nothing is new.
   bytes publish_input = 21;
   // The same, plus the rows the member chose to keep that were PROPOSED as
   // duplicates. Empty when there are none.

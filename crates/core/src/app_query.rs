@@ -1024,24 +1024,21 @@ mod tests {
 
         fn run(&self, name: &str, input: serde_json::Value) -> serde_json::Value {
             self.writes.set(self.writes.get() + 1);
-            let wire::response::Kind::Command(outcome) = self
-                .call(wire::request::Kind::Command(wire::Command {
-                    name: name.to_owned(),
-                    input: serde_json::to_vec(&input).expect("json"),
-                    invoke_key: format!("app-query-test-{}", self.writes.get()),
-                    ..wire::Command::default()
-                }))
-                .unwrap_or_else(|error| panic!("{name} refused: {error}"))
-            else {
-                panic!("a command answered with something else");
-            };
+            let outcome = self
+                .handle
+                .command(
+                    name,
+                    &input,
+                    &format!("app-query-test-{}", self.writes.get()),
+                )
+                .unwrap_or_else(|error| panic!("{name} refused: {error}"));
             assert_eq!(
                 outcome.status,
-                wire::CommandStatus::Executed as i32,
-                "{name}: {}",
+                centraid_vault::CommandStatus::Executed,
+                "{name}: {:?}",
                 outcome.reason
             );
-            serde_json::from_slice(&outcome.output).expect("the output is JSON")
+            outcome.output
         }
 
         fn propose(&self, summary: &str, start: &str, end: &str, rrule: Option<&str>) -> String {

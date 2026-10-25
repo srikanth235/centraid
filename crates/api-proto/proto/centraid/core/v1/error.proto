@@ -1,7 +1,7 @@
 // Typed errors (#1020, D-1020-C4).
 //
 // **No free-text reason reaches a member from this message.** A member-facing
-// sentence is either the author's (a precondition's, `CommandOutcome.reason`) or
+// sentence is either the author's (a precondition's, `ActResponse.reason`) or
 // the shell's, rendered from `code`. `detail` here is for logs and support
 // bundles only.
 //
@@ -179,7 +179,7 @@ message Error {
   // It is not a second `detail` and it is not localisation: it is one English
   // sentence a shell may show verbatim or replace by branching on `code`. The
   // raw predicate stays in `detail` for the audit trail and never reaches a
-  // member — the rule `command.proto` states for `CommandOutcome.reason`, which
+  // member — the rule `action.proto` states for `ActResponse.reason`, which
   // this message had no way to keep.
   string sentence = 4;
 

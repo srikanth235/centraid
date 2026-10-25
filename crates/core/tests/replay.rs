@@ -23,8 +23,7 @@
 //! of what a ledger would do. If a later change makes the second send answer the
 //! first outcome, this test flips — on purpose, in the same change as the ruling
 //! that restores the ledger, the docs that say there is none (`docs/decisions.md`
-//! R-1088-12, `crates/vault/src/commands/mod.rs`, `command.proto`, the shell's
-//! `ScreenRuntime`) and the callers that were relying on their own idempotence.
+//! R-1088-12, `crates/vault/src/commands/mod.rs`, `Handle::command`) and the callers that were relying on their own idempotence.
 //! It is not a test to delete to go green.
 
 mod common;
@@ -41,19 +40,10 @@ fn send(
     sample: &Sample,
     key: &str,
     title: &str,
-) -> Result<wire::CommandOutcome, centraid_core::CoreError> {
-    let answer = sample.handle.call(&wire::Request {
-        kind: Some(wire::request::Kind::Command(wire::Command {
-            name: COMMAND.to_owned(),
-            input: serde_json::to_vec(&serde_json::json!({ "title": title })).expect("json"),
-            invoke_key: key.to_owned(),
-            ..wire::Command::default()
-        })),
-    })?;
-    match answer.kind {
-        Some(wire::response::Kind::Command(outcome)) => Ok(outcome),
-        other => panic!("a command answered {other:?}"),
-    }
+) -> Result<centraid_core::CommandOutcome, centraid_core::CoreError> {
+    sample
+        .handle
+        .command(COMMAND, &serde_json::json!({ "title": title }), key)
 }
 
 /// Every task with this title, through the page door a screen reads by: `(id)`
@@ -101,7 +91,7 @@ fn tasks_titled(sample: &Sample, title: &str) -> Vec<String> {
 
 /// THE PIN. The command is `Once` — "must not be run twice for one intent" — and
 /// the same `invoke_key` is sent twice down the core's real command path
-/// (`Handle::call` → `api::invoke` → `Vault::execute`). Both sends EXECUTE: two
+/// (`Handle::command` → `api::invoke` → `Vault::execute`). Both sends EXECUTE: two
 /// invocations, two journal rows, two rows. Nothing answers the second from a
 /// ledger, because there is none.
 #[test]
@@ -130,14 +120,14 @@ fn the_same_key_sent_twice_runs_the_command_twice() {
 
     assert_eq!(
         first.status,
-        wire::CommandStatus::Executed as i32,
-        "{}",
+        centraid_vault::CommandStatus::Executed,
+        "{:?}",
         first.reason
     );
     assert_eq!(
         second.status,
-        wire::CommandStatus::Executed as i32,
-        "the second send EXECUTES; it is not answered from a ledger: {}",
+        centraid_vault::CommandStatus::Executed,
+        "the second send EXECUTES; it is not answered from a ledger: {:?}",
         second.reason
     );
     assert_ne!(
@@ -145,8 +135,9 @@ fn the_same_key_sent_twice_runs_the_command_twice() {
         "two sends are two invocations, so the handler ran twice"
     );
     // The journal row is the evidence and `invocation_id` is its position: each send
-    // was journalled on its own, and nothing else is a receipt (#1135).
-    assert!(first.receipt_id.is_empty() && second.receipt_id.is_empty());
+    // was journalled on its own, and nothing else is a receipt (#1135): the outcome
+    // carries no receipt id to fill.
+    assert!(!first.invocation_id.is_empty() && !second.invocation_id.is_empty());
     assert_ne!(
         first.output, second.output,
         "and each minted its own task id"

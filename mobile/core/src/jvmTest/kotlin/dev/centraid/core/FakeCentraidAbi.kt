@@ -15,14 +15,11 @@ import kotlin.concurrent.atomics.AtomicLong
  * A fake ABI, for the cases the real one cannot be asked to produce.
  *
  * WHY A FAKE AT ALL, when there is a real `libcentraid_core_ffi.so` on this
- * machine: `crates/core-ffi` has **no fault-injection point**. Its own clause-9
- * test says so — "a real panic inside a `call` would need a fault injection
- * point the ABI does not have" — and drives `Handle::poison` directly, which is
- * a Rust-side call no shell can make. So the binding's handling of `PANICKED`,
- * of an undefined status code, and of a full event queue is proved here, and
- * `contracts/handoff/E/findings.md` carries the patch that would let the real
- * library produce them (a `debug-fault` feature behind an `Admin` request, with
- * no sixth symbol).
+ * machine: the library this suite loads is a default build, and its one
+ * fault-injection point — the `debug-fault` feature, an `act` on
+ * `debug`/`panic` with no sixth symbol (`crates/core-ffi/CONTRACT.md` clause 9)
+ * — is compiled into no default build. So the binding's handling of `PANICKED`,
+ * of an undefined status code, and of a full event queue is proved here.
  *
  * Everything the real library CAN be asked to do is tested against the real
  * library in [AbiRoundTripSpec]. A fake that shadowed a reachable case would be

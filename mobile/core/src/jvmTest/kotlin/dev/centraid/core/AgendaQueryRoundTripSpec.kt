@@ -7,10 +7,9 @@ import centraid.core.v1.AgendaUpcoming
 import centraid.core.v1.AgendaUpcomingRequest
 import centraid.core.v1.AppQueryRequest
 import centraid.core.v1.AppQueryResponse
-import centraid.core.v1.Command
-import centraid.core.v1.CommandStatus
 import centraid.core.v1.Envelope
 import centraid.core.v1.Request
+import dev.centraid.core.AbiRoundTripSpec.Companion.act
 import dev.centraid.core.AbiRoundTripSpec.Companion.openRealCore
 import dev.centraid.core.AbiRoundTripSpec.Companion.shouldBeAnsweredWith
 import io.kotest.assertions.withClue
@@ -29,7 +28,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
-import okio.ByteString.Companion.encodeUtf8
 
 /**
  * AGENDA'S QUERIES, KOTLIN TO RUST AND BACK (#1046 wave 1's exit).
@@ -42,8 +40,8 @@ import okio.ByteString.Companion.encodeUtf8
  * message, which Wire decodes like everything else the core says.
  *
  * Over JNA, against the real `libcentraid_core_ffi` and the vault
- * `spike-fixture` founded — nothing faked. The writes go through `Command`
- * requests, the command plane a screen uses, so what is read back is what a
+ * `spike-fixture` founded — nothing faked. The writes are `act` requests,
+ * the one way a screen writes, so what is read back is what a
  * member's own writes produce.
  */
 class AgendaQueryRoundTripSpec : StringSpec({
@@ -56,7 +54,7 @@ class AgendaQueryRoundTripSpec : StringSpec({
             val calendarId = core.upcoming().calendars.first().calendar_id
 
             core.write(
-                "event.propose",
+                "propose",
                 """{"title":"Dentist","starts":"2099-06-03T09:00:00.000Z",""" +
                     """"ends":"2099-06-03T10:00:00.000Z","zone":"Etc/UTC","calendar_id":"$calendarId"}""",
                 key = "agenda-round-trip-one-off",
@@ -64,7 +62,7 @@ class AgendaQueryRoundTripSpec : StringSpec({
             // A FLOATING wall clock (07:00 wherever the member is), anchored AT the window's start, so every occurrence answered is
             // inside it and the count below is the range's and nothing else's.
             val series = core.write(
-                "event.propose",
+                "propose",
                 """{"title":"Morning run","starts":"2099-06-01T07:00:00",""" +
                     """"ends":"2099-06-01T08:00:00","timing":"floating","calendar_id":"$calendarId",""" +
                     """"rule":"FREQ=WEEKLY","reminders":[10]}""",
@@ -74,7 +72,7 @@ class AgendaQueryRoundTripSpec : StringSpec({
             // ZONED, in London, at 03:30Z on the 4th: 23:30 on the 3rd in New
             // York, the zone every query here states.
             val lateCall = core.write(
-                "event.propose",
+                "propose",
                 """{"title":"Late call","starts":"2099-06-04T03:30:00.000Z",""" +
                     """"ends":"2099-06-04T05:00:00.000Z","zone":"Europe/London",""" +
                     """"calendar_id":"$calendarId"}""",
@@ -191,24 +189,24 @@ class AgendaQueryRoundTripSpec : StringSpec({
         // HOME'S AGENDA TILE READ `core_event` UNFILTERED until #1046 moved it
         // onto this query, so a cancelled dentist and a deleted lunch both
         // headed the launcher. The exclusion is the core's (the window and
-        // anchor statements); this proves it over the real command plane.
+        // anchor statements); this proves it over the real write.
         val core = openRealCore()
         try {
             val calendarId = core.upcoming().calendars.first().calendar_id
             val kept = core.write(
-                "event.propose",
+                "propose",
                 """{"title":"Kept","starts":"2099-06-02T09:00:00.000Z",""" +
                     """"ends":"2099-06-02T10:00:00.000Z","zone":"Etc/UTC","calendar_id":"$calendarId"}""",
                 key = "agenda-round-trip-kept",
             )
             val cancelled = core.write(
-                "event.propose",
+                "propose",
                 """{"title":"Cancelled","starts":"2099-06-02T11:00:00.000Z",""" +
                     """"ends":"2099-06-02T12:00:00.000Z","zone":"Etc/UTC","calendar_id":"$calendarId"}""",
                 key = "agenda-round-trip-cancelled",
             )
             val trashed = core.write(
-                "event.propose",
+                "propose",
                 """{"title":"Trashed","starts":"2099-06-02T13:00:00.000Z",""" +
                     """"ends":"2099-06-02T14:00:00.000Z","zone":"Etc/UTC","calendar_id":"$calendarId",""" +
                     """"rule":"FREQ=WEEKLY"}""",
@@ -221,14 +219,14 @@ class AgendaQueryRoundTripSpec : StringSpec({
             listOf(kept, cancelled, trashed).forEach { before shouldContain it }
 
             core.write(
-                "event.cancel",
+                "cancel-event",
                 """{"id":"$cancelled"}""",
                 key = "agenda-round-trip-cancel",
             )
             // A SERIES, TRASHED: the anchor read is the one that would bring
             // it back one week at a time, and it does not.
             core.write(
-                "entity.trash",
+                "trash-event",
                 """{"id":"$trashed"}""",
                 key = "agenda-round-trip-delete",
             )
@@ -245,7 +243,7 @@ class AgendaQueryRoundTripSpec : StringSpec({
         try {
             val calendarId = core.upcoming().calendars.first().calendar_id
             val dinner = core.write(
-                "event.propose",
+                "propose",
                 """{"title":"Dinner with Maya","starts":"2099-06-05T19:00:00.000Z",""" +
                     """"ends":"2099-06-05T21:00:00.000Z","zone":"Etc/UTC","calendar_id":"$calendarId"}""",
                 key = "agenda-round-trip-search",
@@ -292,30 +290,14 @@ class AgendaQueryRoundTripSpec : StringSpec({
             return answer!!
         }
 
-        /** One command through the command plane; answers its `id`. */
-        suspend fun CentraidCore.write(name: String, input: String, key: String): String {
-            var eventId = ""
-            call(
-                Envelope(
-                    request_id = 1,
-                    request = Request(
-                        command = Command(
-                            name = name,
-                            input = input.encodeUtf8(),
-                            invoke_key = key,
-                        ),
-                    ),
-                ),
-            ).shouldBeAnsweredWith { envelope ->
-                val outcome = envelope.response?.command ?: error("a CommandOutcome")
-                withClue(outcome.reason) { outcome.status shouldBe CommandStatus.COMMAND_STATUS_EXECUTED }
-                eventId = Regex("\"id\":\"([^\"]+)\"")
-                    .find(outcome.output.utf8())
-                    ?.groupValues
-                    ?.get(1)
-                    ?: ""
-            }
-            return eventId
+        /** One write, as a screen makes it (`act` on agenda); answers its `id`, if any of its output. */
+        suspend fun CentraidCore.write(action: String, input: String, key: String): String {
+            val output = act("agenda", action, input, key)
+            return Regex("\"id\":\"([^\"]+)\"")
+                .find(output)
+                ?.groupValues
+                ?.get(1)
+                .orEmpty()
         }
     }
 }

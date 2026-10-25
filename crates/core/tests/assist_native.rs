@@ -668,16 +668,13 @@ fn a_card_whose_row_changed_since_it_was_planned_is_stale_and_writes_nothing() {
     };
     let edit = sample
         .handle
-        .call(&wire::Request {
-            kind: Some(wire::request::Kind::Command(wire::Command {
-                name: "task.edit".to_owned(),
-                input: serde_json::to_vec(&serde_json::json!({"id": id, "priority": 1})).unwrap(),
-                invoke_key: "test:edit-task".to_owned(),
-                ..wire::Command::default()
-            })),
-        })
+        .command(
+            "task.edit",
+            &serde_json::json!({"id": id, "priority": 1}),
+            "test:edit-task",
+        )
         .expect("the edit runs");
-    assert!(matches!(edit.kind, Some(wire::response::Kind::Command(_))));
+    assert_eq!(edit.status, centraid_vault::CommandStatus::Executed);
     let _ = changes_on_the_queue(&sample);
 
     let tapped = sample.handle.assist_confirm(session, &card.id).unwrap();
@@ -1040,14 +1037,11 @@ fn a_card_whose_row_moved_answers_stale_over_the_wire_and_writes_nothing() {
     };
     sample
         .handle
-        .call(&wire::Request {
-            kind: Some(wire::request::Kind::Command(wire::Command {
-                name: "task.edit".to_owned(),
-                input: serde_json::to_vec(&serde_json::json!({"id": id, "priority": 1})).unwrap(),
-                invoke_key: "test:edit-task-wire".to_owned(),
-                ..wire::Command::default()
-            })),
-        })
+        .command(
+            "task.edit",
+            &serde_json::json!({"id": id, "priority": 1}),
+            "test:edit-task-wire",
+        )
         .expect("the edit runs");
     let _ = changes_on_the_queue(&sample);
 
@@ -1234,26 +1228,19 @@ fn night_call_in(tz: &str) -> (String, String) {
     let day = ymd(door.now_ms().div_euclid(86_400_000) + 2);
     let proposed = sample
         .handle
-        .call(&wire::Request {
-            kind: Some(wire::request::Kind::Command(wire::Command {
-                name: "event.propose".to_owned(),
-                input: serde_json::to_vec(&serde_json::json!({
-                    "title": "Night call",
-                    "starts": format!("{day}T22:30:00.000Z"),
-                    "ends": format!("{day}T23:30:00.000Z"),
-                    "zone": "Etc/UTC",
-                    "timing": "zoned",
-                }))
-                .unwrap(),
-                invoke_key: "test:night-call".to_owned(),
-                ..wire::Command::default()
-            })),
-        })
+        .command(
+            "event.propose",
+            &serde_json::json!({
+                "title": "Night call",
+                "starts": format!("{day}T22:30:00.000Z"),
+                "ends": format!("{day}T23:30:00.000Z"),
+                "zone": "Etc/UTC",
+                "timing": "zoned",
+            }),
+            "test:night-call",
+        )
         .expect("the event is proposed");
-    assert!(matches!(
-        proposed.kind,
-        Some(wire::response::Kind::Command(_))
-    ));
+    assert_eq!(proposed.status, centraid_vault::CommandStatus::Executed);
     let session = sample.start("");
     let sent = send_in(&sample, session, 1, "when is the night call?", tz);
     let answer = answered(&sent);
@@ -1339,19 +1326,16 @@ fn a_session_keeps_the_conversation_across_a_screens_write_and_reads_what_the_sc
     let session = sample.start("");
     sample.send(session, 1, "what tasks do I have?");
 
-    // a screen writes (a command through the ABI) while the chat is open
+    // a write lands (`Handle::command`, the path a screen's act takes) while the chat is open
     let ran = sample
         .handle
-        .call(&wire::Request {
-            kind: Some(wire::request::Kind::Command(wire::Command {
-                name: "container.create".to_owned(),
-                input: br#"{"kind":"project","title":"New list"}"#.to_vec(),
-                invoke_key: "test:edit".to_owned(),
-                ..wire::Command::default()
-            })),
-        })
+        .command(
+            "container.create",
+            &serde_json::json!({ "kind": "project", "title": "New list" }),
+            "test:edit",
+        )
         .expect("the command runs");
-    assert!(matches!(ran.kind, Some(wire::response::Kind::Command(_))));
+    assert_eq!(ran.status, centraid_vault::CommandStatus::Executed);
 
     // the next question is answered over the world as it is now, and the conversation is whole
     let sent = sample.send(session, 2, "which lists do I have?");

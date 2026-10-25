@@ -16,24 +16,14 @@ pub fn driver() -> Driver {
 }
 
 fn command(d: &Driver, name: &str, input: serde_json::Value) {
-    let response = d
+    let outcome = d
         .handle
-        .call(&wire::Request {
-            kind: Some(wire::request::Kind::Command(wire::Command {
-                name: name.to_owned(),
-                input: serde_json::to_vec(&input).expect("json"),
-                invoke_key: format!("w2:{name}:{}", kit_act::fresh()),
-                ..wire::Command::default()
-            })),
-        })
+        .command(name, &input, &format!("w2:{name}:{}", kit_act::fresh()))
         .unwrap_or_else(|error| panic!("{name} refused: {error}"));
-    let Some(wire::response::Kind::Command(outcome)) = response.kind else {
-        panic!("a command answered with something else");
-    };
     assert_eq!(
         outcome.status,
-        wire::CommandStatus::Executed as i32,
-        "{name}: {}",
+        centraid_vault::CommandStatus::Executed,
+        "{name}: {:?}",
         outcome.reason
     );
 }

@@ -156,24 +156,18 @@ impl Scratch {
 
     fn try_run(&self, name: &str, input: serde_json::Value) -> Result<serde_json::Value> {
         self.writes.set(self.writes.get() + 1);
-        let response = self.handle.call(&wire::Request {
-            kind: Some(wire::request::Kind::Command(wire::Command {
-                name: name.to_owned(),
-                input: serde_json::to_vec(&input).expect("json"),
-                invoke_key: format!("locker-query-test-{}", self.writes.get()),
-                ..wire::Command::default()
-            })),
-        })?;
-        let Some(wire::response::Kind::Command(outcome)) = response.kind else {
-            panic!("a command answered with something else");
-        };
+        let outcome = self.handle.command(
+            name,
+            &input,
+            &format!("locker-query-test-{}", self.writes.get()),
+        )?;
         assert_eq!(
             outcome.status,
-            wire::CommandStatus::Executed as i32,
-            "{name}: {}",
+            centraid_vault::CommandStatus::Executed,
+            "{name}: {:?}",
             outcome.reason
         );
-        Ok(serde_json::from_slice(&outcome.output).expect("the output is JSON"))
+        Ok(outcome.output)
     }
 
     fn run(&self, name: &str, input: serde_json::Value) -> serde_json::Value {

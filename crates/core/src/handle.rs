@@ -51,13 +51,16 @@ use crate::events::{EventQueue, Next};
 /// precisely because it must not be here.
 const CAPABILITIES: &[&str] = &[];
 
-/// The command name that triggers the `debug-fault` panic.
+/// The app an `act` names to trigger the `debug-fault` panic.
 ///
 /// Public so a shell's own clause-9 test can name it without copying a string,
-/// and **not** a registered command: `Registry` never sees it, so a build
-/// without the feature answers it as an unknown command like any other typo
-/// (#1020 wave 3, lane E finding 4).
-pub const DEBUG_FAULT_COMMAND: &str = "debug.panic";
+/// and **not** an app the catalogue carries: a build without the feature
+/// answers an act on it as an unknown app like any other typo (#1020 wave 3,
+/// lane E finding 4).
+pub const DEBUG_FAULT_APP: &str = "debug";
+
+/// The action, on [`DEBUG_FAULT_APP`], that triggers the `debug-fault` panic.
+pub const DEBUG_FAULT_ACTION: &str = "panic";
 
 /// THE ONLY CALLER THERE IS, AS A RECEIPT NAMES IT (#1029 §1).
 ///
@@ -983,11 +986,58 @@ impl HandleState {
     /// WHO THIS CORE'S COMMANDS RUN AS (#1029 §1).
     ///
     /// Taken from the handle and never from the request. See
-    /// [`crate::api::invoke`] for why there is nothing else it could be, and
+    /// `crate::api::invoke` for why there is nothing else it could be, and
     /// [`OWNER_DEVICE`] for what a receipt ends up naming.
     #[must_use]
     pub fn owner(&self) -> centraid_vault::Principal {
         centraid_vault::Principal::owner(OWNER_DEVICE)
+    }
+
+    /// RUN ONE REGISTERED COMMAND BY NAME, IN RUST (#1135).
+    ///
+    /// Not a door a shell reaches: the FFI carries no command request, and a
+    /// screen's write is [`Self::act`]. This is for the Rust beside the core
+    /// that names a command no app's manifest declares — the vault shelf's
+    /// `vault.rename`, a seeding tool, a test laying the rows it reads — and it
+    /// takes the one write path `act` and the chat's confirmed card take
+    /// (`crate::api::command`): a Locker secret is sealed under the open
+    /// session, the change feed is told after the commit. `invoke_key` is
+    /// required and remembered by nothing: the same key twice runs twice
+    /// (`tests/replay.rs`).
+    ///
+    /// # Errors
+    /// [`CoreError::InvalidRequest`] for an empty key or a refused seal; the
+    /// vault's own failures; [`CoreError::Unpaired`] with no file.
+    pub fn command(
+        &self,
+        name: &str,
+        input: &serde_json::Value,
+        invoke_key: &str,
+    ) -> Result<centraid_vault::commands::CommandOutcome> {
+        self.check_open()?;
+        if let Some(front) = self.foreground_if_shelved() {
+            return front.command(name, input, invoke_key);
+        }
+        let call = crate::api::Invocation {
+            name: name.to_owned(),
+            input: serde_json::to_vec(input).map_err(|error| CoreError::Invariant {
+                context: format!("a command's input is not JSON: {error}"),
+            })?,
+            invoke_key: invoke_key.to_owned(),
+        };
+        let changes = crate::events::ChangeFeed::new(self.events());
+        let owner = self.owner();
+        self.with_vault(|vault| {
+            crate::api::command(
+                vault,
+                &self.locker,
+                &self.registry,
+                &owner,
+                &call,
+                &changes,
+                None,
+            )
+        })
     }
 
     /// THE DOOR A CHAT'S NATIVE SESSION READS AND WRITES THROUGH (#1088).
@@ -1061,13 +1111,14 @@ impl HandleState {
         // exist — so nothing proved that the real library produces what a fake
         // ABI produces.
         //
-        // It rides the EXISTING `Command` request rather than a new symbol:
+        // It rides the EXISTING `Act` request rather than a new symbol:
         // clause 10 says five symbols and means it, and a shell that needed a
         // sixth to test the fifth would have a sixth in production.
         // `abi-five-symbols` still counts five, because nothing is exported.
         #[cfg(feature = "debug-fault")]
-        if let K::Command(command) = kind
-            && command.name == DEBUG_FAULT_COMMAND
+        if let K::Act(act) = kind
+            && act.app == DEBUG_FAULT_APP
+            && act.action == DEBUG_FAULT_ACTION
         {
             panic!("debug-fault: a deliberate panic for a shell's clause-9 test");
         }
@@ -1089,25 +1140,6 @@ impl HandleState {
             K::Found(request) => Ok(response(wire::response::Kind::Found(self.with_vault(
                 |vault| crate::api::found(vault, &self.registry, &self.owner(), request),
             )?))),
-            K::Command(command) => {
-                let changes = crate::events::ChangeFeed::new(self.events());
-                Ok(response(wire::response::Kind::Command(self.with_vault(
-                    |vault| {
-                        // A LOCKER SECRET IS SEALED in the one write path the chat's
-                        // confirmed card shares (#1047, D-5, #1135): `api::command`.
-                        crate::api::command(
-                            vault,
-                            &self.locker,
-                            &self.registry,
-                            &self.owner(),
-                            command,
-                            &changes,
-                            None,
-                        )
-                        .and_then(crate::api::wire_outcome)
-                    },
-                )?)))
-            }
             // THE LOCKER SESSION (#1047, D-5). See `crate::locker::phone`.
             K::Locker(request) => Ok(response(wire::response::Kind::Locker(
                 self.locker_session(request)?,
@@ -1581,7 +1613,6 @@ fn request_kind(request: &wire::Request) -> RequestKind {
         Some(
             K::Hello(_)
             | K::Page(_)
-            | K::Command(_)
             // A LOCATION LOOKUP IS BOUNDED: it is capped at
             // `api::MAX_CONTENT_URLS` rows of index reads and moves no bytes.
             | K::ContentUrls(_)
@@ -1614,7 +1645,7 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // cap, and reaching one is `ReadBoundReached`, not a longer read.
             | K::AppQuery(_)
             // `load` IS AN APP QUERY BY THE MANIFEST'S NAME, with the same
-            // ceilings; `act` IS ONE COMMAND, as `Command` is.
+            // ceilings; `act` IS ONE COMMAND, one commit.
             | K::Load(_)
             | K::Act(_)
             // A SCREEN EVENT IS A HANDFUL OF `load`s and `act`s, each bounded.
@@ -1755,34 +1786,25 @@ mod tests {
         let blob =
             centraid_vault::bytes::BlobStore::put(&scratch.handle.bytes().expect("a door"), &png)
                 .expect("the store takes it");
-        let Some(wire::response::Kind::Command(outcome)) = scratch
+        let outcome = scratch
             .handle
-            .call(&wire::Request {
-                kind: Some(wire::request::Kind::Command(wire::Command {
-                    name: "photo.add".to_owned(),
-                    input: serde_json::to_vec(&serde_json::json!({
-                        "blob": blob,
-                        "size": png.len(),
-                        "media_type": "image/png",
-                    }))
-                    .expect("json"),
-                    invoke_key: "content-urls-library".to_owned(),
-                    ..wire::Command::default()
-                })),
-            })
-            .expect("the command answers")
-            .kind
-        else {
-            panic!("a command answers with an outcome");
-        };
+            .command(
+                "photo.add",
+                &serde_json::json!({
+                    "blob": blob,
+                    "size": png.len(),
+                    "media_type": "image/png",
+                }),
+                "content-urls-library",
+            )
+            .expect("the command answers");
         assert_eq!(
             outcome.status,
-            wire::CommandStatus::Executed as i32,
-            "{}",
+            centraid_vault::CommandStatus::Executed,
+            "{:?}",
             outcome.reason
         );
-        let output: serde_json::Value =
-            serde_json::from_slice(&outcome.output).expect("the output is JSON");
+        let output = outcome.output;
         let reference = wire::ContentRef {
             content_id: blob.clone(),
             owner_type: "photo".to_owned(),
@@ -2116,7 +2138,7 @@ mod tests {
         assert_eq!(request_kind(&hello()), RequestKind::Bounded);
         assert_eq!(
             request_kind(&wire::Request {
-                kind: Some(wire::request::Kind::Command(wire::Command::default())),
+                kind: Some(wire::request::Kind::Act(Box::default())),
             }),
             RequestKind::Bounded
         );
@@ -2523,13 +2545,7 @@ mod tests {
         assert!(page.next.is_none());
     }
 
-    /// THE PRINCIPAL COMES OFF THE HANDLE (#1029 §1).
-    ///
-    /// A command carrying no principal at all used to be refused —
-    /// `principal_from_wire` answered `InvalidRequest` — because a gateway
-    /// serving seats had a second caller to authorise. There is no second
-    /// caller, so the field is not read and its absence is not a refusal.
-    /// A WRITE THROUGH THE CALL DOOR PUSHES A CHANGE EVENT (#1029 §1).
+    /// A WRITE PUSHES A CHANGE EVENT (#1029 §1).
     ///
     /// The last hole in the loop: `EventQueue` was bounded, coalescing and
     /// fully tested, and the only thing that ever pushed a change event into
@@ -2540,21 +2556,15 @@ mod tests {
     #[test]
     fn a_command_that_writes_pushes_a_change_event_naming_the_table() {
         let scratch = Scratch::founded();
-        let answer = scratch
+        let outcome = scratch
             .handle
-            .call(&wire::Request {
-                kind: Some(wire::request::Kind::Command(wire::Command {
-                    name: "person.add".to_owned(),
-                    input: br#"{"title":"Ada Lovelace"}"#.to_vec(),
-                    invoke_key: "w2-change-event".to_owned(),
-                    ..Default::default()
-                })),
-            })
+            .command(
+                "person.add",
+                &serde_json::json!({ "title": "Ada Lovelace" }),
+                "w2-change-event",
+            )
             .expect("the command runs");
-        let Some(wire::response::Kind::Command(outcome)) = answer.kind else {
-            panic!("a command outcome");
-        };
-        assert_eq!(outcome.status, wire::CommandStatus::Executed as i32);
+        assert_eq!(outcome.status, centraid_vault::CommandStatus::Executed);
 
         let mut tables = Vec::new();
         while let Ok(Some(event)) = scratch.handle.next_event(Duration::from_millis(20)) {
@@ -2568,75 +2578,44 @@ mod tests {
         );
     }
 
+    /// THE PRINCIPAL COMES OFF THE HANDLE (#1029 §1).
+    ///
+    /// A command once carried its caller's principal on the request, and one
+    /// carrying none was refused, because a gateway serving seats had a second
+    /// caller to authorise. There is no second caller and no field to state
+    /// one in: a command runs as [`Handle::owner`], and running one states
+    /// nothing about who is asking.
     #[test]
-    fn a_command_with_no_principal_is_answered_rather_than_refused() {
+    fn a_command_runs_as_the_handles_owner_without_being_told() {
         let scratch = Scratch::founded();
         let outcome = scratch
             .handle
-            .call(&wire::Request {
-                kind: Some(wire::request::Kind::Command(wire::Command {
-                    name: "person.add".to_owned(),
-                    input: br#"{"title":"Ada","cadence_days":0}"#.to_vec(),
-                    invoke_key: "w1-principal-from-the-handle".to_owned(),
-                    // ABSENT, and that is the assertion.
-                    principal: None,
-                    ..Default::default()
-                })),
-            })
+            .command(
+                "person.add",
+                &serde_json::json!({ "title": "Ada", "cadence_days": 0 }),
+                "w1-principal-from-the-handle",
+            )
             .expect("the command is answered");
-        let Some(wire::response::Kind::Command(answer)) = outcome.kind else {
-            panic!("a command outcome comes back");
-        };
         assert_eq!(
-            answer.status,
-            wire::CommandStatus::Executed as i32,
-            "the command ran; reason was `{}`",
-            answer.reason
+            outcome.status,
+            centraid_vault::CommandStatus::Executed,
+            "the command ran; reason was `{:?}`",
+            outcome.reason
         );
     }
 
-    /// AND A PRINCIPAL ON THE REQUEST CANNOT RAISE ONE.
-    ///
-    /// The field survives on the wire (deleting it is the contracts lane's),
-    /// so the thing worth asserting is that filling it changes nothing: a
-    /// caller's claim about its own authority is not a grant.
+    /// THE KEY IS REQUIRED: it is the caller's correlation key, and a command
+    /// with none is a request error rather than a run.
     #[test]
-    fn a_principal_on_the_request_does_not_change_who_the_command_runs_as() {
+    fn a_command_with_no_invoke_key_is_refused_before_it_runs() {
         let scratch = Scratch::founded();
-        let run = |principal: Option<wire::Principal>, key: &str| {
-            let outcome = scratch
+        let refused =
+            scratch
                 .handle
-                .call(&wire::Request {
-                    kind: Some(wire::request::Kind::Command(wire::Command {
-                        name: "person.add".to_owned(),
-                        input: br#"{"title":"Grace","cadence_days":0}"#.to_vec(),
-                        invoke_key: key.to_owned(),
-                        principal,
-                        ..Default::default()
-                    })),
-                })
-                .expect("the command is answered");
-            let Some(wire::response::Kind::Command(answer)) = outcome.kind else {
-                panic!("a command outcome comes back");
-            };
-            answer.status
-        };
-        let plain = run(None, "w1-principal-plain");
-        // An AGENT is the strongest thing the old wire vocabulary could claim,
-        // and it rode an owner it named itself.
-        let claimed = run(
-            Some(wire::Principal {
-                kind: wire::PrincipalKind::Agent as i32,
-                caller_id: "_assistant".to_owned(),
-                principal_id: "_assistant".to_owned(),
-                surface: "money".to_owned(),
-                on_behalf_of_owner: true,
-            }),
-            "w1-principal-claimed",
-        );
-        assert_eq!(
-            plain, claimed,
-            "the request's principal is not read, so it cannot change the answer"
+                .command("person.add", &serde_json::json!({ "title": "Ada" }), "");
+        assert!(
+            matches!(refused, Err(CoreError::InvalidRequest { .. })),
+            "{refused:?}"
         );
     }
 }

@@ -44,6 +44,7 @@ use centraid_assist::attach::ImageData;
 use centraid_assist::native::park::Confirmed;
 use centraid_assist::prompt::Turn;
 use centraid_assist::{App, Attachments, Card, Notice, Refusal, Session};
+use centraid_vault::commands::CommandStatus;
 
 use crate::handle::HandleState as Handle;
 
@@ -276,11 +277,10 @@ fn run(
     key: &str,
 ) -> Option<Saved> {
     let input = serde_json::to_vec(&command_input(turned, thread, replace)).ok()?;
-    let command = wire::Command {
+    let command = crate::api::Invocation {
         name: "thread.save_turn".to_owned(),
         input,
         invoke_key: key.to_owned(),
-        ..wire::Command::default()
     };
     let changes = crate::events::ChangeFeed::new(handle.events());
     let outcome = handle
@@ -295,11 +295,14 @@ fn run(
         })
         .map_err(|error| tracing::warn!("a chat turn could not be saved: {error}"))
         .ok()?;
-    if outcome.status != wire::CommandStatus::Executed as i32 {
-        tracing::warn!("a chat turn was not saved: {}", outcome.reason);
+    if outcome.status != CommandStatus::Executed {
+        tracing::warn!(
+            "a chat turn was not saved: {}",
+            outcome.reason.unwrap_or_default()
+        );
         return None;
     }
-    let output: serde_json::Value = serde_json::from_slice(&outcome.output).ok()?;
+    let output = outcome.output;
     Some(Saved {
         thread_id: output.get("thread_id")?.as_str()?.to_owned(),
         title: output
@@ -355,11 +358,10 @@ fn settle(handle: &Handle, thread: &str, key: &str, outcome: &str, text: &str) -
     let Ok(input) = serde_json::to_vec(&input) else {
         return false;
     };
-    let command = wire::Command {
+    let command = crate::api::Invocation {
         name: "thread.settle_proposal".to_owned(),
         input,
         invoke_key: key.to_owned(),
-        ..wire::Command::default()
     };
     let changes = crate::events::ChangeFeed::new(handle.events());
     let ran = handle
@@ -375,9 +377,12 @@ fn settle(handle: &Handle, thread: &str, key: &str, outcome: &str, text: &str) -
         .map_err(|error| tracing::warn!("a proposal could not be settled: {error}"))
         .ok();
     match ran {
-        Some(outcome) if outcome.status == wire::CommandStatus::Executed as i32 => true,
+        Some(outcome) if outcome.status == CommandStatus::Executed => true,
         Some(outcome) => {
-            tracing::warn!("a proposal was not settled: {}", outcome.reason);
+            tracing::warn!(
+                "a proposal was not settled: {}",
+                outcome.reason.unwrap_or_default()
+            );
             false
         }
         None => false,

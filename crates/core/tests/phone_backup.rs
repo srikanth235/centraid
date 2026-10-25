@@ -738,17 +738,13 @@ fn a_restore_brings_every_vault_back_and_the_old_phone_freezes() {
     );
 
     // THE OLD PHONE'S NEXT PASS IS REFUSED, AND IT READS FROZEN.
-    let note = old.call(&wire::Request {
-        kind: Some(wire::request::Kind::Command(wire::Command {
-            name: "note.create".to_owned(),
-            input: serde_json::to_vec(&serde_json::json!({
-                "title": "after", "body": "written on the lost phone", "format": "plain"
-            }))
-            .expect("json"),
-            invoke_key: "after-the-restore".to_owned(),
-            ..wire::Command::default()
-        })),
-    });
+    let note = old.command(
+        "note.create",
+        &serde_json::json!({
+            "title": "after", "body": "written on the lost phone", "format": "plain"
+        }),
+        "after-the-restore",
+    );
     assert!(note.is_ok(), "the old phone still writes its own vault");
     let refused = old
         .call(&wire::Request {
@@ -843,19 +839,15 @@ fn a_head_set_between_the_check_and_the_claim_is_checked_before_it_is_claimed() 
             if !moved_once {
                 moved_once = true;
                 // THE OLD PHONE BACKS UP IN THE WINDOW: a note, a snapshot.
-                ask(
-                    &old,
-                    wire::request::Kind::Command(wire::Command {
-                        name: "note.create".to_owned(),
-                        input: serde_json::to_vec(&serde_json::json!({
-                            "title": "in the window", "body": "between check and claim",
-                            "format": "plain"
-                        }))
-                        .expect("json"),
-                        invoke_key: "in-the-window".to_owned(),
-                        ..wire::Command::default()
+                old.command(
+                    "note.create",
+                    &serde_json::json!({
+                        "title": "in the window", "body": "between check and claim",
+                        "format": "plain"
                     }),
-                );
+                    "in-the-window",
+                )
+                .expect("the note is written");
                 std::thread::sleep(Duration::from_millis(5));
                 let moved = drain(&old, at_home());
                 assert!(moved.acked_at_ms.is_some(), "the old phone set a new head");

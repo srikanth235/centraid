@@ -2,8 +2,6 @@ package dev.centraid.core
 
 import centraid.core.v1.AppQueryRequest
 import centraid.core.v1.AppQueryResponse
-import centraid.core.v1.Command
-import centraid.core.v1.CommandStatus
 import centraid.core.v1.Envelope
 import centraid.core.v1.Request
 import centraid.core.v1.AgendaTaskBoard
@@ -14,6 +12,7 @@ import centraid.core.v1.AgendaTaskSearchRequest
 import centraid.core.v1.AgendaTaskDetail
 import centraid.core.v1.AgendaTaskRequest
 import centraid.core.v1.AgendaTaskView
+import dev.centraid.core.AbiRoundTripSpec.Companion.act
 import dev.centraid.core.AbiRoundTripSpec.Companion.openRealCore
 import dev.centraid.core.AbiRoundTripSpec.Companion.shouldBeAnsweredWith
 import io.kotest.core.spec.style.StringSpec
@@ -25,7 +24,6 @@ import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.time.LocalDate
 import java.time.ZoneId
-import okio.ByteString.Companion.encodeUtf8
 
 /**
  * TASKS' QUERIES, KOTLIN TO RUST AND BACK (#1046).
@@ -39,8 +37,8 @@ import okio.ByteString.Companion.encodeUtf8
  * draws strings.
  *
  * Over JNA, against the real `libcentraid_core_ffi` and the vault
- * `spike-fixture` founded — nothing faked. The writes go through `Command`
- * requests, the command plane a screen uses. The fixture vault is shared by
+ * `spike-fixture` founded — nothing faked. The writes are `act` requests,
+ * the one way a screen writes. The fixture vault is shared by
  * every spec in the run and its clock is the real one, so this asks about the
  * tasks it makes and no others, and dates them relative to today.
  */
@@ -52,29 +50,29 @@ class AgendaTaskQueryRoundTripSpec : StringSpec({
             val zone = ZoneId.of(TZ)
             val today = LocalDate.now(zone)
             val late = core.write(
-                "task.add",
+                "add-task",
                 """{"title":"Agenda task spec late","due":"${today.minusDays(3)}"}""",
                 key = "agenda-task-round-trip-late",
             )
             val later = core.write(
-                "task.add",
+                "add-task",
                 """{"title":"Agenda task spec later","due":"${today.plusDays(5)}",""" +
                     """"remind_before_min":15}""",
                 key = "agenda-task-round-trip-later",
             )
             val daily = core.write(
-                "task.add",
+                "add-task",
                 """{"title":"Agenda task spec daily","due":"${today.minusDays(4)}",""" +
                     """"rule":"FREQ=DAILY"}""",
                 key = "agenda-task-round-trip-daily",
             )
             val trashed = core.write(
-                "task.add",
+                "add-task",
                 """{"title":"Agenda task spec trashed","due":"${today.minusDays(1)}"}""",
                 key = "agenda-task-round-trip-trashed",
             )
             core.write(
-                "entity.trash",
+                "delete-task",
                 """{"id":"$trashed"}""",
                 key = "agenda-task-round-trip-delete",
             )
@@ -177,30 +175,14 @@ class AgendaTaskQueryRoundTripSpec : StringSpec({
             return answer!!
         }
 
-        /** One command through the command plane; answers its `id` (a trash has none). */
-        suspend fun CentraidCore.write(name: String, input: String, key: String): String {
-            var taskId = ""
-            call(
-                Envelope(
-                    request_id = 1,
-                    request = Request(
-                        command = Command(
-                            name = name,
-                            input = input.encodeUtf8(),
-                            invoke_key = key,
-                        ),
-                    ),
-                ),
-            ).shouldBeAnsweredWith { envelope ->
-                val outcome = envelope.response?.command ?: error("a CommandOutcome")
-                outcome.status shouldBe CommandStatus.COMMAND_STATUS_EXECUTED
-                taskId = Regex("\"id\":\"([^\"]+)\"")
-                    .find(outcome.output.utf8())
-                    ?.groupValues
-                    ?.get(1)
-                    ?: ""
-            }
-            return taskId
+        /** One write, as a screen makes it (`act` on agenda); answers its `id`, if any of its output. */
+        suspend fun CentraidCore.write(action: String, input: String, key: String): String {
+            val output = act("agenda", action, input, key)
+            return Regex("\"id\":\"([^\"]+)\"")
+                .find(output)
+                ?.groupValues
+                ?.get(1)
+                .orEmpty()
         }
     }
 }

@@ -2,8 +2,6 @@ package dev.centraid.core
 
 import centraid.core.v1.AppQueryRequest
 import centraid.core.v1.AppQueryResponse
-import centraid.core.v1.Command
-import centraid.core.v1.CommandStatus
 import centraid.core.v1.Envelope
 import centraid.core.v1.NotesHistoryRequest
 import centraid.core.v1.NotesJournalRequest
@@ -16,6 +14,7 @@ import centraid.core.v1.NotesSearchRequest
 import centraid.core.v1.NotesSort
 import centraid.core.v1.NotesTrashRequest
 import centraid.core.v1.Request
+import dev.centraid.core.AbiRoundTripSpec.Companion.act
 import dev.centraid.core.AbiRoundTripSpec.Companion.openRealCore
 import dev.centraid.core.AbiRoundTripSpec.Companion.shouldBeAnsweredWith
 import io.kotest.core.spec.style.StringSpec
@@ -26,7 +25,6 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import java.time.LocalDate
 import java.time.ZoneId
-import okio.ByteString.Companion.encodeUtf8
 
 /**
  * NOTES' QUERIES, KOTLIN TO RUST AND BACK (#1046).
@@ -52,7 +50,7 @@ class NotesQueryRoundTripSpec : StringSpec({
         val core = openRealCore()
         try {
             val noteId = core.write(
-                "note.create",
+                "create-note",
                 """{"title":"Round trip","body":"kotlin to rust and back"}""",
                 key = "notes-round-trip-create",
             )
@@ -64,7 +62,7 @@ class NotesQueryRoundTripSpec : StringSpec({
             // A TITLE EDIT ADDS NO VERSION and moves `row_version`: the editor's
             // base is the version of the note, not of its words.
             core.write(
-                "note.edit",
+                "edit-note",
                 """{"id":"$noteId","title":"Round trip, renamed"}""",
                 key = "notes-round-trip-rename",
             )
@@ -73,7 +71,7 @@ class NotesQueryRoundTripSpec : StringSpec({
             renamed.row_version shouldBeGreaterThan opened.row_version
 
             core.write(
-                "note.edit",
+                "edit-note",
                 """{"id":"$noteId","body":"second draft"}""",
                 key = "notes-round-trip-body",
             )
@@ -97,12 +95,12 @@ class NotesQueryRoundTripSpec : StringSpec({
         val core = openRealCore()
         try {
             val kept = core.write(
-                "note.create",
+                "create-note",
                 """{"title":"Quince paste","body":"quince, sugar, lemon"}""",
                 key = "notes-round-trip-kept",
             )
             val gone = core.write(
-                "note.create",
+                "create-note",
                 """{"title":"Quince jelly","body":"quince that did not set"}""",
                 key = "notes-round-trip-gone",
             )
@@ -111,7 +109,7 @@ class NotesQueryRoundTripSpec : StringSpec({
                 ids shouldContain gone
             }
             core.write(
-                "entity.trash",
+                "delete-note",
                 """{"id":"$gone"}""",
                 key = "notes-round-trip-delete",
             )
@@ -202,30 +200,14 @@ class NotesQueryRoundTripSpec : StringSpec({
             return answer!!
         }
 
-        /** One command through the command plane; answers its `note_id`, if any. */
-        suspend fun CentraidCore.write(name: String, input: String, key: String): String {
-            var noteId = ""
-            call(
-                Envelope(
-                    request_id = 1,
-                    request = Request(
-                        command = Command(
-                            name = name,
-                            input = input.encodeUtf8(),
-                            invoke_key = key,
-                        ),
-                    ),
-                ),
-            ).shouldBeAnsweredWith { envelope ->
-                val outcome = envelope.response?.command ?: error("a CommandOutcome")
-                outcome.status shouldBe CommandStatus.COMMAND_STATUS_EXECUTED
-                noteId = Regex("\"id\":\"([^\"]+)\"")
-                    .find(outcome.output.utf8())
-                    ?.groupValues
-                    ?.get(1)
-                    .orEmpty()
-            }
-            return noteId
+        /** One write, as a screen makes it (`act` on notes); answers its `id`, if any of its output. */
+        suspend fun CentraidCore.write(action: String, input: String, key: String): String {
+            val output = act("notes", action, input, key)
+            return Regex("\"id\":\"([^\"]+)\"")
+                .find(output)
+                ?.groupValues
+                ?.get(1)
+                .orEmpty()
         }
     }
 }

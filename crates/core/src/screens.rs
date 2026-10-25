@@ -124,7 +124,7 @@ pub trait ScreenCtx {
     /// A vault lifecycle door that is neither a read nor a write of an app's
     /// rows, and is quick: the 24 words (`phrase`), founding a vault. The type
     /// limits what a screen can send to `vault.proto` and `phone.proto`; there
-    /// is no way through it to a `Command`.
+    /// is no way through it to a write, which is `act`.
     ///
     /// # Errors
     /// Whatever the door refuses with.

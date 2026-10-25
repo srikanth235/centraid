@@ -197,7 +197,7 @@ fn rule_of(value: i32) -> wire::TransferRule {
 
 impl Conditions {
     /// What a drain request says. An unspecified rule is `WIFI_ONLY`
-    /// (`command.proto`).
+    /// (`phone.proto`).
     #[must_use]
     pub fn of(request: &wire::DrainRequest) -> Self {
         Self {

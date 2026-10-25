@@ -91,7 +91,10 @@ message ActResponse {
   ActStatus status = 1;
   // The command's output, canonical JSON in bytes. Empty on a refusal.
   bytes output = 2;
-  // A sentence for the member. Empty when executed.
+  // A sentence for the member. Empty when executed. AN OWNER-FACING SENTENCE:
+  // the author's words for a failed precondition, the access plane's for a
+  // denial. The raw predicate is `refusal.check` and the audit trail's, and
+  // never a member's.
   string reason = 3;
   // The check that refused, when `status` is refused.
   optional ActRefusal refusal = 4;

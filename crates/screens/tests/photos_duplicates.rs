@@ -45,20 +45,18 @@ fn stage(d: &Driver, seed: &str) -> String {
     let hash = centraid_vault::blob::content_digest(seed.as_bytes());
     let response = d
         .handle
-        .call(&wire::Request {
-            kind: Some(wire::request::Kind::Command(wire::Command {
-                name: "blob.stage".to_owned(),
-                input: serde_json::to_vec(&serde_json::json!({ "hash": hash, "size": seed.len() }))
-                    .expect("json"),
-                invoke_key: format!("dup:stage:{}", kit_act::fresh()),
-                ..wire::Command::default()
-            })),
-        })
+        .command(
+            "blob.stage",
+            &serde_json::json!({ "hash": hash, "size": seed.len() }),
+            &format!("dup:stage:{}", kit_act::fresh()),
+        )
         .expect("stage");
-    assert!(matches!(
-        response.kind,
-        Some(wire::response::Kind::Command(_))
-    ));
+    assert_eq!(
+        response.status,
+        centraid_vault::CommandStatus::Executed,
+        "{:?}",
+        response.reason
+    );
     hash
 }
 
