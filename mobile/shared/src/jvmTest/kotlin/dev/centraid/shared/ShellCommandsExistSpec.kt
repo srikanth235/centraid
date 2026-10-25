@@ -131,8 +131,7 @@ class ShellCommandsExistSpec : StringSpec({
         val registered = registeredCommands(repositoryRoot)
         listOf(
             "photo.add", // a `const val ACTION` (People's `EDIT_COMMAND` went with its KMP code, #1135)
-            "locker.add_item", // a bare `const val COMMAND`
-            "vault.rename", // an `if` branch (the trash-spec and helper-argument shapes went with KMP chat, #1135)
+            "vault.rename", // an `if` branch (the trash-spec and helper-argument shapes went with KMP chat, and the bare `const val COMMAND` with the own-key filing, #1135)
         ).forEach { command ->
             withClue(command) {
                 (command in seen).shouldBeTrue()

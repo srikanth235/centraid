@@ -76,8 +76,8 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
             .merge(vault::registry(&shelf, &secrets)),
         vec![
             (shell::TAB.to_owned(), shell::routes::home()),
-            (shell::band::BACKUP.to_owned(), backup::routes::home()),
             (chat::TAB.to_owned(), chat::routes::home()),
+            (shell::band::BACKUP.to_owned(), backup::routes::home()),
         ],
     )
     .with_band(shell::band::view)
