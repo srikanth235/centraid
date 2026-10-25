@@ -366,7 +366,7 @@ message TileBody {
     // says so and `at` is empty too), the tile showing tasks alone (#1128).
     string after = 3;
     // TODAY'S DUE TASKS (#1128, R-1128-8): the open tasks due today or already
-    // overdue, from `tasks.board` TODAY. Zero draws no line. Absent tasks (the
+    // overdue, from `agenda.task.board` TODAY. Zero draws no line. Absent tasks (the
     // read did not land) are zero: a tile never claims a count it did not read.
     uint32 due_count = 4;
     // `3 due`: the count in words, composed in Kotlin. Empty when `due_count` is 0.

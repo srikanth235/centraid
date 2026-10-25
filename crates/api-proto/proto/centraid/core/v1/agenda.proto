@@ -320,7 +320,7 @@ message AgendaDayContext {
   // By month, then day, then name.
   repeated AgendaBirthday birthdays = 1;
   // The per-day list of open tasks due, which only the retired due shelf read:
-  // a dated task is a row in its day, read from `tasks.board` (R-1128-2), so
+  // a dated task is a row in its day, read from `agenda.task.board` (R-1128-2), so
   // the grid's decorations read no task (#1128).
   reserved 2;
   reserved "due";
@@ -418,7 +418,7 @@ enum AgendaTaskView {
   AGENDA_TASK_VIEW_PROJECT = 8;
 }
 
-// `tasks.board`: the open window, the logbook, and the project chrome.
+// `agenda.task.board`: the open window, the logbook, and the project chrome.
 message AgendaTaskBoardRequest {
   // The zone (the file header's rule).
   string tz = 1;
@@ -431,18 +431,18 @@ message AgendaTaskBoardRequest {
   string project_id = 4;
 }
 
-// `tasks.task`: one task, whether or not any board window holds it.
+// `agenda.task.task`: one task, whether or not any board window holds it.
 message AgendaTaskRequest {
   string task_id = 1;
   string tz = 2;
 }
 
-// `tasks.projects`: the live projects and their sections, with open counts.
+// `agenda.task.projects`: the live projects and their sections, with open counts.
 message AgendaTaskProjectsRequest {
   string tz = 1;
 }
 
-// `tasks.search`: tasks matching a term, in the index's rank order.
+// `agenda.task.search`: tasks matching a term, in the index's rank order.
 message AgendaTaskSearchRequest {
   string term = 1;
   // REQUIRED: zero is refused, `ERROR_CODE_INVALID_REQUEST`. Clamped to 100.
@@ -450,12 +450,12 @@ message AgendaTaskSearchRequest {
   string tz = 3;
 }
 
-// `tasks.catch-up`: the overdue piles, and the absence to name.
+// `agenda.task.catch-up`: the overdue piles, and the absence to name.
 message AgendaTaskCatchUpRequest {
   string tz = 1;
 }
 
-// `tasks.trash`: the trashed tasks, most recently trashed first.
+// `agenda.task.trash`: the trashed tasks, most recently trashed first.
 message AgendaTaskTrashRequest {
   // The zone the rows' days are read in: the stated IANA name, else the vault's;
   // a vault that names none and a request that states none answer EMPTY days,
@@ -539,7 +539,7 @@ message AgendaTask {
   repeated AgendaTask children = 35;
   // How many of `children` are closed.
   uint32 done_children = 36;
-  // `tasks.search` only: the index's excerpt, hits wrapped in ⟦ ⟧.
+  // `agenda.task.search` only: the index's excerpt, hits wrapped in ⟦ ⟧.
   optional string snippet = 37;
   // The stored RFC 5545 rule, verbatim; absent on a one-off. For the editor's
   // repeat picker ONLY — to pre-select a preset and send the rule back

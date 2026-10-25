@@ -330,7 +330,7 @@ fn live_tasks(
     ids: &[String],
 ) -> KitResult<Vec<TaskRow>> {
     let rows = task_rows(door, name, column, ids, None)?;
-    let entities = live_entities(door, "tasks.entities", &ids_of(&rows, "id"))?;
+    let entities = live_entities(door, "agenda.task.entities", &ids_of(&rows, "id"))?;
     Ok(tasks_of(&entities, &rows))
 }
 
@@ -339,7 +339,7 @@ fn live_tasks(
 /// may exist beyond them (the walk's own cursor, never a guess from a count).
 fn open_window(door: &dyn PageDoor, window: usize) -> KitResult<(Vec<TaskRow>, bool)> {
     let query = PageQuery::new(
-        "tasks.board.entities",
+        "agenda.task.board.entities",
         ENTITY_COLUMNS,
         "entity",
         PageOrder::desc("created_at", "id"),
@@ -357,7 +357,7 @@ fn open_window(door: &dyn PageDoor, window: usize) -> KitResult<(Vec<TaskRow>, b
         )?;
         let rows = task_rows(
             door,
-            "tasks.board.open",
+            "agenda.task.board.open",
             "id",
             &ids_of(&page.rows, "id"),
             Some(("status = ?", vec![text("open")])),
@@ -375,19 +375,19 @@ fn open_window(door: &dyn PageDoor, window: usize) -> KitResult<(Vec<TaskRow>, b
         }
     }
     Err(KitError::FanOutExceeded {
-        query: "tasks.board.open".to_owned(),
+        query: "agenda.task.board.open".to_owned(),
         cap: OPEN_WALK_PAGES * MAX_PAGE_ROWS,
     })
 }
 
-/// `tasks.board.logbook`: the most recently closed, live.
+/// `agenda.task.board.logbook`: the most recently closed, live.
 ///
 /// **`done_at` IS NULLABLE**: a cancelled task has none, so the read is ONE page
 /// and is never continued, and a cancelled task sorts after every done one.
 fn logbook(door: &dyn PageDoor) -> KitResult<Vec<TaskRow>> {
     let closed = door.page(
         &PageQuery::new(
-            "tasks.board.logbook",
+            "agenda.task.board.logbook",
             TASK_COLUMNS,
             "task",
             PageOrder::desc("done_at", "id"),
@@ -397,7 +397,7 @@ fn logbook(door: &dyn PageDoor) -> KitResult<Vec<TaskRow>> {
     )?;
     let entities = live_entities(
         door,
-        "tasks.board.logbook.entities",
+        "agenda.task.board.logbook.entities",
         &ids_of(&closed.rows, "id"),
     )?;
     let by_id = by_text(&entities, "id");
@@ -513,7 +513,7 @@ fn read_decorations(
         return Ok(decorations);
     }
     let edges = by_ids(
-        "tasks.board.edges",
+        "agenda.task.board.edges",
         "edge",
         "from_id, rel, to_id",
         "from_id",
@@ -525,7 +525,7 @@ fn read_decorations(
         Some(("rel IN (?, ?)", vec![text("about"), text("tagged")])),
     )?;
     let far: BTreeMap<String, Row> = by_ids(
-        "tasks.board.far",
+        "agenda.task.board.far",
         "entity",
         "id, kind, title, deleted_at",
         "id",
@@ -593,14 +593,14 @@ pub fn load_chrome(door: &dyn PageDoor) -> KitResult<(Vec<ProjectRow>, Vec<Secti
             WIDE,
         )
     };
-    let projects = named("tasks.board.projects", "project")?;
-    let sections = named("tasks.board.sections", "section")?;
+    let projects = named("agenda.task.board.projects", "project")?;
+    let sections = named("agenda.task.board.sections", "section")?;
     let ids: Vec<String> = ids_of(&projects, "id")
         .into_iter()
         .chain(ids_of(&sections, "id"))
         .collect();
     let placed: BTreeMap<String, Row> = by_ids(
-        "tasks.board.containers",
+        "agenda.task.board.containers",
         "container",
         "id, parent_id, color, position",
         "id",
@@ -609,30 +609,35 @@ pub fn load_chrome(door: &dyn PageDoor) -> KitResult<(Vec<ProjectRow>, Vec<Secti
     .into_iter()
     .filter_map(|row| text_of(&row, "id").map(|id| (id, row)))
     .collect();
-    let archived: BTreeSet<String> =
-        by_ids("tasks.board.archived", "edge", "from_id, to_id", "from_id")
+    let archived: BTreeSet<String> = by_ids(
+        "agenda.task.board.archived",
+        "edge",
+        "from_id, to_id",
+        "from_id",
+    )
+    .within(
+        WIDE,
+        door,
+        &ids_of(&projects, "id"),
+        Some((
+            "rel = ? AND to_id = ?",
+            vec![text("tagged"), text(ARCHIVED)],
+        )),
+    )?
+    .iter()
+    .filter_map(|row| text_of(row, "from_id"))
+    .collect();
+    let areas: BTreeMap<String, String> =
+        by_ids("agenda.task.board.areas", "entity", "id, title", "id")
             .within(
                 WIDE,
                 door,
-                &ids_of(&projects, "id"),
-                Some((
-                    "rel = ? AND to_id = ?",
-                    vec![text("tagged"), text(ARCHIVED)],
-                )),
+                &ids_of(&placed.values().cloned().collect::<Vec<_>>(), "parent_id"),
+                Some(("kind = ?", vec![text("area")])),
             )?
             .iter()
-            .filter_map(|row| text_of(row, "from_id"))
+            .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "title")?)))
             .collect();
-    let areas: BTreeMap<String, String> = by_ids("tasks.board.areas", "entity", "id, title", "id")
-        .within(
-            WIDE,
-            door,
-            &ids_of(&placed.values().cloned().collect::<Vec<_>>(), "parent_id"),
-            Some(("kind = ?", vec![text("area")])),
-        )?
-        .iter()
-        .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "title")?)))
-        .collect();
     let position = |id: &str| match placed.get(id).and_then(|row| row.get("position")) {
         Some(Cell::Real(at)) => *at,
         _ => 0.0,
@@ -764,7 +769,7 @@ pub fn load_board(
         .collect::<BTreeSet<String>>()
         .into_iter()
         .collect();
-    for task in live_tasks(door, "tasks.board.parents", "id", &missing_parents)? {
+    for task in live_tasks(door, "agenda.task.board.parents", "id", &missing_parents)? {
         by_id.insert(task.task_id.clone(), task);
     }
     // ...then the reverse edge: every subtask of a fetched top-level task, open
@@ -775,7 +780,7 @@ pub fn load_board(
         .filter(|task| task.parent_task_id.is_none())
         .map(|task| task.task_id.clone())
         .collect();
-    for task in live_tasks(door, "tasks.board.children", "parent_id", &top_level)? {
+    for task in live_tasks(door, "agenda.task.board.children", "parent_id", &top_level)? {
         by_id.insert(task.task_id.clone(), task);
     }
     let rows: Vec<TaskRow> = by_id.into_values().collect();
@@ -841,10 +846,11 @@ pub fn load_search(
         return Ok((SearchData::default(), None));
     }
     let read = || -> KitResult<(BTreeMap<String, TaskRow>, Decorations)> {
-        let found: BTreeMap<String, TaskRow> = live_tasks(door, "tasks.search.tasks", "id", &ids)?
-            .into_iter()
-            .map(|task| (task.task_id.clone(), task))
-            .collect();
+        let found: BTreeMap<String, TaskRow> =
+            live_tasks(door, "agenda.task.search.tasks", "id", &ids)?
+                .into_iter()
+                .map(|task| (task.task_id.clone(), task))
+                .collect();
         let decorations = read_decorations(door, &ids, false)?;
         Ok((found, decorations))
     };
@@ -908,15 +914,15 @@ pub fn load_task(
     }
     let ids = [task_id.to_owned()];
     let read = || -> KitResult<Option<Whole>> {
-        let Some(task) = live_tasks(door, "tasks.task.by-id", "id", &ids)?
+        let Some(task) = live_tasks(door, "agenda.task.task.by-id", "id", &ids)?
             .into_iter()
             .next()
         else {
             return Ok(None);
         };
-        let children = live_tasks(door, "tasks.board.children", "parent_id", &ids)?;
+        let children = live_tasks(door, "agenda.task.board.children", "parent_id", &ids)?;
         let parent = match task.parent_task_id.clone() {
-            Some(parent_id) => live_tasks(door, "tasks.task.parent", "id", &[parent_id])?
+            Some(parent_id) => live_tasks(door, "agenda.task.task.parent", "id", &[parent_id])?
                 .into_iter()
                 .next(),
             None => None,
@@ -1048,7 +1054,7 @@ pub struct TrashData {
 /// A reached bound is an `Err`; a door refusal is the payload's denial.
 pub fn load_trash(door: &dyn PageDoor) -> KitResult<(TrashData, Option<Denial>)> {
     let query = PageQuery::new(
-        "tasks.trash",
+        "agenda.task.trash",
         "id, title, deleted_at, purge_at",
         "entity",
         PageOrder::desc("deleted_at", "id"),

@@ -196,7 +196,7 @@ pub(crate) fn projects(
     })
 }
 
-/// `tasks.trash`: the trashed tasks, each day read in the request's zone (none
+/// `agenda.task.trash`: the trashed tasks, each day read in the request's zone (none
 /// when no zone resolved).
 pub(crate) fn trash(
     vault: &Vault,

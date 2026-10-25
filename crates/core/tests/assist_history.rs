@@ -460,7 +460,7 @@ fn a_reopened_threads_retry_asks_its_last_question_again() {
 #[test]
 fn a_thread_stored_by_the_routed_plane_still_reopens_and_joins() {
     let sample = common::chat::sample();
-    let routed_tool = r#"{"user":"What is due today?","record":{"kind":"tool","call_json":"{\"tool\":\"tasks.list\",\"args\":{\"view\":\"today\"}}","headline":"2 tasks due today","answer":"Two things are due."}}"#;
+    let routed_tool = r#"{"user":"What is due today?","record":{"kind":"tool","call_json":"{\"tool\":\"agenda.task_list\",\"args\":{\"view\":\"today\"}}","headline":"2 tasks due today","answer":"Two things are due."}}"#;
     let saved = command(
         &sample,
         "thread.save_turn",

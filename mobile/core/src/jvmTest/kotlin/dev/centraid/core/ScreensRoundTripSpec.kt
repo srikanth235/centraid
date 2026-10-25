@@ -40,7 +40,8 @@ class ScreensRoundTripSpec : StringSpec({
             screens.attach()
             screens.start()
             val navigation = screens.navigation.value!!
-            navigation.tabs.map { it.tab } shouldBe listOf("home", "chat", "backup")
+            navigation.tabs.map { it.tab } shouldBe
+                listOf("home", "chat", "backup", "imports-camera-roll", "imports-files", "imports-made")
             navigation.selected_tab shouldBe "home"
             val root = navigation.tab("home").entries.single()
             root.route!!.screen shouldBe "home.springboard"

@@ -4501,7 +4501,7 @@ pub mod load {
             }
         }
 
-        /// The cross-app facts that decorate a calendar day, as one read-only projection: birthdays recurring inside the window (each `{party_id, name, month, day, tier}`, where `tier` is `inner` when the owner starred that person and `outer` otherwise), and holidays. Holidays are always `[]` today — the vault has no holiday source. It reads no task: a dated task is a row in its day, read from `tasks.board`. `from`/`to` are inclusive `YYYY-MM-DD` days, defaulting to today plus 45 days and capped at a 400-day span.
+        /// The cross-app facts that decorate a calendar day, as one read-only projection: birthdays recurring inside the window (each `{party_id, name, month, day, tier}`, where `tier` is `inner` when the owner starred that person and `outer` otherwise), and holidays. Holidays are always `[]` today — the vault has no holiday source. It reads no task: a dated task is a row in its day, read from `agenda.task.board`. `from`/`to` are inclusive `YYYY-MM-DD` days, defaulting to today plus 45 days and capped at a 400-day span.
         #[derive(Clone, Debug, Default)]
         pub struct DayContext {
             pub from: Option<String>,

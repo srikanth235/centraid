@@ -1113,7 +1113,7 @@ mod tests {
                 })
                 .collect()
         };
-        for name in ["test", "home.people", "tasks.trash", "assist.native"] {
+        for name in ["test", "home.people", "agenda.task.trash", "assist.native"] {
             let answer = ask(name, "entity", &["id", "title"], "id", "id").expect("a page");
             assert!(
                 !titles(&answer).contains(&"Bank login".to_owned()),

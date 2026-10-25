@@ -46,7 +46,7 @@
         "reason": "the clustering needs every perceptual hash by design: the first page is a primary-key-order walk of derivative and each later page resumes at its cursor, so a whole pass reads derivative once"
       },
       {
-        "home": "tasks.board.logbook",
+        "home": "agenda.task.board.logbook",
         "reason": "reads every closed task and sorts them for a 50-row page (about 1,800 in the corpus, a few ms). An index alone does not change it (task_by_done on done_at was added, was not chosen, and was removed): the fix is the app's statement split into status = 'done' ordered by done_at, which an index (status, done_at, id) can stream, then cancelled"
       }
     ]

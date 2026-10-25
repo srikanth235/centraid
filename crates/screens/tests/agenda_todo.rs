@@ -1,6 +1,6 @@
 //! The to-do list pages, the project page and Catch up, through the door a shell
-//! uses. Ports of the `TasksSpec` cases for `tasks.list`, `tasks.project` and
-//! `tasks.catch_up`, plus the behaviours the old architecture only implied.
+//! uses. Ports of the `TasksSpec` cases for `agenda.task_list`, `agenda.task.project` and
+//! `agenda.task.catch_up`, plus the behaviours the old architecture only implied.
 
 mod todo_support;
 

@@ -242,7 +242,7 @@ mod tests {
         Turn {
             user: format!("question {n}"),
             record: Recorded::Tool {
-                call_json: r#"{"tool":"tasks.list","args":{"view":"today"}}"#.to_owned(),
+                call_json: r#"{"tool":"agenda.task_list","args":{"view":"today"}}"#.to_owned(),
                 headline: format!("{n} tasks due today"),
                 answer: format!("answer {n}"),
             },
@@ -318,13 +318,13 @@ mod tests {
     fn a_thread_stored_before_the_native_plane_still_reads() {
         // The shapes the routed plane stored (#1078): `tool`, `answer` and `no_tool`. A thread
         // holding them must reopen, so they stay readable although nothing writes them now.
-        let tool = r#"{"user":"What is due today?","record":{"kind":"tool","call_json":"{\"tool\":\"tasks.list\",\"args\":{\"view\":\"today\"}}","headline":"2 tasks due today","answer":"Two things are due."}}"#;
+        let tool = r#"{"user":"What is due today?","record":{"kind":"tool","call_json":"{\"tool\":\"agenda.task_list\",\"args\":{\"view\":\"today\"}}","headline":"2 tasks due today","answer":"Two things are due."}}"#;
         assert_eq!(
             Turn::from_json(tool),
             Some(Turn {
                 user: "What is due today?".to_owned(),
                 record: Recorded::Tool {
-                    call_json: r#"{"tool":"tasks.list","args":{"view":"today"}}"#.to_owned(),
+                    call_json: r#"{"tool":"agenda.task_list","args":{"view":"today"}}"#.to_owned(),
                     headline: "2 tasks due today".to_owned(),
                     answer: "Two things are due.".to_owned(),
                 },

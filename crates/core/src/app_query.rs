@@ -1296,7 +1296,7 @@ mod tests {
     /// `parties` names the owner and flags them; `day-context` — with nobody
     /// starred and nobody's birthday in range — answers no birthdays, which is
     /// a fact and not a refusal. It answers no due work: a dated task is a row
-    /// in its day, read from `tasks.board` (R-1128-F1, #1128).
+    /// in its day, read from `agenda.task.board` (R-1128-F1, #1128).
     #[test]
     fn parties_and_day_context_answer_typed() {
         let scratch = Scratch::founded();
