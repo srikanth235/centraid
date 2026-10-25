@@ -262,3 +262,33 @@ private fun parseHex(value: String?): Color? {
         blue = (scanned and 0xFF).toInt() / 255f,
     )
 }
+
+/**
+ * THE TRANSFER RULES (#1025 S4), behind the gear beside "N originals waiting": Rust's sheet
+ * (`HomeState.transfer_sheet`), its heading, the line under it and the three choices, the picked one
+ * ticked as the store holds it. A pick is `TransferRuleChosen`; Rust writes it and tells the pass
+ * service, and the sheet closes.
+ */
+@Composable
+public fun TransferRulesSheet(
+    sheet: centraid.core.v1.HomeTransferSheet,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    SheetRoom(title = sheet.title, onDismiss = onDismiss) {
+        Text(
+            sheet.subtitle,
+            style = centraidType("small"),
+            color = centraidColor("textSoft"),
+            modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
+        )
+        sheet.choices.forEach { choice ->
+            SheetRow(
+                label = choice.sentence,
+                selected = choice.picked,
+                testTag = "transfer-rule-" + choice.stored,
+                onTap = { onPick(choice.stored) },
+            )
+        }
+    }
+}

@@ -79,6 +79,7 @@ import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.CentraidGeometry
 // TRANSITIONAL (lane H2 deletes it with the Backup tab): the one place Home still
 // words a place Rust does not own yet.
+import dev.centraid.android.kit.TransferRulesSheet
 import dev.centraid.android.screens.words.FirstLaunchScreen
 
 /**
@@ -136,8 +137,7 @@ public fun HomeScreen(
         Box(Modifier.fillMaxSize().background(centraidColor("bg")))
         return
     }
-    // THE BACKUP LINE'S DOOR, and the download settings' gear: the backup tab, where the
-    // rule is chosen. Rust selects it.
+    // THE BACKUP LINE'S DOOR: the backup tab, which Rust selects.
     val openBackup = { onEvent(HomeEvent(backup = HomeEvent.BackupPressed())) }
     val search: () -> Unit = { bar?.search_route?.let(onOpen) }
     val appearance: () -> Unit = { onEvent(HomeEvent(appearance = HomeEvent.AppearancePressed())) }
@@ -153,7 +153,7 @@ public fun HomeScreen(
             VaultHeader(
                 bar = bar,
                 onSwitchVault = { onEvent(HomeEvent(vault = HomeEvent.VaultPressed())) },
-                onDownloadSettings = openBackup,
+                onDownloadSettings = { onEvent(HomeEvent(transfer_rules_pressed = HomeEvent.TransferRulesPressed())) },
                 // THE LOCKUP'S SECOND LINE IS THE BACKUP'S STATUS (R-ONBOARD-11),
                 // and its door. Nothing between it and the grid: no backup
                 // sentence, no "Home" title (the band says where the member is),
@@ -190,6 +190,13 @@ public fun HomeScreen(
     // scrolling page would scroll.
     val sheet = state.sheet
     if (sheet != null) VaultSheet(sheet, onEvent)
+    state.transfer_sheet?.let { rules ->
+        TransferRulesSheet(
+            sheet = rules,
+            onPick = { stored -> onEvent(HomeEvent(transfer_rule_chosen = HomeEvent.TransferRuleChosen(stored = stored))) },
+            onDismiss = { onEvent(HomeEvent(transfer_rules_closed = HomeEvent.TransferRulesClosed())) },
+        )
+    }
 }
 
 /** THE BAND: Rust's places, its words and its lit place; a press selects that tab. */
