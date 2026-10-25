@@ -558,7 +558,77 @@ impl Import {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
+    /// The date-order question a statement asks when its dates read both ways.
+    fn date_question(
+        &self,
+        locale: Locale,
+        statement: &wire::MoneyStatementPlan,
+    ) -> Option<wire::MoneyImportQuestion> {
+        statement
+            .question
+            .as_ref()
+            .map(|q| wire::MoneyImportQuestion {
+                prompt: words::date_order_prompt(locale),
+                samples: q.samples.clone(),
+                options: q
+                    .options
+                    .iter()
+                    .filter_map(|option| {
+                        match wire::MoneyDateOrder::try_from(*option).unwrap_or_default() {
+                            wire::MoneyDateOrder::Mdy => Some(choice(
+                                "mdy",
+                                &words::date_order_mdy(locale),
+                                self.date_order == Some(loads::ImportPlanDateOrder::Mdy),
+                                "",
+                            )),
+                            wire::MoneyDateOrder::Dmy => Some(choice(
+                                "dmy",
+                                &words::date_order_dmy(locale),
+                                self.date_order == Some(loads::ImportPlanDateOrder::Dmy),
+                                "",
+                            )),
+                            _ => None,
+                        }
+                    })
+                    .collect(),
+            })
+    }
+
+    /// The count rows under a statement: new, already in, check, repeats, rejected.
+    fn counts(locale: Locale, statement: &wire::MoneyStatementPlan) -> Vec<wire::MoneyFact> {
+        let owed = |n: u32, tone: Tone| {
+            if n > 0 { tone } else { Tone::Unspecified }
+        };
+        let mut counts = vec![
+            fact(words::count_new(locale), statement.new, Tone::Unspecified),
+            fact(
+                words::count_already_in(locale),
+                statement.already_in,
+                Tone::Unspecified,
+            ),
+            // LINES OWED A LOOK carry the tone that says so while there are any:
+            // "Check these" is the seam's, "Can't read" the net's.
+            fact(
+                words::count_check(locale),
+                statement.proposed_duplicates,
+                owed(statement.proposed_duplicates, Tone::Seam),
+            ),
+        ];
+        if statement.repeats_in_file > 0 {
+            counts.push(fact(
+                words::count_repeats(locale),
+                statement.repeats_in_file,
+                Tone::Unspecified,
+            ));
+        }
+        counts.push(fact(
+            words::count_rejected(locale),
+            statement.rejected,
+            owed(statement.rejected, Tone::Net),
+        ));
+        counts
+    }
+
     fn statement(
         &self,
         locale: Locale,
@@ -597,68 +667,12 @@ impl Import {
         .filter(|(len, cap)| len > cap)
         .map(|(len, cap)| fold::with_n(words::and_more(locale), len - cap))
         .collect();
-        let question = statement
-            .question
-            .as_ref()
-            .map(|q| wire::MoneyImportQuestion {
-                prompt: words::date_order_prompt(locale),
-                samples: q.samples.clone(),
-                options: q
-                    .options
-                    .iter()
-                    .filter_map(|option| {
-                        match wire::MoneyDateOrder::try_from(*option).unwrap_or_default() {
-                            wire::MoneyDateOrder::Mdy => Some(choice(
-                                "mdy",
-                                &words::date_order_mdy(locale),
-                                self.date_order == Some(loads::ImportPlanDateOrder::Mdy),
-                                "",
-                            )),
-                            wire::MoneyDateOrder::Dmy => Some(choice(
-                                "dmy",
-                                &words::date_order_dmy(locale),
-                                self.date_order == Some(loads::ImportPlanDateOrder::Dmy),
-                                "",
-                            )),
-                            _ => None,
-                        }
-                    })
-                    .collect(),
-            });
+        let question = self.date_question(locale, statement);
         let sign_guessed = statement
             .warnings
             .contains(&(wire::MoneyImportWarning::SignGuessed as i32));
         let plain = statement.question.is_none() && statement.statement_refusal.is_none();
-        let owed = |n: u32, tone: Tone| {
-            if n > 0 { tone } else { Tone::Unspecified }
-        };
-        let mut counts = vec![
-            fact(words::count_new(locale), statement.new, Tone::Unspecified),
-            fact(
-                words::count_already_in(locale),
-                statement.already_in,
-                Tone::Unspecified,
-            ),
-            // LINES OWED A LOOK carry the tone that says so while there are any:
-            // "Check these" is the seam's, "Can't read" the net's.
-            fact(
-                words::count_check(locale),
-                statement.proposed_duplicates,
-                owed(statement.proposed_duplicates, Tone::Seam),
-            ),
-        ];
-        if statement.repeats_in_file > 0 {
-            counts.push(fact(
-                words::count_repeats(locale),
-                statement.repeats_in_file,
-                Tone::Unspecified,
-            ));
-        }
-        counts.push(fact(
-            words::count_rejected(locale),
-            statement.rejected,
-            owed(statement.rejected, Tone::Net),
-        ));
+        let counts = Self::counts(locale, statement);
         wire::MoneyImportStatement {
             key: format!("statement:{index}"),
             title: statement.account_label.clone().unwrap_or_else(|| {

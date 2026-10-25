@@ -82,7 +82,11 @@ fn bits(size: usize, length: u32) -> u32 {
     if size < 2 {
         return 0;
     }
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "size >= 2 so log2 is positive, and length * log2(size) is at most a few thousand"
+    )]
     let bits = (f64::from(length) * (size as f64).log2()).round() as u32;
     bits
 }

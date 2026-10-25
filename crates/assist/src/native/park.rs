@@ -1932,8 +1932,15 @@ fn rule_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
     if let Some(title) = category {
         row.fields.insert("category", Val::Text(title));
     }
-    if let Some(position) = input.get("position").and_then(Value::as_f64) {
-        #[allow(clippy::cast_possible_truncation)]
+    if let Some(position) = input
+        .get("position")
+        .and_then(Value::as_f64)
+        .filter(|position| position.abs() < 1e9)
+    {
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "the filter keeps position finite and under a billion in magnitude"
+        )]
         row.fields.insert("position", Val::Num(position as i64));
     }
     row.updated = cx.now.clone();
