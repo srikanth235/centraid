@@ -506,10 +506,13 @@ fn a_stranded_write_ribbon_is_shown_and_its_door_goes_where_it_says() {
                 copy: "Storage is low".into(),
                 action: "Free up space".into(),
                 destination: wire::home_status::Destination::Phone as i32,
+                ..Default::default()
             }),
         }),
     );
-    assert_eq!(state(&d, i).status.unwrap().copy, "Storage is low");
+    let ribbon = state(&d, i).status.unwrap();
+    assert_eq!(ribbon.copy, "Storage is low");
+    assert_eq!(ribbon.accessibility_label, "Storage is low. Free up space");
     tell(&mut d, i, H::Status(wire::home_event::StatusPressed {}));
     assert!(matches!(
         d.effects.last().and_then(|e| e.effect.as_ref()).and_then(|e| e.kind.as_ref()),
@@ -642,4 +645,66 @@ fn both_native_home_views_name_all_eight_hue_roles_and_the_solved_foreground() {
         // that failed contrast on it.
         assert!(source.contains("textInv"), "{view} never names textInv");
     }
+}
+
+#[test]
+fn an_outside_entry_is_answered_with_the_route_and_the_shell_names_no_screen() {
+    use wire::home_event::entry_asked::Entry;
+    for (entry, screen) in [
+        (Entry::LockerLock, "locker.lock"),
+        (Entry::HealthConnect, "health.connect"),
+    ] {
+        let (mut d, i) = started();
+        let before = d.effects.len();
+        tell(
+            &mut d,
+            i,
+            H::EntryAsked(wire::home_event::EntryAsked {
+                entry: entry as i32,
+            }),
+        );
+        let routes: Vec<_> = d.effects[before..]
+            .iter()
+            .filter_map(|e| match e.effect.as_ref()?.kind.as_ref()? {
+                wire::effect::Kind::OpenRoute(open) => {
+                    open.route.as_ref().map(|r| r.screen.clone())
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(routes, [screen], "{entry:?}");
+    }
+}
+
+#[test]
+fn the_lockups_spoken_sentences_are_finished_by_rust() {
+    let (mut d, i) = started();
+    let front = vault("v1", "Personal");
+    tell(&mut d, i, told(&front, std::slice::from_ref(&front)));
+    // No backup line: the vault's own state line stands in the sentence.
+    let bar = state(&d, i).bar.unwrap();
+    let state_line = bar.vault.as_ref().unwrap().state_line.clone();
+    assert_eq!(
+        bar.switch_label,
+        format!("Personal, {state_line}. {}", bar.switch_spoken)
+    );
+    assert_eq!(bar.backup_open_label, "");
+    // A backup line replaces the state line, and is a door of its own.
+    tell(
+        &mut d,
+        i,
+        H::BackupTold(wire::home_event::BackupLineTold {
+            line: Some(wire::HomeBackupLine {
+                status: "Backed up today".into(),
+                tone: wire::HomeTone::Quiet as i32,
+                accessibility_label: "Backed up today".into(),
+            }),
+        }),
+    );
+    let bar = state(&d, i).bar.unwrap();
+    assert_eq!(bar.switch_label, format!("Personal. {}", bar.switch_spoken));
+    assert_eq!(
+        bar.backup_open_label,
+        format!("Backed up today. {}", bar.backup_open_spoken)
+    );
 }

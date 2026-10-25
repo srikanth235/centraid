@@ -108,9 +108,7 @@ public fun VaultHeader(
                 // reader hears one sentence rather than a name and an orphan
                 // line. The backup status is a door of its own, below.
                 .semantics(mergeDescendants = true) {
-                    contentDescription =
-                        listOf(name, if (status.isEmpty()) line else "", waiting).filter { it.isNotEmpty() }
-                            .joinToString(", ") + ". " + bar.switch_spoken
+                    contentDescription = bar.switch_label
                 },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -149,7 +147,7 @@ public fun VaultHeader(
                             .clickable(onClick = onOpenBackup)
                             .testTag("home-backup-status")
                             .semantics(mergeDescendants = true) {
-                                contentDescription = status + ". " + bar.backup_open_spoken
+                                contentDescription = bar.backup_open_label
                             },
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),

@@ -79,7 +79,7 @@ struct VaultHeader: View {
         // THE BACKUP TAB ITSELF IS PLAIN TEXT, not a dimmed control: the status
         // is still true there.
         .allowsHitTesting(shell.tab != .backup)
-        .accessibilityLabel(status + (shell.tab == .backup ? "" : ". " + bar.backupOpenSpoken))
+        .accessibilityLabel(shell.tab == .backup ? status : bar.backupOpenLabel)
         .accessibilityIdentifier("home-backup-status")
     }
 
@@ -116,7 +116,7 @@ struct VaultHeader: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(vault.name + ". " + bar.switchSpoken)
+                .accessibilityLabel(bar.switchLabel)
                 .accessibilityIdentifier("home-vault-switch")
 
                 if !status.isEmpty {

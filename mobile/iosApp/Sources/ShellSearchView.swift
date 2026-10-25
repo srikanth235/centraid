@@ -93,7 +93,8 @@ struct ShellSearchView: View {
             ReadStateView(
                 content: content,
                 loadingLabel: state.chrome.loading,
-                onRetry: { send(event { $0.refreshed = .init() }) }
+                onRetry: { send(event { $0.refreshed = .init() }) },
+                retryLabel: state.chrome.retry
             ) { found in
                 switch found {
                 case let .resting(resting):

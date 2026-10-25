@@ -324,9 +324,7 @@ private struct StatusRibbon: View {
         .accessibilityIdentifier("home-status")
         .accessibilityElement(children: hasDoor ? .contain : .combine)
         .accessibilityLabel(
-            hasDoor
-                ? status.copy
-                : [status.copy, status.action].filter { !$0.isEmpty }.joined(separator: ". ")
+            hasDoor ? status.copy : status.accessibilityLabel
         )
     }
 }
@@ -1062,7 +1060,7 @@ private struct VaultSheet: View {
             // MAKING AND RESTORING A VAULT LIVE HERE (R-ONBOARD-11), in the same
             // list, so a long roster scrolls them with it.
             Section {
-                switcherAction(sheet.makeLabel, icon: "Plus", id: "vault-found-button") {
+                switcherAction(sheet.makeLabel, spoken: sheet.makeSpoken, icon: "Plus", id: "vault-found-button") {
                     store.sendHome(.make(.init()))
                 }
                 switcherAction(sheet.restoreLabel, icon: "Refresh", id: "vault-restore-button") {
@@ -1134,7 +1132,7 @@ private struct VaultSheet: View {
     }
 
     /// One of the switcher's two acts: a mark and a label, a full-width row.
-    private func switcherAction(_ label: String, icon: String, id: String, action: @escaping () -> Void) -> some View {
+    private func switcherAction(_ label: String, spoken: String = "", icon: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
                 CentraidIconView(iconKey: icon, tint: Theme.color("text", scheme), size: 18)
@@ -1152,6 +1150,7 @@ private struct VaultSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(spoken.isEmpty ? label : spoken)
         .accessibilityIdentifier(id)
     }
 }
