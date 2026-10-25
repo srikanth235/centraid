@@ -772,16 +772,11 @@ fn a_tap_paints_the_original_fetching_before_the_bytes_move_and_a_failure_stops_
         state.words.as_ref().expect("words").load_original,
         "Load the original"
     );
-    let hash = photo_of(&state)
-        .tile
-        .as_ref()
-        .expect("tile")
-        .content_id
-        .clone();
     d.effects.clear();
     send(&mut d, at, ev::Kind::FetchOriginal(ev::FetchTapped {}));
+    // THE CORE IS ASKED, OFF THE LOCK: nothing is asked of the shell.
     let asked = effects_of(&mut d);
-    assert!(matches!(&asked[..], [wire::effect::Kind::FetchOriginal(f)] if f.content_hash == hash));
+    assert!(asked.is_empty(), "{asked:?}");
     let state = view(&d, at);
     assert!(photo_of(&state).fetching && !photo_of(&state).offers_fetch);
     assert_eq!(
@@ -793,21 +788,13 @@ fn a_tap_paints_the_original_fetching_before_the_bytes_move_and_a_failure_stops_
     send(&mut d, at, ev::Kind::FetchOriginal(ev::FetchTapped {}));
     assert!(effects_of(&mut d).is_empty());
 
-    // It could not reach the backup device: the spinner stops and the sentence says why.
-    d.effects.clear();
-    d.send(
-        at,
-        E::EffectResult(wire::EffectResult {
-            effect_id: 0,
-            outcome: Some(wire::effect_result::Outcome::OriginalFetched(
-                wire::OriginalFetched {
-                    outcome: wire::OriginalFetchOutcome::Unreachable as i32,
-                    path: String::new(),
-                    content_hash: hash.clone(),
-                },
-            )),
-        }),
-    );
+    // No backup device is paired, so none answers: the spinner stops and the sentence says why.
+    for _ in 0..100 {
+        if !photo_of(&view(&d, at)).fetching {
+            break;
+        }
+        d.pump(std::time::Duration::from_millis(50));
+    }
     let state = view(&d, at);
     assert!(
         !photo_of(&state).fetching && photo_of(&state).offers_fetch,

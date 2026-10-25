@@ -673,6 +673,7 @@ impl ScreenHost for Runtime {
                     },
                     region: region_of(&environment.locale),
                     platform: environment.platform.clone(),
+                    library_deletes: environment.library_deletes,
                 };
                 // The band's words follow the locale.
                 if state.band.is_some() {

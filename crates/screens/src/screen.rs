@@ -45,6 +45,8 @@ pub struct Environment {
     pub region: String,
     /// The OS the shell runs on (`ios`, `android`); empty before it says.
     pub platform: String,
+    /// The platform deletes from its photo library behind its own confirmation.
+    pub library_deletes: bool,
 }
 
 impl Default for Environment {
@@ -54,6 +56,7 @@ impl Default for Environment {
             zone: "UTC".to_owned(),
             region: String::new(),
             platform: String::new(),
+            library_deletes: false,
         }
     }
 }
@@ -264,6 +267,14 @@ impl<'a> Ctx<'a> {
     #[must_use]
     pub fn platform(&self) -> &str {
         &self.env.platform
+    }
+
+    /// Whether the platform deletes from its photo library behind its own
+    /// confirmation (`Environment.library_deletes`): "Free up space" is offered
+    /// only where it does.
+    #[must_use]
+    pub fn library_deletes(&self) -> bool {
+        self.env.library_deletes
     }
 
     /// Start (or restart) the named timer. When it elapses the screen gets

@@ -99,6 +99,10 @@ message Environment {
   // The OS the shell runs on: `ios` or `android`. Health names the phone's own
   // health store by it; nothing else varies by it.
   string platform = 3;
+  // The platform deletes from its photo library behind its own confirmation
+  // (iOS PhotoKit; Android 11 and later). False draws no "Free up space" row:
+  // an action the phone cannot take is not offered (#1080 A20).
+  bool library_deletes = 4;
 }
 
 // A timer elapsed (`Event.wake`). Internal to the core: see `next_event`.
@@ -471,6 +475,7 @@ message Effect {
     FreeUpSpace free_up_space = 24;
     RenderEdit render_edit = 25;
     ReadCamera read_camera = 26;
+    LibraryDelete library_delete = 27;
     ContactsRead contacts_read = 18;
     // Open the OS maps app at an address (People's address channel).
     OpenMap open_map = 19;
@@ -744,6 +749,24 @@ message FreeUpSpace {
   }
 }
 
+// DELETE ORIGINALS FROM THE PHONE'S PHOTO LIBRARY, behind the platform's own
+// confirmation (#1080 A19, A20).
+message LibraryDelete {
+  repeated LibraryDeleteItem items = 1;
+}
+
+message LibraryDeleteItem {
+  string os_ref = 1;
+  string content_hash = 2;
+  string media_type = 3;
+}
+
+message LibraryDeleted {
+  repeated string deleted_hashes = 1;
+  bool declined = 2;
+  string error = 3;
+}
+
 message FreeUpFacts {
   // The platform can delete from its library behind the system's own
   // confirmation. False draws no row at all.
@@ -872,6 +895,7 @@ message EffectResult {
     EditRendered edit_rendered = 14;
     CameraRead camera_read = 15;
     ContactsSnapshot contacts = 16;
+    LibraryDeleted library_deleted = 17;
     // ---- docs (200-299): files ----
     FilePicked file_picked = 200;
     FileProgress file_progress = 201;

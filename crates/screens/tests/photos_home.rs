@@ -1213,64 +1213,40 @@ fn send_a_copy_asks_which_location_travels_then_hands_the_pick_to_the_shell() {
 // The download arrow (FreeUpSpec's way back)
 // ---------------------------------------------------------------------------
 
-#[test]
-fn a_tapped_download_paints_the_cell_fetching_then_re_reads_on_success() {
-    let mut r = rig();
-    let a = r.photo("fetch a", Some("2026-07-01T10:00:00Z"), None);
-    r.send(H::Refreshed(wire::PhotosRefreshed {}));
-    let hash = r.tile(&a).content_id.clone();
-    assert!(!hash.is_empty());
-    let update = r.send(H::OriginalRequested(a.clone()));
-    let Some(wire::effect::Kind::FetchOriginal(fetch)) =
-        &update.effects[0].effect.as_ref().unwrap().kind
-    else {
-        panic!("not a fetch");
-    };
-    assert_eq!(fetch.content_hash, hash);
-    assert_eq!(r.tile(&a).held, wire::photo_tile::Held::Fetching as i32);
-    // A second tap while it moves asks for nothing more.
-    assert!(r.send(H::OriginalRequested(a.clone())).effects.is_empty());
-    r.d.answer_effect(wire::effect_result::Outcome::OriginalFetched(
-        wire::OriginalFetched {
-            outcome: wire::OriginalFetchOutcome::Landed as i32,
-            path: String::new(),
-            content_hash: hash,
-        },
-    ));
-    assert_ne!(r.tile(&a).held, wire::photo_tile::Held::Fetching as i32);
-    assert!(r.state().status.is_none());
+/// Pump the core's events until `done` holds, or give up after five seconds.
+fn pump_until(r: &mut Rig, done: impl Fn(&Rig) -> bool) {
+    for _ in 0..100 {
+        if done(r) {
+            return;
+        }
+        r.d.pump(std::time::Duration::from_millis(50));
+    }
 }
 
 #[test]
-fn a_fetch_that_fails_stops_the_spinner_and_names_why_without_replacing_the_library() {
+fn a_tapped_download_asks_the_core_off_the_lock_and_says_why_it_did_not_land() {
     let mut r = rig();
-    let a = r.photo("fetch b", Some("2026-07-02T10:00:00Z"), None);
+    let a = r.photo("fetch a", Some("2026-07-01T10:00:00Z"), None);
     r.send(H::Refreshed(wire::PhotosRefreshed {}));
-    let hash = r.tile(&a).content_id.clone();
-    r.send(H::OriginalRequested(a.clone()));
-    r.d.answer_effect(wire::effect_result::Outcome::OriginalFetched(
-        wire::OriginalFetched {
-            outcome: wire::OriginalFetchOutcome::Untrusted as i32,
-            path: String::new(),
-            content_hash: hash.clone(),
-        },
-    ));
+    assert!(!r.tile(&a).content_id.is_empty());
+    // THE CORE IS ASKED, NOT THE SHELL: the cell paints fetching at once.
+    let update = r.send(H::OriginalRequested(a.clone()));
+    assert!(update.effects.is_empty(), "{:?}", update.effects);
+    assert_eq!(r.tile(&a).held, wire::photo_tile::Held::Fetching as i32);
+    // A second tap while it moves asks for nothing more.
+    assert!(r.send(H::OriginalRequested(a.clone())).effects.is_empty());
+    // No backup device is paired, so none answers: the cell stops and the line says why.
+    pump_until(&mut r, |r| {
+        r.tile(&a).held != wire::photo_tile::Held::Fetching as i32
+    });
     assert_ne!(r.tile(&a).held, wire::photo_tile::Held::Fetching as i32);
     let status = r.state().status.as_ref().expect("a status");
-    assert_eq!(status.sentence, "That isn't your backup device.");
+    assert_eq!(
+        status.sentence,
+        "Can't reach your backup device. Try again later."
+    );
     assert!(status.refused);
     assert!(r.tile_ids().contains(&a));
-    // No answer at all is never silence.
-    r.send(H::OriginalRequested(a.clone()));
-    r.d.answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
-        reason: "no core".to_owned(),
-        denied: false,
-        cancelled: false,
-    }));
-    assert_eq!(
-        r.state().status.as_ref().unwrap().sentence,
-        "Couldn't get the original back. Try again."
-    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1290,34 +1266,63 @@ fn facts(releasable: u32) -> wire::FreeUpFacts {
     }
 }
 
-#[test]
-fn the_more_sheet_counts_when_it_opens_and_offers_only_what_the_core_named() {
-    let mut r = rig();
-    let update = r.send(H::Band("more".to_owned()));
-    assert!(matches!(
-        update.effects[0].effect.as_ref().unwrap().kind,
-        Some(wire::effect::Kind::FreeUpSpace(ref f)) if f.action == wire::free_up_space::Action::Count as i32
-    ));
-    // Nothing is drawn until the census has answered.
-    assert!(r.state().more.as_ref().unwrap().free_up.is_none());
-    r.d.answer_effect(wire::effect_result::Outcome::FreeUpFacts(facts(2)));
-    let row = r
-        .state()
+/// The shell reports what the platform can do; `deletes` is whether it deletes from its photo
+/// library behind its own confirmation.
+fn environment(r: &mut Rig, deletes: bool) {
+    r.d.call(wire::screen_request::Kind::Environment(wire::Environment {
+        locale: "en-US".to_owned(),
+        zone: "UTC".to_owned(),
+        platform: "ios".to_owned(),
+        library_deletes: deletes,
+    }));
+}
+
+fn free_up_row(r: &Rig) -> Option<wire::PhotosFreeUpRow> {
+    r.state()
         .more
         .as_ref()
-        .unwrap()
-        .free_up
-        .clone()
-        .expect("a row");
+        .and_then(|more| more.free_up.clone())
+}
+
+#[test]
+fn the_more_sheet_counts_off_the_lock_through_the_core_and_asks_the_shell_nothing() {
+    let mut r = rig();
+    environment(&mut r, true);
+    let update = r.send(H::Band("more".to_owned()));
+    assert!(update.effects.is_empty(), "{:?}", update.effects);
+    // Nothing is drawn until the census has answered.
+    assert!(free_up_row(&r).is_none());
+    pump_until(&mut r, |r| free_up_row(r).is_some());
+    let row = free_up_row(&r).expect("a row");
     assert_eq!(row.title, "Free up space");
-    assert_eq!(row.meta, "40 originals · 3 GB on this phone");
-    assert_eq!(row.reason, "2 photos are backed up.");
-    assert_eq!(row.action_label, "Free up 2 GB");
-    assert!(row.enabled);
+    // No gateway holds an original whole yet, so nothing can be freed.
+    assert!(!row.enabled && row.action_label.is_empty());
+    assert!(
+        row.reason.starts_with("None can be freed yet."),
+        "{}",
+        row.reason
+    );
     assert_eq!(
         row.retention,
         "Deleted photos stay on your backup device for a while before they are cleared."
     );
+    // A tap on a row with nothing to free asks the platform nothing.
+    assert!(
+        r.send(H::FreeUpTapped(wire::PhotosFreeUpTapped {}))
+            .effects
+            .is_empty()
+    );
+}
+
+#[test]
+fn a_phone_whose_platform_cannot_delete_is_offered_no_row_and_counts_nothing() {
+    let mut r = rig();
+    environment(&mut r, false);
+    let update = r.send(H::Band("more".to_owned()));
+    assert!(update.effects.is_empty());
+    r.d.pump(std::time::Duration::from_millis(200));
+    assert!(r.state().more.is_some(), "the sheet is up");
+    assert!(free_up_row(&r).is_none());
 }
 
 #[test]
@@ -1351,42 +1356,12 @@ fn nothing_is_offered_until_a_gateway_holds_an_original_whole() {
 }
 
 #[test]
-fn a_tap_holds_the_row_while_the_system_asks_and_the_answer_is_a_sentence() {
-    let mut r = rig();
-    r.send(H::Band("more".to_owned()));
-    // Before the count there is nothing to tap.
-    assert!(
-        r.send(H::FreeUpTapped(wire::PhotosFreeUpTapped {}))
-            .effects
-            .is_empty()
-    );
-    r.d.answer_effect(wire::effect_result::Outcome::FreeUpFacts(facts(2)));
-    let update = r.send(H::FreeUpTapped(wire::PhotosFreeUpTapped {}));
-    assert!(matches!(
-        update.effects[0].effect.as_ref().unwrap().kind,
-        Some(wire::effect::Kind::FreeUpSpace(ref f)) if f.action == wire::free_up_space::Action::Free as i32
-    ));
-    assert!(
-        r.state()
-            .more
-            .as_ref()
-            .unwrap()
-            .free_up
-            .as_ref()
-            .unwrap()
-            .freeing
-    );
-    // A second tap while it is in the system's hands does nothing.
-    assert!(
-        r.send(H::FreeUpTapped(wire::PhotosFreeUpTapped {}))
-            .effects
-            .is_empty()
-    );
+fn what_the_last_free_up_came_to_is_one_sentence_on_the_row() {
+    use centraid_screens::photos::keep_originals::FreeUpRow;
     let mut after = facts(0);
     after.outcome = wire::free_up_facts::Outcome::Freed as i32;
     after.freed_bytes = 2_000_000_000;
-    r.d.answer_effect(wire::effect_result::Outcome::FreeUpFacts(after));
-    let row = r.state().more.as_ref().unwrap().free_up.clone().unwrap();
+    let row = FreeUpRow::from_facts(Locale::En, &after);
     assert!(!row.freeing);
     assert_eq!(
         row.notice,
@@ -1404,19 +1379,19 @@ fn a_tap_holds_the_row_while_the_system_asks_and_the_answer_is_a_sentence() {
     ] {
         let mut f = facts(1);
         f.outcome = outcome as i32;
-        assert_eq!(
-            centraid_screens::photos::keep_originals::FreeUpRow::from_facts(Locale::En, &f).notice,
-            text
-        );
+        assert_eq!(FreeUpRow::from_facts(Locale::En, &f).notice, text);
     }
     let mut platform = facts(1);
     platform.outcome = wire::free_up_facts::Outcome::PlatformError as i32;
     platform.platform_error = "Photos access is limited.".to_owned();
     assert_eq!(
-        centraid_screens::photos::keep_originals::FreeUpRow::from_facts(Locale::En, &platform)
-            .notice,
+        FreeUpRow::from_facts(Locale::En, &platform).notice,
         "Photos access is limited."
     );
+    // A row with something to free holds still while the system asks.
+    let row = FreeUpRow::from_facts(Locale::En, &facts(2));
+    let held = row.tapped().expect("a tap holds");
+    assert!(held.freeing && held.tapped().is_none());
 }
 
 #[test]
