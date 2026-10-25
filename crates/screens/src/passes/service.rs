@@ -29,6 +29,10 @@ use super::windows;
 use crate::custody::secrets::VaultSecrets;
 use crate::screen::{Ctx, Screen};
 
+/// The pseudo-table the core announces when the backup ledger moved
+/// (`centraid_core` `phone::backup_reads::TABLE`).
+const LEDGER_TABLE: &str = "backup";
+
 /// The route name of the service.
 pub const NAME: &str = "passes.conductor";
 
@@ -242,6 +246,13 @@ impl Service {
                 } else {
                     self.conductor.entered_background()
                 }
+            }
+            // THE LEDGER'S OWN MOVES ARE NOT COMMITS: a pass, a pairing or a forget announces
+            // the pseudo-table `backup` (`phone::backup_reads::TABLE`), and a pass started by
+            // the change a pass made would never end. Only a change to a vault table is a
+            // commit worth a pass.
+            E::DataChanged(changed) if changed.tables.iter().all(|table| table == LEDGER_TABLE) => {
+                Vec::new()
             }
             E::DataChanged(_) => self.conductor.commit_landed(),
             E::TimerFired(fired) => self.conductor.timer(&fired.timer),
