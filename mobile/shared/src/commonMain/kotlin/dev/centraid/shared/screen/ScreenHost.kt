@@ -94,9 +94,9 @@ public class ScreenHost<S, E>(public val machine: ScreenMachine<S, E>) {
          * the opposite ("so `send` does not suspend on a shell that has not
          * attached its runner yet"), and on that reading two runners started
          * their collectors with a plain `launch` and raced the screen's first
-         * `ReadPage`. Home's tiles sat `LOADING` for ever on the launches the
-         * race lost. Both start `UNDISPATCHED` now; `HomeRuntime.start` carries
-         * the argument.
+         * `ReadPage`. A screen sat `LOADING` for ever on the launches the
+         * race lost. Both start `UNDISPATCHED` now (`ScreenRuntime.start` carries
+         * the argument).
          */
         public const val EFFECT_BUFFER: Int = 32
     }

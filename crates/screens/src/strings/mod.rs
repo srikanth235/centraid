@@ -133,6 +133,7 @@ pub mod backup_home;
 pub mod custody;
 pub mod docs;
 pub mod health;
+pub mod home;
 pub mod locker;
 pub mod money;
 pub mod notes;

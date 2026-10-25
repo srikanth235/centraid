@@ -144,6 +144,7 @@ struct CentraidApp: App {
                 switch phase {
                 case .active:
                     shell.unmask()
+                    shell.tellPhoneScheme()
                     shell.screens?.lifecycle(foreground: true)
                     // AND DOCS FOLLOWS THE PHONE. The foreground pass is Rust's:
                     // the lifecycle above is what the pass scheduler hears.

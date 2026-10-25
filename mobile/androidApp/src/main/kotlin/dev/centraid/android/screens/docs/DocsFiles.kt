@@ -38,7 +38,7 @@ import java.io.File
 /**
  * WHAT DOCS' EFFECTS NEED FROM THE SESSION (#1135): the stage door that a picked file
  * streams through, and the vault's half of following a folder. Attached once, with the
- * session (`AgendaRoutes.attach`).
+ * session (`RustRoot.attach`).
  */
 internal class DocsFiles {
     val stage = StageFileBridge()

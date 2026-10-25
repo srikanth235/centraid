@@ -97,8 +97,7 @@ class ScreenOpeningsSpec : StringSpec({
         RowRoutes.isThread(row("agenda", "thread", "c1")) shouldBe false
     }
 
-    "a route is its destination, spelled: a destination no route spells is null, not a guess" {
-        ScreenOpenings.of(Destination.Settings).shouldBeNull()
+    "a route is its destination, spelled" {
         // Agenda's pages are Rust's (#1135): the opening is the `Route`, encoded, under one screen id.
         val rust = ScreenOpenings.of(AgendaEntry.home())!!
         rust.screenId shouldBe ScreenIds.RUST_SCREEN

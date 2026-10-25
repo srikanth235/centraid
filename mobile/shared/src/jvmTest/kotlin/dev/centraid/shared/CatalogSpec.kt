@@ -2,14 +2,11 @@ package dev.centraid.shared
 
 import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.shared.shell.BandPolicy
 import dev.centraid.shared.shell.SpringboardPolicy
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
-import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
-import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 
@@ -73,9 +70,9 @@ class CatalogSpec : StringSpec({
         // shells and nothing fails.
         val named = buildSet {
             addAll(CentraidCatalog.apps.map { it.iconKey })
-            addAll(BandPolicy.PLACES.map { it.iconKey })
-            // The band's Backup tab, drawn beside the places (R-ONBOARD-9).
-            add("Backup")
+            // THE BAND'S MARKS are Rust's (`crates/screens/src/shell/band.rs`: Home, the
+            // assistant's Sparkle, Backup); a mark the emitted set lacks draws blank.
+            addAll(listOf("Home", "Sparkle", "Backup"))
             // The lockup's two verbs and the title row's one control.
             add("Search")
             add("NewChat")
@@ -85,55 +82,6 @@ class CatalogSpec : StringSpec({
             withClue("icon '$key' is named by a caller and is not in the emitted set") {
                 CentraidCatalog.icons.containsKey(key).shouldBeTrue()
                 CentraidCatalog.icons.getValue(key).isNotEmpty().shouldBeTrue()
-            }
-        }
-    }
-
-    // --- the band -----------------------------------------------------------
-
-    "the band is Home plus four, and More is not one of them" {
-        val tabs = BandPolicy.bandTabs()
-        tabs.first().id shouldBe "home"
-        tabs.first().law.shouldBeTrue()
-        (tabs.size <= BandPolicy.BAND_PLACE_SLOTS + 1).shouldBeTrue()
-        tabs.none { it.id == "more" }.shouldBeTrue()
-    }
-
-    "the default band pins no place with nothing behind it (R-1047-F7b)" {
-        // Vault has no destination on either shell yet: pinned, it was a tab
-        // that navigated nowhere, which is Starred's defect.
-        BandPolicy.DEFAULT_PINS.contains("data").shouldBeFalse()
-        BandPolicy.bandTabs().map { it.id } shouldBe listOf("home")
-        BandPolicy.place("data").shouldNotBeNull().pinnedByDefault.shouldBeFalse()
-    }
-
-    "System is reachable by link and never spends a band slot" {
-        // Its route still resolves, so a saved link never dead-ends; it is a
-        // custodian surface and does not earn one of five targets.
-        BandPolicy.bandTabs(BandPolicy.PLACES.map { it.id })
-            .none { it.id == "gateway" }.shouldBeTrue()
-    }
-
-    "every place pinned is capped at Home plus four; a sixth overflows into More" {
-        // The cap is a CONSTRAINT: a sixth destination puts every target under
-        // 44pt on a 390px screen.
-        val everything = BandPolicy.PLACES.map { it.id }
-        val bandable = BandPolicy.PLACES.count { it.id != "gateway" }
-        BandPolicy.bandTabs(everything).size shouldBe minOf(bandable, BandPolicy.BAND_PLACE_SLOTS + 1)
-        // Needs you and Activity went with their data planes (#1029).
-        BandPolicy.place("notifs") shouldBe null
-        BandPolicy.place("stats") shouldBe null
-    }
-
-    "a place's short name only ever DROPS words from its name" {
-        // v0 shipped four names for one place at once because the band spoke one
-        // noun and painted another. A substitution here is that defect.
-        BandPolicy.PLACES.forEach { place ->
-            withClue(place.id) {
-                val words = place.name.lowercase().split(" ").toSet()
-                place.short.lowercase().split(" ").forEach { word ->
-                    words.contains(word).shouldBeTrue()
-                }
             }
         }
     }

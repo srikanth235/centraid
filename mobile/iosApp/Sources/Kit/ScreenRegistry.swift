@@ -24,9 +24,6 @@ protocol AppScreens {
     static var appID: String { get }
     /// Hand the shell this app's ports and routes.
     @MainActor static func register(into shell: ShellModel)
-    /// Where this app's Home tile leads, or nowhere (`nil` is honest: a tap
-    /// that stays put beats a blank cover).
-    static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route?
     /// WHAT AN APP WATCHES FROM THE APP'S ROOT, wherever the member is
     /// (Android's `AppRoutes.Global`): a push a background ingest earns, the
     /// OS prompt a lock asks for, the platform sheets a bridge's seam
@@ -59,10 +56,6 @@ enum AppRegistry {
         MoneyScreens.self,
         HealthScreens.self,
     ]
-
-    static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? {
-        apps.first { $0.appID == tile.appID }?.tileRoute(tile)
-    }
 
     /// A screen id's app is the one hosting its prefix; a screen no app claims
     /// is pushed as it stands.

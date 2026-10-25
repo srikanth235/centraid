@@ -48,7 +48,7 @@ const PERSON_ENTITY: &str = "person";
 /// containers that matched.
 type Opened = (Vec<Target>, Vec<Target>);
 
-pub(super) fn search(
+pub(crate) fn search(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::VaultSearchRequest,
