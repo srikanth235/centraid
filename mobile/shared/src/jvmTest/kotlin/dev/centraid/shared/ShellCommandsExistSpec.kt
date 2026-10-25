@@ -124,7 +124,7 @@ class ShellCommandsExistSpec : StringSpec({
             .toSet()
         val registered = registeredCommands(repositoryRoot)
         listOf(
-            "person.edit", // a `const val EDIT_COMMAND`
+            "photo.add", // a `const val ACTION` (People's `EDIT_COMMAND` went with its KMP code, #1135)
             "locker.add_item", // a bare `const val COMMAND`
             "entity.purge", // an argument to a trash spec
             "locker.edit_item", // an `if` branch

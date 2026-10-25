@@ -59,7 +59,10 @@ class ChatScopeSpec : StringSpec({
             ?: error("thread is gone from contracts/schema/vault-ddl.sql; point this spec at its replacement")
         thread.groupValues[1].contains("scope TEXT,") shouldBe true
         thread.groupValues[1].contains("CHECK") shouldBe false
-        roster().none { ddl.contains("'$it'") } shouldBe true
+        // `health` is also the word of a phone store a followed origin names (`follow.system`); it
+        // is the one roster word the DDL spells, as a store and never as an app.
+        val outsideStores = ddl.lines().filterNot { it.contains("system IN (") }.joinToString("\n")
+        roster().none { outsideStores.contains("'$it'") } shouldBe true
     }
 
     "and the scopes the assistant takes (App::ALL: every app is a scope)" {
