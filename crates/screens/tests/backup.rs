@@ -145,16 +145,12 @@ fn choosing_a_rule_tells_the_pass_service_in_the_same_call_that_the_write_is_ans
     let (mut driver, mut shell, instance) = open();
     driver.serve(&mut shell);
     let windows = |driver: &Driver| {
-        driver
-            .effects
-            .iter()
-            .filter_map(
-                |request| match request.effect.as_ref().and_then(|e| e.kind.as_ref()) {
-                    Some(wire::effect::Kind::ScheduleWindows(schedule)) => Some(schedule.clone()),
-                    _ => None,
-                },
-            )
-            .last()
+        driver.effects.iter().rev().find_map(|request| {
+            match request.effect.as_ref().and_then(|e| e.kind.as_ref()) {
+                Some(wire::effect::Kind::ScheduleWindows(schedule)) => Some(schedule.clone()),
+                _ => None,
+            }
+        })
     };
     let before = windows(&driver).map(|schedule| schedule.windows.len());
     driver.effects.retain(|request| {

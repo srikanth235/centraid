@@ -280,7 +280,7 @@ impl Runtime {
         };
         let ctx = Ctx::new(core, &env);
         let effects = instance.screen.update(event, &ctx);
-        let mut done = ctx.finish();
+        let done = ctx.finish();
         instance.tables.extend(done.tables);
         if let Some(vault_id) = done.switch {
             state.switch = Some(vault_id);
