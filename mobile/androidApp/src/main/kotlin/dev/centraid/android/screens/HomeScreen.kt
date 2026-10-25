@@ -127,6 +127,10 @@ public fun HomeScreen(
     onOpenHome: () -> Unit = {},
     /** The Backup tab's screen (`BackupSheets.Tab`). */
     backupTab: @Composable () -> Unit = {},
+    /** Whether the Chat tab is drawn in place of the springboard (#1135), and its door and screen. */
+    chatShown: Boolean = false,
+    onOpenChat: () -> Unit = {},
+    chatTab: @Composable () -> Unit = {},
     /** Home's search bar's words: the search screen's own placeholder (R-CHROME-6). */
     searchPlaceholder: String = "",
     /** The search bar was tapped. Defaulted for previews. */
@@ -135,7 +139,7 @@ public fun HomeScreen(
     onToggleAppearance: (() -> Unit)? = null,
 ) {
     // BACK ON THE BACKUP TAB returns to Home, as the band's Home does.
-    BackHandler(enabled = backupShown) { onOpenHome() }
+    BackHandler(enabled = backupShown || chatShown) { onOpenHome() }
     // BARE PAPER UNTIL THE LOCKUP LANDS. The shelf says it holds a vault a
     // moment before the session publishes that vault's lockup, and Home drawn
     // in that moment said "No vault yet" for a frame between first launch and
@@ -168,10 +172,23 @@ public fun HomeScreen(
             // HOME'S SEARCH KEY (R-CHROME-6), at the lockup's trailing edge;
             // a tap opens the search over every app. Not on the
             // Backup tab, which is the backup's and not the springboard's.
-            onSearch = onOpenSearch.takeIf { !backupShown },
+            onSearch = onOpenSearch.takeIf { !backupShown && !chatShown },
             searchLabel = searchPlaceholder,
-            onAppearance = onToggleAppearance.takeIf { !backupShown },
+            onAppearance = onToggleAppearance.takeIf { !backupShown && !chatShown },
         )
+        // THE CHAT TAB DRAWS IN PLACE OF THE SPRINGBOARD, as Backup does (#1135): its screen is Rust's.
+        if (chatShown) {
+            Box(Modifier.weight(1f)) { chatTab() }
+            LocalShellLine.current?.invoke()
+            HomeBand(
+                active = BandPolicy.PLACE_CHAT,
+                onSelect = { target ->
+                    if (target == BandPolicy.PLACE_HOME) onOpenHome()
+                    if (target == BandPolicy.PLACE_BACKUP) onOpenBackup()
+                },
+            )
+            return@Column
+        }
         // THE BACKUP TAB DRAWS IN PLACE OF THE SPRINGBOARD, as Chat does on
         // iOS, under the vault's lockup: the backup it describes is that
         // vault's, and the band stays where it is.
@@ -180,7 +197,10 @@ public fun HomeScreen(
             LocalShellLine.current?.invoke()
             HomeBand(
                 active = BandPolicy.PLACE_BACKUP,
-                onSelect = { target -> if (target == BandPolicy.PLACE_HOME) onOpenHome() },
+                onSelect = { target ->
+                    if (target == BandPolicy.PLACE_HOME) onOpenHome()
+                    if (target == BandPolicy.PLACE_CHAT) onOpenChat()
+                },
             )
             return@Column
         }
@@ -207,6 +227,7 @@ public fun HomeScreen(
                 // BACKUP is a tab: where this vault's backup stands, the
                 // backup devices and the recovery key.
                 if (target == BandPolicy.PLACE_BACKUP) onOpenBackup()
+                if (target == BandPolicy.PLACE_CHAT) onOpenChat()
             },
         )
     }

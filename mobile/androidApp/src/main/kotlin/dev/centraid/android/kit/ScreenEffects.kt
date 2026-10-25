@@ -92,6 +92,8 @@ internal fun PerformScreenEffects(
     docs: DocsPickers? = null,
     health: AndroidHealth? = null,
     openRoute: ((Route) -> Unit)? = null,
+    /** A second tab whose instances' effects are also performed here (the Chat tab shares Agenda's runtime). */
+    alsoTab: String? = null,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -111,13 +113,18 @@ internal fun PerformScreenEffects(
     val fileDoors = remember { FileDoors() }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> fileDoors.picked(uri) }
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri -> fileDoors.saved(uri) }
+    // THE CHAT'S PHOTO LIBRARY: the system photo picker, one image, one prompt out at a time.
+    val photoDoor = remember { ChatEffects.PhotoDoor() }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> photoDoor.picked(uri) }
     LaunchedEffect(screens) {
         screens.effects.collect { request ->
             // TWO APPS' RUNTIMES SHARE ONE CORE, so each hears every push: an effect for
             // another app's screen is that app's performer's to answer.
-            if (tab != null && screens.navigation.value?.tabs?.firstOrNull { it.tab == tab }
-                    ?.entries?.none { it.instance == request.instance } != false
-            ) {
+            val mine = { name: String ->
+                screens.navigation.value?.tabs?.firstOrNull { it.tab == name }
+                    ?.entries?.any { it.instance == request.instance } == true
+            }
+            if (tab != null && !mine(tab) && (alsoTab == null || !mine(alsoTab))) {
                 return@collect
             }
             // ONE COROUTINE PER EFFECT: a permission dialog waits for the member
@@ -126,7 +133,14 @@ internal fun PerformScreenEffects(
                 val effect = request.effect
                 val doors = Doors(fileDoors, { picker.launch(arrayOf("*/*")) }, { saver.launch(it) }, onAnnounce)
                 val answer: (EffectResult) -> Unit = { result -> launch { screens.answer(request, result) } }
-                val result = if (effect?.health_read != null) {
+                val result = if (effect?.model_download != null) {
+                    // THE CHAT'S MODEL (and the photo reader): the only thing Centraid fetches.
+                    ChatEffects.download(screens, request, effect.model_download!!)
+                } else if (effect?.pick_library_photo != null) {
+                    ChatEffects.pickLibraryPhoto(context, photoDoor) {
+                        photoPicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    }
+                } else if (effect?.health_read != null) {
                     health?.snapshot(effect.health_read!!) { healthLauncher?.launch(it) }
                         ?: failed("not performed by this shell")
                 } else if (effect?.pick_file != null || effect?.follow_folder != null || effect?.stop_following != null || effect?.open_route != null) {

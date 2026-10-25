@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
+import dev.centraid.design.copy.ChatCopy
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.shell.BandPolicy
 
@@ -112,6 +113,17 @@ public fun HomeBand(
                 modifier = Modifier.weight(1f),
             )
         }
+        // CHAT, the band's second place (#1135): a tab drawn in place of the springboard, as Backup
+        // is. Its mark is the assistant's, not a speech bubble.
+        BandTab(
+            iconKey = "Sparkle",
+            label = ChatCopy.TAB_LABEL,
+            spoken = ChatCopy.TAB_LABEL + if (active == BandPolicy.PLACE_CHAT) ", " + SharedCopy.BAND_CURRENT_SPOKEN else "",
+            selected = active == BandPolicy.PLACE_CHAT,
+            testTag = "home-band-chat",
+            onPress = { onSelect(BandPolicy.PLACE_CHAT) },
+            modifier = Modifier.weight(1f),
+        )
         // BACKUP, the band's last place: a tab drawn in place of the
         // springboard — where the backup stands, the backup devices and the 24
         // words — so a member never hunts for the one thing that brings the

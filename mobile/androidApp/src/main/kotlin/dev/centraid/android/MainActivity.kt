@@ -420,6 +420,21 @@ public class MainActivity : FragmentActivity() {
                 // import's progress and outcome). It stays until its Done — DESIGN.md has no toast —
                 // and a held line (an import still running) has no Done.
                 var shellNote by remember { mutableStateOf(ShellNote("", holds = false)) }
+                // THE CHAT TAB (#1135): drawn in place of the springboard, as Backup is. It scopes to
+                // the app the member last had open.
+                var chatShown by remember { mutableStateOf(false) }
+                var chatApp by remember { mutableStateOf("") }
+                LaunchedEffect(stack.current) {
+                    (stack.current as? Destination.RustScreen)?.route?.screen?.substringBefore('.')
+                        ?.takeIf { it.isNotEmpty() }?.let { chatApp = it }
+                }
+                // A SEARCH'S ASK ROW (#1097): back to Home, the Chat tab, and the question.
+                val askChat: (centraid.core.v1.SearchAsk) -> Unit = { ask ->
+                    stack = NavStack()
+                    backupSheet.close()
+                    chatShown = true
+                    agenda.ask(ask)
+                }
                 // THE QUESTION AN ACCOUNT THAT LEFT THE PHONE ASKS (R-1127-9).
                 phoneFollow.question?.let { asked ->
                     PhoneFollowSheet(asked) { keep -> phoneFollow.answer(asked, keep) }
@@ -494,6 +509,7 @@ public class MainActivity : FragmentActivity() {
                 }
                 CompositionLocalProvider(
                     LocalShellLine provides shellLine,
+                    dev.centraid.android.kit.LocalAskChat provides askChat,
                 ) {
                 // EVERY APP'S ROOT WATCH (`AppRoutes.Global`), on every screen.
                 routes.forEach { app -> key(app) { app.Global(nav) } }
@@ -616,7 +632,10 @@ public class MainActivity : FragmentActivity() {
                         // BACKUP TAB (#1080, R-ONBOARD-9): the backup devices
                         // and the 24 words live there. "Add a backup device"
                         // and "Show my 24 words" open their sheets over it.
-                        onOpenBackup = { backupSheet.open() },
+                        onOpenBackup = { chatShown = false; backupSheet.open() },
+                        chatShown = chatShown,
+                        onOpenChat = { backupSheet.close(); chatShown = true },
+                        chatTab = { agenda.ChatTab(nav, chatApp, state.vault?.vault_name.orEmpty()) },
                         searchPlaceholder = homeSearch.placeholder,
                         onOpenSearch = { stack = stack.push(homeSearch.open()) },
                         // THE APPEARANCE KEY (R-CHROME-7): flipped against
@@ -629,8 +648,8 @@ public class MainActivity : FragmentActivity() {
                                 appearance = Appearance.read(store)
                             }
                         },
-                        backupShown = backupSheet.showing,
-                        onOpenHome = { backupSheet.close() },
+                        backupShown = backupSheet.showing && !chatShown,
+                        onOpenHome = { chatShown = false; backupSheet.close() },
                         backupTab = {
                             backupSheet.Tab(
                                 onAddDestination = {

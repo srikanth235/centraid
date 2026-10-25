@@ -18,6 +18,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import centraid.core.v1.AgendaDestination
+import centraid.core.v1.ChatEvent
+import centraid.core.v1.SearchAsk
+import dev.centraid.android.screens.chat.ChatScreen
 import centraid.core.v1.LockerWallEvent
 import centraid.core.v1.DocsDriveEvent
 import centraid.core.v1.DocsFollowed
@@ -190,6 +193,9 @@ internal class AgendaRoutes(
                 docs = pickers,
                 health = health,
                 openRoute = { route -> nav.push(Destination.RustScreen(route)) },
+                // THE CHAT TAB'S INSTANCE lives in this runtime: its effects (the model download,
+                // the library photo, the owner check) are performed here too.
+                alsoTab = CHAT_TAB,
             )
             // THE APP LEAVING THE FOREGROUND RELOCKS THE LOCKER: the core does it, every open screen hears it.
             val owner = LocalLifecycleOwner.current
@@ -217,6 +223,59 @@ internal class AgendaRoutes(
         val runtime = screens ?: return
         val instance = opened.firstOrNull { it.entry === entry }?.instance ?: return
         RustHost(runtime, instance, entry, nav)
+    }
+
+    /**
+     * THE CHAT TAB (#1135, lane I), drawn from Rust's `chat.home` root, which this runtime opened
+     * with the other tabs' roots. [app] is the app the member last had open (the chat scopes to
+     * it while it has nothing to lose), [vaultName] the header's second line. A card's page and
+     * Photos' attach picker are pushed as any row's route is.
+     */
+    @Composable
+    fun ChatTab(nav: RouteNav, app: String, vaultName: String) {
+        val runtime = screens ?: return
+        val navigation by runtime.navigation.collectAsState()
+        val views by runtime.views.collectAsState()
+        val context = LocalContext.current
+        val instance = navigation?.tabs?.firstOrNull { it.tab == CHAT_TAB }?.entries?.firstOrNull()?.instance ?: return
+        val send: (ChatEvent) -> Unit = { event ->
+            nav.scope.launch { runtime.send(instance, ScreenEvent(chat = event)) }
+        }
+        // THE TAB APPEARING: the scope it opens in, the vault's name and where models live.
+        LaunchedEffect(instance, app, vaultName) {
+            send(
+                ChatEvent(
+                    opened = ChatEvent.Opened(
+                        app = app,
+                        vault_name = vaultName,
+                        models_dir = java.io.File(context.filesDir, "models").path,
+                    ),
+                ),
+            )
+        }
+        val state = views[instance]?.chat ?: return
+        ChatScreen(
+            state = state,
+            onEvent = send,
+            onOpenRoute = { route -> nav.push(Destination.RustScreen(route)) },
+        )
+    }
+
+    /**
+     * A SEARCH'S ASK ROW (#1097): the chat opens in the row's scope and asks its question. The
+     * caller has already shown the Chat tab; Rust starts a fresh chat when the open one holds a
+     * thread and waits for the model before asking.
+     */
+    fun ask(ask: SearchAsk) {
+        val runtime = screens ?: return
+        scope?.launch {
+            val instance = runtime.navigation.value?.tabs?.firstOrNull { it.tab == CHAT_TAB }?.entries?.firstOrNull()?.instance
+                ?: return@launch
+            runtime.send(
+                instance,
+                ScreenEvent(chat = ChatEvent(asked = ChatEvent.Asked(scope = ask.scope, question = ask.question))),
+            )
+        }
     }
 
     /** The 24 words' sheet closed: every Locker wall re-reads whether this core holds keys (a re-key just landed). */
@@ -600,6 +659,9 @@ internal class AgendaRoutes(
          * shell lane replaces the KMP one.
          */
         const val TAB = "agenda"
+
+        /** The Chat tab's id in Rust's runtime (`chat::TAB`); its root is drawn by [ChatTab]. */
+        const val CHAT_TAB = "chat"
         val PREFIXES = listOf("agenda.", "docs.", "notes.", "people.", "health.", "locker.", "money.")
     }
 }
