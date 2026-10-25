@@ -58,11 +58,30 @@ impl World {
             .filter(|party| !party.is_you)
             .map(|party| (party.name.clone(), party.party_id.clone()))
             .collect();
-        Self {
+        let mut world = Self {
             driver,
             me,
             people,
             seq: 0,
+        };
+        world.clear_the_example_agenda();
+        world
+    }
+
+    /// The example vault seeds its agenda around the wall clock, a weekly run
+    /// from tomorrow among it, so on the weekday before a test's 2099 week the
+    /// run lands in that week. Trash every seeded event: each test arranges the
+    /// events it counts.
+    fn clear_the_example_agenda(&mut self) {
+        let mut seeded: Vec<String> = self
+            .window("1970-01-01T00:00:00Z", "2099-01-01T00:00:00Z")
+            .into_iter()
+            .map(|event| event.event_id)
+            .collect();
+        seeded.sort();
+        seeded.dedup();
+        for event_id in seeded {
+            self.act(act::agenda::TrashEvent { event_id });
         }
     }
 
