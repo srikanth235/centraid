@@ -70,7 +70,43 @@ pub const DEBUG_FAULT_COMMAND: &str = "debug.panic";
 pub const OWNER_DEVICE: &str = "this-device";
 
 /// The type a shell holds. Opaque across the C ABI.
+///
+/// A cheap clone of one [`HandleState`]: a job that must outlive a call (the
+/// screen runtime's `off_thread`) takes its own `Handle` and the core stays
+/// one, whoever holds it.
+#[derive(Clone)]
 pub struct Handle {
+    state: Arc<HandleState>,
+}
+
+impl std::ops::Deref for Handle {
+    type Target = HandleState;
+
+    fn deref(&self) -> &HandleState {
+        &self.state
+    }
+}
+
+impl Handle {
+    fn new(make: impl FnOnce(std::sync::Weak<HandleState>) -> HandleState) -> Handle {
+        Handle {
+            state: Arc::new_cyclic(|me| make(me.clone())),
+        }
+    }
+
+    /// The handle a [`HandleState`] belongs to; `None` once the last `Handle`
+    /// is gone.
+    #[must_use]
+    pub fn of(state: &HandleState) -> Option<Handle> {
+        state.me.upgrade().map(|state| Handle { state })
+    }
+}
+
+/// Everything a [`Handle`] is. Public only so `Handle` can deref to it.
+#[doc(hidden)]
+pub struct HandleState {
+    /// This state's own `Arc`, so `&self` can mint a [`Handle`].
+    me: std::sync::Weak<HandleState>,
     /// THE VAULT, WHEN THERE IS ONE.
     ///
     /// `None` is a core opened at a path with no file and `create: false` —
@@ -167,10 +203,7 @@ pub struct Handle {
     pub(crate) assist: crate::assist::Hub,
     /// THE SCREEN RUNTIME, once a shell-facing library has attached one
     /// (#1135, lane C2): see [`crate::screens`].
-    pub(crate) screens: std::sync::OnceLock<Arc<dyn crate::screens::ScreenHost>>,
-    /// This handle, weakly, once it is shared ([`Handle::shared`]): what a job that outlives
-    /// the call that started it holds (`ScreenCtx::spawn`).
-    pub(crate) me: std::sync::OnceLock<std::sync::Weak<Handle>>,
+    screens: std::sync::OnceLock<Arc<dyn crate::screens::ScreenHost>>,
 }
 
 /// THE CLOCK AND ID SOURCE A CORE WAS OPENED WITH, kept for the life of the
@@ -266,12 +299,14 @@ impl Core {
             None => None,
             Some((seed, index)) => Some(crate::phone::Keyring::derive(&seed, index)?),
         };
-        Ok(Handle {
+        let registry = Arc::new(Registry::with_system_commands()?);
+        Ok(Handle::new(|me| HandleState {
+            me,
             plane: crate::phone::Plane::of(&path).with_ceiling(spool_ceiling),
             path,
             keys,
             vault: Arc::new(Mutex::new(vault)),
-            registry: Arc::new(Registry::with_system_commands()?),
+            registry,
             ui_thread_name,
             events: Arc::new(EventQueue::new()),
             staging: crate::stage::Staging::default(),
@@ -289,8 +324,7 @@ impl Core {
             locker: Arc::new(Mutex::new(None)),
             assist: crate::assist::Hub::new(),
             screens: std::sync::OnceLock::new(),
-            me: std::sync::OnceLock::new(),
-        })
+        }))
     }
 
     /// Open (or create) the file and put the content store beside it.
@@ -357,7 +391,7 @@ impl Core {
     }
 }
 
-impl Handle {
+impl HandleState {
     /// The event queue, so a producer (sync, the applier) can push to it.
     #[must_use]
     pub fn events(&self) -> Arc<EventQueue> {
@@ -553,6 +587,13 @@ impl Handle {
     /// # Errors
     /// Whatever `load` refuses with; [`CoreError::Unpaired`] with no file.
     pub fn load(&self, request: &wire::LoadRequest) -> Result<wire::LoadResponse> {
+        // Some of the shell's reads are the phone's own ledger (the backup's
+        // status, the held vaults), not a vault table: they need the handle.
+        if request.app == crate::shell::ID
+            && let Some(answer) = crate::phone::shell_reads::load(self, request)
+        {
+            return answer;
+        }
         self.with_vault(|vault| crate::load::load(vault, request))
     }
 
@@ -577,16 +618,6 @@ impl Handle {
                 request,
             )
         })
-    }
-
-    /// Share this handle, so work the core starts (a screen's off-thread job) can hold it past
-    /// the call that started it. The shells hold the `Arc`; a handle that was never shared runs
-    /// no off-thread job and says so.
-    #[must_use]
-    pub fn shared(self) -> Arc<Self> {
-        let shared = Arc::new(self);
-        let _ = shared.me.set(Arc::downgrade(&shared));
-        shared
     }
 
     /// Attach the screen runtime. Once per core: a second attach is ignored,
@@ -660,9 +691,14 @@ impl Handle {
                                 host.wake(self);
                             }
                         }
-                        // THE ASSISTANT'S STREAM goes to the screens that listen
-                        // (the chat) and is swallowed: a shell with a runtime
-                        // draws the turn from the view state it pushes.
+                        (Some(wire::event::Kind::JobDone(done)), host) => {
+                            if let Some(host) = host {
+                                host.job_done(self, done.job, done.bytes.clone());
+                            }
+                        }
+                        // THE ASSISTANT'S STREAM goes to the screens that listen (the chat)
+                        // and is swallowed: a shell with a runtime draws the turn from the view
+                        // state it pushes.
                         (Some(wire::event::Kind::Assist(assist)), Some(host)) => {
                             host.assist(self, assist);
                         }

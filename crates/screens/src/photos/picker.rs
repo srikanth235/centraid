@@ -207,13 +207,15 @@ impl Picker {
             crate::chat::HOME,
             wire::ScreenEvent {
                 kind: Some(S::Chat(wire::ChatEvent {
-                    kind: Some(wire::chat_event::Kind::Attached(wire::chat_event::Attached {
-                        source: Some(wire::chat_event::attached::Source::VaultPhoto(
-                            wire::chat_event::VaultPhoto { asset_id: photo_id },
-                        )),
-                        label: String::new(),
-                        thumbnail_path: String::new(),
-                    })),
+                    kind: Some(wire::chat_event::Kind::Attached(
+                        wire::chat_event::Attached {
+                            source: Some(wire::chat_event::attached::Source::VaultPhoto(
+                                wire::chat_event::VaultPhoto { asset_id: photo_id },
+                            )),
+                            label: String::new(),
+                            thumbnail_path: String::new(),
+                        },
+                    )),
                 })),
             },
         );

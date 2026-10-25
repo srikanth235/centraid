@@ -45,6 +45,7 @@ pub mod link;
 pub mod pair;
 pub mod phrase;
 pub mod restore;
+pub(crate) mod shell_reads;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};

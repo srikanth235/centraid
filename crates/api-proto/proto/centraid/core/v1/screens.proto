@@ -31,6 +31,11 @@ import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/assist.proto";
 import "centraid/core/v1/chat_screens.proto";
 import "centraid/core/v1/imports_screens.proto";
+import "centraid/core/v1/backup_screens.proto";
+import "centraid/core/v1/custody_screens.proto";
+import "centraid/core/v1/pair_screens.proto";
+import "centraid/core/v1/passes_screens.proto";
+import "centraid/core/v1/plumbing_screens.proto";
 import "centraid/core/v1/docs_screens.proto";
 import "centraid/core/v1/health_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
@@ -85,6 +90,21 @@ message Environment {
 
 // A timer elapsed (`Event.wake`). Internal to the core: see `next_event`.
 message ScreenWake {}
+
+// A job a screen started with `Ctx::off_thread` finished on its worker thread
+// (`Event.job_done`). Internal to the core, like `ScreenWake`: `next_event`
+// hands it to the runtime and never to a shell.
+message ScreenJobDone {
+  uint64 job = 1;
+  bytes bytes = 2;
+}
+
+// What the asking screen hears when its job is done. Delivered like a timer.
+message OffThreadDone {
+  // The tag the screen gave the job.
+  string tag = 1;
+  bytes bytes = 2;
+}
 
 // The answer to every `ScreenRequest`, and the body of every pushed
 // `Event.screen`: what changed, in one message, so a shell applies one update
@@ -185,6 +205,9 @@ message ScreenEvent {
     EnvironmentChanged environment_changed = 5;
     // RUNTIME-ORIGINATED: the app left or returned to the foreground.
     AppLifecycle lifecycle = 7;
+    // RUNTIME-ORIGINATED: a job the screen started off the runtime's lock
+    // (`Ctx::off_thread`) has finished.
+    OffThreadDone off_thread_done = 8;
     // RUNTIME-ORIGINATED: the screen is being popped. Its last chance to write
     // what the member typed (an autosave's pending edit); a shell never sends
     // it, and only its `act`s survive: the view is no longer drawn.
@@ -192,11 +215,7 @@ message ScreenEvent {
     // RUNTIME-ORIGINATED: the assistant's running turn said something (a token,
     // the cards, the answer). Only a screen that opts in (`hears_assist`, the
     // chat) hears it; a shell never sends it.
-    AssistEvent assist = 8;
-    // RUNTIME-ORIGINATED: a job the screen started off the runtime thread
-    // (`Ctx::off_thread`) finished. `tag` is the screen's own name for it; `bytes`
-    // is what the job returned. A shell never sends it.
-    OffThreadDone off_thread_done = 9;
+    AssistEvent assist = 11;
     CounterEvent counter = 10;
     // ---- agenda (100-199) ----
     AgendaHomeEvent agenda_home = 100;
@@ -266,11 +285,6 @@ message Appeared {}
 message TimerFired {
   // The screen's own name for the timer.
   string timer = 1;
-}
-
-message OffThreadDone {
-  string tag = 1;
-  bytes bytes = 2;
 }
 
 message EnvironmentChanged {}
@@ -418,6 +432,9 @@ message Effect {
     FoldersRead folders_read = 1705;
     StageFolderFile stage_folder_file = 1706;
     RemindersRead reminders_read = 1707;
+    // ---- vault plumbing (1300-1399, lane H2): plumbing_screens.proto ----
+    SecretBatch secrets = 1300;
+    SyncedSecretsProbe synced_probe = 1302;
   }
 }
 
@@ -790,6 +807,9 @@ message EffectResult {
     FoldersListing folders_listing = 1705;
     FolderFileStaged folder_file_staged = 1706;
     RemindersSnapshot reminders_snapshot = 1707;
+    // ---- vault plumbing (1300-1399, lane H2) ----
+    SecretBatched secrets = 1300;
+    SyncedSecretsStatus synced_status = 1302;
   }
 }
 

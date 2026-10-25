@@ -33,6 +33,9 @@ use crate::strings::Locale;
 
 struct Instance {
     route: wire::Route,
+    /// A service has no view and no place in any tab (see
+    /// [`Runtime::with_services`]).
+    service: bool,
     screen: Box<dyn Screen>,
     /// Every table any of this screen's loads read.
     tables: BTreeSet<String>,
@@ -56,6 +59,9 @@ struct State {
     selected: String,
     nav_revision: u64,
     timers: BTreeMap<(u64, String), Instant>,
+    /// Jobs running off the lock: the instance that asked and the tag it gave.
+    jobs: BTreeMap<u64, (u64, String)>,
+    next_job: u64,
     env: Environment,
     started: bool,
 }
@@ -64,6 +70,7 @@ struct State {
 pub struct Runtime {
     registry: Registry,
     roots: Vec<(String, wire::Route)>,
+    services: Vec<wire::Route>,
     state: Mutex<State>,
 }
 
@@ -79,6 +86,7 @@ impl Runtime {
         Self {
             registry,
             roots,
+            services: Vec::new(),
             state: Mutex::new(State {
                 next_instance: 1,
                 next_effect: 1,
@@ -87,10 +95,24 @@ impl Runtime {
                 selected,
                 nav_revision: 0,
                 timers: BTreeMap::new(),
+                jobs: BTreeMap::new(),
+                next_job: 1,
                 env: Environment::default(),
                 started: false,
             }),
         }
+    }
+
+    /// Screens that run for as long as the runtime does, with no view and no
+    /// tab: the pass scheduler, which must hear the app's lifecycle, the
+    /// environment and the tables it read whether or not any page is open
+    /// (#1135, lane H2). Opened by the first call, before the roots; they hear
+    /// every broadcast, are never popped or closed, and a view they return is
+    /// ignored. Their effects reach the shell as any screen's do.
+    #[must_use]
+    pub fn with_services(mut self, services: Vec<wire::Route>) -> Self {
+        self.services = services;
+        self
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
@@ -135,6 +157,7 @@ impl Runtime {
         state: &mut State,
         core: &dyn ScreenCtx,
         route: wire::Route,
+        service: bool,
         out: &mut wire::ScreenUpdate,
     ) -> Result<u64> {
         let screen = self
@@ -147,6 +170,7 @@ impl Runtime {
             id,
             Instance {
                 route,
+                service,
                 screen,
                 tables: BTreeSet::new(),
                 revision: 0,
@@ -172,6 +196,7 @@ impl Runtime {
             out.closed.push(id);
         }
         state.timers.retain(|(owner, _), _| *owner != id);
+        state.jobs.retain(|_, (owner, _)| *owner != id);
     }
 
     /// Tell a screen it is being popped: its last chance to write what the
@@ -207,22 +232,23 @@ impl Runtime {
         let done = ctx.finish();
         instance.tables.extend(done.tables);
 
-        let view_ctx = Ctx::new(core, &env);
-        let mut view = instance.screen.view(&view_ctx);
-        view.instance = id;
-        view.revision = 0;
-        let encoded = view.encode_to_vec();
-        if encoded != instance.last {
-            instance.revision += 1;
-            instance.last = encoded;
-        }
-        view.revision = instance.revision;
-        if view != instance.view {
-            instance.view = view.clone();
-            out.views.push(view);
+        if !instance.service {
+            let view_ctx = Ctx::new(core, &env);
+            let mut view = instance.screen.view(&view_ctx);
+            view.instance = id;
+            view.revision = 0;
+            let encoded = view.encode_to_vec();
+            if encoded != instance.last {
+                instance.revision += 1;
+                instance.last = encoded;
+            }
+            view.revision = instance.revision;
+            if view != instance.view {
+                instance.view = view.clone();
+                out.views.push(view);
+            }
         }
 
-        let mut pending_failures: Vec<String> = Vec::new();
         for op in done.timers {
             match op {
                 TimerOp::Start(name, after) => {
@@ -234,8 +260,8 @@ impl Runtime {
                 }
             }
         }
-        // WHAT THIS SCREEN HANDED TO OTHERS (a picker's pick): delivered now, so one
-        // re-render carries both screens' views.
+        // WHAT THIS SCREEN HANDED TO OTHERS (a picker's pick): delivered now, so one re-render
+        // carries both screens' views.
         for (screen, post) in done.posts {
             let targets: Vec<u64> = state
                 .instances
@@ -247,26 +273,11 @@ impl Runtime {
                 Self::dispatch(state, core, target, post.clone(), out);
             }
         }
-        // SLOW WORK the screen started runs on the core's pool, off this lock; a core that
-        // cannot hold it answers at once with nothing, so the screen has one failure path.
-        for (tag, job) in done.jobs {
-            if core.spawn(id, tag.clone(), job).is_err() {
-                pending_failures.push(tag);
-            }
-        }
-        for tag in pending_failures {
-            Self::dispatch(
-                state,
-                core,
-                id,
-                wire::ScreenEvent {
-                    kind: Some(wire::screen_event::Kind::OffThreadDone(wire::OffThreadDone {
-                        tag,
-                        bytes: Vec::new(),
-                    })),
-                },
-                out,
-            );
+        for (tag, work) in done.jobs {
+            let job = state.next_job;
+            state.next_job += 1;
+            state.jobs.insert(job, (id, tag));
+            core.off_thread(job, work);
         }
         for effect in effects {
             let effect_id = state.next_effect;
@@ -290,8 +301,11 @@ impl Runtime {
             return Ok(());
         }
         state.started = true;
+        for route in &self.services {
+            self.open(state, core, route.clone(), true, out)?;
+        }
         for (tab, route) in &self.roots {
-            let id = self.open(state, core, route.clone(), out)?;
+            let id = self.open(state, core, route.clone(), false, out)?;
             state.tabs.push(Tab {
                 id: tab.clone(),
                 stack: vec![id],
@@ -327,7 +341,7 @@ impl Runtime {
                     .route
                     .clone()
                     .ok_or_else(|| Self::bad("a push without a route"))?;
-                let id = self.open(state, core, route, out)?;
+                let id = self.open(state, core, route, false, out)?;
                 state.tabs[index].stack.push(id);
                 state.selected.clone_from(&push.tab);
             }
@@ -422,7 +436,12 @@ impl ScreenHost for Runtime {
             }
             K::Snapshot(_) => {
                 out.navigation = Some(Self::navigation(&state));
-                out.views = state.instances.values().map(|i| i.view.clone()).collect();
+                out.views = state
+                    .instances
+                    .values()
+                    .filter(|i| !i.service)
+                    .map(|i| i.view.clone())
+                    .collect();
             }
             K::Environment(environment) => {
                 state.env = Environment {
@@ -497,27 +516,6 @@ impl ScreenHost for Runtime {
         }
     }
 
-    fn job_done(&self, core: &dyn ScreenCtx, instance: u64, tag: &str, bytes: Vec<u8>) {
-        let mut state = self.lock();
-        let mut out = wire::ScreenUpdate::default();
-        // The screen may have been popped while its job ran: then nobody is told.
-        Self::dispatch(
-            &mut state,
-            core,
-            instance,
-            wire::ScreenEvent {
-                kind: Some(wire::screen_event::Kind::OffThreadDone(wire::OffThreadDone {
-                    tag: tag.to_owned(),
-                    bytes,
-                })),
-            },
-            &mut out,
-        );
-        if !Self::empty(&out) {
-            core.push(out);
-        }
-    }
-
     fn assist(&self, core: &dyn ScreenCtx, event: &wire::AssistEvent) {
         let mut state = self.lock();
         let mut out = wire::ScreenUpdate::default();
@@ -538,6 +536,28 @@ impl ScreenHost for Runtime {
                 &mut out,
             );
         }
+        if !Self::empty(&out) {
+            core.push(out);
+        }
+    }
+
+    fn job_done(&self, core: &dyn ScreenCtx, job: u64, bytes: Vec<u8>) {
+        let mut state = self.lock();
+        let Some((id, tag)) = state.jobs.remove(&job) else {
+            return;
+        };
+        let mut out = wire::ScreenUpdate::default();
+        Self::dispatch(
+            &mut state,
+            core,
+            id,
+            wire::ScreenEvent {
+                kind: Some(wire::screen_event::Kind::OffThreadDone(
+                    wire::OffThreadDone { tag, bytes },
+                )),
+            },
+            &mut out,
+        );
         if !Self::empty(&out) {
             core.push(out);
         }

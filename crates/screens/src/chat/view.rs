@@ -189,22 +189,44 @@ impl Chat {
         let corrected = self.search.corrected.clone();
         let state = wire::ChatState {
             phase: self.phase as i32,
-            title: if title.is_empty() { words::new_chat(locale) } else { title },
+            title: if title.is_empty() {
+                words::new_chat(locale)
+            } else {
+                title
+            },
             subtitle: if self.vault_name.is_empty() {
                 words::subtitle(locale)
             } else {
-                fill(&words::subtitle_vault(locale), &[("vault", &self.vault_name)])
+                fill(
+                    &words::subtitle_vault(locale),
+                    &[("vault", &self.vault_name)],
+                )
             },
             scope_app: self.scope.clone(),
             messages: if ready {
-                self.messages.iter().map(|message| self.message(message, locale)).collect()
+                self.messages
+                    .iter()
+                    .map(|message| self.message(message, locale))
+                    .collect()
             } else {
                 Vec::new()
             },
-            empty_line: if ready && empty { words::empty_line(locale) } else { String::new() },
-            suggestions: if ready && empty { self.suggestions.clone() } else { Vec::new() },
+            empty_line: if ready && empty {
+                words::empty_line(locale)
+            } else {
+                String::new()
+            },
+            suggestions: if ready && empty {
+                self.suggestions.clone()
+            } else {
+                Vec::new()
+            },
             streaming: ready && self.running,
-            activity: if ready && self.running { self.activity.clone() } else { String::new() },
+            activity: if ready && self.running {
+                self.activity.clone()
+            } else {
+                String::new()
+            },
             error: self
                 .error
                 .map(|fail| self.fail_line(fail, locale))
@@ -222,7 +244,14 @@ impl Chat {
                 && !empty
                 && !self.retry_loses_an_attachment(),
             can_new_chat: ready && (!empty || !self.thread_id.is_empty()),
-            pending: if ready { self.pending.iter().map(|held| attachment(held, locale)).collect() } else { Vec::new() },
+            pending: if ready {
+                self.pending
+                    .iter()
+                    .map(|held| attachment(held, locale))
+                    .collect()
+            } else {
+                Vec::new()
+            },
             can_attach: ready && self.can_attach(),
             attach_label: words::attach(locale),
             attach_vault_photo_label: words::attach_vault_photo(locale),
@@ -232,7 +261,10 @@ impl Chat {
             vision_step: self.vision_step(locale),
             vision_blocked: ready && self.vision_blocked(),
             drawer_open: self.drawer_open,
-            threads: shown.iter().map(|row| self.thread_item(row, locale)).collect(),
+            threads: shown
+                .iter()
+                .map(|row| self.thread_item(row, locale))
+                .collect(),
             threads_empty_line: if searching && shown.is_empty() {
                 fill(
                     &words::drawer_search_no_match(locale),
@@ -257,7 +289,11 @@ impl Chat {
             delete_body: words::delete_body(locale),
             delete_all_title: words::delete_all_title(locale),
             delete_all_body: words::delete_all_body(locale),
-            card_gone_line: if self.card_gone { words::card_gone(locale) } else { String::new() },
+            card_gone_line: if self.card_gone {
+                words::card_gone(locale)
+            } else {
+                String::new()
+            },
             current_label: words::current_chat(locale),
             drawer_search: Some(wire::ChatDrawerSearch {
                 open: self.search.open,
@@ -339,7 +375,11 @@ impl Chat {
             streaming: message.streaming,
             stopped: message.stopped,
             accessibility_label: label,
-            attachments: message.attachments.iter().map(|held| attachment(held, locale)).collect(),
+            attachments: message
+                .attachments
+                .iter()
+                .map(|held| attachment(held, locale))
+                .collect(),
             note: if message.truncated {
                 words::note_doc_truncated(locale)
             } else {

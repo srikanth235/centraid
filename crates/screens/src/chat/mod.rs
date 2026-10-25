@@ -118,7 +118,10 @@ pub mod routes {
 /// Agenda covers its tasks (#1128).
 #[must_use]
 pub fn scopable_apps() -> Vec<&'static str> {
-    centraid_assist::App::ALL.iter().map(|app| app.id()).collect()
+    centraid_assist::App::ALL
+        .iter()
+        .map(|app| app.id())
+        .collect()
 }
 
 /// THE SCOPE A VISIT TO `app` GIVES A CHAT: the app it opens in, when that is a scope, else every

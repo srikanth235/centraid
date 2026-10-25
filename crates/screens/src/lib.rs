@@ -5,8 +5,10 @@
 //! the contract and the porting recipe.
 
 pub mod agenda;
+pub mod backup;
 pub mod catalog;
 pub mod chat;
+pub mod custody;
 pub mod docs;
 pub mod field;
 pub mod health;
@@ -15,6 +17,8 @@ pub mod kit;
 pub mod locker;
 pub mod money;
 pub mod notes;
+pub mod pairing;
+pub mod passes;
 pub mod people;
 pub mod photos;
 pub mod proof;
@@ -33,6 +37,9 @@ pub use screen::{Ctx, Environment, Screen};
 /// real ones as it ports Home and the other apps.
 #[must_use]
 pub fn standard() -> Runtime {
+    // The vault plumbing's one cache of what the shell keeps secret: custody,
+    // pairing, the backup screen and the pass service all read the same one.
+    let secrets = custody::secrets::VaultSecrets::new();
     Runtime::new(
         Registry::default()
             .with(proof::NAME, proof::build)
@@ -45,7 +52,11 @@ pub fn standard() -> Runtime {
             .merge(people::registry())
             .merge(photos::registry())
             .merge(imports::registry())
-            .merge(chat::registry()),
+            .merge(chat::registry())
+            .merge(custody::registry(&secrets))
+            .merge(pairing::registry(&secrets))
+            .merge(backup::registry(&secrets))
+            .merge(passes::registry(&secrets)),
         vec![
             ("proof".to_owned(), proof::route()),
             (
@@ -61,6 +72,12 @@ pub fn standard() -> Runtime {
             ),
             (chat::TAB.to_owned(), chat::routes::home()),
         ],
+    )
+    .with_services(
+        passes::services()
+            .into_iter()
+            .chain(imports::roots().into_iter().map(|(_, route)| route))
+            .collect(),
     )
 }
 

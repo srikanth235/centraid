@@ -7,12 +7,18 @@ use wire::chat_event::attached::Source as From;
 use wire::chat_state::Phase;
 
 use super::asset;
-use super::model::{Await, Chat, Fail, Pending, Sheet, Source, Vision, VisionPhase, assist, effect};
+use super::model::{
+    Await, Chat, Fail, Pending, Sheet, Source, Vision, VisionPhase, assist, effect,
+};
 use crate::screen::Ctx;
 
 impl Chat {
     /// The member chose something. Only while there is a thread to attach it to.
-    pub(super) fn attached(&mut self, event: wire::chat_event::Attached, ctx: &Ctx) -> Vec<wire::Effect> {
+    pub(super) fn attached(
+        &mut self,
+        event: wire::chat_event::Attached,
+        ctx: &Ctx,
+    ) -> Vec<wire::Effect> {
         if !self.ready() || self.running {
             return Vec::new();
         }
@@ -134,7 +140,10 @@ impl Chat {
         Vec::new()
     }
 
-    pub(super) fn vision_loaded(&mut self, state: Option<wire::AssistVisionState>) -> Vec<wire::Effect> {
+    pub(super) fn vision_loaded(
+        &mut self,
+        state: Option<wire::AssistVisionState>,
+    ) -> Vec<wire::Effect> {
         if self.vision.phase != VisionPhase::Loading {
             return Vec::new();
         }
@@ -176,10 +185,16 @@ impl Chat {
         if !self.ready() || self.running {
             return Vec::new();
         }
-        vec![effect(wire::effect::Kind::PickLibraryPhoto(wire::PickLibraryPhoto {}))]
+        vec![effect(wire::effect::Kind::PickLibraryPhoto(
+            wire::PickLibraryPhoto {},
+        ))]
     }
 
-    pub(super) fn library_photo_picked(&mut self, picked: wire::LibraryPhotoPicked, ctx: &Ctx) -> Vec<wire::Effect> {
+    pub(super) fn library_photo_picked(
+        &mut self,
+        picked: wire::LibraryPhotoPicked,
+        ctx: &Ctx,
+    ) -> Vec<wire::Effect> {
         if picked.cancelled {
             return Vec::new();
         }
@@ -206,7 +221,9 @@ impl Chat {
         if !self.ready() || self.running {
             return Vec::new();
         }
-        let answer = ctx.assist(&assist(Ask::Documents(wire::AssistDocumentsRequest { limit: 50 })));
+        let answer = ctx.assist(&assist(Ask::Documents(wire::AssistDocumentsRequest {
+            limit: 50,
+        })));
         let rows = match answer.ok().and_then(|answer| answer.kind) {
             Some(wire::assist_response::Kind::Documents(documents)) => documents.documents,
             _ => Vec::new(),

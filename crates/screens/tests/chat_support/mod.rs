@@ -45,8 +45,16 @@ pub const DRY_CLEANING: &str = "Pick up the dry cleaning";
 
 pub fn complete_dry_cleaning() -> Vec<[String; 2]> {
     vec![
-        step("plan: look", "find", &[("kind", "task"), ("name", "dry cleaning")]),
-        step("plan: write", "act", &[("verb", "complete"), ("rows", "@1")]),
+        step(
+            "plan: look",
+            "find",
+            &[("kind", "task"), ("name", "dry cleaning")],
+        ),
+        step(
+            "plan: write",
+            "act",
+            &[("verb", "complete"), ("rows", "@1")],
+        ),
     ]
 }
 
@@ -60,7 +68,10 @@ pub fn registry() -> Registry {
 }
 
 pub fn runtime() -> Runtime {
-    Runtime::new(registry(), vec![(chat::TAB.to_owned(), chat::routes::home())])
+    Runtime::new(
+        registry(),
+        vec![(chat::TAB.to_owned(), chat::routes::home())],
+    )
 }
 
 impl Chat {
@@ -92,8 +103,8 @@ impl Chat {
     }
 
     pub fn event(&mut self, kind: C) -> wire::ScreenUpdate {
-        let update = self.driver.send(self.id, S::Chat(wire::ChatEvent { kind: Some(kind) }));
-        update
+        self.driver
+            .send(self.id, S::Chat(wire::ChatEvent { kind: Some(kind) }))
     }
 
     /// The tab appears, scoped to `app`; the shell's own bookkeeping (a models directory) rides
@@ -125,7 +136,9 @@ impl Chat {
     }
 
     pub fn say(&mut self, text: &str) {
-        self.event(C::Sent(wire::chat_event::Sent { text: text.to_owned() }));
+        self.event(C::Sent(wire::chat_event::Sent {
+            text: text.to_owned(),
+        }));
         self.perform();
     }
 
@@ -140,7 +153,10 @@ impl Chat {
             if !busy && self.driver.pump(Duration::from_millis(40)) == 0 {
                 return;
             }
-            assert!(std::time::Instant::now() < deadline, "the chat never settled");
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the chat never settled"
+            );
         }
     }
 
@@ -154,10 +170,18 @@ impl Chat {
     }
 
     pub fn last_text(&self) -> String {
-        self.state().messages.last().map(|m| m.text.clone()).unwrap_or_default()
+        self.state()
+            .messages
+            .last()
+            .map(|m| m.text.clone())
+            .unwrap_or_default()
     }
 
     pub fn thread_titles(&self) -> Vec<String> {
-        self.state().threads.iter().map(|t| t.title.clone()).collect()
+        self.state()
+            .threads
+            .iter()
+            .map(|t| t.title.clone())
+            .collect()
     }
 }

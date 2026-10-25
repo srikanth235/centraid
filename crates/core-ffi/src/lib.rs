@@ -180,10 +180,7 @@ pub unsafe extern "C" fn centraid_open(
     }));
     match outcome {
         Ok(Ok(handle)) => {
-            // SHARED, so a job the core starts for a screen can hold the handle past the
-            // call that started it; the pointer is the `Arc`'s payload, and `centraid_close`
-            // takes the shell's one reference back.
-            let boxed = std::sync::Arc::into_raw(handle.shared()).cast_mut();
+            let boxed = Box::into_raw(Box::new(handle));
             // SAFETY: `out` is non-null (checked above) and the caller promised
             // it points to writable storage for one pointer.
             unsafe { out.write(boxed) };
@@ -408,7 +405,7 @@ pub unsafe extern "C" fn centraid_close(handle: *mut Handle) -> i32 {
     }
     // SAFETY: the caller promised a live pointer from `centraid_open`, which is
     // the only thing that produces one, and that it has not been closed.
-    let boxed = unsafe { std::sync::Arc::from_raw(handle.cast_const()) };
+    let boxed = unsafe { Box::from_raw(handle) };
     let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
         // CLOSE FIRST, then drop: the waiters have to be released before the
         // queue they are parked on goes away.

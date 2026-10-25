@@ -2,10 +2,11 @@
 
 mod chat_support;
 
-
 use centraid_api_proto::core_v1 as wire;
 use centraid_assist::testing::ScriptedModel;
-use chat_support::{Chat, DRY_CLEANING, FOUND_TASKS, complete_dry_cleaning, read_tasks, script, step};
+use chat_support::{
+    Chat, DRY_CLEANING, FOUND_TASKS, complete_dry_cleaning, read_tasks, script, step,
+};
 use wire::chat_event::Kind as C;
 use wire::chat_pending::State;
 use wire::chat_state::Phase;
@@ -23,7 +24,11 @@ fn opening_a_ready_model_starts_a_session_and_shows_three_suggestions() {
     assert_eq!(state.title, "New chat");
     assert_eq!(state.subtitle, "Sample · on this phone");
     assert_eq!(state.empty_line, "Ask about anything in your vault.");
-    assert!(!state.suggestions.is_empty() && state.suggestions.len() <= 3, "{:?}", state.suggestions);
+    assert!(
+        !state.suggestions.is_empty() && state.suggestions.len() <= 3,
+        "{:?}",
+        state.suggestions
+    );
     assert!(state.messages.is_empty());
 }
 
@@ -40,7 +45,10 @@ fn a_question_streams_into_the_thread_and_settles_once_with_its_thread_named() {
     assert_eq!(answer.cards.len(), 6);
     assert!(!answer.streaming && !state.streaming && state.activity.is_empty());
     assert!(state.error.is_empty());
-    assert!(state.suggestions.is_empty(), "suggestions go with the first question");
+    assert!(
+        state.suggestions.is_empty(),
+        "suggestions go with the first question"
+    );
     // The core saved the turn: the header takes the title and the drawer lists the chat.
     assert_eq!(state.title, "what tasks do I have?");
     assert!(!state.thread_id.is_empty());
@@ -51,7 +59,9 @@ fn a_question_streams_into_the_thread_and_settles_once_with_its_thread_named() {
 #[test]
 fn a_turn_settles_once_and_what_arrives_after_it_changes_nothing() {
     let mut chat = ready();
-    chat.event(C::Sent(wire::chat_event::Sent { text: "tasks?".to_owned() }));
+    chat.event(C::Sent(wire::chat_event::Sent {
+        text: "tasks?".to_owned(),
+    }));
     // While the turn runs the thread already shows the question and a streaming answer.
     assert!(chat.state().streaming);
     assert_eq!(chat.state().activity, "Thinking");
@@ -60,22 +70,32 @@ fn a_turn_settles_once_and_what_arrives_after_it_changes_nothing() {
     assert_eq!(before.messages[1].text, FOUND_TASKS);
     assert!(!before.thread_id.is_empty());
     // a late failure of the same turn, and a late token of it, are not heard
-    chat.driver.send(chat.id, S::OffThreadDone(wire::OffThreadDone {
-        tag: "send:1".to_owned(),
-        bytes: Vec::new(),
-    }));
-    chat.driver.send(chat.id, S::Assist(wire::AssistEvent {
-        session_id: 1,
-        turn_id: 1,
-        kind: Some(wire::assist_event::Kind::Token(wire::AssistToken { text: "LATE".to_owned() })),
-    }));
+    chat.driver.send(
+        chat.id,
+        S::OffThreadDone(wire::OffThreadDone {
+            tag: "send:1".to_owned(),
+            bytes: Vec::new(),
+        }),
+    );
+    chat.driver.send(
+        chat.id,
+        S::Assist(wire::AssistEvent {
+            session_id: 1,
+            turn_id: 1,
+            kind: Some(wire::assist_event::Kind::Token(wire::AssistToken {
+                text: "LATE".to_owned(),
+            })),
+        }),
+    );
     assert_eq!(chat.state(), &before);
 }
 
 #[test]
 fn an_event_for_another_turn_or_session_is_not_heard() {
     let mut chat = ready();
-    chat.event(C::Sent(wire::chat_event::Sent { text: "tasks?".to_owned() }));
+    chat.event(C::Sent(wire::chat_event::Sent {
+        text: "tasks?".to_owned(),
+    }));
     let session = {
         // The running turn is 1 on the chat's session; an event for turn 99 is stale.
         let wire::ChatState { .. } = chat.state();
@@ -84,7 +104,9 @@ fn an_event_for_another_turn_or_session_is_not_heard() {
     let stale = |turn| wire::AssistEvent {
         session_id: session,
         turn_id: turn,
-        kind: Some(wire::assist_event::Kind::Token(wire::AssistToken { text: "STALE".to_owned() })),
+        kind: Some(wire::assist_event::Kind::Token(wire::AssistToken {
+            text: "STALE".to_owned(),
+        })),
     };
     for turn in [0, 99] {
         chat.driver.send(chat.id, S::Assist(stale(turn)));
@@ -97,19 +119,30 @@ fn an_event_for_another_turn_or_session_is_not_heard() {
 fn a_blank_message_a_message_while_one_runs_and_a_message_before_ready_are_not_sent() {
     let mut chat = Chat::with(None);
     chat.say("early");
-    assert!(chat.state().messages.is_empty(), "no thread before the model is ready");
+    assert!(
+        chat.state().messages.is_empty(),
+        "no thread before the model is ready"
+    );
     let mut chat = ready();
     chat.say("   ");
     assert!(chat.state().messages.is_empty());
-    chat.event(C::Sent(wire::chat_event::Sent { text: "first".to_owned() }));
-    chat.event(C::Sent(wire::chat_event::Sent { text: "second".to_owned() }));
+    chat.event(C::Sent(wire::chat_event::Sent {
+        text: "first".to_owned(),
+    }));
+    chat.event(C::Sent(wire::chat_event::Sent {
+        text: "second".to_owned(),
+    }));
     assert_eq!(chat.state().messages.len(), 2, "one turn runs at a time");
     chat.perform();
 }
 
 #[test]
 fn a_decline_is_a_composed_line_and_an_exhausted_model_is_the_generic_failure() {
-    let mut chat = Chat::ready(script(&[step("plan: no", "decline", &[("reason", "not_found")])]));
+    let mut chat = Chat::ready(script(&[step(
+        "plan: no",
+        "decline",
+        &[("reason", "not_found")],
+    )]));
     chat.say("do the thing");
     assert_eq!(chat.last_text(), "Nothing found.");
 
@@ -117,7 +150,11 @@ fn a_decline_is_a_composed_line_and_an_exhausted_model_is_the_generic_failure() 
     chat.say("anything");
     let state = chat.state();
     assert_eq!(state.error, "The model stopped. Retry.");
-    assert_eq!(state.messages.len(), 1, "an answer with nothing in it is dropped, the question stays");
+    assert_eq!(
+        state.messages.len(),
+        1,
+        "an answer with nothing in it is dropped, the question stays"
+    );
     assert!(!state.streaming);
 }
 
@@ -127,11 +164,17 @@ fn stopping_keeps_the_part_that_was_drawn_says_nothing_and_offers_retry() {
         ScriptedModel::new(read_tasks().iter().flatten().cloned()).cancelling_during(1, 1),
     );
     let mut chat = Chat::ready(model);
-    chat.event(C::Sent(wire::chat_event::Sent { text: "tasks?".to_owned() }));
+    chat.event(C::Sent(wire::chat_event::Sent {
+        text: "tasks?".to_owned(),
+    }));
     // The member taps Stop while the send is still running; here the model fires the token.
     chat.perform();
     let state = chat.state();
-    assert!(state.error.is_empty(), "a stop says nothing: {:?}", state.error);
+    assert!(
+        state.error.is_empty(),
+        "a stop says nothing: {:?}",
+        state.error
+    );
     assert!(!state.streaming);
     assert!(state.can_retry);
 }
@@ -148,7 +191,11 @@ fn retry_asks_the_same_question_again_in_place_of_the_last_answer() {
     chat.event(C::Regenerated(wire::chat_event::Regenerated {}));
     chat.perform();
     let state = chat.state();
-    assert_eq!(state.messages.len(), 2, "the question stays, the answer is replaced");
+    assert_eq!(
+        state.messages.len(),
+        2,
+        "the question stays, the answer is replaced"
+    );
     assert_eq!(state.messages[0].text, "tasks?");
     assert_eq!(state.messages[1].text, FOUND_TASKS);
 }
@@ -192,7 +239,10 @@ fn a_model_that_went_away_sends_the_chat_back_to_ask_where_it_stands() {
     chat.say("tasks?");
     // The refusal sends the chat back to CHECKING, and the status read finds no model file.
     assert_eq!(chat.state().phase(), Phase::NeedsModel);
-    assert!(chat.state().messages.is_empty(), "the thread is drawn only when the model is ready");
+    assert!(
+        chat.state().messages.is_empty(),
+        "the thread is drawn only when the model is ready"
+    );
 }
 
 // ---------------------------------------------------------------- proposals --
@@ -204,7 +254,11 @@ fn proposing() -> Chat {
 }
 
 fn card(chat: &Chat) -> wire::ChatPending {
-    chat.state().messages.last().and_then(|m| m.pending.clone()).expect("a card")
+    chat.state()
+        .messages
+        .last()
+        .and_then(|m| m.pending.clone())
+        .expect("a card")
 }
 
 fn task_status(chat: &Chat, title: &str) -> String {
@@ -212,7 +266,14 @@ fn task_status(chat: &Chat, title: &str) -> String {
     use centraid_assist::native::door::text;
     let door = chat.driver.handle.assist_door();
     let titles: std::collections::BTreeMap<String, String> = door
-        .table_where("entity", "id, title, created_at", "created_at", "id", "kind = ?", &["task".to_owned()])
+        .table_where(
+            "entity",
+            "id, title, created_at",
+            "created_at",
+            "id",
+            "kind = ?",
+            &["task".to_owned()],
+        )
         .unwrap()
         .iter()
         .filter_map(|row| Some((text(row, "id")?, text(row, "title")?)))
@@ -221,7 +282,8 @@ fn task_status(chat: &Chat, title: &str) -> String {
         .unwrap()
         .iter()
         .find_map(|row| {
-            (titles.get(&text(row, "id")?)? == title).then(|| text(row, "status").unwrap_or_default())
+            (titles.get(&text(row, "id")?)? == title)
+                .then(|| text(row, "status").unwrap_or_default())
         })
         .expect("the task")
 }
@@ -230,12 +292,24 @@ fn task_status(chat: &Chat, title: &str) -> String {
 fn a_write_the_model_parks_is_a_card_in_the_cores_words_and_writes_nothing_until_the_tap() {
     let chat = proposing();
     let message = chat.state().messages.last().unwrap();
-    assert_eq!(message.text, format!("Proposed: Complete task \"{DRY_CLEANING}\"."));
+    assert_eq!(
+        message.text,
+        format!("Proposed: Complete task \"{DRY_CLEANING}\".")
+    );
     let pending = card(&chat);
     assert_eq!(pending.state(), State::Waiting);
     assert_eq!(pending.steps.len(), 1);
-    assert_eq!(pending.steps[0].summary, format!("Complete task \"{DRY_CLEANING}\""));
-    assert_eq!((pending.confirm_label.as_str(), pending.cancel_label.as_str()), ("Confirm", "Cancel"));
+    assert_eq!(
+        pending.steps[0].summary,
+        format!("Complete task \"{DRY_CLEANING}\"")
+    );
+    assert_eq!(
+        (
+            pending.confirm_label.as_str(),
+            pending.cancel_label.as_str()
+        ),
+        ("Confirm", "Cancel")
+    );
     assert!(!pending.destructive && pending.more_line.is_empty());
     assert_eq!(task_status(&chat, DRY_CLEANING), "open");
 }
@@ -244,13 +318,17 @@ fn a_write_the_model_parks_is_a_card_in_the_cores_words_and_writes_nothing_until
 fn confirm_runs_the_card_once_and_draws_the_cores_line_with_no_undo() {
     let mut chat = proposing();
     let id = card(&chat).pending_id;
-    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed { pending_id: id.clone() }));
+    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed {
+        pending_id: id.clone(),
+    }));
     let pending = card(&chat);
     assert_eq!(pending.state(), State::Applied);
     assert_eq!(pending.settled_line, "Done.");
     assert_eq!(task_status(&chat, DRY_CLEANING), "done");
     // a second tap finds nothing waiting
-    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed { pending_id: id }));
+    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed {
+        pending_id: id,
+    }));
     assert_eq!(card(&chat).state(), State::Applied);
 }
 
@@ -258,13 +336,17 @@ fn confirm_runs_the_card_once_and_draws_the_cores_line_with_no_undo() {
 fn cancel_settles_the_card_at_once_and_writes_nothing() {
     let mut chat = proposing();
     let id = card(&chat).pending_id;
-    chat.event(C::PendingCancelled(wire::chat_event::PendingCancelled { pending_id: id.clone() }));
+    chat.event(C::PendingCancelled(wire::chat_event::PendingCancelled {
+        pending_id: id.clone(),
+    }));
     let pending = card(&chat);
     assert_eq!(pending.state(), State::NotDone);
     assert_eq!(pending.settled_line, "Not done.");
     assert_eq!(task_status(&chat, DRY_CLEANING), "open");
     // and the core no longer holds it
-    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed { pending_id: id }));
+    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed {
+        pending_id: id,
+    }));
     assert_eq!(task_status(&chat, DRY_CLEANING), "open");
 }
 
@@ -280,15 +362,21 @@ fn a_new_question_makes_a_waiting_card_inert_and_the_core_never_runs_it() {
     chat.say("never mind");
     let first = &chat.state().messages[1];
     assert_eq!(first.pending.as_ref().unwrap().state(), State::Inert);
-    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed { pending_id: id }));
+    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed {
+        pending_id: id,
+    }));
     assert_eq!(task_status(&chat, DRY_CLEANING), "open");
 }
 
 #[test]
 fn taps_that_are_not_for_a_waiting_card_do_nothing() {
     let mut chat = proposing();
-    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed { pending_id: "other".to_owned() }));
-    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed { pending_id: String::new() }));
+    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed {
+        pending_id: "other".to_owned(),
+    }));
+    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed {
+        pending_id: String::new(),
+    }));
     assert_eq!(card(&chat).state(), State::Waiting);
     assert_eq!(task_status(&chat, DRY_CLEANING), "open");
 }
@@ -302,18 +390,28 @@ fn a_card_whose_rows_moved_says_so_and_runs_nothing() {
         use centraid_assist::native::Door as _;
         use centraid_assist::native::door::text;
         let door = chat.driver.handle.assist_door();
-        door.table_where("entity", "id, title, created_at", "created_at", "id", "kind = ?", &["task".to_owned()])
-            .unwrap()
-            .iter()
-            .find(|row| text(row, "title").as_deref() == Some(DRY_CLEANING))
-            .and_then(|row| text(row, "id"))
-            .unwrap()
+        door.table_where(
+            "entity",
+            "id, title, created_at",
+            "created_at",
+            "id",
+            "kind = ?",
+            &["task".to_owned()],
+        )
+        .unwrap()
+        .iter()
+        .find(|row| text(row, "title").as_deref() == Some(DRY_CLEANING))
+        .and_then(|row| text(row, "id"))
+        .unwrap()
     };
-    let mut request = centraid_screens::catalog::act::agenda::CompleteTask { task_id: task }.request();
+    let mut request =
+        centraid_screens::catalog::act::agenda::CompleteTask { task_id: task }.request();
     request.invoke_key = "test:moved:1".to_owned();
     let moved = chat.driver.act(request);
     assert_eq!(moved.status, wire::ActStatus::Executed as i32, "{moved:?}");
-    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed { pending_id: id }));
+    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed {
+        pending_id: id,
+    }));
     let pending = card(&chat);
     assert_eq!(pending.state(), State::Stale);
     assert_eq!(pending.settled_line, "That changed since. Ask again.");

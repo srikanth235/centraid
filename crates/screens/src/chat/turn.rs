@@ -4,9 +4,7 @@ use centraid_api_proto::core_v1 as wire;
 use wire::assist_request::Kind as Ask;
 use wire::chat_state::Phase;
 
-use super::model::{
-    Await, Chat, Fail, Msg, Pending, Proposal, Source, Stage, Step, effect,
-};
+use super::model::{Await, Chat, Fail, Msg, Pending, Proposal, Source, Stage, Step, effect};
 use crate::kit::rows::{self, RowRef};
 use crate::screen::Ctx;
 use crate::strings::chat as words;
@@ -55,7 +53,10 @@ impl Chat {
         }
         if self.can_ask() {
             effects.extend(self.ask(question, false, ctx));
-        } else if matches!(self.phase, Phase::Checking | Phase::Loading | Phase::Downloading) {
+        } else if matches!(
+            self.phase,
+            Phase::Checking | Phase::Loading | Phase::Downloading
+        ) {
             self.waiting = Some(super::model::Waiting {
                 question: question.to_owned(),
             });
@@ -171,9 +172,11 @@ impl Chat {
     pub(super) fn new_chat(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         self.clear_thread();
         if self.session != 0 {
-            let _ = ctx.assist(&super::model::assist(Ask::Clear(wire::AssistClearRequest {
-                session_id: self.session,
-            })));
+            let _ = ctx.assist(&super::model::assist(Ask::Clear(
+                wire::AssistClearRequest {
+                    session_id: self.session,
+                },
+            )));
             self.suggest(ctx);
         }
         Vec::new()
@@ -210,11 +213,13 @@ impl Chat {
         if text.is_empty() {
             return Vec::new();
         }
-        vec![effect(wire::effect::Kind::ClipboardSet(wire::ClipboardSet {
-            text,
-            sensitive: false,
-            clear_after_ms: 0,
-        }))]
+        vec![effect(wire::effect::Kind::ClipboardSet(
+            wire::ClipboardSet {
+                text,
+                sensitive: false,
+                clear_after_ms: 0,
+            },
+        ))]
     }
 
     /// One streamed event. Only the running turn's are heard.
@@ -346,7 +351,8 @@ impl Chat {
     fn failed(&mut self, refusal: Option<&wire::AssistRefusal>, ctx: &Ctx) -> Vec<wire::Effect> {
         let reason = refusal.map_or(wire::AssistRefusalReason::Unspecified as i32, |r| r.reason);
         let drawn = self.messages.last().is_some_and(|last| {
-            !last.user && (!last.text.is_empty() || !last.cards.is_empty() || last.proposal.is_some())
+            !last.user
+                && (!last.text.is_empty() || !last.cards.is_empty() || last.proposal.is_some())
         });
         match self.messages.last_mut() {
             Some(last) if !last.user && drawn => {
@@ -407,10 +413,12 @@ impl Chat {
     }
 
     fn run_confirm(&mut self, id: &str, ctx: &Ctx) -> Vec<wire::Effect> {
-        let answer = ctx.assist(&super::model::assist(Ask::Confirm(wire::AssistConfirmRequest {
-            session_id: self.session,
-            pending_id: id.to_owned(),
-        })));
+        let answer = ctx.assist(&super::model::assist(Ask::Confirm(
+            wire::AssistConfirmRequest {
+                session_id: self.session,
+                pending_id: id.to_owned(),
+            },
+        )));
         let settled = match answer.ok().and_then(|answer| answer.kind) {
             Some(wire::assist_response::Kind::Settled(settled)) => Some(settled),
             _ => None,
@@ -457,7 +465,11 @@ impl Chat {
 
     /// The OS owner check answered for a held confirm: opened, the same confirm goes again; not,
     /// the card is waiting as it was.
-    pub(super) fn owner_checked(&mut self, checked: &wire::OwnerChecked, ctx: &Ctx) -> Vec<wire::Effect> {
+    pub(super) fn owner_checked(
+        &mut self,
+        checked: &wire::OwnerChecked,
+        ctx: &Ctx,
+    ) -> Vec<wire::Effect> {
         let Some(id) = self.unlocking.take() else {
             return Vec::new();
         };
@@ -498,17 +510,24 @@ impl Chat {
         };
         held.stage = Stage::NotDone;
         held.line = line;
-        let _ = ctx.assist(&super::model::assist(Ask::Dismiss(wire::AssistDismissRequest {
-            session_id: self.session,
-            pending_id: id.to_owned(),
-        })));
+        let _ = ctx.assist(&super::model::assist(Ask::Dismiss(
+            wire::AssistDismissRequest {
+                session_id: self.session,
+                pending_id: id.to_owned(),
+            },
+        )));
         Vec::new()
     }
 
     // ----------------------------------------------------------------- cards --
 
     /// A card was tapped: the page its row lives on, unless the row is gone since the answer.
-    pub(super) fn card_tapped(&mut self, message_id: u64, index: usize, ctx: &Ctx) -> Vec<wire::Effect> {
+    pub(super) fn card_tapped(
+        &mut self,
+        message_id: u64,
+        index: usize,
+        ctx: &Ctx,
+    ) -> Vec<wire::Effect> {
         let Some(tapped) = self
             .messages
             .iter()
@@ -583,7 +602,11 @@ impl Msg {
     /// A card still WAITING when something newer happens goes inert; any other stage has already
     /// ended or is in flight.
     pub(super) fn supersede(&mut self, ctx: &Ctx) {
-        if let Some(held) = self.proposal.as_mut().filter(|held| held.stage == Stage::Waiting) {
+        if let Some(held) = self
+            .proposal
+            .as_mut()
+            .filter(|held| held.stage == Stage::Waiting)
+        {
             held.stage = Stage::Inert;
             held.line = words::not_done(ctx.locale());
         }
@@ -592,7 +615,10 @@ impl Msg {
     /// The card the core sent, once: the stream and the answer both carry it, in either order.
     fn with_proposal(&mut self, parked: &wire::AssistPending) {
         if parked.pending_id.is_empty()
-            || self.proposal.as_ref().is_some_and(|held| held.id == parked.pending_id)
+            || self
+                .proposal
+                .as_ref()
+                .is_some_and(|held| held.id == parked.pending_id)
         {
             return;
         }

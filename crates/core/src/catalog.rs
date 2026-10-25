@@ -132,7 +132,11 @@ mod tests {
             );
         }
         for row in crate::shell::ACTIONS {
-            assert!(shell.action(row.action).is_some(), "{} is not declared", row.action);
+            assert!(
+                shell.action(row.action).is_some(),
+                "{} is not declared",
+                row.action
+            );
         }
     }
 

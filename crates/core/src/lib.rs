@@ -74,7 +74,7 @@ pub mod originals;
 /// `phone.proto`.
 pub mod phone;
 pub mod screens;
-pub(crate) mod shell;
+pub mod shell;
 pub mod stage;
 /// THE STARTER ROWS a member's first vault is founded with: ordinary rows of
 /// theirs, best-effort, declared as data. See `vault.proto`'s `FoundContent`.

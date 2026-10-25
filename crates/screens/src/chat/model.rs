@@ -304,9 +304,16 @@ impl Chat {
         };
         self.awaiting.push(wait);
         let request = assist(kind);
-        ctx.off_thread(&tag, move |core| {
-            core.assist(&request)
-                .map(|answer| answer.encode_to_vec())
+        ctx.off_thread(&tag, move |handle| {
+            handle
+                .call(&wire::Request {
+                    kind: Some(wire::request::Kind::Assist(request)),
+                })
+                .ok()
+                .and_then(|response| match response.kind {
+                    Some(wire::response::Kind::Assist(answer)) => Some(answer.encode_to_vec()),
+                    _ => None,
+                })
                 .unwrap_or_default()
         });
     }
@@ -330,7 +337,9 @@ impl Chat {
             E::AttachmentRemoved(removed) => self.removed(removed.id),
             E::Drawer(toggle) => self.drawer_toggled(toggle.opened, ctx),
             E::ThreadOpened(opened) => self.thread_opened(&opened.thread_id, &opened.title, ctx),
-            E::ThreadRenamed(renamed) => self.thread_renamed(&renamed.thread_id, &renamed.title, ctx),
+            E::ThreadRenamed(renamed) => {
+                self.thread_renamed(&renamed.thread_id, &renamed.title, ctx)
+            }
             E::ThreadDeleted(deleted) => self.thread_deleted(&deleted.thread_id, ctx),
             E::AllThreadsDeleted(_) => self.all_threads_deleted(ctx),
             E::PendingConfirmed(confirmed) => self.confirm_tapped(&confirmed.pending_id, ctx),
@@ -339,7 +348,9 @@ impl Chat {
             E::DrawerSearchTerm(term) => self.search_term(&term.term, ctx),
             E::DrawerSearchClosed(_) => self.search_closed(),
             E::Asked(asked) => self.asked_on_behalf(&asked.scope, &asked.question, ctx),
-            E::CardTapped(tapped) => self.card_tapped(tapped.message_id, tapped.index as usize, ctx),
+            E::CardTapped(tapped) => {
+                self.card_tapped(tapped.message_id, tapped.index as usize, ctx)
+            }
             E::LibraryPhotoTapped(_) => self.library_photo_tapped(),
             E::DocumentsOpened(_) => self.documents_opened(ctx),
             E::DocumentsClosed(_) => {
@@ -551,14 +562,16 @@ impl Chat {
             self.progress = None;
             self.error = None;
         }
-        vec![effect(wire::effect::Kind::ModelDownload(wire::ModelDownload {
-            vision,
-            url: model.url.to_owned(),
-            file_name: model.file_name.to_owned(),
-            sha256: model.sha256.to_owned(),
-            bytes: model.bytes,
-            models_dir: self.models_dir.clone(),
-        }))]
+        vec![effect(wire::effect::Kind::ModelDownload(
+            wire::ModelDownload {
+                vision,
+                url: model.url.to_owned(),
+                file_name: model.file_name.to_owned(),
+                sha256: model.sha256.to_owned(),
+                bytes: model.bytes,
+                models_dir: self.models_dir.clone(),
+            },
+        ))]
     }
 
     /// A transfer reported progress.
@@ -568,10 +581,13 @@ impl Chat {
     /// STILL RUNNING (a background transfer outlives the app), and the shell said so on this
     /// launch. The chat goes to DOWNLOADING at once instead of offering "Download model" over a
     /// transfer that is already half done. No effect: the transfer is already going.
-    fn progressed(&mut self, progress: &wire::chat_event::DownloadProgress, _ctx: &Ctx) -> Vec<wire::Effect> {
-        let fraction = (progress.total_bytes > 0).then(|| {
-            (progress.done_bytes as f32 / progress.total_bytes as f32).clamp(0.0, 1.0)
-        });
+    fn progressed(
+        &mut self,
+        progress: &wire::chat_event::DownloadProgress,
+        _ctx: &Ctx,
+    ) -> Vec<wire::Effect> {
+        let fraction = (progress.total_bytes > 0)
+            .then(|| (progress.done_bytes as f32 / progress.total_bytes as f32).clamp(0.0, 1.0));
         if progress.vision {
             self.vision.phase = VisionPhase::Downloading;
             self.vision.progress = fraction;
@@ -639,7 +655,10 @@ impl Chat {
         let wait = match tag {
             "load" => Await::Load,
             "load-vision" => Await::LoadVision,
-            send => match send.strip_prefix("send:").and_then(|turn| turn.parse().ok()) {
+            send => match send
+                .strip_prefix("send:")
+                .and_then(|turn| turn.parse().ok())
+            {
                 Some(turn) => Await::Send(turn),
                 None => return Vec::new(),
             },

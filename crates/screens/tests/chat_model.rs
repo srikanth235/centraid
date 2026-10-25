@@ -68,9 +68,15 @@ fn no_model_draws_the_download_step_with_the_size_the_sentence_and_the_action() 
     assert_eq!(state.phase(), Phase::NeedsModel);
     let step = state.model_step.clone().expect("a step");
     assert_eq!(step.size_line, "563 MB download");
-    assert_eq!(step.note_line, "This is the only time Centraid fetches anything.");
+    assert_eq!(
+        step.note_line,
+        "This is the only time Centraid fetches anything."
+    );
     assert_eq!(step.action_label, "Download model");
-    assert!(state.messages.is_empty(), "a member never types into a chat with no model");
+    assert!(
+        state.messages.is_empty(),
+        "a member never types into a chat with no model"
+    );
 }
 
 #[test]
@@ -79,7 +85,10 @@ fn a_file_this_build_has_no_engine_for_is_unavailable_and_not_a_download_problem
     open_in(&mut chat, &dir);
     let state = chat.state();
     assert_eq!(state.phase(), Phase::Unavailable);
-    assert_eq!(state.model_step.clone().unwrap().status_line, "Chat is not available here.");
+    assert_eq!(
+        state.model_step.clone().unwrap().status_line,
+        "Chat is not available here."
+    );
     assert!(state.model_step.clone().unwrap().action_label.is_empty());
 }
 
@@ -92,8 +101,14 @@ fn a_model_on_the_phone_is_loaded_then_a_session_started_then_suggestions_asked_
     }));
     // The load blocks for seconds, so it runs on the core's pool and the chat shows the wait.
     assert_eq!(chat.state().phase(), Phase::Loading);
-    assert_eq!(chat.state().model_step.clone().unwrap().status_line, "Loading model");
-    assert!(chat.driver.effects.is_empty(), "the shell carries none of it");
+    assert_eq!(
+        chat.state().model_step.clone().unwrap().status_line,
+        "Loading model"
+    );
+    assert!(
+        chat.driver.effects.is_empty(),
+        "the shell carries none of it"
+    );
     chat.perform();
     let state = chat.state();
     assert_eq!(state.phase(), Phase::Ready);
@@ -113,7 +128,9 @@ fn a_model_that_will_not_load_is_a_model_to_fetch_again_with_one_line_saying_so(
 fn the_download_step_tap_progress_then_a_load_and_a_failure_goes_back_with_one_line() {
     let mut chat = Chat::with(None);
     chat.open("");
-    chat.event(C::Download(wire::chat_event::DownloadTapped { vision: false }));
+    chat.event(C::Download(wire::chat_event::DownloadTapped {
+        vision: false,
+    }));
     assert_eq!(chat.state().phase(), Phase::Downloading);
     let asked = chat.asked(|kind| match kind {
         wire::effect::Kind::ModelDownload(download) => Some(download.clone()),
@@ -123,11 +140,18 @@ fn the_download_step_tap_progress_then_a_load_and_a_failure_goes_back_with_one_l
     let download = &asked[0];
     assert!(!download.vision);
     assert_eq!(download.file_name, "Qwen3.5-0.8B-Q4_0.gguf");
-    assert!(download.url.contains("/resolve/8fea620810c4afa23dd6443f999a48574c1611a3/"));
+    assert!(
+        download
+            .url
+            .contains("/resolve/8fea620810c4afa23dd6443f999a48574c1611a3/")
+    );
     assert_eq!(download.sha256.len(), 64);
     assert_eq!(download.models_dir, "/nowhere/models");
     // unknown progress, then a known one
-    assert_eq!(chat.state().model_step.clone().unwrap().status_line, "Downloading");
+    assert_eq!(
+        chat.state().model_step.clone().unwrap().status_line,
+        "Downloading"
+    );
     chat.event(C::DownloadProgress(wire::chat_event::DownloadProgress {
         done_bytes: 50,
         total_bytes: 100,
@@ -138,14 +162,22 @@ fn the_download_step_tap_progress_then_a_load_and_a_failure_goes_back_with_one_l
     assert!((step.progress - 0.5).abs() < f32::EPSILON);
     assert_eq!(step.status_line, "Downloading 50%");
     // it stopped short
-    chat.event(C::DownloadFinished(wire::chat_event::DownloadFinished { ok: false, vision: false }));
+    chat.event(C::DownloadFinished(wire::chat_event::DownloadFinished {
+        ok: false,
+        vision: false,
+    }));
     let state = chat.state();
     assert_eq!(state.phase(), Phase::NeedsModel);
     assert_eq!(state.error, "Download stopped. Retry.");
     // and again, to a load
-    chat.event(C::Download(wire::chat_event::DownloadTapped { vision: false }));
+    chat.event(C::Download(wire::chat_event::DownloadTapped {
+        vision: false,
+    }));
     assert!(chat.state().error.is_empty());
-    chat.event(C::DownloadFinished(wire::chat_event::DownloadFinished { ok: true, vision: false }));
+    chat.event(C::DownloadFinished(wire::chat_event::DownloadFinished {
+        ok: true,
+        vision: false,
+    }));
     assert_eq!(chat.state().phase(), Phase::Loading);
 }
 
@@ -153,13 +185,17 @@ fn the_download_step_tap_progress_then_a_load_and_a_failure_goes_back_with_one_l
 fn a_download_tap_outside_the_download_step_does_nothing_and_a_stale_status_cannot_undo_one() {
     let mut chat = Chat::ready(script(&read_tasks()));
     chat.driver.effects.clear();
-    chat.event(C::Download(wire::chat_event::DownloadTapped { vision: false }));
+    chat.event(C::Download(wire::chat_event::DownloadTapped {
+        vision: false,
+    }));
     assert_eq!(chat.state().phase(), Phase::Ready);
     assert!(chat.driver.effects.is_empty());
 
     let mut chat = Chat::with(None);
     chat.open("");
-    chat.event(C::Download(wire::chat_event::DownloadTapped { vision: false }));
+    chat.event(C::Download(wire::chat_event::DownloadTapped {
+        vision: false,
+    }));
     // the tab appears again while the transfer runs: the status read must not step back
     chat.open("");
     assert_eq!(chat.state().phase(), Phase::Downloading);
@@ -169,13 +205,21 @@ fn a_download_tap_outside_the_download_step_does_nothing_and_a_stale_status_cann
 fn a_download_still_running_from_an_earlier_launch_is_downloading_at_once() {
     let mut chat = Chat::with(None);
     chat.open("");
-    assert_eq!(chat.state().phase(), Phase::NeedsModel, "the status read said no model");
+    assert_eq!(
+        chat.state().phase(),
+        Phase::NeedsModel,
+        "the status read said no model"
+    );
     chat.event(C::DownloadProgress(wire::chat_event::DownloadProgress {
         done_bytes: 10,
         total_bytes: 100,
         vision: false,
     }));
-    assert_eq!(chat.state().phase(), Phase::Downloading, "without waiting for a tap");
+    assert_eq!(
+        chat.state().phase(),
+        Phase::Downloading,
+        "without waiting for a tap"
+    );
     assert!(chat.state().error.is_empty());
     // the status read that lands after it is ignored
     chat.open("");
@@ -185,7 +229,10 @@ fn a_download_still_running_from_an_earlier_launch_is_downloading_at_once() {
 #[test]
 fn health_and_locker_are_chat_scopes_like_every_other_app() {
     let mut chat = Chat::with(Some(script(&read_tasks())));
-    chat.event(C::Opened(wire::chat_event::Opened { app: "locker".to_owned(), ..Default::default() }));
+    chat.event(C::Opened(wire::chat_event::Opened {
+        app: "locker".to_owned(),
+        ..Default::default()
+    }));
     // Locker is a scope (every app is), so the session opens.
     assert_eq!(chat.state().phase(), Phase::Ready);
     assert_eq!(chat.state().scope_app, "locker");
@@ -196,7 +243,9 @@ fn the_scopes_are_the_assistants_apps_in_menu_order_and_an_id_that_is_no_app_sco
     let scopes = centraid_screens::chat::scopable_apps();
     assert_eq!(
         scopes,
-        ["agenda", "docs", "health", "locker", "money", "notes", "people", "photos"]
+        [
+            "agenda", "docs", "health", "locker", "money", "notes", "people", "photos"
+        ]
     );
     for app in &scopes {
         assert_eq!(centraid_screens::chat::scope_of(app), *app);
@@ -207,11 +256,16 @@ fn the_scopes_are_the_assistants_apps_in_menu_order_and_an_id_that_is_no_app_sco
 }
 
 #[test]
-fn the_tab_appearing_again_keeps_the_thread_whatever_scope_the_shell_says_and_a_scope_chosen_starts_over() {
+fn the_tab_appearing_again_keeps_the_thread_whatever_scope_the_shell_says_and_a_scope_chosen_starts_over()
+ {
     let mut chat = Chat::ready(script(&read_tasks()));
     chat.say("tasks?");
     chat.open("notes");
-    assert_eq!(chat.state().messages.len(), 2, "the thread survives a switch of tab");
+    assert_eq!(
+        chat.state().messages.len(),
+        2,
+        "the thread survives a switch of tab"
+    );
     assert_eq!(chat.state().scope_app, "");
     // a scope chosen from the composer's menu starts over
     chat.choose_scope("notes");
@@ -228,7 +282,11 @@ fn the_tab_appearing_again_keeps_the_thread_whatever_scope_the_shell_says_and_a_
 fn a_chat_still_waiting_for_a_model_looks_again_when_the_tab_opens() {
     let (mut chat, dir) = with_model_file(Some(Arc::new(Loader(script(&read_tasks())))));
     chat.open("");
-    assert_eq!(chat.state().phase(), Phase::NeedsModel, "the file is in a directory the shell did not name");
+    assert_eq!(
+        chat.state().phase(),
+        Phase::NeedsModel,
+        "the file is in a directory the shell did not name"
+    );
     open_in(&mut chat, &dir);
     assert_eq!(chat.state().phase(), Phase::Ready);
 }
@@ -237,9 +295,11 @@ fn a_chat_still_waiting_for_a_model_looks_again_when_the_tab_opens() {
 
 fn vault_photo(chat: &mut Chat) {
     chat.event(C::Attached(wire::chat_event::Attached {
-        source: Some(wire::chat_event::attached::Source::VaultPhoto(wire::chat_event::VaultPhoto {
-            asset_id: "asset-1".to_owned(),
-        })),
+        source: Some(wire::chat_event::attached::Source::VaultPhoto(
+            wire::chat_event::VaultPhoto {
+                asset_id: "asset-1".to_owned(),
+            },
+        )),
         label: "Lake".to_owned(),
         thumbnail_path: String::new(),
     }));
@@ -257,7 +317,10 @@ fn a_photo_with_no_reader_on_the_phone_is_the_offer_with_the_size_and_a_send_wai
     assert_eq!(step.action_label, "Download");
     assert!(state.vision_blocked);
     chat.say("what is this?");
-    assert!(chat.state().messages.is_empty(), "the send waits for the reader");
+    assert!(
+        chat.state().messages.is_empty(),
+        "the send waits for the reader"
+    );
 }
 
 #[test]
@@ -283,7 +346,11 @@ fn the_readers_download_runs_loads_and_unblocks_the_send() {
     // attachment, and the refusal is its own line
     chat.say("what is this?");
     let state = chat.state();
-    assert_eq!(state.messages.len(), 1, "the question stays, the empty answer goes");
+    assert_eq!(
+        state.messages.len(),
+        1,
+        "the question stays, the empty answer goes"
+    );
     assert_eq!(state.error, "That attachment would not open.");
 }
 
@@ -293,12 +360,16 @@ fn removing_the_photo_takes_its_offer_away_and_a_document_needs_no_reader() {
     vault_photo(&mut chat);
     assert!(chat.state().vision_step.is_some());
     let id = chat.state().pending[0].id;
-    chat.event(C::AttachmentRemoved(wire::chat_event::AttachmentRemoved { id }));
+    chat.event(C::AttachmentRemoved(wire::chat_event::AttachmentRemoved {
+        id,
+    }));
     assert!(chat.state().vision_step.is_none() && chat.state().pending.is_empty());
     chat.event(C::Attached(wire::chat_event::Attached {
-        source: Some(wire::chat_event::attached::Source::VaultDocument(wire::chat_event::VaultDocument {
-            doc_id: "doc-1".to_owned(),
-        })),
+        source: Some(wire::chat_event::attached::Source::VaultDocument(
+            wire::chat_event::VaultDocument {
+                doc_id: "doc-1".to_owned(),
+            },
+        )),
         label: "Notes.txt".to_owned(),
         thumbnail_path: String::new(),
     }));
@@ -306,12 +377,17 @@ fn removing_the_photo_takes_its_offer_away_and_a_document_needs_no_reader() {
 }
 
 #[test]
-fn a_reader_download_that_stops_is_offered_again_with_one_line_and_its_events_never_move_the_models_phase() {
+fn a_reader_download_that_stops_is_offered_again_with_one_line_and_its_events_never_move_the_models_phase()
+ {
     let mut chat = Chat::ready(script(&read_tasks()));
     vault_photo(&mut chat);
-    chat.event(C::Download(wire::chat_event::DownloadTapped { vision: true }));
+    chat.event(C::Download(wire::chat_event::DownloadTapped {
+        vision: true,
+    }));
     let asked = chat.asked(|kind| match kind {
-        wire::effect::Kind::ModelDownload(download) if download.vision => Some(download.file_name.clone()),
+        wire::effect::Kind::ModelDownload(download) if download.vision => {
+            Some(download.file_name.clone())
+        }
         _ => None,
     });
     assert_eq!(asked, ["Qwen3.5-0.8B-mmproj-F16.gguf"]);
@@ -320,9 +396,19 @@ fn a_reader_download_that_stops_is_offered_again_with_one_line_and_its_events_ne
         total_bytes: 4,
         vision: true,
     }));
-    assert_eq!(chat.state().phase(), Phase::Ready, "the reader is not the model's phase");
-    assert_eq!(chat.state().vision_step.clone().unwrap().status_line, "Downloading 25%");
-    chat.event(C::DownloadFinished(wire::chat_event::DownloadFinished { ok: false, vision: true }));
+    assert_eq!(
+        chat.state().phase(),
+        Phase::Ready,
+        "the reader is not the model's phase"
+    );
+    assert_eq!(
+        chat.state().vision_step.clone().unwrap().status_line,
+        "Downloading 25%"
+    );
+    chat.event(C::DownloadFinished(wire::chat_event::DownloadFinished {
+        ok: false,
+        vision: true,
+    }));
     let step = chat.state().vision_step.clone().unwrap();
     assert_eq!(step.status_line, "Download stopped. Retry.");
     assert_eq!(step.action_label, "Download");
@@ -333,22 +419,31 @@ fn a_message_takes_one_photo_and_one_document_a_second_of_a_kind_replaces_the_fi
     let mut chat = Chat::ready(script(&read_tasks()));
     vault_photo(&mut chat);
     chat.event(C::Attached(wire::chat_event::Attached {
-        source: Some(wire::chat_event::attached::Source::VaultPhoto(wire::chat_event::VaultPhoto {
-            asset_id: "asset-2".to_owned(),
-        })),
+        source: Some(wire::chat_event::attached::Source::VaultPhoto(
+            wire::chat_event::VaultPhoto {
+                asset_id: "asset-2".to_owned(),
+            },
+        )),
         label: "River".to_owned(),
         thumbnail_path: String::new(),
     }));
     for doc in ["a", "b"] {
         chat.event(C::Attached(wire::chat_event::Attached {
-            source: Some(wire::chat_event::attached::Source::VaultDocument(wire::chat_event::VaultDocument {
-                doc_id: doc.to_owned(),
-            })),
+            source: Some(wire::chat_event::attached::Source::VaultDocument(
+                wire::chat_event::VaultDocument {
+                    doc_id: doc.to_owned(),
+                },
+            )),
             label: format!("{doc}.txt"),
             thumbnail_path: String::new(),
         }));
     }
-    let labels: Vec<String> = chat.state().pending.iter().map(|chip| chip.label.clone()).collect();
+    let labels: Vec<String> = chat
+        .state()
+        .pending
+        .iter()
+        .map(|chip| chip.label.clone())
+        .collect();
     assert_eq!(labels, ["River", "b.txt"]);
 }
 
@@ -358,7 +453,9 @@ fn attaching_waits_for_a_thread_and_not_while_a_turn_runs() {
     vault_photo(&mut chat);
     assert!(chat.state().pending.is_empty());
     let mut chat = Chat::ready(script(&read_tasks()));
-    chat.event(C::Sent(wire::chat_event::Sent { text: "tasks?".to_owned() }));
+    chat.event(C::Sent(wire::chat_event::Sent {
+        text: "tasks?".to_owned(),
+    }));
     vault_photo(&mut chat);
     assert!(chat.state().pending.is_empty());
     chat.perform();
@@ -370,10 +467,18 @@ fn attaching_waits_for_a_thread_and_not_while_a_turn_runs() {
 
 #[test]
 fn the_scopes_are_the_vaults_roster_and_the_ddl_holds_no_app_word() {
-    let roster: Vec<&str> = centraid_vault::roster::APPS.iter().map(|app| app.id).collect();
+    let roster: Vec<&str> = centraid_vault::roster::APPS
+        .iter()
+        .map(|app| app.id)
+        .collect();
     assert_eq!(roster, centraid_screens::chat::scopable_apps());
-    assert!(roster.iter().all(|app| centraid_screens::chat::scope_of(app) == *app));
-    let ddl_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../contracts/schema/vault-ddl.sql");
+    assert!(
+        roster
+            .iter()
+            .all(|app| centraid_screens::chat::scope_of(app) == *app)
+    );
+    let ddl_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../contracts/schema/vault-ddl.sql");
     let ddl = std::fs::read_to_string(ddl_path).expect("the vault DDL");
     // `thread.scope` is a bare column; the command holds it to the roster.
     let thread = ddl

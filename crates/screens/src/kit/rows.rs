@@ -60,7 +60,10 @@ impl MemberAction {
         if row.app != "locker" || row.entity != "locker_item" {
             return None;
         }
-        let (word, column) = row.qualifier.split_once(':').unwrap_or((&row.qualifier, ""));
+        let (word, column) = row
+            .qualifier
+            .split_once(':')
+            .unwrap_or((&row.qualifier, ""));
         let kind = match word {
             "reveal" => Self::Reveal,
             "code" => Self::Code,
@@ -94,8 +97,17 @@ pub fn route_of(row: &RowRef, parent: &str, neighbours: &[String]) -> Option<wir
         ("agenda", "project") => Some(agenda::routes::project(id, title)),
         ("agenda", "event") => Some(agenda::routes::event(id, &row.qualifier, None, "")),
         ("notes", "note") => Some(notes::routes::editor(id)),
-        ("notes", "notebook") => Some(notes::routes::home(wire::NotesPlace::Notes, id, title, false)),
-        ("photos", "album") => Some(photos::routes::shelf(wire::PhotosShelfKind::Album, id, title)),
+        ("notes", "notebook") => Some(notes::routes::home(
+            wire::NotesPlace::Notes,
+            id,
+            title,
+            false,
+        )),
+        ("photos", "album") => Some(photos::routes::shelf(
+            wire::PhotosShelfKind::Album,
+            id,
+            title,
+        )),
         ("photos", "photo") => {
             let among: Vec<String> = if neighbours.is_empty() {
                 vec![id.to_owned()]
@@ -207,17 +219,30 @@ mod tests {
         ] {
             assert_eq!(MemberAction::parse(&none), None, "{none:?}");
         }
-        let follow = route_of(&row("locker", "locker_item", "i1", "code:otp_seed"), "Chat", &[]).unwrap();
+        let follow = route_of(
+            &row("locker", "locker_item", "i1", "code:otp_seed"),
+            "Chat",
+            &[],
+        )
+        .unwrap();
         let Some(wire::route::Args::LockerItem(item)) = follow.args else {
             panic!("an item");
         };
-        assert_eq!((item.follow.as_str(), item.parent.as_str()), ("code:otp_seed", "Chat"));
+        assert_eq!(
+            (item.follow.as_str(), item.parent.as_str()),
+            ("code:otp_seed", "Chat")
+        );
         let plain = route_of(&row("locker", "locker_item", "i1", "junk"), "Chat", &[]).unwrap();
         let Some(wire::route::Args::LockerItem(item)) = plain.args else {
             panic!("an item");
         };
         assert_eq!(item.follow, "");
-        let edit = route_of(&row("locker", "locker_item", "i1", "edit_secret:cvv"), "", &[]).unwrap();
+        let edit = route_of(
+            &row("locker", "locker_item", "i1", "edit_secret:cvv"),
+            "",
+            &[],
+        )
+        .unwrap();
         assert_eq!(edit.screen, "locker.editor");
         let export = route_of(&row("locker", "locker_item", "", "export:"), "Chat", &[]).unwrap();
         assert_eq!(export.screen, "locker.export");

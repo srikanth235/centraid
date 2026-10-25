@@ -11,8 +11,10 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_core::Result;
 use centraid_core::screens::ScreenCtx;
+use centraid_core::screens::VaultRequest;
+use centraid_core::{Handle, Result};
+use prost::Message;
 
 use crate::strings::Locale;
 
@@ -26,8 +28,8 @@ pub trait Screen: Send {
     /// The finished state. `instance` and `revision` are stamped by the runtime.
     fn view(&self, ctx: &Ctx) -> wire::ViewState;
 
-    /// Whether the assistant's stream is for this screen (`ScreenEvent.assist`):
-    /// only the chat says yes, so a token does not wake every open screen.
+    /// Whether the assistant's stream is for this screen (`ScreenEvent.assist`): only the chat
+    /// says yes, so a token does not wake every open screen.
     fn hears_assist(&self) -> bool {
         false
     }
@@ -67,10 +69,9 @@ pub(crate) enum TimerOp {
 pub(crate) struct Done {
     pub tables: BTreeSet<String>,
     pub timers: Vec<TimerOp>,
+    pub jobs: Vec<(String, centraid_core::screens::OffThreadWork)>,
     /// Events for other open screens, by registered name (`Ctx::post`).
-    pub posts: Vec<(String, centraid_api_proto::core_v1::ScreenEvent)>,
-    /// Slow work to run off the runtime lock (`Ctx::off_thread`).
-    pub jobs: Vec<(String, centraid_core::screens::Job)>,
+    pub posts: Vec<(String, wire::ScreenEvent)>,
 }
 
 /// A screen's door to the core, the catalog and the clock.
@@ -132,14 +133,6 @@ impl<'a> Ctx<'a> {
         self.core.content_urls(request)
     }
 
-    /// One bounded assistant call; see `ScreenCtx::assist`.
-    ///
-    /// # Errors
-    /// Whatever the core refuses with.
-    pub fn assist(&self, request: &wire::AssistRequest) -> Result<wire::AssistResponse> {
-        self.core.assist(request)
-    }
-
     /// One step of the Locker session. The tables are untouched: the session is
     /// not a read.
     ///
@@ -150,6 +143,64 @@ impl<'a> Ctx<'a> {
         request: &wire::LockerSessionRequest,
     ) -> Result<wire::LockerSessionResponse> {
         self.core.locker(request)
+    }
+
+    /// A vault lifecycle door that is quick (the 24 words, founding a vault).
+    /// The type limits it to `vault.proto` and `phone.proto` requests.
+    ///
+    /// # Errors
+    /// Whatever the door refuses with.
+    pub fn vault(&self, request: VaultRequest) -> Result<wire::Response> {
+        self.core.vault(request)
+    }
+
+    /// Run `job` on a worker thread with its own handle to the core, off the
+    /// runtime's lock, and answer this screen with
+    /// [`wire::OffThreadDone`] `{ tag, bytes }` when it is done, the way a timer
+    /// is delivered. A screen popped meanwhile never hears it.
+    pub fn off_thread(&self, tag: &str, job: impl FnOnce(&Handle) -> Vec<u8> + Send + 'static) {
+        self.done
+            .borrow_mut()
+            .jobs
+            .push((tag.to_owned(), Box::new(job)));
+    }
+
+    /// [`Self::off_thread`] over one slow vault door (a pass, a pairing, a
+    /// restore): the answer is a [`wire::VaultCalled`] — the core's encoded
+    /// `Response`, or its typed refusal.
+    pub fn vault_async(&self, tag: &str, request: VaultRequest) {
+        self.off_thread(tag, move |handle| {
+            let called = match handle.call(&request.into_request()) {
+                Ok(response) => wire::VaultCalled {
+                    response: response.encode_to_vec(),
+                    error: None,
+                },
+                Err(refusal) => wire::VaultCalled {
+                    response: Vec::new(),
+                    error: Some(refusal.to_wire()),
+                },
+            };
+            called.encode_to_vec()
+        });
+    }
+
+    /// One bounded assistant call (status, start, suggest, cancel, clear, confirm, dismiss,
+    /// documents). A load or a send blocks for seconds: make those from [`Self::off_thread`].
+    ///
+    /// # Errors
+    /// Whatever the core refuses with.
+    pub fn assist(&self, request: &wire::AssistRequest) -> Result<wire::AssistResponse> {
+        self.core.assist(request)
+    }
+
+    /// Hand `event` to every open screen registered as `screen` (a picker returning its pick to
+    /// the page that asked for it). Delivered after this update, in the same re-render; an
+    /// instance cannot post to itself.
+    pub fn post(&self, screen: &str, event: wire::ScreenEvent) {
+        self.done
+            .borrow_mut()
+            .posts
+            .push((screen.to_owned(), event));
     }
 
     /// The locale every string is made in.
@@ -193,28 +244,6 @@ impl<'a> Ctx<'a> {
             .borrow_mut()
             .timers
             .push(TimerOp::Cancel(name.to_owned()));
-    }
-
-    /// Run `job` on the core's thread pool, off the runtime lock (a model load, a whole turn),
-    /// and deliver what it returns to this screen as `ScreenEvent.off_thread_done` tagged `tag`.
-    /// The job gets the core's door, so it can call anything a screen can. A core that cannot
-    /// run it delivers the same event with no bytes, so a screen has one failure path.
-    pub fn off_thread(
-        &self,
-        tag: &str,
-        job: impl FnOnce(&dyn ScreenCtx) -> Vec<u8> + Send + 'static,
-    ) {
-        self.done
-            .borrow_mut()
-            .jobs
-            .push((tag.to_owned(), Box::new(job)));
-    }
-
-    /// Hand `event` to every open screen registered as `screen` (a picker returning its pick to
-    /// the page that asked for it). Delivered after this update, in the same re-render; an
-    /// instance cannot post to itself.
-    pub fn post(&self, screen: &str, event: wire::ScreenEvent) {
-        self.done.borrow_mut().posts.push((screen.to_owned(), event));
     }
 
     pub(crate) fn finish(self) -> Done {

@@ -30,7 +30,10 @@ impl Chat {
         self.clock();
         let reading = read::read(
             ctx,
-            load::shell::Chats { limit: 0, term: None },
+            load::shell::Chats {
+                limit: 0,
+                term: None,
+            },
             |answer| match answer {
                 Answer::ChatThreads(threads) => Some(threads),
                 _ => None,
@@ -150,10 +153,12 @@ impl Chat {
                 _ => None,
             },
         );
-        let started = ctx.assist(&super::model::assist(Ask::Start(wire::AssistStartRequest {
-            app: String::new(),
-            thread_id: id.to_owned(),
-        })));
+        let started = ctx.assist(&super::model::assist(Ask::Start(
+            wire::AssistStartRequest {
+                app: String::new(),
+                thread_id: id.to_owned(),
+            },
+        )));
         let started = match started.ok().and_then(|answer| answer.kind) {
             Some(wire::assist_response::Kind::Started(started)) => Some(started),
             _ => None,
@@ -234,9 +239,11 @@ impl Chat {
         self.clear_thread();
         self.error = Some(fail.unwrap_or(Fail::Generic));
         if self.session != 0 {
-            let _ = ctx.assist(&super::model::assist(Ask::Clear(wire::AssistClearRequest {
-                session_id: self.session,
-            })));
+            let _ = ctx.assist(&super::model::assist(Ask::Clear(
+                wire::AssistClearRequest {
+                    session_id: self.session,
+                },
+            )));
         }
         self.read_threads(ctx);
         Vec::new()
@@ -248,7 +255,11 @@ impl Chat {
         if id.is_empty() || named.is_empty() {
             return Vec::new();
         }
-        for row in self.threads.iter_mut().chain(self.found.iter_mut().flatten()) {
+        for row in self
+            .threads
+            .iter_mut()
+            .chain(self.found.iter_mut().flatten())
+        {
             if row.id == id {
                 row.title.clone_from(&named);
             }
@@ -312,9 +323,11 @@ impl Chat {
         self.clear_thread();
         self.threads = threads;
         if self.session != 0 {
-            let _ = ctx.assist(&super::model::assist(Ask::Clear(wire::AssistClearRequest {
-                session_id: self.session,
-            })));
+            let _ = ctx.assist(&super::model::assist(Ask::Clear(
+                wire::AssistClearRequest {
+                    session_id: self.session,
+                },
+            )));
             self.suggest(ctx);
         }
     }
@@ -349,7 +362,9 @@ fn pending_of(held: &wire::ChatStoredAttachment, id: u64) -> Pending {
     let kind = K::try_from(held.kind).unwrap_or(K::Unspecified);
     let source = match kind {
         K::Photo if !held.asset_id.is_empty() => Source::VaultPhoto(held.asset_id.clone()),
-        K::Document if !held.document_id.is_empty() => Source::VaultDocument(held.document_id.clone()),
+        K::Document if !held.document_id.is_empty() => {
+            Source::VaultDocument(held.document_id.clone())
+        }
         // A camera-roll image kept only its thumbnail, and a photo or a document the member has
         // since deleted is not there to send.
         _ => Source::Unavailable,
