@@ -236,7 +236,7 @@ impl Show {
 
     fn render(&self, locale: Locale) -> wire::WordsShowState {
         let phase = self.phase;
-        let show = phase == Phase::Show;
+        let show = phase == Phase::Show && !self.finished;
         // ASK BEFORE ANY FAILURE IS NOT A SCREEN: the owner check is up and
         // nothing is drawn until it answers.
         let check_now = phase == Phase::Ask && !self.failed;

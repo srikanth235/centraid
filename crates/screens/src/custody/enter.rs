@@ -635,6 +635,7 @@ impl Enter {
             };
         }
         let grid = !held
+            && !self.finished
             && !self.retrying
             && (phase == Phase::Entering || phase == Phase::Working);
         let cells = if grid {

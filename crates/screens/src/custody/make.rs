@@ -458,7 +458,7 @@ impl Make {
     /// Every word the screen says, for the phase.
     fn render(&self, locale: Locale) -> wire::WordsMakeState {
         let phase = self.phase;
-        let show = phase == Phase::Show;
+        let show = phase == Phase::Show && !self.finished;
         let own_name = self.name.trim().to_owned();
         let name = [("name", own_name.as_str())];
         let title = match phase {

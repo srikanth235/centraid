@@ -1203,3 +1203,6 @@ impl Runner {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -157,6 +157,9 @@ impl Keeper for Absent {
 #[derive(Default)]
 pub struct FakeKeeper {
     inner: Mutex<FakeState>,
+    /// The cache the screens share, when the test wants the log to say whether
+    /// a seed was stored at the moment of each call.
+    secrets: Option<super::secrets::VaultSecrets>,
 }
 
 #[derive(Default)]
@@ -172,6 +175,21 @@ impl FakeKeeper {
     #[must_use]
     pub fn new() -> Arc<Self> {
         Arc::new(Self::default())
+    }
+
+    /// A fake whose log says `seed=true|false` of `secrets` at each call.
+    #[must_use]
+    pub fn watching(secrets: &super::secrets::VaultSecrets) -> Arc<Self> {
+        Arc::new(Self {
+            inner: Mutex::default(),
+            secrets: Some(secrets.clone()),
+        })
+    }
+
+    fn seen(&self) -> String {
+        self.secrets.as_ref().map_or_else(String::new, |secrets| {
+            format!(" seed={}", secrets.seed().is_some())
+        })
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, FakeState> {
@@ -211,7 +229,8 @@ impl FakeKeeper {
 impl Keeper for FakeKeeper {
     fn found(&self, own: Option<&str>, name: &str) -> Effected<Found> {
         let mut state = self.lock();
-        state.log.push(format!("found own={own:?} name={name}"));
+        let seen = self.seen();
+        state.log.push(format!("found own={own:?} name={name}{seen}"));
         let found = state
             .found
             .clone()
@@ -231,7 +250,8 @@ impl Keeper for FakeKeeper {
                 None => vault.index.to_string(),
             })
             .collect();
-        state.log.push(format!("adopt [{}]", at.join(", ")));
+        let seen = self.seen();
+        state.log.push(format!("adopt [{}]{seen}", at.join(", ")));
         if !restored.is_empty() {
             state.holds = true;
         }
@@ -239,8 +259,9 @@ impl Keeper for FakeKeeper {
     }
 
     fn rekey(&self) -> usize {
+        let seen = self.seen();
         let mut state = self.lock();
-        state.log.push("rekey".to_owned());
+        state.log.push(format!("rekey{seen}"));
         state.indexed
     }
 
