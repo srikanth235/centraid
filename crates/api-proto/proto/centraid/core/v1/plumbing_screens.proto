@@ -80,6 +80,10 @@ message SecretBatched {
 message CoreCall {
   // An encoded `Request`.
   bytes request = 1;
+  // Which vault's core performs it. Empty is the core the screens run on; a
+  // pass over every vault the phone holds names each in turn and the shell
+  // routes the call to that vault's core.
+  string vault_id = 2;
 }
 
 message CoreCalled {
