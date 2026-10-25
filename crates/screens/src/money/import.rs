@@ -898,3 +898,62 @@ impl Screen for Import {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn planned() -> Import {
+        Import {
+            parent: String::new(),
+            accounts: Phase::Loading,
+            file: Some(Held {
+                name: "Statement.csv".to_owned(),
+                bytes: b"Date,Description,Amount\n".to_vec(),
+            }),
+            account_id: "a1".to_owned(),
+            date_order: None,
+            sign: None,
+            keep_proposed: false,
+            phase: P::Planned,
+            plan: Some(wire::MoneyImportPlan {
+                statements: vec![wire::MoneyStatementPlan {
+                    new: 5,
+                    publish_input: b"{}".to_vec(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+            status: None,
+            sheet: Sheet::None,
+            finished: false,
+        }
+    }
+
+    /// A REFUSED PUBLISH KEEPS THE PLAN, so Import can be tried again: the
+    /// vault's refusal is the sentence, the phase is still Planned, the file and
+    /// the plan are held, and the same input is still there to send.
+    #[test]
+    fn a_refused_publish_keeps_the_plan_and_says_why() {
+        let mut import = planned();
+        import.refused(Locale::En, "That account is not open.");
+        assert_eq!(import.phase, P::Planned);
+        assert!(import.file.is_some() && import.plan.is_some());
+        assert_eq!(import.inputs().len(), 1);
+        assert_eq!(import.publishable(), 5);
+        let status = import.status.as_ref().expect("a status");
+        assert!(status.refused);
+        assert_eq!(status.sentence, "That account is not open.");
+    }
+
+    #[test]
+    fn a_refusal_with_no_sentence_says_the_import_failed() {
+        let mut import = planned();
+        import.refused(Locale::En, "  ");
+        assert_eq!(
+            import.status.as_ref().expect("a status").sentence,
+            "Couldn’t import this file. Try again."
+        );
+        assert_eq!(import.phase, P::Planned);
+    }
+}

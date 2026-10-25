@@ -438,6 +438,15 @@ fn a_term_that_matches_nothing_says_so_and_a_clear_goes_back_to_resting() {
     else {
         panic!("no search data");
     };
+    // THE ASK IS OFFERED ON NO MATCH TOO: the term goes to the assistant, scoped to Money.
+    assert_eq!(
+        data.ask,
+        Some(wire::SearchAsk {
+            label: "Ask about “zzqqxx”".into(),
+            question: "Find zzqqxx".into(),
+            scope: "money".into(),
+        })
+    );
     let empty = data.empty.expect("an empty state");
     assert_eq!(empty.headline, "Nothing matches zzqqxx.");
     assert_eq!(
@@ -465,6 +474,12 @@ fn a_term_that_matches_lists_rows_with_the_day_and_a_route() {
     else {
         panic!("no search data");
     };
+    // THE ASK IS OFFERED BESIDE THE MATCHES TOO, with the term as typed.
+    assert_eq!(data.ask.as_ref().map(|a| a.scope.as_str()), Some("money"));
+    assert_eq!(
+        data.ask.as_ref().map(|a| a.question.as_str()),
+        Some("Find rent")
+    );
     if data.rows.is_empty() {
         return; // the example scenario may not hold the word; the empty case is pinned above
     }
