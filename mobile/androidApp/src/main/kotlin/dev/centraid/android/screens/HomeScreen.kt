@@ -520,9 +520,7 @@ private fun StatusRibbon(
             .padding(horizontal = PAGE_MARGIN)
             .testTag("home-status")
             .semantics {
-                contentDescription =
-                    listOf(status.copy, status.action).filter { it.isNotEmpty() }
-                        .joinToString(". ")
+                contentDescription = status.accessibility_label
             },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),

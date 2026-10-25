@@ -26,14 +26,12 @@ import centraid.core.v1.ChatEvent
 import centraid.core.v1.DocsDriveEvent
 import centraid.core.v1.DocsFollowed
 import centraid.core.v1.DocsPermission
-import centraid.core.v1.HealthConnectRoute
 import centraid.core.v1.HomeBackupLine
 import centraid.core.v1.HomeEvent
 import centraid.core.v1.HomeScheme
 import centraid.core.v1.HomeStatus
 import centraid.core.v1.HomeTone
 import centraid.core.v1.HomeVaultState
-import centraid.core.v1.LockerLockRoute
 import centraid.core.v1.LockerWallEvent
 import centraid.core.v1.NavEvent
 import centraid.core.v1.NavPopToRoot
@@ -233,6 +231,15 @@ internal class RustRoot(
         scope?.launch { runtime.navigate(NavEvent(push = NavPush(tab = tab, route = route))) }
     }
 
+    /** Tell Home's root something the phone asked for; Home answers with the route to push. */
+    private fun tellHome(event: HomeEvent) {
+        val runtime = screens ?: return
+        scope?.launch {
+            val root = runtime.navigation.value?.tabs?.firstOrNull { it.tab == TAB }?.entries?.firstOrNull()?.instance ?: return@launch
+            runtime.send(root, ScreenEvent(home = event))
+        }
+    }
+
     private fun pop(instance: Long) {
         val runtime = screens ?: return
         val tab = tabOf(instance)
@@ -417,7 +424,7 @@ internal class RustRoot(
         if (HealthRationale.requested) {
             LaunchedEffect(Unit) {
                 HealthRationale.requested = false
-                push(Route(screen = "health.connect", health_connect = HealthConnectRoute(parent = "")))
+                tellHome(HomeEvent(entry_asked = HomeEvent.EntryAsked(entry = HomeEvent.EntryAsked.Entry.ENTRY_HEALTH_CONNECT)))
             }
         }
         // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED, and when Home's tile learns the Locker is open.
@@ -472,7 +479,7 @@ internal class RustRoot(
             next.navigate(NavEvent(pop_to_root = NavPopToRoot(tab = TAB)))
             // ENTERING LOCKER FROM CHAT'S KEY SLOT: the one place a lock page is pushed.
             LockerEntry.install()
-            LockerEntry.pushLock = { home.launch { push(Route(screen = "locker.lock", locker_lock = LockerLockRoute())) } }
+            LockerEntry.pushLock = { tellHome(HomeEvent(entry_asked = HomeEvent.EntryAsked(entry = HomeEvent.EntryAsked.Entry.ENTRY_LOCKER_LOCK))) }
         }
         // A PHOTOS HOME THAT OPENS LATER IS TOLD WHAT THE ROLL ALREADY SAID.
         home.launch {

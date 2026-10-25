@@ -166,6 +166,19 @@ fn select(tab: &str) -> wire::Effect {
     }))
 }
 
+/// The page an outside caller asked for, as a route the shell pushes.
+fn entry_route(entry: wire::home_event::entry_asked::Entry) -> Vec<wire::Effect> {
+    use wire::home_event::entry_asked::Entry as E;
+    let route = match entry {
+        E::LockerLock => crate::locker::routes::lock(),
+        E::HealthConnect => crate::health::routes::connect(""),
+        E::Unspecified => return Vec::new(),
+    };
+    vec![effect(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+        route: Some(route),
+    }))]
+}
+
 /// The Backup place: the runtime selects the `backup` tab when one is registered, and the
 /// command is the host's door to its native place until then. Opening it twice is a no-op.
 fn open_backup() -> Vec<wire::Effect> {
@@ -218,6 +231,7 @@ impl Home {
         match event {
             H::Backup(_) => return open_backup(),
             H::Status(_) => return self.status_pressed(),
+            H::EntryAsked(asked) => return entry_route(asked.entry()),
             H::Appearance(_) => {
                 self.appearance = self.appearance.toggled(self.phone_dark);
                 return vec![keychain_set(self.appearance.stored())];
@@ -414,9 +428,34 @@ impl Home {
             .backup
             .clone()
             .filter(|_| vault.state() != wire::HomeVaultState::Frozen);
+        let switch_label = format!(
+            "{}. {}",
+            [
+                vault.name.as_str(),
+                // The state line stands in only where the backup's status does not.
+                if backup.is_some() {
+                    ""
+                } else {
+                    vault.state_line.as_str()
+                },
+                vault.originals_line.as_str(),
+            ]
+            .iter()
+            .filter(|part| !part.is_empty())
+            .copied()
+            .collect::<Vec<_>>()
+            .join(", "),
+            words::vault_switch_spoken(locale),
+        );
+        let backup_open_label = backup
+            .as_ref()
+            .map(|line| format!("{}. {}", line.status, words::backup_status_open(locale)))
+            .unwrap_or_default();
         wire::HomeBar {
             vault: Some(vault),
             backup,
+            switch_label,
+            backup_open_label,
             search_label: words::home_search_placeholder(locale),
             search_route: Some(routes::search()),
             transfer_rules_label: photos::transfer_settings_label(locale),
@@ -557,7 +596,15 @@ impl Screen for Home {
         wire::ViewState {
             kind: Some(wire::view_state::Kind::Home(Box::new(wire::HomeState {
                 bar: Some(self.bar(locale)),
-                status: self.status.clone(),
+                status: self.status.clone().map(|mut status| {
+                    status.accessibility_label = [status.copy.as_str(), status.action.as_str()]
+                        .iter()
+                        .filter(|part| !part.is_empty())
+                        .copied()
+                        .collect::<Vec<_>>()
+                        .join(". ");
+                    status
+                }),
                 content: Some(content),
                 sheet: self.sheet(locale),
                 scheme: match self.appearance {

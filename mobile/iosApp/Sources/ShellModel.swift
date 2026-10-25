@@ -345,10 +345,7 @@ final class ShellModel: ObservableObject {
         LockerEntry.shared.install()
         LockerEntry.shared.pushLock = { [weak self] in
             Task { @MainActor in
-                var route = Centraid_Core_V1_Route()
-                route.screen = "locker.lock"
-                route.lockerLock = Centraid_Core_V1_LockerLockRoute()
-                self?.open(route)
+                self?.screens?.sendHome(.entryAsked(.with { $0.entry = .lockerLock }))
             }
         }
         Task {

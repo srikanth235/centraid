@@ -183,6 +183,8 @@ message HomeStatus {
   string copy = 2;
   string action = 3;
   Destination destination = 4;
+  // "copy. action", finished (the whole ribbon as one sentence).
+  string accessibility_label = 5;
 
   // Where the action goes, as a verb the shell performs.
   enum Destination {
@@ -306,6 +308,10 @@ message HomeBar {
   string appearance_label = 5;
   string switch_spoken = 6;
   string backup_open_spoken = 7;
+  // The finished spoken sentences (the lockup's switch press, the backup line's door):
+  // a shell speaks them as given and joins nothing.
+  string switch_label = 10;
+  string backup_open_label = 11;
 }
 
 // The member's light/dark choice: follow the phone, or hold one.
@@ -358,6 +364,9 @@ message HomeEvent {
     // Whether the phone itself is dark right now: what "follow the phone" means.
     // The shell sends it when Home opens and whenever the phone's scheme moves.
     PhoneSchemeTold phone_scheme_told = 24;
+    // The phone asked for a page from outside Home (a key slot, a system rationale link):
+    // Home answers with the route, so the shell names no screen.
+    EntryAsked entry_asked = 25;
   }
 
   message BackupPressed {}
@@ -383,6 +392,16 @@ message HomeEvent {
     bool none = 3;
   }
   message PhoneSchemeTold { bool dark = 1; }
+  message EntryAsked {
+    enum Entry {
+      ENTRY_UNSPECIFIED = 0;
+      // The Locker's wall as a page (chat's key slot needs the key).
+      ENTRY_LOCKER_LOCK = 1;
+      // What Health may read, and Connect (the system's permission rationale).
+      ENTRY_HEALTH_CONNECT = 2;
+    }
+    Entry entry = 1;
+  }
   message BackupLineTold { optional HomeBackupLine line = 1; }
   message StatusTold { optional HomeStatus status = 1; }
   // How a make, a restore, a rename or a forget came out, in the member's words.
