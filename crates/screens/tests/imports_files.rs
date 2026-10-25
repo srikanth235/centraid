@@ -9,10 +9,17 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_screens::catalog::load;
 use centraid_screens::imports::files::{media_type_of, stat_of, usable};
 use centraid_screens::kit::read;
-use imports_support::{Shell, owned, shell, stage};
+use imports_support::{Shell, owned, stage};
 use wire::app_query_response::Answer;
 use wire::effect::Kind as K;
 use wire::imports_files_event as files;
+
+/// The services open together; the camera roll's first read of the grant is not this file's.
+fn shell() -> Shell {
+    let mut shell = imports_support::shell();
+    shell.d.effects.clear();
+    shell
+}
 
 fn send(shell: &mut Shell, kind: files::Kind) {
     let instance = shell.files;

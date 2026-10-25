@@ -23,6 +23,9 @@ import "centraid/core/v1/route.proto";
 // ---------------------------------------------------------------------------
 
 message ImportsCameraRollEvent {
+  // The vault the roll is offered to: the cursor is kept per vault (a photograph offered to two
+  // vaults is two imports). Every event carries it; empty keeps the last one told.
+  string vault_id = 10;
   oneof kind {
     // The Photos screen's `CameraRoll` effect, relayed: the shell turns the effect
     // into this event (it owns the OS prompt and the roll).
@@ -269,6 +272,11 @@ message LibraryStage {
   string ref = 1;
   bool allow_network = 2;
   bool changed_in_place = 3;
+  // For bytes the core asked for again (`NeededBytes`): the media type and the length the
+  // core named them with. Empty / 0 for a walk, which states neither (the library does not
+  // always say how long an item is before it is read).
+  string media_type = 4;
+  uint64 byte_size = 5;
 }
 
 message LibraryStaged {
