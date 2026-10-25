@@ -190,3 +190,35 @@ fn a_pushed_backup_page_pops_and_its_timers_die_with_it() {
     // A change the screen no longer reads is not heard by anything.
     assert_eq!(driver.pump(std::time::Duration::from_millis(60)), 0);
 }
+
+/// THERE IS NO SECOND SWITCH FOR PHOTOGRAPHS (the KMP `CameraRollSpec`): the member's one rule
+/// governs originals, so choosing "photos on cellular" writes the rule's one key and nothing
+/// else. The videos switch is the rule's own refinement (`transfer-rule.include-videos`), written
+/// only when the member moves it.
+#[test]
+fn choosing_photos_on_cellular_writes_the_one_rule_and_no_second_switch() {
+    let (mut driver, mut shell, instance) = open();
+    driver.serve(&mut shell);
+    driver.send(
+        instance,
+        E::BackupHome(wire::BackupHomeEvent {
+            kind: Some(wire::backup_home_event::Kind::RuleChosen(
+                wire::backup_home_event::RuleChosen {
+                    stored: "wifi-and-cellular-photos".to_owned(),
+                },
+            )),
+        }),
+    );
+    driver.serve(&mut shell);
+    let keys: Vec<&str> = shell
+        .device
+        .keys()
+        .map(String::as_str)
+        .filter(|key| key.contains("rule") || key.contains("photo") || key.contains("cellular"))
+        .collect();
+    assert_eq!(keys, ["transfer-rule"]);
+    assert_eq!(
+        shell.device.get("transfer-rule").map(String::as_str),
+        Some("wifi-and-cellular-photos")
+    );
+}
