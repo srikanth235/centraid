@@ -149,7 +149,7 @@ fn sort_pinned_only_tags_and_a_wider_window_are_the_reads_parameters_and_chips()
         }),
     );
     let state = home_state(d.view(i));
-    assert_eq!(state.sheet, wire::NotesSheet::None as i32);
+    assert_eq!(state.sheet, wire::NotesSheet::Unspecified as i32);
     assert_eq!(state.chips.last().unwrap().label, "Title");
     // Pinned leads under every order, then A first.
     assert_eq!(titles(d.view(i)), ["Cherry", "Apple", "Banana"]);
@@ -342,7 +342,10 @@ fn a_row_menu_pins_at_once_files_and_trashes_only_after_a_confirm() {
             note_id: id.clone(),
         }),
     );
-    assert_eq!(home_state(d.view(i)).sheet, wire::NotesSheet::None as i32);
+    assert_eq!(
+        home_state(d.view(i)).sheet,
+        wire::NotesSheet::Unspecified as i32
+    );
     assert!(note_of(&d, &id).pinned);
     assert!(library_rows(d.view(i))[0].pinned);
     send_home(
@@ -675,7 +678,10 @@ fn more_is_a_sheet_that_holds_trash_alone_and_the_same_tab_is_nothing() {
     assert_eq!(rows, [("trash", "Trash")]);
     assert_eq!(state.more_rows[0].route, Some(routes::trash()));
     send_home(&mut d, i, H::SheetClosed(ev::SheetClosed {}));
-    assert_eq!(home_state(d.view(i)).sheet, wire::NotesSheet::None as i32);
+    assert_eq!(
+        home_state(d.view(i)).sheet,
+        wire::NotesSheet::Unspecified as i32
+    );
     send_home(
         &mut d,
         i,

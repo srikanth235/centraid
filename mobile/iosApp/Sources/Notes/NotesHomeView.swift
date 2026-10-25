@@ -150,11 +150,11 @@ struct NotesHomeView: View {
             get: {
                 switch state.sheet {
                 case .more, .sort, .rowMenu, .fileInto, .notebookMenu: return !state.hasConfirm
-                case .none, .UNRECOGNIZED: return false
+                case .unspecified, .UNRECOGNIZED: return false
                 }
             },
             set: { open in
-                guard !open, state.sheet != .none else { return }
+                guard !open, state.sheet != .unspecified else { return }
                 send(NotesEvents.home { $0.sheetClosed = .init() })
             }
         )
@@ -501,7 +501,7 @@ private struct NotesHomeSheet: View {
                     send(NotesEvents.home { $0.notebookDelete = .with { $0.notebookID = menu.noteID } })
                 }
             }
-        case .none, .UNRECOGNIZED:
+        case .unspecified, .UNRECOGNIZED:
             EmptyView()
         }
     }

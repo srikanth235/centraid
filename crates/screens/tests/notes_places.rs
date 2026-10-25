@@ -255,7 +255,10 @@ fn a_notebook_is_renamed_and_deleted_from_its_menu() {
     assert_eq!(form.title, "Rename notebook");
     assert_eq!(form.name, "Trips");
     assert_eq!(form.confirm_label, "Rename");
-    assert_eq!(home_state(d.view(i)).sheet, wire::NotesSheet::None as i32);
+    assert_eq!(
+        home_state(d.view(i)).sheet,
+        wire::NotesSheet::Unspecified as i32
+    );
     send_home(
         &mut d,
         i,

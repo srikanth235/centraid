@@ -89,7 +89,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         place: None,
         selection: Selection::new(offer, Drain::Settled, Wording::Chosen),
         choice: album.map_or_else(AlbumChoice::new, AlbumChoice::excluding),
-        prompt: Prompt::None,
+        prompt: Prompt::Unspecified,
         notice: String::new(),
         keep: album.map(|_| Keep::default()),
         dismissed: false,
@@ -327,7 +327,7 @@ impl Shelf {
     /// Open a sheet. Each is offered only where it means something.
     fn open_prompt(&mut self, prompt: Prompt) {
         let allowed = match prompt {
-            Prompt::None => false,
+            Prompt::Unspecified => false,
             Prompt::EmptyTrash => self.is_trash() && !self.cells.is_empty(),
             Prompt::DeleteAlbum | Prompt::RenameAlbum => self.is_album() && !self.head_trashed(),
             Prompt::SendLocation => !self.selection.picked().is_empty(),
@@ -345,7 +345,7 @@ impl Shelf {
     }
 
     fn confirmed(&mut self, ctx: &Ctx) {
-        let prompt = std::mem::replace(&mut self.prompt, Prompt::None);
+        let prompt = std::mem::replace(&mut self.prompt, Prompt::Unspecified);
         match prompt {
             Prompt::EmptyTrash if self.is_trash() => self.empty_trash(ctx),
             Prompt::DeleteAlbum if self.is_album() => self.delete_album(ctx),
@@ -388,7 +388,7 @@ impl Shelf {
     }
 
     fn rename_album(&mut self, title: &str, ctx: &Ctx) {
-        self.prompt = Prompt::None;
+        self.prompt = Prompt::Unspecified;
         let name = title.trim();
         let current = self.head.as_ref().map(|head| head.title.as_str());
         // An empty name is refused by the vault and the same name changes
@@ -455,7 +455,7 @@ impl Shelf {
     /// Hand the pick's originals to the platform: its share sheet or this
     /// device's photos. The shell finds the files and takes the place out.
     fn copy(&mut self, mode: Mode, keep_location: bool, ctx: &Ctx) -> Vec<wire::Effect> {
-        self.prompt = Prompt::None;
+        self.prompt = Prompt::Unspecified;
         self.notice.clear();
         let ids = self.selection.picked().to_vec();
         if ids.is_empty() || self.copying.is_some() {
@@ -485,9 +485,9 @@ impl Shelf {
             Some(E::Selection(selection)) => self.selection_event(&selection, ctx),
             Some(E::AlbumChoice(choice)) => self.album_choice_event(&choice, ctx),
             Some(E::PromptOpened(opened)) => {
-                self.open_prompt(Prompt::try_from(opened.prompt).unwrap_or(Prompt::None));
+                self.open_prompt(Prompt::try_from(opened.prompt).unwrap_or(Prompt::Unspecified));
             }
-            Some(E::PromptDismissed(_)) => self.prompt = Prompt::None,
+            Some(E::PromptDismissed(_)) => self.prompt = Prompt::Unspecified,
             Some(E::PromptConfirmed(_)) => self.confirmed(ctx),
             Some(E::LocationChosen(chosen)) => return self.copy(Mode::Send, chosen.exact, ctx),
             Some(E::AlbumRenamed(renamed)) => self.rename_album(&renamed.title, ctx),

@@ -108,7 +108,10 @@ fn an_order_is_the_reads_and_a_pick_closes_the_sheet_and_renames_the_chip() {
         }),
     );
     let state = home_state(d.view(i));
-    assert_eq!(state.sheet, wire::people_home_state::Sheet::None as i32);
+    assert_eq!(
+        state.sheet,
+        wire::people_home_state::Sheet::Unspecified as i32
+    );
     assert_eq!(state.sort_chip.as_ref().unwrap().label, "Name");
     assert_eq!(names(roster_data(d.view(i))), ["Ana", "Mia", "Zed"]);
     // The same order again is nothing.
@@ -322,7 +325,7 @@ fn more_holds_trash_alone_and_is_an_ordinary_band_tab_last() {
     send_home(&mut d, i, H::SheetClosed(ev::SheetClosed {}));
     assert_eq!(
         home_state(d.view(i)).sheet,
-        wire::people_home_state::Sheet::None as i32
+        wire::people_home_state::Sheet::Unspecified as i32
     );
 }
 

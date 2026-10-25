@@ -62,7 +62,8 @@ message PhotosShelfState {
   string prompt_cancel_label = 20;
 
   enum Prompt {
-    PROMPT_NONE = 0;
+    // No prompt is open.
+    PROMPT_UNSPECIFIED = 0;
     PROMPT_EMPTY_TRASH = 1;
     PROMPT_DELETE_ALBUM = 2;
     PROMPT_SEND_LOCATION = 3;

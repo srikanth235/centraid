@@ -1360,7 +1360,24 @@ fn run_buf(ctx: &Ctx) -> Result<Outcome> {
 
     let mut empty_bases = 0usize;
     for base in &against {
-        let outcome = process(ctx, "buf", "buf", &["breaking", "--against", base])?;
+        // THE BASE IS READ UNDER TODAY'S MODULE LAYOUT (`--against-config`): a
+        // base whose `buf.yaml` split the tree into a different number of
+        // modules cannot be paired image for image, and buf refuses the
+        // comparison outright. The rules are the same WIRE_JSON either way;
+        // only the module boundaries are taken from this commit (#1135, when
+        // `centraid.screen.v1` and its second module were deleted).
+        let outcome = process(
+            ctx,
+            "buf",
+            "buf",
+            &[
+                "breaking",
+                "--against",
+                base,
+                "--against-config",
+                "buf.yaml",
+            ],
+        )?;
         if let Outcome::Failed(detail) = outcome {
             if base_carries_no_schema(ctx, "buf") {
                 empty_bases += 1;

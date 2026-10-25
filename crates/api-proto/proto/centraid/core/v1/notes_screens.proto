@@ -60,7 +60,8 @@ message NotesHomeState {
 }
 
 enum NotesSheet {
-  NOTES_SHEET_NONE = 0;
+  // No sheet is open.
+  NOTES_SHEET_UNSPECIFIED = 0;
   NOTES_SHEET_MORE = 1;
   NOTES_SHEET_SORT = 2;
   NOTES_SHEET_ROW_MENU = 3;

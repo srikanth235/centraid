@@ -96,7 +96,8 @@ message PeopleHomeState {
   Route add_person = 17;
 
   enum Sheet {
-    SHEET_NONE = 0;
+    // No sheet is open.
+    SHEET_UNSPECIFIED = 0;
     SHEET_MORE = 1;
     SHEET_ORDER = 2;
   }

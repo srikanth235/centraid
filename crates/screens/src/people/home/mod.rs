@@ -52,7 +52,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         roster: Phase::Loading,
         touch: Phase::Loading,
         search: Search::default(),
-        sheet: wire::people_home_state::Sheet::None,
+        sheet: wire::people_home_state::Sheet::Unspecified,
         status: None,
         contacts: ContactsFollow::new(),
         attached: false,
@@ -154,7 +154,7 @@ impl Home {
     /// Show `destination` from nothing: another list is a fresh page.
     fn go(&mut self, ctx: &Ctx, destination: wire::PeopleDestination) {
         self.destination = destination;
-        self.sheet = wire::people_home_state::Sheet::None;
+        self.sheet = wire::people_home_state::Sheet::Unspecified;
         self.search = Search::default();
         self.status = None;
         self.reload(ctx);
@@ -178,7 +178,7 @@ impl Home {
     }
 
     fn set_order(&mut self, ctx: &Ctx, order: wire::PeopleOrder) {
-        self.sheet = wire::people_home_state::Sheet::None;
+        self.sheet = wire::people_home_state::Sheet::Unspecified;
         if order == self.order || order == wire::PeopleOrder::Unspecified {
             return;
         }
@@ -294,10 +294,10 @@ impl Home {
             H::SheetOpened(opened) => {
                 self.sheet = match wire::people_home_state::Sheet::try_from(opened.sheet) {
                     Ok(sheet) => sheet,
-                    Err(_) => wire::people_home_state::Sheet::None,
+                    Err(_) => wire::people_home_state::Sheet::Unspecified,
                 };
             }
-            H::SheetClosed(_) => self.sheet = wire::people_home_state::Sheet::None,
+            H::SheetClosed(_) => self.sheet = wire::people_home_state::Sheet::Unspecified,
             H::Star(toggled) => self.star(ctx, &toggled.party_id),
             H::ImportContacts(_) => {
                 self.status = None;

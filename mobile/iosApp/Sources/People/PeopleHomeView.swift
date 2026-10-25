@@ -69,7 +69,7 @@ struct PeopleHomeView: View {
         .sheet(isPresented: Binding(
             get: { state.sheet == .more || state.sheet == .order },
             set: { shown in
-                guard !shown, state.sheet != .none else { return }
+                guard !shown, state.sheet != .unspecified else { return }
                 send(PeopleEvents.home { $0.sheetClosed = .init() })
             }
         )) {

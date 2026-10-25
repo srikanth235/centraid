@@ -144,7 +144,7 @@ fn empty_trash_is_offered_on_the_trash_only_and_a_dismissed_sheet_purges_nothing
     star(&d, &a);
     let favorites = open(&mut d, wire::PhotosShelfKind::Favorites, "");
     prompt(&mut d, favorites, Prompt::EmptyTrash);
-    assert_eq!(state(&d, favorites).prompt, Prompt::None as i32);
+    assert_eq!(state(&d, favorites).prompt, Prompt::Unspecified as i32);
     assert_eq!(data(&d, favorites).empty_trash_label, None);
 
     trash(&d, &a);
@@ -537,7 +537,7 @@ fn an_album_renames_covers_removes_and_deletes() {
         }),
     );
     assert_eq!(state(&d, shelf).title, "Portugal");
-    assert_eq!(state(&d, shelf).prompt, Prompt::None as i32);
+    assert_eq!(state(&d, shelf).prompt, Prompt::Unspecified as i32);
     send(
         &mut d,
         shelf,
@@ -660,7 +660,7 @@ fn send_a_copy_asks_how_much_place_travels_then_hands_the_pick_to_the_platform()
     let shelf = open(&mut d, wire::PhotosShelfKind::Favorites, "");
     // Nothing picked: no sheet.
     prompt(&mut d, shelf, Prompt::SendLocation);
-    assert_eq!(state(&d, shelf).prompt, Prompt::None as i32);
+    assert_eq!(state(&d, shelf).prompt, Prompt::Unspecified as i32);
 
     pick(&mut d, shelf, &a);
     pick(&mut d, shelf, &b);

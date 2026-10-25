@@ -46,7 +46,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         library: Library::new(&args.notebook_id, &args.notebook_name, args.unfiled_only),
         notebooks: Notebooks::new(),
         journal: Journal::new(),
-        sheet: wire::NotesSheet::None,
+        sheet: wire::NotesSheet::Unspecified,
         menu_id: String::new(),
         asking: Asking::Nothing,
         status: None,
@@ -95,7 +95,7 @@ impl Home {
     }
 
     fn close_sheet(&mut self) {
-        self.sheet = wire::NotesSheet::None;
+        self.sheet = wire::NotesSheet::Unspecified;
         self.menu_id.clear();
     }
 
