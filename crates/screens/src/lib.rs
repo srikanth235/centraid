@@ -10,6 +10,7 @@ pub mod chat;
 pub mod docs;
 pub mod field;
 pub mod health;
+pub mod imports;
 pub mod kit;
 pub mod locker;
 pub mod money;
@@ -43,6 +44,7 @@ pub fn standard() -> Runtime {
             .merge(notes::registry())
             .merge(people::registry())
             .merge(photos::registry())
+            .merge(imports::registry())
             .merge(chat::registry()),
         vec![
             ("proof".to_owned(), proof::route()),

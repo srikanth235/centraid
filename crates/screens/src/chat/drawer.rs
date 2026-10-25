@@ -158,13 +158,14 @@ impl Chat {
             Some(wire::assist_response::Kind::Started(started)) => Some(started),
             _ => None,
         };
-        let (Reading::Data(stored), Some(started)) = (stored, started) else {
-            // The read or the session failed: say so, and leave a new chat.
-            return self.thread_unavailable(None, ctx);
-        };
-        if !stored.found {
+        // A chat deleted from another place says so; a read or a session that failed otherwise
+        // is the generic line. Either leaves a new chat.
+        if matches!(&stored, Reading::Data(stored) if !stored.found) {
             return self.thread_unavailable(Some(Fail::ThreadGone), ctx);
         }
+        let (Reading::Data(stored), Some(started)) = (stored, started) else {
+            return self.thread_unavailable(None, ctx);
+        };
         self.clear_thread();
         self.thread_id = id.to_owned();
         self.thread_title = title;

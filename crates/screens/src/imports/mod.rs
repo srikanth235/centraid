@@ -70,18 +70,25 @@ pub mod routes {
     }
 }
 
-/// A runtime that hosts the three services as hidden roots, for tests and for a shell that wants
-/// only them.
+/// The three services as hidden tab roots: `(tab, route)`, in the order the shell opens them. A
+/// service is a screen that is never drawn, and the runtime opens instances only as a tab's root or
+/// a push, so the navigation root (lane H1) appends these to its tabs and keeps them out of the tab
+/// bar. They serve the runtime's own vault (a core is one vault; a vault switch is a new runtime),
+/// so the route's `vault_id` is empty here and the camera roll learns its vault id from the
+/// events that carry it.
+#[must_use]
+pub fn roots() -> Vec<(String, wire::Route)> {
+    vec![
+        ("imports-camera-roll".to_owned(), routes::camera_roll("")),
+        ("imports-files".to_owned(), routes::files("")),
+        ("imports-made".to_owned(), routes::made("")),
+    ]
+}
+
+/// A runtime that hosts only the three services, for tests.
 #[must_use]
 pub fn runtime() -> crate::Runtime {
-    crate::Runtime::new(
-        registry(),
-        vec![
-            ("imports-camera-roll".to_owned(), routes::camera_roll("v")),
-            ("imports-files".to_owned(), routes::files("v")),
-            ("imports-made".to_owned(), routes::made("v")),
-        ],
-    )
+    crate::Runtime::new(registry(), roots())
 }
 
 pub(crate) fn effect(kind: wire::effect::Kind) -> wire::Effect {

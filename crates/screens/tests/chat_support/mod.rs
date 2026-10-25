@@ -66,7 +66,17 @@ pub fn runtime() -> Runtime {
 impl Chat {
     /// A chat tab over the scenario with `model` already in the slot (`None`: no model).
     pub fn with(model: Option<Arc<dyn Model>>) -> Self {
-        let mut driver = Driver::with_runtime(runtime());
+        Self::on(Driver::with_runtime(runtime()), model)
+    }
+
+    /// The same over a core that holds the vault's keys, so Locker can be unlocked.
+    pub fn keyed(model: Arc<dyn Model>) -> Self {
+        let mut chat = Self::on(Driver::keyed(runtime()), Some(model));
+        chat.open("");
+        chat
+    }
+
+    fn on(mut driver: Driver, model: Option<Arc<dyn Model>>) -> Self {
         if let Some(model) = model {
             driver.handle.assist().host().install(model);
         }

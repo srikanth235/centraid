@@ -29,7 +29,15 @@ pub fn ago(locale: Locale, updated_ms: i64, now: i64) -> String {
         1440..=2879 => shared::yesterday(locale),
         2880..=10079 => words::ago_days(locale, count / 1440),
         // The day an old chat last moved is a landmark and not a timestamp: UTC, no zone to say.
-        _ => civil::day_month(locale, &civil::civil_day_of(updated_ms.div_euclid(DAY))),
+        _ => {
+            let day = civil::civil_day_of(updated_ms.div_euclid(DAY));
+            let month = day.get(5..7).and_then(|m| m.parse().ok()).unwrap_or(1);
+            format!(
+                "{} {}",
+                civil::day_of_month_of(&day).unwrap_or(1),
+                civil::month_name(locale, month)
+            )
+        }
     }
 }
 

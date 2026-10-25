@@ -124,7 +124,6 @@ pub struct Outcome {
 
 /// A folder the vault follows, as `files-followed` answered it.
 struct Held {
-    origin_id: String,
     phone_origin: String,
     label: String,
     documents: u32,
@@ -171,7 +170,6 @@ fn read_held(ctx: &Ctx) -> Reading<Vec<Held>> {
             held.folders
                 .into_iter()
                 .map(|folder| Held {
-                    origin_id: folder.origin_id,
                     phone_origin: folder.origin_ref,
                     label: folder.label,
                     documents: folder.documents,
@@ -541,7 +539,6 @@ impl Screen for Files {
             })
             .collect();
         followed.sort_by_key(|folder| folder.name.to_lowercase());
-        let _ = &self.held.first().map(|held| &held.origin_id);
         wire::ViewState {
             kind: Some(wire::view_state::Kind::ImportsFiles(wire::ImportsFilesState {
                 followed,
