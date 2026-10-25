@@ -19,7 +19,7 @@ This is the most important table in this file. **Nothing in the right-hand colum
 | --- | --- |
 | the **real ABI round trip**: `open → call → next_event → free → close` from Kotlin over JNA against `libcentraid_core_ffi.so`, on a vault the Rust fixture binary founded (`:core:jvmTest`) | the same round trip through cinterop on iOS, and through JNA on a device |
 | the UI-thread assertion, the buffer accounting, the poison handling, the bounded-queue behaviour | a panic injected by the real library (it has no fault-injection point — see `contracts/handoff/E/proposed-patches.md`) |
-| every screen's behaviour: `centraid_screens::testing::Driver` over the real core (`cargo test -p centraid-screens`), and the screen fixtures in `contracts/screens` | the Compose screens and the SwiftUI views rendering; the 26 fixtures decoded by Wire (Android) and SwiftProtobuf (iOS) |
+| every screen's behaviour: `centraid_screens::testing::Driver` over the real core (`cargo test -p centraid-screens`) | the Compose screens and the SwiftUI views rendering |
 | the emitted token table, catalogue and kit words match `packages/design` (`packages/design`'s `native-emission.test.ts`, and the drift check of the `mobile-jvm` step) | every emitted silhouette parsing in the Swift path reader (`IconSilhouetteTests`); Roborazzi and swift-snapshot-testing snapshots |
 | the pass service, the phone imports and the vault shelf's decisions (Rust tests in `crates/screens`) | the windows firing, the background `URLSession` carrying parts with the app suspended, the PhotoKit and MediaStore walkers, the derivatives, the deletions — `maestro/backup-measurement.md` |
 | `cargo xtask rules` over the shells' sources (no copy in a view, controls from the kit) | the device numbers that promote `tests/journeys.json`'s parked ceilings |
@@ -227,7 +227,6 @@ Above `:core`, Android's `dev.centraid.core.Screens` holds the screen runtime's 
 | `androidApp/src/main/kotlin/dev/centraid/android/design/{Tokens,Catalog,Words}.kt` | `contracts/tools/export-native-theme.ts` (the catalogue by `export-native-catalog.ts`, the kit's words by `export-native-words.ts`, from `crates/screens/src/strings/shared.rs`) | `git diff --exit-code design mobile` |
 | `iosApp/Design/{Theme,Catalog,Words}.swift` | the same | the same |
 | `design/native-{theme,catalog}.json` | the same | the same |
-| `contracts/screens/**/*.bin` | `contracts/tools/build-screen-fixtures.ts` | `git diff --exit-code contracts/screens` |
 | the Wire types | `crates/api-proto/proto`, by Gradle's `generateCommonMainProtos` | `buf lint` / `buf breaking`; the task is a build input, so a stale tree is not possible |
 | `iosApp/Sources/Generated/**` (the SwiftProtobuf types) | `mobile/scripts/generate-swift-protos.sh`: Xcode's pre-build phase, and `xcodegen generate`'s `preGenCommand` | none needed: the phase re-runs when a `.proto` changes, and `Sources/Generated` is gitignored |
 
