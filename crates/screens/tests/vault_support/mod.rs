@@ -127,6 +127,22 @@ impl Phone {
         }
     }
 
+    /// A phone over `dir` whose runtime is `build`'s: the screens a test wants
+    /// beside the shelf's own service.
+    pub fn running(dir: &Path, build: impl FnOnce(&Arc<Shelf>, &VaultSecrets) -> Runtime) -> Self {
+        let secrets = VaultSecrets::new();
+        let shelf = Shelf::new(&secrets);
+        let driver = Driver::shelved(build(&shelf, &secrets), &shelf, dir, None);
+        Self {
+            driver,
+            shelf,
+            secrets,
+            shell: FakeShell::default(),
+            dir: dir.to_path_buf(),
+            _scratch: None,
+        }
+    }
+
     /// A phone whose cores are made ready by `prepare`, which can sabotage them
     /// to give the shelf a refusal it did not cause.
     pub fn prepared(dir: &Path, prepare: centraid_screens::vault::Prepare) -> Self {
