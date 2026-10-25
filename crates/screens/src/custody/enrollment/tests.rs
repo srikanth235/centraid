@@ -130,10 +130,7 @@ impl Phone {
                                 "{kind} {prefix} payload={:?} indices={:?}",
                                 request.payload, request.indices
                             ),
-                            None => format!(
-                                "{kind} seed={}",
-                                secrets.seed().is_some()
-                            ),
+                            None => format!("{kind} seed={}", secrets.seed().is_some()),
                         });
                         let scripted = prefix
                             .and_then(|prefix| by_seed.get(&prefix).cloned())
@@ -193,15 +190,18 @@ impl Phone {
 
     /// The seed arrived by the synchronised keychain: no words, no indices.
     fn arrive_by_sync(&mut self, seed: &str) {
-        self.shell.synced.insert(secrets::SEED_KEY.to_owned(), seed.to_owned());
+        self.shell
+            .synced
+            .insert(secrets::SEED_KEY.to_owned(), seed.to_owned());
         self.reload();
     }
 
     /// The shelf recorded a vault's index (what founding does).
     fn record_index(&mut self, vault: &str, index: u32) {
-        self.shell
-            .device
-            .insert(format!("{}{vault}", secrets::INDEX_PREFIX), index.to_string());
+        self.shell.device.insert(
+            format!("{}{vault}", secrets::INDEX_PREFIX),
+            index.to_string(),
+        );
         self.shell
             .device
             .insert(secrets::INDEX_HIGH_WATER.to_owned(), index.to_string());
@@ -293,7 +293,7 @@ fn a_seed_that_arrived_by_sync_has_no_words_and_forgetting_the_seed_forgets_the_
 
 #[test]
 fn a_seed_this_phone_settled_makes_the_next_vault_without_words_and_a_synced_one_must_restore_first()
-{
+ {
     let mut settled = Phone::new();
     assert_eq!(settled.kept(words_a()), None);
     assert_eq!(settled.standing(), Standing::Settled);
@@ -311,13 +311,21 @@ fn a_seed_this_phone_settled_makes_the_next_vault_without_words_and_a_synced_one
 #[test]
 fn a_restore_dials_with_nothing_stored_then_stores_the_seed_before_holding_what_came_back() {
     let mut phone = Phone::new();
-    phone.answer = Some(answer(vec![at("/v/a/vault.db", 0, 10), at("/v/b/vault.db", 2, 0)]));
+    phone.answer = Some(answer(vec![
+        at("/v/a/vault.db", 0, 10),
+        at("/v/b/vault.db", 2, 0),
+    ]));
     let Restored::Done { added, answer, .. } = phone.restore(words_a(), "code") else {
         panic!("a restore came back")
     };
     assert_eq!(added, 2);
     assert_eq!(
-        phone.log.clone().into_iter().chain(phone.keeper.log()).collect::<Vec<_>>(),
+        phone
+            .log
+            .clone()
+            .into_iter()
+            .chain(phone.keeper.log())
+            .collect::<Vec<_>>(),
         vec![
             "restore seed=false".to_owned(),
             "adopt [0, 2] seed=true".to_owned()
@@ -343,7 +351,11 @@ fn a_restore_that_left_a_vault_with_the_old_phone_holds_only_what_it_claimed() {
     assert_eq!(added, 1);
     assert_eq!(phone.keeper.log(), vec!["adopt [0] seed=true".to_owned()]);
     assert_eq!(
-        answer.unclaimed.iter().map(|vault| vault.index).collect::<Vec<_>>(),
+        answer
+            .unclaimed
+            .iter()
+            .map(|vault| vault.index)
+            .collect::<Vec<_>>(),
         vec![1]
     );
 }
@@ -397,16 +409,25 @@ fn a_synchronised_seed_restores_with_no_words_and_is_settled_once_vaults_came_ba
     let seed = phone.seed_of(&words_a());
     phone.arrive_by_sync(&seed);
     assert_eq!(phone.standing(), Standing::Unsettled);
-    phone.answer = Some(answer(vec![at("/v/a/vault.db", 0, 0), at("/v/c/vault.db", 1, 0)]));
+    phone.answer = Some(answer(vec![
+        at("/v/a/vault.db", 0, 0),
+        at("/v/c/vault.db", 1, 0),
+    ]));
     let Restored::Done { added, .. } = phone.held("code") else {
         panic!("a held restore came back")
     };
     assert_eq!(added, 2);
     assert_eq!(
         phone.log,
-        vec![format!("restore {} payload=\"code\" indices=[]", &seed[..4])]
+        vec![format!(
+            "restore {} payload=\"code\" indices=[]",
+            &seed[..4]
+        )]
     );
-    assert_eq!(phone.keeper.log(), vec!["adopt [0, 1] seed=true".to_owned()]);
+    assert_eq!(
+        phone.keeper.log(),
+        vec!["adopt [0, 1] seed=true".to_owned()]
+    );
     assert_eq!(phone.standing(), Standing::Settled);
     assert_eq!(phone.secrets.words(), None);
 }
@@ -427,10 +448,7 @@ fn the_keychains_seed_is_not_the_backups_typed_words_replace_it_while_no_vault_o
 #[test]
 fn a_held_restore_with_no_seed_or_one_the_backup_answered_with_nothing_settles_nothing() {
     let mut none = Phone::new();
-    assert_eq!(
-        none.held(""),
-        Restored::Refused(Refusal::NotAPhrase)
-    );
+    assert_eq!(none.held(""), Restored::Refused(Refusal::NotAPhrase));
     assert!(none.log.is_empty());
 
     let mut empty = Phone::new();
@@ -542,7 +560,12 @@ fn own_words_are_kept_under_an_entry_of_their_own_never_the_members_slot() {
         phone.secrets.pending_filings(),
         vec![(id.clone(), "Family".to_owned())]
     );
-    let labels: Vec<String> = phone.secrets.own_seeds().into_iter().map(|e| e.label).collect();
+    let labels: Vec<String> = phone
+        .secrets
+        .own_seeds()
+        .into_iter()
+        .map(|e| e.label)
+        .collect();
     assert_eq!(labels, vec!["Family".to_owned()]);
 }
 
@@ -553,8 +576,14 @@ fn a_held_restore_asks_for_the_members_seed_and_every_vault_on_its_own_words() {
     phone.arrive_by_sync(&member);
     let id = VaultSecrets::fresh_entry_id();
     let own_seed = phone.seed_of(&words_b());
-    phone.shell.synced.insert(format!("{}{id}", secrets::OWN_SEED_PREFIX), own_seed.clone());
-    phone.shell.synced.insert(secrets::OWN_SEED_INDEX.to_owned(), format!("{id}\tFamily"));
+    phone.shell.synced.insert(
+        format!("{}{id}", secrets::OWN_SEED_PREFIX),
+        own_seed.clone(),
+    );
+    phone
+        .shell
+        .synced
+        .insert(secrets::OWN_SEED_INDEX.to_owned(), format!("{id}\tFamily"));
     phone.reload();
     phone.answer = Some(answer(vec![at("/v/x/vault.db", 0, 0)]));
     let Restored::Done { added, answer, .. } = phone.held("") else {
@@ -562,7 +591,11 @@ fn a_held_restore_asks_for_the_members_seed_and_every_vault_on_its_own_words() {
     };
     assert_eq!(added, 2);
     assert_eq!(
-        answer.vaults.iter().map(|v| v.own.clone()).collect::<Vec<_>>(),
+        answer
+            .vaults
+            .iter()
+            .map(|v| v.own.clone())
+            .collect::<Vec<_>>(),
         vec![None, Some(id.clone())]
     );
     assert_eq!(
@@ -574,14 +607,17 @@ fn a_held_restore_asks_for_the_members_seed_and_every_vault_on_its_own_words() {
     );
     assert_eq!(
         phone.keeper.log(),
-        vec!["adopt [0] seed=true".to_owned(), format!("adopt [0@{id}] seed=true")]
+        vec![
+            "adopt [0] seed=true".to_owned(),
+            format!("adopt [0@{id}] seed=true")
+        ]
     );
     assert_eq!(phone.standing(), Standing::Settled);
 }
 
 #[test]
 fn words_that_are_not_the_members_on_a_phone_whose_vaults_open_with_the_members_restore_as_a_vault_on_its_own_words()
-{
+ {
     let mut phone = Phone::new();
     assert_eq!(phone.kept(words_a()), None);
     phone.record_index("v-a", 0);
@@ -589,9 +625,15 @@ fn words_that_are_not_the_members_on_a_phone_whose_vaults_open_with_the_members_
     let Restored::Done { answer, .. } = phone.restore(words_b(), "code") else {
         panic!("a restore came back")
     };
-    let own = answer.vaults[0].own.clone().expect("the vault is tagged with its entry");
+    let own = answer.vaults[0]
+        .own
+        .clone()
+        .expect("the vault is tagged with its entry");
     assert_eq!(phone.secrets.seed(), Some(phone.seed_of(&words_a())));
-    assert_eq!(phone.secrets.own_seed(&own), Some(phone.seed_of(&words_b())));
+    assert_eq!(
+        phone.secrets.own_seed(&own),
+        Some(phone.seed_of(&words_b()))
+    );
     // TYPED AGAIN, the same entry answers, not a second one.
     assert!(matches!(
         phone.restore(words_b(), "code"),
@@ -607,11 +649,20 @@ fn a_vault_on_its_own_words_the_backup_holds_nothing_for_is_named_not_left_out()
     both.arrive_by_sync(&member);
     let id = VaultSecrets::fresh_entry_id();
     let own_seed = both.seed_of(&words_b());
-    both.shell.synced.insert(format!("{}{id}", secrets::OWN_SEED_PREFIX), own_seed.clone());
-    both.shell.synced.insert(secrets::OWN_SEED_INDEX.to_owned(), format!("{id}\tFamily"));
+    both.shell.synced.insert(
+        format!("{}{id}", secrets::OWN_SEED_PREFIX),
+        own_seed.clone(),
+    );
+    both.shell
+        .synced
+        .insert(secrets::OWN_SEED_INDEX.to_owned(), format!("{id}\tFamily"));
     both.reload();
-    both.by_seed.insert(member[..4].to_owned(), answer(vec![at("/v/x/vault.db", 0, 0)]));
-    both.by_seed.insert(own_seed[..4].to_owned(), RestoreAnswer::default());
+    both.by_seed.insert(
+        member[..4].to_owned(),
+        answer(vec![at("/v/x/vault.db", 0, 0)]),
+    );
+    both.by_seed
+        .insert(own_seed[..4].to_owned(), RestoreAnswer::default());
     let Restored::Done { added, missing, .. } = both.held("") else {
         panic!("a held restore came back")
     };
@@ -635,7 +686,7 @@ fn a_synchronised_store_that_refuses_the_seed_leaves_it_on_this_phone_only() {
 
 #[test]
 fn the_runner_ignores_an_answer_it_is_not_waiting_for_and_folds_a_secret_answer_into_the_cache() {
-    let mut phone = Phone::new();
+    let phone = Phone::new();
     let mut runner = Runner::default();
     let keeper: Arc<dyn Keeper> = phone.keeper.clone();
     let secrets = phone.secrets.clone();
@@ -657,7 +708,9 @@ fn the_runner_ignores_an_answer_it_is_not_waiting_for_and_folds_a_secret_answer_
         };
         assert!(runner.answered(&stray, &env).is_none());
         let mut shell = FakeShell::default();
-        shell.device.insert(secrets::LOCAL_WORDS.to_owned(), words_a().join(" "));
+        shell
+            .device
+            .insert(secrets::LOCAL_WORDS.to_owned(), words_a().join(" "));
         let Some(wire::effect::Kind::Secrets(batch)) = started.effects[0].kind.clone() else {
             panic!("a reload sends a secret batch")
         };
@@ -665,7 +718,9 @@ fn the_runner_ignores_an_answer_it_is_not_waiting_for_and_folds_a_secret_answer_
             effect_id: 1,
             outcome: Some(wire::effect_result::Outcome::Secrets(shell.batch(&batch))),
         };
-        let progress = runner.answered(&answered, &env).expect("the reload awaited it");
+        let progress = runner
+            .answered(&answered, &env)
+            .expect("the reload awaited it");
         assert_eq!(progress.out, Some(Out::Done));
         assert!(!runner.busy());
         assert!(secrets.loaded());
@@ -678,5 +733,15 @@ fn a_job_and_what_it_holds_never_print_a_word() {
     let job = Job::restore(words_a(), "code");
     assert!(!format!("{job:?}").contains(ABANDON));
     let answer = RestoreAnswer::default();
-    assert!(!format!("{:?}", Restored::Done { answer, added: 1, missing: vec![] }).contains('/'));
+    assert!(
+        !format!(
+            "{:?}",
+            Restored::Done {
+                answer,
+                added: 1,
+                missing: vec![]
+            }
+        )
+        .contains('/')
+    );
 }

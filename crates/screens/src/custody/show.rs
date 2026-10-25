@@ -308,7 +308,11 @@ impl Show {
                     .collect::<Vec<_>>()
                     .join(". ")
             },
-            save_label: if show { words::save_label(locale) } else { String::new() },
+            save_label: if show {
+                words::save_label(locale)
+            } else {
+                String::new()
+            },
             check_now,
             finished: self.finished,
             title,

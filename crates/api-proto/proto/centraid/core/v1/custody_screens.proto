@@ -173,7 +173,7 @@ message WordsEnterState {
   // THE PAIRING CODE IS SCANNED AS WELL AS PASTED. With a camera the control
   // opens it (`scan_camera`); without one it opens the photo picker. What it
   // reads comes back as `Scanned` and fills `endpoint`; a photo with no square
-  // comes back as `PhotoUnread`.
+  // comes back as `WordsPhotoUnread`.
   string scan_label = 22;
   bool scan_camera = 23;
   string photo_label = 24;
@@ -195,7 +195,7 @@ message WordEntry {
   string typed = 3;
   Mark mark = 4;
   // List words beginning with what is typed, when it is not yet one. A tap
-  // sends `SuggestionPicked`.
+  // sends `WordsSuggestionPicked`.
   repeated string suggestions = 5;
   string accessibility_label = 6;
 
@@ -220,9 +220,9 @@ message RestoredVaultLine {
 
 message WordsEnterEvent {
   oneof kind {
-    WordTyped typed = 1;
-    SuggestionPicked picked = 2;
-    EndpointTyped endpoint = 3;
+    WordsWordTyped typed = 1;
+    WordsSuggestionPicked picked = 2;
+    WordsEndpointTyped endpoint = 3;
     WordsPrimary primary = 4;
     WordsSecondary secondary = 5;
     // `retry_label`'s control: restore the vaults that stayed, on their own.
@@ -231,39 +231,39 @@ message WordsEnterEvent {
     WordsUseWords use_words = 7;
     // `scan_label`'s answer: the square's text. It fills `endpoint` as a paste
     // would.
-    PairingScanned scanned = 8;
+    WordsScanned scanned = 8;
     // A photo chosen to scan held no square.
-    PhotoUnread unread = 9;
+    WordsPhotoUnread unread = 9;
     // What this phone can scan with; the shell tells once, as the view appears.
-    ScanCapability capability = 10;
+    WordsScanCapability capability = 10;
     // The sheet was swiped away: the words are dropped.
     WordsDismissed dismissed = 11;
   }
 }
 
-message WordTyped {
+message WordsWordTyped {
   uint32 position = 1;
   string text = 2;
 }
 
-message SuggestionPicked {
+message WordsSuggestionPicked {
   uint32 position = 1;
   string word = 2;
 }
 
-message EndpointTyped {
+message WordsEndpointTyped {
   string text = 1;
 }
 
 message WordsRetry {}
 message WordsUseWords {}
-message PhotoUnread {}
+message WordsPhotoUnread {}
 
-message PairingScanned {
+message WordsScanned {
   string payload = 1;
 }
 
-message ScanCapability {
+message WordsScanCapability {
   bool camera = 1;
 }
 

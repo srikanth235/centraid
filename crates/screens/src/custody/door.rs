@@ -195,7 +195,11 @@ impl fmt::Debug for RestoreAnswer {
 
 impl fmt::Debug for RestoredVaultAt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "RestoredVaultAt(index={}, rows={})", self.index, self.rows)
+        write!(
+            f,
+            "RestoredVaultAt(index={}, rows={})",
+            self.index, self.rows
+        )
     }
 }
 
@@ -320,7 +324,6 @@ pub fn send_restore(ctx: &Ctx, request: wire::RestoreRequest) {
 }
 
 /// What a restore's [`wire::OffThreadDone`] carried.
-#[must_use]
 pub fn restored(done: &wire::OffThreadDone) -> Result<RestoreAnswer, RestoreRefusal> {
     let Ok(called) = wire::VaultCalled::decode(done.bytes.as_slice()) else {
         return Err(RestoreRefusal::Unreachable);

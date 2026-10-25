@@ -176,11 +176,15 @@ fn a_settled_seed_with_no_vault_is_a_reinstalls_first_make_and_asks_nothing() {
 }
 
 #[test]
-fn a_seed_that_arrived_from_elsewhere_is_sent_to_restore_first_and_the_restore_opens_in_its_place() {
+fn a_seed_that_arrived_from_elsewhere_is_sent_to_restore_first_and_the_restore_opens_in_its_place()
+{
     let mut phone = make_phone("ios");
     // The keychain carried a seed here, with no record of its indices.
     let seed = "ab".repeat(64);
-    phone.shell.synced.insert(secrets::SEED_KEY.to_owned(), seed);
+    phone
+        .shell
+        .synced
+        .insert(secrets::SEED_KEY.to_owned(), seed);
     phone.serve();
     let state = phone.make();
     assert_eq!(state.phase, Phase::RestoreFirst as i32);
@@ -218,7 +222,10 @@ fn a_founding_that_is_refused_says_so_and_try_again_founds_on_the_same_words() {
     let before = phone.shell.device.clone();
     phone.primary_make();
     assert!(phone.make().finished);
-    assert_eq!(phone.shell.device.get(secrets::LOCAL_SEED), before.get(secrets::LOCAL_SEED));
+    assert_eq!(
+        phone.shell.device.get(secrets::LOCAL_SEED),
+        before.get(secrets::LOCAL_SEED)
+    );
     assert_eq!(phone.keeper.log().len(), 2);
 }
 
@@ -331,11 +338,13 @@ fn a_vault_on_its_own_words_is_named_minted_shown_as_its_own_kept_under_its_entr
         .map(|(_, value)| value.clone());
     assert_eq!(own_words, Some(minted.join(" ")));
     // Recorded to be filed in the main vault's Locker on its next unlock.
-    assert!(phone
-        .shell
-        .device
-        .get(secrets::PENDING_FILINGS)
-        .is_some_and(|line| line.ends_with("\tFamily")));
+    assert!(
+        phone
+            .shell
+            .device
+            .get(secrets::PENDING_FILINGS)
+            .is_some_and(|line| line.ends_with("\tFamily"))
+    );
 }
 
 #[test]
@@ -356,23 +365,24 @@ fn an_entry_kept_for_a_vault_that_was_never_made_is_dropped_when_the_member_walk
         .set_found(Some(Found::Refused(FoundRefusal::NotFounded)));
     phone.primary_make();
     assert_eq!(phone.make().phase, Phase::Failed as i32);
-    assert!(phone
-        .shell
-        .device
-        .keys()
-        .any(|key| key.starts_with(secrets::LOCAL_OWN_WORDS_PREFIX)));
+    assert!(
+        phone
+            .shell
+            .device
+            .keys()
+            .any(|key| key.starts_with(secrets::LOCAL_OWN_WORDS_PREFIX))
+    );
     // TRY AGAIN founds on the same entry; Cancel drops it.
     phone.keeper.set_found(None);
     phone.send_make(K::Secondary(wire::WordsSecondary {}));
     assert!(phone.make().finished);
     phone.serve();
-    assert!(!phone
-        .shell
-        .device
-        .keys()
-        .any(|key| key.starts_with(secrets::LOCAL_OWN_WORDS_PREFIX)));
-    assert!(!phone
-        .shell
-        .device
-        .contains_key(secrets::PENDING_FILINGS));
+    assert!(
+        !phone
+            .shell
+            .device
+            .keys()
+            .any(|key| key.starts_with(secrets::LOCAL_OWN_WORDS_PREFIX))
+    );
+    assert!(!phone.shell.device.contains_key(secrets::PENDING_FILINGS));
 }

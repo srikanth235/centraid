@@ -1,6 +1,5 @@
 package dev.centraid.android.screens.words
 
-import android.content.Intent
 import android.os.Build
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
@@ -35,10 +34,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -52,7 +49,6 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalTextToolbar
@@ -74,15 +70,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import centraid.core.v1.EndpointTyped
-import centraid.core.v1.PairingScanned
-import centraid.core.v1.PhotoUnread
+import centraid.core.v1.WordsEndpointTyped
 import centraid.core.v1.RestoredVaultLine
-import centraid.core.v1.ScanCapability
-import centraid.core.v1.SuggestionPicked
+import centraid.core.v1.WordsSuggestionPicked
 import centraid.core.v1.WordCell
 import centraid.core.v1.WordEntry
-import centraid.core.v1.WordTyped
+import centraid.core.v1.WordsWordTyped
 import centraid.core.v1.WordsEnterEvent
 import centraid.core.v1.WordsEnterState
 import centraid.core.v1.WordsMakeEvent
@@ -103,7 +96,6 @@ import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.design.copy.WordsCopy
 import dev.centraid.android.kit.KitSpinner
 import dev.centraid.android.kit.NoAutofill
 import dev.centraid.android.theme.LocalCentraidTokens
@@ -347,7 +339,7 @@ internal fun WordsEntryScreen(
                         enabled = !working,
                         requester = requesters.getOrPut(cell.position) { FocusRequester() },
                         onEdit = { text ->
-                            onEvent(WordsEnterEvent(typed = WordTyped(position = cell.position, text = text)))
+                            onEvent(WordsEnterEvent(typed = WordsWordTyped(position = cell.position, text = text)))
                             // A SPACE IS HOW A MEMBER MOVES ON: the keyboard goes
                             // at once — in this callback, not after a recomposition
                             // or the machine's answer — to the cell the next letter
@@ -363,7 +355,7 @@ internal fun WordsEntryScreen(
                             }
                         },
                         onPick = { word ->
-                            onEvent(WordsEnterEvent(picked = SuggestionPicked(position = cell.position, word = word)))
+                            onEvent(WordsEnterEvent(picked = WordsSuggestionPicked(position = cell.position, word = word)))
                             moveTo(cell.position + 1)
                         },
                         onNext = { moveTo(cell.position + 1) },
@@ -390,7 +382,7 @@ internal fun WordsEntryScreen(
                 label = state.endpoint_label,
                 value = state.endpoint,
                 enabled = !working,
-                onEdit = { text -> onEvent(WordsEnterEvent(endpoint = EndpointTyped(text = text))) },
+                onEdit = { text -> onEvent(WordsEnterEvent(endpoint = WordsEndpointTyped(text = text))) },
             )
         }
         // THE CODE IS SCANNED AS WELL AS PASTED, as pairing's is: the camera,
@@ -439,7 +431,7 @@ internal fun WordsEntryScreen(
 
 /**
  * One of the 24 cells: its number, the field, and the list words its prefix
- * could be — each a tap that sends `SuggestionPicked`.
+ * could be — each a tap that sends `WordsSuggestionPicked`.
  */
 @Composable
 private fun EntryCell(

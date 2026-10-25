@@ -477,7 +477,9 @@ impl Enter {
         stayed: Vec<UnclaimedVaultAt>,
         missing: &[String],
     ) {
-        let order = |own: &Option<String>, index: u32| (own.is_some(), own.clone().unwrap_or_default(), index);
+        let order = |own: &Option<String>, index: u32| {
+            (own.is_some(), own.clone().unwrap_or_default(), index)
+        };
         let mut sequence: Vec<(bool, String, u32)> = restored
             .iter()
             .map(|vault| order(&vault.own, vault.index))
@@ -499,7 +501,12 @@ impl Enter {
             .collect();
         self.stayed = stayed
             .iter()
-            .map(|vault| fill(&words::restored_stayed(self.locale), &[("index", &ordinal(&vault.own, vault.index).to_string())]))
+            .map(|vault| {
+                fill(
+                    &words::restored_stayed(self.locale),
+                    &[("index", &ordinal(&vault.own, vault.index).to_string())],
+                )
+            })
             .chain(missing.iter().map(|name| {
                 let name = if name.trim().is_empty() {
                     words::restore_held_own_unnamed(self.locale)
@@ -596,7 +603,11 @@ impl Enter {
         let Some(verdict) = &self.verdict else {
             return String::new();
         };
-        let filled = self.cells.iter().filter(|cell| !cell.trim().is_empty()).count();
+        let filled = self
+            .cells
+            .iter()
+            .filter(|cell| !cell.trim().is_empty())
+            .count();
         match verdict.verdict {
             Judged::Valid => String::new(),
             Judged::Incomplete => match filled {
@@ -658,7 +669,10 @@ impl Enter {
                 .iter()
                 .enumerate()
                 .map(|(at, typed)| {
-                    let judged = self.verdict.as_ref().and_then(|verdict| verdict.cells.get(at));
+                    let judged = self
+                        .verdict
+                        .as_ref()
+                        .and_then(|verdict| verdict.cells.get(at));
                     let prompt = fill(&words::word_prompt(locale), &[("n", &(at + 1).to_string())]);
                     wire::WordEntry {
                         position: u32::try_from(at + 1).unwrap_or(u32::MAX),
@@ -674,7 +688,9 @@ impl Enter {
                         suggestions: if typed.trim().is_empty() {
                             Vec::new()
                         } else {
-                            judged.map(|cell| cell.suggestions.clone()).unwrap_or_default()
+                            judged
+                                .map(|cell| cell.suggestions.clone())
+                                .unwrap_or_default()
                         },
                         accessibility_label: prompt,
                     }
@@ -737,7 +753,11 @@ impl Enter {
         wire::WordsEnterState {
             phase: phase as i32,
             purpose: self.purpose as i32,
-            origin: if rekey { self.origin as i32 } else { Origin::Unspecified as i32 },
+            origin: if rekey {
+                self.origin as i32
+            } else {
+                Origin::Unspecified as i32
+            },
             // NOTHING SECRET IS ON A HELD-SEED RESTORE: no word, no seed.
             secure: grid,
             title: title.clone(),
@@ -755,9 +775,17 @@ impl Enter {
             } else {
                 String::new()
             },
-            scan_label: if scans { words::pair_scan(locale) } else { String::new() },
+            scan_label: if scans {
+                words::pair_scan(locale)
+            } else {
+                String::new()
+            },
             scan_camera: scans && self.camera,
-            photo_label: if scans && self.camera { words::pair_photo(locale) } else { String::new() },
+            photo_label: if scans && self.camera {
+                words::pair_photo(locale)
+            } else {
+                String::new()
+            },
             primary_enabled: match phase {
                 Phase::Entering if self.restores() && self.endpoint.trim().is_empty() => false,
                 Phase::Entering => held || self.offer_restore || self.valid(),
@@ -765,9 +793,17 @@ impl Enter {
                 _ => false,
             },
             primary_label: primary,
-            secondary_label: if entering { words::cancel(locale) } else { String::new() },
+            secondary_label: if entering {
+                words::cancel(locale)
+            } else {
+                String::new()
+            },
             progress: if phase == Phase::Working {
-                if rekey { words::rekeying(locale) } else { words::restoring(locale) }
+                if rekey {
+                    words::rekeying(locale)
+                } else {
+                    words::restoring(locale)
+                }
             } else {
                 String::new()
             },
@@ -778,7 +814,11 @@ impl Enter {
             } else {
                 String::new()
             },
-            words_label: if held && entering { words::restore_held_words(locale) } else { String::new() },
+            words_label: if held && entering {
+                words::restore_held_words(locale)
+            } else {
+                String::new()
+            },
             held_keys_label: if held && entering && !self.held_keys.is_empty() {
                 words::restore_held_own_label(locale)
             } else {
@@ -814,16 +854,12 @@ fn grouped(rows: i64) -> String {
     let digits = rows.unsigned_abs().to_string();
     let mut out = String::new();
     for (at, digit) in digits.chars().enumerate() {
-        if at > 0 && (digits.len() - at) % 3 == 0 {
+        if at > 0 && (digits.len() - at).is_multiple_of(3) {
             out.push(',');
         }
         out.push(digit);
     }
-    if rows < 0 {
-        format!("-{out}")
-    } else {
-        out
-    }
+    if rows < 0 { format!("-{out}") } else { out }
 }
 
 impl Screen for Enter {

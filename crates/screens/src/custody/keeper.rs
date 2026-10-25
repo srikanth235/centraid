@@ -230,7 +230,9 @@ impl Keeper for FakeKeeper {
     fn found(&self, own: Option<&str>, name: &str) -> Effected<Found> {
         let mut state = self.lock();
         let seen = self.seen();
-        state.log.push(format!("found own={own:?} name={name}{seen}"));
+        state
+            .log
+            .push(format!("found own={own:?} name={name}{seen}"));
         let found = state
             .found
             .clone()

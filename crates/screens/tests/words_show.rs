@@ -84,7 +84,8 @@ fn a_failed_owner_check_keeps_the_words_hidden_and_says_so_with_a_way_to_try_aga
 }
 
 #[test]
-fn verified_reads_the_store_the_words_show_on_a_secure_screen_and_saved_drops_them_and_records_it() {
+fn verified_reads_the_store_the_words_show_on_a_secure_screen_and_saved_drops_them_and_records_it()
+{
     let mut phone = show_phone();
     answer_check(&mut phone, Checked::Succeeded);
     let state = phone.show();
@@ -113,9 +114,11 @@ fn verified_reads_the_store_the_words_show_on_a_secure_screen_and_saved_drops_th
 fn leaving_the_foreground_or_swiping_away_drops_the_words() {
     let mut phone = show_phone();
     answer_check(&mut phone, Checked::Succeeded);
-    phone.driver.call(wire::screen_request::Kind::Lifecycle(
-        wire::AppLifecycle { foreground: false },
-    ));
+    phone
+        .driver
+        .call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
+            foreground: false,
+        }));
     assert!(phone.show().finished && phone.show().words.is_empty());
 
     let mut swiped = show_phone();
@@ -132,7 +135,11 @@ fn no_words_here_a_synced_seed_says_where_they_are_and_no_seed_says_to_make_or_r
     let state = synced.show();
     assert_eq!(state.phase, Phase::NoneHere as i32);
     assert_eq!(state.title, "No recovery key on this phone");
-    assert!(state.body.starts_with("Your keychain gave this phone the key without its words."));
+    assert!(
+        state
+            .body
+            .starts_with("Your keychain gave this phone the key without its words.")
+    );
     assert!(state.words.is_empty());
     assert_eq!(state.primary_label, "Done");
 
@@ -150,10 +157,10 @@ fn no_words_here_a_synced_seed_says_where_they_are_and_no_seed_says_to_make_or_r
 fn the_vault_in_front_on_its_own_words_shows_its_words_by_its_name() {
     let mut phone = show_phone();
     let id = "0123456789abcdef";
-    phone
-        .shell
-        .device
-        .insert(format!("{}v-family", secrets::OWN_VAULT_PREFIX), id.to_owned());
+    phone.shell.device.insert(
+        format!("{}v-family", secrets::OWN_VAULT_PREFIX),
+        id.to_owned(),
+    );
     phone.shell.device.insert(
         format!("{}{id}", secrets::LOCAL_OWN_SEED_PREFIX),
         "ee".repeat(64),

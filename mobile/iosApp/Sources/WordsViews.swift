@@ -348,7 +348,7 @@ struct WordsEntryView: View {
 }
 
 /// One of the 24 cells: its number, the field, and the list words its prefix
-/// could be — each a tap that sends `SuggestionPicked`.
+/// could be — each a tap that sends `WordsSuggestionPicked`.
 private struct EntryCell: View {
     let cell: Centraid_Core_V1_WordEntry
     let focus: Binding<UInt32?>

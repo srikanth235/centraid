@@ -22,7 +22,10 @@ fn waiting_phone(own_vault_in_front: bool) -> Phone {
     device.insert(format!("{}v-main", secrets::INDEX_PREFIX), "0".to_owned());
     device.insert(secrets::INDEX_HIGH_WATER.to_owned(), "0".to_owned());
     if own_vault_in_front {
-        device.insert(format!("{}v-main", secrets::OWN_VAULT_PREFIX), ID.to_owned());
+        device.insert(
+            format!("{}v-main", secrets::OWN_VAULT_PREFIX),
+            ID.to_owned(),
+        );
     }
     phone.keeper.set_foreground("v-main", "My vault");
     phone

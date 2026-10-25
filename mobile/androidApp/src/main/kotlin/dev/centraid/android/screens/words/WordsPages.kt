@@ -7,17 +7,15 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
-import centraid.core.v1.PairingScanned
-import centraid.core.v1.PhotoUnread
+import centraid.core.v1.WordsScanned
+import centraid.core.v1.WordsPhotoUnread
 import centraid.core.v1.Route
-import centraid.core.v1.ScanCapability
+import centraid.core.v1.WordsScanCapability
 import centraid.core.v1.WordsEnterEvent
 import centraid.core.v1.WordsEnterOrigin
 import centraid.core.v1.WordsEnterPurpose
@@ -65,7 +63,7 @@ internal fun WordsEnterPage(state: WordsEnterState, onEvent: (WordsEnterEvent) -
     // WHAT THIS PHONE CAN SCAN WITH is the shell's to say, once.
     LaunchedEffect(Unit) {
         val camera = context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
-        onEvent(WordsEnterEvent(capability = ScanCapability(camera = camera)))
+        onEvent(WordsEnterEvent(capability = WordsScanCapability(camera = camera)))
     }
     var scanning by remember { mutableStateOf(false) }
     val grant = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -81,9 +79,9 @@ internal fun WordsEnterPage(state: WordsEnterState, onEvent: (WordsEnterEvent) -
     val scanned = { code: String? ->
         onEvent(
             if (code != null) {
-                WordsEnterEvent(scanned = PairingScanned(payload = code))
+                WordsEnterEvent(scanned = WordsScanned(payload = code))
             } else {
-                WordsEnterEvent(unread = PhotoUnread())
+                WordsEnterEvent(unread = WordsPhotoUnread())
             },
         )
     }

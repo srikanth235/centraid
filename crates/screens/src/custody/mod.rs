@@ -131,10 +131,7 @@ pub mod routes {
     /// Make a vault (and, on a phone with no key, its 24 words).
     #[must_use]
     pub fn make() -> wire::Route {
-        route(
-            MAKE,
-            wire::route::Args::WordsMake(wire::WordsMakeRoute {}),
-        )
+        route(MAKE, wire::route::Args::WordsMake(wire::WordsMakeRoute {}))
     }
 
     /// Type the words back for `purpose`; a re-key names the door it came from.

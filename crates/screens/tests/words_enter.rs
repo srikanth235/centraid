@@ -23,14 +23,14 @@ fn open(route: wire::Route) -> Phone {
 }
 
 fn typed(phone: &mut Phone, position: u32, text: &str) {
-    phone.send_enter(K::Typed(wire::WordTyped {
+    phone.send_enter(K::Typed(wire::WordsWordTyped {
         position,
         text: text.to_owned(),
     }));
 }
 
 fn code(phone: &mut Phone, text: &str) {
-    phone.send_enter(K::Endpoint(wire::EndpointTyped {
+    phone.send_enter(K::Endpoint(wire::WordsEndpointTyped {
         text: text.to_owned(),
     }));
 }
@@ -133,7 +133,7 @@ fn the_grid_opens_empty_and_secure_with_the_pairing_codes_field_only_for_a_resto
 #[test]
 fn the_pairing_code_is_scanned_as_well_as_pasted_wherever_its_field_is_drawn() {
     let mut with_camera = open(routes::restore());
-    with_camera.send_enter(K::Capability(wire::ScanCapability { camera: true }));
+    with_camera.send_enter(K::Capability(wire::WordsScanCapability { camera: true }));
     let state = with_camera.enter();
     assert_eq!(state.scan_label, "Scan QR code");
     assert!(state.scan_camera);
@@ -147,16 +147,18 @@ fn the_pairing_code_is_scanned_as_well_as_pasted_wherever_its_field_is_drawn() {
 
     // A re-key names no gateway, so there is nothing to scan.
     let mut rekey = open(routes::rekey_for_locker());
-    rekey.send_enter(K::Capability(wire::ScanCapability { camera: true }));
+    rekey.send_enter(K::Capability(wire::WordsScanCapability { camera: true }));
     assert_eq!(rekey.enter().scan_label, "");
 
     // A scan fills the field as a paste would, and waits for the primary.
-    with_camera.send_enter(K::Unread(wire::PhotoUnread {}));
-    assert!(with_camera
-        .enter()
-        .notice
-        .starts_with("No readable QR code in that photo."));
-    with_camera.send_enter(K::Scanned(wire::PairingScanned {
+    with_camera.send_enter(K::Unread(wire::WordsPhotoUnread {}));
+    assert!(
+        with_camera
+            .enter()
+            .notice
+            .starts_with("No readable QR code in that photo.")
+    );
+    with_camera.send_enter(K::Scanned(wire::WordsScanned {
         payload: CODE.to_owned(),
     }));
     assert_eq!(with_camera.enter().endpoint, CODE);
@@ -174,7 +176,7 @@ fn typing_asks_the_core_and_a_space_runs_on_into_the_next_cells() {
     assert_eq!(state.cells[4].typed, "");
     assert_eq!(state.cells[2].mark, Mark::Known as i32);
     // A suggestion picked fills its cell.
-    phone.send_enter(K::Picked(wire::SuggestionPicked {
+    phone.send_enter(K::Picked(wire::WordsSuggestionPicked {
         position: 1,
         word: "zoo".to_owned(),
     }));
@@ -198,10 +200,13 @@ fn the_verdict_speaks_in_order_the_count_an_unknown_word_by_place_then_the_check
 
     let mut unknown = open(routes::restore());
     let mut words = vec!["abandon"; 24];
-    words[4] = "abandn";
+    words[4] = "aband";
     typed(&mut unknown, 1, &words.join(" "));
     let state = unknown.enter();
-    assert_eq!(state.notice, "Word 5 isn't a recovery key word. Check the spelling.");
+    assert_eq!(
+        state.notice,
+        "Word 5 isn't a recovery key word. Check the spelling."
+    );
     assert_eq!(state.cells[4].mark, Mark::Unknown as i32);
     assert!(state.cells[4].suggestions.contains(&"abandon".to_owned()));
     assert_eq!(state.cells[0].mark, Mark::Known as i32);
@@ -223,7 +228,12 @@ fn the_verdict_speaks_in_order_the_count_an_unknown_word_by_place_then_the_check
 #[test]
 fn a_restore_waits_for_its_gateways_pairing_code_valid_words_alone_leave_the_control_closed() {
     let mut phone = filled(routes::restore(), None);
-    assert!(phone.enter().endpoint_label.starts_with("Paste the pairing code"));
+    assert!(
+        phone
+            .enter()
+            .endpoint_label
+            .starts_with("Paste the pairing code")
+    );
     assert!(!phone.enter().primary_enabled);
     // A STRAY TAP ASKS NOTHING.
     primary(&mut phone);
@@ -252,7 +262,11 @@ fn a_valid_phrase_opens_the_one_control_and_a_restore_answer_drops_every_word() 
     assert!(!state.secure && state.cells.is_empty());
     assert_eq!(state.restored[0].line, "Vault 1: 1,204 rows.");
     assert_eq!(state.restored[0].safety_number, "12345 67890");
-    assert!(state.restored[0].safety_label.starts_with("Check this number"));
+    assert!(
+        state.restored[0]
+            .safety_label
+            .starts_with("Check this number")
+    );
     assert_eq!(state.title, "Your vaults are back");
     assert_eq!(state.primary_label, "Done");
     // The seed was stored and the words kept for Settings.
@@ -264,7 +278,10 @@ fn a_valid_phrase_opens_the_one_control_and_a_restore_answer_drops_every_word() 
     // ONE ROW IS A ROW; a vault with no census says no count.
     let mut one = filled(routes::restore(), Some(CODE));
     primary(&mut one);
-    deliver(&mut one, restore_answer(&[("/v/a/vault.db", 0, 1, "")], &[]));
+    deliver(
+        &mut one,
+        restore_answer(&[("/v/a/vault.db", 0, 1, "")], &[]),
+    );
     assert_eq!(one.enter().restored[0].line, "Vault 1: 1 row.");
     assert_eq!(one.enter().restored[0].safety_label, "");
 }
@@ -275,7 +292,10 @@ fn a_vault_that_stayed_is_numbered_with_the_ones_that_came_back_and_offers_a_ret
     primary(&mut phone);
     deliver(
         &mut phone,
-        restore_answer(&[("/v/a/vault.db", 0, 3, ""), ("/v/c/vault.db", 2, 1, "")], &[1]),
+        restore_answer(
+            &[("/v/a/vault.db", 0, 3, ""), ("/v/c/vault.db", 2, 1, "")],
+            &[1],
+        ),
     );
     let state = phone.enter();
     assert_eq!(state.title, "Some of your vaults are back");
@@ -318,17 +338,31 @@ fn a_vault_that_stayed_is_numbered_with_the_ones_that_came_back_and_offers_a_ret
     assert_eq!(state.retry_label, "Try again");
 
     phone.send_enter(K::Retry(wire::WordsRetry {}));
-    deliver(&mut phone, restore_refused(wire::ErrorCode::PeerUnreachable));
-    assert!(phone.enter().notice.starts_with("Couldn't reach your backup device."));
+    deliver(
+        &mut phone,
+        restore_refused(wire::ErrorCode::PeerUnreachable),
+    );
+    assert!(
+        phone
+            .enter()
+            .notice
+            .starts_with("Couldn't reach your backup device.")
+    );
 
     // IT CAME BACK: one list, numbered as before, and the whole title.
     phone.send_enter(K::Retry(wire::WordsRetry {}));
-    deliver(&mut phone, restore_answer(&[("/v/b/vault.db", 1, 5, "")], &[]));
+    deliver(
+        &mut phone,
+        restore_answer(&[("/v/b/vault.db", 1, 5, "")], &[]),
+    );
     let state = phone.enter();
     assert_eq!(state.title, "Your vaults are back");
     assert_eq!(state.notice, "");
     let lines: Vec<_> = state.restored.iter().map(|v| v.line.clone()).collect();
-    assert_eq!(lines, vec!["Vault 1: 3 rows.", "Vault 2: 5 rows.", "Vault 3: 1 row."]);
+    assert_eq!(
+        lines,
+        vec!["Vault 1: 3 rows.", "Vault 2: 5 rows.", "Vault 3: 1 row."]
+    );
     assert!(state.stayed.is_empty());
     assert_eq!(state.retry_label, "");
 }
@@ -362,13 +396,14 @@ fn an_unreachable_gateway_or_an_empty_one_keeps_the_words_on_screen_with_the_sen
         assert_eq!(state.phase, Phase::Entering as i32);
         assert_eq!(state.notice, sentence);
         assert_eq!(state.cells[0].typed, "abandon", "the words stay");
-        assert!(phone.shell.device.get(secrets::LOCAL_SEED).is_none());
+        assert!(!phone.shell.device.contains_key(secrets::LOCAL_SEED));
         assert!(phone.shell.synced.is_empty());
     }
 }
 
 #[test]
-fn re_keying_done_says_the_words_are_back_and_nothing_to_key_offers_the_restore_with_the_words_kept() {
+fn re_keying_done_says_the_words_are_back_and_nothing_to_key_offers_the_restore_with_the_words_kept()
+ {
     let mut phone = filled(routes::rekey_for_locker(), None);
     phone.keeper.set_indexed(1);
     assert!(phone.enter().primary_enabled);
@@ -376,14 +411,21 @@ fn re_keying_done_says_the_words_are_back_and_nothing_to_key_offers_the_restore_
     let state = phone.enter();
     assert_eq!(state.title, "Recovery key restored");
     assert!(state.cells.is_empty());
-    assert_eq!(state.body, "Locker and backups open again for the vaults made with this key.");
+    assert_eq!(
+        state.body,
+        "Locker and backups open again for the vaults made with this key."
+    );
     assert_eq!(phone.keeper.log(), vec!["rekey seed=true".to_owned()]);
 
     let mut none = filled(routes::rekey_for_locker(), None);
     primary(&mut none);
     let state = none.enter();
     assert_eq!(state.phase, Phase::Entering as i32);
-    assert!(state.notice.starts_with("No vault on this phone uses this key."));
+    assert!(
+        state
+            .notice
+            .starts_with("No vault on this phone uses this key.")
+    );
     assert_eq!(state.primary_label, "Restore vaults");
     // THE OFFERED RESTORE DRAWS THE CODE'S FIELD AND WAITS FOR IT (#1080 A23).
     assert!(state.endpoint_label.starts_with("Paste the pairing code"));
@@ -393,13 +435,19 @@ fn re_keying_done_says_the_words_are_back_and_nothing_to_key_offers_the_restore_
     assert!(none.enter().primary_enabled);
     primary(&mut none);
     assert_eq!(none.enter().phase, Phase::Working as i32);
-    assert_eq!(none.enter().purpose, wire::WordsEnterPurpose::Restore as i32);
+    assert_eq!(
+        none.enter().purpose,
+        wire::WordsEnterPurpose::Restore as i32
+    );
 }
 
 #[test]
 fn a_re_key_explains_itself_in_its_doors_words_pairings_lockers_and_a_restores_own() {
     let pairing = open(routes::rekey_for_pairing());
-    assert_eq!(pairing.enter().origin, wire::WordsEnterOrigin::Pairing as i32);
+    assert_eq!(
+        pairing.enter().origin,
+        wire::WordsEnterOrigin::Pairing as i32
+    );
     assert_eq!(
         pairing.enter().body,
         "Type your recovery key's 24 words, then pair with your backup device."
@@ -471,9 +519,16 @@ fn a_restore_opened_while_the_keychain_holds_a_seed_opens_without_the_grid() {
 fn a_held_seed_restore_waits_for_the_code_then_restores_and_nothing_held_goes_back_to_entering() {
     let mut phone = held_phone(routes::restore_held());
     primary(&mut phone);
-    assert_eq!(phone.enter().phase, Phase::Entering as i32, "a stray tap asks nothing");
+    assert_eq!(
+        phone.enter().phase,
+        Phase::Entering as i32,
+        "a stray tap asks nothing"
+    );
     typed(&mut phone, 1, "abandon");
-    assert!(phone.enter().cells.is_empty(), "a typed word has nowhere to land");
+    assert!(
+        phone.enter().cells.is_empty(),
+        "a typed word has nowhere to land"
+    );
     code(&mut phone, " ab ");
     assert!(phone.enter().primary_enabled);
     primary(&mut phone);
@@ -486,7 +541,10 @@ fn a_held_seed_restore_waits_for_the_code_then_restores_and_nothing_held_goes_ba
         "Your backup device has no backup for that recovery key. Check it's the right one."
     );
     primary(&mut phone);
-    deliver(&mut phone, restore_answer(&[("/v/a/vault.db", 0, 3, "")], &[]));
+    deliver(
+        &mut phone,
+        restore_answer(&[("/v/a/vault.db", 0, 3, "")], &[]),
+    );
     assert_eq!(phone.enter().phase, Phase::Done as i32);
     assert_eq!(phone.enter().restored.len(), 1);
     // The seed is settled once vaults came back; no words are kept.
@@ -521,10 +579,10 @@ fn a_held_restore_lists_the_vaults_on_their_own_words_it_will_also_bring_back() 
         .synced
         .insert(secrets::SEED_KEY.to_owned(), "ab".repeat(64));
     let id = "0123456789abcdef";
-    phone.shell.synced.insert(
-        format!("{}{id}", secrets::OWN_SEED_PREFIX),
-        "cd".repeat(64),
-    );
+    phone
+        .shell
+        .synced
+        .insert(format!("{}{id}", secrets::OWN_SEED_PREFIX), "cd".repeat(64));
     phone
         .shell
         .synced
@@ -543,7 +601,10 @@ fn vaults_from_two_seeds_are_numbered_once_each_the_members_first() {
     let mut phone = held_phone(routes::restore_held());
     code(&mut phone, CODE);
     primary(&mut phone);
-    deliver(&mut phone, restore_answer(&[("/v/a/vault.db", 0, 1, "")], &[1]));
+    deliver(
+        &mut phone,
+        restore_answer(&[("/v/a/vault.db", 0, 1, "")], &[1]),
+    );
     let state = phone.enter();
     assert_eq!(state.restored[0].line, "Vault 1: 1 row.");
     assert_eq!(
@@ -566,7 +627,10 @@ fn a_late_answer_to_a_screen_that_was_left_changes_nothing() {
     let mut phone = filled(routes::restore(), Some(CODE));
     primary(&mut phone);
     phone.send_enter(K::Dismissed(wire::WordsDismissed {}));
-    deliver(&mut phone, restore_answer(&[("/v/a/vault.db", 0, 1, "")], &[]));
+    deliver(
+        &mut phone,
+        restore_answer(&[("/v/a/vault.db", 0, 1, "")], &[]),
+    );
     assert!(phone.enter().finished);
     assert!(phone.enter().restored.is_empty());
 }

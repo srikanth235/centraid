@@ -265,7 +265,10 @@ impl Make {
     fn make(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         let name = self.name.trim().to_owned();
         self.begin(
-            Job::make(self.own_id.clone(), (!name.is_empty()).then_some(name.as_str())),
+            Job::make(
+                self.own_id.clone(),
+                (!name.is_empty()).then_some(name.as_str()),
+            ),
             ctx,
         )
     }
@@ -507,7 +510,8 @@ impl Make {
             Vec::new()
         };
         // A VAULT ON ITS OWN WORDS NEEDS A NAME: it is how a restore lists it.
-        let enabled = !primary.is_empty() && !(phase == Phase::Choose && self.own && own_name.is_empty());
+        let enabled =
+            !(primary.is_empty() || phase == Phase::Choose && self.own && own_name.is_empty());
         let accessibility = if show {
             words::show_a11y(locale)
         } else {
@@ -542,13 +546,33 @@ impl Make {
                 String::new()
             },
             accessibility_label: accessibility,
-            save_label: if show { words::save_label(locale) } else { String::new() },
-            own_label: if phase == Phase::Choose { words::own_label(locale) } else { String::new() },
+            save_label: if show {
+                words::save_label(locale)
+            } else {
+                String::new()
+            },
+            own_label: if phase == Phase::Choose {
+                words::own_label(locale)
+            } else {
+                String::new()
+            },
             own_on: phase == Phase::Choose && self.own,
-            name_label: if phase == Phase::Choose { words::name_label(locale) } else { String::new() },
-            name: if phase == Phase::Choose { self.name.clone() } else { String::new() },
+            name_label: if phase == Phase::Choose {
+                words::name_label(locale)
+            } else {
+                String::new()
+            },
+            name: if phase == Phase::Choose {
+                self.name.clone()
+            } else {
+                String::new()
+            },
             finished: self.finished,
-            made_line: if self.finished { self.made_line.clone() } else { String::new() },
+            made_line: if self.finished {
+                self.made_line.clone()
+            } else {
+                String::new()
+            },
         }
     }
 }

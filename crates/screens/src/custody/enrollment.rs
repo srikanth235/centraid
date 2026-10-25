@@ -350,9 +350,9 @@ impl KeepOwn {
                         return Step::Done(Err(Refusal::NotAPhrase));
                     };
                     self.id = VaultSecrets::fresh_entry_id();
-                    let write =
-                        env.secrets
-                            .keep_own_seed(&self.id, &seed, &self.label, self.sync);
+                    let write = env
+                        .secrets
+                        .keep_own_seed(&self.id, &seed, &self.label, self.sync);
                     self.seed = seed;
                     let first = write.first();
                     self.write = Some(write);
@@ -719,8 +719,8 @@ impl RestoreJob {
                     // open with the member's, are a vault on its own words
                     // (R-1047-E18), or one the keychain already holds an entry
                     // for.
-                    self.as_own =
-                        conflicts(env.secrets, &seed) || env.secrets.own_seed_matching(&seed).is_some();
+                    self.as_own = conflicts(env.secrets, &seed)
+                        || env.secrets.own_seed_matching(&seed).is_some();
                     let Some(request) =
                         door::restore_request(&Source::Words(self.words.clone()), &self.payload)
                     else {

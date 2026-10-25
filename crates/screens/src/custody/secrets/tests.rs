@@ -369,19 +369,26 @@ fn a_saved_copy_is_a_claim_kept_apart_from_the_key() {
 fn a_vaults_own_key_waits_to_be_filed_until_it_is_filed_or_forgotten() {
     let secrets = VaultSecrets::new();
     assert!(secrets.pending_filings().is_empty());
-    apply(&secrets, &[secrets.add_pending_filing("0123456789abcdef", "Family")]);
-    apply(&secrets, &[secrets.add_pending_filing("fedcba9876543210", "Work")]);
+    apply(
+        &secrets,
+        &[secrets.add_pending_filing("0123456789abcdef", "Family")],
+    );
+    apply(
+        &secrets,
+        &[secrets.add_pending_filing("fedcba9876543210", "Work")],
+    );
     assert_eq!(secrets.pending_filings().len(), 2);
     // Filing two at once leaves neither standing, not the last one's list.
     apply(
         &secrets,
-        &secrets.clear_pending_filings(&[
-            "0123456789abcdef".to_owned(),
-            "fedcba9876543210".to_owned(),
-        ]),
+        &secrets
+            .clear_pending_filings(&["0123456789abcdef".to_owned(), "fedcba9876543210".to_owned()]),
     );
     assert!(secrets.pending_filings().is_empty());
-    apply(&secrets, &[secrets.add_pending_filing("0123456789abcdef", "Family")]);
+    apply(
+        &secrets,
+        &[secrets.add_pending_filing("0123456789abcdef", "Family")],
+    );
     apply(&secrets, &secrets.clear_pending_filing("0123456789abcdef"));
     assert!(secrets.pending_filings().is_empty());
 }
