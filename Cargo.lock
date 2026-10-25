@@ -786,6 +786,7 @@ dependencies = [
  "centraid-api-proto",
  "centraid-apps-docs",
  "centraid-apps-locker",
+ "centraid-assist",
  "centraid-core",
  "centraid-design",
  "centraid-identity",
