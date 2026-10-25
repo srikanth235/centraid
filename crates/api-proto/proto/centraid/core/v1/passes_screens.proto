@@ -1,0 +1,6 @@
+// PASSES (#1135, lane H2): this file's messages are the lane worker's. See
+// `plumbing_screens.proto` for the arm ranges.
+
+syntax = "proto3";
+
+package centraid.core.v1;

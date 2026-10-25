@@ -1,0 +1,9 @@
+{
+  "manifestVersion": 1,
+  "id": "shell",
+  "name": "Centraid",
+  "version": "0.1.0",
+  "description": "The shell's own reads: the questions that are not one app's (what Home shows, a search across the vault, the chat's history, the backup's status). One catalogue for the shell, parsed like an app's manifest but not one of the eight apps, so chat and the training harness never see it.",
+  "actions": [],
+  "queries": []
+}

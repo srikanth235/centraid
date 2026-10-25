@@ -33,6 +33,9 @@ use crate::strings::Locale;
 
 struct Instance {
     route: wire::Route,
+    /// A service has no view and no place in any tab (see
+    /// [`Runtime::with_services`]).
+    service: bool,
     screen: Box<dyn Screen>,
     /// Every table any of this screen's loads read.
     tables: BTreeSet<String>,
@@ -64,6 +67,7 @@ struct State {
 pub struct Runtime {
     registry: Registry,
     roots: Vec<(String, wire::Route)>,
+    services: Vec<wire::Route>,
     state: Mutex<State>,
 }
 
@@ -79,6 +83,7 @@ impl Runtime {
         Self {
             registry,
             roots,
+            services: Vec::new(),
             state: Mutex::new(State {
                 next_instance: 1,
                 next_effect: 1,
@@ -91,6 +96,18 @@ impl Runtime {
                 started: false,
             }),
         }
+    }
+
+    /// Screens that run for as long as the runtime does, with no view and no
+    /// tab: the pass scheduler, which must hear the app's lifecycle, the
+    /// environment and the tables it read whether or not any page is open
+    /// (#1135, lane H2). Opened by the first call, before the roots; they hear
+    /// every broadcast, are never popped or closed, and a view they return is
+    /// ignored. Their effects reach the shell as any screen's do.
+    #[must_use]
+    pub fn with_services(mut self, services: Vec<wire::Route>) -> Self {
+        self.services = services;
+        self
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
@@ -135,6 +152,7 @@ impl Runtime {
         state: &mut State,
         core: &dyn ScreenCtx,
         route: wire::Route,
+        service: bool,
         out: &mut wire::ScreenUpdate,
     ) -> Result<u64> {
         let screen = self
@@ -147,6 +165,7 @@ impl Runtime {
             id,
             Instance {
                 route,
+                service,
                 screen,
                 tables: BTreeSet::new(),
                 revision: 0,
@@ -207,19 +226,21 @@ impl Runtime {
         let done = ctx.finish();
         instance.tables.extend(done.tables);
 
-        let view_ctx = Ctx::new(core, &env);
-        let mut view = instance.screen.view(&view_ctx);
-        view.instance = id;
-        view.revision = 0;
-        let encoded = view.encode_to_vec();
-        if encoded != instance.last {
-            instance.revision += 1;
-            instance.last = encoded;
-        }
-        view.revision = instance.revision;
-        if view != instance.view {
-            instance.view = view.clone();
-            out.views.push(view);
+        if !instance.service {
+            let view_ctx = Ctx::new(core, &env);
+            let mut view = instance.screen.view(&view_ctx);
+            view.instance = id;
+            view.revision = 0;
+            let encoded = view.encode_to_vec();
+            if encoded != instance.last {
+                instance.revision += 1;
+                instance.last = encoded;
+            }
+            view.revision = instance.revision;
+            if view != instance.view {
+                instance.view = view.clone();
+                out.views.push(view);
+            }
         }
 
         for op in done.timers {
@@ -255,8 +276,11 @@ impl Runtime {
             return Ok(());
         }
         state.started = true;
+        for route in &self.services {
+            self.open(state, core, route.clone(), true, out)?;
+        }
         for (tab, route) in &self.roots {
-            let id = self.open(state, core, route.clone(), out)?;
+            let id = self.open(state, core, route.clone(), false, out)?;
             state.tabs.push(Tab {
                 id: tab.clone(),
                 stack: vec![id],
@@ -292,7 +316,7 @@ impl Runtime {
                     .route
                     .clone()
                     .ok_or_else(|| Self::bad("a push without a route"))?;
-                let id = self.open(state, core, route, out)?;
+                let id = self.open(state, core, route, false, out)?;
                 state.tabs[index].stack.push(id);
                 state.selected.clone_from(&push.tab);
             }
@@ -387,7 +411,12 @@ impl ScreenHost for Runtime {
             }
             K::Snapshot(_) => {
                 out.navigation = Some(Self::navigation(&state));
-                out.views = state.instances.values().map(|i| i.view.clone()).collect();
+                out.views = state
+                    .instances
+                    .values()
+                    .filter(|i| !i.service)
+                    .map(|i| i.view.clone())
+                    .collect();
             }
             K::Environment(environment) => {
                 state.env = Environment {

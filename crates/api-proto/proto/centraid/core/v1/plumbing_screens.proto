@@ -1,0 +1,101 @@
+// THE VAULT PLUMBING'S SHARED WIRE (#1135, lane H2): the generic effects every
+// custody, pairing, backup and pass screen speaks, and nothing app-shaped.
+//
+// A secret is read and written through `SecretBatch`: the shell keeps the
+// bytes (Keychain, Keystore, iCloud Keychain, Block Store) and Rust keeps every
+// decision about them (`crates/screens/src/custody/secrets.rs`). A door that
+// waits on a gateway (a pass, a pairing, a restore) is `CoreCall`: the shell
+// performs it on its own worker thread and answers with the core's response, so
+// the screen runtime's lock is never held across a network wait.
+//
+// Effect and result arms of this lane: 1300-1399 (1300-1309 here; the lane's
+// workers take 1310-1339 words, 1340-1349 pairing, 1350-1369 backup, 1370-1399
+// passes). Event and view arms: 1300-1599 (words 1300-1399, pairing 1400-1449,
+// backup 1450-1499, passes 1500-1599).
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/error.proto";
+
+// Which of the shell's stores a secret lives in.
+enum SecretStore {
+  SECRET_STORE_UNSPECIFIED = 0;
+  // This device only: Keychain `ThisDeviceOnly` on iOS, Keystore-sealed
+  // preferences off Auto Backup on Android. The words, each vault's index and
+  // the seed when no synchronised store took it.
+  SECRET_STORE_DEVICE = 1;
+  // The platform's synchronised store (iCloud Keychain, Block Store): the one
+  // exception, and only for the recovery seed and the seeds of vaults kept on
+  // their own words.
+  SECRET_STORE_SYNCED = 2;
+}
+
+message SecretOp {
+  enum Op {
+    OP_UNSPECIFIED = 0;
+    // Answer the value under `key`.
+    OP_GET = 1;
+    // Store `value` under `key`; replaces. A synchronised store that cannot
+    // take it answers `ok: false`, not a failed effect.
+    OP_SET = 2;
+    // Forget `key`; forgetting an absent key is fine.
+    OP_DELETE = 3;
+    // Answer every key that starts with `key`, with its value.
+    OP_LIST = 4;
+  }
+  Op op = 1;
+  SecretStore store = 2;
+  string key = 3;
+  // For OP_SET. UTF-8 text.
+  bytes value = 4;
+}
+
+// Run in order; each is answered in the same order.
+message SecretBatch {
+  repeated SecretOp ops = 1;
+}
+
+message SecretAnswer {
+  // The op took effect. False for a store that refused it.
+  bool ok = 1;
+  // OP_GET: the key held a value.
+  bool found = 2;
+  bytes value = 3;
+  // OP_LIST.
+  repeated SecretEntry entries = 4;
+}
+
+message SecretEntry {
+  string key = 1;
+  bytes value = 2;
+}
+
+message SecretBatched {
+  repeated SecretAnswer answers = 1;
+}
+
+// Perform one core request off the UI thread and answer with its response.
+message CoreCall {
+  // An encoded `Request`.
+  bytes request = 1;
+}
+
+message CoreCalled {
+  // An encoded `Response`; empty when the core refused.
+  bytes response = 1;
+  // The core's typed refusal, when it refused.
+  optional Error error = 2;
+}
+
+// Ask the platform whether its synchronised secret store would carry a key to
+// another device right now (iCloud Keychain on, Google Play services present).
+message SyncedSecretsProbe {}
+
+message SyncedSecretsStatus {
+  bool synchronizing = 1;
+  // False on Android: Block Store returns a key only in the new-phone setup
+  // flow, so the written words are the common way back there.
+  bool restores_after_setup = 2;
+}

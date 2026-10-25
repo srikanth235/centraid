@@ -549,6 +549,11 @@ impl Handle {
     /// # Errors
     /// Whatever `load` refuses with; [`CoreError::Unpaired`] with no file.
     pub fn load(&self, request: &wire::LoadRequest) -> Result<wire::LoadResponse> {
+        // The shell's own catalogue is not one of the eight apps and some of
+        // what it reads is the phone's ledger, not a vault table (`shell`).
+        if request.app == crate::shell::ID {
+            return crate::shell::load(self, request);
+        }
         self.with_vault(|vault| crate::load::load(vault, request))
     }
 
