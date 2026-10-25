@@ -2,7 +2,8 @@
 //!
 //! Four of them, one per invariant in the issue's *Execution plan → Invariants*:
 //! SQL confinement, the five-symbol C ABI, no listening TCP socket, and no
-//! platform import in `mobile/shared/commonMain`.
+//! platform import in the JVM binding's `mobile/core/src/commonMain`. The native
+//! shells' own rules (#1135) are [`crate::native_rules`], run with these.
 //!
 //! **These are file walks and hand-rolled scanners, not parse trees.** The
 //! issue rules that tree-sitter owns structural rules; it is not here yet,
@@ -91,7 +92,7 @@ pub enum RuleState {
 }
 
 impl RuleReport {
-    fn applied(name: &'static str, scanned: usize, findings: Vec<String>) -> Self {
+    pub(crate) fn applied(name: &'static str, scanned: usize, findings: Vec<String>) -> Self {
         Self {
             name,
             state: RuleState::Applied(scanned),
@@ -100,12 +101,12 @@ impl RuleReport {
         }
     }
 
-    fn with_note(mut self, note: String) -> Self {
+    pub(crate) fn with_note(mut self, note: String) -> Self {
         self.note = note;
         self
     }
 
-    fn pending(name: &'static str, reason: &str) -> Self {
+    pub(crate) fn pending(name: &'static str, reason: &str) -> Self {
         Self {
             name,
             state: RuleState::Pending(reason.to_owned()),
@@ -144,6 +145,9 @@ pub fn all(root: &Path) -> Vec<RuleReport> {
         no_listening_socket(root),
         commonmain_no_platform_import(root),
     ]
+    .into_iter()
+    .chain(crate::native_rules::all(root))
+    .collect()
 }
 
 /// `cargo xtask rules` — the rules on their own, for the edit-run loop.
@@ -439,30 +443,20 @@ pub fn listener_hits(source: &str) -> Vec<(usize, &'static str)> {
 }
 
 // ---------------------------------------------------------------------------
-// Rule 4 — mobile/shared/commonMain has no platform import
+// Rule 4 — the JVM binding's commonMain has no platform import
 // ---------------------------------------------------------------------------
 
 pub fn commonmain_no_platform_import(root: &Path) -> RuleReport {
     const NAME: &str = "commonmain-no-platform-import";
-    // BOTH KMP MODULES. `mobile/core`'s `commonMain` is the ABI binding's
-    // shared half and is exactly as platform-free as `mobile/shared`'s: a JNA
-    // `Pointer` or a `kotlinx.cinterop` import leaking into it would be the
-    // same defect with a shorter blast radius (#1020 wave 3 lane E).
-    let roots = [
-        root.join("mobile/shared/src/commonMain"),
-        root.join("mobile/core/src/commonMain"),
-    ];
-    if !roots.iter().any(|dir| dir.is_dir()) {
-        return RuleReport::pending(
-            NAME,
-            "mobile/ lands in wave 3 lane E; Konsist replaces this rule there, and this cheap one stays",
-        );
+    // `mobile/core`'s `commonMain` is the ABI binding's shared half: a JNA
+    // `Pointer` or a `kotlinx.cinterop` import leaking into it is platform code
+    // where only the protocol belongs (#1020 wave 3 lane E). The KMP `:shared`
+    // module that also had one is deleted (#1135; `no-kmp-shared`).
+    let dir = root.join("mobile/core/src/commonMain");
+    if !dir.is_dir() {
+        return RuleReport::pending(NAME, "no mobile/core/src/commonMain");
     }
-    let files: Vec<_> = roots
-        .iter()
-        .filter(|dir| dir.is_dir())
-        .flat_map(|dir| source_files(dir, "kt"))
-        .collect();
+    let files = source_files(&dir, "kt");
     let mut findings = Vec::new();
     for file in &files {
         let rel = relative(root, file);
@@ -471,7 +465,7 @@ pub fn commonmain_no_platform_import(root: &Path) -> RuleReport {
         };
         for (line, import) in platform_imports(&source) {
             findings.push(format!(
-                "{rel}:{line}: `import {import}` is platform code in commonMain. Kotlin owns screen state and nothing platform-specific; expect/actual is the seam (#1020)"
+                "{rel}:{line}: `import {import}` is platform code in commonMain; expect/actual is the seam (#1020)"
             ));
         }
     }
@@ -528,7 +522,7 @@ fn walk(dir: &Path, extension: &str, out: &mut Vec<PathBuf>) {
     }
 }
 
-fn relative(root: &Path, path: &Path) -> String {
+pub(crate) fn relative(root: &Path, path: &Path) -> String {
     path.strip_prefix(root)
         .unwrap_or(path)
         .to_string_lossy()
@@ -932,7 +926,7 @@ fn door() {
         let root = fixture_dir("commonmain-red");
         write(
             &root,
-            "mobile/shared/src/commonMain/kotlin/Money.kt",
+            "mobile/core/src/commonMain/kotlin/Money.kt",
             "package money\n\nimport android.os.Bundle\nimport kotlin.time.Duration\n",
         );
         let report = commonmain_no_platform_import(&root);
@@ -945,7 +939,7 @@ fn door() {
         let root = fixture_dir("commonmain-green");
         write(
             &root,
-            "mobile/shared/src/commonMain/kotlin/Money.kt",
+            "mobile/core/src/commonMain/kotlin/Money.kt",
             "package money\n\nimport kotlinx.coroutines.flow.StateFlow\n",
         );
         assert!(commonmain_no_platform_import(&root).findings.is_empty());

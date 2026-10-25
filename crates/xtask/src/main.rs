@@ -22,6 +22,7 @@ mod doc_links;
 mod gate;
 mod ledger;
 mod measure;
+mod native_rules;
 mod rules;
 mod screens_catalog;
 mod select;
@@ -138,8 +139,8 @@ pub enum Profile {
     Nightly,
     /// `nightly` plus the restore drill and the VPS smoke.
     Release,
-    /// The Kotlin/Gradle JVM suites: `:shared:jvmTest`, `:core:jvmTest` — a
-    /// real ABI round trip against the real cdylib — and the generated-artifact
+    /// The Kotlin/Gradle JVM suite: `:core:jvmTest` — a real ABI round trip
+    /// against the real cdylib — and the generated-artifact
     /// drift check. NOT a superset of any other profile and not charged to
     /// `pr`: a different toolchain with a different cold cost, and one number
     /// answering for two build systems answers for neither (D-1020-B2-3).

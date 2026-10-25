@@ -1198,7 +1198,7 @@ mod tests {
                 "docs/decisions.md",
                 "README.md",
                 "scripts/lint-copy.mjs",
-                "mobile/shared/src/Foo.kt",
+                "mobile/androidApp/src/Foo.kt",
                 ".github/workflows/gate.yml",
                 "receipts/issue-1.md",
             ]),
