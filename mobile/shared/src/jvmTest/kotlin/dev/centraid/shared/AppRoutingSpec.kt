@@ -13,7 +13,9 @@ import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.nav.NavMove
 import dev.centraid.shared.nav.NavStack
+import dev.centraid.shared.nav.HealthEntry
 import dev.centraid.shared.nav.NotesEntry
+import dev.centraid.shared.nav.PeopleEntry
 import dev.centraid.shared.nav.ScreenMoves
 import dev.centraid.shared.nav.ScreenOpenings
 import dev.centraid.shared.nav.applying
@@ -39,29 +41,31 @@ class AppRoutingSpec : StringSpec({
     val home = Destination.Home
 
     "a move drops the top (never the floor), then pushes; spelled, it is the same openings in order" {
-        val stack = NavStack().push(Destination.LockerHome())
-        stack.applying(NavMove.swap(Destination.LockerTrash)).entries shouldContainExactly listOf(home, Destination.LockerTrash)
+        val stack = NavStack().push(Destination.PhotosHome())
+        val lightbox = Destination.PhotoLightbox("a1", listOf("a1", "a2"))
+        stack.applying(NavMove.swap(lightbox)).entries shouldContainExactly listOf(home, lightbox)
         stack.applying(NavMove.Pop).entries shouldContainExactly listOf(home)
         NavStack().applying(NavMove.Pop).entries shouldContainExactly listOf(home)
-        stack.applying(NavMove.push(Destination.LockerTrash)).entries shouldContainExactly
-            listOf(home, Destination.LockerHome(), Destination.LockerTrash)
+        stack.applying(NavMove.push(lightbox)).entries shouldContainExactly
+            listOf(home, Destination.PhotosHome(), lightbox)
 
-        val spelled = ScreenMoves.of(NavMove(dropsTop = true, pushes = listOf(Destination.LockerEditor(itemId = "i1"), Destination.LockerItem("i1"))))
+        val spelled = ScreenMoves.of(NavMove(dropsTop = true, pushes = listOf(Destination.PhotosHome(), lightbox)))
         spelled.shouldNotBeNull()
         spelled.dropsTop shouldBe true
-        spelled.openings.map { it.screenId } shouldContainExactly listOf(LockerEditorMachine.SCREEN_ID, LockerItemMachine.SCREEN_ID)
+        spelled.openings.map { it.screenId } shouldContainExactly listOf(ScreenIds.PHOTOS_GRID, ScreenIds.PHOTOS_LIGHTBOX)
         // Half a move is no move: a page no route spells spells nothing.
-        ScreenMoves.of(NavMove(pushes = listOf(Destination.LockerTrash, Destination.Settings))).shouldBeNull()
+        ScreenMoves.of(NavMove(pushes = listOf(lightbox, Destination.Settings))).shouldBeNull()
         ScreenMoves.of(null).shouldBeNull()
     }
 
-    "every page a routing names is spelled on the id its machine registers under" {
+    "every page a routing names is spelled on the id its screen registers under" {
         val ids = mapOf(
+            Destination.PhotosHome() to ScreenIds.PHOTOS_GRID,
+            Destination.PhotoLightbox("a1") to ScreenIds.PHOTOS_LIGHTBOX,
+            PeopleEntry.home() to ScreenIds.RUST_SCREEN,
+            HealthEntry.home() to ScreenIds.RUST_SCREEN,
         )
         ids.forEach { (destination, id) -> ScreenOpenings.of(destination).shouldNotBeNull().screenId shouldBe id }
-    }
-
-    "the openings carry what the page opens on" {
     }
 
     // --- Notes -----------------------------------------------------------
