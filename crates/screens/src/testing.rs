@@ -113,7 +113,21 @@ pub struct Driver {
     pub effects: Vec<wire::EffectRequest>,
     /// Instances closed so far, oldest first.
     pub closed: Vec<u64>,
-    _dir: std::path::PathBuf,
+    /// The scratch directory this driver made, removed when it drops. `None`
+    /// for a directory the caller gave ([`Self::shelved_with`]), which a test
+    /// may open again after this driver is gone.
+    scratch: Option<std::path::PathBuf>,
+}
+
+impl Drop for Driver {
+    /// THE SCRATCH VAULT GOES WITH ITS DRIVER: thousands of test runs each left
+    /// one under the system's temporary directory and filled the disk.
+    fn drop(&mut self) {
+        self.handle.close();
+        if let Some(dir) = self.scratch.take() {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
 }
 
 impl Driver {
@@ -155,7 +169,7 @@ impl Driver {
             navigation: None,
             effects: Vec::new(),
             closed: Vec::new(),
-            _dir: dir,
+            scratch: Some(dir),
         }
     }
 
@@ -205,7 +219,7 @@ impl Driver {
             navigation: None,
             effects: Vec::new(),
             closed: Vec::new(),
-            _dir: dir,
+            scratch: Some(dir),
         }
     }
 
@@ -256,7 +270,7 @@ impl Driver {
             navigation: None,
             effects: Vec::new(),
             closed: Vec::new(),
-            _dir: dir.to_path_buf(),
+            scratch: None,
         }
     }
 
