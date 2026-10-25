@@ -19,7 +19,7 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_apps_kit::manifest::{Manifest, parse_manifest};
 
 use crate::error::{CoreError, Result};
-use crate::handle::Handle;
+use crate::handle::HandleState as Handle;
 
 /// The app id the shell's queries are addressed under.
 pub const ID: &str = "shell";

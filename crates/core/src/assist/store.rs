@@ -45,7 +45,7 @@ use centraid_assist::native::park::Confirmed;
 use centraid_assist::prompt::Turn;
 use centraid_assist::{App, Attachments, Card, Notice, Refusal, Session};
 
-use crate::handle::Handle;
+use crate::handle::HandleState as Handle;
 
 /// The long edge of a stored thumbnail, in pixels.
 pub const THUMBNAIL_EDGE: u32 = 256;
