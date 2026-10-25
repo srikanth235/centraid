@@ -1,0 +1,123 @@
+{
+  "manifestVersion": 1,
+  "id": "shell",
+  "name": "Shell",
+  "description": "What the shell itself reads and writes, which is not one app's: the chat's history, and (in the blocks the other shell lanes add) Home, search and the vault's plumbing. It is parsed like an app manifest and is not one of the eight apps: the assistant's catalogue and the training harness do not carry it.",
+  "version": "0.1.0",
+  "queries": [
+    {
+      "name": "chats",
+      "kind": "chat_thread",
+      "figures": ["threads", "corrected"],
+      "description": "The chat drawer's list, newest activity first; with a term, the chats it finds by title and by the member's own words, best first, with the words it corrected a typo to.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 500 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "chat",
+      "kind": "chat_thread",
+      "figures": ["found", "thread", "messages"],
+      "description": "One stored chat and its messages, oldest first, each with its cards and attachments as they were said.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "thread_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["thread_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "chat-card",
+      "kind": "chat_thread",
+      "figures": ["exists"],
+      "description": "Whether the row a stored card names is still in the vault.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "app": { "type": "string", "minLength": 1 },
+          "entity": { "type": "string", "minLength": 1 },
+          "id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["app", "entity", "id"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "actions": [
+    {
+      "name": "rename-chat",
+      "verb": "edit",
+      "kind": "chat_thread",
+      "inverse": null,
+      "sealed": ["title"],
+      "command": "thread.rename",
+      "phrasings": [
+        "rename this chat",
+        "call this chat something else",
+        "change the title of this chat"
+      ],
+      "description": "Rename a stored chat through thread.rename.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "thread_id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 }
+        },
+        "required": ["thread_id", "title"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "delete-chat",
+      "verb": "purge",
+      "kind": "chat_thread",
+      "inverse": null,
+      "sealed": [],
+      "command": "entity.purge",
+      "phrasings": [
+        "delete this chat",
+        "remove this conversation",
+        "forget this chat"
+      ],
+      "description": "Delete one stored chat with its messages for good through entity.purge: a chat has no trash.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "clear-chats",
+      "verb": "purge",
+      "kind": "chat_thread",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "thread.clear",
+      "phrasings": [
+        "delete all my chats",
+        "clear every conversation",
+        "wipe the chat history"
+      ],
+      "description": "Delete every stored chat in this vault for good through thread.clear.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  ]
+}

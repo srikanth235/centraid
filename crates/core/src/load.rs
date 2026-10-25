@@ -526,6 +526,31 @@ fn read(
                 tz,
             },
         )?,
+        // ---- the shell's own catalogue (`shell/manifest.json`) ----
+        // chat (lane I): the drawer's list or search, one stored chat, and a card's liveness
+        ("shell", "chats") => app_query::chat::threads(
+            vault,
+            door,
+            &wire::ChatThreadsRequest {
+                limit: p.limit(0),
+                term: p.text("term")?,
+            },
+        )?,
+        ("shell", "chat") => app_query::chat::thread(
+            vault,
+            &wire::ChatThreadRequest {
+                thread_id: p.text("thread_id")?,
+            },
+        )?,
+        ("shell", "chat-card") => app_query::chat::card(
+            vault,
+            &wire::ChatCardRequest {
+                app: p.text("app")?,
+                entity: p.text("entity")?,
+                id: p.text("id")?,
+            },
+        )?,
+
         ("people", "trash") => {
             app_query::people::trash(vault, door, &wire::PeopleTrashRequest { tz })?
         }
@@ -817,7 +842,7 @@ mod tests {
     #[test]
     fn every_manifest_query_has_a_reader_and_no_reader_lacks_a_manifest_query() {
         let (dir, vault) = founded();
-        for app in catalog::APPS {
+        for app in catalog::APPS.iter().chain([&catalog::SHELL]) {
             for query in &app.manifest().queries {
                 let (_, _, _, has_reader) = asked_of(&vault, &ask(app.id, &query.name));
                 assert!(
@@ -842,7 +867,7 @@ mod tests {
     fn a_readers_arguments_are_the_properties_its_manifest_declares() {
         let (dir, vault) = founded();
         let mut wrong = Vec::new();
-        for app in catalog::APPS {
+        for app in catalog::APPS.iter().chain([&catalog::SHELL]) {
             for query in &app.manifest().queries {
                 let (names, limit, after, _) = asked_of(&vault, &ask(app.id, &query.name));
                 let mut declared: BTreeSet<String> = query.input["properties"]

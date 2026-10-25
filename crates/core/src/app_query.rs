@@ -67,7 +67,7 @@ use centraid_vault::value::Value;
 use crate::error::{CoreError, Result};
 
 // The chat's arm (R-CHAT-1): the thread list, a thread, and a card's row.
-mod chat;
+pub(crate) mod chat;
 // The named as search results (#1097, R-1097-19..24): notebooks, albums,
 // projects, Docs folders and chat threads, for Home and the
 // owning apps.
