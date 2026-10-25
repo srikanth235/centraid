@@ -1,7 +1,7 @@
 //! THE JOURNAL BY THE MEMBER'S LOCAL DAY (#1046).
 //!
-//! `mobile/shared`'s `commonMain` has no calendar or zone library, and the
-//! Journal place still reads as days — "Today", "Tuesday 3 June". So the core
+//! No shell has a calendar or zone library, and the Journal place still reads
+//! as days — "Today", "Tuesday 3 June". So the core
 //! groups the entries by the civil day each was WRITTEN on (`created_at`), in
 //! the zone the request states, through the vault's one zone engine
 //! ([`FireZone`], the same `crates/apps/agenda`'s `local` module reads). A

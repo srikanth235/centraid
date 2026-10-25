@@ -68,10 +68,10 @@ cargo test -p centraid-apps-notes --test year3 -- --ignored --nocapture
 
 ## Owner hand-off — the typing-latency number
 
-The typing-latency target is a round trip through the **editor's state machine on a reference device** (#1020 `:167`), and that machine is Kotlin with no Rust twin:
+The typing-latency target is a round trip through the **editor's state machine on a reference device** (#1020 `:167`). The machine is Rust's `notes.editor` screen, whose reducer is covered by `crates/screens/tests/notes_editor.rs`:
 
 ```sh
-./gradlew -p mobile :shared:jvmTest --tests '*ScreenMachineSpec*'   # the reducer, on a JVM
+cargo test -p centraid-screens --test notes_editor   # the reducer
 ```
 
 The on-device half has no automated flow; it is a manual measurement on a reference device. What the Rust box measures is the editor's on-open pull over the largest body the product holds (~1.5 ms for 48 KiB on `ci-linux-x64-4c`, debug), printed by `tests/year3.rs`.

@@ -3,7 +3,7 @@
 //! so the four formatters the shells grew (Swift `Money.render`, Kotlin
 //! `formatMoney` and two row helpers) are gone (#1135).
 //!
-//! `contracts/screens/money-render.json` is the law. The exponent is the
+//! `contracts/screens/money-render.json` is the law (the Android `MoneyRenderTest` reads it too). The exponent is the
 //! amount's own, never assumed to be 2; a currency this table does not know is
 //! spelled after the amount; nothing adds across currencies ([`sum_by_currency`]).
 //! Locale data is a small table (separators and symbol placement for the

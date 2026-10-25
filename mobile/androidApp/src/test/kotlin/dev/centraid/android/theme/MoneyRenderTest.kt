@@ -7,7 +7,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * ONE MONEY LAW, THIS SHELL'S HALF (K5): the real [formatMoney] over every case
+ * ONE MONEY LAW, THIS SHELL'S HALF: the real [formatMoney] over every case
  * in `contracts/screens/money-render.json`, on the JVM with no device.
  */
 class MoneyRenderTest {

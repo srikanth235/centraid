@@ -263,8 +263,8 @@ fn main() {
         report.refused.extend(seed_locker(&handle));
     }
     // WHAT HOME WILL DRAW, READ BACK BEFORE THE HANDLE CLOSES. Each number is
-    // the row count of the table that app's Home tile pages (`HomeReads.READS`
-    // in `mobile/shared`).
+    // the row count of the table that app's Home tile pages (`crates/screens`'s
+    // `shell::tiles`).
     let self_id = handle
         .with_vault(|vault| Ok(vault.self_id()?.unwrap_or_default()))
         .expect("the self person reads");

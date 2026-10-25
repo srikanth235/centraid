@@ -1,8 +1,8 @@
 //! WHERE AN OCCURRENCE FALLS ON A MEMBER'S CALENDAR — in the zone the device
 //! states, computed here so no shell does civil arithmetic (#1046).
 //!
-//! `mobile/shared`'s `commonMain` has no calendar, zone or date-time library by
-//! design (`sync/Instants.kt`'s header), and an Agenda screen still has to
+//! No shell has a calendar, zone or date-time library by design, and an
+//! Agenda screen still has to
 //! group occurrences by the member's LOCAL day, draw a now line and print
 //! "08:15". So the core answers those in the request's zone, from this module,
 //! and a screen reads strings. Every function is pure: a zone, a row, an

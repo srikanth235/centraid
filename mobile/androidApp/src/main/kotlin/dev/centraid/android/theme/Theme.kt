@@ -273,7 +273,7 @@ internal fun NativeTheme.color(role: String): Color = Color(
 public fun formatMoney(money: Money): String {
     if (money.currency.isEmpty()) return ""
     val exponent = money.exponent
-    // AN EMPTY LOCALE IS THE DEVICE'S, as on iOS (`Money.render`) and as
+    // AN EMPTY LOCALE IS THE DEVICE'S, as in the Rust formatter and as
     // the retired Tally reads said: "und" was the ROOT locale — no grouping a member
     // recognises and a bare currency sign — so the two shells drew one amount
     // two ways (`contracts/screens/money-render.json`).

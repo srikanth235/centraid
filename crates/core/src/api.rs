@@ -88,8 +88,7 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// shell that asked. So it reads these thirteen and refuses the rest as an
 /// invalid request, before the vault is asked.
 ///
-/// The set is every `from` a shell sends today, read off `mobile/shared`'s
-/// `PageQuery` builders and the Rust callers of the wire:
+/// The set is every `from` a shell or a Rust caller of the wire sends today:
 ///
 /// | Screens | Tables |
 /// |---|---|

@@ -1,8 +1,8 @@
 //! WHEN A TASK FALLS ON A MEMBER'S CALENDAR — in the zone the device states,
 //! computed here so no shell does civil arithmetic (#1046, the Tasks arm).
 //!
-//! `mobile/shared`'s `commonMain` has no calendar, zone or date-time library by
-//! design, and the Tasks screens still sort by the member's LOCAL day, say
+//! No shell has a calendar, zone or date-time library by design, and the Tasks
+//! screens still sort by the member's LOCAL day, say
 //! "overdue", group Upcoming by day and print "09:00". v0 did that arithmetic
 //! on the phone with the host zone and got "today" wrong for every member east
 //! of UTC at night (the audit's "UTC today" defect). So the core answers those

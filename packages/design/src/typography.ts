@@ -28,8 +28,7 @@ export interface TypeStyle {
    * THE WEB VALUE. A phone renders `size + nativeDelta.size`, so the numbers
    * in this file are NOT the numbers a device draws and never were: `small`
    * is 13/19 here and 15/22 in `design/native-theme.json`, in
-   * `mobile/iosApp/Design/Theme.swift` and in
-   * `mobile/shared/.../design/Tokens.kt`, which are emitted from this table by
+   * `mobile/iosApp/Design/Theme.swift`, which are emitted from this table by
    * `contracts/tools/export-native-theme.ts`. One role, two surfaces, one
    * declared step — see [nativeDelta] and `docs/design-machinery.md`'s
    * invariant 5.

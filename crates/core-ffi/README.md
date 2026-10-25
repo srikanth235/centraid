@@ -80,4 +80,4 @@ cargo test -p centraid-core-ffi --test spike -- --nocapture
 cargo run -p centraid-core-ffi --bin spike-fixture -- /tmp/spike
 ```
 
-The spike fixes the ABI's **shape** the shells are written against. The numbers are `ci-linux-x64-4c` numbers and a floor; the device bindings (cinterop on iOS, JNA on Android) live in `mobile/core` and `mobile/shared`, and on-device numbers are an owner hand-off. The measured numbers are in the receipt.
+The spike fixes the ABI's **shape** the shells are written against. The numbers are `ci-linux-x64-4c` numbers and a floor; the device bindings (cinterop on iOS, JNA on Android) live in `mobile/core` (Android) and `mobile/iosApp/Sources/Core.swift` (iOS), and on-device numbers are an owner hand-off. The measured numbers are in the receipt.
