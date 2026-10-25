@@ -284,3 +284,55 @@ fn rows_proposed_as_duplicates_are_skipped_unless_the_member_says_otherwise() {
         "Imported 5 rows"
     );
 }
+
+/// A statement whose amounts are all positive and which names no direction:
+/// the core guesses which sign means money out, says so, and offers the two
+/// answers.
+const POSITIVE_ONLY: &str = "Date,Description,Amount\n2026-09-01,GROCER A,20.00\n2026-09-03,GROCER B,30.00\n2026-09-08,GROCER C,40.00\n2026-09-10,GROCER D,50.00\n2026-09-12,GROCER E,60.00\n";
+
+#[test]
+fn a_guessed_sign_is_said_and_the_answer_plans_the_file_again() {
+    let (mut d, i) = opened();
+    let (account, _) = accounts(&d).remove(0);
+    pick(&mut d, i, "a.csv", POSITIVE_ONLY);
+    if accounts(&d).len() > 1 {
+        event(
+            &mut d,
+            i,
+            iev(ie::Kind::AccountPicked(ie::AccountPicked {
+                account_id: account,
+            })),
+        );
+    }
+    let statement = data(d.view(i)).statements[0].clone();
+    assert_eq!(
+        statement.warnings,
+        ["Which sign means money out was guessed."]
+    );
+    assert_eq!(statement.sign_label, "Money out is");
+    let options: Vec<_> = statement
+        .sign_options
+        .iter()
+        .map(|o| (o.key.as_str(), o.label.as_str(), o.selected))
+        .collect();
+    assert_eq!(
+        options,
+        [
+            ("debits_negative", "Negative", false),
+            ("debits_positive", "Positive", false)
+        ]
+    );
+    // The member's answer is taken, and the file is planned again under it.
+    event(
+        &mut d,
+        i,
+        iev(ie::Kind::Sign(ie::SignPicked {
+            choice: "debits_positive".into(),
+        })),
+    );
+    // Said once answered: the guess is gone, so the warning and the two
+    // choices are too, and the file is ready to import.
+    let again = &data(d.view(i)).statements[0];
+    assert!(again.warnings.is_empty() && again.sign_options.is_empty());
+    assert_eq!(data(d.view(i)).publish_label, "Import 5 rows");
+}

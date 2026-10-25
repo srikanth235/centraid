@@ -62,12 +62,14 @@ struct MoneySearchView: View {
     private func results(_ search: Centraid_Core_V1_MoneySearchData, state: Centraid_Core_V1_MoneySearchState) -> some View {
         if search.rows.isEmpty, search.hasEmpty {
             EmptyStateView(search.empty.legacy)
+            if search.hasAsk { SearchAskRow(ask: search.ask.legacy) }
             Spacer(minLength: 0)
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         StatusLineView(status: countLine(search.countLabel).legacy, identifier: "money-search-count") {}
+                        if search.hasAsk { SearchAskRow(ask: search.ask.legacy) }
                         ForEach(Array(search.rows.enumerated()), id: \.offset) { _, row in
                             MoneyRowView(row: row) { open(row.route) }
                         }

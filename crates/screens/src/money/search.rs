@@ -11,7 +11,7 @@ use wire::screen_event::Kind as E;
 use super::fold::{self, Phase};
 use super::rows;
 use crate::catalog::load;
-use crate::kit::read;
+use crate::kit::{read, search};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words};
 
@@ -89,6 +89,7 @@ impl Search {
                 ..Default::default()
             }),
             corrected: answer.corrected.clone().unwrap_or_default(),
+            ask: Some(search::offer(locale, self.asked(), "money")),
             rows: lines,
         }
     }
