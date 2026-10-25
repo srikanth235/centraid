@@ -60,7 +60,7 @@ const ROW = new RegExp(
 
 /** Undo the escapes a catalogue row's Rust string literal uses. */
 function unescapeRust(body) {
-  return body.replace(/\\(u\{[0-9a-fA-F]+\}|.)/gu, (_all, code) => {
+  return body.replace(/\\(?<code>u\{[0-9a-fA-F]+\}|.)/gu, (_all, code) => {
     if (code.startsWith("u{")) {
       return String.fromCodePoint(Number.parseInt(code.slice(2, -1), 16));
     }

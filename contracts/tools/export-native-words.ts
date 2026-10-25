@@ -101,7 +101,7 @@ export function readCatalog(source: string): Map<string, string> {
       inside = false;
       continue;
     }
-    if (/^\s*(\/\/.*)?$/u.test(line)) continue;
+    if (/^\s*(?:\/\/.*)?$/u.test(line)) continue;
     const match = row.exec(line);
     if (match === null) {
       throw new Error(
