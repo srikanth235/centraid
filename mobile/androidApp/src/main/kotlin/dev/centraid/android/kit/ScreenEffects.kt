@@ -38,6 +38,7 @@ import centraid.core.v1.KeychainOp
 import centraid.core.v1.KeychainValue
 import centraid.core.v1.OriginalFetched
 import centraid.core.v1.PhoneChanged
+import centraid.core.v1.VaultCommand
 import centraid.core.v1.Route
 import dev.centraid.android.screens.PhotoHandOff
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
@@ -79,6 +80,9 @@ import okio.ByteString
  * [docs] performs Docs' `PickFile`, `FollowFolder` and `StopFollowing` (the pickers, the
  * camera, the follower's grant); [openRoute] is `OpenRoute`: a page Rust asked the shell to push.
  * [health] answers `HealthRead` (Health Connect, read only). Either is null where the host has none, and the effect is answered `failed`.
+ *
+ * ONE PERFORMER FOR THE ONE RUNTIME (#1135): every screen is on Rust's `home` tab over a single
+ * [Screens], so every effect is performed here exactly once. [vaultCommand] is Home's `VaultCommand`.
  */
 @Composable
 internal fun PerformScreenEffects(
@@ -86,12 +90,12 @@ internal fun PerformScreenEffects(
     phone: AndroidPhoneFollow?,
     /** Photos' device half: the camera roll, free up space and an original from the gateway. */
     photos: PhotosDevice? = null,
-    /** This app's tab: when set, only its instances' effects are performed here (two apps share one core). */
-    tab: String? = null,
     onAnnounce: (String) -> Unit = {},
     docs: DocsPickers? = null,
     health: AndroidHealth? = null,
     openRoute: ((Route) -> Unit)? = null,
+    /** What Home asks of the shelf (`VaultCommand`): switch, make, restore, forget, rename, open a settings door. */
+    vaultCommand: ((VaultCommand) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -113,20 +117,21 @@ internal fun PerformScreenEffects(
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri -> fileDoors.saved(uri) }
     LaunchedEffect(screens) {
         screens.effects.collect { request ->
-            // TWO APPS' RUNTIMES SHARE ONE CORE, so each hears every push: an effect for
-            // another app's screen is that app's performer's to answer.
-            if (tab != null && screens.navigation.value?.tabs?.firstOrNull { it.tab == tab }
-                    ?.entries?.none { it.instance == request.instance } != false
-            ) {
-                return@collect
-            }
             // ONE COROUTINE PER EFFECT: a permission dialog waits for the member
             // without holding up the keychain read behind it.
             launch {
                 val effect = request.effect
                 val doors = Doors(fileDoors, { picker.launch(arrayOf("*/*")) }, { saver.launch(it) }, onAnnounce)
                 val answer: (EffectResult) -> Unit = { result -> launch { screens.answer(request, result) } }
-                val result = if (effect?.health_read != null) {
+                val result = if (effect?.vault_command != null) {
+                    // HOME'S REQUEST OF THE SHELF (the shelf, the files and the keys are this shell's).
+                    if (vaultCommand == null) {
+                        failed("no shelf to ask")
+                    } else {
+                        vaultCommand(effect.vault_command!!)
+                        EffectResult(done = EffectDone())
+                    }
+                } else if (effect?.health_read != null) {
                     health?.snapshot(effect.health_read!!) { healthLauncher?.launch(it) }
                         ?: failed("not performed by this shell")
                 } else if (effect?.pick_file != null || effect?.follow_folder != null || effect?.stop_following != null || effect?.open_route != null) {
