@@ -12,7 +12,7 @@ use std::time::Duration;
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::custody::secrets::VaultSecrets;
 use centraid_screens::pairing::discovery::Rediscovery;
-use centraid_screens::pairing::laptop::{ANNOUNCE_PAIRED, ANNOUNCE_REKEY, ticket_of};
+use centraid_screens::pairing::laptop::{ANNOUNCE_PAIRED, ticket_of};
 use centraid_screens::pairing::{self, routes};
 use centraid_screens::testing::Driver;
 use centraid_screens::{Ctx, Registry, Runtime, Screen};
@@ -125,6 +125,17 @@ fn refused(code: wire::ErrorCode) -> wire::VaultCalled {
     }
 }
 
+/// Whether the screen asked the shell to open the re-key of the words in pairing's terms.
+fn rekey_opened(driver: &Driver) -> bool {
+    driver.effects.iter().any(|request| {
+        matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::OpenRoute(open))
+                if open.route.as_ref() == Some(&centraid_screens::custody::routes::rekey_for_pairing())
+        )
+    })
+}
+
 fn announced(driver: &Driver, topic: &str) -> bool {
     driver.effects.iter().any(|request| {
         matches!(
@@ -187,7 +198,8 @@ fn a_vault_that_opened_without_its_words_is_offered_them_back_and_the_tap_finish
         P::Words(wire::pair_laptop_event::WordsTapped {}),
     );
     assert!(state(&driver, id).finished);
-    assert!(announced(&driver, ANNOUNCE_REKEY));
+    // THE WORDS' PAGE IS RUST'S TO NAME: the shell pushes the route, it spells none.
+    assert!(rekey_opened(&driver));
 
     // NO VAULT, NO WORDS TO ENTER: no door, and a stray tap changes nothing.
     let (mut driver, id) = opened(Driver::unfounded(runtime()));
@@ -198,7 +210,7 @@ fn a_vault_that_opened_without_its_words_is_offered_them_back_and_the_tap_finish
         P::Words(wire::pair_laptop_event::WordsTapped {}),
     );
     assert!(!state(&driver, id).finished);
-    assert!(!announced(&driver, ANNOUNCE_REKEY));
+    assert!(!rekey_opened(&driver));
 
     // Nor anywhere else the door is not drawn.
     let (mut driver, id) = keyed();
