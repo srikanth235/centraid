@@ -32,6 +32,11 @@ pub trait Screen: Send {
 pub struct Environment {
     pub locale: Locale,
     pub zone: String,
+    /// The region of the locale tag (`US` of `en-US` or `en_US`), upper-cased;
+    /// empty when the tag names none. Units follow it.
+    pub region: String,
+    /// The OS the shell runs on (`ios`, `android`); empty before it says.
+    pub platform: String,
 }
 
 impl Default for Environment {
@@ -39,6 +44,8 @@ impl Default for Environment {
         Self {
             locale: Locale::En,
             zone: "UTC".to_owned(),
+            region: String::new(),
+            platform: String::new(),
         }
     }
 }
@@ -139,6 +146,18 @@ impl<'a> Ctx<'a> {
     #[must_use]
     pub fn zone(&self) -> &str {
         &self.env.zone
+    }
+
+    /// The region of the device's locale (`US`), or empty.
+    #[must_use]
+    pub fn region(&self) -> &str {
+        &self.env.region
+    }
+
+    /// The OS the shell runs on (`ios`, `android`), or empty.
+    #[must_use]
+    pub fn platform(&self) -> &str {
+        &self.env.platform
     }
 
     /// Start (or restart) the named timer. When it elapses the screen gets

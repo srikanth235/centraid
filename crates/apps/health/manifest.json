@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "health",
   "name": "Health",
-  "description": "Your body's daily record, followed from the phone's health store one way — Apple Health on iOS, Health Connect on Android — into the vault, so it is in your backup and nowhere else. Daily totals (steps, active energy, exercise minutes, sleep, resting heart rate and weight) and workouts, never raw samples. Today shows each number against your own 30-day typical, not a target; Trends shows weeks, months and a year; Workouts lists every workout the store holds. Every typical, average and trend is derived at read time and nothing derived is stored. Nothing is ever written back to the health store, and Chat does not read Health.",
+  "description": "Your body's daily record, followed from the phone's health store one way — Apple Health on iOS, Health Connect on Android — into the vault, so it is in your backup and nowhere else. Daily totals (steps, active energy, exercise minutes, sleep, resting heart rate and weight) and workouts, never raw samples. Today shows each number against your own 30-day typical, not a target; Trends shows weeks, months and a year; Workouts lists every workout the store holds. Every typical, average and trend is derived at read time and nothing derived is stored. Nothing is ever written back to the health store. Chat reads it like any app: the daily figures and workouts are kinds the assistant finds, counts and sums.",
   "version": "0.2.0",
   "iconKey": "Activity",
   "colorKey": "olive",
@@ -52,6 +52,11 @@
       {
         "schema": "follow",
         "table": "health",
+        "verbs": "act"
+      },
+      {
+        "schema": "follow",
+        "table": "stop",
         "verbs": "act"
       },
       {
@@ -256,6 +261,50 @@
           }
         }
       }
+    },
+    {
+      "name": "stop-following",
+      "verb": "detach",
+      "kind": "daily_figure",
+      "inverse": null,
+      "sealed": [],
+      "command": "follow.stop",
+      "phrasings": [
+        "stop reading my health app",
+        "disconnect Apple Health",
+        "stop following Health Connect"
+      ],
+      "description": "Stop following the phone's health store through follow.stop: the store's origin is retired and its workouts forget their source. Every day and every workout stays, an ordinary row from now on.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["system", "ref"],
+        "additionalProperties": false,
+        "properties": {
+          "system": {
+            "type": "string",
+            "enum": ["contacts", "calendar", "files", "health", "statement"]
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
     }
   ],
   "queries": [
@@ -409,7 +458,7 @@
       "name": "daily figure",
       "plural": "daily figures",
       "order": 12,
-      "live": "declared",
+      "live": "read",
       "entity": "measurement",
       "table": "measurement",
       "pk": "day",
@@ -447,7 +496,7 @@
       "name": "workout",
       "plural": "workouts",
       "order": 13,
-      "live": "declared",
+      "live": "read",
       "entity": "activity",
       "table": "workout",
       "pk": "id",

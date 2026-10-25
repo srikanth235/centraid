@@ -5,20 +5,6 @@ import centraid.core.v1.ErrorCode
 import centraid.core.v1.PageCursor
 import centraid.screen.v1.ReadFailureKind
 import dev.centraid.core.CoreFailure
-import dev.centraid.shared.apps.health.HealthHomeMachine
-import dev.centraid.shared.apps.health.HealthHomeReads
-import dev.centraid.shared.apps.health.HealthMetricMachine
-import dev.centraid.shared.apps.health.HealthMetricReads
-import dev.centraid.shared.apps.health.HealthWorkoutMachine
-import dev.centraid.shared.apps.health.HealthWorkoutReads
-import dev.centraid.shared.apps.people.PeopleEditorMachine
-import dev.centraid.shared.apps.people.PeopleEditorReads
-import dev.centraid.shared.apps.people.PeopleHomeMachine
-import dev.centraid.shared.apps.people.PeopleHomeReads
-import dev.centraid.shared.apps.people.PeoplePersonMachine
-import dev.centraid.shared.apps.people.PeoplePersonReads
-import dev.centraid.shared.apps.people.PeopleTrashMachine
-import dev.centraid.shared.apps.people.PeopleTrashReads
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.kit.TrashReads
 import dev.centraid.shared.shell.HomeMachine
@@ -75,15 +61,6 @@ class AppReadsSpec : StringSpec({
      * is that the declaration and the machine agree EXACTLY.
      */
     val queryScreens: List<Triple<String, ScreenQueries<*, *>, ScreenMachine<*, *>>> = listOf(
-        Triple("people.home", PeopleHomeReads, PeopleHomeMachine),
-        Triple("people.person", PeoplePersonReads, PeoplePersonMachine),
-        Triple("people.editor", PeopleEditorReads, PeopleEditorMachine),
-        Triple("people.trash", PeopleTrashReads, PeopleTrashMachine),
-        // HEALTH (#1129). Home reads the days, the workouts, their kinds and whether a
-        // store is connected; a metric only the days; a workout its activity and kind.
-        Triple("health.home", HealthHomeReads, HealthHomeMachine),
-        Triple("health.metric", HealthMetricReads, HealthMetricMachine),
-        Triple("health.workout", HealthWorkoutReads, HealthWorkoutMachine),
         // HOME'S SEARCH (R-CHROME-6). Like the powerbox it declares no table:
         // a transient screen over search results re-reads on a new term only.
         Triple("home.search", HomeSearchReads, HomeSearchMachine),

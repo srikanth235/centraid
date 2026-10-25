@@ -397,6 +397,8 @@ impl ScreenHost for Runtime {
                     } else {
                         environment.zone.clone()
                     },
+                    region: region_of(&environment.locale),
+                    platform: environment.platform.clone(),
                 };
                 Self::broadcast(
                     &mut state,
@@ -487,5 +489,29 @@ impl ScreenHost for Runtime {
         if !Self::empty(&out) {
             core.push(out);
         }
+    }
+}
+
+/// The region of a BCP 47 or POSIX locale tag (`en-US`, `en_US`, `zh-Hant-TW`):
+/// its first two-letter alphabetic part after the language, upper-cased.
+fn region_of(tag: &str) -> String {
+    tag.split(['-', '_'])
+        .skip(1)
+        .find(|part| part.len() == 2 && part.chars().all(|c| c.is_ascii_alphabetic()))
+        .map(str::to_ascii_uppercase)
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod region_tests {
+    use super::region_of;
+
+    #[test]
+    fn a_region_is_the_two_letters_after_the_language() {
+        assert_eq!(region_of("en-US"), "US");
+        assert_eq!(region_of("en_us"), "US");
+        assert_eq!(region_of("zh-Hant-TW"), "TW");
+        assert_eq!(region_of("en"), "");
+        assert_eq!(region_of(""), "");
     }
 }

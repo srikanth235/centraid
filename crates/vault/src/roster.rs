@@ -9,8 +9,9 @@
 //!
 //! Every app a member opens is a chat scope, Locker included: the assistant has the owner's access
 //! to a Locker item's plain rows (the owner's ruling of 2026-10-22), and a sealed value is never in
-//! a prompt or an answer (R-1088-3). Health is not on it until the assistant has Health kinds
-//! (R-1129-11). One app is one word: the tasks a member keeps are Agenda's (#1128), so a card, a
+//! a prompt or an answer (R-1088-3). Health is on it too: its `daily_figure` and `workout` kinds
+//! are read and written through its manifest like any app's (owner ruling of 2026-10-24, #1135;
+//! R-1129-11 is superseded). One app is one word: the tasks a member keeps are Agenda's (#1128), so a card, a
 //! search hit, a write and a chat scope all say `agenda`, and nothing here maps one app onto
 //! another.
 
@@ -22,9 +23,10 @@ pub struct RosterApp {
 }
 
 /// The roster, in registry order. A card may name any of them and a chat may be scoped to any.
-pub const APPS: [RosterApp; 7] = [
+pub const APPS: [RosterApp; 8] = [
     RosterApp { id: "agenda" },
     RosterApp { id: "docs" },
+    RosterApp { id: "health" },
     RosterApp { id: "locker" },
     RosterApp { id: "money" },
     RosterApp { id: "notes" },
@@ -52,10 +54,10 @@ mod tests {
         assert_eq!(
             ids().collect::<Vec<_>>(),
             [
-                "agenda", "docs", "locker", "money", "notes", "people", "photos"
+                "agenda", "docs", "health", "locker", "money", "notes", "people", "photos"
             ]
         );
-        assert!(is_app("locker") && !is_app("health"));
+        assert!(is_app("locker") && is_app("health"));
         assert!(
             !is_app("tasks"),
             "the tasks are Agenda's: there is no `tasks` app"

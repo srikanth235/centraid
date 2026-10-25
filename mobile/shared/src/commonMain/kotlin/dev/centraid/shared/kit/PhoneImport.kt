@@ -8,7 +8,6 @@ import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
 import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.copy.AgendaCopy
-import dev.centraid.design.copy.PeopleCopy
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.nav.AppHomes
 import okio.ByteString.Companion.encodeUtf8
@@ -21,7 +20,7 @@ import kotlin.uuid.Uuid
  * JSON string a hand-built input needs. An import writes the member's own rows
  * the way a screen does, so a row it makes is a row like any other.
  *
- * The apps' importers — Contacts → People — live in their app and call these (Agenda's calendar import is Rust's, #1135).
+ * Contacts → People and calendar → Agenda are Rust's now (#1135); what still imports from Kotlin calls these.
  */
 public object PhoneImport {
     /** What one import did: rows written, and sources the core refused. */
@@ -97,7 +96,6 @@ public object PhoneImport {
         CentraidCatalog.byId[AppHomes.appOf(app)]?.name?.let { SharedCopy.OPEN_APP.replace("{name}", it) }.orEmpty()
 
     private val quiet: Set<String> = setOf(
-        PeopleCopy.IMPORT_CONTACTS_NONE,
         AgendaCopy.IMPORT_CALENDAR_NONE,
     )
 

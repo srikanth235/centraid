@@ -35,6 +35,8 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
         Kind::Rule => "BLUE BOTTLE",
         Kind::Category => "Pets fund",
         Kind::Budget => return None,
+        // Health's kinds are read-only in chat (#1135): no verb applies.
+        Kind::DailyFigure | Kind::Workout => return None,
     };
     Some(match verb {
         "create" => {
@@ -56,7 +58,12 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
                 Kind::List => json!({"name": "Errands"}),
                 Kind::Account => json!({"name": "Holiday fund", "type": "savings"}),
                 Kind::Category => json!({"name": "Pets"}),
-                Kind::Photo | Kind::Transaction | Kind::Budget | Kind::Rule => return None,
+                Kind::Photo
+                | Kind::Transaction
+                | Kind::Budget
+                | Kind::Rule
+                | Kind::DailyFigure
+                | Kind::Workout => return None,
             };
             measure(
                 session,

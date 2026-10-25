@@ -3,22 +3,7 @@ package dev.centraid.shared
 import centraid.core.v1.NotesPlace
 import centraid.core.v1.Route
 import centraid.screen.v1.HomeTile
-import centraid.screen.v1.PeopleChannelRow
-import centraid.screen.v1.PeopleEditorEvent
-import centraid.screen.v1.PeopleHomeEvent
-import centraid.screen.v1.PeoplePersonData
-import centraid.screen.v1.PeoplePersonEvent
-import centraid.screen.v1.PeoplePersonState
 import centraid.screen.v1.TileStatus
-import dev.centraid.shared.apps.health.HealthConnectMachine
-import dev.centraid.shared.apps.health.HealthHomeMachine
-import dev.centraid.shared.apps.health.HealthMetricMachine
-import dev.centraid.shared.apps.health.HealthWorkoutMachine
-import dev.centraid.shared.apps.people.PeopleEditorMachine
-import dev.centraid.shared.apps.people.PeopleHomeMachine
-import dev.centraid.shared.apps.people.PeoplePersonMachine
-import dev.centraid.shared.apps.people.PeopleRouting
-import dev.centraid.shared.apps.people.PeopleTrashMachine
 import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.LockerEntry
@@ -28,7 +13,9 @@ import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.nav.NavMove
 import dev.centraid.shared.nav.NavStack
+import dev.centraid.shared.nav.HealthEntry
 import dev.centraid.shared.nav.NotesEntry
+import dev.centraid.shared.nav.PeopleEntry
 import dev.centraid.shared.nav.ScreenMoves
 import dev.centraid.shared.nav.ScreenOpenings
 import dev.centraid.shared.nav.applying
@@ -46,7 +33,7 @@ import io.kotest.matchers.string.shouldNotBeEmpty
  * Each `<App>Routing` answers an event with the move Android applies, and its
  * bytes door answers the same move spelled for iOS. These pin both halves:
  * the decisions (a band place swaps, Done pops, a notebook named Unfiled is
- * the unfiled filter, a new person's id is minted once) and that every page a
+ * the unfiled filter) and that every page a
  * routing names is one `ScreenOpenings` spells, on the screen id its machine
  * registers under.
  */
@@ -54,40 +41,31 @@ class AppRoutingSpec : StringSpec({
     val home = Destination.Home
 
     "a move drops the top (never the floor), then pushes; spelled, it is the same openings in order" {
-        val stack = NavStack().push(Destination.PeopleHome())
-        stack.applying(NavMove.swap(Destination.PeopleTrash)).entries shouldContainExactly listOf(home, Destination.PeopleTrash)
+        val stack = NavStack().push(Destination.PhotosHome())
+        val lightbox = Destination.PhotoLightbox("a1", listOf("a1", "a2"))
+        stack.applying(NavMove.swap(lightbox)).entries shouldContainExactly listOf(home, lightbox)
         stack.applying(NavMove.Pop).entries shouldContainExactly listOf(home)
         NavStack().applying(NavMove.Pop).entries shouldContainExactly listOf(home)
-        stack.applying(NavMove.push(Destination.PeopleTrash)).entries shouldContainExactly
-            listOf(home, Destination.PeopleHome(), Destination.PeopleTrash)
+        stack.applying(NavMove.push(lightbox)).entries shouldContainExactly
+            listOf(home, Destination.PhotosHome(), lightbox)
 
-        val spelled = ScreenMoves.of(NavMove(dropsTop = true, pushes = listOf(Destination.PeopleEditor("p1"), Destination.PeoplePerson("p1"))))
+        val spelled = ScreenMoves.of(NavMove(dropsTop = true, pushes = listOf(Destination.PhotosHome(), lightbox)))
         spelled.shouldNotBeNull()
         spelled.dropsTop shouldBe true
-        spelled.openings.map { it.screenId } shouldContainExactly listOf(PeopleEditorMachine.SCREEN_ID, PeoplePersonMachine.SCREEN_ID)
+        spelled.openings.map { it.screenId } shouldContainExactly listOf(ScreenIds.PHOTOS_GRID, ScreenIds.PHOTOS_LIGHTBOX)
         // Half a move is no move: a page no route spells spells nothing.
-        ScreenMoves.of(NavMove(pushes = listOf(Destination.PeopleTrash, Destination.Settings))).shouldBeNull()
+        ScreenMoves.of(NavMove(pushes = listOf(lightbox, Destination.Settings))).shouldBeNull()
         ScreenMoves.of(null).shouldBeNull()
     }
 
-    "every page a routing names is spelled on the id its machine registers under" {
+    "every page a routing names is spelled on the id its screen registers under" {
         val ids = mapOf(
-            Destination.PeopleEditor("p") to PeopleEditorMachine.SCREEN_ID,
-            Destination.PeopleTrash to PeopleTrashMachine.screenId,
-            Destination.HealthHome() to HealthHomeMachine.SCREEN_ID,
-            Destination.HealthMetric("steps") to HealthMetricMachine.SCREEN_ID,
-            Destination.HealthWorkout("a") to HealthWorkoutMachine.SCREEN_ID,
-            Destination.HealthConnect() to HealthConnectMachine.SCREEN_ID,
+            Destination.PhotosHome() to ScreenIds.PHOTOS_GRID,
+            Destination.PhotoLightbox("a1") to ScreenIds.PHOTOS_LIGHTBOX,
+            PeopleEntry.home() to ScreenIds.RUST_SCREEN,
+            HealthEntry.home() to ScreenIds.RUST_SCREEN,
         )
         ids.forEach { (destination, id) -> ScreenOpenings.of(destination).shouldNotBeNull().screenId shouldBe id }
-    }
-
-    "the openings carry what the page opens on" {
-        PeopleEditorEvent.ADAPTER.decode(ScreenOpenings.of(Destination.PeopleEditor("p9", isNew = true))!!.event).opened!!.run {
-            minted_party_id shouldBe "p9"
-            party_id shouldBe ""
-        }
-        PeopleEditorEvent.ADAPTER.decode(ScreenOpenings.of(Destination.PeopleEditor("p9"))!!.event).opened!!.party_id shouldBe "p9"
     }
 
     // --- Notes -----------------------------------------------------------
@@ -116,35 +94,6 @@ class AppRoutingSpec : StringSpec({
         book.route.notes_home!!.notebook_id shouldBe "nb"
         book.route.notes_home!!.notebook_name shouldBe "Cabin"
         (RowRoutes.appHome(AppIds.NOTES) as Destination.RustScreen).route.screen shouldBe "notes.home"
-    }
-
-    // --- People ----------------------------------------------------------
-
-    "People: a person, a touch, Add and Trash push; a new person's id is minted once, for the route" {
-        PeopleRouting.home(PeopleHomeEvent(person = PeopleHomeEvent.PersonPicked(party_id = "p1", name = "Ada"))) shouldBe
-            Destination.PeoplePerson("p1", "Ada")
-        PeopleRouting.home(PeopleHomeEvent(log_touch = PeopleHomeEvent.LogTouchRequested(party_id = "p1", name = "Ada"))) shouldBe
-            Destination.PeoplePerson("p1", "Ada", logTouch = true)
-        PeopleRouting.home(PeopleHomeEvent(person = PeopleHomeEvent.PersonPicked())).shouldBeNull()
-        val added = PeopleRouting.home(PeopleHomeEvent(add_person = PeopleHomeEvent.AddPersonRequested())) as Destination.PeopleEditor
-        added.isNew shouldBe true
-        added.partyId.matches(Regex("^[0-9a-f-]{36}$")) shouldBe true
-        PeopleRouting.home(PeopleHomeEvent(more_row = PeopleHomeEvent.MoreRowPicked(key = PeopleHomeMachine.MORE_TRASH))) shouldBe
-            Destination.PeopleTrash
-    }
-
-    "People: Edit opens the person the page holds; a channel tap names its row" {
-        val edit = PeoplePersonEvent(edit = PeoplePersonEvent.EditRequested())
-        PeopleRouting.person(edit, PeoplePersonState()).shouldBeNull()
-        PeopleRouting.person(edit, PeoplePersonState(party_id = "p1")) shouldBe Destination.PeopleEditor("p1")
-        val row = PeopleChannelRow(channel_id = "c2", value_ = "+31 6")
-        val state = PeoplePersonState(party_id = "p1", data_ = PeoplePersonData(channels = listOf(PeopleChannelRow(channel_id = "c1"), row)))
-        val tapped = PeoplePersonEvent(channel = PeoplePersonEvent.ChannelTapped(channel_id = "c2"))
-        PeopleRouting.channel(tapped, state) shouldBe row
-        PeopleChannelRow.ADAPTER.decode(PeopleRouting.channelRow(tapped.encode(), state.encode())!!) shouldBe row
-        PeopleRouting.channelRow(edit.encode(), state.encode()).shouldBeNull()
-        PeopleRouting.route(PeoplePersonMachine.SCREEN_ID, edit.encode(), state.encode())!!.openings.single().screenId shouldBe
-            PeopleEditorMachine.SCREEN_ID
     }
 
     // --- Locker ----------------------------------------------------------

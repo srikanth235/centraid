@@ -1,21 +1,13 @@
-import SwiftProtobuf
 import SwiftUI
 
 import CentraidShared
 
-// HEALTH'S SHARED DRAWING PARTS (#1129).
+// HEALTH'S SHARED DRAWING PARTS (#1129, #1135).
 //
 // Every word, number and unit here is the state's, and every length is the state's basis points
 // of its own span (10,000 is full): nothing here computes a typical, a range or a delta, and
 // nothing picks a unit. The identity hue (olive, R-1129-10) is drawn in exactly one place — the
 // bar of the period a chart's `current` names — and the app's icon chip, which is the catalogue's.
-
-/// One Health event, encoded: the bytes every Health bridge takes.
-func healthEvent<Event: SwiftProtobuf.Message>(_ type: Event.Type, _ build: (inout Event) -> Void) -> Data {
-    var event = Event()
-    build(&event)
-    return event.encoded
-}
 
 /// A basis point length as a fraction, clamped: 10,000 is the whole span.
 func healthFraction<Number: BinaryInteger>(_ basisPoints: Number) -> CGFloat {
@@ -24,36 +16,36 @@ func healthFraction<Number: BinaryInteger>(_ basisPoints: Number) -> CGFloat {
 
 // MARK: - The read law, per state
 
-extension Centraid_Screen_V1_HealthHomeState {
-    var readContent: ScreenContent<Centraid_Screen_V1_HealthHomeData> {
+extension Centraid_Core_V1_HealthHomeState {
+    var readContent: ScreenContent<Centraid_Core_V1_HealthHomeData> {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .denied(denied)?: return .gated(denied)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
     }
 }
 
-extension Centraid_Screen_V1_HealthMetricState {
-    var readContent: ScreenContent<Centraid_Screen_V1_HealthMetricData> {
+extension Centraid_Core_V1_HealthMetricState {
+    var readContent: ScreenContent<Centraid_Core_V1_HealthMetricData> {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .denied(denied)?: return .gated(denied)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
     }
 }
 
-extension Centraid_Screen_V1_HealthWorkoutState {
-    var readContent: ScreenContent<Centraid_Screen_V1_HealthWorkoutData> {
+extension Centraid_Core_V1_HealthWorkoutState {
+    var readContent: ScreenContent<Centraid_Core_V1_HealthWorkoutData> {
         switch content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .denied(denied)?: return .gated(denied)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
@@ -106,7 +98,7 @@ struct HealthNote: View {
 /// band, the day as a dot, both placed by the state's basis points. No dot when there is no
 /// figure. The hero's bar carries its three labels under it.
 struct HealthRangeBarView: View {
-    let bar: Centraid_Screen_V1_HealthRangeBar
+    let bar: Centraid_Core_V1_HealthRangeBar
     var hero: Bool = false
 
     @Environment(\.colorScheme) private var scheme
@@ -159,7 +151,7 @@ struct HealthRangeBarView: View {
 /// ONE DAILY METRIC AS TODAY LISTS IT: name and figure, when and the typical, the range bar.
 /// The whole line is the tap to the metric's page.
 struct HealthMetricLineView: View {
-    let line: Centraid_Screen_V1_HealthMetricLine
+    let line: Centraid_Core_V1_HealthMetricLine
     let onTap: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -213,7 +205,7 @@ struct HealthMetricLineView: View {
 /// ONE WORKOUT AS A LIST DRAWS IT: its kind's mark on a neutral chip, the title over the meta,
 /// and when. The whole row opens the workout.
 struct HealthWorkoutRow: View {
-    let row: Centraid_Screen_V1_HealthWorkoutLine
+    let row: Centraid_Core_V1_HealthWorkoutLine
     let onTap: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -310,7 +302,7 @@ struct HealthSparkline: View {
 /// THE CURRENT BUCKET IS THE ONE HUE MARK (R-1129-10); a bucket above the typical is drawn in
 /// soft ink, the rest in the quiet line.
 struct HealthBarChart: View {
-    let data: Centraid_Screen_V1_HealthMetricData
+    let data: Centraid_Core_V1_HealthMetricData
 
     @Environment(\.colorScheme) private var scheme
 

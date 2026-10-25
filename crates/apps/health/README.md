@@ -6,7 +6,7 @@ Health follows the phone's health store one way — HealthKit on iOS, Health Con
 - a day with no row is **not a day of zero**: an average is over the days that have one, and a figure nothing feeds is absent;
 - a metric folds its own way: steps, energy and exercise are sums (a period has a total), sleep is a night's total (never added across nights), resting heart rate an average, and weight's figure for a span is its **newest** value;
 - **nothing derived is stored**: the figures are Rust's (R-1129-12), and a shell formats them by the phone's locale and computes none;
-- nothing is ever written to the health store (R-1129-7), and Chat does not read Health (R-1129-11).
+- nothing is ever written to the health store (R-1129-7), and Chat reads Health like any app (owner ruling of 2026-10-24, #1135; R-1129-11 is superseded).
 
 ## Modules
 

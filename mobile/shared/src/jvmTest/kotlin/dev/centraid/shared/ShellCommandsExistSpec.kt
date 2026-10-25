@@ -124,7 +124,7 @@ class ShellCommandsExistSpec : StringSpec({
             .toSet()
         val registered = registeredCommands(repositoryRoot)
         listOf(
-            "person.edit", // a `const val EDIT_COMMAND`
+            "photo.add", // a `const val ACTION` (People's `EDIT_COMMAND` went with its KMP code, #1135)
             "locker.add_item", // a bare `const val COMMAND`
             "entity.purge", // an argument to a trash spec
             "vault.rename", // an `if` branch
@@ -352,8 +352,8 @@ private fun unknownIds(
 /**
  * THE `ScreenIds` CONSTANTS SOME SCREEN IS BOUND TO. `nav/ScreenIds.kt` states
  * the ids cross-app routes open screens by, and each machine aliases its own
- * (`SCREEN_ID = ScreenIds.PEOPLE_HOME`) or `ScreenOpenings` opens it
- * (`screen(ScreenIds.PEOPLE_TRASH, …)`); a constant no binding reads is NOT
+ * (`SCREEN_ID = ScreenIds.MONEY_HOME`) or `ScreenOpenings` opens it
+ * (`screen(ScreenIds.MONEY_TRANSACTION, …)`); a constant no binding reads is NOT
  * exempt, so a command parked in that file is still a finding.
  */
 private fun registeredScreenIds(sources: List<Pair<String, String>>): Set<String> =

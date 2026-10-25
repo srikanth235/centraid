@@ -8,10 +8,12 @@ pub mod agenda;
 pub mod catalog;
 pub mod docs;
 pub mod field;
+pub mod health;
 pub mod kit;
 pub mod locker;
 pub mod money;
 pub mod notes;
+pub mod people;
 pub mod photos;
 pub mod proof;
 pub mod registry;
@@ -36,7 +38,9 @@ pub fn standard() -> Runtime {
             .merge(locker::registry())
             .merge(money::registry())
             .merge(docs::registry())
+            .merge(health::registry())
             .merge(notes::registry())
+            .merge(people::registry())
             .merge(photos::registry()),
         vec![
             ("proof".to_owned(), proof::route()),

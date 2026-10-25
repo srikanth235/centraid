@@ -41,9 +41,10 @@ docs,restore-version,restore,document,card,yes: crates/screens/src/docs/versions
 docs,create-folder,create,folder,direct,yes: crates/screens/src/docs/drive/mod.rs,yes
 docs,rename-folder,edit,folder,direct,no,yes
 docs,delete-folder,delete,folder,direct,no,yes
-health,record-days,log,daily_figure,card,yes: apps/health/HealthImport.kt,no
-health,follow-workouts,import,workout,card,yes: apps/health/HealthImport.kt,no
+health,record-days,log,daily_figure,card,yes: crates/screens/src/health/follow.rs,no
+health,follow-workouts,import,workout,card,yes: crates/screens/src/health/follow.rs,no
 health,delete-workout,delete,workout,card,no,no
+health,stop-following,detach,daily_figure,card,yes: crates/screens/src/health/home.rs,no
 locker,add-item,create,locker_item,direct,yes: crates/screens/src/locker/editor.rs,yes
 locker,edit-item,edit,locker_item,direct,yes: crates/screens/src/locker/editor.rs,yes
 locker,trash-item,delete,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes
@@ -104,31 +105,32 @@ notes,attach,attach,note,card,no,no
 notes,detach,detach,note,card,no,no
 notes,add-tag,tag,note,direct,yes: crates/screens/src/notes/editor.rs,no
 notes,remove-tag,untag,note,direct,yes: crates/screens/src/notes/editor.rs,no
-people,add-person,create,person,direct,yes: apps/people/PeopleEditorMachine.kt,yes
-people,edit-person,edit,person,direct,yes: apps/people/PeopleEditorMachine.kt,yes
-people,set-cadence,edit:cadence,person,direct,yes: apps/people/PeopleEditorMachine.kt,yes
-people,trash-person,delete,person,direct,yes: apps/people/PeoplePersonMachine.kt,yes
-people,restore-person,restore,person,direct,yes: apps/people/PeopleTrash.kt,yes
-people,purge-person,purge,person,card,yes: apps/people/PeopleTrash.kt,no
-people,log-interaction,log,person,direct,yes: apps/people/PeoplePersonMachine.kt,yes
-people,star-person,star,person,direct,yes: apps/people/PeopleHomeMachine.kt,yes
-people,unstar-person,unstar,person,direct,yes: apps/people/PeopleHomeMachine.kt,yes
+people,add-person,create,person,direct,yes: crates/screens/src/people/editor.rs,yes
+people,edit-person,edit,person,direct,yes: crates/screens/src/people/editor.rs,yes
+people,set-cadence,edit:cadence,person,direct,yes: crates/screens/src/people/editor.rs,yes
+people,trash-person,delete,person,direct,yes: crates/screens/src/people/person/mod.rs,yes
+people,restore-person,restore,person,direct,yes: crates/screens/src/people/trash.rs,yes
+people,purge-person,purge,person,card,yes: crates/screens/src/people/trash.rs,no
+people,log-interaction,log,person,direct,yes: crates/screens/src/people/person/mod.rs,yes
+people,star-person,star,person,direct,yes: crates/screens/src/people/home/mod.rs; crates/screens/src/people/person/mod.rs,yes
+people,unstar-person,unstar,person,direct,yes: crates/screens/src/people/home/mod.rs; crates/screens/src/people/person/mod.rs,yes
 people,move-person,add_to,person,card,no,no
-people,add-note,create,note,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,add-note,create,note,card,yes: crates/screens/src/people/person/mod.rs,no
 people,add-task,create,task,card,no,no
 people,complete-task,complete,task,card,yes: crates/screens/src/agenda/todo/ops.rs,yes
 people,reopen-task,reopen,task,card,yes: crates/screens/src/agenda/todo/ops.rs,yes
-people,add-important-date,create,important_date,card,yes: apps/people/PeoplePersonMachine.kt,no
-people,set-reminder,edit,important_date,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,add-important-date,create,important_date,card,yes: crates/screens/src/people/person/mod.rs,no
+people,set-reminder,edit,important_date,card,yes: crates/screens/src/people/person/mod.rs,no
 people,add-relationship,link,person,card,no,no
 people,add-gift,create,gift,card,no,no
 people,create-list,create,people_list,card,no,no
 people,rename-list,edit,people_list,card,no,no
-people,delete-list,delete,people_list,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,delete-list,delete,people_list,card,no,no
 people,add-journal-entry,create,journal_entry,card,no,no
-people,save-contact-channel,edit,contact_point,card,yes: apps/people/PeoplePersonMachine.kt,no
-people,delete-contact-channel,delete,contact_point,card,yes: apps/people/PeoplePersonMachine.kt,no
-people,merge-people,merge,person,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,save-contact-channel,edit,contact_point,card,yes: crates/screens/src/people/person/mod.rs,no
+people,delete-contact-channel,delete,contact_point,card,yes: crates/screens/src/people/person/mod.rs,no
+people,merge-people,merge,person,card,yes: crates/screens/src/people/person/mod.rs,no
+people,follow-contacts,import,person,card,yes: crates/screens/src/people/contacts.rs,no
 photos,upload,import,photo,card,yes: crates/screens/src/photos/editor.rs,no
 photos,edit-photo,edit,photo,card,no,no
 photos,retitle-photo,edit,photo,direct,yes: crates/screens/src/photos/lightbox.rs,yes

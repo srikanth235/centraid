@@ -1,7 +1,6 @@
 //! A RESULT IS THE CHAT'S EXISTING CARD (R-1088-7): the kind to app and entity table.
 //!
-//! The runtime's rows are twelve kinds; the chat's card names one of seven apps (Money's is the
-//! seventh, since rung fifteen) and an entity the
+//! The runtime's rows are fourteen kinds; the chat's card names one of eight apps and an entity the
 //! shell routes by. This is the one place that says which. A card is a reference (`app`,
 //! `entity`, `id`) and a few words; the app's own tile draws the row.
 //!
@@ -19,6 +18,8 @@
 //! | list | tasks | `project` | the project |
 //! | transaction | money | `transaction` | the transaction's page |
 //! | locker item | locker | `locker_item` | the item's page, behind the Locker's lock wall |
+//! | workout | health | `workout` | the workout's page |
+//! | daily figure | health | `daily_figure` | Health's front door: a day's total has no page of its own |
 //! | account, category, budget, rule | money | the kind's name | Money's home |
 //!
 //! The album, notebook and folder routes are the shell's since the containers became search results
@@ -26,7 +27,7 @@
 //! The kinds with no row route open their app's home, which is what the shell does with any entity
 //! it has no route for (`ChatRouting.appHome`): a tap that reached nothing would read as a broken
 //! card. Giving one a route is a shell change and no schema change: `chat_message_card.entity` holds
-//! any non-empty word, and `app` is one of the seven this table maps into.
+//! any non-empty word, and `app` is one of the eight this table maps into.
 
 use jiff::civil::Date;
 
@@ -72,7 +73,7 @@ const fn home(kind: Kind, app: App, entity: &'static str) -> CardKind {
 }
 
 /// THE TABLE. Every kind.
-pub const TABLE: [CardKind; 16] = [
+pub const TABLE: [CardKind; 18] = [
     row(Kind::Person, App::People, "person"),
     row(Kind::Event, App::Agenda, "event"),
     row(Kind::Task, App::Agenda, "task"),
@@ -85,6 +86,13 @@ pub const TABLE: [CardKind; 16] = [
     row(Kind::List, App::Agenda, "project"),
     row(Kind::Transaction, App::Money, "transaction"),
     row(Kind::LockerItem, App::Locker, "locker_item"),
+    row(Kind::Workout, App::Health, "workout"),
+    CardKind {
+        kind: Kind::DailyFigure,
+        app: App::Health,
+        entity: "daily_figure",
+        opens: Opens::AppHome,
+    },
     // Money's account, category, budget and rule have no page of their own in the shell's row
     // routes: a tap opens Money's home, where the lists they live in are one tap away.
     home(Kind::Account, App::Money, "account"),

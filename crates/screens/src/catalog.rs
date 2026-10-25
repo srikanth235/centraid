@@ -1360,6 +1360,49 @@ pub mod act {
                 value.request()
             }
         }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum StopFollowingSystem {
+            #[default]
+            Contacts,
+            Calendar,
+            Files,
+            Health,
+            Statement,
+        }
+        impl StopFollowingSystem {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Contacts => "contacts",
+                    Self::Calendar => "calendar",
+                    Self::Files => "files",
+                    Self::Health => "health",
+                    Self::Statement => "statement",
+                }
+            }
+        }
+
+        /// Stop following the phone's health store through follow.stop: the store's origin is retired and its workouts forget their source. Every day and every workout stays, an ordinary row from now on.
+        #[derive(Clone, Debug, Default)]
+        pub struct StopFollowing {
+            pub r#ref: String,
+            pub system: StopFollowingSystem,
+        }
+        impl StopFollowing {
+            pub const NAME: &str = "stop-following";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("ref".to_owned(), text(self.r#ref));
+                map.insert("system".to_owned(), text(self.system.wire()));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<StopFollowing> for wire::ActRequest {
+            fn from(value: StopFollowing) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod locker {
@@ -3732,6 +3775,32 @@ pub mod act {
         }
         impl From<MergePeople> for wire::ActRequest {
             fn from(value: MergePeople) -> Self {
+                value.request()
+            }
+        }
+
+        /// Follow the phone's address book through follow.contacts, one account at a time: a field the member never changed follows the phone, one they changed stands, a contact the vault does not know is matched by name to a person of the member's own before one is added, and one gone from a complete read goes to the trash if the member never edited it. A record carries a name, its phone numbers and email addresses as points, and an optional MM-DD birthday.
+        #[derive(Clone, Debug, Default)]
+        pub struct FollowContacts {
+            pub origin: String,
+            pub records: String,
+            pub complete: Option<bool>,
+            pub since: Option<String>,
+        }
+        impl FollowContacts {
+            pub const NAME: &str = "follow-contacts";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("origin".to_owned(), text(self.origin));
+                map.insert("records".to_owned(), text(self.records));
+                if let Some(it) = self.complete { map.insert("complete".to_owned(), flag(it)); }
+                if let Some(it) = self.since { map.insert("since".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<FollowContacts> for wire::ActRequest {
+            fn from(value: FollowContacts) -> Self {
                 value.request()
             }
         }

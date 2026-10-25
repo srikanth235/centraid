@@ -1869,6 +1869,24 @@
         "verb": "delete"
       },
       {
+        "action": "stop-following",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "card",
+        "command": "follow.stop",
+        "inverse": null,
+        "kind": "daily_figure",
+        "phrasings": [
+          "stop reading my health app",
+          "disconnect Apple Health",
+          "stop following Health Connect"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
+      },
+      {
         "action": "add-item",
         "also": [],
         "app": "locker",
@@ -3419,6 +3437,24 @@
         "verb": "merge"
       },
       {
+        "action": "follow-contacts",
+        "also": [],
+        "app": "people",
+        "bulk": true,
+        "chat": "card",
+        "command": "follow.contacts",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "import my phone's contacts",
+          "sync people from the address book on this phone",
+          "pull in my contacts"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "import"
+      },
+      {
         "action": "upload",
         "also": [],
         "app": "photos",
@@ -4422,151 +4458,7 @@
     "month",
     "year"
   ],
-  "declared_kinds": [
-    {
-      "app": "health",
-      "container": false,
-      "date": {
-        "label": "day",
-        "source": {
-          "column": "day",
-          "table": "measurement"
-        }
-      },
-      "entity": "measurement",
-      "fields": [
-        {
-          "name": "metric",
-          "source": {
-            "column": "metric",
-            "table": "measurement"
-          },
-          "type": "enum",
-          "unit": null,
-          "values": [
-            [
-              "steps",
-              "steps"
-            ],
-            [
-              "active_energy_kcal",
-              "active_energy_kcal"
-            ],
-            [
-              "exercise_min",
-              "exercise_min"
-            ],
-            [
-              "sleep_min",
-              "sleep_min"
-            ],
-            [
-              "resting_hr_bpm",
-              "resting_hr_bpm"
-            ],
-            [
-              "weight_kg",
-              "weight_kg"
-            ]
-          ]
-        },
-        {
-          "name": "value",
-          "source": {
-            "column": "value",
-            "table": "measurement"
-          },
-          "type": "number",
-          "unit": null,
-          "values": []
-        }
-      ],
-      "id": "daily_figure",
-      "name": "daily figure",
-      "name_source": {
-        "column": "metric",
-        "table": "measurement"
-      },
-      "pk": "day",
-      "plural": "daily figures",
-      "table": "measurement",
-      "trash": false
-    },
-    {
-      "app": "health",
-      "container": false,
-      "date": {
-        "label": "start",
-        "source": {
-          "column": "starts",
-          "table": "activity"
-        }
-      },
-      "entity": "activity",
-      "fields": [
-        {
-          "name": "moving",
-          "source": {
-            "column": "moving_s",
-            "table": "workout"
-          },
-          "type": "number",
-          "unit": "s",
-          "values": []
-        },
-        {
-          "name": "distance",
-          "source": {
-            "column": "distance_m",
-            "table": "workout"
-          },
-          "type": "number",
-          "unit": "m",
-          "values": []
-        },
-        {
-          "name": "energy",
-          "source": {
-            "column": "energy_kcal",
-            "table": "workout"
-          },
-          "type": "number",
-          "unit": "kcal",
-          "values": []
-        },
-        {
-          "name": "heart_rate",
-          "source": {
-            "column": "heart_bpm",
-            "table": "workout"
-          },
-          "type": "number",
-          "unit": "bpm",
-          "values": []
-        },
-        {
-          "name": "climb",
-          "source": {
-            "column": "climb_m",
-            "table": "workout"
-          },
-          "type": "number",
-          "unit": "m",
-          "values": []
-        }
-      ],
-      "id": "workout",
-      "name": "workout",
-      "name_source": {
-        "column": "title",
-        "table": "entity"
-      },
-      "pk": "id",
-      "plural": "workouts",
-      "table": "workout",
-      "trash": true
-    }
-  ],
+  "declared_kinds": [],
   "declared_verbs": [],
   "decline_reasons": [
     "out_of_scope",
@@ -5467,6 +5359,164 @@
         "category",
         "transfer",
         "status"
+      ]
+    },
+    {
+      "card": "daily figure: name, date (day), metric (steps|active_energy_kcal|exercise_min|sleep_min|resting_hr_bpm|weight_kg), value",
+      "container": false,
+      "date": {
+        "label": "day",
+        "source": {
+          "column": "day",
+          "table": "measurement"
+        }
+      },
+      "entity": "measurement",
+      "fields": [
+        {
+          "name": "metric",
+          "source": {
+            "column": "metric",
+            "table": "measurement"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "steps",
+              "steps"
+            ],
+            [
+              "active_energy_kcal",
+              "active_energy_kcal"
+            ],
+            [
+              "exercise_min",
+              "exercise_min"
+            ],
+            [
+              "sleep_min",
+              "sleep_min"
+            ],
+            [
+              "resting_hr_bpm",
+              "resting_hr_bpm"
+            ],
+            [
+              "weight_kg",
+              "weight_kg"
+            ]
+          ]
+        },
+        {
+          "name": "value",
+          "source": {
+            "column": "value",
+            "table": "measurement"
+          },
+          "type": "number",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "daily_figure",
+      "links": [],
+      "name": "daily figure",
+      "name_source": {
+        "column": "metric",
+        "table": "measurement"
+      },
+      "pk": "day",
+      "plural": "daily figures",
+      "table": "measurement",
+      "trash": false,
+      "verbs": [],
+      "where_fields": [
+        "metric",
+        "value"
+      ]
+    },
+    {
+      "card": "workout: name, date (start), moving (s), distance (m), energy (kcal), heart_rate (bpm), climb (m)",
+      "container": false,
+      "date": {
+        "label": "start",
+        "source": {
+          "column": "starts",
+          "table": "activity"
+        }
+      },
+      "entity": "activity",
+      "fields": [
+        {
+          "name": "moving",
+          "source": {
+            "column": "moving_s",
+            "table": "workout"
+          },
+          "type": "number",
+          "unit": "s",
+          "values": []
+        },
+        {
+          "name": "distance",
+          "source": {
+            "column": "distance_m",
+            "table": "workout"
+          },
+          "type": "number",
+          "unit": "m",
+          "values": []
+        },
+        {
+          "name": "energy",
+          "source": {
+            "column": "energy_kcal",
+            "table": "workout"
+          },
+          "type": "number",
+          "unit": "kcal",
+          "values": []
+        },
+        {
+          "name": "heart_rate",
+          "source": {
+            "column": "heart_bpm",
+            "table": "workout"
+          },
+          "type": "number",
+          "unit": "bpm",
+          "values": []
+        },
+        {
+          "name": "climb",
+          "source": {
+            "column": "climb_m",
+            "table": "workout"
+          },
+          "type": "number",
+          "unit": "m",
+          "values": []
+        }
+      ],
+      "kind": "workout",
+      "links": [],
+      "name": "workout",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "workouts",
+      "table": "workout",
+      "trash": true,
+      "verbs": [],
+      "where_fields": [
+        "moving",
+        "distance",
+        "energy",
+        "heart_rate",
+        "climb"
       ]
     },
     {

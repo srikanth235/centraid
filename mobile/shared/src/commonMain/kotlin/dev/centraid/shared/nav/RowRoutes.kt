@@ -47,6 +47,7 @@ public object RowRoutes {
     private const val PERSON: String = "person"
     private const val EVENT: String = "event"
     private const val TRANSACTION: String = "transaction"
+    private const val WORKOUT: String = "workout"
     private const val THREAD: String = "thread"
     private const val LOCKER_ITEM: String = "locker_item"
 
@@ -70,10 +71,11 @@ public object RowRoutes {
         AppIds.PHOTOS to ALBUM -> PhotosShelfEntry.album(row.id, row.title)
         AppIds.DOCS to FOLDER -> DocsEntry.folder(row.id, row.title, parent = parent)
         AppIds.DOCS to DOCUMENT -> DocsEntry.document(row.id, row.title, parent = parent)
-        AppIds.PEOPLE to PERSON -> Destination.PeoplePerson(row.id, row.title)
+        AppIds.PEOPLE to PERSON -> PeopleEntry.person(row.id, row.title)
         AppIds.AGENDA to EVENT -> AgendaEntry.event(eventId = row.id, instanceKey = row.qualifier)
         AppIds.PHOTOS to PHOTO -> PhotosEntry.lightbox(row.id, neighbours.ifEmpty { listOf(row.id) })
         AppIds.MONEY to TRANSACTION -> MoneyEntry.transaction(row.id, parent = parent)
+        AppIds.HEALTH to WORKOUT -> HealthEntry.workout(row.id, parent = parent)
         AppIds.LOCKER to LOCKER_ITEM -> lockerItem(row, parent)
         else -> appHome(row.app)
     }
@@ -111,11 +113,11 @@ public object RowRoutes {
     public fun appHome(app: String): Destination? = when (app) {
         AppIds.NOTES -> NotesEntry.home()
         AppIds.DOCS -> DocsEntry.home()
-        AppIds.PEOPLE -> Destination.PeopleHome()
+        AppIds.PEOPLE -> PeopleEntry.home()
         AppIds.AGENDA -> AgendaEntry.home()
         AppIds.PHOTOS -> PhotosEntry.home()
         AppIds.MONEY -> MoneyEntry.home()
-        AppIds.HEALTH -> Destination.HealthHome()
+        AppIds.HEALTH -> HealthEntry.home()
         else -> null
     }
 

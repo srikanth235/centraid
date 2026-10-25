@@ -1,20 +1,24 @@
 package dev.centraid.shared
 
+import centraid.core.v1.AppQueryRequest
+import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.CommandStatus
+import centraid.screen.v1.ReadFailure
+import centraid.screen.v1.SeatState
 import centraid.screen.v1.BackupState
 import centraid.screen.v1.MediaPermission
-import centraid.screen.v1.Autosave
-import centraid.screen.v1.PeopleEditorEvent
-import centraid.screen.v1.PeopleEditorState
-import centraid.screen.v1.PeopleProfileDraft
 import dev.centraid.core.CentraidCore
-import dev.centraid.shared.apps.people.PeopleEditorMachine
-import dev.centraid.shared.apps.people.PeopleEditorReads
+import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.platform.FakePlatformServices
+import dev.centraid.shared.screen.ScreenEffect
+import dev.centraid.shared.screen.ScreenMachine
+import dev.centraid.shared.screen.Step
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.CameraRoll
 import dev.centraid.shared.shell.Shelf
+import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenQueryRuntime
+import dev.centraid.shared.sync.ScreenWrites
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
@@ -115,7 +119,24 @@ class VaultMovedSpec : StringSpec({
 
     "a save on a frozen vault is DENIED with the sentence, and never reaches the core" {
         runTest {
-            val host = ScreenHost(PeopleEditorMachine)
+            // A MACHINE THAT EMITS A WRITE, as every editor does: this law is the
+            // runtime's, not any one screen's (People's editor, which drove it,
+            // is Rust's now, #1135).
+            val machine = object : ScreenMachine<List<String>, String> {
+                override fun initial(): List<String> = emptyList()
+
+                override fun reduce(state: List<String>, event: String): Step<List<String>> =
+                    if (event == "save") {
+                        Step(state, listOf(ScreenEffect.SubmitWrite("person.edit", "{}", "person.edit:p-1")))
+                    } else {
+                        Step(state + event)
+                    }
+
+                override fun rowsChanged(table: String, keys: List<String>): String? = null
+
+                override fun seatChanged(seat: SeatState): String? = null
+            }
+            val host = ScreenHost(machine)
             val seen = mutableListOf<Pair<CommandStatus, String>>()
             // A HEALTHY HANDLE, OPEN, and that is what makes the assertion
             // worth making: the refusal has to happen in front of a door that
@@ -136,51 +157,34 @@ class VaultMovedSpec : StringSpec({
             ScreenQueryRuntime(
                 core = { core },
                 host = host,
-                queries = PeopleEditorReads,
+                queries = object : ScreenQueries<List<String>, String> {
+                    override val screenId: String = "probe.screen"
+                    override val tables: Set<String> = emptySet()
+                    override fun requests(state: List<String>, now: DeviceClock.Reading): List<AppQueryRequest>? = null
+                    override fun arrived(answers: List<AppQueryResponse>): String = "arrived"
+                    override fun refused(failure: ReadFailure): String = "refused"
+                },
                 clock = dev.centraid.shared.platform.FakeDeviceClock(),
                 scope = runtimeScope,
-                writes = object : dev.centraid.shared.sync.ScreenWrites<
-                    PeopleEditorState,
-                    PeopleEditorEvent,
-                    > {
-                    override val appId: String = PeopleEditorReads.appId
+                writes = object : ScreenWrites<List<String>, String> {
+                    override val appId: String = "people"
 
-                    override fun settled(
-                        status: CommandStatus,
-                        sentence: String,
-                        invokeKey: String,
-                    ): PeopleEditorEvent {
+                    override fun settled(status: CommandStatus, sentence: String, invokeKey: String): String {
                         seen += status to sentence
-                        return PeopleEditorReads.settled(status, sentence, invokeKey)
+                        return "settled"
                     }
                 },
                 readOnly = { Shelf.MOVED_SENTENCE },
             ).start()
 
-            // DRIVEN THROUGH THE REAL EDITOR, so what is refused is the write
-            // the product actually emits rather than one this test invented.
-            host.send(PeopleEditorEvent(opened = PeopleEditorEvent.Opened(party_id = "p-1")))
-            host.send(
-                PeopleEditorEvent(
-                    data_ = PeopleEditorEvent.DataArrived(draft = PeopleProfileDraft(display_name = "Dana", met = "At the studio")),
-                ),
-            )
-            host.send(PeopleEditorEvent(met = PeopleEditorEvent.MetChanged(text = "At the studio, twice")))
-            host.send(PeopleEditorMachine.left())
+            host.send("save")
             runtimeScope.cancel()
 
             seen shouldBe listOf(CommandStatus.COMMAND_STATUS_DENIED to Shelf.MOVED_SENTENCE)
-            // NOTHING WAS SUBMITTED. The editor's `Opened` also asks for a
-            // read, and that one is allowed through — so the assertion is that
-            // no request carried a COMMAND, which is what a write is.
+            // NOTHING WAS SUBMITTED: no request carried a COMMAND, which is what a write is.
             asked.none { it.request?.command != null }.shouldBeTrue()
-            // AND THE EDITOR RENDERS IT AS A REFUSAL, not as a queue badge
-            // promising a save that will never happen. The sentence's own
-            // journey onto the draft is `WriteRunnerSpec`'s — this harness's
-            // stub core refuses the editor's opening READ a beat later, which
-            // clears the draft, and chasing that ordering would be testing the
-            // stub. What belongs here is that a frozen vault denies.
-            host.state.value.autosave.shouldNotBeNull().phase shouldBe Autosave.Phase.PHASE_REFUSED
+            // AND THE SCREEN WAS TOLD, by the settled event its writes lens folds.
+            host.state.value shouldBe listOf("settled")
         }
     }
 

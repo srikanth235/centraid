@@ -41,6 +41,7 @@ impl World {
         driver.call(wire::screen_request::Kind::Environment(wire::Environment {
             locale: "en".to_owned(),
             zone: ZONE.to_owned(),
+            ..Default::default()
         }));
         let parties = driver
             .handle
@@ -100,6 +101,7 @@ impl World {
             .call(wire::screen_request::Kind::Environment(wire::Environment {
                 locale: "en".to_owned(),
                 zone: zone.to_owned(),
+                ..Default::default()
             }));
     }
 

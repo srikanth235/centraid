@@ -10,6 +10,8 @@ notebook: name · links: notes · verbs: create edit delete
 folder: name · links: documents · verbs: create edit delete
 list: name, area · links: tasks · verbs: create edit
 transaction: name, date (posted), amount (USD), account, category, transfer, status (posted|void) · verbs: edit unlink
+daily figure: name, date (day), metric (steps|active_energy_kcal|exercise_min|sleep_min|resting_hr_bpm|weight_kg), value
+workout: name, date (start), moving (s), distance (m), energy (kcal), heart_rate (bpm), climb (m)
 account: name, type (checking|savings|credit_card|cash), currency, opening (USD), on_budget (yes|no) · verbs: create edit archive unarchive
 category: name, key, group · verbs: create archive unarchive
 budget: name, date (month), amount (USD), currency, carry (yes|no)

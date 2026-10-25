@@ -318,11 +318,13 @@ fn the_roster_is_the_schemas_not_a_check() {
         w.run("thread.save_turn", input).status
     };
     assert_eq!(attempt(json!(null), "agenda"), CommandStatus::Executed);
-    // Health is never named; Locker is an app a card names and a scope (the owner's ruling of
-    // 2026-10-22); there is no `tasks` app, the tasks are Agenda's (#1128).
+    // Health and Locker are apps a card names and a scope (the owner's rulings of 2026-10-22 and
+    // 2026-10-24); there is no `tasks` app, the tasks are Agenda's (#1128).
     assert_ne!(attempt(json!(null), "tasks"), CommandStatus::Executed);
     assert_eq!(attempt(json!(null), "locker"), CommandStatus::Executed);
-    assert_ne!(attempt(json!(null), "health"), CommandStatus::Executed);
+    assert_eq!(attempt(json!(null), "health"), CommandStatus::Executed);
+    assert_eq!(attempt(json!("health"), "notes"), CommandStatus::Executed);
+    assert_ne!(attempt(json!(null), "weather"), CommandStatus::Executed);
     assert_ne!(attempt(json!("tasks"), "notes"), CommandStatus::Executed);
     assert_eq!(attempt(json!("locker"), "notes"), CommandStatus::Executed);
     assert_eq!(attempt(json!("photos"), "notes"), CommandStatus::Executed);
@@ -460,7 +462,11 @@ fn a_card_is_live_while_its_row_is_and_an_unknown_word_is_not_evidence_of_a_hole
         !vault.chat_card_row_exists("notes", "task", &note).unwrap(),
         "a note is no task"
     );
-    assert!(!vault.chat_card_row_exists("health", "note", &note).unwrap());
+    assert!(
+        !vault
+            .chat_card_row_exists("weather", "note", &note)
+            .unwrap()
+    );
     assert!(
         !vault
             .chat_card_row_exists("locker", "locker_item", "no-such-item")

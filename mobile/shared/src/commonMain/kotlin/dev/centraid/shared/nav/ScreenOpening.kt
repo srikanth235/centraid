@@ -1,12 +1,5 @@
 package dev.centraid.shared.nav
 
-import centraid.screen.v1.HealthConnectEvent
-import centraid.screen.v1.HealthHomeEvent
-import centraid.screen.v1.HealthMetricEvent
-import centraid.screen.v1.HealthWorkoutEvent
-import centraid.screen.v1.PeopleEditorEvent
-import centraid.screen.v1.PeopleHomeEvent
-import centraid.screen.v1.PeoplePersonEvent
 import centraid.screen.v1.TrashListEvent
 
 /**
@@ -32,49 +25,6 @@ public object ScreenOpenings {
      * spells (a shell-owned page, or one the callers have not needed yet).
      */
     public fun of(destination: Destination): ScreenOpening? = when (destination) {
-        is Destination.PeopleHome -> screen(
-            ScreenIds.PEOPLE_HOME,
-            PeopleHomeEvent(opened = PeopleHomeEvent.Opened(destination = destination.destination)).encode(),
-        )
-        is Destination.PeoplePerson -> screen(
-            ScreenIds.PEOPLE_PERSON,
-            PeoplePersonEvent(
-                opened = PeoplePersonEvent.Opened(
-                    party_id = destination.partyId,
-                    name = destination.name,
-                    log_touch = destination.logTouch,
-                ),
-            ).encode(),
-        )
-        // HEALTH: the phone's facts are stamped on arrival (`HealthRouting.opened`), never spelled here.
-        is Destination.HealthHome -> screen(
-            ScreenIds.HEALTH_HOME,
-            HealthHomeEvent(opened = HealthHomeEvent.Opened(destination = destination.destination)).encode(),
-        )
-        is Destination.HealthMetric -> screen(
-            ScreenIds.HEALTH_METRIC,
-            HealthMetricEvent(opened = HealthMetricEvent.Opened(metric = destination.metric, parent = destination.parent)).encode(),
-        )
-        is Destination.HealthWorkout -> screen(
-            ScreenIds.HEALTH_WORKOUT,
-            HealthWorkoutEvent(opened = HealthWorkoutEvent.Opened(activity_id = destination.activityId, parent = destination.parent)).encode(),
-        )
-        is Destination.HealthConnect -> screen(
-            ScreenIds.HEALTH_CONNECT,
-            HealthConnectEvent(opened = HealthConnectEvent.Opened(parent = destination.parent)).encode(),
-        )
-        // A NEW PERSON's id rides as the minted one: the editor adds them on its first save.
-        is Destination.PeopleEditor -> screen(
-            ScreenIds.PEOPLE_EDITOR,
-            PeopleEditorEvent(
-                opened = if (destination.isNew) {
-                    PeopleEditorEvent.Opened(minted_party_id = destination.partyId)
-                } else {
-                    PeopleEditorEvent.Opened(party_id = destination.partyId)
-                },
-            ).encode(),
-        )
-        Destination.PeopleTrash -> screen(ScreenIds.PEOPLE_TRASH, TrashListEvent(opened = TrashListEvent.Opened()).encode())
         // A SCREEN RUST OWNS: the event is the `Route` Rust built, which the shell pushes as it stands.
         is Destination.RustScreen -> screen(ScreenIds.RUST_SCREEN, destination.route.encode())
         else -> null

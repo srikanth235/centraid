@@ -229,6 +229,13 @@ fn candidates(source: Source, world: &World, today: Date) -> Candidates {
             dataless.push(say(app, "What was my biggest expense this month?"));
             dataless.push(say(app, "What came in this month?"));
         }
+        // Health's rows are daily figures and workouts, not entities a chip can name, so none is
+        // backed; each question is one its `today`, `series` and `workouts` queries answer.
+        Source::Other(App::Health) => {
+            dataless.push(say(app, "How did I sleep this week?"));
+            dataless.push(say(app, "How many steps did I take today?"));
+            dataless.push(say(app, "What workouts did I do lately?"));
+        }
         // A Locker item's title is a chip a member did not ask to see, so none is backed; each
         // question reads plain fields (`type`, `starred`) and never a sealed value (R-1088-3).
         Source::Other(App::Locker) => {

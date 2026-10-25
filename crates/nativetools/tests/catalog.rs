@@ -98,13 +98,18 @@ fn a_declared_kind_has_no_variant_and_a_declared_verb_names_a_catalog_action() {
         );
     }
     let ids: BTreeSet<&str> = DECLARED_KINDS.iter().map(|kind| kind.id).collect();
-    for expected in ["daily_figure", "workout"] {
-        assert!(ids.contains(expected), "no declared kind {expected}");
-    }
-    // Money's account, category, budget and rule went live with its screens (#1135).
-    for live_now in ["account", "category", "budget", "rule"] {
-        assert!(!ids.contains(live_now), "{live_now} is still declared");
-        assert!(Kind::parse(live_now).is_some(), "{live_now} does not parse");
+    // Money's account, category, budget and rule went live with its screens, and Health's daily
+    // figure and workout with theirs (#1135).
+    for (id, name) in [
+        ("account", "account"),
+        ("category", "category"),
+        ("budget", "budget"),
+        ("rule", "rule"),
+        ("daily_figure", "daily figure"),
+        ("workout", "workout"),
+    ] {
+        assert!(!ids.contains(id), "{id} is still declared");
+        assert!(Kind::parse(name).is_some(), "{name} does not parse");
     }
     let all = manifests();
     for row in DECLARED_VERBS {
@@ -157,7 +162,7 @@ fn every_declared_enum_is_exactly_its_columns_check_list() {
             seen += 1;
         }
     }
-    assert_eq!(seen, 1, "daily_figure.metric");
+    assert_eq!(seen, 0, "every kind the catalog declares is live");
     // and the live kinds' enums are still the live test's (`meta.rs`)
     assert!(!meta::mapped_columns().is_empty());
 }

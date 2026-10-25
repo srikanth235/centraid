@@ -3,13 +3,12 @@ package dev.centraid.shared
 import centraid.core.v1.AgendaDestination
 import centraid.core.v1.DocsDestination
 import centraid.core.v1.Route
-import dev.centraid.shared.apps.health.HealthHomeMachine
-import dev.centraid.shared.apps.people.PeopleHomeMachine
-import dev.centraid.shared.apps.people.PeoplePersonMachine
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.DocsEntry
+import dev.centraid.shared.nav.PeopleEntry
 import dev.centraid.shared.nav.RowRef
+import dev.centraid.shared.nav.HealthEntry
 import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.nav.ScreenOpenings
@@ -51,9 +50,10 @@ class ScreenOpeningsSpec : StringSpec({
         opened.folder_name shouldBe "Taxes"
         opened.parent shouldBe "Search"
 
-        RowRoutes.route(row("people", "person", "pe1", "Ada"))!!.screenId shouldBe PeoplePersonMachine.SCREEN_ID
-        RowRoutes.route(row("money", "transaction", "tx1"))!!.screenId shouldBe
-            dev.centraid.shared.nav.ScreenIds.RUST_SCREEN
+        val person = RowRoutes.route(row("people", "person", "pe1", "Ada"))!!
+        person.screenId shouldBe ScreenIds.RUST_SCREEN
+        Route.ADAPTER.decode(person.event) shouldBe PeopleEntry.person("pe1", "Ada").route
+        RowRoutes.route(row("money", "transaction", "tx1"))!!.screenId shouldBe ScreenIds.RUST_SCREEN
         // A NOTE MAY LINK A LOCKER ITEM (#1135), and opening the link is Locker's Rust screen, whose own
         // wall covers it like every Locker destination.
         RowRoutes.route(row("locker", "locker_item", "lk1", "Bank"))!!.screenId shouldBe
@@ -83,10 +83,10 @@ class ScreenOpeningsSpec : StringSpec({
     }
 
     "a noun the table has no row for opens the app's home, an unknown app opens nothing" {
-                RowRoutes.route(row("people", "tag", "x"))!!.screenId shouldBe PeopleHomeMachine.SCREEN_ID
-        RowRoutes.route(row("money", "tag", "x"))!!.screenId shouldBe
-            dev.centraid.shared.nav.ScreenIds.RUST_SCREEN
-        RowRoutes.route(row("health", "activity", "x"))!!.screenId shouldBe HealthHomeMachine.SCREEN_ID
+        Route.ADAPTER.decode(RowRoutes.route(row("people", "tag", "x"))!!.event) shouldBe PeopleEntry.home().route
+        RowRoutes.route(row("money", "tag", "x"))!!.screenId shouldBe ScreenIds.RUST_SCREEN
+        // Health's pages are Rust's (#1135): an entity it has no row for opens its home as a Route.
+        RowRoutes.route(row("health", "daily_figure", "x"))!!.screenId shouldBe ScreenIds.RUST_SCREEN
         RowRoutes.route(row("photos", "tag", "x"))!!.screenId shouldBe ScreenIds.RUST_SCREEN
         RowRoutes.route(row("weather", "forecast", "x")).shouldBeNull()
         RowRoutes.appHomeRoute("locker").shouldBeNull()
@@ -103,6 +103,18 @@ class ScreenOpeningsSpec : StringSpec({
         val rust = ScreenOpenings.of(AgendaEntry.home())!!
         rust.screenId shouldBe ScreenIds.RUST_SCREEN
         Route.ADAPTER.decode(rust.event).screen shouldBe "agenda.home"
+    }
+
+    "Health's rows and front doors are Rust routes the shell pushes" {
+        fun route(entity: String, id: String) = RowRoutes.destination(row("health", entity, id))
+        Route.ADAPTER.decode(ScreenOpenings.of(route("workout", "w1")!!)!!.event).run {
+            screen shouldBe "health.workout"
+            health_workout!!.activity_id shouldBe "w1"
+        }
+        // A day's total has no page of its own: it opens Health's front door.
+        Route.ADAPTER.decode(ScreenOpenings.of(route("daily_figure", "2026-10-20")!!)!!.event).screen shouldBe "health.home"
+        Route.ADAPTER.decode(ScreenOpenings.of(HealthEntry.connect("Health"))!!.event).health_connect!!.parent shouldBe "Health"
+        Route.ADAPTER.decode(ScreenOpenings.of(HealthEntry.metric("steps", "Today"))!!.event).health_metric!!.metric shouldBe "steps"
     }
 
     "Agenda's rows and front doors are Rust routes the shell pushes" {

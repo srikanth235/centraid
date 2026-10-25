@@ -59,7 +59,10 @@ class ChatScopeSpec : StringSpec({
             ?: error("thread is gone from contracts/schema/vault-ddl.sql; point this spec at its replacement")
         thread.groupValues[1].contains("scope TEXT,") shouldBe true
         thread.groupValues[1].contains("CHECK") shouldBe false
-        roster().none { ddl.contains("'$it'") } shouldBe true
+        // `health` is also the word of a phone store a followed origin names (`follow.system`); it
+        // is the one roster word the DDL spells, as a store and never as an app.
+        val outsideStores = ddl.lines().filterNot { it.contains("system IN (") }.joinToString("\n")
+        roster().none { outsideStores.contains("'$it'") } shouldBe true
     }
 
     "and the scopes the assistant takes (App::ALL: every app is a scope)" {
@@ -70,13 +73,14 @@ class ChatScopeSpec : StringSpec({
             ChatMachine.SCOPABLE_APPS
     }
 
-    "health is in no chat scope: Chat does not read Health (R-1129-11)" {
-        // Off by default in "What Chat may read" (owner answer 1): until that screen grants it,
-        // no scope list names Health — the shells' menu, the roster every command schema reads
-        // and the assistant's app set (its ids are the roster's).
-        ChatMachine.SCOPABLE_APPS.contains("health") shouldBe false
-        roster().contains("health") shouldBe false
-        source("crates/assist/src/app.rs").contains("Health") shouldBe false
+    "health is a chat scope like every other app (the owner's ruling of 2026-10-24, #1135)" {
+        // R-1129-11 ("Chat does not read Health") is superseded: its daily figures and workouts
+        // are live kinds, so the shells' menu, the roster every command schema reads and the
+        // assistant's app set all name Health.
+        ChatMachine.SCOPABLE_APPS.contains("health") shouldBe true
+        roster().contains("health") shouldBe true
+        source("crates/assist/src/app.rs").contains("Health,") shouldBe true
+        ChatMachine.scopeOf("health") shouldBe "health"
     }
 
     "Locker is among them, and the list is in the order the menu draws it" {

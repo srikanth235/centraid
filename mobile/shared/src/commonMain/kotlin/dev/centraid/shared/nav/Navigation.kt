@@ -1,7 +1,6 @@
 package dev.centraid.shared.nav
 
 import centraid.core.v1.Route
-import centraid.screen.v1.PeopleHomeState
 
 /**
  * The navigation model (#1020, D-1020-E1, D-1020-E3).
@@ -62,53 +61,6 @@ public sealed interface Destination {
      */
     public data class RustScreen(val route: Route) : Destination
 
-    // --- People (#1029 port) ---
-
-    /**
-     * PEOPLE'S HOME: People or Touch, as a parameter; search is a field over it
-     * and More a sheet. A shell calls `PeopleHomeBridge.open(destination)`.
-     */
-    public data class PeopleHome(
-        val destination: PeopleHomeState.Destination =
-            PeopleHomeState.Destination.DESTINATION_PEOPLE,
-    ) : Destination
-
-    /** One person; the name rides along for the head. `logTouch` opens the Log a touch sheet. */
-    public data class PeoplePerson(
-        val partyId: String,
-        val name: String = "",
-        val logTouch: Boolean = false,
-    ) : Destination
-
-    /**
-     * The profile editor. `isNew`: `partyId` was minted by
-     * `PeopleEditorBridge.openNew` and the first save adds the person.
-     */
-    public data class PeopleEditor(val partyId: String, val isNew: Boolean = false) : Destination
-
-    public data object PeopleTrash : Destination
-
-    // --- Health (#1129) ---
-    // `parent` on a pushed Health page is the pushing page's title: the back
-    // control's word. Empty: "Health".
-
-    /**
-     * HEALTH'S HOME. Today, Trends or Workouts, as a parameter; More is a
-     * sheet. A shell calls `HealthHomeBridge.open(destination)`.
-     */
-    public data class HealthHome(
-        val destination: centraid.screen.v1.HealthHomeState.Destination =
-            centraid.screen.v1.HealthHomeState.Destination.DESTINATION_TODAY,
-    ) : Destination
-
-    /** One metric (its key, `steps`): `HealthMetricBridge.open(metric, parent)`. */
-    public data class HealthMetric(val metric: String, val parent: String = "") : Destination
-
-    /** One workout: `HealthWorkoutBridge.open(activityId, parent)`. */
-    public data class HealthWorkout(val activityId: String, val parent: String = "") : Destination
-
-    /** What Health may read, and Connect: `HealthConnectScreenBridge.open(parent)`. */
-    public data class HealthConnect(val parent: String = "") : Destination
 }
 
 /**
@@ -134,22 +86,3 @@ public data class NavStack(val entries: List<Destination> = listOf(Destination.H
         if (entries.size == 1) this else NavStack(entries.dropLast(1))
 }
 
-/** PEOPLE'S BAND, IN PLACE (#1029 port): People and Touch are one screen's parameter. */
-public fun NavStack.withPeopleDestination(destination: PeopleHomeState.Destination): NavStack {
-    val top = current
-    return if (top is Destination.PeopleHome) {
-        NavStack(entries.dropLast(1) + top.copy(destination = destination))
-    } else {
-        push(Destination.PeopleHome(destination))
-    }
-}
-
-/** HEALTH'S BAND, IN PLACE (#1129): Today, Trends and Workouts are one screen's parameter. */
-public fun NavStack.withHealthDestination(destination: centraid.screen.v1.HealthHomeState.Destination): NavStack {
-    val top = current
-    return if (top is Destination.HealthHome) {
-        NavStack(entries.dropLast(1) + top.copy(destination = destination))
-    } else {
-        push(Destination.HealthHome(destination))
-    }
-}

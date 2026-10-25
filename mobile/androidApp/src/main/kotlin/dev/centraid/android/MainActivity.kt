@@ -29,10 +29,8 @@ import dev.centraid.android.kit.LocalShellLine
 import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.AndroidPhoneFollow
-import dev.centraid.android.kit.LocalPhoneImport
 import dev.centraid.android.kit.PhoneFollowSheet
 import dev.centraid.android.kit.ShellBanner
-import dev.centraid.android.screens.people.rememberContactsImport
 import dev.centraid.shared.shell.HomeWords
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -43,9 +41,7 @@ import androidx.core.view.WindowCompat
 import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.agenda.AgendaRoutes
-import dev.centraid.android.screens.health.HealthRoutes
 import dev.centraid.android.screens.notes.NotesRoutes
-import dev.centraid.android.screens.people.PeopleRoutes
 import dev.centraid.android.screens.mediaPermissions
 import dev.centraid.android.screens.photos.PhotosRoutes
 import dev.centraid.android.screens.words.FirstLaunchScreen
@@ -62,10 +58,8 @@ import androidx.compose.ui.Modifier
 // (#1020, wave A) — the whole `by` delegate fails on the setter alone.
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import centraid.screen.v1.HomeEvent
-import centraid.screen.v1.ImportSource
 import dev.centraid.shared.kit.KitWords
 import dev.centraid.shared.kit.PhoneImport
-import dev.centraid.shared.sync.phone.PhoneSource
 import dev.centraid.android.backup.MediaStoreDeleter
 import dev.centraid.android.backup.ProcessSession
 import dev.centraid.android.screens.backup.BackupSheets
@@ -144,8 +138,6 @@ public class MainActivity : FragmentActivity() {
             agenda,
             PhotosRoutes(cacheDir),
             NotesRoutes(),
-            PeopleRoutes(),
-            HealthRoutes(health),
             homeSearch,
         )
     }
@@ -158,7 +150,7 @@ public class MainActivity : FragmentActivity() {
      * (#1135), and the 24 words' sheet's close has every Locker wall re-read
      * `keyed` (#1047 E3).
      */
-    private val agenda: AgendaRoutes by lazy { AgendaRoutes(phoneFollow, openWords = { words.openRekey() }) }
+    private val agenda: AgendaRoutes by lazy { AgendaRoutes(phoneFollow, health, openWords = { words.openRekey() }) }
 
     /** THE 24 WORDS' SHEETS (#1047 E3), over every screen. See `WordsSheets`. */
     private val words: WordsSheets by lazy {
@@ -171,7 +163,7 @@ public class MainActivity : FragmentActivity() {
      * ANDROID FOLLOWS THE PHONE (#1127): the foreground and content-observer triggers and the
      * question an account that left asks. Started in `onStart`, stopped in `onStop`.
      */
-    private val phoneFollow: AndroidPhoneFollow by lazy { AndroidPhoneFollow(this, health.reader) }
+    private val phoneFollow: AndroidPhoneFollow by lazy { AndroidPhoneFollow(this) }
 
     /**
      * HEALTH CONNECT (#1129): the reader the follower and Health's Connect share, the member's
@@ -218,7 +210,6 @@ public class MainActivity : FragmentActivity() {
      */
     override fun onStart() {
         super.onStart()
-        health.state()
         phoneFollow.start()
     }
 
@@ -429,34 +420,10 @@ public class MainActivity : FragmentActivity() {
                 // import's progress and outcome). It stays until its Done — DESIGN.md has no toast —
                 // and a held line (an import still running) has no Done.
                 var shellNote by remember { mutableStateOf(ShellNote("", holds = false)) }
-                // THE PHONE'S STORES → THE APPS, at the tap: Contacts → People
-                // (`ContactsImporter`). One door keyed by source, into the member's vault.
-                // The calendar is not one: Agenda's screen holds its import and its
-                // follow in Rust (#1135) and asks this shell for the read. Android has no
-                // system reminders: `importLabel` names no verb for them, so the door is
-                // never called with one.
-                val contactsImport = rememberContactsImport(
-                    homeSession,
-                    onStatus = { sentence, holds -> shellNote = ShellNote(sentence, holds) },
-                    onImported = { phoneFollow.requested(PhoneSource.CONTACTS) },
-                )
                 // THE QUESTION AN ACCOUNT THAT LEFT THE PHONE ASKS (R-1127-9).
                 phoneFollow.question?.let { asked ->
                     PhoneFollowSheet(asked) { keep -> phoneFollow.answer(asked, keep) }
                 }
-                val phoneImport: ((ImportSource) -> Unit)? =
-                    remember(contactsImport, homeSession) {
-                        if (homeSession == null) {
-                            null
-                        } else {
-                            { source ->
-                                when (source) {
-                                    ImportSource.IMPORT_SOURCE_CONTACTS -> contactsImport(null)
-                                    else -> Unit
-                                }
-                            }
-                        }
-                    }
                 // THE FIRST-LAUNCH GATE: the shelf's one answer to "does this
                 // device hold no vault", read here and nowhere else.
                 val holdsNoVault by (homeSession?.shelf?.holdsNoVault ?: shelfUnread)
@@ -526,7 +493,6 @@ public class MainActivity : FragmentActivity() {
                     )
                 }
                 CompositionLocalProvider(
-                    LocalPhoneImport provides phoneImport,
                     LocalShellLine provides shellLine,
                 ) {
                 // EVERY APP'S ROOT WATCH (`AppRoutes.Global`), on every screen.
@@ -568,10 +534,9 @@ public class MainActivity : FragmentActivity() {
                     // the vault sheet, as `found`'s did — taken once.
                     val made = words.made
                     // A VAULT WAS MADE: what the phone already holds is asked
-                    // for once and brought in (R-ONBOARD-8) — the photos, then
-                    // the contacts, each prompt after the last was answered
-                    // (Android has no system reminders; the calendar is Agenda's own
-                    // import, held by its screen in Rust).
+                    // for once and brought in (R-ONBOARD-8) — the photos
+                    // (Android has no system reminders; the calendar and the contacts
+                    // are Agenda's and People's own imports, held by their screens in Rust).
                     // The photo prompt is this activity's launcher; the answer
                     // goes to the camera-roll runner, which walks on a grant.
                     // One banner says what came in (`PhoneImport.madeSummary`).
@@ -579,14 +544,6 @@ public class MainActivity : FragmentActivity() {
                         ActivityResultContracts.RequestMultiplePermissions(),
                     ) {
                         routes.filterIsInstance<PhotosRoutes>().firstOrNull()?.photosAnswered(scope)
-                        contactsImport { people ->
-                            val made = listOf("people" to people).filter { it.second != null }
-                            val outcomes = made.map { it.second.orEmpty() }
-                            val summary = PhoneImport.madeSummary(outcomes)
-                            // THE LINE'S ONE ACTION opens what came in.
-                            val opens = if (summary.isEmpty()) "" else PhoneImport.madeOpens(made.map { it.first }, outcomes)
-                            shellNote = ShellNote(summary, holds = false, opens = opens)
-                        }
                     }
                     LaunchedEffect(made.first) {
                         words.takeMade()?.let {

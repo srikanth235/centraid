@@ -29,6 +29,7 @@ package centraid.core.v1;
 
 import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/docs_screens.proto";
+import "centraid/core/v1/health_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/photos_home_screens.proto";
 import "centraid/core/v1/photos_lightbox_screens.proto";
@@ -36,6 +37,7 @@ import "centraid/core/v1/photos_shelf_screens.proto";
 import "centraid/core/v1/locker_screens.proto";
 import "centraid/core/v1/money_screens.proto";
 import "centraid/core/v1/notes_screens.proto";
+import "centraid/core/v1/people_screens.proto";
 import "centraid/core/v1/route.proto";
 
 // ---------------------------------------------------------------------------
@@ -73,6 +75,9 @@ message Environment {
   string locale = 1;
   // An IANA zone, e.g. `Asia/Kolkata`.
   string zone = 2;
+  // The OS the shell runs on: `ios` or `android`. Health names the phone's own
+  // health store by it; nothing else varies by it.
+  string platform = 3;
 }
 
 // A timer elapsed (`Event.wake`). Internal to the core: see `next_event`.
@@ -223,9 +228,17 @@ message ScreenEvent {
     DocsEditorEvent docs_editor = 202;
     DocsVersionsEvent docs_versions = 203;
     // ---- notes (600-699) ----
+    HealthHomeEvent health_home = 300;
+    HealthMetricEvent health_metric = 301;
+    HealthWorkoutEvent health_workout = 302;
+    HealthConnectEvent health_connect = 303;
     NotesHomeEvent notes_home = 600;
     NotesEditorEvent notes_editor = 601;
     NotesHistoryEvent notes_history = 602;
+    // ---- people (700-799) ----
+    PeopleHomeEvent people_home = 700;
+    PeoplePersonEvent people_person = 701;
+    PeopleEditorEvent people_editor = 702;
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
   }
@@ -296,9 +309,17 @@ message ViewState {
     DocsEditorState docs_editor = 202;
     DocsVersionsState docs_versions = 203;
     // ---- notes (600-699) ----
+    HealthHomeState health_home = 300;
+    HealthMetricState health_metric = 301;
+    HealthWorkoutState health_workout = 302;
+    HealthConnectState health_connect = 303;
     NotesHomeState notes_home = 600;
     NotesEditorState notes_editor = 601;
     NotesHistoryState notes_history = 602;
+    // ---- people (700-799) ----
+    PeopleHomeState people_home = 700;
+    PeoplePersonState people_person = 701;
+    PeopleEditorState people_editor = 702;
     // ---- the kit (900-999) ----
     TrashView trash = 900;
   }
@@ -346,6 +367,9 @@ message Effect {
     FreeUpSpace free_up_space = 24;
     RenderEdit render_edit = 25;
     ReadCamera read_camera = 26;
+    ContactsRead contacts_read = 18;
+    // Open the OS maps app at an address (People's address channel).
+    OpenMap open_map = 19;
     // Open a page now, wherever the member is: the shell pushes `route` as a
     // tapped row's route is pushed. For a screen that makes a thing and
     // opens it (a document just filed).
@@ -403,12 +427,23 @@ message PickPhotos {
 
 message CapturePhoto {}
 
+// READ THE PHONE'S HEALTH STORE (HealthKit on iOS, Health Connect on Android) over
+// the window Rust placed, for the types the member chose, and answer a
+// `HealthSnapshot`. Read only: nothing is ever written to the store (R-1129-7).
+// `ask_permission` is the member's Connect tap, the one place the OS is asked
+// (R-1127-15); a pass never asks, and answers `EffectFailed{denied}` when
+// nothing was ever granted.
 message HealthRead {
-  // The Health store's own type names (`step_count`, `heart_rate`, ...).
-  repeated string types = 1;
-  // Inclusive window, epoch milliseconds.
-  int64 from_ms = 2;
-  int64 to_ms = 3;
+  // The type keys the member chose: `steps`, `sleep_min`, `active_energy_kcal`,
+  // `exercise_min`, `resting_hr_bpm`, `weight_kg`, `workouts`.
+  repeated string chosen = 1;
+  bool ask_permission = 2;
+  // The day totals are read from this civil day (`YYYY-MM-DD`, the phone's
+  // zone) through `today`; a workout that started at or after `workouts_since_ms`
+  // is in the window.
+  string totals_from = 3;
+  string today = 4;
+  int64 workouts_since_ms = 5;
 }
 
 message KeychainOp {
@@ -445,6 +480,18 @@ message CalendarRead {
   bool ask_permission = 1;
   uint32 days_back = 2;
   uint32 days_on = 3;
+}
+
+// Read the phone's address book. A shell that is denied (or has none) answers
+// `EffectFailed{denied}`; a pass that only follows never asks the OS for
+// permission (`ask_permission` false), the member's Import tap does.
+message ContactsRead {
+  bool ask_permission = 1;
+}
+
+message OpenMap {
+  // An address, as the member wrote it.
+  string query = 1;
 }
 
 // Start (`on`) or stop watching a phone store; while it is on, the shell
@@ -676,7 +723,7 @@ message EffectResult {
     EffectDone done = 2;
     EffectFailed failed = 3;
     PhotosPicked photos = 4;
-    HealthSamples health = 5;
+    HealthSnapshot health = 5;
     KeychainValue keychain = 6;
     CalendarSnapshot calendar = 7;
     PhoneChanged phone_changed = 8;
@@ -688,6 +735,7 @@ message EffectResult {
     FreeUpFacts free_up_facts = 13;
     EditRendered edit_rendered = 14;
     CameraRead camera_read = 15;
+    ContactsSnapshot contacts = 16;
     // ---- docs (200-299): files ----
     FilePicked file_picked = 200;
     FileProgress file_progress = 201;
@@ -712,14 +760,62 @@ message PhotosPicked {
   repeated string stage_ids = 1;
 }
 
-message HealthSamples {
-  message Sample {
-    string type = 1;
-    double value = 2;
-    string unit = 3;
-    int64 at_ms = 4;
+// WHAT THE SHELL READ OF THE HEALTH STORE. Nothing here is a decision: Rust diffs
+// the days against the vault's, maps a workout's kind, decides when a read is
+// complete and what is sent.
+message HealthSnapshot {
+  // Which store this phone has.
+  Store store = 1;
+  // False when the store is not on the phone at all (Health Connect
+  // uninstalled): nothing is read, and the store's origin is not touched.
+  bool store_present = 2;
+  // The chosen types the OS refused. Health Connect names them; HealthKit hides
+  // a refusal, so iOS leaves this empty.
+  repeated string refused = 3;
+  // Every day total the store has in the window, chosen metrics only; a day the
+  // store has nothing for is absent, never a zero.
+  repeated HealthDayTotal days = 4;
+  repeated HealthPhoneWorkout workouts = 5;
+  // False when the workout read may have missed some (a query failed part-way).
+  bool workouts_complete = 6;
+  // This phone's id, which a followed workout carries.
+  string device_id = 7;
+  // With `store_present` false: Health Connect is not installed and Google Play
+  // can bring it, so Connect says where to get it.
+  bool installable = 8;
+
+  enum Store {
+    STORE_UNSPECIFIED = 0;
+    STORE_APPLE_HEALTH = 1;
+    STORE_HEALTH_CONNECT = 2;
   }
-  repeated Sample samples = 1;
+}
+
+// One day's total as the store states it: `day` is the store's own day in the
+// phone's zone (a night of sleep is keyed to the day the member woke), `metric`
+// the metric's key, `value` in the metric's own unit.
+message HealthDayTotal {
+  string day = 1;
+  string metric = 2;
+  double value = 3;
+}
+
+// One workout as the store holds it.
+message HealthPhoneWorkout {
+  // The store's own id (HealthKit's uuid, Health Connect's record id): it means
+  // something on this phone only.
+  string id = 1;
+  // The store's word for the kind, whole (`running`, `EXERCISE_TYPE_RUNNING`).
+  string kind = 2;
+  // UTC instants, `YYYY-MM-DDTHH:MM:SS[.sss]Z`.
+  string started_at = 3;
+  string ended_at = 4;
+  optional int64 moving_sec = 5;
+  optional double distance_m = 6;
+  optional double energy_kcal = 7;
+  optional int64 avg_hr_bpm = 8;
+  optional double elevation_gain_m = 9;
+  optional string recorded_by = 10;
 }
 
 message KeychainValue {
@@ -778,6 +874,45 @@ message PhoneCalendarSeries {
   string rrule = 2;
   string start = 3;
   string end = 4;
+}
+
+// The phone's address book as the OS holds it. Rust makes every record: it
+// squashes the names, keeps one contact once, labels each account and decides
+// what to send (`follow-contacts`).
+message ContactsSnapshot {
+  // False when the read may have missed contacts (iOS limited access, a read
+  // that failed part-way): nothing is then trashed.
+  bool complete = 1;
+  // This install's id, minted once and kept off the vault: an id that means
+  // something on this phone only is followed under it (R-1127-10).
+  string device_id = 2;
+  // Every account or container present, an empty one included.
+  repeated PhoneContactContainer containers = 3;
+  repeated PhoneContact contacts = 4;
+}
+
+message PhoneContactContainer {
+  // The platform's own id for the account, not yet prefixed.
+  string key = 1;
+  // What the OS calls it ("iCloud", "Gmail"); empty is the phone's own.
+  string name = 2;
+}
+
+message PhoneContact {
+  // The display name; a contact with none is skipped.
+  string name = 1;
+  repeated string phones = 2;
+  repeated string emails = 3;
+  // `MM-DD`, or empty: the year is not asked for, because a People date is a
+  // day of the year.
+  string birthday = 4;
+  // The phone's most durable id, kind-prefixed (`lookup:` Android's
+  // `LOOKUP_KEY`, `local:` a device-scoped id). A contact with none is skipped,
+  // because nothing could find it again.
+  string phone_id = 5;
+  // The account the contact was read in (a `PhoneContactContainer.key`); empty
+  // is this phone.
+  string container_key = 6;
 }
 
 // A watched store changed.

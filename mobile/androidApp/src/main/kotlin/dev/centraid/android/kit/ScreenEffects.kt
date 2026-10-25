@@ -44,6 +44,7 @@ import dev.centraid.android.screens.agenda.readCalendarSnapshot
 import android.provider.OpenableColumns
 import dev.centraid.android.screens.docs.DocsPickers
 import dev.centraid.android.screens.mediaPermissions
+import dev.centraid.android.screens.people.readContactsSnapshot
 import dev.centraid.android.screens.performExportOriginals
 import dev.centraid.android.screens.photos.PhotosEditRender
 import dev.centraid.core.CentraidCore
@@ -62,20 +63,22 @@ import okio.ByteString
  * screen, naming none. Rust sends an [EffectRequest]; this does it and answers
  * with the same `effect_id` ([Screens.answer]). Only the effects this shell can
  * perform are here — clipboard, haptic, share, open URL, the keychain (the
- * secure store), the phone's calendars (`CalendarRead`) and the watch on a phone
- * store (`PhoneWatch`); anything else is answered `failed`, by value, so the
+ * secure store), the phone's calendars (`CalendarRead`) and address book
+ * (`ContactsRead`), a map (`OpenMap`) and the watch on a phone store
+ * (`PhoneWatch`); anything else is answered `failed`, by value, so the
  * screen that asked is never left waiting.
  *
- * **The calendar permission is asked here, at the member's Import tap**
- * (`ask_permission`), through the activity's launcher; a following pass sets it
- * false and is answered `denied` when the OS has not already allowed it.
+ * **The calendar's and the contacts' permission is asked here, at the member's
+ * Import tap** (`ask_permission`), through the activity's launcher; a following
+ * pass sets it false and is answered `denied` when the OS has not already
+ * allowed it.
  *
  * [phone] is the activity's watcher of the phone's stores; a `PhoneWatch` with no
  * watcher is answered `failed`.
  *
  * [docs] performs Docs' `PickFile`, `FollowFolder` and `StopFollowing` (the pickers, the
  * camera, the follower's grant); [openRoute] is `OpenRoute`: a page Rust asked the shell to push.
- * Either is null where the host has none, and the effect is answered `failed`.
+ * [health] answers `HealthRead` (Health Connect, read only). Either is null where the host has none, and the effect is answered `failed`.
  */
 @Composable
 internal fun PerformScreenEffects(
@@ -87,17 +90,22 @@ internal fun PerformScreenEffects(
     tab: String? = null,
     onAnnounce: (String) -> Unit = {},
     docs: DocsPickers? = null,
+    health: AndroidHealth? = null,
     openRoute: ((Route) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
-    val asking = remember { CalendarPermission() }
+    val asking = remember { PermissionAsk() }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         asking.answer(granted)
     }
     val mediaAsk = remember { MediaPermissionAsk() }
     val mediaLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         mediaAsk.answer()
+    }
+    // HEALTH CONNECT'S OWN PERMISSION SHEET, shown at the member's Connect tap only.
+    val healthLauncher = health?.let { store ->
+        rememberLauncherForActivityResult(store.contract()) { granted -> store.permissionsAnswered(granted) }
     }
     // THE FILE SHEETS (Locker's import and export): the system's pickers, one out at a time.
     val fileDoors = remember { FileDoors() }
@@ -118,7 +126,10 @@ internal fun PerformScreenEffects(
                 val effect = request.effect
                 val doors = Doors(fileDoors, { picker.launch(arrayOf("*/*")) }, { saver.launch(it) }, onAnnounce)
                 val answer: (EffectResult) -> Unit = { result -> launch { screens.answer(request, result) } }
-                val result = if (effect?.pick_file != null || effect?.follow_folder != null || effect?.stop_following != null || effect?.open_route != null) {
+                val result = if (effect?.health_read != null) {
+                    health?.snapshot(effect.health_read!!) { healthLauncher?.launch(it) }
+                        ?: failed("not performed by this shell")
+                } else if (effect?.pick_file != null || effect?.follow_folder != null || effect?.stop_following != null || effect?.open_route != null) {
                     files(effect, docs, openRoute, answer)
                 } else {
                     perform(
@@ -135,13 +146,13 @@ internal fun PerformScreenEffects(
 }
 
 /** The one permission prompt that may be out, and its answer. */
-private class CalendarPermission {
+private class PermissionAsk {
     private var waiting: CompletableDeferred<Boolean>? = null
 
-    fun ask(launch: (String) -> Unit): CompletableDeferred<Boolean> {
+    fun ask(permission: String, launch: (String) -> Unit): CompletableDeferred<Boolean> {
         val answer = CompletableDeferred<Boolean>()
         waiting = answer
-        launch(Manifest.permission.READ_CALENDAR)
+        launch(permission)
         return answer
     }
 
@@ -156,7 +167,7 @@ private suspend fun perform(
     effect: Effect?,
     context: Context,
     view: View,
-    asking: CalendarPermission,
+    asking: PermissionAsk,
     launchPermission: (String) -> Unit,
     phone: AndroidPhoneFollow?,
     doors: Doors,
@@ -235,8 +246,8 @@ private suspend fun perform(
         }
         effect.calendar_read != null -> {
             val read = effect.calendar_read!!
-            val allowed = granted(context) ||
-                (read.ask_permission && asking.ask(launchPermission).await())
+            val allowed = granted(context, Manifest.permission.READ_CALENDAR) ||
+                (read.ask_permission && asking.ask(Manifest.permission.READ_CALENDAR, launchPermission).await())
             if (!allowed) {
                 EffectResult(failed = EffectFailed(reason = "calendar access is off", denied = true))
             } else {
@@ -250,18 +261,41 @@ private suspend fun perform(
                 )
             }
         }
+        effect.contacts_read != null -> {
+            val read = effect.contacts_read!!
+            val allowed = granted(context, Manifest.permission.READ_CONTACTS) ||
+                (read.ask_permission && asking.ask(Manifest.permission.READ_CONTACTS, launchPermission).await())
+            if (!allowed) {
+                EffectResult(failed = EffectFailed(reason = "contacts access is off", denied = true))
+            } else {
+                runCatching {
+                    withContext(Dispatchers.IO) { readContactsSnapshot(context, PhoneDevice.id()) }
+                }.fold(
+                    onSuccess = { EffectResult(contacts = it) },
+                    onFailure = { failed("the address book could not be read") },
+                )
+            }
+        }
+        effect.open_map != null ->
+            start(context, Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=" + Uri.encode(effect.open_map!!.query))), done)
         effect.phone_watch != null -> {
             val watch = effect.phone_watch!!
+            val watched: ((() -> Unit)?) -> Unit = when {
+                phone == null -> { _ -> }
+                watch.source == ImportSource.IMPORT_SOURCE_CALENDAR -> phone::watchCalendar
+                watch.source == ImportSource.IMPORT_SOURCE_CONTACTS -> phone::watchContacts
+                else -> { _ -> }
+            }
             when {
-                phone == null || watch.source != ImportSource.IMPORT_SOURCE_CALENDAR ->
+                phone == null || (watch.source != ImportSource.IMPORT_SOURCE_CALENDAR && watch.source != ImportSource.IMPORT_SOURCE_CONTACTS) ->
                     failed("this phone store is not watched by this shell")
                 watch.on -> {
                     // ANSWERED EACH TIME THE STORE CHANGES, under this one effect id.
-                    phone.watchCalendar { report(PhoneChanged(source = watch.source)) }
+                    watched { report(PhoneChanged(source = watch.source)) }
                     null
                 }
                 else -> {
-                    phone.watchCalendar(null)
+                    watched(null)
                     done
                 }
             }
@@ -378,8 +412,8 @@ private fun start(context: Context, intent: Intent, done: EffectResult): EffectR
     failed("no app on this phone answers")
 }
 
-private fun granted(context: Context): Boolean =
-    ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
+private fun granted(context: Context, permission: String): Boolean =
+    ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
 private fun hapticOf(kind: HapticKind): Int = when (kind) {
     HapticKind.HAPTIC_KIND_SELECTION -> HapticFeedbackConstants.CLOCK_TICK

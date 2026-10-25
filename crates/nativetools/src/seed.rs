@@ -191,6 +191,8 @@ const SECTIONS: &[&str] = &[
     "locker",
     "accounts",
     "transactions",
+    "health_days",
+    "workouts",
     "transfers",
     "categories",
     "rules",
@@ -594,6 +596,32 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             seeder.run("txn.void", json!({"id": id}))?;
         }
         seeder.key(row, Kind::Transaction, id)?;
+    }
+    // HEALTH (#1135): the daily figures as one recorded batch, then each workout as one followed
+    // line of the health store, so a row has the instant of its own.
+    let days: Vec<Value> = rows(world, "health_days").to_vec();
+    if !days.is_empty() {
+        seeder.run("measurement.record", json!({ "days": days }))?;
+    }
+    for row in rows(world, "workouts") {
+        seeder.clock_for(row, "created")?;
+        let key = str_of(row, "key").ok_or("a workout needs a key")?;
+        let external = format!("store:{key}");
+        let mut fields = serde_json::Map::new();
+        for name in ["kind", "starts", "ends", "workout"] {
+            if let Some(value) = row.get(name) {
+                fields.insert(name.to_owned(), value.clone());
+            }
+        }
+        seeder.run(
+            "follow.health",
+            json!({
+                "origin": {"ref": "store:seed", "label": "Health"},
+                "records": [{"external_id": external, "fields": fields}],
+            }),
+        )?;
+        let id = seeder.handle.followed(&external)?;
+        seeder.key(row, Kind::Workout, id)?;
     }
     for transfer in rows(world, "transfers") {
         let (Some(a), Some(b)) = (str_of(transfer, "a"), str_of(transfer, "b")) else {

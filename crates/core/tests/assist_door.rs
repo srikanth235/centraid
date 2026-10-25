@@ -438,6 +438,72 @@ fn money_reaches_the_world_through_the_core_door_as_signed_rows_inside_the_windo
     );
 }
 
+#[test]
+fn health_reaches_the_world_through_the_core_door_inside_the_window() {
+    // #1135: Chat reads Health like any app. `measurement` is a WITHOUT ROWID table with a
+    // composite key, read through the same paged read a screen uses.
+    let pair = pair();
+    let door = pair.core.assist_door();
+    let today = door.now_ms().div_euclid(86_400_000);
+    let day = |back: i64| ymd(today - back);
+    let run = |key: &str, command: &'static str, input: serde_json::Value| {
+        let ran = door.act_keyed(key, &Call::bare(command), input).unwrap();
+        assert!(ran.ok, "{command}: {:?}", ran.reason);
+    };
+    run(
+        "health-1:0",
+        "measurement.record",
+        serde_json::json!({"days": [
+            {"day": day(1), "metric": "steps", "value": 8412},
+            {"day": day(1), "metric": "weight_kg", "value": 71.6},
+            {"day": day(400), "metric": "steps", "value": 999},
+        ]}),
+    );
+    run(
+        "health-1:1",
+        "follow.health",
+        serde_json::json!({
+            "origin": {"ref": "store:door-test", "label": "Health"},
+            "records": [
+                {"external_id": "wk-1", "fields": {
+                    "kind": "run",
+                    "starts": format!("{}T07:00:00Z", day(2)), "ends": format!("{}T07:30:00Z", day(2)),
+                    "workout": {"moving_s": 1800, "distance_m": 5000.0}}},
+                {"external_id": "wk-old", "fields": {
+                    "kind": "run",
+                    "starts": format!("{}T07:00:00Z", day(300)), "ends": format!("{}T07:30:00Z", day(300))}},
+            ],
+        }),
+    );
+    let world = World::load_in(&door, None).expect("a world loads");
+    use centraid_assist::native::world::Val;
+    let figure = |id: String| world.row(&(Kind::DailyFigure, id));
+    let steps = figure(format!("{}:steps", day(1))).expect("yesterday's steps");
+    assert_eq!(steps.field("value"), Some(&Val::Num(8412)));
+    assert_eq!(steps.field("metric"), Some(&Val::Enum("steps")));
+    assert_eq!(
+        figure(format!("{}:weight_kg", day(1)))
+            .unwrap()
+            .field("value"),
+        Some(&Val::Num(72)),
+        "a weight is read to the nearest kilogram"
+    );
+    assert!(figure(format!("{}:steps", day(400))).is_none());
+    let workouts: Vec<_> = world.of_kind(Kind::Workout).collect();
+    assert_eq!(workouts.len(), 1, "{workouts:?}");
+    assert_eq!(workouts[0].field("moving"), Some(&Val::Num(1800)));
+    assert_eq!(workouts[0].field("distance"), Some(&Val::Num(5000)));
+    // A workout card is live while its activity is; a day's total has no row to be gone.
+    let id = workouts[0].id.clone();
+    let live = |entity: &str, id: &str| {
+        pair.core
+            .with_vault(|vault| Ok(vault.chat_card_row_exists("health", entity, id)?))
+            .expect("the card asks")
+    };
+    assert!(live("workout", &id));
+    assert!(!live("workout", "a-workout-that-was-deleted"));
+}
+
 // ---------------------------------------------------------------------------
 // THE ASSISTANT IS THE MEMBER IN LOCKER; A SEALED VALUE IS A CHANNEL THE DOOR KEEPS CLOSED (#1135).
 //

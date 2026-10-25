@@ -37,7 +37,7 @@ enum PhoneCalendar {
     }
 
     /// This install's id, minted once and kept off the vault (R-1127-10).
-    private static var deviceID: String {
+    static var deviceID: String {
         let key = "dev.centraid.install-id"
         if let known = UserDefaults.standard.string(forKey: key) { return known }
         let minted = UUID().uuidString

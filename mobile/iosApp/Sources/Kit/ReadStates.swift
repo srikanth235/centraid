@@ -168,9 +168,6 @@ struct EmptyStateView: View {
     var actionIdentifier: String = "kit-empty-action"
 
     @Environment(\.colorScheme) private var scheme
-    /// The shell's doors for an app's day-one empty (docs/decisions.md,
-    /// "Onboarding without sample data"); nil where the shell offers neither.
-    @Environment(\.importFromPhone) private var importFromPhone
 
     init(_ empty: Centraid_Screen_V1_EmptyState, actionIdentifier: String = "kit-empty-action", onAction: (() -> Void)? = nil) {
         self.empty = empty
@@ -199,14 +196,7 @@ struct EmptyStateView: View {
                     .foregroundStyle(Theme.color("textSoft", scheme))
                     .multilineTextAlignment(.center)
             }
-            // WHERE THE PHONE ALREADY HOLDS THE DATA, ITS IMPORT IS THE ACTION,
-            // asked here at the point of use; the app's own add stays in its
-            // header. A shell with no importer for the source draws the app's.
-            if !importLabel(empty.importSource).isEmpty, let importFromPhone {
-                KitOutlineButton(label: importLabel(empty.importSource)) { importFromPhone(empty.importSource) }
-                    .accessibilityIdentifier("kit-empty-import")
-                    .padding(.top, 4)
-            } else if !empty.actionLabel.isEmpty, let onAction {
+            if !empty.actionLabel.isEmpty, let onAction {
                 KitOutlineButton(label: empty.actionLabel, action: onAction)
                     .accessibilityIdentifier(actionIdentifier)
                     .padding(.top, 4)

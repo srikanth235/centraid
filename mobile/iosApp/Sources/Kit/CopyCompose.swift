@@ -18,7 +18,6 @@ func copyFill(_ template: String, _ hole: String, _ value: String) -> String {
 /// The import's verb for a day-one empty state, by where the phone holds the data.
 func importLabel(_ source: Centraid_Screen_V1_ImportSource) -> String {
     switch source {
-    case .contacts: return PeopleCopy.shared.IMPORT_CONTACTS
     case .calendar: return AgendaCopy.shared.IMPORT_CALENDAR
     default: return ""
     }

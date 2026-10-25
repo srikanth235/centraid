@@ -46,6 +46,8 @@ final class ScreenStore: ObservableObject {
     /// OPEN A PAGE NOW, wherever the member is (`OpenRoute`): the shell pushes the
     /// route as it pushes a tapped row's route. Set by `ShellModel`.
     var onOpenRoute: ((Centraid_Core_V1_Route) -> Void)?
+    /// An import over iOS's limited contact access: the shell raises the system's picker.
+    var onContactsLimited: (() -> Void)?
 
     /// THE CAMERA ROLL AND THE PHOTOS DEVICE (#1135, lane D): the roll, the free-up
     /// flow and an original back from the gateway are the shell's, not a screen's.
@@ -113,11 +115,12 @@ final class ScreenStore: ObservableObject {
         Task { await request(.lifecycle(lifecycle)) }
     }
 
-    /// Report the device's locale and zone; Rust formats from them.
+    /// Report the device's locale, zone and OS; Rust formats from them.
     func reportEnvironment() {
         var environment = Centraid_Core_V1_Environment()
         environment.locale = Locale.current.identifier
         environment.zone = TimeZone.current.identifier
+        environment.platform = "ios"
         Task { await request(.environment(environment)) }
     }
 
@@ -226,6 +229,15 @@ final class ScreenStore: ObservableObject {
                 let outcome = await ShelfCopyExport.run(export, core: core)
                 answer(request, outcome)
             }
+        case .openMap(let map)?:
+            var components = URLComponents(string: "https://maps.apple.com/")
+            components?.queryItems = [URLQueryItem(name: "q", value: map.query)]
+            if let url = components?.url {
+                UIApplication.shared.open(url)
+                answer(request, .done(Centraid_Core_V1_EffectDone()))
+            } else {
+                answer(request, .failed(Self.failure("not an address")))
+            }
         #endif
         case .cameraRoll(let roll)?:
             answer(request, performCameraRoll(roll))
@@ -268,6 +280,12 @@ final class ScreenStore: ObservableObject {
                 let outcome = await PhoneCalendar.snapshot(read)
                 answer(request, outcome)
             }
+        case .contactsRead(let read)?:
+            Task {
+                let outcome = await PhoneContacts.snapshot(read)
+                answer(request, outcome)
+                if read.askPermission, PhoneContacts.limited { onContactsLimited?() }
+            }
         case .phoneWatch(let watch)?:
             self.watch(request, watch)
         // PHOTOS' ONE-PHOTOGRAPH PAGES (#1135): the camera the original's header
@@ -278,6 +296,12 @@ final class ScreenStore: ObservableObject {
         case .renderEdit(let render)?:
             Task { answer(request, await PhotoEffects.renderEdit(render, core: core)) }
         #endif
+        // HEALTH'S STORE (#1135): read over the window Rust placed, for the types it names.
+        case .healthRead(let read)?:
+            Task {
+                let outcome = await HealthKitReader.snapshot(read)
+                answer(request, outcome)
+            }
         case .openRoute(let open)?:
             onOpenRoute?(open.route)
             answer(request, .done(Centraid_Core_V1_EffectDone()))

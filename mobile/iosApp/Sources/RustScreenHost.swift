@@ -297,6 +297,31 @@ private struct RustScreenView: View {
                 send: { store.send(instance, .docsEditor($0)) },
                 onClose: pop
             )
+        case .healthHome(let state)?:
+            HealthHomeView(
+                state: state,
+                send: { store.send(instance, .healthHome($0)) },
+                open: open,
+                onHome: { shell.path.removeAll() }
+            )
+        case .healthMetric(let state)?:
+            HealthMetricView(
+                state: state,
+                send: { store.send(instance, .healthMetric($0)) },
+                onBack: pop
+            )
+        case .healthWorkout(let state)?:
+            HealthWorkoutView(
+                state: state,
+                send: { store.send(instance, .healthWorkout($0)) },
+                onBack: pop
+            )
+        case .healthConnect(let state)?:
+            HealthConnectView(
+                state: state,
+                send: { store.send(instance, .healthConnect($0)) },
+                onBack: pop
+            )
         case .notesHome(let state)?:
             NotesHomeView(
                 state: state,
@@ -316,6 +341,26 @@ private struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .notesHistory($0)) },
                 onBack: pop
+            )
+        case .peopleHome(let state)?:
+            PeopleHomeView(
+                state: state,
+                send: { store.send(instance, .peopleHome($0)) },
+                open: open,
+                onHome: { shell.path.removeAll() }
+            )
+        case .peoplePerson(let state)?:
+            PeoplePersonView(
+                state: state,
+                send: { store.send(instance, .peoplePerson($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .peopleEditor(let state)?:
+            PeopleEditorView(
+                state: state,
+                send: { store.send(instance, .peopleEditor($0)) },
+                onClose: pop
             )
         case .trash(let state)?:
             CoreTrashView(
