@@ -1,9 +1,6 @@
 package dev.centraid.shared
 
-import centraid.core.v1.NotesPlace
 import centraid.core.v1.Route
-import centraid.screen.v1.HomeTile
-import centraid.screen.v1.TileStatus
 import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.LockerEntry
@@ -11,54 +8,25 @@ import dev.centraid.shared.nav.MemberAction
 import dev.centraid.shared.nav.RowRef
 import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.shared.nav.ScreenIds
-import dev.centraid.shared.nav.NavMove
-import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.nav.HealthEntry
-import dev.centraid.shared.nav.NotesEntry
 import dev.centraid.shared.nav.PeopleEntry
 import dev.centraid.shared.nav.PhotosEntry
-import dev.centraid.shared.nav.ScreenMoves
 import dev.centraid.shared.nav.ScreenOpenings
-import dev.centraid.shared.nav.applying
 import io.kotest.core.spec.style.StringSpec
-import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
-import io.kotest.matchers.string.shouldNotBeEmpty
 
 /**
- * WHERE EVERY APP'S INTENTS GO IS STATED ONCE, IN SHARED (#1029 port).
+ * WHERE A CHAT CARD GOES, STATED ONCE ON THIS SIDE (#1029 port; #1135).
  *
- * Each `<App>Routing` answers an event with the move Android applies, and its
- * bytes door answers the same move spelled for iOS. These pin both halves:
- * the decisions (a band place swaps, Done pops, a notebook named Unfiled is
- * the unfiled filter) and that every page a
- * routing names is one `ScreenOpenings` spells, on the screen id its machine
- * registers under.
+ * Home, search and every app's rows carry the route Rust built, and the stack,
+ * the move and Notes' tile are Rust's (`crates/screens/src/shell`, whose tests
+ * hold those cases). What remains here is the table the chat's cards still use
+ * until the chat is Rust's: a row of an app opens that app's page, spelled as a
+ * `ScreenOpening` a shell pushes.
  */
 class AppRoutingSpec : StringSpec({
-    val home = Destination.Home
-
-    "a move drops the top (never the floor), then pushes; spelled, it is the same openings in order" {
-        val photos = PhotosEntry.home()
-        val lightbox = PhotosEntry.lightbox("a1")
-        val stack = NavStack().push(photos)
-        stack.applying(NavMove.swap(lightbox)).entries shouldContainExactly listOf(home, lightbox)
-        stack.applying(NavMove.Pop).entries shouldContainExactly listOf(home)
-        NavStack().applying(NavMove.Pop).entries shouldContainExactly listOf(home)
-        stack.applying(NavMove.push(lightbox)).entries shouldContainExactly listOf(home, photos, lightbox)
-
-        val spelled = ScreenMoves.of(NavMove(dropsTop = true, pushes = listOf(photos, lightbox)))
-        spelled.shouldNotBeNull()
-        spelled.dropsTop shouldBe true
-        spelled.openings.map { Route.ADAPTER.decode(it.event) } shouldContainExactly listOf(photos.route, lightbox.route)
-        // Half a move is no move: a page no route spells spells nothing.
-        ScreenMoves.of(NavMove(pushes = listOf(lightbox, Destination.Settings))).shouldBeNull()
-        ScreenMoves.of(null).shouldBeNull()
-    }
-
     "every app's page opens as a Rust screen carrying its route" {
         listOf(PhotosEntry.home(), PhotosEntry.lightbox("a1"), PeopleEntry.home(), HealthEntry.home()).forEach { destination ->
             val opening = ScreenOpenings.of(destination).shouldNotBeNull()
@@ -67,24 +35,7 @@ class AppRoutingSpec : StringSpec({
         }
     }
 
-    // --- Notes -----------------------------------------------------------
-
-    "Notes' entry: the tile opens its shelf's place, a new note on an empty vault, and nothing while it reads" {
-        val route = { destination: Destination? -> (destination as Destination.RustScreen).route }
-        val tile = HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_EMPTY)
-        route(NotesEntry.tile(tile)).notes_editor!!.is_new shouldBe true
-        route(NotesEntry.tile(null)).notes_editor!!.is_new shouldBe true
-        NotesEntry.tile(HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_LOADING)).shouldBeNull()
-        NotesEntry.tile(HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_UNKNOWN)).shouldBeNull()
-        val shelf = HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_CONTENT)
-        route(NotesEntry.tile(shelf)).screen shouldBe "notes.home"
-        route(NotesEntry.tile(shelf)).notes_home!!.place shouldBe NotesPlace.NOTES_PLACE_NOTES
-        // Spelled, a Notes page is the Rust screen id and the encoded route, which a shell that keys by id pushes.
-        val opening = NotesEntry.tileOpening(tile.encode())!!
-        opening.screenId shouldBe ScreenIds.RUST_SCREEN
-        Route.ADAPTER.decode(opening.event).screen shouldBe "notes.editor"
-        NotesEntry.tileOpening(byteArrayOf(-1, -1)).shouldBeNull()
-    }
+    // --- Notes ---------------------------------------------------------
 
     "Notes' rows route by their kind: a note opens its editor, a notebook the home filtered to it" {
         val note = RowRoutes.destination(RowRef(AppIds.NOTES, "note", "n1", "Plans")) as Destination.RustScreen

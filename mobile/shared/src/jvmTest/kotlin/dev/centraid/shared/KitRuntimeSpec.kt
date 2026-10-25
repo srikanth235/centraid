@@ -9,7 +9,6 @@ import centraid.core.v1.Response
 import centraid.screen.v1.ReadFailure
 import centraid.screen.v1.SeatState
 import dev.centraid.core.CentraidCore
-import dev.centraid.shared.kit.ScreenBridge
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.platform.FakeDeviceClock
 import dev.centraid.shared.screen.ScreenEffect

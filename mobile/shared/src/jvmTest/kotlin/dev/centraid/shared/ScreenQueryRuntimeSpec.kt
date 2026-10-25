@@ -20,20 +20,12 @@ import centraid.core.v1.NotesTrashRequest
 import centraid.core.v1.Page
 import centraid.core.v1.PeopleTouchRequest
 import centraid.core.v1.Response
-import centraid.core.v1.TasksBoard
 import centraid.core.v1.TasksBoardRequest
-import centraid.core.v1.TasksCounts
-import centraid.core.v1.TasksGroup
-import centraid.core.v1.TasksGroupKind
-import centraid.core.v1.TasksTask
-import centraid.core.v1.TasksView
 import centraid.core.v1.TasksSearch
 import centraid.core.v1.TasksSearchRequest
-import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.ReadFailure
 import centraid.screen.v1.ReadFailureKind
 import centraid.screen.v1.SeatState
-import centraid.screen.v1.TileStatus
 import dev.centraid.core.CentraidCore
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.platform.FakeDeviceClock
@@ -41,8 +33,6 @@ import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
-import dev.centraid.shared.shell.HomeMachine
-import dev.centraid.shared.shell.HomeRuntime
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenQueryRuntime
 import dev.centraid.shared.sync.ScreenWrites
@@ -298,126 +288,6 @@ class ScreenQueryRuntimeSpec : StringSpec({
         commands.toList() shouldBe listOf("schedule.rsvp rsvp:evt-1:accepted")
         scope.cancel()
         core.close()
-    }
-
-    // --- Home's Agenda tile rides the same arm -------------------------------
-
-    "Home's Agenda tile lands from the arm, and a denied read is UNKNOWN, never EMPTY" {
-        val zones = ConcurrentLinkedQueue<String>()
-        fun home(answer: (AppQueryRequest) -> Envelope): CentraidCore =
-            CentraidCore.answering(Dispatchers.Default) { envelope ->
-                val query = envelope.request.shouldNotBeNull().app_query
-                when {
-                    query == null -> Envelope(request_id = 0, response = Response(page = Page()))
-                    // Health's tile is Home's other app query (#1129); it is not this case's.
-                    query.health_today != null -> answered(AppQueryResponse())
-                    // Home asks two arms for Agenda's tile (#1128): the events, then the due tasks.
-                    query.agenda_upcoming != null || query.tasks_board != null -> {
-                        zones += (query.agenda_upcoming?.tz ?: query.tasks_board.shouldNotBeNull().tz)
-                        answer(query)
-                    }
-                    // Notes' tile rides this arm too, and is not this case's
-                    // subject: an empty answer refuses it and leaves Agenda be.
-                    else -> answered(AppQueryResponse())
-                }
-            }
-
-        suspend fun agendaTile(core: CentraidCore) = run {
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            try {
-                val host = ScreenHost(HomeMachine)
-                HomeRuntime({ core }, host, scope, FakeDeviceClock(zone = "Asia/Tokyo")).start()
-                host.send(HomeEvent(opened = HomeEvent.Opened()))
-                withTimeout(5_000) {
-                    host.state.first { state ->
-                        state.data_?.tiles?.single { it.app_id == "agenda" }?.status
-                            .let { it != null && it != TileStatus.TILE_STATUS_LOADING }
-                    }
-                }.data_.shouldNotBeNull().tiles.single { it.app_id == "agenda" }
-            } finally {
-                scope.cancel()
-            }
-        }
-
-        val content = home { query ->
-            if (query.tasks_board != null) {
-                return@home answered(
-                    AppQueryResponse(
-                        tasks_board = TasksBoard(
-                            today = "2026-06-15",
-                            view = TasksView.TASKS_VIEW_TODAY,
-                            groups = listOf(
-                                TasksGroup(
-                                    kind = TasksGroupKind.TASKS_GROUP_KIND_TODAY,
-                                    key = "today",
-                                    tasks = listOf(TasksTask(task_id = "t1", title = "Call Mum", status = "open")),
-                                ),
-                            ),
-                            counts = TasksCounts(today = 1),
-                        ),
-                    ),
-                )
-            }
-            answered(
-                AppQueryResponse(
-                    agenda_upcoming = AgendaUpcoming(
-                        events = listOf(
-                            AgendaEvent(
-                                event_id = "evt-1",
-                                summary = "Survey walk-through",
-                                instance_key = "evt-1",
-                                local_start = "2026-06-17T08:15",
-                                local_days = listOf("2026-06-17"),
-                            ),
-                        ),
-                        today = "2026-06-15",
-                        now_local = "2026-06-15T09:00",
-                    ),
-                ),
-            )
-        }
-        val tile = agendaTile(content)
-        tile.status shouldBe TileStatus.TILE_STATUS_CONTENT
-        tile.body.shouldNotBeNull().agenda.shouldNotBeNull().at shouldBe "Wed 17 · 08:15"
-        tile.body.agenda.shouldNotBeNull().due_label shouldBe "1 due"
-        tile.body.agenda.shouldNotBeNull().due_title shouldBe "Call Mum"
-        zones.toList().last() shouldBe "Asia/Tokyo"
-        content.close()
-
-        // A DENIED DUE READ costs the tile its due line and nothing else (#1128).
-        val noTasks = home { query ->
-            if (query.tasks_board != null) {
-                answered(AppQueryResponse(denied = AppQueryDenial()))
-            } else {
-                answered(
-                    AppQueryResponse(
-                        agenda_upcoming = AgendaUpcoming(
-                            events = listOf(
-                                AgendaEvent(
-                                    event_id = "evt-1",
-                                    summary = "Survey walk-through",
-                                    instance_key = "evt-1",
-                                    local_start = "2026-06-17T08:15",
-                                    local_days = listOf("2026-06-17"),
-                                ),
-                            ),
-                            today = "2026-06-15",
-                            now_local = "2026-06-15T09:00",
-                        ),
-                    ),
-                )
-            }
-        }
-        val kept = agendaTile(noTasks)
-        kept.status shouldBe TileStatus.TILE_STATUS_CONTENT
-        kept.body.shouldNotBeNull().agenda.shouldNotBeNull().due_count shouldBe 0
-        noTasks.close()
-
-        val denied = home { answered(AppQueryResponse(denied = AppQueryDenial())) }
-        val refused = agendaTile(denied)
-        refused.status shouldBe TileStatus.TILE_STATUS_UNKNOWN
-        refused.count shouldBe null
-        denied.close()
     }
 
     "a blank zone is refused before the core is asked, for every app's query, not only Agenda's" {

@@ -1,160 +1,23 @@
 package dev.centraid.shared.shell
 
 /**
- * THE BAND — invariant 1 of the Binding Layer (#1020, wave A).
+ * THE BAND'S PLATE, as numbers (#1135).
  *
- * One band, never app-themed, never scrolled away. It lists FRAME PLACES and
- * never installed apps: Home, the pinned places, and Backup. Apps are covers
- * pushed over Home, which is why this is native-stack chrome drawn at the foot
- * of Home rather than a bottom-tab navigator — a tab bar would make every app a
- * peer of Home and there would be nowhere for a cover to come from.
- *
- * The seam: this file decides WHICH destinations the band offers and in
- * what order, and it never decides where a press goes — that is the navigator's.
- *
- * KEEP IT PURE. No storage, no platform, no clock: `bandTabs` takes the pinned
- * ids and returns a list, which is what lets both shells draw one band without
- * either of them holding the rule.
+ * Which places the band holds, in what order, their words and which is lit are
+ * Rust's (`crates/screens/src/shell/band.rs`, carried in `Navigation.band`). What
+ * stays here is the plate's geometry both native shells read, until the shells
+ * hold their own numbers and this module goes. The pins, `PLACES` and the
+ * overflow into More were machinery nothing drew and went with Home's port.
  */
 public object BandPolicy {
     /**
-     * THE KEYS A SHELL NAMES when the band tells it which place was pressed or
-     * which is active. [PLACE_HOME] is the `PLACES` row of that id; [PLACE_CHAT]
-     * and [PLACE_BACKUP] are tabs drawn in place of Home's springboard, and are
-     * no `PLACES` row (the on-device chat has only the iOS shell so far).
+     * THE RUNTIME TABS the band's places select (`Navigation.band`). Chat and
+     * Backup are drawn natively in place of Home's springboard until lanes I and
+     * H2 register their Rust tabs.
      */
     public const val PLACE_HOME: String = "home"
     public const val PLACE_CHAT: String = "chat"
     public const val PLACE_BACKUP: String = "backup"
-
-    /**
-     * The frame destinations, in FIXED order.
-     *
-     * Never sorted by recency: a band that reordered itself would move the
-     * target under a member's thumb, which is the same law the springboard
-     * follows. Readers FILTER this list and never reorder it.
-     *
-     * Starred was one until v0's `#1015` B15 — a row that navigated nowhere
-     * and could still be pinned into a band slot. It is dropped rather than
-     * shipped dead, and so are Needs you and Activity: their data planes
-     * (staged writes and access requests; runs, harnesses and spend) were
-     * deleted with the gateway-as-server (#1029), and a place with nothing
-     * behind it is Starred's defect again. Vault stays in the table (its
-     * row names a place the frame will have) and is pinned by nobody until
-     * a shell can draw it (R-1047-F7b).
-     */
-    public val PLACES: List<Place> = listOf(
-        Place(
-            id = PLACE_HOME,
-            name = "Home",
-            short = "Home",
-            iconKey = "Home",
-            what = "Every app, at a glance",
-            // Pinned BY LAW: its row shows "by law", not a switch.
-            law = true,
-            pinnedByDefault = true,
-        ),
-        Place(
-            id = "data",
-            name = "Vault",
-            short = "Vault",
-            // Records, not files — `Folder` is already documents the member filed.
-            iconKey = "Database",
-            what = "Contents, copies and sharing",
-            law = false,
-            // NOT PINNED UNTIL ITS SCREEN EXISTS (R-1047-F7b): neither shell
-            // has a destination for it, so a pinned Vault was a tab that
-            // navigated nowhere — Starred's defect, on the default band.
-            pinnedByDefault = false,
-        ),
-        Place(
-            id = "gateway",
-            name = "System",
-            short = "System",
-            iconKey = "Cellular",
-            what = "Your backup device",
-            law = false,
-            pinnedByDefault = false,
-        ),
-        Place(
-            id = "storage",
-            name = "On this phone",
-            short = "On phone",
-            iconKey = "Save",
-            what = "Cached data, pending uploads and room",
-            law = false,
-            pinnedByDefault = false,
-        ),
-        Place(
-            id = "settings",
-            name = "Settings",
-            short = "Settings",
-            iconKey = "Settings",
-            what = "The account, the themes, the keys",
-            law = false,
-            pinnedByDefault = false,
-        ),
-    )
-
-    /**
-     * Home plus four, and then Backup.
-     *
-     * A sixth destination puts every target under 44pt on a 390px screen, so
-     * this is a constraint and not a preference. Places past the cap are not
-     * drawn; every app is a tile on Home.
-     */
-    public const val BAND_PLACE_SLOTS: Int = 4
-
-    /** The places pinned when nobody has said otherwise. */
-    public val DEFAULT_PINS: List<String> =
-        PLACES.filter { !it.law && it.pinnedByDefault }.map { it.id }
-
-    /**
-     * System is reachable by link and never by band.
-     *
-     * It is a custodian surface; its route still resolves, so a saved link never
-     * dead-ends, but it does not spend one of five slots.
-     */
-    private const val NOT_IN_BAND: String = "gateway"
-
-    public fun place(id: String): Place? = PLACES.firstOrNull { it.id == id }
-
-    /** Home is pinned by law; everything else is pinned when the member says so. */
-    public fun isPinned(pins: List<String>, id: String): Boolean {
-        val place = place(id) ?: return false
-        return place.law || pins.contains(id)
-    }
-
-    /**
-     * The band's tabs: Home first, then pinned places in TABLE order, capped.
-     *
-     * `Backup` is not in this list — each shell draws it beside the tabs,
-     * because it opens the Backup screen over Home rather than being a place
-     * (R-ONBOARD-9).
-     */
-    public fun bandTabs(pins: List<String> = DEFAULT_PINS): List<Place> {
-        val pinned = PLACES.filter { it.id != NOT_IN_BAND && isPinned(pins, it.id) }
-        val home = pinned.firstOrNull() ?: return emptyList()
-        return listOf(home) + pinned.drop(1).take(BAND_PLACE_SLOTS)
-    }
-
-    /** One frame destination that is not an app. */
-    public data class Place(
-        val id: String,
-        val name: String,
-        /**
-         * The band tab is 61px wide: a declared short name, never an ellipsised
-         * long one. ONE NOUN PER DESTINATION: v0 shipped four names for one
-         * place at once (`#1015` R-NY-4) because the band spoke one noun to
-         * VoiceOver and painted another, so this may only DROP words from
-         * [name], never substitute a different noun.
-         */
-        val short: String,
-        val iconKey: String,
-        val what: String,
-        val law: Boolean,
-        val pinnedByDefault: Boolean,
-    )
 
     // ── the plate ────────────────────────────────────────────────────────────
     //

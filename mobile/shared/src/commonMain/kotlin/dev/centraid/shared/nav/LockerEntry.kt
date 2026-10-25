@@ -12,7 +12,6 @@ import dev.centraid.shared.chat.ChatSlots
 import dev.centraid.shared.custody.OwnKeyFiling
 import dev.centraid.shared.custody.VaultSecrets
 import dev.centraid.shared.platform.platformServices
-import dev.centraid.shared.shell.HomeReads
 import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -101,7 +100,6 @@ public object LockerEntry {
 
     /** Fill Home's tile and chat's slot. Called once at launch. */
     public fun install() {
-        HomeReads.lockerOpen = { open.value }
         ChatSlots.unlockLocker = {
             if (open.value) {
                 true
