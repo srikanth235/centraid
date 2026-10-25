@@ -27,15 +27,17 @@ message ImportsCameraRollEvent {
   // vaults is two imports). Every event carries it; empty keeps the last one told.
   string vault_id = 10;
   oneof kind {
-    // The Photos screen's `CameraRoll` effect, relayed: the shell turns the effect
-    // into this event (it owns the OS prompt and the roll).
+    // Photos' home and the made vault, by name (`Ctx::post`): the prompt, a walk,
+    // or what the roll says now (a home that opened).
     Requested requested = 1;
-    // The OS photo library changed while the app is on screen: a nudge to walk.
+    // THE ONE THING A SHELL SENDS: the OS photo library changed while the app is
+    // on screen (iOS `PHPhotoLibraryChangeObserver`, Android's MediaStore
+    // observer), a nudge to walk. Sent to the root of the `imports-camera-roll` tab.
     LibraryChanged library_changed = 2;
-    // The app came forward or a session pass began (`ShelfDrain.installWalk`): walk
-    // the roll now.
+    // The pass service, by name, when a session pass begins: walk the roll now.
     Walk walk = 3;
-    // The core named bytes it wants again (`DrainResponse.need_bytes`): feed them.
+    // The pass service, by name: the core named bytes it wants again
+    // (`DrainResponse.need_bytes`), feed them.
     BytesNeeded bytes_needed = 4;
   }
 
@@ -70,18 +72,18 @@ message NeededBytes {
   string content_hash = 4;
 }
 
-// What the shell draws of the roll: nothing, and what it forwards. The shell sends
-// `PhotosPermissionChanged` and `PhotosBackupChanged` to every open Photos home with
-// `permission` and `backup` whenever they change (and once when a home opens).
+// What the roll says, for tests and a debugging shell; a shell draws nothing of it.
+// The roll tells every open Photos home `PhotosPermissionChanged` and
+// `PhotosBackupChanged` itself (on a change, and when a home opens and asks), asks
+// the pass service for its after-import pass when a walk brought photographs in,
+// and reports a walk and a feed to the pass service (`RollReported`).
 message ImportsCameraRollState {
   PhotosMediaPermission permission = 1;
   PhotosBackupChanged backup = 2;
-  // A pass imported something and the walk has ended: the shell moves what was just
-  // staged now (`ShelfDrain.afterImport`). Counts the imports so far; a change is a
-  // fresh nudge.
+  // The photographs the walks so far brought in.
   uint32 imported_total = 3;
   // How many of the last `BytesNeeded` landed under the hash asked for (0 before the
-  // first), counted per round; the shell reads it after it sent the needs.
+  // first), counted per round.
   uint32 fed_last_round = 4;
   uint32 fed_rounds = 5;
 }
@@ -92,12 +94,13 @@ message ImportsCameraRollState {
 
 message ImportsFilesEvent {
   oneof kind {
-    // The folder store may have changed, or the app came forward: follow soon.
+    // The folder store may have changed: follow soon. (The app coming forward is
+    // heard as `Lifecycle` and does the same.)
     Requested requested = 1;
-    // The member picked a folder (the shell's `FolderFollowed` answer, relayed): the
-    // vault follows it.
+    // The member picked a folder (the shell's `FolderFollowed` answer to the Docs
+    // drive's `FollowFolder`, posted on by the drive): the vault follows it.
     FolderFollowed folder_followed = 2;
-    // The member stopped following (the shell's `StopFollowing`, relayed).
+    // The member stopped following (the Docs drive, by name).
     FolderStopped folder_stopped = 3;
   }
 
@@ -245,9 +248,9 @@ message RollResource {
   }
 }
 
-// How the phone is connected now, and the member's transfer rule. Answer
-// `LinkReading`. Rust decides whether an original that lives only in iCloud may be
-// downloaded.
+// How the phone is connected now. Answer `LinkReading`. Rust decides, under the
+// member's transfer rule (which it reads from the phone's store itself), whether an
+// original that lives only in iCloud may be downloaded.
 message LinkRead {}
 
 message LinkReading {
@@ -255,14 +258,8 @@ message LinkReading {
   bool metered = 2;
   // The platform refused to say: counts as expensive.
   bool platform_refused = 3;
-  Rule rule = 4;
-
-  enum Rule {
-    RULE_UNSPECIFIED = 0;
-    RULE_WIFI_ONLY = 1;
-    RULE_WIFI_AND_CELLULAR_PHOTOS = 2;
-    RULE_MANUAL = 3;
-  }
+  // `rule`: the transfer rule is Rust's to read (`passes::Rules`).
+  reserved 4;
 }
 
 // OPEN ONE RESOURCE FROM THE LIBRARY AND STREAM IT THROUGH THE STAGE DOOR, with

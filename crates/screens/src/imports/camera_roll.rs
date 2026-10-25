@@ -39,12 +39,15 @@
 //! The bytes the core asked for again (`DrainResponse.need_bytes`, the old `LibraryFeed`) are
 //! served the same way: reopened by their `os_ref`, and only the hash asked for counts.
 //!
-//! ## What the shell does
+//! ## What the shell does, and what is told by name
 //!
-//! It forwards this screen's view to every open Photos home as `PhotosPermissionChanged` and
-//! `PhotosBackupChanged` (and once when a home opens), relays Photos' `CameraRoll` effect as
-//! `Requested`, sends `Walk` when the app opens or comes forward and `LibraryChanged` on a
-//! `PHChange`, and moves what was staged (`ShelfDrain.afterImport`) whenever `imported_total` grows.
+//! The shell sends `LibraryChanged` when the OS library changed (a `PHChange`, a MediaStore
+//! change) to the root of the `imports-camera-roll` tab, and performs the effects. Everything else
+//! reaches this screen by name: Photos' home asks for the prompt, a walk and what the roll says
+//! (`Requested`), the made vault asks for a walk once it has the grant, and the pass service asks
+//! for a walk and a feed. This screen tells every open Photos home `PhotosPermissionChanged` and
+//! `PhotosBackupChanged` itself, asks the pass service for its after-import pass when a walk
+//! brought photographs in, and reads the member's transfer rule from the phone's store.
 
 use std::collections::VecDeque;
 
@@ -54,8 +57,10 @@ use wire::screen_event::Kind as E;
 
 use super::effect;
 use crate::catalog::act;
+use crate::custody::secrets::VaultSecrets;
 use crate::field::{Field, Keyed};
 use crate::kit::act as kit_act;
+use crate::passes::{Rules, TransferRule};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, imports as words, photos as photo_words};
 
@@ -68,12 +73,18 @@ pub const PAGE: u32 = 25;
 /// A hundred thousand items at [`PAGE`], and never a loop.
 const MAX_PASSES: u32 = 4_000;
 
-#[must_use]
-pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
-    let Some(wire::route::Args::Imports(args)) = &route.args else {
-        return None;
-    };
-    Some(Box::new(Roll::new(&args.vault_id)))
+/// The registry factory, over the phone's secrets: the member's transfer rule is read from the
+/// device store they hold (`passes::Rules`), never from the shell.
+pub fn build(
+    secrets: &VaultSecrets,
+) -> impl Fn(&wire::Route) -> Option<Box<dyn Screen>> + Send + Sync + 'static {
+    let secrets = secrets.clone();
+    move |route| {
+        let Some(wire::route::Args::Imports(args)) = &route.args else {
+            return None;
+        };
+        Some(Box::new(Roll::new(&args.vault_id, secrets.clone())) as Box<dyn Screen>)
+    }
 }
 
 /// The keychain key of a vault's cursor. PER VAULT, because a photograph offered to two vaults is
@@ -108,17 +119,16 @@ pub fn permission_sentence(locale: Locale, permission: Permission) -> String {
 /// delays a photograph. A video never crosses a metered link, whatever the rule, and under MANUAL
 /// what a backup needs waits for Wi-Fi as under WIFI_ONLY (R-1080-D7).
 #[must_use]
-pub fn may_fetch(link: &wire::LinkReading, video: bool) -> bool {
-    use wire::link_reading::Rule;
+pub fn may_fetch(link: &wire::LinkReading, rule: TransferRule, video: bool) -> bool {
     if !link.online {
         return false;
     }
     if !(link.metered || link.platform_refused) {
         return true;
     }
-    match Rule::try_from(link.rule).unwrap_or(Rule::Unspecified) {
-        Rule::WifiAndCellularPhotos => !video,
-        Rule::WifiOnly | Rule::Manual | Rule::Unspecified => false,
+    match rule {
+        TransferRule::WifiAndCellularPhotos => !video,
+        TransferRule::WifiOnly | TransferRule::Manual => false,
     }
 }
 
@@ -248,6 +258,9 @@ enum Job {
 
 struct Roll {
     vault_id: String,
+    secrets: VaultSecrets,
+    /// What every open Photos home was last told: the grant and the backup line.
+    told: Option<(Permission, wire::PhotosBackupChanged)>,
     permission: Permission,
     backup: wire::PhotosBackupChanged,
     wait: Wait,
@@ -270,9 +283,11 @@ fn keychain(op: wire::keychain_op::Op, key: &str, value: &str) -> wire::Effect {
 }
 
 impl Roll {
-    fn new(vault_id: &str) -> Self {
+    fn new(vault_id: &str, secrets: VaultSecrets) -> Self {
         Self {
             vault_id: vault_id.to_owned(),
+            secrets,
+            told: None,
             permission: Permission::NotAsked,
             backup: wire::PhotosBackupChanged {
                 phase: wire::PhotosBackupPhase::Idle as i32,
@@ -338,6 +353,13 @@ impl Roll {
         self.wait = Wait::Nothing;
         if let Some(Job::Walk(walk)) = self.job.take() {
             self.imported_total += walk.imported;
+            // WHAT WAS JUST STAGED MOVES NOW: a walk that brought photographs in asks the pass
+            // service for its after-import pass (debounced there), with no shell between.
+            if walk.imported > 0 {
+                self.secrets
+                    .conductor()
+                    .ask(ctx, wire::pass_asked::Ask::ImportFinished);
+            }
             // THE PASS WAITS ON THE ROLL, so a walk that ends tells it however it ended (a
             // denied grant, a refused effect, the end of the roll). A walk queued behind this
             // one reports at its own end: the pass asked for the roll as it is now.
@@ -508,6 +530,7 @@ impl Roll {
     }
 
     fn linked(&mut self, link: &wire::LinkReading) -> Vec<wire::Effect> {
+        let rule = Rules::read(&self.secrets).rule;
         if let Some(Job::Feed(feed)) = self.job.as_mut() {
             let Some(need) = feed.current.as_ref() else {
                 return Vec::new();
@@ -518,7 +541,7 @@ impl Roll {
             return vec![effect(wire::effect::Kind::LibraryStage(
                 wire::LibraryStage {
                     r#ref: need.os_ref.clone(),
-                    allow_network: may_fetch(link, video),
+                    allow_network: may_fetch(link, rule, video),
                     changed_in_place: false,
                     media_type: need.media_type.clone(),
                     byte_size: need.size,
@@ -533,7 +556,7 @@ impl Roll {
         };
         let request = wire::LibraryStage {
             r#ref: resource.reference.clone(),
-            allow_network: may_fetch(link, resource.video),
+            allow_network: may_fetch(link, rule, resource.video),
             // The lookup of what the vault last filed this ref as comes BEFORE the new bytes are
             // staged: afterwards the ref names both.
             changed_in_place: offer.asset.changed_in_place && resource.original,
@@ -860,18 +883,60 @@ fn resource_ref(offer: &Offer) -> String {
         .unwrap_or_default()
 }
 
-impl Screen for Roll {
-    fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
+impl Roll {
+    /// TELL EVERY OPEN PHOTOS HOME what the roll says (`PhotosPermissionChanged`,
+    /// `PhotosBackupChanged`): when either moved, or every time when `again` (a home opened and
+    /// asked). No shell relays it.
+    fn tell(&mut self, ctx: &Ctx, again: bool) {
+        let now = (self.permission, self.backup.clone());
+        if !again && self.told.as_ref() == Some(&now) {
+            return;
+        }
+        self.told = Some(now);
+        let home = |kind: wire::photos_home_event::Kind| wire::ScreenEvent {
+            kind: Some(E::PhotosHome(wire::PhotosHomeEvent { kind: Some(kind) })),
+        };
+        ctx.post(
+            crate::photos::HOME,
+            home(wire::photos_home_event::Kind::Permission(
+                wire::PhotosPermissionChanged {
+                    permission: self.permission as i32,
+                },
+            )),
+        );
+        ctx.post(
+            crate::photos::HOME,
+            home(wire::photos_home_event::Kind::Backup(self.backup.clone())),
+        );
+    }
+
+    /// The vault this roll is offered to: the one an event named, else the vault in front.
+    fn learn_vault(&mut self, ctx: &Ctx, named: &str) {
+        if !named.is_empty() {
+            named.clone_into(&mut self.vault_id);
+        } else if self.vault_id.is_empty()
+            && let Some(front) = ctx.vaults().and_then(|vaults| vaults.foreground_id())
+        {
+            self.vault_id = front;
+        }
+    }
+
+    fn react(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         use wire::effect_result::Outcome as O;
         match event.kind {
             // Read the OS grant onto the screen. A read, never an ask: a grant that landed after
             // the session attached must be on state before the member-visible frame.
-            Some(E::Appeared(_)) if self.job.is_none() => self.ask_permission(false, Why::Sync),
+            Some(E::Appeared(_)) => {
+                self.learn_vault(ctx, "");
+                if self.job.is_none() {
+                    self.ask_permission(false, Why::Sync)
+                } else {
+                    Vec::new()
+                }
+            }
             Some(E::ImportsCameraRoll(roll)) => {
                 // THE VAULT THE ROLL IS OFFERED TO: the cursor is per vault.
-                if !roll.vault_id.is_empty() {
-                    self.vault_id = roll.vault_id.clone();
-                }
+                self.learn_vault(ctx, &roll.vault_id);
                 match roll.kind {
                     Some(C::Requested(requested)) => {
                         use wire::imports_camera_roll_event::requested::Action;
@@ -881,8 +946,16 @@ impl Screen for Roll {
                             Action::AskPermission if self.job.is_some() => Vec::new(),
                             Action::AskPermission => self.ask_permission(true, Why::Ask),
                             Action::ImportNow => self.trigger(),
-                            Action::ReadPermission if self.job.is_some() => Vec::new(),
-                            Action::ReadPermission => self.ask_permission(false, Why::Sync),
+                            // A HOME OPENED: it is told what the roll says now, and the grant is
+                            // read again in case it moved in Settings.
+                            Action::ReadPermission => {
+                                self.tell(ctx, true);
+                                if self.job.is_some() {
+                                    Vec::new()
+                                } else {
+                                    self.ask_permission(false, Why::Sync)
+                                }
+                            }
                             Action::Unspecified => Vec::new(),
                         }
                     }
@@ -927,6 +1000,14 @@ impl Screen for Roll {
             }
             _ => Vec::new(),
         }
+    }
+}
+
+impl Screen for Roll {
+    fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
+        let effects = self.react(event, ctx);
+        self.tell(ctx, false);
+        effects
     }
 
     fn view(&self, _ctx: &Ctx) -> wire::ViewState {

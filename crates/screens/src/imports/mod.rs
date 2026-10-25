@@ -1,7 +1,8 @@
-//! THE PHONE IMPORTS (#1135, lane I): headless SERVICE screens the shell opens once per
-//! foreground vault, never drawn. Every decision is Rust's; the shell performs the platform
-//! work as generic effects and answers them. `docs/screens.md`, "Phone imports (lane I)", says
-//! exactly what the shell does.
+//! THE PHONE IMPORTS (#1135, lane I): headless screens, the roots of three hidden tabs
+//! ([`roots`]), opened again for each vault in front and never drawn. Every decision is Rust's;
+//! the shell performs the platform work as generic effects and answers them, and sends two
+//! things: `LibraryChanged` to the camera roll on an OS library change, and `Made` to the made
+//! vault's screen when a vault is made. Everything else reaches them by name (`Ctx::post`).
 //!
 //! | Screen | Replaces (KMP) | Hosts |
 //! |---|---|---|
@@ -27,16 +28,17 @@ pub mod reminders;
 use centraid_api_proto::core_v1 as wire;
 
 use crate::Registry;
+use crate::custody::secrets::VaultSecrets;
 
 pub const CAMERA_ROLL: &str = "imports.camera_roll";
 pub const FILES: &str = "imports.files";
 pub const MADE: &str = "imports.made";
 
-/// The registry of the three services.
+/// The registry of the three services, over the phone's secrets (the member's transfer rule).
 #[must_use]
-pub fn registry() -> Registry {
+pub fn registry(secrets: &VaultSecrets) -> Registry {
     Registry::default()
-        .with(CAMERA_ROLL, camera_roll::build)
+        .with(CAMERA_ROLL, camera_roll::build(secrets))
         .with(FILES, files::build)
         .with(MADE, made::build)
 }
@@ -88,7 +90,13 @@ pub fn roots() -> Vec<(String, wire::Route)> {
 /// A runtime that hosts only the three services, for tests.
 #[must_use]
 pub fn runtime() -> crate::Runtime {
-    crate::Runtime::new(registry(), roots())
+    runtime_with(&VaultSecrets::new())
+}
+
+/// [`runtime`], over secrets a test fills (the member's transfer rule).
+#[must_use]
+pub fn runtime_with(secrets: &VaultSecrets) -> crate::Runtime {
+    crate::Runtime::new(registry(secrets), roots())
 }
 
 pub(crate) fn effect(kind: wire::effect::Kind) -> wire::Effect {

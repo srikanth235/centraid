@@ -10,9 +10,11 @@ use centraid_screens::imports::camera_roll::{
     add_request, can_enumerate, cursor_key, may_fetch, permission_sentence,
 };
 use centraid_screens::kit::read;
+use centraid_screens::passes::TransferRule as Rule;
 use centraid_screens::strings::Locale;
 use imports_support::{
-    Library, Shell, live, photo, resource, serve_library, shell, shell_over, wifi,
+    Library, Shell, choose, live, photo, resource, rule, serve_library, shell, shell_over,
+    shell_with, wifi,
 };
 use wire::PhotosMediaPermission as Permission;
 use wire::app_query_response::Answer;
@@ -224,53 +226,44 @@ fn a_denied_grant_leaves_the_backup_idle_and_says_why_and_enumerates_nothing() {
 
 // ---- what may cross which link ----
 
-fn link(
-    online: bool,
-    metered: bool,
-    refused: bool,
-    rule: wire::link_reading::Rule,
-) -> wire::LinkReading {
+fn link(online: bool, metered: bool, refused: bool) -> wire::LinkReading {
     wire::LinkReading {
         online,
         metered,
         platform_refused: refused,
-        rule: rule as i32,
     }
 }
 
 #[test]
 fn wifi_only_downloads_an_icloud_original_only_on_a_link_nobody_pays_for() {
-    use wire::link_reading::Rule;
-    let cellular = link(true, true, false, Rule::WifiOnly);
-    assert!(!may_fetch(&cellular, false));
-    assert!(may_fetch(&wifi(), false));
-    assert!(may_fetch(&wifi(), true));
+    let cellular = link(true, true, false);
+    assert!(!may_fetch(&cellular, Rule::WifiOnly, false));
+    assert!(may_fetch(&wifi(), Rule::WifiOnly, false));
+    assert!(may_fetch(&wifi(), Rule::WifiOnly, true));
 }
 
 #[test]
 fn a_platform_that_would_not_say_is_expensive_and_offline_downloads_nothing() {
-    use wire::link_reading::Rule;
-    assert!(!may_fetch(&link(true, false, true, Rule::WifiOnly), false));
+    assert!(!may_fetch(&link(true, false, true), Rule::WifiOnly, false));
     assert!(!may_fetch(
-        &link(false, false, false, Rule::WifiOnly),
+        &link(false, false, false),
+        Rule::WifiOnly,
         false
     ));
 }
 
 #[test]
 fn manual_fetches_on_wifi_as_wifi_only_does_and_never_on_cellular() {
-    use wire::link_reading::Rule;
-    assert!(may_fetch(&link(true, false, false, Rule::Manual), false));
-    assert!(!may_fetch(&link(true, true, false, Rule::Manual), false));
+    assert!(may_fetch(&link(true, false, false), Rule::Manual, false));
+    assert!(!may_fetch(&link(true, true, false), Rule::Manual, false));
 }
 
 #[test]
 fn photos_on_cellular_downloads_a_photographs_original_there_and_never_a_videos() {
-    use wire::link_reading::Rule;
-    let cellular = link(true, true, false, Rule::WifiAndCellularPhotos);
-    assert!(may_fetch(&cellular, false));
+    let cellular = link(true, true, false);
+    assert!(may_fetch(&cellular, Rule::WifiAndCellularPhotos, false));
     // THE FIXED RULE: a member who said "photos on cellular" did not say "a 900 MB video".
-    assert!(!may_fetch(&cellular, true));
+    assert!(!may_fetch(&cellular, Rule::WifiAndCellularPhotos, true));
 }
 
 #[test]
@@ -417,13 +410,12 @@ fn a_live_photo_is_one_asset_two_resources_in_one_capture_group_with_derivatives
 #[test]
 fn an_original_only_in_icloud_waits_for_wifi_with_the_cursor_before_it_and_is_fetched_once_it_may_be()
  {
-    use wire::link_reading::Rule;
     let mut library = Library::new()
         .with(photo("A"), &[("A", STILL)])
         .with(photo("B"), &[("B", MOVIE)])
         .with(photo("C"), &[("C", b"third")]);
     library.in_cloud.insert("B".to_owned());
-    library.link = link(true, true, false, Rule::WifiOnly);
+    library.link = link(true, true, false);
     let mut shell = started(&mut library);
 
     // STAGING IS LOCAL: the photograph on the phone goes in on cellular.
@@ -608,12 +600,14 @@ fn the_need_bytes_feed_streams_each_ask_by_its_os_ref_and_only_the_hash_asked_fo
 
 #[test]
 fn the_feed_downloads_from_icloud_only_where_the_rule_lets_it_cross_the_link() {
-    use wire::link_reading::Rule;
     let mut library = Library::new();
     library.bytes.insert("P".to_owned(), STILL.to_vec());
     library.bytes.insert("V".to_owned(), MOVIE.to_vec());
-    library.link = link(true, true, false, Rule::WifiAndCellularPhotos);
-    let mut shell = started(&mut library);
+    library.link = link(true, true, false);
+    // THE MEMBER'S RULE IS READ FROM THE PHONE'S STORE, never told by the shell.
+    let secrets = rule(Rule::WifiAndCellularPhotos);
+    let mut shell = shell_with(&secrets);
+    serve_library(&mut shell, &mut library);
     send(
         &mut shell,
         roll::Kind::BytesNeeded(roll::BytesNeeded {
@@ -631,7 +625,8 @@ fn the_feed_downloads_from_icloud_only_where_the_rule_lets_it_cross_the_link() {
     );
     // An unknown link is metered, and WIFI_ONLY keeps even a photograph off it.
     library.asked.clear();
-    library.link = link(true, false, true, Rule::WifiOnly);
+    library.link = link(true, false, true);
+    choose(&secrets, Rule::WifiOnly);
     send(
         &mut shell,
         roll::Kind::BytesNeeded(roll::BytesNeeded {
@@ -668,10 +663,12 @@ fn listening() -> (
 ) {
     let heard = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let ear = heard.clone();
-    let registry = centraid_screens::imports::registry()
-        .with(centraid_screens::passes::service::NAME, move |_| {
-            Some(Box::new(PassEar(ear.clone())))
-        });
+    let registry = centraid_screens::imports::registry(
+        &centraid_screens::custody::secrets::VaultSecrets::new(),
+    )
+    .with(centraid_screens::passes::service::NAME, move |_| {
+        Some(Box::new(PassEar(ear.clone())))
+    });
     let runtime = centraid_screens::Runtime::new(registry, centraid_screens::imports::roots())
         .with_services(centraid_screens::passes::services());
     (shell_over(runtime), heard)

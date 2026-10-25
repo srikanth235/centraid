@@ -6,7 +6,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_screens::custody::secrets::VaultSecrets;
 use centraid_screens::imports;
+use centraid_screens::passes::{Rules, TransferRule};
 use centraid_screens::testing::Driver;
 
 pub struct Shell {
@@ -18,6 +20,29 @@ pub struct Shell {
 
 pub fn shell() -> Shell {
     shell_over(imports::runtime())
+}
+
+/// The shell over the phone's secrets `secrets` (the member's transfer rule, which Rust reads).
+pub fn shell_with(secrets: &VaultSecrets) -> Shell {
+    shell_over(imports::runtime_with(secrets))
+}
+
+/// Secrets whose device store holds the member's transfer rule `rule`, as the shell answered it.
+pub fn rule(rule: TransferRule) -> VaultSecrets {
+    let secrets = VaultSecrets::new();
+    choose(&secrets, rule);
+    secrets
+}
+
+/// The member chose `rule`: the device store holds it from now on.
+pub fn choose(secrets: &VaultSecrets, rule: TransferRule) {
+    secrets.absorb(
+        &[Rules::write_rule(rule)],
+        &[wire::SecretAnswer {
+            ok: true,
+            ..wire::SecretAnswer::default()
+        }],
+    );
 }
 
 /// The same shell over a runtime of the test's own (the imports plus a stand-in for a screen
@@ -104,7 +129,6 @@ pub fn wifi() -> wire::LinkReading {
         online: true,
         metered: false,
         platform_refused: false,
-        rule: wire::link_reading::Rule::WifiOnly as i32,
     }
 }
 

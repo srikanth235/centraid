@@ -372,7 +372,12 @@ impl Home {
                 use wire::camera_roll::Action;
                 use wire::photos_home_import_banner::Remedy;
                 let action = match Remedy::try_from(picked.remedy).unwrap_or(Remedy::Unspecified) {
-                    Remedy::Ask => Action::AskPermission,
+                    // THE PROMPT IS THE CAMERA ROLL'S, asked by name: it walks if the grant allows.
+                    Remedy::Ask => {
+                        ask_roll(ctx, RollAsk::AskPermission);
+                        return Vec::new();
+                    }
+                    // Settings and iOS's limited selection are the platform's own pages.
                     Remedy::Settings => Action::OpenSettings,
                     Remedy::ManageSelection => Action::ManageSelection,
                     Remedy::Unspecified => return Vec::new(),
@@ -381,7 +386,7 @@ impl Home {
             }
             H::ImportNow(_) => {
                 if !self.roll.running() {
-                    return vec![camera_roll(wire::camera_roll::Action::ImportNow)];
+                    ask_roll(ctx, RollAsk::ImportNow);
                 }
             }
             H::FreeUpTapped(_) => {
@@ -816,6 +821,25 @@ fn refused(sentence: String) -> wire::StatusLine {
     }
 }
 
+use wire::imports_camera_roll_event::requested::Action as RollAsk;
+
+/// Ask the camera roll (`imports.camera_roll`) by name: a prompt, a walk, or what it says now.
+fn ask_roll(ctx: &Ctx, action: RollAsk) {
+    ctx.post(
+        crate::imports::CAMERA_ROLL,
+        wire::ScreenEvent {
+            kind: Some(E::ImportsCameraRoll(wire::ImportsCameraRollEvent {
+                vault_id: String::new(),
+                kind: Some(wire::imports_camera_roll_event::Kind::Requested(
+                    wire::imports_camera_roll_event::Requested {
+                        action: action as i32,
+                    },
+                )),
+            })),
+        },
+    );
+}
+
 fn camera_roll(action: wire::camera_roll::Action) -> wire::Effect {
     wire::Effect {
         kind: Some(wire::effect::Kind::CameraRoll(wire::CameraRoll {
@@ -829,6 +853,8 @@ impl Screen for Home {
         match event.kind {
             Some(E::Appeared(_)) => {
                 self.read(ctx);
+                // THE ROLL TELLS A HOME THAT OPENS what it says, and reads the grant again.
+                ask_roll(ctx, RollAsk::ReadPermission);
                 // THE TILE SIZE ACROSS LAUNCHES (v0's `photos-rung-store.ts`): the
                 // rung and ONLY the rung is remembered; the filter and the zoom are
                 // session-scoped.

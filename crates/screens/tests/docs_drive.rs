@@ -627,29 +627,24 @@ fn the_add_sheet_rows_follow_the_os_grants_as_state() {
 }
 
 #[test]
-fn a_followed_folder_is_a_stop_row_and_stopping_asks_the_shell_to_forget_it() {
+fn a_folder_the_vault_follows_is_a_stop_row_and_stopping_asks_the_shell_to_forget_it() {
     let mut d = driver();
     let i = root(&d);
     band(&mut d, i, "more");
     assert!(!sheet_keys(state(&d, i)).contains(&"followed".to_owned()));
-    drive_send(
-        &mut d,
-        i,
-        D::FollowedChanged(de::FollowedChanged {
-            followed: vec![
-                wire::DocsFollowed {
-                    origin_id: "folder:abc".to_owned(),
-                    name: "Scans".to_owned(),
-                    documents: 1,
-                },
-                wire::DocsFollowed {
-                    origin_id: "folder:def".to_owned(),
-                    name: "Receipts".to_owned(),
-                    documents: 4,
-                },
-            ],
-        }),
-    );
+    // THE VAULT FOLLOWS TWO FOLDERS (as `imports.files` records them); the drive reads them.
+    for (origin, label) in [("folder:abc", "Scans"), ("folder:def", "Receipts")] {
+        arrange(
+            &d,
+            act::shell::FollowFiles {
+                origin: serde_json::json!({ "ref": origin, "label": label, "fills": null })
+                    .to_string(),
+                records: "[]".to_owned(),
+                complete: Some(false),
+            },
+        );
+    }
+    drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
     assert!(sheet_keys(state(&d, i)).contains(&"followed".to_owned()));
     pick(&mut d, i, "followed");
     let sheet = state(&d, i).sheet.as_ref().unwrap();
@@ -657,9 +652,9 @@ fn a_followed_folder_is_a_stop_row_and_stopping_asks_the_shell_to_forget_it() {
     let Some(wire::docs_sheet::Body::Actions(list)) = &sheet.body else {
         panic!();
     };
-    assert_eq!(list.actions[0].label, "Stop following Scans");
-    assert_eq!(list.actions[0].detail, "1 document stays in Docs");
-    assert_eq!(list.actions[1].detail, "4 documents stay in Docs");
+    // In the name's order, as the vault lists them.
+    assert_eq!(list.actions[0].label, "Stop following Receipts");
+    assert_eq!(list.actions[1].label, "Stop following Scans");
     assert_eq!(
         list.footer,
         "Files added, changed or removed in these folders reach Docs. Stopping keeps every document."

@@ -68,7 +68,7 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
             .merge(notes::registry())
             .merge(people::registry())
             .merge(photos::registry())
-            .merge(imports::registry())
+            .merge(imports::registry(&secrets))
             .merge(chat::registry())
             .merge(custody::registry_with(&secrets, &keeper))
             .merge(pairing::registry(&secrets))

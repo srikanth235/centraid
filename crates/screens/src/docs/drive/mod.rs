@@ -192,6 +192,7 @@ impl Drive {
     // -----------------------------------------------------------------------
 
     fn reload(&mut self, ctx: &Ctx) {
+        self.read_followed(ctx);
         if let Some(term) = self.active_term() {
             let mut request: wire::LoadRequest = load::docs::Search { term }.into();
             request.limit = SEARCH_LIMIT;
@@ -369,7 +370,6 @@ impl Drive {
             }
             Some(D::Dismissed(_)) => self.asking = None,
             Some(D::Permission(changed)) => self.permission(&changed),
-            Some(D::FollowedChanged(changed)) => self.followed = changed.followed,
             Some(D::IngestRetried(_)) => {
                 let effects = self.ingest.retry(ctx);
                 self.reload(ctx);
@@ -501,6 +501,15 @@ impl Drive {
                     // The shell forgets its access and tells the core to forget
                     // the folder's links; every document stays.
                     self.followed.retain(|folder| folder.origin_id != origin);
+                    // THE VAULT FORGETS THE FOLDER'S LINKS (`imports.files`); the shell, its access.
+                    tell_files(
+                        ctx,
+                        wire::imports_files_event::Kind::FolderStopped(
+                            wire::imports_files_event::FolderStopped {
+                                origin: origin.to_owned(),
+                            },
+                        ),
+                    );
                     return vec![wire::Effect {
                         kind: Some(wire::effect::Kind::StopFollowing(wire::StopFollowing {
                             origin: origin.to_owned(),
@@ -713,7 +722,46 @@ impl Screen for Drive {
     }
 }
 
+/// Tell the folder follower (`imports.files`) what the member did with a folder.
+fn tell_files(ctx: &Ctx, kind: wire::imports_files_event::Kind) {
+    ctx.post(
+        "imports.files",
+        wire::ScreenEvent {
+            kind: Some(E::ImportsFiles(wire::ImportsFilesEvent {
+                kind: Some(kind),
+            })),
+        },
+    );
+}
+
 impl Drive {
+    /// THE FOLDERS THIS VAULT FOLLOWS, as the vault holds them (`shell.files-followed`): read
+    /// with the drive, so a follow or a stop the vault recorded is drawn on its next read. A
+    /// read that failed keeps the list it had.
+    fn read_followed(&mut self, ctx: &Ctx) {
+        let reading = read::read(
+            ctx,
+            load::shell::FilesFollowed::default(),
+            |answer| match answer {
+                Answer::ImportsFilesHeld(held) => Some(held),
+                _ => None,
+            },
+        );
+        if let Reading::Data(held) = reading {
+            let mut followed: Vec<wire::DocsFollowed> = held
+                .folders
+                .into_iter()
+                .map(|folder| wire::DocsFollowed {
+                    origin_id: folder.origin_ref,
+                    name: folder.label,
+                    documents: i32::try_from(folder.documents).unwrap_or(i32::MAX),
+                })
+                .collect();
+            followed.sort_by_key(|folder| folder.name.to_lowercase());
+            self.followed = followed;
+        }
+    }
+
     /// An answer to an effect: the ingest's, else the folder follow's.
     fn effect_result(&mut self, result: wire::EffectResult, ctx: &Ctx) -> Vec<wire::Effect> {
         use wire::effect_result::Outcome as O;
@@ -726,6 +774,16 @@ impl Drive {
         }
         match outcome {
             O::FolderFollowed(followed) => {
+                // THE VAULT FOLLOWS IT (`imports.files`); the list reads the vault again once it does.
+                tell_files(
+                    ctx,
+                    wire::imports_files_event::Kind::FolderFollowed(
+                        wire::imports_files_event::FolderFollowed {
+                            origin: followed.origin.clone(),
+                            name: followed.name.clone(),
+                        },
+                    ),
+                );
                 if !self.followed.iter().any(|f| f.origin_id == followed.origin) {
                     self.followed.push(wire::DocsFollowed {
                         origin_id: followed.origin,

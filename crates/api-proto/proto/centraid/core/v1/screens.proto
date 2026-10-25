@@ -700,20 +700,20 @@ message OriginalsExported {
 // THE CAMERA ROLL'S PLATFORM HALF (#1025 S6). Photos' grid decides what the
 // banner says and which remedy it offers; the shell performs the remedy. The
 // roll itself (enumerating, uploading) is the shell's own and is not an effect.
+// THE PLATFORM'S OWN PHOTO PAGES, which only it can open: this app's page in
+// Settings, and iOS's limited selection. The prompt and a walk are the camera
+// roll's (`imports.camera_roll`), asked by name.
 message CameraRoll {
   Action action = 1;
 
   enum Action {
     ACTION_UNSPECIFIED = 0;
-    // The system's photo-access prompt. The shell answers by sending the
-    // screen a `PermissionChanged` event.
-    ACTION_ASK_PERMISSION = 1;
     // This app's page in Settings.
     ACTION_OPEN_SETTINGS = 2;
     // iOS's limited selection: let the member edit it.
     ACTION_MANAGE_SELECTION = 3;
-    // Run one camera-roll pass now.
-    ACTION_IMPORT_NOW = 4;
+    // `ACTION_ASK_PERMISSION`, `ACTION_IMPORT_NOW`: the camera roll's.
+    reserved 1, 4;
   }
 }
 

@@ -552,7 +552,7 @@ fn a_permission_or_progress_report_asks_the_shell_for_nothing() {
 }
 
 #[test]
-fn import_now_over_an_emptied_library_asks_the_shell_to_run_a_pass() {
+fn import_now_over_an_emptied_library_asks_the_camera_roll_for_a_pass_and_the_shell_for_nothing() {
     let mut r = rig();
     r.clear_library();
     r.send(H::Permission(wire::PhotosPermissionChanged {
@@ -564,24 +564,24 @@ fn import_now_over_an_emptied_library_asks_the_shell_to_run_a_pass() {
     r.send(H::Filter(Filter::Favorites as i32));
     assert!(r.state().import_banner.is_none());
     r.send(H::Filter(Filter::All as i32));
+    // THE ROLL IS ASKED BY NAME (`imports_by_name.rs` follows it there).
     let update = r.send(H::ImportNow(wire::PhotosImportNow {}));
-    assert!(matches!(
-        update.effects[0].effect.as_ref().unwrap().kind,
-        Some(wire::effect::Kind::CameraRoll(ref roll))
-            if roll.action == wire::camera_roll::Action::ImportNow as i32
-    ));
+    assert!(update.effects.is_empty(), "{:?}", update.effects);
     // The empty library says so, in its own words.
     let empty = r.library().empty.as_ref().expect("an empty state");
     assert_eq!(empty.headline, "No photos on this phone yet.");
 }
 
 #[test]
-fn the_remedies_are_effects_the_shell_performs() {
+fn the_platforms_own_pages_are_effects_the_shell_performs_and_the_prompt_is_the_rolls() {
     use wire::camera_roll::Action;
     use wire::photos_home_import_banner::Remedy;
     let mut r = rig();
+    let update = r.send(H::Remedy(wire::PhotosBannerRemedy {
+        remedy: Remedy::Ask as i32,
+    }));
+    assert!(update.effects.is_empty(), "{:?}", update.effects);
     for (remedy, action) in [
-        (Remedy::Ask, Action::AskPermission),
         (Remedy::Settings, Action::OpenSettings),
         (Remedy::ManageSelection, Action::ManageSelection),
     ] {

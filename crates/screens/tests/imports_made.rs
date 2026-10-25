@@ -43,7 +43,10 @@ fn asked(shell: &Shell) -> Vec<String> {
         .iter()
         .filter_map(|request| {
             Some(match request.effect.as_ref()?.kind.as_ref()? {
-                K::CameraRoll(roll) => format!("camera_roll:{}", roll.action),
+                // The made vault's own photo prompt; the camera roll's reads are its own.
+                K::LibraryPermission(read) if request.instance == shell.made => {
+                    format!("photo_prompt:ask={}", read.ask)
+                }
                 K::ContactsRead(read) => format!("contacts:ask={}", read.ask_permission),
                 K::CalendarRead(read) => format!("calendar:ask={}", read.ask_permission),
                 K::RemindersRead(read) => format!("reminders:ask={}", read.ask_permission),
@@ -158,8 +161,30 @@ fn open_tasks(shell: &Shell) -> u32 {
     })
 }
 
+/// The member answered the photo prompt (no to it, so the camera roll stays still).
 fn photos_answered(shell: &mut Shell) {
-    shell.d.answer_effect(O::Done(wire::EffectDone {}));
+    let at = shell
+        .d
+        .effects
+        .iter()
+        .position(|request| {
+            request.instance == shell.made
+                && matches!(
+                    request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+                    Some(K::LibraryPermission(_))
+                )
+        })
+        .expect("the photo prompt was asked");
+    let request = shell.d.effects.remove(at);
+    shell.d.send(
+        shell.made,
+        wire::screen_event::Kind::EffectResult(wire::EffectResult {
+            effect_id: request.effect_id,
+            outcome: Some(O::LibraryPermissionRead(wire::LibraryPermissionRead {
+                permission: wire::PhotosMediaPermission::Denied as i32,
+            })),
+        }),
+    );
 }
 
 #[test]
@@ -167,7 +192,7 @@ fn photo_access_is_asked_once_and_only_after_it_is_answered_the_importers_run_in
     let mut shell = shell_for_made();
     made(&mut shell, true);
     // TWO SYSTEM PROMPTS NEVER STACK: the photo prompt first, and nothing else until it is answered.
-    assert_eq!(asked(&shell), vec!["camera_roll:1"]);
+    assert_eq!(asked(&shell), vec!["photo_prompt:ask=true"]);
     assert!(view(&shell).running);
     photos_answered(&mut shell);
     assert_eq!(asked(&shell), vec!["contacts:ask=true"]);
@@ -269,7 +294,7 @@ fn a_made_event_is_heard_once() {
     made(&mut shell, false);
     assert_eq!(
         asked(&shell),
-        vec!["camera_roll:1"],
+        vec!["photo_prompt:ask=true"],
         "one prompt, however many times it is told"
     );
 }

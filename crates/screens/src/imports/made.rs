@@ -10,9 +10,9 @@
 //! (so a calendar imported here is followed from now on, exactly as one imported from Agenda's
 //! home), and [`super::reminders`]. This screen only sequences them and says the result.
 //!
-//! The shell opens it when the vault is made (`Made`), answers `CameraRoll` with `EffectDone`
-//! once the OS prompt is answered (and lets the camera-roll service walk), answers the importers'
-//! reads as it always does, and closes the service when the view says `finished`.
+//! The shell tells it when the vault is made (`Made`), answers the photo prompt
+//! (`LibraryPermission{ask}`) and the importers' reads as it always does, and stops drawing its
+//! line when the view says `finished`. A grant asks the camera roll to walk, by name.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::imports_made_event::Kind as M;
@@ -114,9 +114,9 @@ impl Made {
         match self.step {
             Step::Idle => {
                 self.step = Step::Photos;
-                vec![effect(wire::effect::Kind::CameraRoll(wire::CameraRoll {
-                    action: wire::camera_roll::Action::AskPermission as i32,
-                }))]
+                vec![effect(wire::effect::Kind::LibraryPermission(
+                    wire::LibraryPermission { ask: true },
+                ))]
             }
             Step::Photos => {
                 self.step = Step::Contacts;
@@ -169,6 +169,22 @@ impl Made {
     }
 }
 
+/// Ask the camera roll to walk, now that the member let it read.
+fn walk(ctx: &Ctx) {
+    use wire::imports_camera_roll_event::{Kind, Requested, requested::Action};
+    ctx.post(
+        super::CAMERA_ROLL,
+        wire::ScreenEvent {
+            kind: Some(E::ImportsCameraRoll(wire::ImportsCameraRollEvent {
+                vault_id: String::new(),
+                kind: Some(Kind::Requested(Requested {
+                    action: Action::ImportNow as i32,
+                })),
+            })),
+        },
+    );
+}
+
 fn read_ended(result: &wire::EffectResult) -> bool {
     use wire::effect_result::Outcome as O;
     matches!(
@@ -191,9 +207,18 @@ impl Screen for Made {
                 }
                 Vec::new()
             }
-            // The OS photo prompt was answered (or the shell could not raise it): the importers go.
-            (E::EffectResult(result), Step::Photos) => match result.outcome {
-                Some(O::Done(_) | O::Failed(_)) => self.next(ctx),
+            // The OS photo prompt was answered (or the shell could not raise it): a grant starts
+            // the camera roll's walk, by name, and the importers go.
+            (E::EffectResult(result), Step::Photos) => match &result.outcome {
+                Some(O::LibraryPermissionRead(read)) => {
+                    let granted = wire::PhotosMediaPermission::try_from(read.permission)
+                        .is_ok_and(super::camera_roll::can_enumerate);
+                    if granted {
+                        walk(ctx);
+                    }
+                    self.next(ctx)
+                }
+                Some(O::Failed(_)) => self.next(ctx),
                 _ => Vec::new(),
             },
             (E::EffectResult(result), Step::Contacts) => {

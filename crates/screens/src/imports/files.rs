@@ -28,11 +28,11 @@
 //! delete, and Keep is the default (R-1127-9). The member is not asked; the KMP "keep or trash?"
 //! question went with the Kotlin follower.
 //!
-//! ## What the shell relays
+//! ## What reaches it by name
 //!
-//! The Docs drive owns the picker effects (`FollowFolder`, `StopFollowing`); the shell relays
-//! their answers here ([`wire::imports_files_event`]) and sends the drive this screen's
-//! `followed` list as `FollowedChanged` whenever it changes.
+//! The Docs drive owns the picker effects (`FollowFolder`, `StopFollowing`) and posts what they
+//! came to here ([`wire::imports_files_event`]); the drive reads the folders the vault follows
+//! itself (`shell.files-followed`). The app coming forward is heard as `Lifecycle`.
 
 use std::collections::{BTreeSet, VecDeque};
 use std::time::{Duration, Instant};
@@ -507,6 +507,11 @@ impl Screen for Files {
             }
             Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => {
                 self.reload(ctx);
+                Vec::new()
+            }
+            // THE APP CAME FORWARD: the folders may have changed while it was away.
+            Some(E::Lifecycle(wire::AppLifecycle { foreground: true })) => {
+                self.request(ctx);
                 Vec::new()
             }
             Some(E::ImportsFiles(files)) => {

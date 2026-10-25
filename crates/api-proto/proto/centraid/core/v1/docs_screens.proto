@@ -330,8 +330,8 @@ message DocsAction {
 }
 
 // A FOLDER DOCS FOLLOWS ON THIS PHONE (#1127): its origin (`folder:<uuid>`), the
-// name the phone gives it, and how many documents it holds. The shell reports
-// the list (`FollowedChanged`).
+// name the phone gives it, and how many documents it holds, as the vault holds
+// them (`shell.files-followed`, read with the drive).
 message DocsFollowed {
   string origin_id = 1;
   string name = 2;
@@ -478,14 +478,14 @@ message DocsDriveEvent {
     FolderCreated folder_created = 19;
     Confirmed confirmed = 20;
     Dismissed dismissed = 21;
-    // The shell's reports (law 4): what the OS lets the Add sheet offer, and
-    // the folders followed now.
+    // The shell's report (law 4): what the OS lets the Add sheet offer.
     PermissionChanged permission = 22;
-    FollowedChanged followed_changed = 23;
     // The status line's controls.
     IngestRetried ingest_retried = 24;
     IngestDismissed ingest_dismissed = 25;
   }
+  // `FollowedChanged`: the drive reads what the vault follows itself.
+  reserved 23;
 
   message Refreshed {}
 
@@ -565,10 +565,6 @@ message DocsDriveEvent {
       SURFACE_CAMERA = 1;
       SURFACE_FILES = 2;
     }
-  }
-
-  message FollowedChanged {
-    repeated DocsFollowed followed = 1;
   }
 
   message IngestRetried {}
