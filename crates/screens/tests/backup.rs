@@ -17,6 +17,7 @@ fn open() -> (Driver, FakeShell, u64) {
         locale: "en-US".to_owned(),
         zone: "UTC".to_owned(),
         platform: "ios".to_owned(),
+        ..Default::default()
     }));
     let instance = driver.push("home", routes::home());
     (driver, FakeShell::default(), instance)

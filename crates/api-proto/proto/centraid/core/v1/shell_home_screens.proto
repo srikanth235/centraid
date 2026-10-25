@@ -11,6 +11,7 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/backup_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/route.proto";
 
@@ -340,6 +341,18 @@ message HomeState {
   // the `Failure`), and drawn in place of Home. Its doors are `MakePressed` and
   // `RestorePressed`.
   optional HomeFirstLaunch first_launch = 9;
+  // THE TRANSFER RULES SHEET, set while it is open (`TransferRulesPressed`).
+  optional HomeTransferSheet transfer_sheet = 10;
+}
+
+// The sheet behind the gear beside "N originals waiting": the member's one transfer
+// rule, the same three choices the Backup page draws and the same store.
+message HomeTransferSheet {
+  string title = 1;
+  // Said once under the heading, rather than "on this phone" in every sentence.
+  string subtitle = 2;
+  // In the order the sheet lists them; exactly one is picked.
+  repeated BackupRuleChoice choices = 3;
 }
 
 // What a phone that holds no vault opens onto: every app's mark as one house,
@@ -378,6 +391,12 @@ message HomeEvent {
     RenameTyped rename_typed = 13;
     AskConfirmed ask_confirmed = 14;
     AskDismissed ask_dismissed = 15;
+    // The gear beside "N originals waiting": open the transfer rules sheet.
+    TransferRulesPressed transfer_rules_pressed = 17;
+    // A choice in that sheet (`BackupRuleChoice.stored`): kept, the pass service told in the
+    // same call, and the sheet closes.
+    TransferRuleChosen transfer_rule_chosen = 18;
+    TransferRulesClosed transfer_rules_closed = 19;
     // ---- told by the shell ----
     VaultsTold vaults_told = 20;
     BackupLineTold backup_told = 21;
@@ -405,6 +424,9 @@ message HomeEvent {
   message RenameTyped { string name = 1; }
   message AskConfirmed {}
   message AskDismissed {}
+  message TransferRulesPressed {}
+  message TransferRuleChosen { string stored = 1; }
+  message TransferRulesClosed {}
 
   message VaultsTold {
     // The one in front, and the roster in the shelf's order.

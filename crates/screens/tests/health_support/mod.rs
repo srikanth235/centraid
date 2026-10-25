@@ -20,6 +20,7 @@ pub fn driver_on(platform: &str, locale: &str) -> Driver {
         locale: locale.to_owned(),
         zone: "Europe/Berlin".to_owned(),
         platform: platform.to_owned(),
+        ..Default::default()
     }));
     driver.start();
     driver

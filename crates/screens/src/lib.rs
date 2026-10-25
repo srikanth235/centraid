@@ -59,7 +59,7 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
     let runtime = Runtime::new(
         Registry::default()
             .with(proof::NAME, proof::build)
-            .merge(shell::registry())
+            .merge(shell::registry(&secrets))
             .merge(agenda::registry())
             .merge(locker::registry())
             .merge(money::registry())

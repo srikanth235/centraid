@@ -48,6 +48,7 @@ pub fn phone(route: wire::Route, platform: &str) -> Phone {
         locale: "en-US".to_owned(),
         zone: "UTC".to_owned(),
         platform: platform.to_owned(),
+        ..Default::default()
     }));
     driver.start();
     let id = *driver.views.keys().next().expect("the root opened");

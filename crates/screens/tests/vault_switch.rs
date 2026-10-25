@@ -430,6 +430,7 @@ fn a_job_started_on_one_vault_finishes_on_it_after_a_switch_and_a_service_outliv
             locale: "en".to_owned(),
             zone: "UTC".to_owned(),
             platform: "ios".to_owned(),
+            ..Default::default()
         }));
     // ... and the member switches to B before it is done.
     ask_switch(&mut phone, &b);

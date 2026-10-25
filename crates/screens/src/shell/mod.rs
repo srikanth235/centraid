@@ -30,9 +30,9 @@ pub const TAB: &str = band::HOME;
 
 /// Every shell screen, registered under its route name.
 #[must_use]
-pub fn registry() -> Registry {
+pub fn registry(secrets: &crate::custody::secrets::VaultSecrets) -> Registry {
     Registry::default()
-        .with(HOME, home::build)
+        .with(HOME, home::build(secrets))
         .with(SEARCH, search::build)
 }
 
@@ -80,5 +80,9 @@ pub mod routes {
 /// what Home's own tests drive.
 #[must_use]
 pub fn runtime() -> crate::Runtime {
-    crate::Runtime::new(registry(), vec![(TAB.to_owned(), routes::home())]).with_band(band::view)
+    crate::Runtime::new(
+        registry(&crate::custody::secrets::VaultSecrets::new()),
+        vec![(TAB.to_owned(), routes::home())],
+    )
+    .with_band(band::view)
 }

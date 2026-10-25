@@ -522,7 +522,7 @@ fn the_backup_door_selects_the_backup_tab_when_it_exists_and_does_nothing_when_i
     tell(&mut d, i, H::Backup(wire::home_event::BackupPressed {}));
     assert_eq!(d.navigation.as_ref().unwrap().revision, before);
     // With one, the runtime selects it and the shell hears a new navigation.
-    let registry = shell::registry().with(
+    let registry = shell::registry(&centraid_screens::custody::secrets::VaultSecrets::new()).with(
         centraid_screens::proof::NAME,
         centraid_screens::proof::build,
     );

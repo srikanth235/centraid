@@ -39,6 +39,7 @@ use super::policy;
 use super::routes;
 use super::row_routes;
 use super::tiles::{self, Made};
+use crate::custody::secrets::VaultSecrets;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, home as words, photos};
 
@@ -126,28 +127,43 @@ struct Home {
     outcome: String,
     appearance: Appearance,
     phone_dark: bool,
+    /// The cache of what the shell keeps, shared with the pass service: the
+    /// transfer rule is read from it and written through it.
+    secrets: VaultSecrets,
+    transfer_sheet_open: bool,
 }
 
-/// The registry factory.
-#[must_use]
-pub fn build(_route: &wire::Route) -> Option<Box<dyn Screen>> {
-    Some(Box::new(Home {
-        tiles: policy::ORDER
-            .iter()
-            .map(|app| ((*app).to_owned(), tiles::loading()))
-            .collect(),
-        read: false,
-        vault: None,
-        vaults: Vec::new(),
-        none: false,
-        backup: None,
-        status: None,
-        sheet_open: false,
-        ask: Ask::None,
-        outcome: String::new(),
-        appearance: Appearance::System,
-        phone_dark: false,
-    }))
+/// The registry factory. Home shares the cache of what the shell keeps (the
+/// transfer rule lives in it) and the pass conductor with the other screens.
+pub fn build(
+    secrets: &VaultSecrets,
+) -> impl Fn(&wire::Route) -> Option<Box<dyn Screen>> + Send + Sync + 'static {
+    let secrets = secrets.clone();
+    move |_| Some(Box::new(Home::new(secrets.clone())))
+}
+
+impl Home {
+    fn new(secrets: VaultSecrets) -> Self {
+        Self {
+            secrets,
+            tiles: policy::ORDER
+                .iter()
+                .map(|app| ((*app).to_owned(), tiles::loading()))
+                .collect(),
+            read: false,
+            vault: None,
+            vaults: Vec::new(),
+            none: false,
+            backup: None,
+            status: None,
+            sheet_open: false,
+            ask: Ask::None,
+            outcome: String::new(),
+            appearance: Appearance::System,
+            phone_dark: false,
+            transfer_sheet_open: false,
+        }
+    }
 }
 
 fn effect(kind: wire::effect::Kind) -> wire::Effect {
@@ -285,6 +301,7 @@ impl Home {
             }
             H::AskConfirmed(_) => return self.ask_confirmed(),
             H::AskDismissed(_) => self.ask = Ask::None,
+            H::TransferRulesPressed(_) | H::TransferRuleChosen(_) | H::TransferRulesClosed(_) => {}
             H::VaultsTold(told) => {
                 let switched = self.vault_changed(&told);
                 let was_none = self.none;
@@ -609,6 +626,7 @@ impl Screen for Home {
                 } as i32,
                 loading_label: words::home_loading(locale),
                 first_launch: self.none.then(|| first_launch(locale)),
+                transfer_sheet: None,
             }))),
             ..wire::ViewState::default()
         }
