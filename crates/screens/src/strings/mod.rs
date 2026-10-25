@@ -133,6 +133,7 @@ pub mod health;
 pub mod locker;
 pub mod money;
 pub mod notes;
+pub mod pairing;
 pub mod people;
 pub mod photos;
 pub mod photos_home;

@@ -319,8 +319,19 @@ final class ShellModel: ObservableObject {
         // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED (R-ONBOARD-10), and when
         // Home's tile and chat's key slot learn the Locker is open.
         store.onAnnounce = { [weak self] topic in
-            guard topic == "locker.unlocked", let session = self?.session else { return }
-            LockerEntry.shared.unlocked(session: session)
+            switch topic {
+            case "locker.unlocked":
+                guard let session = self?.session else { return }
+                LockerEntry.shared.unlocked(session: session)
+            // A GATEWAY WAS PAIRED (`pair.laptop`): the mover must hold its certificate.
+            case "backup.destinations":
+                self?.refreshUploadPins()
+            // `pair.laptop` handed over to the words: a re-key, in pairing's terms.
+            case "pair.rekey":
+                self?.openRekeyForPairing()
+            default:
+                break
+            }
         }
         LockerEntry.shared.install()
         LockerEntry.shared.pushLock = { [weak self] in
@@ -781,7 +792,7 @@ final class ShellModel: ObservableObject {
 
     /// The same re-key from pair.laptop's `WordsTapped`: the screen explains
     /// the words in pairing's terms, not Locker's (#1047 F5).
-    private func openRekeyForPairing() {
+    func openRekeyForPairing() {
         wordsEntry.openRekeyForPairing()
         wordsSheet = .enter
     }

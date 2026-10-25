@@ -172,6 +172,8 @@ final class ScreenStore: ObservableObject {
         for id in update.closed {
             closed.insert(id)
             views[id] = nil
+            // A BROWSE LASTS AS LONG AS THE SCREEN THAT ASKED FOR IT.
+            GatewayBrowsing.shared.stop(id)
         }
         for view in update.views
         where !closed.contains(view.instance) && view.revision > (views[view.instance]?.revision ?? 0) {
@@ -274,7 +276,14 @@ final class ScreenStore: ObservableObject {
             FilePerformer.pick(pick) { [weak self] outcome in self?.answer(request, outcome) }
         case .saveFile(let save)?:
             FilePerformer.save(save) { [weak self] outcome in self?.answer(request, outcome) }
+        // PAIRING (#1135): read one QR code, and browse the network for gateways.
+        case .scanCode(let scan)?:
+            PairScan.run(scan) { [weak self] outcome in self?.answer(request, outcome) }
         #endif
+        case .browseGateways(let browse)?:
+            GatewayBrowsing.shared.perform(request.instance, browse) { [weak self] outcome in
+                self?.answer(request, outcome)
+            }
         case .calendarRead(let read)?:
             Task {
                 let outcome = await PhoneCalendar.snapshot(read)

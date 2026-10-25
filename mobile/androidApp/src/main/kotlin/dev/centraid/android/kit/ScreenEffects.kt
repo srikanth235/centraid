@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.content.ContextCompat
 import centraid.core.v1.CameraRead
+import centraid.core.v1.CodeScanned
 import centraid.core.v1.CameraRoll
 import centraid.core.v1.Effect
 import centraid.core.v1.EffectDone
@@ -45,6 +46,7 @@ import android.provider.OpenableColumns
 import dev.centraid.android.screens.docs.DocsPickers
 import dev.centraid.android.screens.mediaPermissions
 import dev.centraid.android.screens.people.readContactsSnapshot
+import dev.centraid.android.screens.words.CodeScanDoor
 import dev.centraid.android.screens.performExportOriginals
 import dev.centraid.android.screens.photos.PhotosEditRender
 import dev.centraid.core.CentraidCore
@@ -111,6 +113,9 @@ internal fun PerformScreenEffects(
     val fileDoors = remember { FileDoors() }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> fileDoors.picked(uri) }
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri -> fileDoors.saved(uri) }
+    // PAIRING'S SCAN (`ScanCode`): the camera, or the photo picker on a phone with none.
+    val scanDoor = remember { CodeScanDoor() }
+    scanDoor.Host()
     LaunchedEffect(screens) {
         screens.effects.collect { request ->
             // TWO APPS' RUNTIMES SHARE ONE CORE, so each hears every push: an effect for
@@ -129,6 +134,9 @@ internal fun PerformScreenEffects(
                 val result = if (effect?.health_read != null) {
                     health?.snapshot(effect.health_read!!) { healthLauncher?.launch(it) }
                         ?: failed("not performed by this shell")
+                } else if (effect?.scan_code != null) {
+                    scanDoor.scan(effect.scan_code!!.photo_label)?.let { EffectResult(code_scanned = CodeScanned(text = it)) }
+                        ?: EffectResult(failed = EffectFailed(reason = "scan closed", cancelled = true))
                 } else if (effect?.pick_file != null || effect?.follow_folder != null || effect?.stop_following != null || effect?.open_route != null) {
                     files(effect, docs, openRoute, answer)
                 } else {

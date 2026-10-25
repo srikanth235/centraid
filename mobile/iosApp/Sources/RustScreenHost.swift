@@ -368,6 +368,13 @@ private struct RustScreenView: View {
                 send: { store.send(instance, .trash($0)) },
                 onBack: pop
             )
+        // PAIRING A GATEWAY (#1135).
+        case .pairLaptop(let state)?:
+            PairLaptopPageView(
+                state: state,
+                send: { store.send(instance, .pairLaptop($0)) },
+                onDone: pop
+            )
         // PHOTOS' ONE-PHOTOGRAPH PAGES (#1135).
         case .photosLightbox(let state)?:
             PhotosLightboxView(

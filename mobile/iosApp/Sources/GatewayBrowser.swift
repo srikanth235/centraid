@@ -5,13 +5,14 @@ import CentraidShared
 
 // THE iOS HALF OF Q-1080-D3: ASK THE LAN WHERE A GATEWAY WENT.
 //
-// `commonMain`'s `GatewayRediscovery` decides WHEN to browse (a foreground
-// pass found no paired gateway, at most once every 30 s), WHICH sighting is
-// which gateway (the TXT `gw`, never the instance name) and what the core
-// does with the answer (`refresh_destination` dials each offered address with
-// the pinned certificate and keeps only the ones that answer as that
-// gateway). This file is only the browse: `GatewayBrowser`'s one method,
-// over `NWBrowser`.
+// Rust decides WHEN to browse (the screen that asked, `BrowseGateways`), WHICH
+// sighting is which gateway (the TXT `gw`, never the instance name;
+// `crates/screens/src/pairing/matching.rs`) and what the core does with the
+// answer (`refresh_destination` dials each offered address with the pinned
+// certificate and keeps only the ones that answer as that gateway). This file
+// is only the browse: `GatewayBrowsing` performs the effect over `NWBrowser`,
+// and `BonjourGatewayBrowser` is the same browse for the KMP side's
+// `GatewayRediscovery` while it lasts.
 //
 // THE PHONE ONLY BROWSES. `NWBrowser` sends a multicast query and reads its
 // answers; nothing here is an `NWListener`, and nothing accepts a connection.
@@ -304,6 +305,77 @@ final class BonjourGatewayBrowser: NSObject, GatewayBrowser {
             }
             // On the main queue, as every shell callback into Kotlin is.
             DispatchQueue.main.async { done(sightings) }
+        }
+        run.start()
+    }
+}
+
+
+// MARK: - the `BrowseGateways` effect
+
+/// THE PERFORMER OF `BrowseGateways` (#1135). `on: true` starts a browse for the
+/// screen that asked and keeps it going until `on: false` or that screen is
+/// closed: one window of `window_ms`, answered as `GatewaysSighted` with
+/// everything it resolved, then again every `repeat_ms` (0: once). A window that
+/// finds nothing is an empty answer. The window, the cadence and what the
+/// sightings mean are Rust's; this runs the browse and reports.
+@MainActor
+final class GatewayBrowsing {
+    static let shared = GatewayBrowsing()
+
+    /// One screen's browse; `ended` stops its next window.
+    private final class Session {
+        var ended = false
+    }
+
+    private var sessions: [UInt64: Session] = [:]
+
+    func perform(
+        _ instance: UInt64,
+        _ browse: Centraid_Core_V1_BrowseGateways,
+        answer: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
+    ) {
+        stop(instance)
+        guard browse.on else {
+            answer(.done(Centraid_Core_V1_EffectDone()))
+            return
+        }
+        let session = Session()
+        sessions[instance] = session
+        window(session, browse, answer)
+    }
+
+    func stop(_ instance: UInt64) {
+        sessions.removeValue(forKey: instance)?.ended = true
+    }
+
+    private func window(
+        _ session: Session,
+        _ browse: Centraid_Core_V1_BrowseGateways,
+        _ answer: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
+    ) {
+        let run = GatewayBrowseRun(
+            finder: NWServiceFinder(),
+            resolver: ConnectionResolver(),
+            window: TimeInterval(browse.windowMs) / 1000
+        ) { found in
+            DispatchQueue.main.async {
+                guard !session.ended else { return }
+                var sighted = Centraid_Core_V1_GatewaysSighted()
+                sighted.sightings = found.map { service in
+                    var sighting = Centraid_Core_V1_GatewaySighting()
+                    sighting.serviceName = service.serviceName
+                    sighting.txt = service.txt
+                    sighting.addresses = service.addresses
+                    return sighting
+                }
+                answer(.gatewaysSighted(sighted))
+                guard browse.repeatMs > 0 else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(browse.repeatMs))) {
+                    guard !session.ended else { return }
+                    GatewayBrowsing.shared.window(session, browse, answer)
+                }
+            }
         }
         run.start()
     }
