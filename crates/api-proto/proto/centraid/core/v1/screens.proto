@@ -192,6 +192,13 @@ message ScreenEvent {
     // it, and only its `act`s survive: the view is no longer drawn.
     Left left = 6;
     CounterEvent counter = 10;
+    // RUNTIME-ORIGINATED: a screen asked the shell to act on a topic
+    // (`Announce`), and every open screen, services included, hears it.
+    Announced announced = 8;
+    // ---- words (1300-1399, lane H2): custody_screens.proto ----
+    WordsMakeEvent words_make = 1300;
+    WordsEnterEvent words_enter = 1301;
+    WordsShowEvent words_show = 1302;
     // ---- agenda (100-199) ----
     AgendaHomeEvent agenda_home = 100;
     AgendaEventEvent agenda_event = 101;
@@ -258,6 +265,13 @@ message TimerFired {
 
 message EnvironmentChanged {}
 
+// A topic a screen announced (`Announce`), as the runtime relays it to every
+// open screen. The shell performs its own half of the announcement and sends
+// nothing back.
+message Announced {
+  string topic = 1;
+}
+
 message Left {}
 
 message DataChanged {
@@ -273,6 +287,10 @@ message ViewState {
   uint64 revision = 2;
   oneof kind {
     CounterView counter = 10;
+    // ---- words (1300-1399, lane H2) ----
+    WordsMakeState words_make = 1300;
+    WordsEnterState words_enter = 1301;
+    WordsShowState words_show = 1302;
     // ---- agenda (100-199) ----
     AgendaHomeState agenda_home = 100;
     AgendaEventState agenda_event = 101;

@@ -68,7 +68,7 @@ pub fn standard() -> Runtime {
             ),
         ],
     )
-    .with_services(passes::services())
+    .with_services([passes::services(), custody::services()].concat())
 }
 
 /// Attach [`standard`] to a core. `centraid_open` calls this.

@@ -1,6 +1,320 @@
-// CUSTODY (#1135, lane H2): this file's messages are the lane worker's. See
-// `plumbing_screens.proto` for the arm ranges.
+// THE 24 WORDS (#1135, lane H2): the screens that make a vault and its recovery
+// key, type the words back to restore or re-key, and show them again. Arms in
+// `screens.proto` and `route.proto`: 1300-1399. Every sentence is made in Rust
+// (`crates/screens/src/custody`, `strings::custody`); the shells draw and
+// forward.
+//
+// THREE PLATFORM DUTIES ARE THE VIEW'S, because only a view can do them:
+//
+// 1. While `secure` is set the screen is shielded from capture: Android
+//    `FLAG_SECURE` on the window, iOS the secure-field screenshot shield plus a
+//    cover drawn when the scene resigns active.
+// 2. A word is never put on the clipboard: no copy control, no long-press copy
+//    on a shown word, and no paste target that reads the clipboard. "Save a
+//    copy" sends `SaveCopy`; Rust answers with a `Share` effect.
+// 3. Every word-entry field turns off autocorrect, autocapitalisation,
+//    suggestions and keyboard learning, so the words do not end up in a
+//    keyboard's dictionary.
+//
+// A secret reaches a view only where the screen drew it before: the shown
+// words (`words`, with `secure`), and the cells the member typed. The seed and
+// the words are never in a route, a log line or a `Debug`.
 
 syntax = "proto3";
 
 package centraid.core.v1;
+
+import "centraid/core/v1/route.proto";
+
+message WordCell {
+  // 1-based.
+  uint32 position = 1;
+  string word = 2;
+  // "Word 3, abandon".
+  string accessibility_label = 3;
+}
+
+// ---------------------------------------------------------------------------
+// words.make: make a vault, and its words
+// ---------------------------------------------------------------------------
+
+message WordsMakeState {
+  Phase phase = 1;
+  // SHIELD THE SCREEN (duty 1). Set while the words are on it.
+  bool secure = 2;
+  string title = 3;
+  string body = 4;
+  // SHOW: the 24 words, in order. Empty in every other phase.
+  repeated WordCell words = 5;
+  // The one control the phase offers; empty when there is none to draw.
+  string primary_label = 6;
+  bool primary_enabled = 7;
+  // The quieter control (Cancel); empty for none.
+  string secondary_label = 8;
+  // Why nothing was made.
+  string notice = 9;
+  // SHOW: where this phone keeps the key, in the platform's own sentence.
+  string custody = 10;
+  // RESTORE_FIRST: the intent's label ("Restore my vaults"). A tap sends
+  // `RestoreTapped`; Rust then asks the shell to open the restore screen
+  // (`OpenRoute`) and finishes this one.
+  string restore_label = 11;
+  string accessibility_label = 12;
+  // SHOW: the label of "Save a copy" (`SaveCopy`). Empty in every other phase.
+  string save_label = 13;
+  // CHOOSE: the checkbox that keeps this vault on its own 24 words
+  // (`OwnToggled`); `own_on` is whether it is ticked. Empty hides it.
+  string own_label = 14;
+  bool own_on = 15;
+  // CHOOSE: the vault's name, as typed (`NameTyped`). A vault on its own words
+  // needs one: it is how a restore lists it. Empty label hides the field.
+  string name_label = 16;
+  string name = 17;
+  // The flow is over; the shell pops the screen.
+  bool finished = 18;
+  // Set with `finished` after a vault was made: the sentence Home's status line
+  // takes and the camera-roll ask follows (R-ONBOARD-8). Empty otherwise.
+  string made_line = 19;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    // Reading what this phone already holds.
+    PHASE_CHECKING = 1;
+    // The words are shown, once.
+    PHASE_SHOW = 2;
+    // The key is being kept and the vault founded.
+    PHASE_MAKING = 3;
+    // `notice` says why; `primary_label` offers another try.
+    PHASE_FAILED = 4;
+    // This phone holds a key from another phone and no record of which vaults
+    // it made: restore them first (R-1047-E2).
+    PHASE_RESTORE_FIRST = 5;
+    // A phone whose words already root its vaults makes the next one here: a
+    // name, and whether it is kept on its own words (R-1047-E18).
+    PHASE_CHOOSE = 6;
+  }
+}
+
+message WordsMakeEvent {
+  oneof kind {
+    // The phase's primary control, whatever it is labelled.
+    WordsPrimary primary = 1;
+    WordsSecondary secondary = 2;
+    // The sheet was swiped away. Drops the words; keeps nothing.
+    WordsDismissed dismissed = 3;
+    // INTENT: open the restore screen.
+    WordsRestoreTapped restore = 4;
+    // The own-words checkbox was tapped. CHOOSE only.
+    WordsOwnToggled own = 5;
+    // The name field changed. CHOOSE only.
+    WordsNameTyped name = 6;
+    // "Save a copy": the words go to the platform's share sheet as one line.
+    WordsSaveCopy save_copy = 7;
+  }
+}
+
+message WordsPrimary {}
+message WordsSecondary {}
+message WordsDismissed {}
+message WordsRestoreTapped {}
+message WordsSaveCopy {}
+
+message WordsOwnToggled {
+  bool on = 1;
+}
+
+message WordsNameTyped {
+  string text = 1;
+}
+
+// ---------------------------------------------------------------------------
+// words.enter: type the words back
+// ---------------------------------------------------------------------------
+
+message WordsEnterState {
+  Phase phase = 1;
+  WordsEnterPurpose purpose = 2;
+  // SHIELD THE SCREEN (duty 1). Set while any word is on it.
+  bool secure = 3;
+  string title = 4;
+  string body = 5;
+  // 24 cells in order while the grid is drawn; empty otherwise.
+  repeated WordEntry cells = 6;
+  // The pairing code of the gateway to restore from, and what it is for. Drawn
+  // wherever the primary restores; `primary_enabled` waits for it, because the
+  // core refuses a restore that names no gateway (#1080 A23).
+  string endpoint_label = 7;
+  string endpoint = 8;
+  // The phrase's verdict or the refusal, as a sentence; empty for none.
+  string notice = 9;
+  string primary_label = 10;
+  bool primary_enabled = 11;
+  string secondary_label = 12;
+  // WORKING: what is happening.
+  string progress = 13;
+  // DONE after a restore: one line per vault, each with its safety number.
+  repeated RestoredVaultLine restored = 14;
+  string accessibility_label = 15;
+  // A re-key's door, kept through DONE.
+  WordsEnterOrigin origin = 16;
+  // DONE after a restore: one sentence per vault that stayed with the other
+  // phone or has no backup (R-1047-R5).
+  repeated string stayed = 17;
+  // DONE with any vault that stayed: the control that asks again for those
+  // alone (`Retry`, R-1047-R6). Empty hides it.
+  string retry_label = 18;
+  // ENTERING a held-seed restore: the control that sends `UseWords` and draws
+  // the grid instead. Empty hides it.
+  string words_label = 19;
+  // ENTERING a held-seed restore: each vault on its own words the keychain also
+  // carried, by name (R-1047-E18), under `held_keys_label`.
+  repeated string held_keys = 20;
+  string held_keys_label = 21;
+  // THE PAIRING CODE IS SCANNED AS WELL AS PASTED. With a camera the control
+  // opens it (`scan_camera`); without one it opens the photo picker. What it
+  // reads comes back as `Scanned` and fills `endpoint`; a photo with no square
+  // comes back as `PhotoUnread`.
+  string scan_label = 22;
+  bool scan_camera = 23;
+  string photo_label = 24;
+  // The flow is over; the shell pops the screen.
+  bool finished = 25;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_ENTERING = 1;
+    PHASE_WORKING = 2;
+    PHASE_DONE = 3;
+  }
+}
+
+message WordEntry {
+  uint32 position = 1;
+  // "Word 5".
+  string prompt = 2;
+  string typed = 3;
+  Mark mark = 4;
+  // List words beginning with what is typed, when it is not yet one. A tap
+  // sends `SuggestionPicked`.
+  repeated string suggestions = 5;
+  string accessibility_label = 6;
+
+  enum Mark {
+    MARK_UNSPECIFIED = 0;
+    MARK_EMPTY = 1;
+    // A list word.
+    MARK_KNOWN = 2;
+    // Not a list word (yet).
+    MARK_UNKNOWN = 3;
+  }
+}
+
+message RestoredVaultLine {
+  // "Vault 1: 1,204 rows." for this vault, by index.
+  string line = 1;
+  // The safety number to compare with the gateway's, grouped; empty when the
+  // phone could not compute one, never shown as "it matched".
+  string safety_number = 2;
+  string safety_label = 3;
+}
+
+message WordsEnterEvent {
+  oneof kind {
+    WordTyped typed = 1;
+    SuggestionPicked picked = 2;
+    EndpointTyped endpoint = 3;
+    WordsPrimary primary = 4;
+    WordsSecondary secondary = 5;
+    // `retry_label`'s control: restore the vaults that stayed, on their own.
+    WordsRetry retry = 6;
+    // `words_label`'s control: leave the held seed and type the 24 words.
+    WordsUseWords use_words = 7;
+    // `scan_label`'s answer: the square's text. It fills `endpoint` as a paste
+    // would.
+    PairingScanned scanned = 8;
+    // A photo chosen to scan held no square.
+    PhotoUnread unread = 9;
+    // What this phone can scan with; the shell tells once, as the view appears.
+    ScanCapability capability = 10;
+    // The sheet was swiped away: the words are dropped.
+    WordsDismissed dismissed = 11;
+  }
+}
+
+message WordTyped {
+  uint32 position = 1;
+  string text = 2;
+}
+
+message SuggestionPicked {
+  uint32 position = 1;
+  string word = 2;
+}
+
+message EndpointTyped {
+  string text = 1;
+}
+
+message WordsRetry {}
+message WordsUseWords {}
+message PhotoUnread {}
+
+message PairingScanned {
+  string payload = 1;
+}
+
+message ScanCapability {
+  bool camera = 1;
+}
+
+// ---------------------------------------------------------------------------
+// words.show: settings shows the words again
+// ---------------------------------------------------------------------------
+//
+// The words are kept in this phone's device-only store beside the seed. The
+// screen asks the phone's own owner check first (the generic `OwnerCheck`
+// effect, Rust's), reads them only after it passed, holds them only while
+// PHASE_SHOW is up, and drops them on Done, on dismissal and when the app
+// leaves the foreground.
+
+message WordsShowState {
+  Phase phase = 1;
+  bool secure = 2;
+  string title = 3;
+  string body = 4;
+  // SHOW: the 24 words, in order. Empty in every other phase.
+  repeated WordCell words = 5;
+  string primary_label = 6;
+  string secondary_label = 7;
+  string notice = 8;
+  string accessibility_label = 9;
+  // SHOW: "Save a copy" (`SaveCopy`). Empty in every other phase.
+  string save_label = 10;
+  // ASK, just opened: the owner check is up and nothing is drawn until it
+  // answers. Every label is empty while this is set.
+  bool check_now = 11;
+  // The flow is over; the shell pops the screen.
+  bool finished = 12;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    // The owner check; after a failed one, drawn with its notice and a primary
+    // to try again.
+    PHASE_ASK = 1;
+    // The words are being read from the store.
+    PHASE_LOADING = 2;
+    PHASE_SHOW = 3;
+    // This phone holds no words to show: its key came through the synchronised
+    // keychain, or it has none. `body` says which.
+    PHASE_NONE_HERE = 4;
+  }
+}
+
+message WordsShowEvent {
+  oneof kind {
+    WordsPrimary primary = 1;
+    WordsSecondary secondary = 2;
+    WordsDismissed dismissed = 3;
+    WordsSaveCopy save_copy = 4;
+  }
+}

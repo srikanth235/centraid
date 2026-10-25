@@ -722,6 +722,18 @@ impl VaultSecrets {
         vec![set_device(PENDING_FILINGS, &write_index(&kept))]
     }
 
+    /// Every entry in `ids` was filed, or forgotten: one write, so a batch
+    /// clearing several does not leave the last one's list standing.
+    #[must_use]
+    pub fn clear_pending_filings(&self, ids: &[String]) -> Vec<wire::SecretOp> {
+        let kept: Vec<_> = self
+            .pending_filings()
+            .into_iter()
+            .filter(|(entry, _)| !ids.contains(entry))
+            .collect();
+        vec![set_device(PENDING_FILINGS, &write_index(&kept))]
+    }
+
     /// Entry `id`'s 24 words, device-only, so Settings can show them again.
     ///
     /// # Panics
