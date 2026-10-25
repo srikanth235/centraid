@@ -28,12 +28,6 @@ pub trait Screen: Send {
     /// The finished state. `instance` and `revision` are stamped by the runtime.
     fn view(&self, ctx: &Ctx) -> wire::ViewState;
 
-    /// Whether this screen wants to hear [`Ctx::signal`] on `topic`. Nothing
-    /// is sent to a screen that does not say so.
-    fn hears(&self, _topic: &str) -> bool {
-        false
-    }
-
     /// Whether the assistant's stream is for this screen (`ScreenEvent.assist`): only the chat
     /// says yes, so a token does not wake every open screen.
     fn hears_assist(&self) -> bool {
@@ -79,10 +73,6 @@ pub(crate) struct Done {
     /// The vault the screen asked to bring to the front, see
     /// [`Ctx::switch_vault`].
     pub switch: Option<String>,
-    pub signals: Vec<String>,
-    /// Events for every open screen registered under a name, see
-    /// [`Ctx::tell_screen`].
-    pub tells: Vec<(String, wire::ScreenEvent)>,
     /// Events for other open screens, by registered name (`Ctx::post`).
     pub posts: Vec<(String, wire::ScreenEvent)>,
 }
@@ -238,9 +228,11 @@ impl<'a> Ctx<'a> {
         self.core.assist(request)
     }
 
-    /// Hand `event` to every open screen registered as `screen` (a picker returning its pick to
-    /// the page that asked for it). Delivered after this update, in the same re-render; an
-    /// instance cannot post to itself.
+    /// THE ONE WAY A SCREEN REACHES ANOTHER: hand `event` to every open screen (a service
+    /// included) registered as `screen`. A picker returns its pick to the page that asked for
+    /// it, a service tells Home what the shelf holds, and the Backup screen wakes the pass
+    /// service. Delivered after this update, in the same re-render; an instance cannot post
+    /// to itself.
     pub fn post(&self, screen: &str, event: wire::ScreenEvent) {
         self.done
             .borrow_mut()
@@ -289,25 +281,6 @@ impl<'a> Ctx<'a> {
             .borrow_mut()
             .timers
             .push(TimerOp::Cancel(name.to_owned()));
-    }
-
-    /// Tell every OTHER open screen that hears `topic` (see [`Screen::hears`])
-    /// that something it draws or drives changed, as [`wire::Signalled`]. For
-    /// two screens that share an object (the pass conductor) and need to wake
-    /// each other; not a broadcast of data.
-    pub fn signal(&self, topic: &str) {
-        self.done.borrow_mut().signals.push(topic.to_owned());
-    }
-
-    /// Send `event` to every open screen registered under `screen` (a route
-    /// name), after this update is recorded. For a service that tells a screen
-    /// what it holds and cannot know which instances exist (a Home told what
-    /// the shelf holds); the event is delivered as any other.
-    pub fn tell_screen(&self, screen: &str, event: wire::ScreenEvent) {
-        self.done
-            .borrow_mut()
-            .tells
-            .push((screen.to_owned(), event));
     }
 
     pub(crate) fn finish(self) -> Done {

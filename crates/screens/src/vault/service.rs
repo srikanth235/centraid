@@ -44,7 +44,6 @@ use crate::backup::{line, reading};
 use crate::catalog::load;
 use crate::custody::secrets::{self, VaultSecrets};
 use crate::kit::read::Reading;
-use crate::passes::conductor::TOPIC as PASSES;
 use crate::screen::{Ctx, Screen};
 use crate::shell::HOME;
 
@@ -226,7 +225,7 @@ impl Service {
             originals_withheld: 0,
         };
         let vaults: Vec<wire::ShellVault> = held.vaults.iter().map(shell_vault).collect();
-        ctx.tell_screen(
+        ctx.post(
             HOME,
             Self::told(wire::home_event::Kind::VaultsTold(
                 wire::home_event::VaultsTold {
@@ -236,7 +235,7 @@ impl Service {
                 },
             )),
         );
-        ctx.tell_screen(
+        ctx.post(
             HOME,
             Self::told(wire::home_event::Kind::BackupTold(
                 wire::home_event::BackupLineTold {
@@ -245,7 +244,7 @@ impl Service {
             )),
         );
         if let Some(sentence) = self.shelf.take_outcome() {
-            ctx.tell_screen(
+            ctx.post(
                 HOME,
                 Self::told(wire::home_event::Kind::OutcomeTold(
                     wire::home_event::OutcomeTold {
@@ -280,7 +279,7 @@ impl Service {
     }
 
     fn outcome(ctx: &Ctx, sentence: &str, rename_failed: bool) {
-        ctx.tell_screen(
+        ctx.post(
             HOME,
             Self::told(wire::home_event::Kind::OutcomeTold(
                 wire::home_event::OutcomeTold {
@@ -360,8 +359,8 @@ impl Screen for Service {
                 }
                 Vec::new()
             }
-            Some(E::Signalled(signalled)) => {
-                if signalled.topic == PASSES && self.launch == Launch::Ready {
+            Some(E::Signalled(_)) => {
+                if self.launch == Launch::Ready {
                     self.tell_home(ctx);
                 }
                 Vec::new()
@@ -382,10 +381,6 @@ impl Screen for Service {
             }
             _ => Vec::new(),
         }
-    }
-
-    fn hears(&self, topic: &str) -> bool {
-        topic == PASSES
     }
 
     fn view(&self, _ctx: &Ctx) -> wire::ViewState {

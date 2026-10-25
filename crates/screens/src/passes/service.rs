@@ -23,7 +23,7 @@ use prost::Message;
 use wire::screen_event::Kind as E;
 
 use super::conditions::Reason;
-use super::conductor::{Action, Conductor, Drained, Registration, TOPIC};
+use super::conductor::{Action, Conductor, Drained, Registration};
 use super::rule::Rules;
 use super::windows;
 use crate::custody::secrets::VaultSecrets;
@@ -207,7 +207,7 @@ impl Service {
                 ),
                 Action::Timer { name, after } => ctx.start_timer(&name, after),
                 Action::CancelTimer { name } => ctx.cancel_timer(&name),
-                Action::Changed => ctx.signal(TOPIC),
+                Action::Changed => Conductor::wake(ctx),
             }
         }
     }
@@ -256,7 +256,7 @@ impl Service {
             }
             E::DataChanged(_) => self.conductor.commit_landed(),
             E::TimerFired(fired) => self.conductor.timer(&fired.timer),
-            E::Signalled(signal) if signal.topic == TOPIC => self.asked(),
+            E::Signalled(_) => self.asked(),
             E::ShellFact(fact) => self.fact(fact),
             _ => Vec::new(),
         };
@@ -493,10 +493,6 @@ impl Screen for Service {
 
     fn view(&self, _ctx: &Ctx) -> wire::ViewState {
         wire::ViewState::default()
-    }
-
-    fn hears(&self, topic: &str) -> bool {
-        topic == TOPIC
     }
 }
 

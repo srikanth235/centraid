@@ -46,10 +46,6 @@ impl Screen for Probe {
             ..Default::default()
         }
     }
-
-    fn hears(&self, topic: &str) -> bool {
-        topic == passes::conductor::TOPIC
-    }
 }
 
 /// The pass service is the first instance the runtime opens.
@@ -66,6 +62,15 @@ struct Rig {
 impl Rig {
     fn new() -> Self {
         Self::with_shell(FakeShell::default())
+    }
+
+    /// What a shell's next change push does to a screen that reads the
+    /// conductor's facts: it draws them again.
+    fn redraw(&mut self, instance: u64) {
+        self.driver.send(
+            instance,
+            E::DataChanged(wire::DataChanged { tables: vec![] }),
+        );
     }
 
     fn with_shell(shell: FakeShell) -> Self {
@@ -688,8 +693,9 @@ fn the_deadline_is_divided_over_the_vaults_the_shell_says_it_holds() {
 fn back_up_now_from_another_screen_walks_asks_and_releases_the_long_run() {
     let mut rig = Rig::new();
     rig.first_pass(empty());
-    // THE BACKUP SCREEN OPENS AND ASKS; the service hears it as a signal.
+    // THE BACKUP SCREEN OPENS AND ASKS; the service hears it as a post.
     let probe = rig.driver.push("t", passes_probe_route());
+    rig.redraw(probe);
     assert_eq!(rig.driver.view(probe).kind_title(), "backing up");
     assert!(rig.secrets.conductor().facts().backing_up);
     assert_eq!(long_runs(&rig), [true]);
@@ -699,7 +705,8 @@ fn back_up_now_from_another_screen_walks_asks_and_releases_the_long_run() {
     let (drain, _) = rig.drain();
     assert!(drain.asked && drain.wants_snapshot);
     rig.answer_drain(empty());
-    // THE SCREEN IS TOLD, and draws that the run ended.
+    // THE SCREEN DRAWS THE FACTS when it is next drawn, and the run ended.
+    rig.redraw(probe);
     assert_eq!(rig.driver.view(probe).kind_title(), "idle");
     assert!(!rig.secrets.conductor().facts().backing_up);
     rig.noted();

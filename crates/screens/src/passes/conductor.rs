@@ -90,9 +90,9 @@ pub const BACKGROUND_WINDOW: &str = "entered-background";
 pub const BATCH_PARTS: u32 = 16;
 pub const BATCH_BYTES: u64 = 512 * 1024 * 1024;
 pub const MAX_IN_FLIGHT: u32 = 32;
-/// The topic the conductor signals when its facts moved; the Backup screen
-/// hears it (see `Ctx::signal`).
-pub const TOPIC: &str = "passes";
+/// The services a wake reaches (see [`Conductor::wake`]): the pass service takes
+/// what the screens asked, and the vault service tells Home the line moved.
+const WAKES: [&str; 2] = [super::service::NAME, crate::vault::service::NAME];
 /// How many asked doors [`Conductor::take_issued`] keeps.
 const ISSUED_KEPT: usize = 64;
 
@@ -376,7 +376,7 @@ pub enum Action {
     CancelTimer {
         name: String,
     },
-    /// The facts moved: tell the screens that listen ([`TOPIC`]).
+    /// The facts moved: wake the services ([`Conductor::wake`]).
     Changed,
 }
 
@@ -585,7 +585,21 @@ impl Conductor {
     /// service owns the answers.
     pub fn ask(&self, ctx: &crate::screen::Ctx, ask: wire::pass_asked::Ask) {
         self.lock().inbox.push_back(ask);
-        ctx.signal(TOPIC);
+        Self::wake(ctx);
+    }
+
+    /// Tell the services that something the conductor holds moved, as
+    /// `Signalled`. A screen is never woken by its own post, so the pass service
+    /// waking the services wakes only the other one.
+    pub(crate) fn wake(ctx: &crate::screen::Ctx) {
+        for name in WAKES {
+            ctx.post(
+                name,
+                wire::ScreenEvent {
+                    kind: Some(wire::screen_event::Kind::Signalled(wire::Signalled {})),
+                },
+            );
+        }
     }
 
     /// What the screens asked since the service last looked.

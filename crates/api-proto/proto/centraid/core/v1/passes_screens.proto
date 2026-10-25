@@ -103,10 +103,9 @@ message UploadSettled {
 // the app again.
 message UploadsDrained {}
 
-// Another screen asked, by topic, that the screens listening hear about it.
-message Signalled {
-  string topic = 1;
-}
+// The pass conductor's wake, posted by name to the pass service and the vault
+// service: something the conductor holds moved (an ask, a fact), look again.
+message Signalled {}
 
 // ---------------------------------------------------------------------------
 // Effects (1370-1374) and their results

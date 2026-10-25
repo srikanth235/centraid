@@ -281,8 +281,6 @@ impl Runtime {
         let ctx = Ctx::new(core, &env);
         let effects = instance.screen.update(event, &ctx);
         let mut done = ctx.finish();
-        let signals = std::mem::take(&mut done.signals);
-        let tells = std::mem::take(&mut done.tells);
         instance.tables.extend(done.tables);
         if let Some(vault_id) = done.switch {
             state.switch = Some(vault_id);
@@ -319,8 +317,8 @@ impl Runtime {
                 }
             }
         }
-        // WHAT THIS SCREEN HANDED TO OTHERS (a picker's pick): delivered now, so one re-render
-        // carries both screens' views.
+        // WHAT THIS SCREEN HANDED TO OTHERS (a picker's pick, a service's news, a wake): delivered
+        // now, so one re-render carries both screens' views.
         for (screen, post) in done.posts {
             let targets: Vec<u64> = state
                 .instances
@@ -374,44 +372,6 @@ impl Runtime {
                 instance: id,
                 effect: Some(effect),
             });
-        }
-        // A SIGNAL REACHES THE OTHER SCREENS THAT LISTEN FOR ITS TOPIC, after
-        // this screen's own work is recorded. A screen is never told its own.
-        for topic in signals {
-            let hearing: Vec<u64> = state
-                .instances
-                .iter()
-                .filter(|(other, instance)| **other != id && instance.screen.hears(&topic))
-                .map(|(other, _)| *other)
-                .collect();
-            for other in hearing {
-                Self::dispatch(
-                    state,
-                    core,
-                    other,
-                    wire::ScreenEvent {
-                        kind: Some(wire::screen_event::Kind::Signalled(wire::Signalled {
-                            topic: topic.clone(),
-                        })),
-                    },
-                    out,
-                );
-            }
-        }
-        // A TELL REACHES EVERY OPEN SCREEN OF THE NAME it was addressed to, after
-        // this screen's own work is recorded.
-        for (screen, event) in tells {
-            let named: Vec<u64> = state
-                .instances
-                .iter()
-                .filter(|(other, instance)| {
-                    **other != id && !instance.service && instance.route.screen == screen
-                })
-                .map(|(other, _)| *other)
-                .collect();
-            for other in named {
-                Self::dispatch(state, core, other, event.clone(), out);
-            }
         }
     }
 
