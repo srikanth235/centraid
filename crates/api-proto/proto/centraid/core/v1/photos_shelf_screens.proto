@@ -215,6 +215,8 @@ message PhotosPickerData {
   // Present when there is nothing left to add: "Everything in your library is
   // already in this album."
   optional EmptyState empty = 3;
+  // What a taken cell is spoken as: "Already in this album".
+  string taken_label = 5;
 }
 
 message PhotosPickerState {

@@ -274,6 +274,7 @@ impl Picker {
         wire::PhotosPickerData {
             can_show_more: self.next.is_some(),
             show_more_label: words::photos_show_all(locale),
+            taken_label: String::new(),
             empty: nothing_left.then(|| wire::EmptyState {
                 headline: words::photos_picker_nothing_left(locale),
                 ..wire::EmptyState::default()

@@ -85,6 +85,16 @@ fn what_the_album_already_holds_is_drawn_taken_and_cannot_be_picked() {
 }
 
 #[test]
+fn a_taken_cell_is_spoken_in_the_picker_s_own_words() {
+    let mut d = driver();
+    let held = photo(&d, "held");
+    let album_id = album(&d, "Trip");
+    put_in(&d, &album_id, &held);
+    let picker = open(&mut d, &album_id, "Trip");
+    assert_eq!(data(&d, picker).taken_label, "Already in this album");
+}
+
+#[test]
 fn a_pick_is_a_toggle_and_the_button_counts() {
     let mut d = driver();
     let (a, b) = (photo(&d, "a"), photo(&d, "b"));
