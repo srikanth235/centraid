@@ -793,14 +793,15 @@ mod tests {
         (dir, vault)
     }
 
-    /// The eight apps' manifests and the shell's own.
+    /// The eight apps' manifests. The shell's own is not here: its ledger reads
+    /// (`phone::shell_reads`, the phone's chats, backup, shelf) have no vault reader
+    /// by design, and `the_shell_catalogue_answers_the_vault_search`
+    /// holds its one vault read.
     fn every_manifest() -> Vec<(&'static str, &'static centraid_apps_kit::manifest::Manifest)> {
-        let mut all: Vec<_> = catalog::APPS
+        catalog::APPS
             .iter()
             .map(|app| (app.id, app.manifest()))
-            .collect();
-        all.push((crate::shell::ID, crate::shell::manifest()));
-        all
+            .collect()
     }
 
     /// What `read` asked of the request: the names, whether it took the limit
@@ -893,9 +894,9 @@ mod tests {
     }
 
     /// THE SHELL'S CATALOGUE is served by `load` and by nothing else: it answers its
-    /// search, refuses a name it does not declare, and is no app (`act` has none).
+    /// search, and refuses a name it does not declare.
     #[test]
-    fn the_shell_catalogue_answers_the_vault_search_and_is_no_app() {
+    fn the_shell_catalogue_answers_the_vault_search() {
         let (dir, vault) = founded();
         let mut request = ask("shell", "search");
         request.params.insert(
@@ -910,7 +911,10 @@ mod tests {
             Some(wire::app_query_response::Answer::VaultSearch(_))
         ));
         assert!(load(&vault, &ask("shell", "no-such")).is_err());
-        assert!(catalog::app("shell").is_none(), "the shell is not an app");
+        assert!(
+            catalog::app("shell").is_some(),
+            "the shell is an app of the catalogue: its ledger actions run through `act`"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
