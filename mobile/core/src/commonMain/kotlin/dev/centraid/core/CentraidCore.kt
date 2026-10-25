@@ -45,11 +45,9 @@ public data class CoreConfiguration(
     /**
      * The vault file.
      *
-     * Named by the shell and by nothing else. It used to be named after the
-     * VAULT — `centraid-replica-<vaultId>.sqlite3` — so that a device could
-     * find a vault's enrolment record before opening the file; there is no
-     * record, so the name is a label and `dev.centraid.shared.shell.Shelf`
-     * asks each file which vault it is instead.
+     * Named by the shell and by nothing else: a label. The Rust shelf
+     * (`crates/screens/src/vault`) asks each file which vault it is; a shell
+     * opening a shelf ([shelf]) names only the directory.
      */
     public val databasePath: String,
     /**
@@ -688,8 +686,8 @@ public class CentraidCore private constructor(
  * ## The key is the path as given
  *
  * Not canonicalised, because `commonMain` has no filesystem and the shell hands
- * one absolute path per vault, built in one place
- * (`dev.centraid.shared.shell.Shelf`). A guard that pretended to canonicalise
+ * one absolute path per core, built in one place
+ * ([CoreConfiguration.shelf], under the shelf's directory). A guard that pretended to canonicalise
  * would be claiming a property it cannot check.
  */
 internal class SingleHandleGuard {
