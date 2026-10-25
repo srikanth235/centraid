@@ -23,11 +23,17 @@ import centraid.core.v1.NavPopped
 import centraid.core.v1.NavPush
 import centraid.core.v1.Route
 import centraid.core.v1.ScreenEvent
+import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.AndroidPhoneFollow
 import dev.centraid.android.kit.PerformScreenEffects
 import dev.centraid.android.kit.TrashScreen
 import dev.centraid.android.screens.AgendaHomeScreen
 import dev.centraid.android.screens.AppRoutes
+import dev.centraid.android.screens.health.HealthConnectScreen
+import dev.centraid.android.screens.health.HealthHomeScreen
+import dev.centraid.android.screens.health.HealthMetricScreen
+import dev.centraid.android.screens.health.HealthRationale
+import dev.centraid.android.screens.health.HealthWorkoutScreen
 import dev.centraid.android.screens.docs.DocsDocumentScreen
 import dev.centraid.android.screens.docs.DocsDriveScreen
 import dev.centraid.android.screens.docs.DocsEditorScreen
@@ -35,6 +41,7 @@ import dev.centraid.android.screens.docs.DocsFiles
 import dev.centraid.android.screens.docs.DocsVersionsScreen
 import dev.centraid.android.screens.docs.rememberDocsPickers
 import dev.centraid.shared.nav.DocsEntry
+import dev.centraid.shared.nav.HealthEntry
 import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.notes.NotesEditorScreen
 import dev.centraid.android.screens.notes.NotesHistoryScreen
@@ -81,7 +88,7 @@ import java.util.TimeZone
  * [PerformScreenEffects], composed from [Global] so a late answer (a calendar
  * read that outlives its page) is still performed.
  */
-internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
+internal class AgendaRoutes(private val phone: AndroidPhoneFollow, private val health: AndroidHealth) : AppRoutes {
     private var session: HomeSession? = null
     private var scope: CoroutineScope? = null
 
@@ -107,6 +114,7 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
         AppIds.AGENDA -> AgendaEntry.home(AgendaDestination.AGENDA_DESTINATION_DAY, "")
         AppIds.DOCS -> DocsEntry.home()
         AppIds.PEOPLE -> PeopleEntry.home()
+        AppIds.HEALTH -> HealthEntry.home()
         else -> null
     }
 
@@ -129,9 +137,16 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
                 }
             }
         }
+        // A REQUEST FROM OUTSIDE THE APP (Health Connect's "what this app reads"): the Connect page.
+        if (HealthRationale.requested) {
+            LaunchedEffect(Unit) {
+                HealthRationale.requested = false
+                nav.push(HealthEntry.connect())
+            }
+        }
         screens?.let {
             val pickers = rememberDocsPickers(docsFiles, onFollowed = { phone.requested(PhoneSource.FILES) })
-            PerformScreenEffects(it, phone, docs = pickers, openRoute = { route -> nav.push(Destination.RustScreen(route)) })
+            PerformScreenEffects(it, phone, docs = pickers, health = health, openRoute = { route -> nav.push(Destination.RustScreen(route)) })
         }
     }
 
@@ -219,10 +234,14 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
         val peopleHome = view.people_home
         val peoplePerson = view.people_person
         val peopleEditor = view.people_editor
+        val healthHome = view.health_home
+        val healthMetric = view.health_metric
+        val healthWorkout = view.health_workout
+        val healthConnect = view.health_connect
 
         // THE SCREEN IS DONE (a cancel committed, the editor saved or left, the task deleted): its page goes.
         val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true ||
-            doc?.dismissed == true || peoplePerson?.done == true
+            doc?.dismissed == true || peoplePerson?.done == true || healthConnect?.finished == true
         LaunchedEffect(done) {
             if (done && nav.stack.current === entry) nav.pop()
         }
@@ -333,6 +352,27 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
                 onEvent = { send(ScreenEvent(people_editor = it)) },
                 onClose = back,
             )
+            healthHome != null -> HealthHomeScreen(
+                state = healthHome,
+                onEvent = { send(ScreenEvent(health_home = it)) },
+                onOpen = open,
+                onHome = { nav.home() },
+            )
+            healthMetric != null -> HealthMetricScreen(
+                state = healthMetric,
+                onEvent = { send(ScreenEvent(health_metric = it)) },
+                onBack = back,
+            )
+            healthWorkout != null -> HealthWorkoutScreen(
+                state = healthWorkout,
+                onEvent = { send(ScreenEvent(health_workout = it)) },
+                onBack = back,
+            )
+            healthConnect != null -> HealthConnectScreen(
+                state = healthConnect,
+                onEvent = { send(ScreenEvent(health_connect = it)) },
+                onBack = back,
+            )
             trash != null -> TrashScreen(
                 view = trash,
                 onEvent = { send(ScreenEvent(trash = it)) },
@@ -369,11 +409,11 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
     private companion object {
         /**
          * Rust's one tab for the pages this host draws, and the prefixes their screen names carry:
-         * Agenda's, Docs', Notes' and People's (#1135). Every Rust-owned app's pages ride this stack until the
+         * Agenda's, Docs', Notes', People's and Health's (#1135). Every Rust-owned app's pages ride this stack until the
          * shell lane replaces the KMP one.
          */
         const val TAB = "agenda"
-        val PREFIXES = listOf("agenda.", "docs.", "notes.", "people.")
+        val PREFIXES = listOf("agenda.", "docs.", "notes.", "people.", "health.")
     }
 }
 

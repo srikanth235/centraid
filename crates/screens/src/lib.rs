@@ -8,6 +8,7 @@ pub mod agenda;
 pub mod catalog;
 pub mod docs;
 pub mod field;
+pub mod health;
 pub mod kit;
 pub mod notes;
 pub mod people;
@@ -32,6 +33,7 @@ pub fn standard() -> Runtime {
             .with(proof::NAME, proof::build)
             .merge(agenda::registry())
             .merge(docs::registry())
+            .merge(health::registry())
             .merge(notes::registry())
             .merge(people::registry()),
         vec![

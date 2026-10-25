@@ -12,8 +12,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.centraid.android.screens.docs.AndroidFolderReader
 import dev.centraid.shared.apps.docs.FilesFollow
-import dev.centraid.shared.apps.health.HealthFollow
-import dev.centraid.shared.apps.health.HealthReader
 import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.shell.PhoneFollowBridge
 import dev.centraid.shared.shell.PhoneFollowQuestion
@@ -35,15 +33,15 @@ import dev.centraid.shared.sync.phone.PhoneSource
  * - **Reads.** Docs' folders are read by `AndroidFolderReader`, over
  *   the tree grants the member gave when they picked each folder; triggers for them are the app
  *   coming forward and the picker returning (`requested(PhoneSource.FILES)`), with no watcher.
- *   Health Connect is read by [health] (`HealthConnectReader`), over the types the member chose
- *   on Health's Connect page; its triggers are the app coming forward and Connect itself, with no
- *   watcher (#1129).
+ *   Health Connect is not followed here: Health's screen holds its follow
+ *   (`crates/screens/src/health/follow.rs`) and reads the store with a `HealthRead` effect
+ *   (`HealthConnectReader.kt`) (#1135).
  * - **The question.** [question] holds the one the bridge is waiting on; [PhoneFollowSheet]
  *   draws it and [answer] sends the member's choice back.
  *
  * Held by the activity and built on the application context, so it keeps no activity alive.
  */
-internal class AndroidPhoneFollow(context: Context, private val health: HealthReader) {
+internal class AndroidPhoneFollow(context: Context) {
     private val context: Context = context.applicationContext
     private val bridge = PhoneFollowBridge()
     private val main = Handler(Looper.getMainLooper())
@@ -73,7 +71,6 @@ internal class AndroidPhoneFollow(context: Context, private val health: HealthRe
     fun attach(session: HomeSession) {
         val sources = listOf(
             FilesFollow(AndroidFolderReader(context)),
-            HealthFollow(health),
         )
         bridge.attach(session, sources) { question = it }
         attached = true
@@ -133,7 +130,6 @@ internal class AndroidPhoneFollow(context: Context, private val health: HealthRe
 
     private fun requestAll() {
         bridge.requested(PhoneSource.FILES)
-        bridge.requested(PhoneSource.HEALTH)
     }
 }
 

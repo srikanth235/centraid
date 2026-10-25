@@ -1,9 +1,5 @@
 package dev.centraid.shared.nav
 
-import centraid.screen.v1.HealthConnectEvent
-import centraid.screen.v1.HealthHomeEvent
-import centraid.screen.v1.HealthMetricEvent
-import centraid.screen.v1.HealthWorkoutEvent
 import centraid.screen.v1.LockerAccessEvent
 import centraid.screen.v1.LockerEditorEvent
 import centraid.screen.v1.LockerEditorState
@@ -92,23 +88,6 @@ public object ScreenOpenings {
             MoneyCategoriesEvent(opened = MoneyCategoriesEvent.Opened(parent = destination.parent)).encode(),
         )
         Destination.MoneySearch -> screen(ScreenIds.MONEY_SEARCH, MoneySearchEvent(opened = MoneySearchEvent.Opened()).encode())
-        // HEALTH: the phone's facts are stamped on arrival (`HealthRouting.opened`), never spelled here.
-        is Destination.HealthHome -> screen(
-            ScreenIds.HEALTH_HOME,
-            HealthHomeEvent(opened = HealthHomeEvent.Opened(destination = destination.destination)).encode(),
-        )
-        is Destination.HealthMetric -> screen(
-            ScreenIds.HEALTH_METRIC,
-            HealthMetricEvent(opened = HealthMetricEvent.Opened(metric = destination.metric, parent = destination.parent)).encode(),
-        )
-        is Destination.HealthWorkout -> screen(
-            ScreenIds.HEALTH_WORKOUT,
-            HealthWorkoutEvent(opened = HealthWorkoutEvent.Opened(activity_id = destination.activityId, parent = destination.parent)).encode(),
-        )
-        is Destination.HealthConnect -> screen(
-            ScreenIds.HEALTH_CONNECT,
-            HealthConnectEvent(opened = HealthConnectEvent.Opened(parent = destination.parent)).encode(),
-        )
         // LOCKER: every page's bridge opens itself on arrival, so the event is
         // what names the page. The generator's candidate never rides here
         // (`Destination.LockerEditor`), and neither does `fromGenerator`: that

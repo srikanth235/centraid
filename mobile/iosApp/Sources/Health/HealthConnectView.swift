@@ -2,27 +2,26 @@ import SwiftUI
 
 import CentraidShared
 
-/// `health.connect` — what Health may read, and the one Ink button (#1129), on the kit.
+/// `health.connect` — what Health may read, and the one Ink button (#1129, #1135), on the kit.
 ///
 /// **THE VIEW DECIDES NOTHING.** The headline, the lede, a switch a type with its words, the
 /// note, the button's label and whether it is live, and the status line are
-/// `HealthConnectState`'s. The tap sends `ConnectTapped`; asking the OS — for exactly
-/// `HealthConnectState.chosen`, read only — and telling the vault are the shell's
-/// (`HealthScreens.routeIntent`, `ShellModel.connectHealth`). Nothing is ever written back
-/// (R-1129-7).
+/// `HealthConnectState`'s (Rust makes them: `crates/screens`, module `health`). The tap sends
+/// `ConnectTapped`; Rust asks the shell to read the store (`HealthRead`, with the member's tap
+/// as the one place the OS is asked — for exactly the chosen types, read only), writes the
+/// store's origin and runs the first pass. A connected page is `finished`, and the shell pops
+/// it. Nothing is ever written back to the store (R-1129-7).
 struct HealthConnectView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_HealthConnectState
+    let send: (Centraid_Core_V1_HealthConnectEvent) -> Void
     let onBack: () -> Void
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_HealthConnectState {
-        (try? Centraid_Screen_V1_HealthConnectState(serializedBytes: data)) ?? .init()
-    }
-
-    private func event(_ build: (inout Centraid_Screen_V1_HealthConnectEvent) -> Void) -> Data {
-        healthEvent(Centraid_Screen_V1_HealthConnectEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_HealthConnectEvent) -> Void) -> Centraid_Core_V1_HealthConnectEvent {
+        var event = Centraid_Core_V1_HealthConnectEvent()
+        build(&event)
+        return event
     }
 
     var body: some View {
@@ -79,10 +78,14 @@ struct HealthConnectView: View {
                 .background(Theme.color("bg", scheme).ignoresSafeArea(edges: .bottom))
             }
         }
+        // CONNECTED: Rust says the page is done.
+        .onChange(of: state.finished) { _, finished in
+            if finished { onBack() }
+        }
     }
 
     /// ONE TYPE: its name over what it is, and the check that says whether Health may read it.
-    private func choiceRow(_ choice: Centraid_Screen_V1_HealthChoice, working: Bool) -> some View {
+    private func choiceRow(_ choice: Centraid_Core_V1_HealthChoice, working: Bool) -> some View {
         let key = choice.key
         let toggle = { send(event { $0.toggled = .with { $0.key = key } }) }
         return HStack(spacing: 8) {

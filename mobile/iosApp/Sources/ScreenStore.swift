@@ -73,11 +73,12 @@ final class ScreenStore: ObservableObject {
         Task { await request(.nav(nav)) }
     }
 
-    /// Report the device's locale and zone; Rust formats from them.
+    /// Report the device's locale, zone and OS; Rust formats from them.
     func reportEnvironment() {
         var environment = Centraid_Core_V1_Environment()
         environment.locale = Locale.current.identifier
         environment.zone = TimeZone.current.identifier
+        environment.platform = "ios"
         Task { await request(.environment(environment)) }
     }
 
@@ -189,6 +190,12 @@ final class ScreenStore: ObservableObject {
             }
         case .phoneWatch(let watch)?:
             self.watch(request, watch)
+        // HEALTH'S STORE (#1135): read over the window Rust placed, for the types it names.
+        case .healthRead(let read)?:
+            Task {
+                let outcome = await HealthKitReader.snapshot(read)
+                answer(request, outcome)
+            }
         case .openRoute(let open)?:
             onOpenRoute?(open.route)
             answer(request, .done(Centraid_Core_V1_EffectDone()))

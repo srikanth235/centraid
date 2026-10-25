@@ -63,13 +63,14 @@ import okio.ByteString
  *
  * [docs] performs Docs' `PickFile`, `FollowFolder` and `StopFollowing` (the pickers, the
  * camera, the follower's grant); [openRoute] is `OpenRoute`: a page Rust asked the shell to push.
- * Either is null where the host has none, and the effect is answered `failed`.
+ * [health] answers `HealthRead` (Health Connect, read only). Either is null where the host has none, and the effect is answered `failed`.
  */
 @Composable
 internal fun PerformScreenEffects(
     screens: Screens,
     phone: AndroidPhoneFollow?,
     docs: DocsPickers? = null,
+    health: AndroidHealth? = null,
     openRoute: ((Route) -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -78,6 +79,10 @@ internal fun PerformScreenEffects(
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         asking.answer(granted)
     }
+    // HEALTH CONNECT'S OWN PERMISSION SHEET, shown at the member's Connect tap only.
+    val healthLauncher = health?.let { store ->
+        rememberLauncherForActivityResult(store.contract()) { granted -> store.permissionsAnswered(granted) }
+    }
     LaunchedEffect(screens) {
         screens.effects.collect { request ->
             // ONE COROUTINE PER EFFECT: a permission dialog waits for the member
@@ -85,7 +90,10 @@ internal fun PerformScreenEffects(
             launch {
                 val effect = request.effect
                 val answer: (EffectResult) -> Unit = { result -> launch { screens.answer(request, result) } }
-                val result = if (effect?.pick_file != null || effect?.follow_folder != null || effect?.stop_following != null || effect?.open_route != null) {
+                val result = if (effect?.health_read != null) {
+                    health?.snapshot(effect.health_read!!) { healthLauncher?.launch(it) }
+                        ?: failed("not performed by this shell")
+                } else if (effect?.pick_file != null || effect?.follow_folder != null || effect?.stop_following != null || effect?.open_route != null) {
                     files(effect, docs, openRoute, answer)
                 } else {
                     perform(effect, context, view, asking, { launcher.launch(it) }, phone) { changed ->

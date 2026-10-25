@@ -2,25 +2,23 @@ import SwiftUI
 
 import CentraidShared
 
-/// `health.metric` — one metric over a week, a month or a year (#1129), on the kit.
+/// `health.metric` — one metric over a week, a month or a year (#1129, #1135), on the kit.
 ///
 /// **THE VIEW DECIDES NOTHING.** The segments, the caption, the average and its unit, the line
 /// against the typical, every bar's height and which bar is the current one, the ticks, the facts
-/// and the foot are `HealthMetricState`'s; this lays them out. The current bucket's bar is the
-/// app's one hue mark (R-1129-10).
+/// and the foot are `HealthMetricState`'s (Rust makes them: `crates/screens`, module `health`);
+/// this lays them out. The current bucket's bar is the app's one hue mark (R-1129-10).
 struct HealthMetricView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_HealthMetricState
+    let send: (Centraid_Core_V1_HealthMetricEvent) -> Void
     let onBack: () -> Void
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_HealthMetricState {
-        (try? Centraid_Screen_V1_HealthMetricState(serializedBytes: data)) ?? .init()
-    }
-
-    private func event(_ build: (inout Centraid_Screen_V1_HealthMetricEvent) -> Void) -> Data {
-        healthEvent(Centraid_Screen_V1_HealthMetricEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_HealthMetricEvent) -> Void) -> Centraid_Core_V1_HealthMetricEvent {
+        var event = Centraid_Core_V1_HealthMetricEvent()
+        build(&event)
+        return event
     }
 
     var body: some View {
@@ -44,7 +42,7 @@ struct HealthMetricView: View {
                             .frame(maxWidth: .infinity)
                         }
                         if metric.hasEmpty {
-                            EmptyStateView(metric.empty)
+                            EmptyStateView(metric.empty.legacy)
                         } else {
                             page(metric)
                         }
@@ -60,7 +58,7 @@ struct HealthMetricView: View {
     }
 
     @ViewBuilder
-    private func page(_ metric: Centraid_Screen_V1_HealthMetricData) -> some View {
+    private func page(_ metric: Centraid_Core_V1_HealthMetricData) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(metric.caption)
                 .centraidType("annotLabel")

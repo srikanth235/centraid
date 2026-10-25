@@ -1580,7 +1580,7 @@ mod tests {
         let apps = [
             ("agenda", 24),
             ("docs", 18),
-            ("health", 3),
+            ("health", 4),
             ("locker", 19),
             ("money", 22),
             ("notes", 17),

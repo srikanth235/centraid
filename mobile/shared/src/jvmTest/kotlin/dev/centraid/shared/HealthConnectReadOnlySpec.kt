@@ -1,6 +1,5 @@
 package dev.centraid.shared
 
-import dev.centraid.shared.apps.health.HealthKinds
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeTrue
@@ -17,9 +16,10 @@ import java.io.File
  * - No Android source calls Health Connect's writes (`insertRecords`, `updateRecords`,
  *   `deleteRecords`) or names a write permission.
  * - The permission sheet is built in one file (`kit/HealthConnectReader.kt`) and launched from one
- *   (`screens/health/HealthConnectAct.kt`, Connect's tap): never at launch, never from a read.
+ *   (`kit/ScreenEffects.kt`, for a `HealthRead` that says the member's Connect tap may ask): never
+ *   at launch, never from a read.
  * - The reader's exercise-type names are the constants' own names, and cover every Health Connect
- *   word [HealthKinds.TABLE] maps to a kind.
+ *   word Rust's kind table (`crates/screens/src/health/kinds.rs`) maps to a kind.
  */
 class HealthConnectReadOnlySpec : StringSpec({
 
@@ -28,7 +28,7 @@ class HealthConnectReadOnlySpec : StringSpec({
     val manifest = app.resolve("AndroidManifest.xml")
     val kotlin = app.resolve("kotlin/dev/centraid/android")
     val reader = kotlin.resolve("kit/HealthConnectReader.kt")
-    val act = kotlin.resolve("screens/health/HealthConnectAct.kt")
+    val act = kotlin.resolve("kit/ScreenEffects.kt")
     val sources = mobileRoot.resolve("androidApp/src").walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
 
     "the spec reads real files — a check over nothing passes forever" {
@@ -68,9 +68,9 @@ class HealthConnectReadOnlySpec : StringSpec({
         withClue(offenders) { offenders shouldBe emptyList() }
     }
 
-    "the permission sheet is built in the reader and launched only from Connect's tap" {
+    "the permission sheet is built in the reader and launched only where a read may ask" {
         val builds = sources.filter { "createRequestPermissionResultContract" in it.readText() }.map { it.name }
-        val launches = sources.filter { it != reader && Regex("""\.permissionsFor\(""").containsMatchIn(it.readText()) }.map { it.name }
+        val launches = sources.filter { it != reader && Regex("""\.contract\(\)""").containsMatchIn(it.readText()) }.map { it.name }
         withClue("builds the sheet") { builds shouldBe listOf(reader.name) }
         withClue("launches the sheet") { launches shouldBe listOf(act.name) }
     }
@@ -81,7 +81,7 @@ class HealthConnectReadOnlySpec : StringSpec({
             .map { it.groupValues[1] to it.groupValues[2] }.toList()
         withClue(pairs.filter { it.first != it.second }) { pairs.all { it.first == it.second }.shouldBeTrue() }
         val named = pairs.map { it.second }.toSet()
-        val mapped = HealthKinds.TABLE.keys.filter { it.startsWith("EXERCISE_TYPE_") }
+        val mapped = kindWords(mobileRoot.parentFile).filter { it.startsWith("EXERCISE_TYPE_") }
         withClue(mapped - named) { (mapped - named) shouldBe emptyList() }
     }
 })

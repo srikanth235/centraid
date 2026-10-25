@@ -41,7 +41,6 @@ import androidx.core.view.WindowCompat
 import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.agenda.AgendaRoutes
-import dev.centraid.android.screens.health.HealthRoutes
 import dev.centraid.android.screens.locker.LockerRoutes
 import dev.centraid.android.screens.money.MoneyRoutes
 import dev.centraid.android.screens.notes.NotesRoutes
@@ -138,11 +137,10 @@ public class MainActivity : FragmentActivity() {
      */
     private val routes: List<AppRoutes> by lazy {
         listOf(
-            AgendaRoutes(phoneFollow),
+            AgendaRoutes(phoneFollow, health),
             PhotosRoutes(cacheDir),
             NotesRoutes(),
             MoneyRoutes(),
-            HealthRoutes(health),
             locker,
             homeSearch,
         )
@@ -169,7 +167,7 @@ public class MainActivity : FragmentActivity() {
      * ANDROID FOLLOWS THE PHONE (#1127): the foreground and content-observer triggers and the
      * question an account that left asks. Started in `onStart`, stopped in `onStop`.
      */
-    private val phoneFollow: AndroidPhoneFollow by lazy { AndroidPhoneFollow(this, health.reader) }
+    private val phoneFollow: AndroidPhoneFollow by lazy { AndroidPhoneFollow(this) }
 
     /**
      * HEALTH CONNECT (#1129): the reader the follower and Health's Connect share, the member's
@@ -216,7 +214,6 @@ public class MainActivity : FragmentActivity() {
      */
     override fun onStart() {
         super.onStart()
-        health.state()
         phoneFollow.start()
     }
 

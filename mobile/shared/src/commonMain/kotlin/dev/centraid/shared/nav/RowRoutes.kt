@@ -78,7 +78,7 @@ public object RowRoutes {
         AppIds.AGENDA to EVENT -> AgendaEntry.event(eventId = row.id, instanceKey = row.qualifier)
         AppIds.PHOTOS to PHOTO -> Destination.PhotoLightbox(row.id, neighbours.ifEmpty { listOf(row.id) })
         AppIds.MONEY to TRANSACTION -> Destination.MoneyTransaction(row.id, parent = parent)
-        AppIds.HEALTH to WORKOUT -> Destination.HealthWorkout(row.id, parent = parent)
+        AppIds.HEALTH to WORKOUT -> HealthEntry.workout(row.id, parent = parent)
         AppIds.LOCKER to LOCKER_ITEM -> lockerItem(row, parent)
         else -> appHome(row.app)
     }
@@ -120,7 +120,7 @@ public object RowRoutes {
         AppIds.AGENDA -> AgendaEntry.home()
         AppIds.PHOTOS -> Destination.PhotosHome()
         AppIds.MONEY -> Destination.MoneyHome()
-        AppIds.HEALTH -> Destination.HealthHome()
+        AppIds.HEALTH -> HealthEntry.home()
         else -> null
     }
 

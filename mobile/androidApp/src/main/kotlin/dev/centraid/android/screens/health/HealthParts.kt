@@ -16,10 +16,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -34,16 +32,14 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.HealthChartBar
-import centraid.screen.v1.HealthConnectState
-import centraid.screen.v1.HealthFigure
-import centraid.screen.v1.HealthMetricLine
-import centraid.screen.v1.HealthRangeBar
-import centraid.screen.v1.HealthTrendRow
-import centraid.screen.v1.HealthWorkoutLine
+import centraid.core.v1.HealthChartBar
+import centraid.core.v1.HealthFigure
+import centraid.core.v1.HealthMetricLine
+import centraid.core.v1.HealthRangeBar
+import centraid.core.v1.HealthTrendRow
+import centraid.core.v1.HealthWorkoutLine
 import centraid.screen.v1.SectionHead
 import dev.centraid.android.kit.CentraidIcon
-import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.theme.LocalCentraidTokens
@@ -51,8 +47,8 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
 /*
- * HEALTH'S SHARED DRAWING PARTS (#1129). Every word, figure and position is the state's: the
- * machines in `shared/.../apps/health` finished them, and a bar's length or a point's height
+ * HEALTH'S SHARED DRAWING PARTS (#1129, #1135). Every word, figure and position is the state's: Rust
+ * (`crates/screens/src/health`) finished them, and a bar's length or a point's height
  * arrives in basis points of its own span. A part draws, and decides nothing — not a unit, not a
  * comparison, not which bar is today's. The identity hue (olive, R-1129-10) is drawn in exactly
  * one place here: the chart bar the state marks `current`.
@@ -334,20 +330,6 @@ internal fun HealthFigures(figures: List<HealthFigure>) {
                 }
                 if (pair.size == 1) Box(Modifier.weight(1f))
             }
-        }
-    }
-}
-
-/**
- * WHAT HEALTH MAY READ, AS A LIST: the lede and each type with its detail, no switches. Health
- * Connect's rationale page draws this ([HealthRationaleActivity]).
- */
-@Composable
-internal fun HealthReads(state: HealthConnectState) {
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).testTag("health-reads")) {
-        HealthNote(state.lede, ink = "text", style = "body")
-        state.choices.forEach { choice ->
-            CentraidRow(title = choice.label, meta = choice.detail, testTag = "health-reads-${choice.key}")
         }
     }
 }

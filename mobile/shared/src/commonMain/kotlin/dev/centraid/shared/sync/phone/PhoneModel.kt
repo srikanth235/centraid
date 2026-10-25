@@ -8,9 +8,6 @@ public enum class PhoneSource(public val wire: String) {
     CONTACTS("contacts"),
     CALENDAR("calendar"),
     FILES("files"),
-
-    /** The phone's health store, into Health: its workouts follow through `follow.health`; its day totals through `measurement.record` (R-1129-3). */
-    HEALTH("health"),
 }
 
 /**
@@ -18,7 +15,7 @@ public enum class PhoneSource(public val wire: String) {
  * mistaken for a local fallback: `uid:` an iCal UID (the same on every device Google syncs to),
  * `lookup:` an Android `LOOKUP_KEY`, `local:` an id that means something on this device only (an
  * iOS contact identifier, an Android `CONTACT_ID`, an EventKit item id, a followed file's
- * `<folder>/<path>`, a health store's workout id). The engine reads only that a prefix is there,
+ * `<folder>/<path>`). The engine reads only that a prefix is there,
  * and that a `local:` id is the device's own: its link names the [PhoneDevice] that made it.
  */
 public object PhoneIds {

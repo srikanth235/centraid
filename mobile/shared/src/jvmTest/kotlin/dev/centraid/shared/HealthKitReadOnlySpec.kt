@@ -1,6 +1,5 @@
 package dev.centraid.shared
 
-import dev.centraid.shared.apps.health.HealthKinds
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldNotBeEmpty
@@ -21,8 +20,8 @@ import java.io.File
  * | `Resources/Info.plist` | no `NSHealthUpdateUsageDescription` (iOS refuses a share request without one, so its absence is a second lock) |
  *
  * iOS does not compile in the JVM gate, so this scan stands in for review. It also holds one
- * cross-language fact: the reader's workout kind names are `HealthKinds.TABLE`'s iOS keys, so a
- * kind HealthKit sends is one the vault maps.
+ * cross-language fact: the reader's workout kind names are the HealthKit words of Rust's kind table
+ * (`crates/screens/src/health/kinds.rs`), so a kind HealthKit sends is one the vault maps.
  */
 class HealthKitReadOnlySpec : StringSpec({
     val ios = File(
@@ -80,11 +79,11 @@ class HealthKitReadOnlySpec : StringSpec({
         withClue("project.yml names the seeder outside a comment") { code.contains("HealthSeeder") shouldBe false }
     }
 
-    "the reader's workout kind names are HealthKinds.TABLE's iOS keys" {
+    "the reader's workout kind names are the kind table's HealthKit words" {
         val named = Regex("""case \.\w+: return "(\w+)"""").findAll(reader).map { it.groupValues[1] }.toSet()
         val fallback = Regex("""default: return "(\w+)"""").find(reader)?.groupValues?.get(1)
-        val table = HealthKinds.TABLE.keys.filterNot { it.startsWith("EXERCISE_TYPE_") }.toSet()
-        named shouldBe table - HealthKinds.OTHER
-        fallback shouldBe HealthKinds.OTHER
+        val table = kindWords(ios.parentFile.parentFile).filterNot { it.startsWith("EXERCISE_TYPE_") }.toSet()
+        named shouldBe table - "other"
+        fallback shouldBe "other"
     }
 })

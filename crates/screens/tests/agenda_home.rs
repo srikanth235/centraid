@@ -171,6 +171,7 @@ impl Rig {
             .call(wire::screen_request::Kind::Environment(wire::Environment {
                 locale: "en".to_owned(),
                 zone: zone.to_owned(),
+                ..Default::default()
             }));
     }
 
@@ -1449,6 +1450,7 @@ fn a_failed_read_is_a_failure_and_never_an_empty_agenda_and_refreshed_is_its_ret
         .call(wire::screen_request::Kind::Environment(wire::Environment {
             locale: "en".to_owned(),
             zone: "UTC".to_owned(),
+            ..Default::default()
         }));
     r.send(H::Refreshed(wire::agenda_home_event::Refreshed {}));
     assert!(matches!(r.state().content, Some(Content::Data(_))));

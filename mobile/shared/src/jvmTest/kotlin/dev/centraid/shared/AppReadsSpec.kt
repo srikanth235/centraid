@@ -8,12 +8,6 @@ import centraid.core.v1.Value
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.ReadFailureKind
 import dev.centraid.core.CoreFailure
-import dev.centraid.shared.apps.health.HealthHomeMachine
-import dev.centraid.shared.apps.health.HealthHomeReads
-import dev.centraid.shared.apps.health.HealthMetricMachine
-import dev.centraid.shared.apps.health.HealthMetricReads
-import dev.centraid.shared.apps.health.HealthWorkoutMachine
-import dev.centraid.shared.apps.health.HealthWorkoutReads
 import dev.centraid.shared.apps.locker.LOCKER_TRASH
 import dev.centraid.shared.apps.locker.LockerAccessMachine
 import dev.centraid.shared.apps.locker.LockerAccessReads
@@ -276,11 +270,6 @@ class AppReadsSpec : StringSpec({
         Triple("money.rules", MoneyRulesReads, MoneyRulesMachine),
         Triple("money.categories", MoneyCategoriesReads, MoneyCategoriesMachine),
         Triple("money.search", MoneySearchReads, MoneySearchMachine),
-        // HEALTH (#1129). Home reads the days, the workouts, their kinds and whether a
-        // store is connected; a metric only the days; a workout its activity and kind.
-        Triple("health.home", HealthHomeReads, HealthHomeMachine),
-        Triple("health.metric", HealthMetricReads, HealthMetricMachine),
-        Triple("health.workout", HealthWorkoutReads, HealthWorkoutMachine),
         // HOME'S SEARCH (R-CHROME-6). Like the powerbox it declares no table:
         // a transient screen over search results re-reads on a new term only.
         Triple("home.search", HomeSearchReads, HomeSearchMachine),
