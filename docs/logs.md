@@ -34,7 +34,7 @@ What the shells write to the platform log:
 | Platform | Line | Where to read it |
 | --- | --- | --- |
 | Android | `Log.w("Centraid", "could not place <name>: …")` — a demo fixture could not be copied into `filesDir` (`mobile/androidApp/.../MainActivity.kt`) | `adb logcat -s Centraid` |
-| iOS | `NSLog("centraid: the secure store refused a write (OSStatus %d)")` (`mobile/shared/src/iosMain/.../PlatformServices.ios.kt`) | the Xcode console, or Console.app filtered on `centraid` |
+| iOS | `NSLog("centraid: the secure store refused a write (OSStatus %d)")` (`mobile/iosApp/Sources/SecretStores.swift`) | the Xcode console, or Console.app filtered on `centraid` |
 | iOS, the backup the OS runs | the background session `dev.centraid.uploads` and the windows `dev.centraid.upload-pass` and `dev.centraid.sync-pass`, in Centraid's and `nsurlsessiond`'s lines | `log collect --device`, then `log show` filtered on `process == "Centraid" OR process == "nsurlsessiond"` ([`backup-measurement.md`](../mobile/maestro/backup-measurement.md)) |
 
 Everything else a pass knows is state the shell draws, not a log line: the backup line and the Backup screen read the core's backup status — what is confirmed, what waits and why, when each gateway was last seen ([mobile-offline.md](mobile-offline.md#the-pass)). On iOS, an upload the operating system ran settles with a code rather than a sentence — the gateway's refusal code, or the shell's own `PIN_MISMATCH`, `CANCELLED`, `TRANSPORT_<n>`, `HTTP_<status>`, `HANDOFF_NOT_HTTPS` or `SPOOL_FILE_MISSING` ([R-1080-E10](decisions.md#backup-and-the-gateway)). The Kotlin JVM suites write their reports under `mobile/**/build/reports/`.

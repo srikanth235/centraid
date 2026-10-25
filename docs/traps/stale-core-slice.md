@@ -1,69 +1,34 @@
-# A Kotlin/Native framework links a Rust archive nothing rebuilt
+# A shell links a Rust core nothing rebuilt
 
-**The symptom.** You change `crates/core`, rebuild the XCFramework, rebuild the app, run it — and the change is not there. No error, no warning, no stale-build notice. The Kotlin recompiled, the Swift recompiled, the app installed. The behaviour is the one from whenever you last ran `cargo build --target`.
+**The symptom.** You change `crates/core` or `crates/screens`, rebuild the app, run it — and the change is not there. No error, no warning, no stale-build notice. The Swift or Kotlin recompiled, the app installed. The behaviour is the one from whenever you last built the core for that platform.
 
-**The cause.** `mobile/shared/build.gradle.kts` links the Rust core with
+**The cause.** Both shells take the Rust core as a _built file_, by path, and neither build system knows how it is made:
 
-```
-linkerOpts("-Wl,-u,_centraid_open", /* …the other four… */ "$slice/libcentraid_core_ffi.a")
-```
+- **iOS** links `libcentraid_core_ffi.a` by a **path into `target/<triple>/<profile>/`** (`mobile/iosApp/project.yml`; the header is the committed `crates/core-ffi/include/centraid.h`, mapped to the Swift module `CentraidCoreC` by `iosApp/CoreBridge`). It is a path and not a dependency, so Xcode has no input to compare, nothing rebuilds it, and the linker is perfectly happy to link a five-hour-old archive. `mobile/scripts/ios-core.sh` is the one command that builds the slices.
+- **Android** loads `libcentraid_core_ffi.so` by JNA from `mobile/androidApp/src/main/jniLibs/<abi>/`, a **copied file**, so it is staler still: nothing updates it until `mobile/scripts/android-core.sh` runs again.
+- **The JVM tests** (`:core:jvmTest`) resolve the cdylib from `-Pcentraid.coreLibDir`, then `$CARGO_TARGET_DIR/debug`, then `<repo>/target/debug`, and the `mobile-jvm` gate builds it first, so they cannot go stale.
 
-where `slice` is a **path into `target/<triple>/<profile>/`**. It is a path and not a Gradle dependency, so nothing in the Gradle graph knows the archive exists, nothing declares it as an input, and nothing rebuilds it. Gradle's up-to-date check cannot see a file it was never told about, and the linker is perfectly happy to link a five-hour-old archive.
+**What it looks like when it bites.** A byte door was added to `crates/core` and wired through both shells in one pass. Every layer compiled. On the simulator the Photos mosaic drew four empty cells. The request was built correctly with the right content ids; a Rust probe against the same vault answered with real paths. The two could not both be true, and they were: the app was running a `libcentraid_core_ffi.a` built five hours earlier, which had never heard of the request.
 
-This is the same shape as the XCFramework's own `-force_load` lesson recorded beside it — a link that succeeds while being wrong — one layer further out.
-
-**What it looks like when it bites.** The wave-A byte door was added to `crates/core` and wired through Kotlin and SwiftUI in one pass. Every layer compiled. On the simulator the Photos mosaic drew four empty cells. The Kotlin diagnostics showed the request being built correctly with the right content ids; the Rust probe against the same vault answered with real paths. The two could not both be true, and they were: the app was running a `libcentraid_core_ffi.a` built five hours earlier, which had never heard of the request.
-
-**The fix, and it is a habit rather than a patch.** Build the slice first, every time the Rust core changes:
+**The fix, and it is a habit rather than a patch.** Build the core for the platform first, every time Rust changes:
 
 ```sh
-cargo build -p centraid-core-ffi --features llama --target aarch64-apple-ios-sim   # simulator
-cargo build -p centraid-core-ffi --features llama --target aarch64-apple-ios       # device
-cargo build -p centraid-core-ffi --features llama --target x86_64-apple-ios        # intel sim
+mobile/scripts/ios-core.sh                       # all three iOS slices
+mobile/scripts/ios-core.sh aarch64-apple-ios-sim # the simulator only
+mobile/scripts/android-core.sh                   # arm64-v8a into jniLibs (x86_64 for an Intel emulator)
 ```
 
-then the XCFramework, then the app. `mobile/README.md`'s iOS hand-off carries this as step 0 for the same reason.
+then the app. `mobile/README.md`'s iOS hand-off carries this as step 0 for the same reason.
 
-**`--features llama` is part of the habit, and leaving it off fails the same silent way.** The on-device chat's engine (llama.cpp) is off by default so that the PR gate's workspace build compiles none of it ([R-CHAT-10](../decisions.md#the-assistant)). A slice built without the feature links, loads and runs, and the chat reports every model file as `NO_ENGINE` — the screen that says this build cannot run the assistant. The check is the same `ls -l` below, and then `nm <archive> | grep -c llama_` (zero means no engine).
+**`--features llama` is part of the habit, and leaving it off fails the same silent way.** The on-device chat's engine (llama.cpp) is off by default so that the PR gate's workspace build compiles none of it ([R-CHAT-10](../decisions.md#the-assistant)). Both scripts build with it. A core built without the feature links, loads and runs, and the chat reports every model file as `NO_ENGINE` — the screen that says this build cannot run the assistant. The check is the same `ls -l` below, and then `nm <archive> | grep -c llama_` (zero means no engine).
 
-**Why Gradle does not build it, and what it does do.** `-Pcentraid.coreFfiLibDir` exists so CI can hand in a slice built by `lane-prebuilt-core.yml` rather than paying for a Rust build on a Mac runner, and a Gradle task that shelled out to `cargo` would fight that override every time — so building the slice stays this habit. What Gradle does now is **declare the archive as an input of each framework link** (`linkTaskProvider` in `mobile/shared/build.gradle.kts`, [#1080](https://github.com/srikanth235/centraid/issues/1080)). Before that, even running step 0 was not enough: a core rebuilt after the last Kotlin change left the link task up to date, and the XCFramework shipped the previous core with step 0 done — which is how a fix proved green in `cargo test` reached the simulator as the old behaviour. Declaring the file builds nothing; it only makes a new archive a reason to link again, whichever directory it came from.
+**Why nothing builds it for you.** `lane-prebuilt-core.yml` builds the slices for CI so a Mac runner does not pay for a Rust build on every app build, and a build step that shelled out to `cargo` would fight that. So building the core stays this habit.
 
-**How to tell, in one command.** Compare the archive's mtime against your last Rust edit:
+**How to tell, in one command.** Compare the file's mtime against your last Rust edit:
 
 ```sh
 ls -l target/aarch64-apple-ios-sim/debug/libcentraid_core_ffi.a
+ls -l mobile/androidApp/src/main/jniLibs/arm64-v8a/libcentraid_core_ffi.so
 ```
 
-If it predates the change you are looking for, the app cannot contain it — stop debugging the Kotlin.
-
-**Android has the same shape**, through a different path: `mobile/androidApp/src/main/jniLibs/<abi>/libcentraid_core_ffi.so` is a **copied file**, so it is staler still — nothing updates it until `mobile/scripts/android-core.sh` is run again (it builds with `--features llama`, so the copy carries the engine).
-
-## The same defect one layer out: Xcode links an XCFramework Gradle never assembled
-
-**The symptom.** You change Kotlin in `mobile/shared` — or a sub-agent does — run the Gradle task, build the app, run it, and the change is not there. The Gradle task succeeded. The Swift recompiled. The app installed. What runs is whatever Kotlin was last turned into an XCFramework, which on a fresh tree is _nothing_: the framework dependency simply does not resolve, and on a tree where it was assembled once it is as old as that assembly.
-
-**The cause.** `mobile/iosApp/project.yml` names its framework dependency by path:
-
-```
-- framework: ../shared/build/XCFrameworks/debug/CentraidShared.xcframework
-  embed: true
-```
-
-`:shared:linkDebugFrameworkIosSimulatorArm64` does not write that path. It links a plain `.framework` under `shared/build/bin/`, which nothing in the Xcode project consumes, and it leaves `build/XCFrameworks/debug/` exactly as it found it. Both halves succeed and the two never meet — a path dependency again, with nothing on either side that could notice the mismatch.
-
-**The fix.** Assemble the artifact the project actually consumes:
-
-```sh
-cd mobile && ./gradlew -Pkotlin.native.enableKlibsCrossCompilation=true \
-    :shared:assembleCentraidSharedDebugXCFramework
-```
-
-The `-Pkotlin.native.enableKlibsCrossCompilation=true` flag is not optional on a Mac: cinterop needs an Apple toolchain, so klib cross-compilation is off by default and back on here. `mobile/README.md`'s iOS hand-off carries this as step 1 for the same reason it carries the Rust slice as step 0.
-
-**How to tell, in one command.** The XCFramework's mtime against your last Kotlin edit:
-
-```sh
-ls -ld mobile/shared/build/XCFrameworks/debug/CentraidShared.xcframework
-```
-
-Absent, or older than the change you are looking for, and the app cannot contain it — stop debugging the Swift.
+If it predates the change you are looking for, the app cannot contain it — stop debugging the Swift and the Kotlin.

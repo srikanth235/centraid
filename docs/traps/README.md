@@ -10,7 +10,7 @@ Read the matching trap before working near its area; each one was paid for once.
 | [generated-and-committed.md](generated-and-committed.md) | A file that is generated _and_ committed, with a guard on the generated half: green while the source is wrong |
 | [coverage-run-filters.md](coverage-run-filters.md) | Filtering a vitest coverage run without over-measuring |
 | [emulator-snapshot-settings.md](emulator-snapshot-settings.md) | `settings put global` on a lane that restores a cached AVD RAM snapshot |
-| [stale-core-slice.md](stale-core-slice.md) | A Kotlin/Native framework links `libcentraid_core_ffi.a` by PATH, so a changed Rust core ships as the old one with no error |
+| [stale-core-slice.md](stale-core-slice.md) | Both shells take the Rust core as a built file by path (iOS links `libcentraid_core_ffi.a`, Android loads a copied `.so`), so a changed core ships as the old one with no error |
 | [shared-cargo-target.md](shared-cargo-target.md) | Two worktrees on one `CARGO_TARGET_DIR`: a build script's `OUT_DIR` is keyed by package identity, and a gate verdict is then worthless |
 | [serde-json-preserve-order.md](serde-json-preserve-order.md) | A `serde_json::Value`'s printed text is not canonical — `preserve_order` unifies across a build, so one crate's feature decides another crate's sort |
 | [fresh-executable-first-exec.md](fresh-executable-first-exec.md) | On macOS the first exec of a just-written file waits on a serialized code assessment, so a test's fixed window for a fake tool is a guess about the whole machine |
