@@ -162,6 +162,10 @@ message PassWindowDone {
 // the screen awake. Idempotent both ways.
 message LongRun {
   bool start = 1;
+  // The notification's title ("Backing up"), finished in the device's locale.
+  string title = 2;
+  // The notification channel's name the member sees in system settings ("Backup").
+  string channel_name = 3;
 }
 
 // The answer to an effect that asks nothing back (`PassWindowDone`, `LongRun`,

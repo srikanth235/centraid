@@ -28,6 +28,7 @@ use super::rule::Rules;
 use super::windows;
 use crate::custody::secrets::VaultSecrets;
 use crate::screen::{Ctx, Screen};
+use crate::strings::{backup, backup_home};
 
 /// The pseudo-table the core announces when the backup ledger moved
 /// (`centraid_core` `phone::backup_reads::TABLE`).
@@ -191,7 +192,11 @@ impl Service {
                 Action::LongRun(start) => self.effect(
                     Kind::Noted,
                     wire::Effect {
-                        kind: Some(wire::effect::Kind::LongRun(wire::LongRun { start })),
+                        kind: Some(wire::effect::Kind::LongRun(wire::LongRun {
+                            start,
+                            title: backup_home::pass_in_flight_title(ctx.locale()),
+                            channel_name: backup::backup_title(ctx.locale()),
+                        })),
                     },
                     out,
                 ),

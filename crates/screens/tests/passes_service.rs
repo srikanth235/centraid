@@ -699,6 +699,22 @@ fn back_up_now_from_another_screen_walks_asks_and_releases_the_long_run() {
     assert_eq!(rig.driver.view(probe).kind_title(), "backing up");
     assert!(rig.secrets.conductor().facts().backing_up);
     assert_eq!(long_runs(&rig), [true]);
+    // THE NOTIFICATION'S WORDS ARE RUST'S: the shell writes none.
+    let run = rig
+        .driver
+        .effects
+        .iter()
+        .find_map(
+            |request| match request.effect.as_ref().and_then(|e| e.kind.as_ref()) {
+                Some(wire::effect::Kind::LongRun(run)) if run.start => Some(run.clone()),
+                _ => None,
+            },
+        )
+        .expect("the long run starts");
+    assert_eq!(
+        (run.title.as_str(), run.channel_name.as_str()),
+        ("Backing up", "Backup")
+    );
     // THE ROLL FIRST, THEN THE ASKED PASS WITH A SNAPSHOT.
     assert!(rig.has(is_walk));
     rig.walk();
