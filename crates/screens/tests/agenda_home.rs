@@ -616,7 +616,25 @@ fn the_sections_run_in_day_order_with_the_month_named_where_the_list_reaches_a_n
         ]
     );
     let sec = section(r.data(), &c).unwrap();
-    assert_eq!(sec.month_heading.as_deref(), Some(month_year(&c).as_str()));
+    // THE MONTH IS NAMED ON THE FIRST DAY DRAWN IN IT, and that is not always the test's own day:
+    // the fixture's birthdays are drawn too, so on some dates one falls earlier in `c`'s month.
+    let first_in_month = r
+        .data()
+        .days
+        .iter()
+        .find(|day| day.day[..7] == c[..7])
+        .expect("c's month is drawn");
+    assert_eq!(
+        first_in_month.month_heading.as_deref(),
+        (c[..7] != r.today()[..7])
+            .then(|| month_year(&c))
+            .as_deref()
+    );
+    assert_eq!(
+        sec.month_heading.is_some(),
+        sec.day == first_in_month.day && c[..7] != r.today()[..7],
+        "only the first day drawn in a new month carries its name"
+    );
     assert_eq!(
         sec.day_number,
         civil::day_of_month_of(&c).unwrap().to_string()
