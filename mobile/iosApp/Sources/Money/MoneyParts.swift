@@ -137,7 +137,7 @@ extension Centraid_Core_V1_MoneySearchState {
         case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
         case let .denied(denied)?: return .denied(denied)
         case let .data(data)?: return .data(data)
-        case .resting?, nil: return .loading(true)
+        case nil: return .loading(true)
         }
     }
 }

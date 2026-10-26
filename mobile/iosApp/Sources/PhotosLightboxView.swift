@@ -629,10 +629,10 @@ private struct PhotosLightboxInfoSheet: View {
             label(words.placeTitle)
             Text(photo.placePhrase).centraidType("body")
             HStack(spacing: 16) {
-                KitLink(label: photo.hasPlace ? words.change : words.addPlace) {
+                KitLink(label: photo.hasPlace_p ? words.change : words.addPlace) {
                     send(.sheet(.with { $0.sheet = .place }))
                 }
-                if photo.hasPlace {
+                if photo.hasPlace_p {
                     KitLink(label: words.remove) { send(.placeChosen(.with { $0.placeID = "" })) }
                 }
                 if photo.canCopyLocation {

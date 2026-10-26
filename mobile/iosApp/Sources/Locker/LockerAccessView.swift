@@ -88,7 +88,8 @@ struct LockerLockPageView: View {
 
     var body: some View {
         Group {
-            if let wall = state.wall {
+            if state.hasWall {
+                let wall = state.wall
                 PushedPage(title: "", parentTitle: state.closeLabel, onBack: onClose) {
                     EmptyView()
                 } content: {

@@ -326,13 +326,13 @@ final class ScreenStore: ObservableObject {
         switch request.effect.kind {
         #if os(iOS)
         case .clipboardSet(let set)?:
-            if set.sensitive && set.clearAfterMs > 0 {
+            if set.sensitive && set.clearAfterMs_p > 0 {
                 // THE OS KEEPS THE DEADLINE: a pasteboard item expires on its own, so a killed app
                 // cannot leave a secret behind, and `localOnly` keeps it off Universal Clipboard.
                 UIPasteboard.general.setItems(
                     [["public.utf8-plain-text": set.text]],
                     options: [
-                        .expirationDate: Date(timeIntervalSinceNow: Double(set.clearAfterMs) / 1000),
+                        .expirationDate: Date(timeIntervalSinceNow: Double(set.clearAfterMs_p) / 1000),
                         .localOnly: true,
                     ]
                 )
@@ -352,7 +352,7 @@ final class ScreenStore: ObservableObject {
             answer(request, done)
         case .openURL(let link)?:
             if let url = URL(string: link.url) {
-                UIApplication.shared.open(url)
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
                 answer(request, done)
             } else {
                 answer(request, .failed(Self.failure("not a URL")))
@@ -364,7 +364,7 @@ final class ScreenStore: ObservableObject {
             var components = URLComponents(string: "https://maps.apple.com/")
             components?.queryItems = [URLQueryItem(name: "q", value: map.query)]
             if let url = components?.url {
-                UIApplication.shared.open(url)
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
                 answer(request, done)
             } else {
                 answer(request, .failed(Self.failure("not an address")))
@@ -494,7 +494,7 @@ final class ScreenStore: ObservableObject {
             if case let .open(destination)? = command.kind, destination == .phone || destination == .notifications,
                 let url = URL(string: UIApplication.openSettingsURLString)
             {
-                UIApplication.shared.open(url)
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
             }
             #endif
             answer(request, done)
@@ -538,7 +538,7 @@ final class ScreenStore: ObservableObject {
         #if os(iOS)
         switch roll.action {
         case .openSettings:
-            if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+            if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url, options: [:], completionHandler: nil) }
         case .manageSelection:
             let scene = UIApplication.shared.connectedScenes
                 .compactMap { $0 as? UIWindowScene }

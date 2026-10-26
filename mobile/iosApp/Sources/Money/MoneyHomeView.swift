@@ -10,21 +10,20 @@ import SwiftUI
 /// Search is a door (R-CHROME-2): the bar never opens in place, it pushes the
 /// search page. Where each intent leads is Rust's (`crates/screens`).
 struct MoneyHomeView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_MoneyHomeState
+    let send: (Centraid_Core_V1_MoneyHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onHome: () -> Void
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Core_V1_MoneyHomeState {
-        (try? Centraid_Core_V1_MoneyHomeState(serializedBytes: data)) ?? .init()
+    private func event(_ build: (inout Centraid_Core_V1_MoneyHomeEvent) -> Void) -> Centraid_Core_V1_MoneyHomeEvent {
+        var event = Centraid_Core_V1_MoneyHomeEvent()
+        build(&event)
+        return event
     }
 
-    private func event(_ build: (inout Centraid_Core_V1_MoneyHomeEvent) -> Void) -> Data {
-        moneyEvent(Centraid_Core_V1_MoneyHomeEvent.self, build)
-    }
-
-    private func addStatement() { send(event { $0.add = .init() }) }
+    private func addStatement() { open(state.chrome.importRoute) }
 
     var body: some View {
         let content = state.readContent
