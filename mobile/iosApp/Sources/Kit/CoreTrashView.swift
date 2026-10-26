@@ -78,3 +78,37 @@ struct CoreTrashView: View {
         .accessibilityIdentifier("\(state.appID)-trash")
     }
 }
+
+private struct TrashRowView: View {
+    let row: Centraid_Core_V1_TrashRow
+    let onRestore: () -> Void
+    let onPurge: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        HStack(spacing: 8) {
+            CentraidRow(title: row.title, meta: row.meta, identifier: "trash-row-\(row.id)")
+            Button(action: onRestore) {
+                Text(row.restoreLabel)
+                    .centraidType("annotLabelOn")
+                    .foregroundStyle(Theme.color("link", scheme))
+                    .frame(minWidth: CentraidGeometry.targetMinCoarse, minHeight: CentraidGeometry.targetMinCoarse)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("trash-restore-\(row.id)")
+            if !row.purgeLabel.isEmpty {
+                Button(action: onPurge) {
+                    CentraidIconView(iconKey: "Trash", tint: Theme.color("net", scheme), size: 16)
+                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(row.purgeLabel)
+                .accessibilityIdentifier("trash-purge-\(row.id)")
+            }
+        }
+        .padding(.trailing, 8)
+    }
+}

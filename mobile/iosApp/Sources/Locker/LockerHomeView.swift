@@ -84,7 +84,8 @@ struct LockerHomeView: View {
                 onHome: onHome
             )
         } content: {
-            if let wall = state.wall {
+            if state.hasWall {
+                let wall = state.wall
                 LockerWallView(wall: wall, send: sendWall, onWords: onWords)
             } else {
                 // OPEN, AND SHIELDED FROM CAPTURE while Rust says `secure`.

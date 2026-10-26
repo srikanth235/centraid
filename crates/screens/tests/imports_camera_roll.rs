@@ -266,6 +266,48 @@ fn photos_on_cellular_downloads_a_photographs_original_there_and_never_a_videos(
     assert!(!may_fetch(&cellular, Rule::WifiAndCellularPhotos, true));
 }
 
+/// A vault coming to the front closes every tab root and opens it again, and the roll's walk dies
+/// with the root that ran it: the root opened for the vault walks the roll itself.
+#[test]
+fn a_roll_root_opened_for_a_vault_walks_the_roll_without_being_asked() {
+    use centraid_screens::imports::routes as route;
+    let mut library = Library::new();
+    library.permission = Permission::Granted;
+    let mut shell = started(&mut library);
+    let before = library.pages.len();
+    let at = shell
+        .d
+        .push("imports-camera-roll", route::camera_roll("vault-1"));
+    assert!(at > 0);
+    serve_library(&mut shell, &mut library);
+    assert!(
+        library.pages.len() > before,
+        "a root opened for a vault read no page of the roll"
+    );
+    assert_eq!(library.prompts, 0, "a walk on open never asks the member");
+}
+
+/// A LAUNCH WALKS BEFORE ANY VAULT IS IN FRONT: the pass service sends the session's first walk
+/// while the shelf is still opening its vaults, so the walk names no vault.
+#[test]
+fn a_walk_that_names_no_vault_still_reads_the_roll() {
+    let mut library = Library::new();
+    let mut shell = started(&mut library);
+    let instance = shell.roll;
+    shell.d.send(
+        instance,
+        wire::screen_event::Kind::ImportsCameraRoll(wire::ImportsCameraRollEvent {
+            vault_id: String::new(),
+            kind: Some(roll::Kind::Walk(roll::Walk {})),
+        }),
+    );
+    serve_library(&mut shell, &mut library);
+    assert!(
+        !library.pages.is_empty(),
+        "a walk with no vault named never asked the shell for a page"
+    );
+}
+
 #[test]
 fn the_cursor_is_per_vault() {
     assert!(cursor_key("vault-a").contains("vault-a"));

@@ -211,10 +211,7 @@ private struct NotesLinkSheet: View {
     var body: some View {
         SheetRoom(title: sheet.title, status: sheet.foot) {
             CentraidSearchField(
-                field: KitSearchField.with {
-                    $0.open = true
-                    $0.term = sheet.term
-                },
+                field: KitSearchField(open: true, term: sheet.term),
                 placeholder: sheet.searchPlaceholder,
                 closeLabel: sheet.close,
                 identifier: "notes-link-search",

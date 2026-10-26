@@ -49,7 +49,7 @@ enum StageDoor {
         let begun: Centraid_Core_V1_StageBegun
         switch await send(core, .begin(frame)) {
         case let .success(.begun(answer)?): begun = answer
-        case let .failure(error): return .refused(error)
+        case let .failure(refusal): return .refused(refusal.error)
         default: return .refused(nil)
         }
         let chunkBytes = max(Int(begun.chunkBytes), 1)
@@ -66,14 +66,14 @@ enum StageDoor {
             chunk.stagingID = begun.stagingID
             chunk.seq = seq
             chunk.payload = slice
-            if case let .failure(error) = await send(core, .chunk(chunk)) { return .refused(error) }
+            if case let .failure(refusal) = await send(core, .chunk(chunk)) { return .refused(refusal.error) }
             seq += 1
         }
         var end = Centraid_Core_V1_StageEnd()
         end.stagingID = begun.stagingID
         switch await send(core, .end(end)) {
         case let .success(.handle(handle)?): return .staged(handle)
-        case let .failure(error): return .refused(error)
+        case let .failure(refusal): return .refused(refusal.error)
         default: return .refused(nil)
         }
     }
@@ -109,22 +109,27 @@ enum StageDoor {
         }
     }
 
+    /// A `Result`'s failure must be an `Error`, and `nil` (no refusal on the wire) is a failure too.
+    private struct Refusal: Error {
+        let error: Centraid_Core_V1_Error?
+    }
+
     private static func send(
         _ core: any ScreenCore,
         _ kind: Centraid_Core_V1_StageRequest.OneOf_Kind
-    ) async -> Result<Centraid_Core_V1_StageResponse.OneOf_Kind?, Centraid_Core_V1_Error?> {
+    ) async -> Result<Centraid_Core_V1_StageResponse.OneOf_Kind?, Refusal> {
         var stage = Centraid_Core_V1_StageRequest()
         stage.kind = kind
         var request = Centraid_Core_V1_Request()
         request.kind = .stage(stage)
         do {
             let response = try await core.call(request, lane: .bulk)
-            guard case let .stage(answer)? = response.kind else { return .failure(nil) }
+            guard case let .stage(answer)? = response.kind else { return .failure(Refusal(error: nil)) }
             return .success(answer.kind)
         } catch let Core.Failure.refused(error) {
-            return .failure(error)
+            return .failure(Refusal(error: error))
         } catch {
-            return .failure(nil)
+            return .failure(Refusal(error: nil))
         }
     }
 

@@ -928,10 +928,18 @@ impl Roll {
             // the session attached must be on state before the member-visible frame.
             Some(E::Appeared(_)) => {
                 self.learn_vault(ctx, "");
-                if self.job.is_none() {
+                if self.job.is_some() {
+                    Vec::new()
+                } else if self.vault_id.is_empty() {
                     self.ask_permission(false, Why::Sync)
                 } else {
-                    Vec::new()
+                    // A ROOT OPENED FOR A VAULT WALKS THE ROLL ONCE. The shelf opens its vaults after
+                    // the session's first walk was sent, and a vault coming to the front closes every
+                    // tab root and opens it again: the walk that was running dies with the screen
+                    // that ran it, and the pass service goes on waiting for its report. The walk is
+                    // the cursor's, so one more costs a read of what changed, and a photograph taken
+                    // while the app was closed is in the vault at launch (R-1029-PH-4).
+                    self.trigger()
                 }
             }
             Some(E::ImportsCameraRoll(roll)) => {

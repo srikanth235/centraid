@@ -95,11 +95,10 @@ fn home_is_the_root_of_the_home_tab_and_reads_every_app_in_the_grid_order() {
         rows,
         vec![
             vec!["photos"],
-            vec!["docs"],
+            vec!["docs", "notes"],
             vec!["agenda"],
-            vec!["notes", "money"],
-            vec!["health", "people"],
-            vec!["locker"],
+            vec!["money", "health"],
+            vec!["people", "locker"],
         ]
     );
     assert!(!data.every_tile_unreadable);

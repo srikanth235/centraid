@@ -496,7 +496,7 @@ private enum ChangeTokens {
         var known: Set<String> = []
         var inserted: Set<String> = []
         var newest: PHPersistentChangeToken?
-        changes.enumerateChanges { change, _ in
+        for change in changes {
             if let details = try? change.changeDetails(for: .asset) {
                 // ONE CHANGE'S SET HAS NO ORDER; sorted, so a resumed page is the same page.
                 for id in details.insertedLocalIdentifiers.sorted() {

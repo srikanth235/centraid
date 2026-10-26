@@ -42,7 +42,8 @@ struct MoneySearchView: View {
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .padding(.top, 4)
                 .padding(.bottom, 8)
-                if case let .resting(resting)? = state.content {
+                if state.content == nil, state.hasResting {
+                    let resting = state.resting
                     EmptyStateView(resting)
                 } else {
                     ReadStateView(
