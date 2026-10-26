@@ -27,7 +27,7 @@ pub const COLUMNS: usize = 2;
 pub fn size_of(app: &str) -> Size {
     match app {
         "photos" => Size::Large,
-        "agenda" | "docs" => Size::Medium,
+        "agenda" => Size::Medium,
         _ => Size::Small,
     }
 }
@@ -147,11 +147,10 @@ mod tests {
             ids(&rows(&all(Status::Loading))),
             vec![
                 vec!["photos"],
-                vec!["docs"],
+                vec!["docs", "notes"],
                 vec!["agenda"],
-                vec!["notes", "money"],
-                vec!["health", "people"],
-                vec!["locker"],
+                vec!["money", "health"],
+                vec!["people", "locker"],
             ]
         );
     }
