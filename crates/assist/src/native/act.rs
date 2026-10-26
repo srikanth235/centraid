@@ -30,9 +30,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Map, Value, json};
 
 use crate::native::dates::{self, Stamp};
-use crate::native::door::Ran;
+use crate::native::door::{Call, Ran};
 use crate::native::member::{ActionKind, MemberAction};
-use crate::native::meta::{self, FieldType, Kind, ROW_CAP, Verb, Via};
+use crate::native::meta::{self, ActionSpec, FieldType, Kind, ROW_CAP, Verb, Via};
 use crate::native::park::{FieldChange, LinkChange, RowChange};
 use crate::native::render;
 use crate::native::session::{
@@ -54,51 +54,6 @@ pub(crate) struct PendingBulk {
     pub args: String,
 }
 
-/// The args a `create` of `kind` takes: `name`, the kind's creatable fields, and the
-/// references and secrets its command carries.
-pub(crate) fn create_allowed(kind: Kind) -> Vec<&'static str> {
-    let mut allowed: Vec<&str> = vec!["name"];
-    allowed.extend(
-        kind.spec()
-            .fields
-            .iter()
-            .filter(|field| field.create)
-            .map(|field| field.name),
-    );
-    match kind {
-        Kind::Task => allowed.extend(["date", "parent", "list"]),
-        Kind::Event => allowed.push("date"),
-        Kind::Note => allowed.push("notebook"),
-        Kind::Document => allowed.extend(["folder", "text"]),
-        Kind::LockerItem => allowed.extend(["password", "code", "card_number", "cvv"]),
-        _ => {}
-    }
-    allowed
-}
-
-/// The field a create arg is another spelling of: the kind's own word for its date (`due` for a
-/// task, `start` for an event) is `date`. The one resolver of a create's arg names: `create`
-/// reads args through it, and so does the normaliser (`normalize.rs`) before it decides an arg
-/// is one the kind does not take.
-pub(crate) fn create_arg_alias(kind: Kind, key: &str) -> Option<&'static str> {
-    kind.spec()
-        .date
-        .filter(|date| date.label == key)
-        .map(|_| "date")
-}
-
-/// The input key that names a row in a command: `id` for every command on an entity of the vault
-/// (a Locker item's `entity.trash` and `flag.set` included), and `item_id` for a `locker.*`
-/// command, which keeps its own spelling.
-#[must_use]
-pub fn id_param(command: &str) -> &'static str {
-    if command.starts_with("locker.") {
-        "item_id"
-    } else {
-        "id"
-    }
-}
-
 /// Which container a kind goes into with `add_to`.
 #[must_use]
 pub fn container_of(kind: Kind) -> Option<Kind> {
@@ -111,13 +66,18 @@ pub fn container_of(kind: Kind) -> Option<Kind> {
     })
 }
 
-/// The refusal for a membership verb on a kind that is in no container.
-fn not_container_verb(verb: Verb, row: &Row) -> String {
+/// The refusal for a verb no action serves on a kind.
+fn not_applicable(verb: Verb, kind: Kind) -> String {
     format!(
         "error: {} does not apply to {}.",
         verb.spec().name,
-        row.kind.name()
+        kind.name()
     )
+}
+
+/// The refusal for a membership verb on a kind that is in no container.
+fn not_container_verb(verb: Verb, row: &Row) -> String {
+    not_applicable(verb, row.kind)
 }
 
 /// `args` as the model writes it: an object, or `field: value` lines whose
@@ -214,8 +174,44 @@ fn text_of(value: &Value) -> String {
 
 /// One planned write.
 struct Step {
-    command: &'static str,
+    act: Call,
     input: Value,
+}
+
+impl Step {
+    /// A step that runs `action` on `input`.
+    fn of(action: &ActionSpec, input: Value) -> Self {
+        Self {
+            act: action.call(),
+            input,
+        }
+    }
+
+    /// A step no manifest action names yet: the bare vault command.
+    fn bare(command: &'static str, input: Value) -> Self {
+        Self {
+            act: Call::bare(command),
+            input,
+        }
+    }
+}
+
+/// The input an action takes: the row it acts on under the action's own id property, the values
+/// chat stated under the names chat says them (`name` for a `title`), and the properties that can
+/// only take one value (`flag`, `rel`) filled in.
+fn input_of(action: &ActionSpec, id: &str, stated: &[(&str, Value)]) -> Value {
+    let mut input = Map::new();
+    input.insert(action.id_param.to_owned(), json!(id));
+    for (name, value) in stated {
+        let property = action.property_named(name).unwrap_or(name);
+        input.insert(property.to_owned(), value.clone());
+    }
+    for (property, fixed) in action.consts.iter().chain(action.defaults) {
+        if let Ok(value) = serde_json::from_str::<Value>(fixed) {
+            input.entry((*property).to_owned()).or_insert(value);
+        }
+    }
+    Value::Object(input)
 }
 
 /// What one target will do.
@@ -1634,7 +1630,7 @@ impl Session {
                     let mut outputs = Vec::new();
                     let mut lapsed_row = false;
                     for step in steps {
-                        let ran = self.write_step(step.command, &step.input)?;
+                        let ran = self.write_step(&step.act, &step.input)?;
                         if !ran.ok {
                             if verb == Verb::Restore
                                 && several
@@ -1648,7 +1644,7 @@ impl Session {
                                 );
                                 set_aside.push((
                                     key.clone(),
-                                    step.command,
+                                    step.act.command,
                                     step.input.clone(),
                                     ran,
                                     said,
@@ -1665,7 +1661,7 @@ impl Session {
                                 && let Some(ended) = self.refusal(
                                     verb,
                                     &key,
-                                    (step.command, &step.input),
+                                    (step.act.command, &step.input),
                                     &ran,
                                     &before,
                                 )
@@ -1701,7 +1697,7 @@ impl Session {
                     touched.push(key.clone());
                     for step in inverse {
                         inverses.push(Inverse {
-                            command: step.command.to_owned(),
+                            act: step.act,
                             input: step.input,
                             key: key.clone(),
                         });
@@ -1955,10 +1951,8 @@ impl Session {
         // A SECRET THE MEMBER TYPED shows on the card masked: the world holds only its presence.
         if key.0 == Kind::LockerItem {
             for step in &self.park.steps {
-                if !matches!(
-                    step.command.as_str(),
-                    "locker.add_item" | "locker.edit_item"
-                ) || step.input["item_id"].as_str() != Some(key.1.as_str())
+                if !matches!(step.act.command, "locker.add_item" | "locker.edit_item")
+                    || step.input["item_id"].as_str() != Some(key.1.as_str())
                 {
                     continue;
                 }
@@ -2036,8 +2030,11 @@ impl Session {
     fn plan(&mut self, verb: Verb, row: &Row, args: &Map<String, Value>) -> Result<Plan, String> {
         let kind = row.kind;
         let id = row.id.clone();
-        let command = verb.command(kind).unwrap_or_default();
-        let target = || json!({ id_param(command): id.clone() });
+        // THE ONE LOOKUP: the manifest action chat runs for this verb on this kind
+        let action = verb
+            .action(kind)
+            .ok_or_else(|| not_applicable(verb, kind))?;
+        let target = || json!({ action.id_param: id.clone() });
         let check_args = |allowed: &[&str]| -> Result<(), String> {
             for key in args.keys() {
                 if !allowed.contains(&key.as_str()) {
@@ -2076,23 +2073,18 @@ impl Session {
                         .unwrap_or_default();
                     return Ok(Plan::Already(format!("is {want}{when}")));
                 }
-                // closing, reopening and cancelling are three commands of the vault; the undo is
-                // the command of the status the row had
+                // closing, reopening and cancelling are three actions; the undo is the action of
+                // the status the row had
                 let back = Kind::Task
                     .spec()
                     .field("status")
                     .and_then(|field| field.vault_value(old))
-                    .and_then(meta::task_status_command)
-                    .unwrap_or("task.reopen");
+                    .and_then(meta::task_status_verb)
+                    .and_then(|verb| verb.action(Kind::Task))
+                    .unwrap_or(action);
                 run(
-                    vec![Step {
-                        command,
-                        input: target(),
-                    }],
-                    vec![Step {
-                        command: back,
-                        input: target(),
-                    }],
+                    vec![Step::of(action, target())],
+                    vec![Step::of(back, json!({ back.id_param: id }))],
                 )
             }
             Verb::Cancel => {
@@ -2111,51 +2103,35 @@ impl Session {
                         })
                     })
                     .unwrap_or("confirmed");
+                let edit = Verb::Edit
+                    .action(Kind::Event)
+                    .ok_or_else(|| not_applicable(Verb::Edit, Kind::Event))?;
                 run(
-                    vec![Step {
-                        command,
-                        input: target(),
-                    }],
-                    vec![Step {
-                        command: "event.edit",
-                        input: json!({"id": id, "status": old}),
-                    }],
+                    vec![Step::of(action, target())],
+                    vec![Step::of(
+                        edit,
+                        input_of(edit, &id, &[("status", json!(old))]),
+                    )],
                 )
             }
-            Verb::Delete => {
+            Verb::Delete | Verb::Restore => {
                 check_args(&[])?;
-                if row.trashed {
+                if verb == Verb::Delete && row.trashed {
                     return Ok(Plan::Already("is in the trash".to_owned()));
                 }
-                // EVERY KIND COMES BACK THE SAME WAY: a trashed row, and what went to the trash
-                // with it, is restored by the vault's own `entity.restore` (a Locker item by its
-                // own); the album, notebook or folder a delete takes out of the model included.
-                let restore = Verb::Restore.command(kind).unwrap_or("entity.restore");
-                run(
-                    vec![Step {
-                        command,
-                        input: target(),
-                    }],
-                    vec![Step {
-                        command: restore,
-                        input: target(),
-                    }],
-                )
-            }
-            Verb::Restore => {
-                check_args(&[])?;
-                if !row.trashed {
+                if verb == Verb::Restore && !row.trashed {
                     return Ok(Plan::Already("is not in the trash".to_owned()));
                 }
-                let delete = Verb::Delete.command(kind).unwrap_or_default();
+                // EVERY KIND COMES BACK THE SAME WAY: a trashed row, and what went to the trash
+                // with it, is restored by the action the manifest names as the delete's inverse
+                // (the vault's own `entity.restore`, a Locker item's by its own); the album,
+                // notebook or folder a delete takes out of the model included.
+                let back = action.inverse.ok_or_else(|| not_applicable(verb, kind))?;
                 run(
+                    vec![Step::of(action, target())],
                     vec![Step {
-                        command,
-                        input: target(),
-                    }],
-                    vec![Step {
-                        command: delete,
-                        input: target(),
+                        act: back.call(),
+                        input: json!({ back.id_param: id }),
                     }],
                 )
             }
@@ -2167,21 +2143,23 @@ impl Session {
                         if want { "is starred" } else { "is not starred" }.to_owned(),
                     ));
                 }
-                let other = if want { Verb::Unstar } else { Verb::Star };
+                let back = action.inverse.ok_or_else(|| not_applicable(verb, kind))?;
                 // a flag is named by the verb
-                let input = |_: bool| json!({"id": id, "flag": "starred"});
+                let input = json!({"id": id, "flag": verb.spec().flag.unwrap_or("starred")});
                 run(
+                    vec![Step::of(action, input.clone())],
                     vec![Step {
-                        command,
-                        input: input(want),
-                    }],
-                    vec![Step {
-                        command: other.command(kind).unwrap_or_default(),
-                        input: input(!want),
+                        act: back.call(),
+                        input,
                     }],
                 )
             }
             Verb::AddTo | Verb::RemoveFrom => self.plan_membership(verb, row, args)?,
+            // A VERB NO BESPOKE PLANNER OWNS is the catalog's: its action runs with the args chat
+            // stated, and the action the manifest names as its inverse takes it back.
+            Verb::Tag | Verb::Untag | Verb::Archive | Verb::Unarchive => {
+                self.plan_catalog(verb, row, args, action)?
+            }
             Verb::Log => {
                 check_args(&["kind"])?;
                 let log = args
@@ -2196,19 +2174,103 @@ impl Session {
                     ));
                 }
                 Plan::Run {
-                    steps: vec![Step {
-                        command,
-                        input: json!({"id": id, "kind": log}),
-                    }],
+                    steps: vec![Step::of(
+                        action,
+                        input_of(action, &id, &[("kind", json!(log))]),
+                    )],
                     inverse: Vec::new(),
                     not_undoable: Some("a logged interaction stays in the journal".to_owned()),
                     note: None,
                 }
             }
+            // A TRANSFER IS TWO LINES THAT POINT AT EACH OTHER: the undo links the partner again
+            // (the `transfer` field is the partner's id), so an unlink is taken back exactly.
+            Verb::Unlink => {
+                check_args(&[])?;
+                let Some(Val::Text(partner)) = row.field("transfer") else {
+                    return Ok(Plan::Already("is not part of a transfer".to_owned()));
+                };
+                let back = action.inverse.ok_or_else(|| not_applicable(verb, kind))?;
+                run(
+                    vec![Step::of(action, target())],
+                    vec![Step {
+                        act: back.call(),
+                        input: json!({ back.id_param: id, "other_id": partner }),
+                    }],
+                )
+            }
             Verb::Reveal => self.plan_reveal(row, args)?,
             Verb::Reschedule => self.plan_reschedule(row, args)?,
             Verb::Edit => self.plan_edit(row, args)?,
             Verb::Create | Verb::Undo => unreachable!("handled by the caller"),
+        })
+    }
+
+    /// A verb the catalog backs and no bespoke planner owns (`tag`, `archive`): the manifest
+    /// action runs with each arg chat stated under a name the action's input says it by (`label`),
+    /// the properties that can only take one value filled in, and the manifest's inverse takes it
+    /// back with the same input.
+    fn plan_catalog(
+        &self,
+        verb: Verb,
+        row: &Row,
+        args: &Map<String, Value>,
+        action: &'static ActionSpec,
+    ) -> Result<Plan, String> {
+        let names = action.chat_names();
+        let mut stated: Vec<(&str, Value)> = Vec::new();
+        for (key, value) in args {
+            if action.property_named(key).is_none() {
+                return Err(format!(
+                    "error: {} takes {}; not \"{key}\".",
+                    verb.spec().name,
+                    if names.is_empty() {
+                        "no args".to_owned()
+                    } else {
+                        format!("args {}", names.join(", "))
+                    }
+                ));
+            }
+            stated.push((key.as_str(), json!(text_of(value).trim())));
+        }
+        for required in action.required {
+            let said = stated
+                .iter()
+                .any(|(name, _)| action.property_named(name) == Some(*required));
+            let filled = *required == action.id_param
+                || said
+                || (*required == "flag" && verb.spec().flag.is_some())
+                || action.minted.contains(required)
+                || action
+                    .consts
+                    .iter()
+                    .chain(action.defaults)
+                    .any(|(p, _)| p == required);
+            if !filled {
+                let name = action
+                    .aliases
+                    .iter()
+                    .find(|(property, _)| property == required)
+                    .and_then(|(_, names)| names.first().copied())
+                    .unwrap_or(required);
+                return Err(format!("error: {} needs {name}: <text>.", verb.spec().name));
+            }
+        }
+        let mut input = input_of(action, &row.id, &stated);
+        if let (Some(flag), true) = (verb.spec().flag, action.takes("flag")) {
+            input["flag"] = json!(flag);
+        }
+        let back = action
+            .inverse
+            .ok_or_else(|| not_applicable(verb, row.kind))?;
+        Ok(Plan::Run {
+            steps: vec![Step::of(action, input.clone())],
+            inverse: vec![Step {
+                act: back.call(),
+                input,
+            }],
+            not_undoable: None,
+            note: None,
         })
     }
 
@@ -2295,51 +2357,43 @@ impl Session {
             return Ok(Plan::Already(format!("is not in {name}")));
         }
         let id = row.id.clone();
-        let cid = container.1.clone();
         // Where a one-place kind (note, document, task) sits now, for undo.
         let current = self
             .world
             .neighbours(&key)
             .get(&expected)
             .and_then(|keys| keys.first().cloned());
-        let place = |at: Option<&Key>| -> Step {
-            match row.kind {
-                Kind::Note => Step {
-                    command: "note.move",
-                    input: json!({"id": id, "notebook_id": at.map(|at| at.1.clone())}),
-                },
-                Kind::Document => Step {
-                    command: "document.move",
-                    input: json!({"id": id, "folder_id": at.map(|at| at.1.clone())}),
-                },
-                _ => Step {
-                    command: "task.organize",
-                    input: json!({"id": id, "project_id": at.map(|at| at.1.clone())}),
-                },
-            }
+        // WHERE THE ROW GOES is the one lookup's: the action that serves `add_to` on this kind says
+        // the property that names the container under the word chat says it by (`to`, or `from`
+        // for a removal)
+        let member = |verb: Verb, at: Option<&Key>| -> Result<Step, String> {
+            let action = verb
+                .action(row.kind)
+                .ok_or_else(|| not_container_verb(verb, row))?;
+            let slot = if verb == Verb::AddTo { "to" } else { "from" };
+            Ok(Step::of(
+                action,
+                input_of(action, &id, &[(slot, json!(at.map(|at| at.1.clone())))]),
+            ))
         };
+        let place = |at: Option<&Key>| member(Verb::AddTo, at);
         // a photograph is in an album by an ordered `contains` edge, and there are as many as it
         // is in albums
-        let pair = |command: &'static str| -> Step {
-            Step {
-                command,
-                input: json!({"from": cid, "rel": "contains", "to": id}),
-            }
-        };
+        let pair = |verb: Verb| member(verb, Some(container));
         let mut planned = match row.kind {
             Kind::Photo => {
-                let (add, remove) = ("edge.add", "edge.remove");
+                let (add, remove) = (Verb::AddTo, Verb::RemoveFrom);
                 if verb == Verb::AddTo {
                     Plan::Run {
-                        steps: vec![pair(add)],
-                        inverse: vec![pair(remove)],
+                        steps: vec![pair(add)?],
+                        inverse: vec![pair(remove)?],
                         not_undoable: None,
                         note: None,
                     }
                 } else {
                     Plan::Run {
-                        steps: vec![pair(remove)],
-                        inverse: vec![pair(add)],
+                        steps: vec![pair(remove)?],
+                        inverse: vec![pair(add)?],
                         not_undoable: None,
                         note: None,
                     }
@@ -2352,8 +2406,8 @@ impl Session {
                     None
                 };
                 Plan::Run {
-                    steps: vec![place(to)],
-                    inverse: vec![place(current.as_ref())],
+                    steps: vec![place(to)?],
+                    inverse: vec![place(current.as_ref())?],
                     not_undoable: None,
                     note: None,
                 }
@@ -2667,25 +2721,32 @@ impl Session {
                     return Ok(Plan::Already(format!("is already due {}", point.show())));
                 }
                 // `due: null` clears a due date, so the undo of a first date is the same command
-                let inverse = json!({"id": row.id, "due": row.date.map(Stamp::vault)});
+                let action = Verb::Reschedule
+                    .action(Kind::Task)
+                    .ok_or_else(|| not_applicable(Verb::Reschedule, Kind::Task))?;
+                let inverse = input_of(
+                    action,
+                    &row.id,
+                    &[("date", json!(row.date.map(Stamp::vault)))],
+                );
                 Ok(Plan::Run {
-                    steps: vec![Step {
-                        command: "task.edit",
-                        input: json!({"id": row.id, "due": point.vault()}),
-                    }],
-                    inverse: vec![Step {
-                        command: "task.edit",
-                        input: inverse,
-                    }],
+                    steps: vec![Step::of(
+                        action,
+                        input_of(action, &row.id, &[("date", json!(point.vault()))]),
+                    )],
+                    inverse: vec![Step::of(action, inverse)],
                     not_undoable: None,
                     note: said,
                 })
             }
             Kind::Event => {
                 // A CANCELLED EVENT IS NOT MOVED: the person is asked whether to plan a new one
+                let action = Verb::Reschedule
+                    .action(Kind::Event)
+                    .ok_or_else(|| not_applicable(Verb::Reschedule, Kind::Event))?;
                 if row.field("status") == Some(&Val::Enum("cancelled")) {
                     return Ok(Plan::Refused {
-                        command: "event.edit",
+                        command: action.command,
                         input: json!({"id": row.id}),
                         predicate: "event_exists_not_cancelled",
                         reason: "That event is not here to change.",
@@ -2719,14 +2780,8 @@ impl Session {
                     input
                 };
                 Ok(Plan::Run {
-                    steps: vec![Step {
-                        command: "event.edit",
-                        input: times(start, end),
-                    }],
-                    inverse: vec![Step {
-                        command: "event.edit",
-                        input: times(old_start, old_end),
-                    }],
+                    steps: vec![Step::of(action, times(start, end))],
+                    inverse: vec![Step::of(action, times(old_start, old_end))],
                     not_undoable: None,
                     note: said,
                 })
@@ -2829,11 +2884,8 @@ impl Session {
                 out.insert(key.clone(), value.clone());
                 continue;
             };
-            let holds_text = matches!(base, "body" | "description")
-                && kind
-                    .spec()
-                    .field(base)
-                    .is_some_and(|field| field.edit.is_some());
+            let holds_text =
+                matches!(base, "body" | "description") && meta::edit_action(kind, base).is_some();
             if !holds_text {
                 return Err(format!(
                     "error: only a body or a description takes +: (text added to the end); {} editable fields: {}.",
@@ -2872,9 +2924,12 @@ impl Session {
         // THE APPEND FORM (nt15 R2b): `body+: oat milk` adds to the text the row has
         let appended = Self::append_args(row, args)?;
         let args = &appended;
-        // command → (input, inverse input)
+        // command → (input, inverse input); the action that runs each command is the one the
+        // fields edited through it name (`calls`), the one that edits the kind in general when
+        // they share a command
         let mut forward: BTreeMap<&'static str, Map<String, Value>> = BTreeMap::new();
         let mut backward: BTreeMap<&'static str, Map<String, Value>> = BTreeMap::new();
+        let mut calls: BTreeMap<&'static str, &'static ActionSpec> = BTreeMap::new();
         // the edits that are a command of their own, not a field of one: a task's status, a
         // note's pin, a list's area (steps, in order, and the steps that put each back)
         let mut apart: Vec<Step> = Vec::new();
@@ -2890,7 +2945,13 @@ impl Session {
                 if name.trim().is_empty() {
                     return Err("error: name cannot be empty.".to_owned());
                 }
-                let (command, param) = rename(kind);
+                let action = meta::edit_action(kind, "name")
+                    .ok_or_else(|| not_applicable(Verb::Edit, kind))?;
+                let (command, param) = (
+                    action.command,
+                    action.property_named("name").unwrap_or("title"),
+                );
+                note_call(&mut calls, action);
                 changed |= name != row.name;
                 forward
                     .entry(command)
@@ -2947,7 +3008,15 @@ impl Session {
                     whr::field_fix(kind, field, whr::FieldUse::Edit)
                 ));
             };
-            let Some(command) = spec_field.edit else {
+            let special = matches!(
+                (kind, field),
+                (Kind::Task, "status") | (Kind::Note, "pinned") | (Kind::List, "area")
+            );
+            // the action that edits this field: the one that names it (`edit:cadence`), else the one
+            // whose input takes it. A task's status, a note's pin and a list's area are commands
+            // of their own, planned below.
+            let action = meta::edit_action(kind, field);
+            if action.is_none() && !special {
                 let hint = match (kind, field) {
                     (_, "starred") => "use star or unstar".to_owned(),
                     (Kind::Event, "status") => "use cancel".to_owned(),
@@ -2955,7 +3024,11 @@ impl Session {
                     _ => format!("{} editable fields: {}", kind.name(), editable(kind)),
                 };
                 return Err(format!("error: {field} cannot be edited; {hint}."));
-            };
+            }
+            let command = action.map_or("", |action| action.command);
+            if let Some(action) = action {
+                note_call(&mut calls, action);
+            }
             let old = row.field(field).cloned();
             let (new_json, new_val) = match spec_field.ty {
                 FieldType::Text => {
@@ -3000,24 +3073,31 @@ impl Session {
                     _ => "open",
                 };
                 let new_vault = new_json.as_str().unwrap_or("open");
-                apart.push(Step {
-                    command: meta::task_status_command(new_vault).unwrap_or("task.reopen"),
-                    input: json!({ "id": row.id }),
-                });
-                apart_back.push(Step {
-                    command: meta::task_status_command(old_vault).unwrap_or("task.reopen"),
-                    input: json!({ "id": row.id }),
-                });
+                let to_status = |vault: &str| -> Result<Step, String> {
+                    let action = meta::task_status_verb(vault)
+                        .and_then(|verb| verb.action(Kind::Task))
+                        .or_else(|| Verb::Reopen.action(Kind::Task))
+                        .ok_or_else(|| not_applicable(Verb::Edit, Kind::Task))?;
+                    Ok(Step::of(action, json!({ action.id_param: row.id })))
+                };
+                apart.push(to_status(new_vault)?);
+                apart_back.push(to_status(old_vault)?);
                 continue;
             }
             // a note is pinned by a flag, which is set and cleared by two commands
             if (kind, field) == (Kind::Note, "pinned") {
-                let flag = |on: bool| Step {
-                    command: if on { "flag.set" } else { "flag.clear" },
-                    input: json!({ "id": row.id, "flag": "pinned" }),
+                let flag = |on: bool| -> Result<Step, String> {
+                    let verb = if on { Verb::Star } else { Verb::Unstar };
+                    let action = verb
+                        .action(Kind::Note)
+                        .ok_or_else(|| not_applicable(Verb::Star, Kind::Note))?;
+                    Ok(Step::of(
+                        action,
+                        json!({ action.id_param: row.id, "flag": "pinned" }),
+                    ))
                 };
-                apart.push(flag(new_val == Some(Val::Bool(true))));
-                apart_back.push(flag(old == Some(Val::Bool(true))));
+                apart.push(flag(new_val == Some(Val::Bool(true)))?);
+                apart_back.push(flag(old == Some(Val::Bool(true)))?);
                 continue;
             }
             // a list sits in an area, which is a container of its own: found by its title, or made
@@ -3046,11 +3126,15 @@ impl Session {
                 }
                 continue;
             }
-            // the column each model field is edited under; `null` clears a column that can be
-            let (param, new_json, old_json) = match (kind, field) {
+            // the property each model field is edited under is the one the action's input says it
+            // as (`cadence` is `cadence_days`, `effort` is `effort_min`); `null` clears a column
+            // that can be
+            let param = action
+                .and_then(|action| action.property_named(field))
+                .unwrap_or(field);
+            let (new_json, old_json) = match (kind, field) {
+                // a cadence of none is no column value
                 (Kind::Person, "cadence") => (
-                    "cadence_days",
-                    // a cadence of none is no column value
                     if new_json == json!(0) {
                         Value::Null
                     } else {
@@ -3058,23 +3142,12 @@ impl Session {
                     },
                     old.as_ref().map_or(Value::Null, Val::json),
                 ),
-                (Kind::Task, "effort") => (
-                    "effort_min",
-                    new_json,
-                    old.as_ref().map_or(Value::Null, Val::json),
-                ),
-                (Kind::Task, "priority") => (
-                    "priority",
-                    new_json,
-                    old.as_ref().map_or(json!(0), Val::json),
-                ),
+                (Kind::Task, "effort") => (new_json, old.as_ref().map_or(Value::Null, Val::json)),
+                (Kind::Task, "priority") => (new_json, old.as_ref().map_or(json!(0), Val::json)),
                 // a body is never null: no words is an empty body
-                (Kind::Note, "body") => {
-                    ("body", new_json, old.as_ref().map_or(json!(""), Val::json))
-                }
+                (Kind::Note, "body") => (new_json, old.as_ref().map_or(json!(""), Val::json)),
                 (Kind::Person, "role" | "nickname" | "met")
                 | (Kind::Task | Kind::Event, "description") => (
-                    field,
                     if new_json == json!("") {
                         Value::Null
                     } else {
@@ -3082,7 +3155,7 @@ impl Session {
                     },
                     old.as_ref().map_or(Value::Null, Val::json),
                 ),
-                (_, name) => (name, new_json, old.as_ref().map_or(json!(""), Val::json)),
+                _ => (new_json, old.as_ref().map_or(json!(""), Val::json)),
             };
             forward
                 .entry(command)
@@ -3111,10 +3184,15 @@ impl Session {
             });
         }
         if !typed_secrets.is_empty() {
-            let sent = forward.entry("locker.edit_item").or_default();
+            let edit = meta::edit_actions(kind)
+                .into_iter()
+                .next()
+                .ok_or_else(|| not_applicable(Verb::Edit, kind))?;
+            note_call(&mut calls, edit);
+            let sent = forward.entry(edit.command).or_default();
             for (column, typed) in &typed_secrets {
                 sent.insert((*column).to_owned(), json!(typed));
-                backward.entry("locker.edit_item").or_default().insert(
+                backward.entry(edit.command).or_default().insert(
                     (*column).to_owned(),
                     json!(centraid_vault::commands::locker::SEALED_PLACEHOLDER),
                 );
@@ -3124,7 +3202,17 @@ impl Session {
             });
         }
         if kind == Kind::LockerItem {
-            self.locker_draft(row, &mut forward, &mut backward, &mut not_undoable)?;
+            let edit = meta::edit_actions(kind)
+                .into_iter()
+                .next()
+                .ok_or_else(|| not_applicable(Verb::Edit, kind))?;
+            self.locker_draft(
+                row,
+                edit.command,
+                &mut forward,
+                &mut backward,
+                &mut not_undoable,
+            )?;
         }
         if !changed {
             return Ok(Plan::Already("already has those values".to_owned()));
@@ -3132,12 +3220,10 @@ impl Session {
         let finish = |map: BTreeMap<&'static str, Map<String, Value>>| -> Vec<Step> {
             map.into_iter()
                 .filter(|(_, input)| !input.is_empty())
-                .map(|(command, mut input)| {
-                    input.insert(id_param(command).to_owned(), json!(row.id));
-                    Step {
-                        command,
-                        input: Value::Object(input),
-                    }
+                .filter_map(|(command, mut input)| {
+                    let action = *calls.get(command)?;
+                    input.insert(action.id_param.to_owned(), json!(row.id));
+                    Some(Step::of(action, Value::Object(input)))
                 })
                 .collect()
         };
@@ -3166,9 +3252,8 @@ impl Session {
         old: Option<String>,
         area: &str,
     ) -> (Vec<Step>, Vec<Step>) {
-        let put = |parent: Option<String>| Step {
-            command: "container.move",
-            input: json!({"id": project, "parent": parent}),
+        let put = |parent: Option<String>| {
+            Step::bare("container.move", json!({"id": project, "parent": parent}))
         };
         let back = put(old);
         if area.is_empty() {
@@ -3185,20 +3270,14 @@ impl Session {
         let id = self.door.mint_id();
         (
             vec![
-                Step {
-                    command: "container.create",
-                    input: json!({"id": id, "kind": "area", "title": area}),
-                },
+                Step::bare(
+                    "container.create",
+                    json!({"id": id, "kind": "area", "title": area}),
+                ),
                 put(Some(id.clone())),
             ],
             // the undo puts the list back, then lets the area made for it go
-            vec![
-                Step {
-                    command: "entity.purge",
-                    input: json!({"id": id}),
-                },
-                back,
-            ],
+            vec![Step::bare("entity.purge", json!({"id": id})), back],
         )
     }
 
@@ -3213,15 +3292,15 @@ impl Session {
     fn locker_draft(
         &self,
         row: &Row,
+        command: &'static str,
         forward: &mut BTreeMap<&'static str, Map<String, Value>>,
         backward: &mut BTreeMap<&'static str, Map<String, Value>>,
         not_undoable: &mut Option<String>,
     ) -> Result<(), String> {
-        const COMMAND: &str = "locker.edit_item";
-        let Some(input) = forward.get_mut(COMMAND) else {
+        let Some(input) = forward.get_mut(command) else {
             return Ok(());
         };
-        let back = backward.entry(COMMAND).or_default();
+        let back = backward.entry(command).or_default();
         let item_type = match row.field("type") {
             Some(Val::Enum(item_type)) => *item_type,
             _ => "login",
@@ -3314,11 +3393,15 @@ impl Session {
                     creatable.join(", ")
                 )
             })?;
-        let allowed = create_allowed(kind);
-        // an arg under another spelling of a field is that field (`create_arg_alias`)
+        // THE ONE LOOKUP: the action that creates this kind, and the names its input says things as
+        let action = Verb::Create
+            .action(kind)
+            .ok_or_else(|| not_applicable(Verb::Create, kind))?;
+        let allowed = meta::create_args(kind);
+        // an arg under another spelling of a field is that field (`due` is a task's `date`)
         let mut spelled = args.clone();
         for key in args.keys() {
-            if let Some(field) = create_arg_alias(kind, key)
+            if let Some(field) = meta::create_arg_canonical(kind, key)
                 && !spelled.contains_key(field)
                 && let Some(value) = spelled.remove(key)
             {
@@ -3393,8 +3476,8 @@ impl Session {
         // EVERY CREATE NAMES THE ID IT WILL HAVE: a parked card shows it, and the confirm writes
         // the row the card named (the vault honours an id the caller minted).
         // a list's area: a container found by its title, or one made after the list
-        let mut area_follow: Vec<(&'static str, Value)> = Vec::new();
-        let (command, input, id_out): (&'static str, Value, &'static str) = match kind {
+        let mut area_follow: Vec<Step> = Vec::new();
+        let (input, id_out): (Value, &'static str) = match kind {
             Kind::Person => {
                 let mut input = json!({"id": mint(), "title": name});
                 if let Some(cadence) = number("cadence")?.filter(|days| *days > 0) {
@@ -3405,7 +3488,7 @@ impl Session {
                         input[field] = json!(value);
                     }
                 }
-                ("person.add", input, "id")
+                (input, action.id_param)
             }
             Kind::Event => {
                 let resolved = date.ok_or("error: create event needs date: <date expression>.")?;
@@ -3442,7 +3525,7 @@ impl Session {
                 if !attendees.is_empty() {
                     input["attendees"] = json!(attendees);
                 }
-                ("event.propose", input, "id")
+                (input, action.id_param)
             }
             Kind::Task => {
                 let mut input = json!({"id": mint(), "title": name});
@@ -3478,7 +3561,7 @@ impl Session {
                 if let Some(list) = &list {
                     input["project_id"] = json!(list.1);
                 }
-                ("task.add", input, "id")
+                (input, action.id_param)
             }
             Kind::Note => {
                 let body = text("body").unwrap_or_else(|| name.clone());
@@ -3486,7 +3569,7 @@ impl Session {
                 if let Some(notebook) = one_row(self, "notebook", Kind::Notebook)? {
                     input["notebook_id"] = json!(notebook.1);
                 }
-                ("note.create", input, "id")
+                (input, action.id_param)
             }
             Kind::Document => {
                 let body = text("text").unwrap_or_else(|| name.clone());
@@ -3499,36 +3582,17 @@ impl Session {
                 if let Some(folder) = one_row(self, "folder", Kind::Folder)? {
                     input["folder_id"] = json!(folder.1);
                 }
-                ("document.create_text", input, "id")
+                (input, action.id_param)
             }
-            Kind::Album => (
-                "container.create",
-                json!({"id": mint(), "kind": "album", "title": name}),
-                "id",
-            ),
-            Kind::Notebook => (
-                "container.create",
-                json!({"id": mint(), "kind": "notebook", "title": name}),
-                "id",
-            ),
-            Kind::Folder => (
-                "container.create",
-                json!({"id": mint(), "kind": "folder", "title": name}),
-                "id",
-            ),
             Kind::List => {
                 let id = mint();
                 if let Some(area) = text("area") {
                     let (steps, _) = self.plan_area_for(&id, None, area.trim());
-                    area_follow = steps
-                        .into_iter()
-                        .map(|step| (step.command, step.input))
-                        .collect();
+                    area_follow = steps;
                 }
                 (
-                    "container.create",
-                    json!({"id": id, "kind": "project", "title": name}),
-                    "id",
+                    input_of(action, &id, &[("name", json!(name))]),
+                    action.id_param,
                 )
             }
             Kind::LockerItem => {
@@ -3567,13 +3631,35 @@ impl Session {
                     };
                     input[column] = json!(value);
                 }
-                ("locker.add_item", input, "item_id")
+                (input, action.id_param)
             }
-            Kind::Photo => unreachable!("photos are not created by a call"),
-            Kind::Transaction => unreachable!("transactions are read-only (#1099, R-1099-8)"),
+            // AN ACCOUNT NAMES ITS TYPE (the vault has no default for what money it holds).
+            Kind::Account => {
+                let Some(kind_value) = text("type") else {
+                    return Err(
+                        "error: create account needs type: checking | savings | credit card | cash."
+                            .to_owned(),
+                    );
+                };
+                let kind_value = whr::enum_value(Kind::Account, "type", &kind_value)?;
+                (
+                    json!({"id": mint(), "title": name, "type": kind_value}),
+                    action.id_param,
+                )
+            }
+            // A CATEGORY'S ID IS ITS NAME: the core derives it, so there is none to mint.
+            Kind::Category => (json!({"title": name}), "id"),
+            // ANY OTHER KIND the catalog creates is its create action's input as the manifest
+            // says it: the name, the id the core would mint, what can only be one value and what
+            // has a default. A container (an album, a notebook, a folder) is that and nothing more,
+            // so a kind made live in chat needs only its manifest rows.
+            _ => (
+                input_of(action, &mint(), &[("name", json!(name))]),
+                action.id_param,
+            ),
         };
         let before = self.world.clone();
-        let ran = self.write_step(command, &input)?;
+        let ran = self.write_step(&action.call(), &input)?;
         if !ran.ok {
             // A NEW EVENT THAT CLASHES WITH ANOTHER is a refusal the person can lift by
             // choosing another time (`compose_busy_conflict`).
@@ -3599,24 +3685,24 @@ impl Session {
         let key = (kind, id.clone());
         // Follow-ups that the create command itself does not take.
         let follow = area_follow;
-        for (command, input) in follow {
-            if let Err(error) = self.write_must(command, input) {
+        for step in follow {
+            if let Err(error) = self.write_must(&step.act, step.input) {
                 // Take the half-made row back out, so no later diff finds it.
-                if let Some(delete) = Verb::Delete.command(kind) {
+                if let Some(delete) = Verb::Delete.action(kind) {
                     self.door.advance();
-                    let _ = self.write_step(delete, &json!({ id_param(delete): id }));
+                    let _ = self.write_step(&delete.call(), &json!({ delete.id_param: id }));
                 }
                 self.settle()?;
                 return Err(error);
             }
         }
-        let inverse = match (kind, Verb::Delete.command(kind)) {
-            (_, Some(delete)) => vec![Inverse {
-                command: delete.to_owned(),
-                input: json!({ id_param(delete): id }),
+        let inverse = match Verb::Delete.action(kind) {
+            Some(delete) => vec![Inverse {
+                act: delete.call(),
+                input: json!({ delete.id_param: id }),
                 key: key.clone(),
             }],
-            _ => Vec::new(),
+            None => Vec::new(),
         };
         let not_undoable = if inverse.is_empty() {
             vec![format!(
@@ -3665,7 +3751,7 @@ impl Session {
         let mut lines = Vec::new();
         let mut touched: Vec<Key> = Vec::new();
         for inverse in inverses.iter().rev() {
-            let ran = self.write_step(&inverse.command, &inverse.input)?;
+            let ran = self.write_step(&inverse.act, &inverse.input)?;
             if !ran.ok {
                 let name = self.named(&inverse.key);
                 lines.push(format!(
@@ -4099,20 +4185,15 @@ pub(crate) fn event_times(
     }
 }
 
-/// The command that renames a row of each kind, and the input key it takes the name under: a
-/// kind with a row of its own has an edit that carries the title, and every other entity is
-/// renamed by the shared `entity.retitle`.
-fn rename(kind: Kind) -> (&'static str, &'static str) {
-    match kind {
-        Kind::Person => ("person.edit", "title"),
-        Kind::Event => ("event.edit", "title"),
-        Kind::Task => ("task.edit", "title"),
-        Kind::Note => ("note.edit", "title"),
-        Kind::LockerItem => ("locker.edit_item", "title"),
-        Kind::Document | Kind::Photo | Kind::Album | Kind::Notebook | Kind::Folder | Kind::List => {
-            ("entity.retitle", "title")
+/// Remember the action that runs a command: the one that edits the kind in general wins a command
+/// it shares with the action of one field (`set-cadence` and `edit-person` both run `person.edit`),
+/// because it takes every field the edit names.
+fn note_call(calls: &mut BTreeMap<&'static str, &'static ActionSpec>, action: &'static ActionSpec) {
+    match calls.get(action.command) {
+        Some(held) if held.qualifier.is_none() || action.qualifier.is_some() => {}
+        _ => {
+            calls.insert(action.command, action);
         }
-        Kind::Transaction => unreachable!("transactions are read-only (#1099, R-1099-8)"),
     }
 }
 
@@ -4152,15 +4233,32 @@ pub fn appended(have: &str, added: &str) -> String {
     format!("{have}{separator}{added}")
 }
 
+/// The fields an `edit` of `kind` takes, by the names chat says them under: what its edit actions'
+/// inputs say them as (a date changes with `reschedule`, a secret with its own call), and the
+/// three that are commands of their own.
 fn editable(kind: Kind) -> String {
-    let mut names = vec!["name"];
-    names.extend(
-        kind.spec()
-            .fields
-            .iter()
-            .filter(|field| field.edit.is_some())
-            .map(|field| field.name),
-    );
+    let mut names: Vec<&str> = Vec::new();
+    for action in meta::edit_actions(kind) {
+        for name in action.chat_names() {
+            if name != "date"
+                && !meta::REVEAL_FIELDS
+                    .iter()
+                    .any(|(secret, _)| *secret == name)
+                && !names.contains(&name)
+            {
+                names.push(name);
+            }
+        }
+    }
+    for special in [
+        (Kind::Task, "status"),
+        (Kind::Note, "pinned"),
+        (Kind::List, "area"),
+    ] {
+        if special.0 == kind {
+            names.push(special.1);
+        }
+    }
     names.join(", ")
 }
 

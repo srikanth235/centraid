@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use centraid_apps_kit::row::Row as VaultRow;
+use centraid_apps_kit::row::{Cell, Row as VaultRow};
 
 use crate::native::dates::Stamp;
 use crate::native::door::{Door, int, text};
@@ -22,6 +22,12 @@ pub const EVENT_DAYS_AHEAD: i64 = 120;
 /// every write, so the read is bounded by months and never walks a ledger's years. A question
 /// about an older month finds nothing here and says so.
 pub const TRANSACTION_MONTHS: u32 = 3;
+/// The days of Health the world holds, today and the ones before it (#1135): the chat answers
+/// about how the member slept and moved lately, and a world is re-read after every write, so the
+/// read is bounded by days and never walks the years the store backfilled. A figure's `value` is
+/// read to the nearest whole unit (a weight to the kilogram); Health's own Trends keep the
+/// decimals.
+pub const HEALTH_DAYS: i64 = 90;
 /// Transactions read per chunk when the display names are fetched by id.
 const DECORATION_CHUNK: usize = 200;
 
@@ -222,6 +228,26 @@ pub struct World {
     pub areas: Vec<(String, String)>,
 }
 
+/// Today in the person's zone, else the door's clock read in UTC.
+fn today_of(door: &dyn Door, at: Option<&Standing>) -> jiff::civil::Date {
+    match at {
+        Some(standing) => standing.today,
+        None => jiff::Timestamp::from_millisecond(door.now_ms())
+            .unwrap_or_default()
+            .to_zoned(jiff::tz::TimeZone::UTC)
+            .date(),
+    }
+}
+
+/// A numeric cell to the nearest whole number (0 when absent).
+fn rounded(row: &VaultRow, column: &str) -> i64 {
+    match row.get(column) {
+        Some(Cell::Integer(value)) => *value,
+        Some(Cell::Real(value)) => value.round() as i64,
+        _ => int(row, column).unwrap_or_default(),
+    }
+}
+
 fn stamp(value: Option<String>) -> Option<Stamp> {
     value.as_deref().and_then(Stamp::parse)
 }
@@ -235,6 +261,10 @@ fn put(fields: &mut BTreeMap<&'static str, Val>, name: &'static str, value: Opti
 fn nonempty(value: Option<String>) -> Option<Val> {
     value.filter(|text| !text.is_empty()).map(Val::Text)
 }
+
+/// The instant the baseline migration seeds Money's stock categories
+/// (`contracts/migrations/001_baseline.sql`): a category created then is vocabulary, not a row.
+const STOCK_CATEGORIES_AT: &str = "2026-10-21T00:00:00.000Z";
 
 impl World {
     #[must_use]
@@ -328,6 +358,8 @@ impl World {
         world.load_documents(door, &flags)?;
         world.load_locker(door, &flags)?;
         world.load_transactions(door, at)?;
+        world.load_money_lists(door)?;
+        world.load_health(door, at)?;
         world.load_links(door)?;
         // an edge is kept when both of its ends are rows the model talks about
         let rows = &world.rows;
@@ -641,6 +673,7 @@ impl World {
             let mut fields = BTreeMap::new();
             put(&mut fields, "body", nonempty(text(note, "body")));
             fields.insert("pinned", Val::Bool(flags.pinned.contains(&id)));
+            fields.insert("starred", Val::Bool(flags.starred.contains(&id)));
             let created = text(entity, "created_at").unwrap_or_default();
             self.insert(Row {
                 date: Stamp::parse(&created),
@@ -792,7 +825,7 @@ impl World {
         let floor = first.to_string();
         let rows = door.table_where(
             "txn",
-            "id, account_id, currency, posted_on, amount_minor, status, category_id",
+            "id, account_id, currency, posted_on, amount_minor, status, category_id, transfer_id",
             "posted_on",
             "id",
             "posted_on >= ?",
@@ -854,6 +887,12 @@ impl World {
                     .and_then(|category| category_names.get(&category).cloned())
                     .map(Val::Text),
             );
+            // the other half of a transfer: an unlink is taken back by linking it again
+            put(
+                &mut fields,
+                "transfer",
+                nonempty(text(transaction, "transfer_id")),
+            );
             let status = match text(transaction, "status").as_deref() {
                 Some("void") => "void",
                 _ => "posted",
@@ -867,6 +906,251 @@ impl World {
             });
             row.extra.remove("purge_at");
             self.insert(row);
+        }
+        Ok(())
+    }
+
+    /// Money's lists (#1135): the accounts, the categories, the monthly targets and the rules,
+    /// read as stored. A rule has no entity row: its name is the text it matches, and a budget
+    /// row is the category's target for one month, so its id is `<category>:<month>`.
+    fn load_money_lists(&mut self, door: &dyn Door) -> Result<(), String> {
+        let account_entities = entities(door, "account")?;
+        for account in door.table(
+            "account",
+            "id, type, currency, opening_minor, on_budget",
+            "id",
+            "id",
+        )? {
+            let id = text(&account, "id").unwrap_or_default();
+            let Some(entity) = account_entities.get(&id) else {
+                continue;
+            };
+            let currency = text(&account, "currency").unwrap_or_else(|| self.currency.clone());
+            let mut fields = BTreeMap::new();
+            if let Some(value) = Kind::Account
+                .spec()
+                .field("type")
+                .and_then(|field| field.model_value(&text(&account, "type").unwrap_or_default()))
+            {
+                fields.insert("type", Val::Enum(value));
+            }
+            fields.insert("currency", Val::Text(currency.clone()));
+            fields.insert(
+                "opening",
+                Val::Money(int(&account, "opening_minor").unwrap_or_default(), currency),
+            );
+            fields.insert(
+                "on_budget",
+                Val::Bool(int(&account, "on_budget") != Some(0)),
+            );
+            self.insert(Row::of(Kind::Account, &id, entity, fields));
+        }
+        let category_entities = entities(door, "category")?;
+        let titles: BTreeMap<String, String> = category_entities
+            .iter()
+            .filter_map(|(id, row)| Some((id.clone(), text(row, "title")?)))
+            .collect();
+        for concept in door.table_where(
+            "concept",
+            "id, key, parent_id",
+            "id",
+            "id",
+            "kind = ?",
+            &["category".to_owned()],
+        )? {
+            let id = text(&concept, "id").unwrap_or_default();
+            let Some(entity) = category_entities.get(&id) else {
+                continue;
+            };
+            // THE STOCK VOCABULARY IS NOT THE MEMBER'S ROWS: forty-odd names the baseline seeds
+            // would answer every selector that shares a word with them ("rent" finds a category).
+            // A transaction names its category as a field; a category the member made is a row.
+            if text(entity, "created_at").as_deref() == Some(STOCK_CATEGORIES_AT) {
+                continue;
+            }
+            let mut fields = BTreeMap::new();
+            put(&mut fields, "key", nonempty(text(&concept, "key")));
+            put(
+                &mut fields,
+                "group",
+                text(&concept, "parent_id")
+                    .and_then(|parent| titles.get(&parent).cloned())
+                    .map(Val::Text),
+            );
+            self.insert(Row::of(Kind::Category, &id, entity, fields));
+        }
+        for budget in door.table(
+            "budget",
+            "category_id, month, amount_minor, currency, carry",
+            "month",
+            "category_id",
+        )? {
+            let category = text(&budget, "category_id").unwrap_or_default();
+            let month = text(&budget, "month").unwrap_or_default();
+            let currency = text(&budget, "currency").unwrap_or_else(|| self.currency.clone());
+            let mut fields = BTreeMap::new();
+            fields.insert(
+                "amount",
+                Val::Money(
+                    int(&budget, "amount_minor").unwrap_or_default(),
+                    currency.clone(),
+                ),
+            );
+            fields.insert("currency", Val::Text(currency));
+            fields.insert("carry", Val::Bool(int(&budget, "carry") == Some(1)));
+            let id = format!("{category}:{month}");
+            self.insert(Row {
+                kind: Kind::Budget,
+                name: format!(
+                    "{} {month}",
+                    titles.get(&category).cloned().unwrap_or_default()
+                ),
+                id,
+                date: None,
+                fields,
+                trashed: false,
+                created: String::new(),
+                updated: String::new(),
+                extra: BTreeMap::new(),
+            });
+        }
+        for rule in door.table(
+            "rule",
+            "id, pattern, category_id, position, created_at",
+            "position",
+            "id",
+        )? {
+            let id = text(&rule, "id").unwrap_or_default();
+            let pattern: serde_json::Value =
+                serde_json::from_str(&text(&rule, "pattern").unwrap_or_default())
+                    .unwrap_or(serde_json::Value::Null);
+            let matched = pattern["text"].as_str().unwrap_or_default().to_owned();
+            let mut fields = BTreeMap::new();
+            put(
+                &mut fields,
+                "category",
+                text(&rule, "category_id")
+                    .and_then(|category| titles.get(&category).cloned())
+                    .map(Val::Text),
+            );
+            fields.insert(
+                "position",
+                Val::Num(int(&rule, "position").unwrap_or_default()),
+            );
+            self.insert(Row {
+                kind: Kind::Rule,
+                name: matched,
+                id,
+                date: stamp(text(&rule, "created_at")),
+                fields,
+                trashed: false,
+                created: text(&rule, "created_at").unwrap_or_default(),
+                updated: String::new(),
+                extra: BTreeMap::new(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Health's daily figures and workouts of the last [`HEALTH_DAYS`] days (#1135). A figure has no
+    /// entity of its own: it is the vault's `measurement` row of the member, named by its metric
+    /// and identified by `<day>:<metric>`. A workout is an activity of a workout kind beside its
+    /// `workout` row, named by the entity's title and dated by its start.
+    fn load_health(&mut self, door: &dyn Door, at: Option<&Standing>) -> Result<(), String> {
+        let floor = today_of(door, at)
+            .checked_sub(jiff::Span::new().days(HEALTH_DAYS))
+            .map_err(|error| format!("the health window is out of range: {error}"))?
+            .to_string();
+        let figures = door.table_where(
+            "measurement",
+            "day, metric, value",
+            "day",
+            "metric",
+            "person_id = ? AND day >= ?",
+            &[self.me.clone(), floor.clone()],
+        )?;
+        let spec = Kind::DailyFigure.spec();
+        for figure in &figures {
+            let (Some(day), Some(metric)) = (text(figure, "day"), text(figure, "metric")) else {
+                continue;
+            };
+            let mut fields = BTreeMap::new();
+            if let Some(value) = spec
+                .field("metric")
+                .and_then(|field| field.model_value(&metric))
+            {
+                fields.insert("metric", Val::Enum(value));
+            }
+            fields.insert("value", Val::Num(rounded(figure, "value")));
+            self.insert(Row {
+                kind: Kind::DailyFigure,
+                id: format!("{day}:{metric}"),
+                name: metric,
+                date: stamp(Some(day)),
+                fields,
+                trashed: false,
+                created: String::new(),
+                updated: String::new(),
+                extra: BTreeMap::new(),
+            });
+        }
+
+        let started = door.table_where(
+            "activity",
+            "id, starts",
+            "starts",
+            "id",
+            "type_kind = ? AND starts >= ?",
+            &["workout_kind".to_owned(), floor],
+        )?;
+        let ids: Vec<String> = started.iter().filter_map(|row| text(row, "id")).collect();
+        for chunk in ids.chunks(DECORATION_CHUNK) {
+            let marks = vec!["?"; chunk.len()].join(", ");
+            let measured = door.table_where(
+                "workout",
+                "id, moving_s, distance_m, energy_kcal, heart_bpm, climb_m",
+                "id",
+                "id",
+                &format!("id IN ({marks})"),
+                chunk,
+            )?;
+            let named = door.table_where(
+                "entity",
+                "id, title, created_at, updated_at, deleted_at, purge_at",
+                "id",
+                "id",
+                &format!("id IN ({marks})"),
+                chunk,
+            )?;
+            let named: BTreeMap<String, VaultRow> = named
+                .into_iter()
+                .filter_map(|entity| Some((text(&entity, "id")?, entity)))
+                .collect();
+            for workout in &measured {
+                let id = text(workout, "id").unwrap_or_default();
+                let Some(entity) = named.get(&id).filter(|e| text(e, "deleted_at").is_none())
+                else {
+                    continue;
+                };
+                let mut fields = BTreeMap::new();
+                for (field, column) in [
+                    ("moving", "moving_s"),
+                    ("distance", "distance_m"),
+                    ("energy", "energy_kcal"),
+                    ("heart_rate", "heart_bpm"),
+                    ("climb", "climb_m"),
+                ] {
+                    if !matches!(workout.get(column), None | Some(Cell::Null)) {
+                        fields.insert(field, Val::Num(rounded(workout, column)));
+                    }
+                }
+                let mut row = Row::of(Kind::Workout, &id, entity, fields);
+                row.date = started
+                    .iter()
+                    .find(|activity| text(activity, "id").as_deref() == Some(id.as_str()))
+                    .and_then(|activity| stamp(text(activity, "starts")));
+                self.insert(row);
+            }
         }
         Ok(())
     }

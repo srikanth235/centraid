@@ -1,17 +1,23 @@
-// PHOTOS' OWN SEARCH AND ITS DUPLICATES, ASKED OF THE CORE (#1097, R-1097-25..27,
-// #1135).
+// PHOTOS' READS, ASKED OF THE CORE (#1097, R-1097-25..27, #1135): one shelf, one
+// photograph, the collections, the places, the search and the duplicates.
 //
 // Photos' search used to be Kotlin legs of `LIKE`. Its TEXT leg and its ALBUM leg
 // are the full-text door's: the photograph (`photo`: its caption, its place's name
 // and locality, the text recognised in the picture) and the album container
-// (`album`). The STRUCTURED legs (the places, the labels) stay with the shell,
-// which reads them through the page door and folds them with this answer.
+// (`album`). Its STRUCTURED legs (the places, no location, the labels) are the
+// core's too (`centraid_apps_photos::search`), folded into the same answer with
+// their counts and the grid they reach.
+//
+// ONE VERDICT ON WHAT IS LIVE (`centraid_apps_kit::rules::Standing`): not trashed,
+// not archived and not folded under an edit. The archive shelf is archived and not
+// trashed; the trash is every trashed photograph; an album draws every member that
+// is not trashed.
 //
 // Duplicates are a projection of the perceptual hashes (a `phash` derivative of
 // each blob), clustered by the core when asked: nothing is stored, so a trashed
 // photograph or a new hash is in the next answer.
 //
-// They ride `app_query.proto` at numbers 90 and 91, Photos' own: 80 is Home's,
+// They ride `app_query.proto` at numbers 90 to 96, Photos' own: 80 is Home's,
 // and the apps' blocks are below it.
 //
 // **NO `tz`.** A photograph search states no civil time (the grid is in capture
@@ -30,14 +36,13 @@ message PhotosSearchRequest {
   // REQUIRED: zero is refused, `ERROR_CODE_INVALID_REQUEST`. The best this many
   // photographs by rank; clamped to 500.
   uint32 limit = 2;
-  // MAY THE CORE CORRECT THE TERM? The shell sets this only when its OWN legs
-  // (places, labels) found nothing for the term as typed, because the core
-  // cannot see them: the correction runs only when EVERY leg is empty. With it
-  // set and the core's legs empty too, the core replaces each mistyped word by
-  // a word the vault's own vocabularies hold (`core.content_item` and the
-  // album container) and runs its legs again at the corrected words;
-  // `PhotosSearch.corrected` says what it searched. Without it the term is
-  // searched as typed and never corrected.
+  // MAY THE CORE CORRECT THE TERM? The correction runs only when EVERY leg (the
+  // text, the albums, the places, no location, the labels) found nothing for the
+  // term as typed: the core then replaces each mistyped word by a word the
+  // vault's own vocabularies hold (`core.content_item` and the album container)
+  // and runs every leg again at the corrected words; `PhotosSearch.corrected`
+  // says what it searched, and it is empty unless the corrected words found
+  // something. Without this the term is searched as typed and never corrected.
   bool correct = 3;
 }
 
@@ -54,10 +59,48 @@ message PhotosSearch {
   repeated ContainerHit albums = 2;
   // THE WORDS SEARCHED when the term was corrected (#1097, R4, R8): the typed
   // words with each mistyped one replaced by a word the vault holds. EMPTY for an
-  // exact answer. Set even when the core's own legs above found nothing at the
-  // corrected words, because the shell's legs may have: the SHELL keeps it only
-  // if the whole answer, its legs and these, is not empty.
+  // exact answer, and empty when the corrected words found nothing in any leg.
   string corrected = 3;
+  // THE LIVE PHOTOGRAPHS ANY LEG REACHES (the text, the places the words name, no
+  // location, the albums, the labels), dated newest first and then the undated, at
+  // most `limit` of them. The archive and an edit's original are never here.
+  repeated PhotosCell cells = 4;
+  // How many photographs the legs reach, exactly; `cells` holds the first `limit`.
+  uint32 total_hits = 5;
+  bool truncated = 6;
+  // The places (three at most, then the no-location bucket) and the albums (three
+  // at most) the words name, each with the size of the shelf it opens.
+  repeated PhotosTopHit top_hits = 7;
+  // The labels the words name that are on a live photograph.
+  repeated PhotosNamed labels = 8;
+  // WITH A BLANK TERM: what could be typed. The places that hold a live
+  // photograph and the labels on one (twelve at most of each), by name.
+  repeated PhotosNamed resting_places = 9;
+  repeated PhotosNamed resting_labels = 10;
+}
+
+// A place, an album or a label by the name it was found under.
+message PhotosNamed {
+  string id = 1;
+  string label = 2;
+}
+
+message PhotosTopHit {
+  Kind kind = 1;
+  // The place's or the album's id; empty for the no-location bucket.
+  string id = 2;
+  // Empty for the no-location bucket: its words are the screen's.
+  string label = 3;
+  // The size of the shelf it opens: a place's live photographs, the live
+  // photographs with no place, an album's members that are not in the trash.
+  uint32 count = 4;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_PLACE = 1;
+    KIND_UNPLACED = 2;
+    KIND_ALBUM = 3;
+  }
 }
 
 // `photos.duplicates`: the near-duplicate clusters of the live library.
@@ -70,9 +113,245 @@ message PhotosDuplicateCluster {
   string key = 1;
   // The members, live photographs only, in id order; at least two.
   repeated string photo_ids = 2;
+  // The same members as cells, in id order: pixel box, size, form, capture time,
+  // heart, the albums that hold each, and what this device holds of it, so a
+  // review can show which copy to keep and which are placed.
+  repeated PhotosCell members = 3;
 }
 
 message PhotosDuplicates {
   // Biggest cluster first, ties by key.
   repeated PhotosDuplicateCluster clusters = 1;
+}
+
+message PhotosTag {
+  string tag_id = 1;
+  string label = 2;
+}
+
+message PhotosPlace {
+  string place_id = 1;
+  string name = 2;
+  // Absent, never 0,0.
+  optional double lat = 3;
+  optional double lng = 4;
+  optional string gazetteer = 5;
+  optional string time_zone = 6;
+}
+
+// ---------------------------------------------------------------------------
+// One photograph as a grid draws it, and the reads built from it.
+// ---------------------------------------------------------------------------
+
+// A photograph: its bytes, its capture, its box, its heart, its albums and what
+// this device holds of it.
+message PhotosCell {
+  string photo_id = 1;
+  // The bytes' hash; also the original's.
+  string content_id = 2;
+  optional string media_type = 3;
+  // `photo`, `video` or `scan`.
+  optional string form = 4;
+  // The caption; empty when there is none.
+  string title = 5;
+  // When it was taken, as the file said; absent for an undated photograph.
+  optional string taken_at = 6;
+  optional sint64 offset_min = 7;
+  optional string burst = 8;
+  optional string edited_from = 9;
+  optional string place_id = 10;
+  optional sint64 width = 11;
+  optional sint64 height = 12;
+  optional double duration_s = 13;
+  optional string created_at = 14;
+  // The trash stamp; only a trashed photograph has one.
+  optional string deleted_at = 15;
+  optional string purge_at = 16;
+  // Whole days left in the trash, rounded up; absent when there is no date.
+  optional sint64 purge_in_days = 17;
+  bool favorite = 18;
+  bool archived = 19;
+  optional sint64 byte_size = 20;
+  // The live albums that hold it.
+  repeated string album_ids = 21;
+  // A path a cell can draw, from the bytes this device holds; absent when none
+  // has reached it.
+  optional string thumbnail_path = 22;
+  // The original itself is on this device.
+  bool original_held = 23;
+  // A STILL WITH A PAIRED MOVIE (a Live Photo): the movie's id and bytes.
+  bool live = 24;
+  optional string live_movie_id = 25;
+  optional string live_content_id = 26;
+  // A MOVIE PAIRED WITH A STILL: that still's id.
+  optional string live_of = 27;
+}
+
+// Where a page of a shelf stopped.
+message PhotosCursor {
+  // The last cell's capture time (the trash: its trash stamp). Empty inside the
+  // undated tail, because a capture time is never empty.
+  string sort_key = 1;
+  string id = 2;
+}
+
+enum PhotosShelfView {
+  PHOTOS_SHELF_VIEW_UNSPECIFIED = 0;
+  // Live: not trashed, not archived, not folded under an edit.
+  PHOTOS_SHELF_VIEW_LIVE = 1;
+  PHOTOS_SHELF_VIEW_FAVORITES = 2;
+  PHOTOS_SHELF_VIEW_VIDEOS = 3;
+  // Archived and not trashed.
+  PHOTOS_SHELF_VIEW_ARCHIVE = 4;
+  // Every trashed photograph, newest trashed first.
+  PHOTOS_SHELF_VIEW_TRASH = 5;
+  // An album's members that are not trashed; needs `id`.
+  PHOTOS_SHELF_VIEW_ALBUM = 6;
+  // A place's live photographs; needs `id`.
+  PHOTOS_SHELF_VIEW_PLACE = 7;
+  // Live photographs in no place.
+  PHOTOS_SHELF_VIEW_UNPLACED = 8;
+}
+
+// `photos.shelf`: one page of one shelf.
+message PhotosShelfRequest {
+  PhotosShelfView view = 1;
+  // The album's or the place's id.
+  string id = 2;
+  // REQUIRED: zero is refused. Clamped to 200.
+  uint32 limit = 3;
+  optional PhotosCursor after = 4;
+}
+
+message PhotosShelf {
+  // Dated newest first, then the undated, newest id first (the trash: newest
+  // trashed first).
+  repeated PhotosCell cells = 1;
+  // Where the next page starts; absent when the shelf ended.
+  optional PhotosCursor next = 2;
+  // The shelf's exact size; present on the first page only.
+  optional uint32 total = 3;
+  // For an album shelf: the album, absent when there is no such album.
+  optional PhotosAlbumHead album = 4;
+  // For a place shelf: the place, absent when there is no such place.
+  optional PhotosPlaceCard place = 5;
+}
+
+message PhotosAlbumHead {
+  string album_id = 1;
+  string title = 2;
+  // Set when the album is in the trash: its screen offers the restore.
+  optional string deleted_at = 3;
+  optional string purge_at = 4;
+  optional sint64 purge_in_days = 5;
+}
+
+enum PhotosPhraseSource {
+  PHOTOS_PHRASE_SOURCE_UNSPECIFIED = 0;
+  // The member's own name for the place.
+  PHOTOS_PHRASE_SOURCE_MEMBER = 1;
+  // `near <city>` from the offline gazetteer.
+  PHOTOS_PHRASE_SOURCE_GAZETTEER = 2;
+  // A bearing from the nearest named place.
+  PHOTOS_PHRASE_SOURCE_RELATIVE = 3;
+  // "A place with no name yet".
+  PHOTOS_PHRASE_SOURCE_NONE = 4;
+}
+
+// A place and how to say where it is.
+message PhotosPlaceCard {
+  PhotosPlace place = 1;
+  // The member's own name; absent when the title is only coordinates.
+  optional string name = 2;
+  // The name, `near <city>`, a bearing from the nearest named place, or "a place
+  // with no name yet". Never digits.
+  string phrase = 3;
+  PhotosPhraseSource phrase_source = 4;
+  // Live photographs in it (absent from a photograph's own place).
+  uint32 count = 5;
+  // Its newest live photograph.
+  optional PhotosCell cover = 6;
+  // Coordinates as digits, for the member's explicit "show exact location".
+  optional string exact_location = 7;
+}
+
+// `photos.photo`: everything one photograph's screens show.
+message PhotosPhotoRequest {
+  string id = 1;
+}
+
+message PhotosPhoto {
+  // Absent when there is no such photograph.
+  optional PhotosPhotoDetail photo = 1;
+}
+
+message PhotosPhotoDetail {
+  PhotosCell cell = 1;
+  bool trashed = 2;
+  // The live albums that hold it, by name.
+  repeated PhotosAlbumRef albums = 3;
+  // Its labels; a heart and the archive are not labels.
+  repeated PhotosTag tags = 4;
+  optional PhotosPlaceCard place = 5;
+  // The photographs made from this one (edits and crops) that are not trashed.
+  repeated string edits = 6;
+}
+
+message PhotosAlbumRef {
+  string album_id = 1;
+  string title = 2;
+}
+
+// `photos.albums`: the collections overview.
+message PhotosAlbumsRequest {}
+
+message PhotosAlbums {
+  // Live albums by title.
+  repeated PhotosAlbumCard albums = 1;
+  // Albums in the trash, newest trashed first.
+  repeated PhotosTrashedAlbum trashed_albums = 2;
+  PhotosShelfTile live = 3;
+  PhotosShelfTile favorites = 4;
+  PhotosShelfTile videos = 5;
+  PhotosShelfTile archive = 6;
+  PhotosShelfTile trash = 7;
+  // Places that hold at least one live photograph.
+  uint32 places = 8;
+  // Live photographs in no place.
+  uint32 unplaced = 9;
+  // Clusters of look-alikes the duplicates read finds.
+  uint32 duplicate_clusters = 10;
+}
+
+message PhotosShelfTile {
+  // Exact: the size of the shelf the tile opens.
+  uint32 count = 1;
+  // The shelf's newest photograph.
+  optional PhotosCell cover = 2;
+}
+
+message PhotosAlbumCard {
+  string album_id = 1;
+  string title = 2;
+  // Members that are not in the trash.
+  uint32 count = 3;
+  optional PhotosCell cover = 4;
+}
+
+message PhotosTrashedAlbum {
+  string album_id = 1;
+  string title = 2;
+  string deleted_at = 3;
+  optional string purge_at = 4;
+  optional sint64 purge_in_days = 5;
+}
+
+// `photos.places`: every place that is not in the trash.
+message PhotosPlacesRequest {}
+
+message PhotosPlaces {
+  // The ones with photographs first, most photographs first.
+  repeated PhotosPlaceCard places = 1;
+  // Live photographs in no place.
+  uint32 unplaced = 2;
 }

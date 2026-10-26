@@ -1,0 +1,871 @@
+// LOCKER'S SCREENS, DECIDED IN RUST (#1135, lane E). The view states and events
+// of `locker.home`, `locker.item`, `locker.editor`, `locker.access`,
+// `locker.export`, `locker.import` and `locker.lock` (the wall chat opens). The
+// trash is the kit's (`kit_screens.proto`).
+//
+// THE LIST IS METADATA; THE SECRET IS NOT. A sealed value reaches a view only as
+// a reveal the core receipted (`LockerSessionRequest.reveal`), lives in the
+// screen's `kit::secret::Secrets` for the core's reveal window, and is gone on
+// conceal, on the timer, on a relock and on leave. A view never carries a
+// secret it was not asked to draw this instant.
+//
+// THE WALL IS EVERY LOCKER VIEW'S: `wall` present means "draw this instead of
+// the screen" and nothing of the screen is drawn under it. `secure` is the
+// whole Locker's capture shield: set exactly while the Locker is open, so a
+// shell keeps every Locker page and dialog out of screenshots, recordings and
+// the app switcher (Android `FLAG_SECURE`, iOS the secure canvas) and drops it
+// on a relock and on leaving.
+//
+// Arms are in the locker range (400-499) of `Route.args`, `ScreenEvent.kind`
+// and `ViewState.kind` (`screens.proto`).
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/route.proto";
+
+// ---------------------------------------------------------------------------
+// The wall
+// ---------------------------------------------------------------------------
+
+message LockerWall {
+  Phase phase = 1;
+  // "Locker is locked".
+  string title = 2;
+  // What unlocking does, in the words for this phone's biometry.
+  string body = 3;
+  // "Unlock with your face", "Unlock with your passcode", "Try again". Empty
+  // while UNLOCKING or UNAVAILABLE: no control to draw.
+  string unlock_label = 4;
+  // The sentence a FAILED or UNAVAILABLE phase says; empty otherwise.
+  string notice = 5;
+  // UNAVAILABLE on a core with no keys: "Enter your 24 words". The shell pushes
+  // `words_route` (words.enter for a re-key) when it is tapped; no event.
+  string words_label = 6;
+  string accessibility_label = 7;
+  // Set with `words_label`: the page the words control opens.
+  optional Route words_route = 8;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_LOCKED = 1;
+    // The owner check is up, or the core is opening the session.
+    PHASE_UNLOCKING = 2;
+    // No passcode on this phone, or no keys on this core.
+    PHASE_UNAVAILABLE = 3;
+    // The check failed or the core would not open; `notice` says which.
+    PHASE_FAILED = 4;
+  }
+}
+
+// What the wall hears. Every Locker screen takes it (`ScreenEvent.locker_wall`).
+message LockerWallEvent {
+  oneof kind {
+    // "Unlock with …": ask the owner check now.
+    UnlockTapped unlock = 1;
+    // The member locked by hand (More's Lock row).
+    LockTapped lock = 2;
+  }
+
+  message UnlockTapped {}
+
+  message LockTapped {}
+}
+
+// ---------------------------------------------------------------------------
+// Shared parts
+// ---------------------------------------------------------------------------
+
+message LockerFact {
+  string label = 1;
+  string detail = 2;
+}
+
+message LockerBandTab {
+  // `items`, `review`, `generate`, `more` — what `BandPicked` sends.
+  string key = 1;
+  string label = 2;
+  string icon_key = 3;
+  bool current = 4;
+}
+
+// One item as a list draws it. Never a secret.
+message LockerRow {
+  string item_id = 1;
+  string title = 2;
+  // "Login · maya@example.com · finance".
+  string meta = 3;
+  // The type chip (two letters) and its icon key.
+  string type_chip = 4;
+  string type_key = 5;
+  bool starred = 6;
+  repeated StatusChip chips = 7;
+  string accessibility_label = 8;
+  // Opens the item page.
+  Route route = 9;
+}
+
+message LockerChoice {
+  string key = 1;
+  string label = 2;
+  bool selected = 3;
+  // A count or a note beside the label ("12"); empty for none.
+  string detail = 4;
+}
+
+message LockerSection {
+  string title = 1;
+  repeated LockerFieldRow rows = 2;
+  // A sentence under the rows (the access history's rule); empty for none.
+  string note = 3;
+}
+
+// A FIELD ROW WITH VERBS. Plain metadata shows its value. A sealed cell shows
+// `mask` and `note` and offers Reveal and Copy; revealed, it shows `value`, a
+// countdown `note` and Copy and Conceal.
+message LockerFieldRow {
+  // What a verb tap names: a column (`password`, `username`), `field:<id>`,
+  // `address:<id>`, `passkey:name`, or a date key.
+  string key = 1;
+  string label = 2;
+  // The plain value, or — revealed — the plaintext. Empty while sealed.
+  string value = 3;
+  bool sealed = 4;
+  bool revealed = 5;
+  // A letter-spaced dot run while sealed and concealed.
+  string mask = 6;
+  string note = 7;
+  repeated LockerVerb verbs = 8;
+  string accessibility_label = 9;
+  // Draw `value` in the monospace role (a secret, a card number).
+  bool monospace = 10;
+  // A shown one-time code's life: the seconds until it rolls, out of the step.
+  optional LockerCountdown countdown = 11;
+}
+
+message LockerCountdown {
+  uint32 seconds_left = 1;
+  uint32 period = 2;
+}
+
+message LockerVerb {
+  // `reveal`, `copy`, `conceal`, `open`; on a one-time code `code` and
+  // `copy_code`; `edit` on a custom field; `rename` on a passkey's name.
+  string key = 1;
+  string label = 2;
+}
+
+message LockerAction {
+  string key = 1;
+  string label = 2;
+  bool destructive = 3;
+}
+
+message LockerMemoSheet {
+  string title = 1;
+  string text = 2;
+  string hint = 3;
+  string save_label = 4;
+  string cancel_label = 5;
+}
+
+// ---------------------------------------------------------------------------
+// locker.home: Items · Review · Generate, More as a sheet; search the bar
+// ---------------------------------------------------------------------------
+
+message LockerHomeState {
+  optional LockerWall wall = 1;
+  bool secure = 2;
+  LockerDestination destination = 3;
+  oneof content {
+    Loading loading = 4;
+    Failure failure = 5;
+    Denied denied = 6;
+    LockerHomeData data = 7;
+  }
+  Sheet sheet = 8;
+  // Four tabs in order; EMPTY while locked or denied.
+  repeated LockerBandTab band = 9;
+  LockerHomeChrome chrome = 10;
+  LockerSearchField search = 11;
+  // The Items filter in force: `all`, `starred`, `archived` or a type key.
+  string filter = 12;
+  // A refusal or a note over the page.
+  optional StatusLine status = 13;
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    SHEET_MORE = 2;
+    // "What Locker keeps".
+    SHEET_FACTS = 3;
+  }
+}
+
+message LockerSearchField {
+  bool open = 1;
+  string term = 2;
+  // The term the rows answer, and the words the core corrected it to.
+  string answered_term = 3;
+  string corrected = 4;
+}
+
+message LockerHomeChrome {
+  string title = 1;
+  // The app bar's primary verb: "New item", and where it goes.
+  string add_label = 2;
+  Route add_route = 3;
+  string retry = 4;
+  string more_title = 5;
+  repeated LockerMoreRow more_rows = 6;
+  string facts_title = 7;
+  repeated LockerFact facts = 8;
+  string search_placeholder = 9;
+  string search_note = 10;
+  string close_label = 11;
+}
+
+message LockerMoreRow {
+  // `import`, `trash`, `export`, `access`, `facts`, `lock`.
+  string key = 1;
+  string label = 2;
+  string meta = 3;
+  string icon_key = 4;
+  // The page it opens; absent for `facts` (a sheet) and `lock` (a gesture).
+  optional Route route = 5;
+}
+
+message LockerHomeData {
+  // "Titles, usernames and addresses are browsable · a secret is revealed per
+  // item, per gesture, and receipted".
+  string status_line = 1;
+
+  // ITEMS: the filter chips, the rows, the window's honest end.
+  repeated LockerChoice filters = 2;
+  repeated LockerRow rows = 3;
+  string window = 4;
+  optional EmptyState items_empty = 5;
+
+  // REVIEW.
+  repeated LockerReviewSection review = 6;
+  repeated LockerFact review_unchecked = 7;
+  string review_unchecked_title = 8;
+  optional EmptyState review_clear = 9;
+  string review_note = 10;
+
+  // SEARCH.
+  repeated LockerRow hits = 11;
+  optional EmptyState search_empty = 12;
+
+  // GENERATE: reads nothing, writes nothing.
+  optional LockerGenerator generator = 13;
+}
+
+message LockerReviewSection {
+  // `compromised`, `insecure_address`, `expired`, `expiring`.
+  string key = 1;
+  LockerSectionHead head = 2;
+  string reason = 3;
+  repeated LockerRow rows = 4;
+}
+
+message LockerSectionHead {
+  string title = 1;
+  uint32 count = 2;
+}
+
+// A STRING WITHOUT AN ITEM: nothing is written until it lands on one.
+// Look-alikes (0 O o 1 l I) are always excluded.
+message LockerGenerator {
+  string title = 1;
+  string output = 2;
+  // "Strong · about 95 bits".
+  string strength = 3;
+  repeated LockerChoice kinds = 4;
+  string kinds_label = 5;
+  uint32 length = 6;
+  uint32 length_min = 7;
+  uint32 length_max = 8;
+  string length_label = 9;
+  repeated LockerChoice include = 10;
+  string include_label = 11;
+  string lookalike_note = 12;
+  string regenerate_label = 13;
+  string copy_label = 14;
+  // "Put it on an item"; empty for a PIN. Opens `use_route`.
+  string use_label = 15;
+  optional Route use_route = 16;
+  string accessibility_label = 17;
+}
+
+message LockerHomeEvent {
+  oneof kind {
+    BandPicked band = 1;
+    FilterPicked filter = 2;
+    SheetOpened sheet_opened = 3;
+    SheetClosed sheet_closed = 4;
+    SearchOpened search_opened = 5;
+    SearchTyped search_typed = 6;
+    SearchClosed search_closed = 7;
+    // A More row without a route: `facts` opens its sheet, `lock` locks.
+    MorePicked more = 8;
+    // GENERATE.
+    GeneratorKindPicked generator_kind = 9;
+    GeneratorLength generator_length = 10;
+    GeneratorIncludeToggled generator_include = 11;
+    GeneratorRegenerate generator_regenerate = 12;
+    GeneratorCopy generator_copy = 13;
+    // A tap that did not open the next page: the failure's "Try again".
+    Refreshed refreshed = 14;
+    // "Put it on an item": hands the candidate to the editor and says so. The
+    // shell then pushes `generator.use_route`.
+    GeneratorUsed generator_used = 15;
+  }
+
+  message BandPicked {
+    string key = 1;
+  }
+
+  message FilterPicked {
+    string key = 1;
+  }
+
+  message SheetOpened {
+    LockerHomeState.Sheet sheet = 1;
+  }
+
+  message SheetClosed {}
+
+  message SearchOpened {}
+
+  message SearchTyped {
+    string term = 1;
+  }
+
+  message SearchClosed {}
+
+  message MorePicked {
+    string key = 1;
+  }
+
+  message GeneratorKindPicked {
+    string key = 1;
+  }
+
+  message GeneratorLength {
+    uint32 length = 1;
+  }
+
+  message GeneratorIncludeToggled {
+    string key = 1;
+  }
+
+  message GeneratorRegenerate {}
+
+  message GeneratorCopy {}
+
+  message Refreshed {}
+
+  message GeneratorUsed {}
+}
+
+// ---------------------------------------------------------------------------
+// locker.item
+// ---------------------------------------------------------------------------
+
+message LockerItemState {
+  optional LockerWall wall = 1;
+  bool secure = 2;
+  string item_id = 3;
+  oneof content {
+    Loading loading = 4;
+    Failure failure = 5;
+    Denied denied = 6;
+    LockerItemData data = 7;
+  }
+  optional Confirm confirm = 8;
+  // What the last act did: "Password copied · …", "Moved to the trash" with
+  // Undo, a refused reveal's sentence.
+  optional StatusLine status = 9;
+  LockerItemChrome chrome = 10;
+  optional LockerMemoSheet memo = 11;
+  // THE CUSTOM FIELD SHEET, while it is open: one field, added or edited.
+  optional LockerFieldSheet field_sheet = 12;
+  // THE PASSKEY RENAME SHEET, while it is open.
+  optional LockerMemoSheet passkey_name = 13;
+  // The item is gone from this page (purged): the shell pops.
+  bool finished = 14;
+}
+
+message LockerItemChrome {
+  string title = 1;
+  string back_label = 2;
+  // "Edit" — the app bar's primary verb; empty on a trashed item.
+  string edit_label = 3;
+  optional Route edit_route = 4;
+  string retry = 5;
+}
+
+message LockerItemData {
+  string title = 1;
+  string type_label = 2;
+  string type_chip = 3;
+  string type_key = 4;
+  bool starred = 5;
+  repeated StatusChip chips = 6;
+  // "Sealed at rest. Revealing one writes a receipt and it conceals itself
+  // after 30 seconds."
+  string status_line = 7;
+  repeated LockerSection sections = 8;
+  repeated string tags = 9;
+  string tags_label = 10;
+  string memo = 11;
+  string memo_label = 12;
+  // "Add a memo" / "Edit the memo"; empty on a trashed item.
+  string memo_action = 13;
+  repeated LockerAction actions = 14;
+  // No item has this id any more.
+  optional EmptyState gone = 15;
+  // "This item is in the trash · it is erased on Mon 12 October".
+  string trashed_note = 16;
+}
+
+// ONE CUSTOM FIELD, ADDED OR EDITED. A SEALED field's value is typed into a
+// secure entry and sealed by the core on Save; editing one shows nothing of
+// the stored value — an empty entry keeps it. The kind is chosen when the
+// field is added and fixed after.
+message LockerFieldSheet {
+  string title = 1;
+  string section_label = 2;
+  string section = 3;
+  string section_hint = 4;
+  string label_label = 5;
+  string label = 6;
+  string label_hint = 7;
+  // The kind chips on a NEW field (`text`, `sealed`); empty on an edit.
+  string kind_label = 8;
+  repeated LockerChoice kinds = 9;
+  string value_label = 10;
+  string value = 11;
+  string value_hint = 12;
+  // A sealed kind: a secure entry, never autocorrected or suggested.
+  bool secret = 13;
+  string value_note = 14;
+  string save_label = 15;
+  string cancel_label = 16;
+  // "Remove the field" on an edit; empty on a new one.
+  string remove_label = 17;
+  bool can_save = 18;
+  // Why Save is not enabled; empty when it is.
+  string blocked = 19;
+}
+
+message LockerItemEvent {
+  oneof kind {
+    VerbTapped verb = 1;
+    ActionTapped action = 2;
+    Confirmed confirmed = 3;
+    Dismissed dismissed = 4;
+    // The status line's verb (Undo).
+    StatusActed status_acted = 5;
+    MemoOpened memo_opened = 6;
+    MemoTyped memo_typed = 7;
+    MemoSaved memo_saved = 8;
+    MemoClosed memo_closed = 9;
+    // The field sheet: `key` is `section`, `label` or `value`.
+    FieldTyped field_typed = 10;
+    FieldKindPicked field_kind = 11;
+    FieldSaved field_saved = 12;
+    FieldRemoved field_removed = 13;
+    FieldClosed field_closed = 14;
+    PasskeyNameTyped passkey_name_typed = 15;
+    PasskeyNameSaved passkey_name_saved = 16;
+    PasskeyNameClosed passkey_name_closed = 17;
+    Refreshed refreshed = 18;
+  }
+
+  message VerbTapped {
+    string key = 1;
+    string verb = 2;
+  }
+
+  message ActionTapped {
+    string key = 1;
+  }
+
+  message Confirmed {}
+
+  message Dismissed {}
+
+  message StatusActed {}
+
+  message MemoOpened {}
+
+  message MemoTyped {
+    string text = 1;
+  }
+
+  message MemoSaved {}
+
+  message MemoClosed {}
+
+  message FieldTyped {
+    string key = 1;
+    string value = 2;
+  }
+
+  message FieldKindPicked {
+    string key = 1;
+  }
+
+  message FieldSaved {}
+
+  message FieldRemoved {}
+
+  message FieldClosed {}
+
+  message PasskeyNameTyped {
+    string text = 1;
+  }
+
+  message PasskeyNameSaved {}
+
+  message PasskeyNameClosed {}
+
+  message Refreshed {}
+}
+
+// ---------------------------------------------------------------------------
+// locker.editor: add or edit an item
+// ---------------------------------------------------------------------------
+
+// AN EXPLICIT SAVE, NOT AUTOSAVE: a secret saved on a pause mid-typing would
+// be a wrong secret the member did not choose. Leaving with changes asks first.
+// A SAVE OF AN EXISTING ITEM IS THE WHOLE DRAFT: `locker.edit-item` REPLACES the
+// type's fields, so a field left empty is cleared and a sealed secret the
+// member did not touch goes as the placeholder `«sealed»`, which keeps it.
+message LockerEditorState {
+  optional LockerWall wall = 1;
+  bool secure = 2;
+  LockerEditorMode mode = 3;
+  string item_id = 4;
+  oneof content {
+    Loading loading = 5;
+    Failure failure = 6;
+    Denied denied = 7;
+    LockerEditorData data = 8;
+  }
+  // The discard confirm, when leaving with changes.
+  optional Confirm confirm = 9;
+  LockerEditorChrome chrome = 10;
+  // The save committed (or the member discarded): the shell pops.
+  bool finished = 11;
+  // A refusal's sentence, over the form.
+  optional StatusLine status = 12;
+}
+
+message LockerEditorChrome {
+  string title = 1;
+  string save_label = 2;
+  string cancel_label = 3;
+  string lede = 4;
+  string retry = 5;
+}
+
+message LockerEditorData {
+  // The six types a phone creates, on ADD; empty on EDIT (a type is fixed).
+  repeated LockerChoice types = 1;
+  string types_label = 2;
+  repeated LockerInputRow inputs = 3;
+  string tags_label = 4;
+  string tags_text = 5;
+  string tags_hint = 6;
+  bool can_save = 7;
+  string blocked = 8;
+  // THE COMPROMISED FLAG: a toggle the member sets on a leaked secret so Review
+  // lists the item for changing.
+  string compromised_label = 9;
+  bool compromised = 10;
+  string compromised_note = 11;
+}
+
+message LockerInputRow {
+  // The command's input key: `title`, `username`, `password`, `url`, …
+  string key = 1;
+  string label = 2;
+  string value = 3;
+  string placeholder = 4;
+  // A secret field: a secure text entry, never autocorrected or suggested.
+  bool secret = 5;
+  Kind kind = 6;
+  // "Kept sealed · type to replace it"; a generated password's strength.
+  string note = 7;
+  // "Generate" on a password field; empty elsewhere.
+  string generate_label = 8;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_TEXT = 1;
+    KIND_EMAIL = 2;
+    KIND_URL = 3;
+    KIND_PHONE = 4;
+    KIND_NUMBER = 5;
+    KIND_MULTILINE = 6;
+  }
+}
+
+message LockerEditorEvent {
+  oneof kind {
+    TypePicked type = 1;
+    Typed typed = 2;
+    TagsTyped tags = 3;
+    GenerateTapped generate = 4;
+    SaveTapped save = 5;
+    CancelTapped cancel = 6;
+    Confirmed confirmed = 7;
+    Dismissed dismissed = 8;
+    CompromisedToggled compromised = 9;
+    Refreshed refreshed = 10;
+  }
+
+  message TypePicked {
+    string key = 1;
+  }
+
+  message Typed {
+    string key = 1;
+    string value = 2;
+  }
+
+  message TagsTyped {
+    string text = 1;
+  }
+
+  message GenerateTapped {
+    string key = 1;
+  }
+
+  message SaveTapped {}
+
+  message CancelTapped {}
+
+  message Confirmed {}
+
+  message Dismissed {}
+
+  message CompromisedToggled {
+    bool on = 1;
+  }
+
+  message Refreshed {}
+}
+
+// ---------------------------------------------------------------------------
+// locker.access: the whole Locker's access history
+// ---------------------------------------------------------------------------
+
+// Every unlock, reveal, copy, one-time code and export, newest first. METADATA
+// ONLY: a row names the act, the item and the minute, never a value.
+message LockerAccessState {
+  optional LockerWall wall = 1;
+  bool secure = 2;
+  oneof content {
+    Loading loading = 3;
+    Failure failure = 4;
+    Denied denied = 5;
+    LockerAccessData data = 6;
+  }
+  LockerAccessChrome chrome = 7;
+}
+
+message LockerAccessChrome {
+  string title = 1;
+  string back_label = 2;
+  string retry = 3;
+}
+
+message LockerAccessData {
+  string lede = 1;
+  LockerSection history = 2;
+}
+
+message LockerAccessEvent {
+  oneof kind {
+    Refreshed refreshed = 1;
+  }
+
+  message Refreshed {}
+}
+
+// ---------------------------------------------------------------------------
+// locker.export: every secret, in a file
+// ---------------------------------------------------------------------------
+
+// It asks three times, in order: the confirm, which names the consequence; the
+// phone's own owner check, raised afresh; and the OS save sheet, which is the
+// only place the file is written. The file never rests in app storage.
+message LockerExportState {
+  optional LockerWall wall = 1;
+  bool secure = 2;
+  oneof content {
+    Loading loading = 3;
+    Failure failure = 4;
+    Denied denied = 5;
+    LockerExportData data = 6;
+  }
+  LockerExportChrome chrome = 7;
+  optional Confirm confirm = 8;
+  Phase phase = 9;
+  optional StatusLine status = 10;
+  // `csv` or `json`.
+  string format = 11;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_IDLE = 1;
+    // The owner check is up.
+    PHASE_CHECKING = 2;
+    // The core is opening every secret and rendering the file.
+    PHASE_WRITING = 3;
+    // The OS save sheet is up over the file.
+    PHASE_SAVING = 4;
+  }
+}
+
+message LockerExportChrome {
+  string title = 1;
+  string back_label = 2;
+  string retry = 3;
+}
+
+message LockerExportData {
+  string lede = 1;
+  string what_label = 2;
+  string what_value = 3;
+  string leaves_out = 4;
+  string format_label = 5;
+  repeated LockerChoice formats = 6;
+  string format_note = 7;
+  string where_label = 8;
+  string where_value = 9;
+  string where_note = 10;
+  // "Write the file"; empty while a write is under way or nothing is kept.
+  string commit_label = 11;
+  string commit_note = 12;
+}
+
+message LockerExportEvent {
+  oneof kind {
+    FormatPicked format = 1;
+    CommitTapped commit = 2;
+    Confirmed confirmed = 3;
+    Dismissed dismissed = 4;
+    Refreshed refreshed = 5;
+  }
+
+  message FormatPicked {
+    string key = 1;
+  }
+
+  message CommitTapped {}
+
+  message Confirmed {}
+
+  message Dismissed {}
+
+  message Refreshed {}
+}
+
+// ---------------------------------------------------------------------------
+// locker.import: a password-manager file, read, reviewed and sealed in
+// ---------------------------------------------------------------------------
+
+message LockerImportState {
+  optional LockerWall wall = 1;
+  bool secure = 2;
+  oneof content {
+    Loading loading = 3;
+    Failure failure = 4;
+    Denied denied = 5;
+    LockerImportData data = 6;
+  }
+  LockerImportChrome chrome = 7;
+  Phase phase = 8;
+  optional StatusLine status = 9;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_IDLE = 1;
+    PHASE_READING = 2;
+    PHASE_PLANNED = 3;
+    PHASE_PUBLISHING = 4;
+    PHASE_PUBLISHED = 5;
+  }
+}
+
+message LockerImportChrome {
+  string title = 1;
+  string back_label = 2;
+  string retry = 3;
+}
+
+message LockerImportData {
+  string lede = 1;
+  string file_label = 2;
+  string file_value = 3;
+  string file_note = 4;
+  // "Choose a file"; empty while the core is reading or writing.
+  string choose_label = 5;
+  string verdicts_label = 6;
+  repeated LockerFact verdicts = 7;
+  string counts = 8;
+  string rows_label = 9;
+  repeated LockerImportLine rows = 10;
+  string publish_label = 11;
+  string publish_note = 12;
+  string discard_label = 13;
+  optional EmptyState empty = 14;
+}
+
+message LockerImportLine {
+  string key = 1;
+  string title = 2;
+  string meta = 3;
+  StatusChip chip = 4;
+  string accessibility_label = 5;
+}
+
+message LockerImportEvent {
+  oneof kind {
+    ChooseTapped choose = 1;
+    PublishTapped publish = 2;
+    DiscardTapped discard = 3;
+    Refreshed refreshed = 4;
+  }
+
+  message ChooseTapped {}
+
+  message PublishTapped {}
+
+  message DiscardTapped {}
+
+  message Refreshed {}
+}
+
+// ---------------------------------------------------------------------------
+// locker.lock: the wall as a page (chat opens it to unlock)
+// ---------------------------------------------------------------------------
+
+// The wall and nothing else. It asks the owner check on appearing and sets
+// `finished` once the Locker is open (or the member leaves it locked), so the
+// shell that pushed it for a caller that needs the key pops it.
+message LockerLockState {
+  optional LockerWall wall = 1;
+  bool secure = 2;
+  bool finished = 3;
+  // True once the Locker is open: the caller reads this, not the wall.
+  bool open = 4;
+  string close_label = 5;
+}

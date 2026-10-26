@@ -60,6 +60,8 @@ fn row(listed: Listed, zone: &FireZone) -> wire::LockerItemRow {
     let item = listed.row;
     wire::LockerItemRow {
         updated_local_day: day_of(zone, item.updated_at.as_deref()),
+        deleted_local_day: String::new(),
+        purge_local_day: String::new(),
         url: if rendered == "login" {
             item.url.unwrap_or_default()
         } else {
@@ -81,7 +83,7 @@ fn row(listed: Listed, zone: &FireZone) -> wire::LockerItemRow {
     }
 }
 
-pub(super) fn items(
+pub(crate) fn items(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -120,7 +122,7 @@ pub(super) fn items(
     )
 }
 
-pub(super) fn item(
+pub(crate) fn item(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -212,7 +214,7 @@ fn detail(data: ItemData, zone: &FireZone) -> wire::LockerItem {
     }
 }
 
-pub(super) fn search(
+pub(crate) fn search(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::LockerSearchRequest,
@@ -262,7 +264,40 @@ pub(super) fn search(
     })
 }
 
-pub(super) fn review(
+/// THE TRASH (#1135): the trashed items as the shelf's rows, each with the day
+/// it went and the day the sweep erases it, in the request's zone.
+pub(crate) fn trash(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    asked: &wire::LockerReviewRequest,
+) -> Result<Answer> {
+    let zone = zone_of(vault, &asked.tz)?;
+    answered(door, phone::load_trash(door), |rows| {
+        Answer::LockerItems(wire::LockerItems {
+            items: rows
+                .into_iter()
+                .map(|trashed| {
+                    let deleted = day_of(&zone, trashed.deleted_at.as_deref());
+                    let purge = day_of(&zone, trashed.purge_at.as_deref());
+                    let mut shelf = row(
+                        Listed {
+                            starred: trashed.starred,
+                            tags: Vec::new(),
+                            row: trashed,
+                        },
+                        &zone,
+                    );
+                    shelf.deleted_local_day = deleted;
+                    shelf.purge_local_day = purge;
+                    shelf
+                })
+                .collect(),
+            ..wire::LockerItems::default()
+        })
+    })
+}
+
+pub(crate) fn review(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -296,7 +331,7 @@ pub(super) fn review(
 /// shell asks nothing of the core while the Locker is locked, and the core
 /// holds no second gate for any Locker read (the items, the item and the
 /// review are asked the same way).
-pub(super) fn access(
+pub(crate) fn access(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::LockerAccessRequest,

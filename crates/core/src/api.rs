@@ -8,7 +8,7 @@
 //! | Verb | State | Why |
 //! |---|---|---|
 //! | [`page`] | live | D1's `page_raw` plus the access plane's filters and mask |
-//! | [`invoke`] | live | D1's command plane, gate order and all |
+//! | `invoke` | live | D1's command plane, gate order and all, behind `act` and [`crate::Handle::command`] |
 //! | [`describe`] | live | the registered definition, so a shell can render a form |
 //! | [`parked`] | live | the outcomes waiting on somebody's decision |
 //! | [`search`] | **stub** | the FTS plane is wave 4 |
@@ -16,7 +16,7 @@
 //! | [`content`] | **stub** | content path minting is wave 3 |
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_vault::commands::{Command, CommandStatus, Registry};
+use centraid_vault::commands::{Command, Registry};
 use centraid_vault::page::KeysetPage;
 use centraid_vault::{Principal, Vault};
 
@@ -88,8 +88,7 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// shell that asked. So it reads these thirteen and refuses the rest as an
 /// invalid request, before the vault is asked.
 ///
-/// The set is every `from` a shell sends today, read off `mobile/shared`'s
-/// `PageQuery` builders and the Rust callers of the wire:
+/// The set is every `from` a shell or a Rust caller of the wire sends today:
 ///
 /// | Screens | Tables |
 /// |---|---|
@@ -367,128 +366,116 @@ fn output_name(entry: &str) -> &str {
         .map_or(entry, |at| entry[at + 4..].trim())
 }
 
+/// ONE RUN OF A REGISTERED COMMAND, as the core's own write paths state it
+/// (#1135). Not a wire message: the FFI carries no command request, and a
+/// shell's write is a screen's `act` (`crate::act`). This is what `act`, the
+/// chat's confirmed card, the chat's own history, a Locker import and
+/// [`crate::Handle::command`] hand the command plane.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Invocation {
+    /// The registered command name.
+    pub name: String,
+    /// The input, canonical JSON in bytes: it is validated against the
+    /// command's own input schema in `crates/vault`, once.
+    pub input: Vec<u8>,
+    /// THE CALLER'S CORRELATION KEY. Required; see [`invoke_raw`].
+    pub invoke_key: String,
+}
+
 /// Run a command through D1's gate order, **under the principal the HANDLE
 /// holds** (#1029 §1).
-///
-/// The principal used to be read off `request.principal`, and that was right
-/// while a gateway served seats: the gateway resolved an enrolled device at the
-/// ALPN boundary, stamped the result on the request, and every authority
-/// decision downstream read that field — which also let a thin seat ask "what
-/// would this OTHER caller be allowed".
 ///
 /// **There is no other caller.** The phone is the only host that opens a vault
 /// (#1029 §6), so the only principal a command can run under is the owner of
 /// the device it is running on, and the handle knows that without being told.
-/// A field on the request could then only do one of two things: agree with the
+/// A field on the call could then only do one of two things: agree with the
 /// handle, or be a caller's claim about its own authority — and the second is
 /// not a thing a local write is allowed to assert.
+///
 /// `changes` IS HOW A SCREEN LEARNS THE WRITE HAPPENED (#1029 §1). The commit
 /// guard's `update_hook` says which tables moved, and this is where that
-/// answer becomes a change event on the queue a shell drains. Before it, the
-/// only producer of change events was the seat's applier — so on a phone with
-/// no seat nothing ever pushed one, and every screen was a poll or a lie.
+/// answer becomes a change event on the queue a shell drains.
 ///
-/// **`invoke_key` is the shell's correlation key, and nothing remembers it.**
-/// The request must carry one — it is how a shell pairs this answer with the
-/// write that caused it (`ScreenWrites.settled`) — but it stops here: the vault
-/// is handed a name and an input, and there is no replay ledger (#1029 §1,
-/// R-1088-12). The same key sent twice runs the command twice
-/// (`tests/replay.rs` pins it), so a write a shell may re-offer is idempotent by
-/// its own content or by an id the phone minted.
-pub fn invoke(
+/// **On this path `invoke_key` is the caller's correlation key, and nothing remembers it.**
+/// The call must carry one, but it stops here: the vault is handed a name and
+/// an input. The same key sent twice runs the command twice (`tests/replay.rs`
+/// pins it), so a write a caller may re-offer is idempotent by its own content
+/// or by an id the phone minted. The write that is remembered is `act`
+/// (`crate::act`), which hands the commit its key to record.
+pub(crate) fn invoke(
     vault: &Vault,
     registry: &Registry,
     principal: &centraid_vault::Principal,
-    request: &wire::Command,
+    call: &Invocation,
     changes: &crate::events::ChangeFeed,
-) -> Result<wire::CommandOutcome> {
-    wire_outcome(invoke_raw(vault, registry, principal, request, changes)?)
+) -> Result<centraid_vault::commands::CommandOutcome> {
+    invoke_raw(vault, registry, principal, call, changes, None)
 }
 
 /// THE ONE WRITE PATH OF A COMMAND THE MEMBER OR THE CHAT MAKES (#1135): a secret typed into the
 /// input is sealed under the open Locker session
 /// ([`crate::locker::phone::seal_command`], which refuses while the session is shut), then
-/// [`invoke_raw`] runs it. The shell's `Command` request and the chat's confirmed card
-/// (`assist::door`) both come through here, so a secret is sealed the same way whoever typed it
-/// and the chat holds no second sealing call.
+/// [`invoke_raw`] runs it. A screen's `act`, the chat's confirmed card (`assist::door`) and
+/// [`crate::Handle::command`] all come through here, so a secret is sealed the same way whoever
+/// typed it and the chat holds no second sealing call.
 pub(crate) fn command(
     vault: &Vault,
     locker: &crate::locker::phone::Cell,
     registry: &Registry,
     principal: &centraid_vault::Principal,
-    request: &wire::Command,
+    call: &Invocation,
     changes: &crate::events::ChangeFeed,
+    keyed: Option<&centraid_vault::journal::KeyMark<'_>>,
 ) -> Result<centraid_vault::commands::CommandOutcome> {
-    match crate::locker::phone::seal_command(vault, locker, request)? {
+    match crate::locker::phone::seal_command(vault, locker, &call.name, &call.input)? {
         Some(input) => invoke_raw(
             vault,
             registry,
             principal,
-            &wire::Command {
+            &Invocation {
                 input,
-                ..request.clone()
+                ..call.clone()
             },
             changes,
+            keyed,
         ),
-        None => invoke_raw(vault, registry, principal, request, changes),
+        None => invoke_raw(vault, registry, principal, call, changes, keyed),
     }
 }
 
-/// A vault outcome as the wire carries it.
-pub(crate) fn wire_outcome(
-    outcome: centraid_vault::commands::CommandOutcome,
-) -> Result<wire::CommandOutcome> {
-    Ok(wire::CommandOutcome {
-        status: match outcome.status {
-            CommandStatus::Executed => wire::CommandStatus::Executed,
-            CommandStatus::Failed => wire::CommandStatus::Failed,
-        } as i32,
-        output: serde_json::to_vec(&outcome.output).map_err(|error| CoreError::Invariant {
-            context: format!("a handler's own output is not JSON: {error}"),
-        })?,
-        // THE AUTHOR'S SENTENCE, never the raw predicate. The predicate reaches
-        // the audit trail and never a member.
-        reason: outcome.reason.unwrap_or_default(),
-        invocation_id: outcome.invocation_id,
-        // The journal row is the evidence; nothing else is a receipt.
-        receipt_id: String::new(),
-        revoked_at: None,
-    })
-}
-
-/// [`invoke`]'s gate order and change feed, answered as the vault's own
-/// outcome rather than the wire's: the chat's door (`assist::door`) needs the
-/// predicate that failed, which the wire answer deliberately drops, to tell the
-/// runtime WHY a write was refused. Same `invoke_key` rule, same
-/// after-the-commit change events.
+/// [`invoke`]'s gate order and change feed, with the journal's key mark an
+/// `act` records. The answer is the vault's own outcome: the chat's door
+/// (`assist::door`) needs the predicate that failed to tell the runtime WHY a
+/// write was refused, and `act` names it as the refusal's check.
 pub(crate) fn invoke_raw(
     vault: &Vault,
     registry: &Registry,
     principal: &centraid_vault::Principal,
-    request: &wire::Command,
+    call: &Invocation,
     changes: &crate::events::ChangeFeed,
+    keyed: Option<&centraid_vault::journal::KeyMark<'_>>,
 ) -> Result<centraid_vault::commands::CommandOutcome> {
-    if request.invoke_key.is_empty() {
+    if call.invoke_key.is_empty() {
         // REQUIRED, unlike v0, where the fallback was the call's ORDINAL and
         // only stable for a handler making the same call sequence every time.
-        // It is the shell's correlation key (an answer is paired with the write
-        // that caused it by this string) and it is not used past this check: no
-        // ledger answers a repeat of it (#1029 §1, R-1088-12).
+        // It is the caller's correlation key and it is not used past this
+        // check: no ledger answers a repeat of it (#1029 §1, R-1088-12).
         return Err(CoreError::InvalidRequest {
             detail: "a command carries no invoke_key; an ordinal fallback is only stable for a \
                      handler that makes the same calls every time"
                 .to_owned(),
         });
     }
-    let input: serde_json::Value = if request.input.is_empty() {
+    let input: serde_json::Value = if call.input.is_empty() {
         serde_json::Value::Object(serde_json::Map::new())
     } else {
-        serde_json::from_slice(&request.input).map_err(|error| CoreError::InvalidRequest {
+        serde_json::from_slice(&call.input).map_err(|error| CoreError::InvalidRequest {
             detail: format!("a command's input is canonical JSON in bytes: {error}"),
         })?
     };
 
-    let outcome = vault.execute(registry, principal, &Command::new(&request.name, input))?;
+    let outcome =
+        vault.execute_keyed(registry, principal, &Command::new(&call.name, input), keyed)?;
     // AFTER THE COMMIT, because that is when the guard reads its census, and a
     // screen redrawn from a transaction that could still roll back is the
     // failure this ordering exists to prevent.
@@ -613,6 +600,7 @@ pub fn content(_content_id: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use centraid_vault::commands::CommandStatus;
 
     /// [`found`] with the registry and the owner a handle would pass.
     fn found_here(vault: &Vault, request: &wire::FoundRequest) -> Result<wire::FoundResponse> {
@@ -1103,7 +1091,7 @@ mod tests {
                 })
                 .collect()
         };
-        for name in ["test", "home.people", "tasks.trash", "assist.native"] {
+        for name in ["test", "home.people", "agenda.task.trash", "assist.native"] {
             let answer = ask(name, "entity", &["id", "title"], "id", "id").expect("a page");
             assert!(
                 !titles(&answer).contains(&"Bank login".to_owned()),

@@ -3,6 +3,7 @@ package dev.centraid.android.screens
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,58 +21,69 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.AlbumChoiceCreated
-import centraid.screen.v1.AlbumChoiceDismissed
-import centraid.screen.v1.AlbumChosen
-import centraid.screen.v1.AlbumChoiceOpened
-import centraid.screen.v1.BackupState
-import centraid.screen.v1.Confirm
-import centraid.screen.v1.MediaPermission
-import centraid.screen.v1.PhotoCell
-import centraid.screen.v1.PhotosGridEvent
-import centraid.screen.v1.PhotosGridState
-import dev.centraid.android.kit.AlbumChoiceSheet
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import centraid.core.v1.PhotosAlbumChoiceEvent
+import centraid.core.v1.PhotosBatchAction
+import centraid.core.v1.PhotosCopyPlaceChosen
+import centraid.core.v1.PhotosFreeUpRow
+import centraid.core.v1.PhotosFreeUpTapped
+import centraid.core.v1.PhotosGrain
+import centraid.core.v1.PhotosGrainChanged
+import centraid.core.v1.PhotosHomeChrome
+import centraid.core.v1.PhotosHomeEvent
+import centraid.core.v1.PhotosHomeImportBanner
+import centraid.core.v1.PhotosHomeState
+import centraid.core.v1.PhotosImportNow
+import centraid.core.v1.PhotosLibrary
+import centraid.core.v1.PhotosLibraryData
+import centraid.core.v1.PhotosNextPage
+import centraid.core.v1.PhotosPinched
+import centraid.core.v1.PhotosSelection
+import centraid.core.v1.PhotosSelectionEvent
+import centraid.core.v1.PhotosViewport
+import centraid.core.v1.Route
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.OptionSheet
+import dev.centraid.android.kit.PhotoGridSkeleton
+import dev.centraid.android.kit.PhotosAlbumChoiceSheet
+import dev.centraid.android.kit.ScreenEmpty
+import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
-import dev.centraid.android.kit.PhotoGridSkeleton
-import dev.centraid.android.kit.ScreenEmpty
-import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.bandFloor
 import dev.centraid.android.kit.bandPress
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.design.copy.PhotosCopy
-import dev.centraid.shared.apps.photos.PhotosTimeline
-import dev.centraid.shared.shell.BandPolicy
+import dev.centraid.android.kit.BandPolicy
 
 /**
- * The Photos grid (#1020, D-1020-E3).
+ * The Photos library (#1020, D-1020-E3; #1135).
  *
  * Two planes on one screen, and the whole screen is arranged so they cannot be
- * confused: the GRID renders `content` (the vault), and the BACKUP banner
- * renders `backup` and `permission` (the camera roll). A denied photo grant
- * changes the banner and never the grid.
+ * confused: the GRID renders the vault, and the BACKUP banner renders the camera
+ * roll's grant and progress. A denied photo grant changes the banner and never
+ * the grid.
  *
  * ## The library, as v0 drew it (#1029, photos port)
  *
@@ -79,90 +91,63 @@ import dev.centraid.shared.shell.BandPolicy
  * under sticky months, paged through the whole library as the member scrolls;
  * Years · Months · All above the band; a scrub rail on the trailing edge; the
  * filter as chips under the search bar and the tile size in More (the room's
- * chrome, drawn by `AppPlace` in `PhotosRoutes`); skeleton tiles while the
- * first page is read; and a selection whose bar takes the
- * band's place. Every choice is `PhotosGridState` and every write is the
- * machine's, so this file draws and forwards and decides nothing. The layout
- * pieces are `PhotosLibraryTimeline.kt`; the SwiftUI twin is
- * `PhotosGridView.swift`.
+ * chrome, drawn by [PhotosHomeScreen]); skeleton tiles while the first page is
+ * read; and a selection whose bar takes the band's place. Every choice is Rust's
+ * (`photos.home`) and every write is Rust's, so this file draws and forwards and
+ * decides nothing. The layout pieces are `PhotosLibraryTimeline.kt`; the SwiftUI
+ * twin is `PhotosGridView.swift`.
  */
 @Composable
-public fun PhotosGridScreen(
-    state: PhotosGridState,
-    onEvent: (PhotosGridEvent) -> Unit,
-    /**
-     * Run one camera-roll pass now (#1025 S6).
-     *
-     * A CALLBACK AND NOT AN EVENT, for iOS's reason: a pass is a shell effect
-     * with file and network I/O in it, and the states it publishes come back as
-     * ordinary `BackupChanged` events. Asking the reducer to do a file read
-     * would make one of the two planes on this screen the other one's problem.
-     *
-     * Defaulted so a preview and a fixture render this screen without one.
-     */
-    onBackUpNow: () -> Unit = {},
-    /**
-     * A CELL WAS TAPPED. The asset, and the page's order as its neighbours.
-     *
-     * Defaulted so a preview and a fixture render this screen without one —
-     * and it was MISSING, so the library grid was the one photographs surface
-     * with no way into the lightbox while the shelf and search both had one.
-     */
-    onOpenAsset: (assetId: String, neighbours: List<String>) -> Unit = { _, _ -> },
+internal fun PhotosLibraryBody(
+    state: PhotosHomeState,
+    library: PhotosLibrary,
+    onEvent: (PhotosHomeEvent) -> Unit,
+    onOpen: (Route) -> Unit,
 ) {
-    val data = state.data_
-    val cells = data?.cells.orEmpty()
-    val selected = remember(state.selected) { state.selected.toSet() }
+    val selection = state.selection ?: PhotosSelection()
+    val selected = remember(selection.selected_ids) { selection.selected_ids.toSet() }
+    val data = library.data_
+    val tiles = data?.tiles.orEmpty()
     // WHERE THE MEMBER IS STANDING, reported by whichever grain is drawn, so a
     // grain switch can land on the same stretch of time.
     val visibleDay = remember { mutableStateOf("") }
     // ONE SCROLL POSITION PER GRAIN: All and Months are different lists, and
     // an index carried from one into the other lands nowhere in particular.
-    val listState = remember(state.grain) { LazyListState() }
+    val listState = remember(library.grain) { LazyListState() }
+    val grain = library.grain
 
     // BACK LEAVES THE MODE BEFORE IT LEAVES THE SCREEN — Apple Photos', and
     // the band is not on screen to leave by while the bar stands in for it.
-    BackHandler(enabled = state.selecting) {
-        onEvent(PhotosGridEvent(selection_mode = PhotosGridEvent.SelectionModeChanged(selecting = false)))
+    BackHandler(enabled = selection.selecting) {
+        onEvent(PhotosHomeEvent(selection = selectionMode(false)))
     }
 
     Column(Modifier.fillMaxSize()) {
-        state.write_failure?.let { failure ->
-            // A REFUSED WRITE SAYS SO, in its own line and never in place of the
-            // library: the photographs are still what they were.
-            Text(
-                text = failure.sentence,
-                style = centraidType("small"),
-                color = centraidColor("textSoft"),
-                modifier = Modifier.padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 4.dp),
-            )
-        }
-        if (state.export_notice.isNotEmpty()) {
-            // WHAT "SEND A COPY" CAME TO — the originals not on this device, a
-            // location that could not be taken out — in the same quiet line.
-            Text(
-                text = state.export_notice,
-                style = centraidType("small"),
-                color = centraidColor("textSoft"),
-                modifier = Modifier.padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 4.dp),
-            )
-        }
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            val width = maxWidth.value.toInt()
-            val viewport = maxHeight.value.toInt()
-            val target = PhotosTimeline.RUNG_HEIGHTS[PhotosTimeline.clampRung(state.rung)]
-            val top: @Composable () -> Unit = {
-                BackupBanner(state, onEvent, onBackUpNow)
+            val width = maxWidth.value.toDouble()
+            val viewport = maxHeight.value.toDouble()
+            // RUST PACKS THE ROWS: it is told the width this grid is drawn at.
+            val report by rememberUpdatedState(onEvent)
+            LaunchedEffect(width, viewport) {
+                report(PhotosHomeEvent(viewport = PhotosViewport(width = width, height = viewport)))
             }
-            val loading = state.loading
-            val failure = state.failure
+            val top: @Composable () -> Unit = {
+                val banner = state.import_banner
+                if (banner != null) {
+                    // Coming back from Settings is the app coming forward: the camera roll reads
+                    // the grant again on `Lifecycle`.
+                    BackupBanner(banner, onEvent)
+                }
+            }
+            val loading = library.loading
+            val failure = library.failure
             when {
                 // THE GRID IS THE LOADING STATE (v0 §14): skeleton tiles at the
                 // rung's real geometry, so nothing reflows when the bytes land.
                 // Never a spinner.
                 loading != null -> Column {
                     top()
-                    PhotoGridSkeleton(width, target, viewport)
+                    PhotoGridSkeleton(loading.skeleton, state.chrome?.title.orEmpty())
                 }
 
                 failure != null -> Column {
@@ -176,165 +161,115 @@ public fun PhotosGridScreen(
 
                 data == null -> Column { top() }
 
-                // THE DATED WALK CAME BACK EMPTY AND THE UNDATED ONE HAS NOT
-                // RUN: still loading, not an empty library.
-                cells.isEmpty() && !data.complete -> Column {
-                    top()
-                    PhotoGridSkeleton(width, target, viewport)
-                    LaunchedEffect(data.undated_walk) {
-                        onEvent(PhotosGridEvent(next_page = PhotosGridEvent.NextPageRequested()))
-                    }
-                }
-
-                cells.isEmpty() -> Column {
+                tiles.isEmpty() -> Column {
                     top()
                     // THE FILTER EMPTIED THE GRID, NOT THE LIBRARY — its own
                     // sentence, never the empty-library copy.
-                    if (state.filter == PhotosGridState.Filter.FILTER_FAVORITES) {
+                    data.empty?.let { empty ->
                         ScreenEmpty(
-                            sentence = PhotosCopy.PHOTOS_GRID_NO_FAVORITES,
-                            remedy = PhotosCopy.PHOTOS_GRID_NO_FAVORITES_CAPTION,
-                            modifier = Modifier.padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp),
-                        )
-                    } else {
-                        ScreenEmpty(
-                            sentence = PhotosCopy.PHOTOS_GRID_EMPTY,
-                            remedy = PhotosCopy.PHOTOS_GRID_EMPTY_CAPTION,
+                            sentence = empty.headline,
+                            remedy = empty.body,
                             modifier = Modifier.padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp),
                         )
                     }
                 }
 
-                state.grain == PhotosGridState.Grain.GRAIN_YEARS ||
-                    state.grain == PhotosGridState.Grain.GRAIN_MONTHS -> {
+                grain == PhotosGrain.PHOTOS_GRAIN_YEARS || grain == PhotosGrain.PHOTOS_GRAIN_MONTHS -> {
                     LibraryGrains(
-                        cells = cells,
-                        grain = state.grain,
-                        placeDay = state.place_day,
+                        items = data.grain_items,
+                        years = grain == PhotosGrain.PHOTOS_GRAIN_YEARS,
+                        placeDay = library.place_day,
                         complete = data.complete,
+                        cellCount = tiles.size,
+                        undatedNote = data.undated_note,
+                        loadingMoreLabel = data.loading_more_label,
                         listState = listState,
                         top = top,
-                        onOpenPeriod = { day ->
-                            onEvent(PhotosGridEvent(period = PhotosGridEvent.PeriodOpened(anchor_day = day)))
-                        },
-                        onMore = { onEvent(PhotosGridEvent(next_page = PhotosGridEvent.NextPageRequested())) },
-                        onPinch = { scale -> pinched(state, scale, visibleDay.value, onEvent) },
+                        onOpenPeriod = { day -> onEvent(PhotosHomeEvent(period_opened = day)) },
+                        onMore = { onEvent(PhotosHomeEvent(next_page = PhotosNextPage())) },
+                        onPinch = { scale -> onEvent(pinched(scale, visibleDay.value)) },
                     )
-                    ReportVisibleDay(listState, visibleDay) { index -> grainDayAt(cells, state.grain, index) }
+                    ReportVisibleDay(listState, visibleDay) { index -> grainDayAt(data.grain_items, index) }
                 }
 
                 else -> {
-                    val year = remember { java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) }
-                    val rows = remember(cells, width, state.rung) { libraryRows(cells, width, state.rung, year) }
-                    LandOnDay(listState, rows, state.place_day)
+                    LandOnDay(listState, data, library.place_day)
                     LibraryTimeline(
-                        rows = rows,
-                        rung = state.rung,
-                        selecting = state.selecting,
+                        tiles = tiles,
+                        rows = data.rows,
+                        rung = library.rung,
+                        selecting = selection.selecting,
                         selected = selected,
                         complete = data.complete,
-                        cellCount = cells.size,
+                        loadingMoreLabel = data.loading_more_label,
+                        scrub = ScrubWords(data.scrub_label, data.scrub_next_label, data.scrub_previous_label),
                         listState = listState,
                         top = top,
-                        onTile = { assetId ->
-                            if (state.selecting) {
-                                onEvent(
-                                    PhotosGridEvent(
-                                        selection_toggled = PhotosGridEvent.SelectionToggled(asset_id = assetId),
-                                    ),
-                                )
+                        onTile = { photoId ->
+                            if (selection.selecting) {
+                                onEvent(PhotosHomeEvent(selection = toggled(photoId)))
                             } else {
                                 // A CELL OPENS THE PHOTOGRAPH, and the loaded
                                 // library's own order rides along as the
                                 // neighbours — so a swipe in the lightbox costs
                                 // no read, and it walks the library in the order
                                 // the member is looking at.
-                                onOpenAsset(assetId, cells.map { it.asset_id })
+                                lightboxRoute(data, photoId)?.let(onOpen)
                             }
                         },
                         onPick = { ids, picked ->
-                            onEvent(
-                                PhotosGridEvent(
-                                    selection_set = PhotosGridEvent.SelectionSet(asset_ids = ids, selected = picked),
-                                ),
-                            )
+                            onEvent(PhotosHomeEvent(selection = pickedSet(ids, picked)))
                         },
-                        onFetch = { assetId, contentHash ->
-                            onEvent(
-                                PhotosGridEvent(
-                                    fetch_original = PhotosGridEvent.OriginalRequested(
-                                        asset_id = assetId,
-                                        content_hash = contentHash,
-                                    ),
-                                ),
-                            )
-                        },
-                        onMore = { onEvent(PhotosGridEvent(next_page = PhotosGridEvent.NextPageRequested())) },
-                        onPinch = { scale -> pinched(state, scale, visibleDay.value, onEvent) },
+                        onFetch = { photoId, _ -> onEvent(PhotosHomeEvent(original_requested = photoId)) },
+                        onMore = { onEvent(PhotosHomeEvent(next_page = PhotosNextPage())) },
+                        onPinch = { scale -> onEvent(pinched(scale, visibleDay.value)) },
                     )
-                    ReportVisibleDay(listState, visibleDay) { index -> dayOfRow(rows.getOrNull(index - 1)) }
+                    ReportVisibleDay(listState, visibleDay) { index -> dayOfRow(data.rows.getOrNull(index - 1)) }
                 }
             }
         }
         // THE GRAIN CONTROL IS PERMANENT WHILE THE LIBRARY HAS PHOTOGRAPHS
         // (v0): absent only while selecting — the bar is then the foot — or
         // when there is nothing to zoom.
-        if (!state.selecting && cells.isNotEmpty()) {
-            GrainControl(state.grain) { grain ->
-                onEvent(PhotosGridEvent(grain = PhotosGridEvent.GrainChanged(grain = grain, at_day = visibleDay.value)))
+        if (!selection.selecting && tiles.isNotEmpty()) {
+            val chrome = state.chrome ?: PhotosHomeChrome()
+            GrainControl(
+                grain = grain,
+                labels = listOf(
+                    PhotosGrain.PHOTOS_GRAIN_YEARS to chrome.grain_years_label,
+                    PhotosGrain.PHOTOS_GRAIN_MONTHS to chrome.grain_months_label,
+                    PhotosGrain.PHOTOS_GRAIN_ALL to chrome.grain_all_label,
+                ),
+            ) { next ->
+                onEvent(PhotosHomeEvent(grain = PhotosGrainChanged(grain = next, at_day = visibleDay.value)))
             }
         }
     }
-
-    // THE SELECTION'S TWO SHEETS: the album choice (lane C's, one sheet for
-    // every "Add to album") and the trash confirm — a confirm is a sheet (D4).
-    if (state.album_choice_open) {
-        AlbumChoiceSheet(
-            choices = state.album_choices,
-            onChoose = { albumId ->
-                onEvent(PhotosGridEvent(album_chosen = AlbumChosen(album_id = albumId)))
-            },
-            onNewAlbum = { title ->
-                onEvent(PhotosGridEvent(album_created = AlbumChoiceCreated(title = title)))
-            },
-            onDismiss = { onEvent(PhotosGridEvent(album_choice_dismissed = AlbumChoiceDismissed())) },
-        )
-    }
-    if (state.sheet == PhotosGridState.Sheet.SHEET_CONFIRM_TRASH) {
-        ConfirmSheet(
-            confirm = Confirm(
-                title = trashQuestion(state.selected.size),
-                body = TRASH_KEEPS_THE_ROLL,
-                confirm_label = PhotosCopy.PHOTOS_GRID_TRASH_CONFIRM,
-                destructive = true,
-            ),
-            cancelLabel = PhotosCopy.PHOTOS_KEEP_THEM,
-            onConfirm = { onEvent(PhotosGridEvent(trash_confirmed = PhotosGridEvent.TrashConfirmed())) },
-            onDismiss = {
-                onEvent(PhotosGridEvent(sheet = PhotosGridEvent.SheetChanged(PhotosGridState.Sheet.SHEET_NONE)))
-            },
-        )
-    }
 }
 
-/**
- * A PINCH, as the machine's table reads it: a rung step inside All, a grain
- * past its ends. Landing where the member was, like every grain change.
- */
-private fun pinched(state: PhotosGridState, scale: Float, day: String, onEvent: (PhotosGridEvent) -> Unit) {
-    val landed = PhotosTimeline.pinch(state.grain, state.rung, scale)
-    if (landed.rung != state.rung) {
-        onEvent(PhotosGridEvent(rung = PhotosGridEvent.RungChanged(rung = landed.rung)))
-    }
-    if (landed.grain != state.grain) {
-        onEvent(PhotosGridEvent(grain = PhotosGridEvent.GrainChanged(grain = landed.grain, at_day = day)))
-    }
+/** The lightbox route the library hands out: its template with the tapped photograph's id set. */
+private fun lightboxRoute(data: PhotosLibraryData, photoId: String): Route? {
+    val template = data.open_ ?: return null
+    val args = template.photos_lightbox ?: return null
+    return template.copy(photos_lightbox = args.copy(photo_id = photoId))
 }
+
+private fun pinched(scale: Float, day: String): PhotosHomeEvent =
+    PhotosHomeEvent(pinched = PhotosPinched(scale = scale, at_day = day))
+
+private fun selectionMode(on: Boolean): PhotosSelectionEvent =
+    PhotosSelectionEvent(mode = PhotosSelectionEvent.ModeSet(selecting = on))
+
+private fun toggled(photoId: String): PhotosSelectionEvent =
+    PhotosSelectionEvent(toggled = PhotosSelectionEvent.Toggled(photo_id = photoId))
+
+private fun pickedSet(ids: List<String>, picked: Boolean): PhotosSelectionEvent =
+    PhotosSelectionEvent(set_ = PhotosSelectionEvent.SetPicked(photo_ids = ids, selected = picked))
 
 /** Keep [visibleDay] on the day at the top of the list as it scrolls. */
 @Composable
 private fun ReportVisibleDay(listState: LazyListState, visibleDay: MutableState<String>, dayAt: (Int) -> String) {
-    val probe by androidx.compose.runtime.rememberUpdatedState(dayAt)
+    val probe by rememberUpdatedState(dayAt)
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex }.collect { index -> visibleDay.value = probe(index) }
     }
@@ -345,13 +280,18 @@ private fun ReportVisibleDay(listState: LazyListState, visibleDay: MutableState<
  * member who scrolls away is not pulled back on the next recomposition.
  */
 @Composable
-private fun LandOnDay(listState: LazyListState, rows: List<LibraryRow>, day: String) {
+private fun LandOnDay(listState: LazyListState, data: PhotosLibraryData, day: String) {
     var landed by remember { mutableStateOf("") }
-    LaunchedEffect(day, rows) {
+    LaunchedEffect(day, data.rows) {
         if (day.isEmpty() || day == landed) return@LaunchedEffect
-        val index = rows.indexOfFirst { it is LibraryRow.Day && it.day == day }
-            .takeIf { it >= 0 }
-            ?: rows.indexOfFirst { it is LibraryRow.Month && day.startsWith(it.day.take(7)) && it.day.isNotEmpty() }
+        val rows = data.rows
+        val index = rows.indexOfFirst {
+            it.kind == centraid.core.v1.PhotosRowKind.PHOTOS_ROW_KIND_DAY && it.day == day
+        }.takeIf { it >= 0 }
+            ?: rows.indexOfFirst {
+                it.kind == centraid.core.v1.PhotosRowKind.PHOTOS_ROW_KIND_MONTH &&
+                    it.day.isNotEmpty() && day.startsWith(it.day.take(7))
+            }
         if (index >= 0) {
             landed = day
             // Item 0 is the top slot, so a row's item is its index + 1.
@@ -361,46 +301,25 @@ private fun LandOnDay(listState: LazyListState, rows: List<LibraryRow>, day: Str
 }
 
 /**
- * THE HEADER WHILE SELECTING: the count, as v0's room swapped it in place.
- * Outside a selection the header is the machine's `chrome.title`.
- */
-internal fun photosSelectionTitle(count: Int): String = when (count) {
-    0 -> PhotosCopy.PHOTOS_GRID_SELECT
-    1 -> PhotosCopy.PHOTOS_GRID_SELECTED_ONE
-    else -> PhotosCopy.PHOTOS_GRID_SELECTED_MANY.replace("{count}", "$count")
-}
-
-/**
  * THE SELECTION BAR, IN THE BAND'S PLACE (Apple Photos; v0's room took the
  * band away under a selection so a tap aimed at Trash could not land on a
- * destination). Drawn by `MainActivity`'s Photos foot in place of `AppBand`
- * while the library is selecting — the band components themselves are not
- * touched.
+ * destination). Drawn in place of `AppBand` while the library is selecting —
+ * the band components themselves are not touched.
  *
  * The band's grammar: one elevated plate on the pill rung with a hairline, a
  * mark over a word per verb. With nothing picked every verb is drawn DISABLED
  * rather than hidden, so the bar does not move under the member's thumb as
- * they pick. Favorite says "Unfavorite" under the Favorites filter, where
- * every photograph on screen already is one. Trash is confirmed first.
- *
- * "Back up" is NOT here, though v0 had it: v0's grid merged camera-roll
- * photographs that were not yet in any vault, and backing one up was a verb
- * on it. Every tile of this grid IS a vault row — the phone is the vault — so
- * there is nothing on screen for a per-selection backup to carry.
- *
- * "Send a copy" is the shelf's batch hand-off (`PhotoShelfCopies.kt`) over the
- * library's pick: [onSendCopy] carries the pick and the member's one answer to
- * how much of the place travels, asked here once for all of them (#816).
+ * they pick. Which verbs the bar offers, their words and whether each is
+ * enabled are Rust's (`PhotosSelection.actions`); "Send a copy" is the
+ * library's own and asks which location travels before it goes.
  */
 @Composable
-public fun PhotosSelectionBar(
-    state: PhotosGridState,
-    onEvent: (PhotosGridEvent) -> Unit,
-    onSendCopy: (assetIds: List<String>, export: ShelfExport.Send) -> Unit,
+internal fun PhotosSelectionBar(
+    selection: PhotosSelection,
+    sendCopyLabel: String,
+    onEvent: (PhotosHomeEvent) -> Unit,
 ) {
-    val armed = state.selected.isNotEmpty()
-    var choosingPlace by remember { mutableStateOf(false) }
-    val favorites = state.filter == PhotosGridState.Filter.FILTER_FAVORITES
+    val armed = selection.selected_ids.isNotEmpty()
     Row(
         Modifier
             .fillMaxWidth()
@@ -424,42 +343,34 @@ public fun PhotosSelectionBar(
                 .padding(BandPolicy.BAND_PLATE_PAD.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            SelectionVerb("FolderPlus", PhotosCopy.PHOTOS_ADD_TO_ALBUM, armed, Modifier.weight(1f)) {
-                onEvent(PhotosGridEvent(album_choice_opened = AlbumChoiceOpened()))
-            }
-            SelectionVerb("Heart", if (favorites) PhotosCopy.PHOTOS_UNFAVORITE else PhotosCopy.PHOTOS_FAVORITE, armed, Modifier.weight(1f)) {
-                onEvent(
-                    PhotosGridEvent(
-                        favorite_selected = PhotosGridEvent.FavoriteSelected(favorite = !favorites),
-                    ),
-                )
-            }
-            SelectionVerb("Share", PhotosCopy.PHOTOS_SEND_COPY, armed, Modifier.weight(1f)) {
-                choosingPlace = true
-            }
-            SelectionVerb("Trash", "Trash", armed, Modifier.weight(1f)) {
-                onEvent(PhotosGridEvent(sheet = PhotosGridEvent.SheetChanged(PhotosGridState.Sheet.SHEET_CONFIRM_TRASH)))
+            selection.actions.forEach { action ->
+                SelectionVerb(verbIcon(action.kind), action.label, action.enabled, Modifier.weight(1f)) {
+                    onEvent(
+                        PhotosHomeEvent(
+                            selection = PhotosSelectionEvent(action = PhotosSelectionEvent.ActionTapped(kind = action.kind)),
+                        ),
+                    )
+                }
+                // "SEND A COPY" SITS BESIDE THE HEART, as the bar always had it.
+                if (action.kind == PhotosBatchAction.Kind.KIND_FAVORITE ||
+                    action.kind == PhotosBatchAction.Kind.KIND_UNFAVORITE
+                ) {
+                    SelectionVerb("Share", sendCopyLabel, armed, Modifier.weight(1f)) {
+                        onEvent(PhotosHomeEvent(copy_asked = centraid.core.v1.PhotosCopyAsked()))
+                    }
+                }
             }
         }
     }
+}
 
-    // HOW MUCH OF THE PLACE TRAVELS, asked every time (#816) — the shelf's two
-    // answers, for the shelf's reason: a place NAME is one sentence per
-    // photograph, and a batch has as many places as photographs.
-    if (choosingPlace) {
-        OptionSheet(
-            title = PhotosCopy.PHOTOS_SEND_PLACE_TITLE,
-            options = listOf(
-                SheetOption(key = "none", label = PhotosCopy.PHOTOS_SEND_NO_LOCATION),
-                SheetOption(key = "exact", label = PhotosCopy.PHOTOS_SEND_EXACT_LOCATION),
-            ),
-            onPick = { key ->
-                choosingPlace = false
-                onSendCopy(state.selected, ShelfExport.Send(keepLocation = key == "exact"))
-            },
-            onDismiss = { choosingPlace = false },
-        )
-    }
+private fun verbIcon(kind: PhotosBatchAction.Kind): String = when (kind) {
+    PhotosBatchAction.Kind.KIND_ADD_TO_ALBUM -> "FolderPlus"
+    PhotosBatchAction.Kind.KIND_FAVORITE, PhotosBatchAction.Kind.KIND_UNFAVORITE -> "Heart"
+    PhotosBatchAction.Kind.KIND_TRASH, PhotosBatchAction.Kind.KIND_DELETE_FOREVER -> "Trash"
+    PhotosBatchAction.Kind.KIND_RESTORE -> "Undo"
+    PhotosBatchAction.Kind.KIND_ARCHIVE, PhotosBatchAction.Kind.KIND_UNARCHIVE -> "Archive"
+    else -> "Check"
 }
 
 @Composable
@@ -498,31 +409,18 @@ private fun SelectionVerb(
     }
 }
 
-private fun trashQuestion(count: Int): String =
-    if (count == 1) {
-        PhotosCopy.PHOTOS_TRASH_ONE
-    } else {
-        PhotosCopy.PHOTOS_TRASH_MANY.replace("{count}", "$count")
-    }
-
-/** What the trash confirm says, once, on both shells. */
-private const val TRASH_KEEPS_THE_ROLL: String = PhotosCopy.PHOTOS_TRASH_BODY
-
 /**
- * THE CAMERA-ROLL BANNER, AS THE MACHINE DECIDED IT (`PhotosGridMachine.importBanner`):
- * unset when there is nothing to say or do, so a library with photographs and
- * an import that is done draws no line at all, and "Import now" is offered
- * only over an empty library. This view decides none of it.
+ * THE CAMERA-ROLL BANNER, AS RUST DECIDED IT: unset when there is nothing to say
+ * or do, so a library with photographs and an import that is done draws no line
+ * at all, and "Import now" is offered only over an empty library. This view
+ * decides none of it; a remedy's tap is an event, and the shell performs it when
+ * Rust asks (`session/ShellEffects.kt`).
  */
 @Composable
-private fun BackupBanner(
-    state: PhotosGridState,
-    onEvent: (PhotosGridEvent) -> Unit,
-    onBackUpNow: () -> Unit,
-) {
-    val answered = { onEvent(PhotosGridEvent(permission_requested = PhotosGridEvent.PermissionRequested())) }
-    PhotoAccessRefresh(state.permission, answered)
-    val banner = state.import_banner ?: return
+private fun BackupBanner(banner: PhotosHomeImportBanner, onEvent: (PhotosHomeEvent) -> Unit) {
+    val remedy = { which: PhotosHomeImportBanner.Remedy ->
+        onEvent(PhotosHomeEvent(remedy = centraid.core.v1.PhotosBannerRemedy(remedy = which)))
+    }
     Column(Modifier.padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 8.dp)) {
         if (banner.sentence.isNotEmpty()) {
             Text(text = banner.sentence, style = centraidType("small"), color = centraidColor("text"))
@@ -530,187 +428,207 @@ private fun BackupBanner(
         if (banner.reason.isNotEmpty()) {
             Text(text = banner.reason, style = centraidType("small"), color = centraidColor("textSoft"))
         }
-        // AN OS PERMISSION IS A STATE, and each state has its own remedy
-        // (`PhotoAccessRemedy`); the answer comes back as `PermissionRequested`,
-        // whose runner reads the grant fresh.
+        // AN OS PERMISSION IS A STATE, and each state has its own remedy.
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            PhotoAccessRemedy(banner, answered)
+            when (banner.remedy) {
+                PhotosHomeImportBanner.Remedy.REMEDY_ASK ->
+                    KitLink(banner.allow_label, onClick = { remedy(PhotosHomeImportBanner.Remedy.REMEDY_ASK) })
+
+                // On Android "denied" is also what a grant nobody has asked for reads
+                // as, so the prompt is offered beside Settings.
+                PhotosHomeImportBanner.Remedy.REMEDY_SETTINGS -> {
+                    KitLink(banner.settings_label, onClick = { remedy(PhotosHomeImportBanner.Remedy.REMEDY_SETTINGS) })
+                    KitLink(banner.allow_label, onClick = { remedy(PhotosHomeImportBanner.Remedy.REMEDY_ASK) })
+                }
+
+                PhotosHomeImportBanner.Remedy.REMEDY_MANAGE_SELECTION ->
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        KitLink(banner.manage_label, onClick = { remedy(PhotosHomeImportBanner.Remedy.REMEDY_MANAGE_SELECTION) })
+                    }
+
+                PhotosHomeImportBanner.Remedy.REMEDY_UNSPECIFIED -> Unit
+            }
             if (banner.import_now) {
-                KitLink(label = banner.import_now_label, onClick = onBackUpNow)
+                KitLink(label = banner.import_now_label, onClick = { onEvent(PhotosHomeEvent(import_now = PhotosImportNow())) })
             }
         }
-    }
-}
-
-/** A wait still says what it has already carried. */
-private fun waitingLine(sentence: String, backup: BackupState): String {
-    val done = backup.assets_transferred_this_session
-    if (done == 0) return sentence
-    return sentence + " " + PhotosCopy.PHOTOS_IMPORT_WAIT_COUNTS
-        .replace("{done}", "$done")
-        .replace("{left}", "${backup.assets_remaining}")
-}
-
-private fun phaseLabel(state: PhotosGridState): String {
-    val backup = state.backup ?: return ""
-    val transferred = backup.assets_transferred_this_session
-    return when (backup.phase) {
-        BackupState.Phase.PHASE_TRANSFERRING ->
-            PhotosCopy.PHOTOS_IMPORT_PROGRESS
-                .replace("{done}", "$transferred")
-                .replace("{left}", "${backup.assets_remaining}")
-        BackupState.Phase.PHASE_ENUMERATING -> PhotosCopy.PHOTOS_IMPORT_LOOKING
-        BackupState.Phase.PHASE_WAITING_FOR_POWER -> waitingLine(PhotosCopy.PHOTOS_IMPORT_WAIT_POWER, backup)
-        BackupState.Phase.PHASE_WAITING_FOR_UNMETERED -> waitingLine(PhotosCopy.PHOTOS_IMPORT_WAIT_WIFI, backup)
-        BackupState.Phase.PHASE_PARKED_LOW_DISK -> PhotosCopy.PHOTOS_IMPORT_PAUSED_DISK
-        BackupState.Phase.PHASE_DONE ->
-            if (transferred > 0) {
-                PhotosCopy.PHOTOS_IMPORT_DONE_COUNT.replace("{done}", "$transferred")
-            } else {
-                PhotosCopy.PHOTOS_IMPORT_DONE
-            }
-        // IDLE HAS A SENTENCE NOW. An empty string over an empty banner is a
-        // member who cannot tell a backup that is OFF from one that has nothing
-        // to say — the two look identical and only one has a next move.
-        BackupState.Phase.PHASE_IDLE -> PhotosCopy.PHOTOS_IMPORT_OFF
-        BackupState.Phase.PHASE_UNSPECIFIED -> ""
     }
 }
 
 /**
- * THE MORE SHEET, AND THE BACKUP DETAIL BEHIND IT.
+ * THE SHEETS PHOTOS' HOME OPENS: More, the tile sizes, the camera roll's detail,
+ * the location a copy carries, and "Add to album". WHICH ONE IS OPEN IS STATE —
+ * read here, beside the band that opens it, so More works from every band and
+ * not only from the library body.
  *
- * `more` is a sheet and never a destination — the band caps at five, and the
- * type system says so, because `SHEET_MORE` is a `PhotosGridState.Sheet` and
- * there is no `Destination` value it could be. Until now the `⋮` control
- * reduced correctly and drew nothing: the event moved `state.sheet` and neither
- * shell read it, so it was a button that did nothing a member could see.
- *
- * **What Collections does not carry.** v0's sheet holds no row for a shelf
- * Collections already shows — that would be two doors, one hidden — and its
- * foot names what is actually behind this door (`photos-band.ts`). The tile
- * size is here since the header lost its menu (R-CHROME-3); never Search,
- * never the filter.
- *
- * **WHERE THE BACKUP ROW LANDS IS NOT WHERE v0 SENT IT.** v0 deep-linked to the
- * FRAME's `Settings → BackupHealth`, keeping a link rather than a copy because
- * the policy it edits governs Docs' scans and Notes' attachments too. There is
- * no frame Settings in this shell — `Destination.Settings` is declared and
- * nothing renders it — so a row that pushed one would go nowhere. It opens
- * `SHEET_BACKUP_DETAIL` instead, which the state already declares. The deep
- * link comes back when the frame screen does.
- *
- * The SwiftUI twin is `mobile/iosApp/Sources/PhotosMoreSheet.swift`.
+ * `more` is a sheet and never a destination. The rows, the sentences and the
+ * free-up row are Rust's; the SwiftUI twin is `PhotosMoreSheet.swift`.
  */
 @Composable
-internal fun PhotosSheets(
-    state: PhotosGridState,
-    onEvent: (PhotosGridEvent) -> Unit,
-    onBackUpNow: () -> Unit,
-) {
-    // A SWIPE-TO-DISMISS HAS TO REACH THE REDUCER TOO, or the state still says
-    // MORE with nothing on screen and the next press on `⋮` is a no-op — the
-    // shape of bug that makes a control feel broken every second press.
-    val close = { onEvent(PhotosGridEvent(sheet = PhotosGridEvent.SheetChanged(PhotosGridState.Sheet.SHEET_NONE))) }
+internal fun PhotosSheets(state: PhotosHomeState, onEvent: (PhotosHomeEvent) -> Unit) {
+    // A SWIPE-TO-DISMISS HAS TO REACH RUST TOO, or the state still says MORE with
+    // nothing on screen and the next press on `⋮` is a no-op.
+    val sheet = { which: PhotosHomeState.Sheet ->
+        onEvent(PhotosHomeEvent(sheet = PhotosHomeEvent.SheetEvent(sheet = which)))
+    }
+    val close = { sheet(PhotosHomeState.Sheet.SHEET_NONE) }
+    val more = state.more
+    val tileSize = state.tile_size
+    val detail = state.backup_detail
+    val copyPlace = state.copy_place
     when (state.sheet) {
-        PhotosGridState.Sheet.SHEET_MORE ->
-            SheetRoom(title = PhotosCopy.PHOTOS_MORE_TITLE, onDismiss = close) {
-                SheetRow(
-                    label = PhotosCopy.PHOTOS_CAMERA_ROLL,
-                    testTag = "sheet-option-camera-roll",
-                    onTap = {
-                        onEvent(
-                            PhotosGridEvent(
-                                sheet = PhotosGridEvent.SheetChanged(
-                                    PhotosGridState.Sheet.SHEET_BACKUP_DETAIL,
-                                ),
-                            ),
-                        )
-                    },
-                )
-                // THE TILE SIZE, A CHOICE AND NOT A HEADER MENU (R-CHROME-3):
-                // only where a size acts on something on screen, which the
-                // machine says.
-                val chrome = state.chrome
-                if (chrome != null && chrome.tile_size_offered) {
+        PhotosHomeState.Sheet.SHEET_MORE -> if (more != null) {
+            SheetRoom(title = more.title, onDismiss = close) {
+                more.rows.forEach { row ->
                     SheetRow(
-                        label = chrome.tile_size_label,
-                        iconKey = "Grid",
-                        detail = chrome.tile_sizes.getOrElse(state.rung) { "" },
-                        testTag = "sheet-option-tile-size",
+                        label = row.label,
+                        iconKey = if (row.key == "tile_size") "Grid" else null,
+                        detail = row.meta,
+                        testTag = "sheet-option-" + row.key.replace('_', '-'),
                         onTap = {
-                            onEvent(
-                                PhotosGridEvent(
-                                    sheet = PhotosGridEvent.SheetChanged(PhotosGridState.Sheet.SHEET_TILE_SIZE),
-                                ),
+                            sheet(
+                                if (row.key == "tile_size") {
+                                    PhotosHomeState.Sheet.SHEET_TILE_SIZE
+                                } else {
+                                    PhotosHomeState.Sheet.SHEET_BACKUP_DETAIL
+                                },
                             )
                         },
                     )
                 }
-                // ONE CLAUSE ONLY. It said "Everything Photos can show."
-                // over one row, and Photos has a dozen other surfaces —
-                // Places, Duplicates, Trash, Archive,
-                // Favorites, Albums — every one of them reached from
-                // Collections, so the claim was false as printed.
+                // ONE CLAUSE ONLY: every other surface is reached from Collections.
                 Text(
-                    text = PhotosCopy.PHOTOS_MORE_FOOT,
+                    text = more.foot,
                     style = centraidType("small"),
                     color = centraidColor("textSoft"),
                     modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
                 )
-                // "FREE UP SPACE" — a statement, not a button
-                // (`KeepOriginalsViews.kt`).
-                FreeUpSpaceRowView(state.free_up)
+                more.free_up?.let { row -> FreeUpSpaceRowView(row) { onEvent(PhotosHomeEvent(free_up_tapped = PhotosFreeUpTapped())) } }
             }
+        }
 
-        // THE SIZES, XS TO L, the current one checked; picking one closes
-        // the choice (the machine's `RungChanged`).
-        PhotosGridState.Sheet.SHEET_TILE_SIZE -> {
-            val chrome = state.chrome
+        // THE SIZES, XS TO L, the current one checked; picking one closes the choice.
+        PhotosHomeState.Sheet.SHEET_TILE_SIZE -> if (tileSize != null) {
             OptionSheet(
-                title = chrome?.tile_size_label.orEmpty(),
-                options = chrome?.tile_sizes.orEmpty().mapIndexed { rung, label ->
-                    SheetOption(key = "$rung", label = label, selected = rung == state.rung)
-                },
-                onPick = { key ->
-                    onEvent(PhotosGridEvent(rung = PhotosGridEvent.RungChanged(rung = key.toInt())))
-                },
+                title = tileSize.title,
+                options = tileSize.options.map { SheetOption(key = "${it.rung}", label = it.label, selected = it.selected) },
+                onPick = { key -> onEvent(PhotosHomeEvent(rung = key.toInt())) },
                 onDismiss = close,
             )
         }
 
-        PhotosGridState.Sheet.SHEET_BACKUP_DETAIL -> {
-            val backup = state.backup
-            val canImport = backup?.phase != BackupState.Phase.PHASE_TRANSFERRING &&
-                backup?.phase != BackupState.Phase.PHASE_ENUMERATING
+        PhotosHomeState.Sheet.SHEET_BACKUP_DETAIL -> if (detail != null) {
             SheetRoom(
-                title = PhotosCopy.PHOTOS_CAMERA_ROLL,
+                title = detail.title,
                 onDismiss = close,
                 // AN IMPORT, AND ONLY THAT (#1080). No transport row and no
-                // gateway: where the backup stands is the Backup screen's,
-                // read from `backup_status`, and this sheet never claims a
-                // gateway holds anything.
-                primary = SheetPrimary(label = PhotosCopy.PHOTOS_IMPORT_NOW, enabled = canImport, onPress = onBackUpNow),
+                // gateway: where the backup stands is the Backup screen's.
+                primary = SheetPrimary(
+                    label = detail.import_label,
+                    enabled = detail.import_enabled,
+                    onPress = { onEvent(PhotosHomeEvent(import_now = PhotosImportNow())) },
+                ),
+                status = detail.status,
             ) {
                 Column(
                     Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text(text = phaseLabel(state), style = centraidType("body"), color = centraidColor("text"))
-                    if (backup != null && backup.paused_reason.isNotEmpty()) {
-                        // WHY IT IS NOT MOVING, and never inferred from a
-                        // radio: the pass asks the platform for the real
-                        // answer.
+                    detail.rows.forEach { row ->
                         Text(
-                            text = backup.paused_reason,
-                            style = centraidType("small"),
-                            color = centraidColor("textSoft"),
+                            text = row.value_,
+                            style = centraidType(if (row.key == "Status") "body" else "small"),
+                            color = centraidColor(if (row.key == "Status") "text" else "textSoft"),
                         )
                     }
                 }
             }
         }
 
+        // HOW MUCH OF THE PLACE TRAVELS, asked every time (#816): a place NAME is
+        // one sentence per photograph, and a batch has as many places as photographs.
+        PhotosHomeState.Sheet.SHEET_COPY_PLACE -> if (copyPlace != null) {
+            OptionSheet(
+                title = copyPlace.title,
+                options = listOf(
+                    SheetOption(key = "none", label = copyPlace.no_location_label),
+                    SheetOption(key = "exact", label = copyPlace.exact_location_label),
+                ),
+                onPick = { key ->
+                    onEvent(PhotosHomeEvent(copy_place_chosen = PhotosCopyPlaceChosen(keep_location = key == "exact")))
+                },
+                onDismiss = close,
+            )
+        }
+
         else -> Unit
+    }
+
+    // THE SELECTION'S TWO SHEETS: the album choice (one sheet for every "Add to
+    // album") and the trash confirm — a confirm is a sheet (D4).
+    val choice = state.album_choice
+    if (choice != null && choice.open_) {
+        PhotosAlbumChoiceSheet(
+            choice = choice,
+            onEvent = { event -> onEvent(PhotosHomeEvent(album_choice = event)) },
+        )
+    }
+    val selection = state.selection
+    val confirm = selection?.confirm
+    if (selection != null && confirm != null) {
+        ConfirmSheet(
+            confirm = confirm,
+            cancelLabel = selection.cancel_label,
+            onConfirm = {
+                onEvent(PhotosHomeEvent(selection = PhotosSelectionEvent(confirmed = PhotosSelectionEvent.Confirmed())))
+            },
+            onDismiss = {
+                onEvent(PhotosHomeEvent(selection = PhotosSelectionEvent(dismissed = PhotosSelectionEvent.ConfirmDismissed())))
+            },
+        )
+    }
+}
+
+/**
+ * THE MORE SHEET'S "FREE UP SPACE" ROW (#1080 A19). The title, the census's line,
+ * why nothing can be freed (or how much a tap frees) and what the last free-up
+ * came to are Rust's; the action is drawn only while it can act, and holds still
+ * while the system's confirmation is up.
+ *
+ * The SwiftUI twin is `FreeUpSpaceRow` in `PhotosMoreSheet.swift`.
+ */
+@Composable
+private fun FreeUpSpaceRowView(row: PhotosFreeUpRow, onFree: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+            // ONE SPOKEN ELEMENT: the title and the census's line.
+            .semantics(mergeDescendants = true) {},
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            CentraidIcon(iconKey = "Gauge", tint = centraidColor("text"))
+            Column {
+                Text(text = row.title, style = centraidType("body"), color = centraidColor("text"))
+                Text(text = row.meta, style = centraidType("small"), color = centraidColor("textSoft"))
+            }
+        }
+        if (row.reason.isNotEmpty()) {
+            Text(text = row.reason, style = centraidType("small"), color = centraidColor("textSoft"))
+        }
+        if (row.action_label.isNotEmpty()) {
+            KitLink(label = row.action_label, onClick = onFree, enabled = row.enabled)
+        }
+        if (row.notice.isNotEmpty()) {
+            Text(text = row.notice, style = centraidType("small"), color = centraidColor("textSoft"))
+        }
+        // WHAT A PHOTO DELETED FOR GOOD COSTS THE BACKUP DEVICE (#1080 F5).
+        if (row.retention.isNotEmpty()) {
+            Text(text = row.retention, style = centraidType("small"), color = centraidColor("textSoft"))
+        }
     }
 }

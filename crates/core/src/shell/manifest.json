@@ -1,0 +1,330 @@
+{
+  "manifestVersion": 1,
+  "id": "shell",
+  "name": "Shell",
+  "description": "What the shell itself reads and writes, which is not one app's: the chat's history, and (in the blocks the other shell lanes add) Home, search and the vault's plumbing. It is parsed like an app manifest and is not one of the eight apps: the assistant's catalogue and the training harness do not carry it.",
+  "version": "0.1.0",
+  "queries": [
+    {
+      "name": "holdings",
+      "kind": "vault",
+      "figures": ["loaded", "foreground", "vaults"],
+      "description": "(vault plumbing, lane H2) The vaults this phone holds: each one's id, name and how it stands (in front, resting, keyed, kept on its own words, frozen with the date and the count of changes no gateway acknowledged), the one in front first. Answered by the shelf, not by a vault: it is the one shell read the front core keeps for itself.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "chats",
+      "kind": "chat_thread",
+      "figures": ["threads", "corrected"],
+      "description": "The chat drawer's list, newest activity first; with a term, the chats it finds by title and by the member's own words, best first, with the words it corrected a typo to.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "chat",
+      "kind": "chat_thread",
+      "figures": ["found", "thread", "messages"],
+      "description": "One stored chat and its messages, oldest first, each with its cards and attachments as they were said.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["thread_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "chat-card",
+      "kind": "chat_thread",
+      "figures": ["exists"],
+      "description": "Whether the row a stored card names is still in the vault.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entity": {
+            "type": "string",
+            "minLength": 1
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["app", "entity", "id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "files-followed",
+      "kind": "followed_folder",
+      "figures": ["folders"],
+      "description": "(imports, lane I) The folders the vault follows, with the documents each still holds and each file's last stated stat, so a rescan of an unchanged folder reads no bytes.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "backup-status",
+      "kind": "backup",
+      "figures": [
+        "destinations",
+        "acked_at_ms",
+        "last_snapshot_ms",
+        "content_total",
+        "content_confirmed",
+        "pending_bytes",
+        "spool_bytes",
+        "waiting",
+        "frozen",
+        "now_ms"
+      ],
+      "description": "(backup, lane H2) Where this vault's backup stands, read from the phone's own ledger without dialling anyone: the gateways it is paired with, when one last acknowledged the head (the gateway's clock), how many photos and files are confirmed of how many the vault knows, what waits and why, and this phone's clock for wording. Re-read whenever a pass, a pairing or a forget moves the ledger, or the vault's files change.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search",
+      "kind": "search_hit",
+      "figures": ["matches"],
+      "description": "Home's vault search: every searchable app's rows for one term in one answer (notes, people, agenda, tasks, photos, docs, Locker items by their plain text, and the named containers and chat threads), at most eight of each kind, under the owner. Blank answers no hits. `corrected` names the words searched when the typed ones found little and a correction added rows.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "hits": {
+            "type": "array"
+          },
+          "corrected": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ],
+  "actions": [
+    {
+      "name": "rename-chat",
+      "verb": "edit",
+      "kind": "chat_thread",
+      "inverse": null,
+      "sealed": ["title"],
+      "command": "thread.rename",
+      "phrasings": [
+        "rename this chat",
+        "call this chat something else",
+        "change the title of this chat"
+      ],
+      "description": "Rename a stored chat through thread.rename.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["thread_id", "title"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "delete-chat",
+      "verb": "purge",
+      "kind": "chat_thread",
+      "inverse": null,
+      "sealed": [],
+      "command": "entity.purge",
+      "phrasings": [
+        "delete this chat",
+        "remove this conversation",
+        "forget this chat"
+      ],
+      "description": "Delete one stored chat with its messages for good through entity.purge: a chat has no trash.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "clear-chats",
+      "verb": "purge",
+      "kind": "chat_thread",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "thread.clear",
+      "phrasings": [
+        "delete all my chats",
+        "clear every conversation",
+        "wipe the chat history"
+      ],
+      "description": "Delete every stored chat in this vault for good through thread.clear.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "follow-files",
+      "verb": "import",
+      "kind": "followed_folder",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "follow.files",
+      "phrasings": [
+        "follow this folder",
+        "keep a folder of files in step",
+        "import the files of a folder"
+      ],
+      "description": "(imports, lane I) Follow a folder of the phone's files through follow.files, one folder at a time: a file the vault lacks becomes a document in the folder's own Docs folder, a changed file a new revision, one gone from a complete read goes to the trash if the member never touched it.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "origin": {
+            "type": "object",
+            "properties": {
+              "ref": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "device_id": {
+                "type": ["string", "null"]
+              },
+              "fills": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": ["ref", "label"],
+            "additionalProperties": false
+          },
+          "records": {
+            "type": "array"
+          },
+          "complete": {
+            "type": "boolean"
+          }
+        },
+        "required": ["origin", "records"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "claim-bytes",
+      "verb": "attach",
+      "kind": "followed_folder",
+      "inverse": null,
+      "sealed": [],
+      "command": "blob.stage",
+      "phrasings": [
+        "claim the bytes I just staged",
+        "name the staged file",
+        "count the staged bytes"
+      ],
+      "description": "(imports, lane I) Name bytes the stage door stored through blob.stage, at the size the core counted, so no stored bytes sit in the vault that nothing names.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "hash": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["hash", "size"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "stop-following-files",
+      "verb": "detach",
+      "kind": "followed_folder",
+      "inverse": null,
+      "sealed": [],
+      "command": "follow.stop",
+      "phrasings": [
+        "stop following this folder",
+        "unfollow a folder",
+        "forget this folder's link"
+      ],
+      "description": "(imports, lane I) Stop following a folder through follow.stop: its sources are forgotten and the origin retired; every document stays.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "system": {
+            "type": "string",
+            "enum": ["files"]
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["system", "ref"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

@@ -1,17 +1,14 @@
 package dev.centraid.android.theme
 
-import centraid.screen.v1.Money
+import dev.centraid.android.kit.Money
 import java.io.File
 import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * ONE MONEY LAW, THIS SHELL'S HALF (K5): the real [formatMoney] over every case
+ * ONE MONEY LAW, THIS SHELL'S HALF: the real [formatMoney] over every case
  * in `contracts/screens/money-render.json`, on the JVM with no device.
- *
- * `:shared`'s `KitTimeMoneyCopySpec` mirrors the function; this runs the
- * function itself, so the mirror and the shell cannot drift apart unnoticed.
  */
 class MoneyRenderTest {
     private val fixture: String by lazy {

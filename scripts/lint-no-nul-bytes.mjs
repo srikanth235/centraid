@@ -27,12 +27,10 @@ const ROOT = path.resolve(import.meta.dirname, "..");
  * Extensions whose files are binary by construction, so a NUL says nothing.
  *
  * Images and app icons, the vendored web fonts, the gradle wrapper jar, the
- * encoded screen fixtures under `contracts/screens/` (`.bin`) and the gzipped
- * golden vaults under `contracts/golden/` (`.gz`). Every one of them is already opaque
- * to textual review and nothing about that is a defect.
+ * gzipped golden vaults under `contracts/golden/` (`.gz`). Every one of them is
+ * already opaque to textual review and nothing about that is a defect.
  */
 export const BINARY_EXTS = Object.freeze([
-  ".bin",
   ".gz",
   ".icns",
   ".ico",

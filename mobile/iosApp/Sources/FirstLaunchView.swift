@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// THE FIRST-LAUNCH GATE: what a device that holds no vault opens onto, in
 /// place of Home.
 ///
@@ -31,16 +29,16 @@ import CentraidShared
 ///
 /// ## Nothing here decides anything
 ///
-/// Whether this screen is up is `ShellModel.holdsNoVault`, the shared shelf's
-/// answer; what each door does is the shell's existing entry point —
-/// `makeVault()` opens `words.make`, which decides whether this phone mints
-/// words, makes from a seed it holds, or must restore first, and
-/// `openRestore()` opens `words.enter`. Both present the root words sheet over
+/// Whether this screen is up, and every word on it, is Rust's Home
+/// (`HomeState.first_launch`, set while the shelf holds no vault). Its two doors
+/// are Home's events: Make (`MakePressed`) and Restore (`RestorePressed`), which
+/// Rust turns into the words' pages (`words.make` decides whether this phone
+/// mints words, makes from a seed it holds, or must restore first) pushed over
 /// this screen, so **cancelling out of either lands back here**, and the gate
-/// goes only when a vault is held — the shelf says so, and Home takes its
-/// place behind the sheet's last screen.
+/// goes only when a vault is held.
 struct FirstLaunchView: View {
-    @ObservedObject var shell: ShellModel
+    let gate: Centraid_Core_V1_HomeFirstLaunch
+    @ObservedObject var store: ScreenStore
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var page = 0
@@ -56,7 +54,7 @@ struct FirstLaunchView: View {
                 // SKIP LEAVES ON THE LAST PAGE, which has nowhere further to
                 // skip to; its place is kept so the header never reflows.
                 if page < Self.last {
-                    KitLink(label: HomeWords.shared.FIRST_LAUNCH_SKIP, identifier: "first-launch-skip") {
+                    KitLink(label: gate.skipLabel, identifier: "first-launch-skip") {
                         page = Self.last
                     }
                 } else {
@@ -70,12 +68,9 @@ struct FirstLaunchView: View {
             Spacer(minLength: 0)
 
             ZStack {
-                slip(0, title: HomeWords.shared.FIRST_LAUNCH_HOUSE_TITLE,
-                     sentence: HomeWords.shared.FIRST_LAUNCH_HOUSE_BODY, id: "house") { HouseScene() }
-                slip(1, title: HomeWords.shared.FIRST_LAUNCH_ASSISTANT_TITLE,
-                     sentence: HomeWords.shared.FIRST_LAUNCH_ASSISTANT_BODY, id: "assistant") { AssistantScene() }
-                slip(2, title: HomeWords.shared.FIRST_LAUNCH_BACKUP_TITLE,
-                     sentence: HomeWords.shared.FIRST_LAUNCH_BACKUP_BODY, id: "backup") { CopyScene() }
+                slip(0, id: "house") { HouseScene(apps: gate.apps) }
+                slip(1, id: "assistant") { AssistantScene() }
+                slip(2, id: "backup") { CopyScene() }
             }
             .frame(maxWidth: 300)
             .frame(height: Self.slipHeight)
@@ -93,14 +88,14 @@ struct FirstLaunchView: View {
             // a quiet link for the way back. One ink element per view, so
             // "Next" and "Make a vault" are the same button changing its verb.
             WordsControls(
-                primary: page < Self.last ? HomeWords.shared.FIRST_LAUNCH_NEXT : HomeWords.shared.FIRST_LAUNCH_MAKE,
+                primary: page < Self.last ? gate.nextLabel : gate.makeLabel,
                 primaryEnabled: true,
-                secondary: HomeWords.shared.FIRST_LAUNCH_RESTORE,
+                secondary: gate.restoreLabel,
                 prefix: "first-launch",
                 onPrimary: {
-                    if page < Self.last { page += 1 } else { shell.makeVault() }
+                    if page < Self.last { page += 1 } else { store.sendHome(.make(.init())) }
                 },
-                onSecondary: { shell.openRestore() }
+                onSecondary: { store.sendHome(.restore(.init())) }
             )
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.bottom, 24)
@@ -134,9 +129,13 @@ struct FirstLaunchView: View {
     /// (already read) it leaves up and to the left; the top one follows the
     /// finger; the two behind step down and in, tilted a little apart.
     private func slip<Scene: View>(
-        _ index: Int, title: String, sentence: String, id: String,
+        _ index: Int, id: String,
         @ViewBuilder scene: @escaping () -> Scene
     ) -> some View {
+        // THE SLIDE'S WORDS ARE RUST'S, in the order it lists them.
+        let slide = index < gate.slides.count ? gate.slides[index] : Centraid_Core_V1_HomeFirstLaunchSlide()
+        let title = slide.title
+        let sentence = slide.body
         let rel = index - page
         let tilt = [-2.0, 1.5, -1.0][index]
         let depth = CGFloat(min(max(rel, 0), 2))
@@ -202,16 +201,16 @@ private struct FirstLaunchSlip<Scene: View>: View {
 }
 
 /// EVERY APP'S MARK AS ONE HOUSE: rooms in one place, not separate products.
-/// The marks are Home's own roster (`FirstLaunch.APPS`, #1129), so an app that
-/// gets a tile is in the house too; five to a row at 40pt is the same width the
-/// grid always took, and fits the narrowest phone's slip.
+/// The marks are Home's own roster (`HomeFirstLaunch.apps`, #1129), so an app
+/// that gets a tile is in the house too; five to a row at 40pt is the same width
+/// the grid always took, and fits the narrowest phone's slip.
 private struct HouseScene: View {
-    private static let apps = FirstLaunch.shared.APPS
+    let apps: [String]
 
     var body: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.fixed(40), spacing: 8), count: 5),
                   spacing: 12) {
-            ForEach(Self.apps, id: \.self) { AppMark(appID: $0, size: 40) }
+            ForEach(apps, id: \.self) { AppMark(appID: $0, size: 40) }
         }
         .padding(.top, 18)
         .frame(height: 150, alignment: .top)
@@ -313,8 +312,8 @@ private struct CopyScene: View {
     }
 }
 
-/// THE FRAME BEFORE THE SHELF HAS READ ITS DIRECTORY (`ShellModel.holdsNoVault`
-/// is nil): the page and nothing on it, so neither the gate nor Home is drawn
+/// THE FRAME BEFORE HOME HAS DRAWN (the core opening, the shelf reading its
+/// directory): the page and nothing on it, so neither the gate nor Home is drawn
 /// for an answer that has not arrived.
 struct BarePaper: View {
     @Environment(\.colorScheme) private var scheme

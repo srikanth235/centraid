@@ -1,66 +1,67 @@
 import SwiftUI
 
-import CentraidShared
+/// The home's events, built once.
+enum LockerHomeEvents {
+    static func make(_ build: (inout Centraid_Core_V1_LockerHomeEvent) -> Void) -> Centraid_Core_V1_LockerHomeEvent {
+        var event = Centraid_Core_V1_LockerHomeEvent()
+        build(&event)
+        return event
+    }
+}
 
 /// LOCKER'S HOME — Items · Review · Generate, More as a sheet (#1047; the
 /// handoff's Locker §1). Search is the room's bar (R-CHROME-2), never a tab;
 /// the Items filters are the room's chip row (R-CHROME-3).
 ///
 /// **THE VIEW DECIDES NOTHING.** The band (empty while locked), the filter
-/// pills, the rows, the review verdicts, the search note, every empty and
-/// every word are `LockerHomeState`'s; the wall is `LockerLockState`'s.
-/// GENERATE draws the generator's own state (`LockerGeneratorState`) in the
-/// band's slot, on its own bridge.
+/// pills, the rows, the review verdicts, the generator, the search note, every
+/// empty and every word are `LockerHomeState`'s (Rust); the wall is its `wall`.
+/// A row, the add control and a More row carry the `Route` to push.
 struct LockerHomeView: View {
-    let data: Data
-    let lock: Data
-    let generator: Data
-    let send: (Data) -> Void
-    let sendLock: (Data) -> Void
-    let sendGenerator: (Data) -> Void
-    /// The generator's "Put it on an item": the shell's own editor route.
-    let onUseGenerated: () -> Void
+    let state: Centraid_Core_V1_LockerHomeState
+    let send: (Centraid_Core_V1_LockerHomeEvent) -> Void
+    let sendWall: (Centraid_Core_V1_LockerWallEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
+    let onWords: () -> Void
     let onHome: () -> Void
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_LockerHomeState {
-        (try? Centraid_Screen_V1_LockerHomeState(serializedBytes: data)) ?? .init()
-    }
-
-    static func event(_ build: (inout Centraid_Screen_V1_LockerHomeEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_LockerHomeEvent()
-        build(&event)
-        return event.encoded
-    }
-
-    private func content(_ state: Centraid_Screen_V1_LockerHomeState) -> ScreenContent<Centraid_Screen_V1_LockerHomeData> {
+    private var content: ScreenContent<Centraid_Core_V1_LockerHomeData> {
         switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
+        case .loading?, nil: return .loading(true)
         case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .denied(denied)?: return .gated(denied)
         case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
         }
     }
 
+    private var searchField: KitSearchField {
+        var field = KitSearchField()
+        field.open = state.search.open
+        field.term = state.search.term
+        field.corrected = state.search.corrected
+        return field
+    }
+
     var body: some View {
-        let state = state
-        let lockState = Centraid_Screen_V1_LockerLockState.of(lock)
-        let covered = lockState.covers
-        let content = content(state)
+        let covered = state.hasWall
+        let content = content
         AppPlace(
             app: "locker",
             title: state.chrome.title,
             trailing: covered || content.isDenied || state.chrome.addLabel.isEmpty
                 ? nil
-                : RoomAction(iconKey: "Plus", label: state.chrome.addLabel, identifier: "locker-add", action: addItem),
+                : RoomAction(iconKey: "Plus", label: state.chrome.addLabel, identifier: "locker-add") {
+                    open(state.chrome.addRoute)
+                },
             search: covered || content.isDenied ? nil : SearchSlot(
-                field: state.search,
+                field: searchField,
                 placeholder: state.chrome.searchPlaceholder,
-                onOpen: { send(Self.event { $0.searchOpened = .init() }) },
-                onTerm: { term in send(Self.event { $0.searchTyped = .with { $0.term = term } }) },
-                onClose: { send(Self.event { $0.searchClosed = .init() }) }
+                closeLabel: state.chrome.closeLabel,
+                onOpen: { send(LockerHomeEvents.make { $0.searchOpened = .init() }) },
+                onTerm: { term in send(LockerHomeEvents.make { $0.searchTyped = .with { $0.term = term } }) },
+                onClose: { send(LockerHomeEvents.make { $0.searchClosed = .init() }) }
             ),
             chips: covered ? [] : filterChips(content),
             showsBand: !content.isDenied
@@ -70,31 +71,27 @@ struct LockerHomeView: View {
                 tabs: covered ? [] : state.band.map { tab in
                     BandView(
                         label: tab.label,
-                        event: Self.event { $0.band = .with { $0.key = tab.key } },
+                        event: Data(tab.key.utf8),
                         iconKey: tab.iconKey,
-                        selected: tab.current
+                        selected: tab.current,
+                        key: tab.key
                     )
                 },
-                onSelect: send,
+                onSelect: { picked in
+                    let key = String(decoding: picked, as: UTF8.self)
+                    send(LockerHomeEvents.make { $0.band = .with { $0.key = key } })
+                },
                 onHome: onHome
             )
         } content: {
-            if covered {
-                LockerWall(lock: lockState, sendLock: sendLock)
+            if let wall = state.wall {
+                LockerWallView(wall: wall, send: sendWall, onWords: onWords)
             } else {
-                // OPEN, AND SHIELDED FROM CAPTURE while the gate says `secure`.
-                LockerShield(lock: lock) { unlocked(state, content) }
+                // OPEN, AND SHIELDED FROM CAPTURE while Rust says `secure`.
+                LockerShield(secure: state.secure) { unlocked(content) }
             }
         }
-        // THE GENERATOR OPENS WHEN ITS TAB DOES: it reads nothing, and a
-        // candidate is minted on its own `Opened`.
-        .onChange(of: state.destination) { _, destination in
-            if destination == .generate { sendGenerator(LockerGeneratorView.event { $0.opened = .init() }) }
-        }
-        .onAppear {
-            if state.destination == .generate { sendGenerator(LockerGeneratorView.event { $0.opened = .init() }) }
-        }
-        .sheet(isPresented: sheetBinding(state, .more)) {
+        .sheet(isPresented: sheetBinding(.more)) {
             OptionSheet(title: state.chrome.moreTitle) {
                 ForEach(state.chrome.moreRows, id: \.key) { row in
                     SheetRow(
@@ -106,7 +103,7 @@ struct LockerHomeView: View {
                 }
             }
         }
-        .sheet(isPresented: sheetBinding(state, .facts)) {
+        .sheet(isPresented: sheetBinding(.facts)) {
             SheetRoom(title: state.chrome.factsTitle) {
                 VStack(spacing: 0) {
                     ForEach(Array(state.chrome.facts.enumerated()), id: \.offset) { _, fact in
@@ -117,38 +114,31 @@ struct LockerHomeView: View {
         }
     }
 
-    /// What an open Locker draws under its header: the generator in the
-    /// band's slot, else the tab's list.
+    /// What an open Locker draws under its header: the tab's list, or the generator.
     @ViewBuilder
-    private func unlocked(
-        _ state: Centraid_Screen_V1_LockerHomeState,
-        _ content: ScreenContent<Centraid_Screen_V1_LockerHomeData>
-    ) -> some View {
-        if state.destination == .generate {
-            LockerGeneratorView(
-                data: generator,
-                send: sendGenerator,
-                onUse: {
-                    sendGenerator(LockerGeneratorView.event { $0.use = .init() })
-                    onUseGenerated()
-                }
-            )
-        } else {
-            ReadStateView(
-                content: content,
-                onRetry: { send(Self.event { $0.refreshed = .init() }) }
-            ) { home in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        switch state.destination {
-                        case .review: review(home)
-                        case .search: search(home, state)
-                        default: items(home, state)
-                        }
+    private func unlocked(_ content: ScreenContent<Centraid_Core_V1_LockerHomeData>) -> some View {
+        ReadStateView(
+            content: content,
+            onRetry: { send(LockerHomeEvents.make { $0.refreshed = .init() }) }
+        ) { home in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    switch state.destination {
+                    case .review: review(home)
+                    case .search: search(home)
+                    case .generate: LockerGeneratorView(generator: home.generator, send: send, open: open)
+                    default: items(home)
                     }
-                    .padding(.bottom, 16)
                 }
-                .refreshable { send(Self.event { $0.refreshed = .init() }) }
+                .padding(.bottom, 16)
+            }
+            .refreshable { send(LockerHomeEvents.make { $0.refreshed = .init() }) }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if state.hasStatus {
+                StatusLineView(status: state.status, identifier: "locker-home-status") {}
+                    .padding(.vertical, 4)
+                    .background(Theme.color("bg", scheme))
             }
         }
     }
@@ -156,33 +146,33 @@ struct LockerHomeView: View {
     // MARK: Tabs
 
     @ViewBuilder
-    private func items(_ home: Centraid_Screen_V1_LockerHomeData, _ state: Centraid_Screen_V1_LockerHomeState) -> some View {
+    private func items(_ home: Centraid_Core_V1_LockerHomeData) -> some View {
         LockerNote(text: home.statusLine)
         if home.hasItemsEmpty {
-            EmptyStateView(home.itemsEmpty, onAction: home.itemsEmpty.actionLabel.isEmpty ? nil : addItem)
+            EmptyStateView(
+                home.itemsEmpty,
+                onAction: home.itemsEmpty.actionLabel.isEmpty ? nil : { open(state.chrome.addRoute) }
+            )
         }
         ForEach(home.rows, id: \.itemID) { row in
-            LockerRowView(row: row) { open(row, state) }
+            LockerRowView(row: row) { open(row.route) }
         }
         LockerNote(text: home.window)
     }
 
     @ViewBuilder
-    private func review(_ home: Centraid_Screen_V1_LockerHomeData) -> some View {
+    private func review(_ home: Centraid_Core_V1_LockerHomeData) -> some View {
         LockerNote(text: home.reviewNote)
         if home.hasReviewClear {
             EmptyStateView(home.reviewClear)
         }
         ForEach(home.review, id: \.key) { section in
-            SectionHeader(section.head)
+            SectionHeader(title: section.head.title, count: section.head.count)
             LockerNote(text: section.reason)
-            // ONE ITEM CAN BE IN TWO VERDICTS — the demo's forum login is
-            // compromised AND on `http://` — and a `LazyVStack` flattens nested
-            // `ForEach`es into one identity space, so a bare `itemID` drew the
-            // second section's row as nothing. The section key scopes it, as
-            // Android's `"r-" + section.key + "-" + item_id` key does.
+            // ONE ITEM CAN BE IN TWO VERDICTS, and a `LazyVStack` flattens nested
+            // `ForEach`es into one identity space: the section key scopes it.
             ForEach(section.rows.map { LockerReviewEntry(section: section.key, row: $0) }) { entry in
-                LockerRowView(row: entry.row) { open(entry.row, state) }
+                LockerRowView(row: entry.row) { open(entry.row.route) }
             }
         }
         if !home.reviewUnchecked.isEmpty {
@@ -194,19 +184,19 @@ struct LockerHomeView: View {
     }
 
     @ViewBuilder
-    private func search(_ home: Centraid_Screen_V1_LockerHomeData, _ state: Centraid_Screen_V1_LockerHomeState) -> some View {
+    private func search(_ home: Centraid_Core_V1_LockerHomeData) -> some View {
         LockerNote(text: state.chrome.searchNote)
         if home.hasSearchEmpty {
             EmptyStateView(home.searchEmpty)
         }
         ForEach(home.hits, id: \.itemID) { row in
-            LockerRowView(row: row) { open(row, state) }
+            LockerRowView(row: row) { open(row.route) }
         }
     }
 
-    /// THE ITEMS FILTERS AS THE ROOM'S CHIP ROW (R-CHROME-3): only Items'
-    /// data carries them, so the row is there on Items and nowhere else.
-    private func filterChips(_ content: ScreenContent<Centraid_Screen_V1_LockerHomeData>) -> [RoomChip] {
+    /// THE ITEMS FILTERS AS THE ROOM'S CHIP ROW (R-CHROME-3): only Items' data
+    /// carries them, so the row is there on Items and nowhere else.
+    private func filterChips(_ content: ScreenContent<Centraid_Core_V1_LockerHomeData>) -> [RoomChip] {
         guard case let .data(home) = content else { return [] }
         return home.filters.map { choice in
             RoomChip(
@@ -215,166 +205,120 @@ struct LockerHomeView: View {
                 count: choice.detail,
                 selected: choice.selected
             ) {
-                send(Self.event { $0.filter = .with { $0.key = choice.key } })
+                send(LockerHomeEvents.make { $0.filter = .with { $0.key = choice.key } })
             }
         }
     }
 
     // MARK: Intents
 
-    private func addItem() {
-        send(Self.event { $0.add = .init() })
+    /// A More row: it tells Rust (a sheet closes, `facts` opens its own, `lock`
+    /// locks) and, when the row carries a route, the shell pushes it.
+    private func more(_ row: Centraid_Core_V1_LockerMoreRow) {
+        send(LockerHomeEvents.make { $0.more = .with { $0.key = row.key } })
+        if row.hasRoute { open(row.route) }
     }
 
-    private func open(_ row: Centraid_Screen_V1_LockerRow, _ state: Centraid_Screen_V1_LockerHomeState) {
-        send(Self.event { $0.item = .with { $0.itemID = row.itemID } })
-    }
-
-    /// A More row: `facts` is the machine's sheet; `import`, `trash`,
-    /// `export`, `access` and `lock` are the shell's (a push, and the gate's
-    /// `LockTapped`).
-    private func more(_ row: Centraid_Screen_V1_LockerMoreRow) {
-        send(Self.event { $0.more = .with { $0.key = row.key } })
-        switch row.key {
-        // Import, Export, Access and Trash are pushes the shell routes
-        // (`LockerRouting`); Lock is the gate's.
-        case LockerHomeMachine.shared.MORE_LOCK: sendLock(LockerLockSeam.event { $0.lock = .init() })
-        default: break
-        }
-    }
-
-    private func sheetBinding(
-        _ state: Centraid_Screen_V1_LockerHomeState,
-        _ sheet: Centraid_Screen_V1_LockerHomeState.Sheet
-    ) -> Binding<Bool> {
+    private func sheetBinding(_ sheet: Centraid_Core_V1_LockerHomeState.Sheet) -> Binding<Bool> {
         Binding(
-            get: { state.sheet == sheet && !Centraid_Screen_V1_LockerLockState.of(lock).covers },
-            set: { open in
-                guard !open, state.sheet == sheet else { return }
-                send(Self.event { $0.sheetClosed = .init() })
+            get: { state.sheet == sheet && !state.hasWall },
+            set: { isOpen in
+                guard !isOpen, state.sheet == sheet else { return }
+                send(LockerHomeEvents.make { $0.sheetClosed = .init() })
             }
         )
     }
 }
 
-/// One quiet line of the machine's — a status, a note, a window's end.
-struct LockerNote: View {
-    let text: String
-
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        if !text.isEmpty {
-            Text(text)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .padding(.vertical, 8)
-        }
-    }
-}
-
 /// THE GENERATOR (the handoff's Generate tab): a string without an item. Its
-/// randomness is the bridge's CSPRNG; the view draws the candidate, its
-/// strength, the kind, the length, what it includes, and three verbs.
+/// randomness is Rust's (the operating system's CSPRNG); the view draws the
+/// candidate, its strength, the kind, the length, what it includes, and verbs.
 struct LockerGeneratorView: View {
-    let data: Data
-    let send: (Data) -> Void
-    let onUse: () -> Void
+    let generator: Centraid_Core_V1_LockerGenerator
+    let send: (Centraid_Core_V1_LockerHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_LockerGeneratorState {
-        (try? Centraid_Screen_V1_LockerGeneratorState(serializedBytes: data)) ?? .init()
-    }
-
-    static func event(_ build: (inout Centraid_Screen_V1_LockerGeneratorEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_LockerGeneratorEvent()
-        build(&event)
-        return event.encoded
-    }
-
     var body: some View {
-        let state = state
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                // THE CANDIDATE, at the display rung in a bordered box. Never
-                // selectable: copying is the Copy verb's, local-only and expiring.
-                Text(state.output)
-                    .centraidType("mono")
+        VStack(alignment: .leading, spacing: 12) {
+            // THE CANDIDATE, at the display rung in a bordered box. Never
+            // selectable: copying is the Copy verb's, sensitive and expiring.
+            Text(generator.output)
+                .centraidType("mono")
+                .foregroundStyle(Theme.color("text", scheme))
+                .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+                .padding(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                        .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
+                )
+                .accessibilityLabel(generator.accessibilityLabel)
+                .accessibilityIdentifier("locker-generator-output")
+            if !generator.strength.isEmpty {
+                Text(generator.strength)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+            }
+            HStack(spacing: 8) {
+                KitOutlineButton(label: generator.regenerateLabel) {
+                    send(LockerHomeEvents.make { $0.generatorRegenerate = .init() })
+                }
+                .accessibilityIdentifier("locker-generator-regenerate")
+                KitOutlineButton(label: generator.copyLabel) {
+                    send(LockerHomeEvents.make { $0.generatorCopy = .init() })
+                }
+                .accessibilityIdentifier("locker-generator-copy")
+            }
+            if !generator.useLabel.isEmpty {
+                KitInkButton(label: generator.useLabel) {
+                    // Rust keeps the candidate for the editor; the shell pushes it.
+                    send(LockerHomeEvents.make { $0.generatorUsed = .init() })
+                    if generator.hasUseRoute { open(generator.useRoute) }
+                }
+                .accessibilityIdentifier("locker-generator-use")
+            }
+            SectionHeader(title: generator.kindsLabel).padding(.horizontal, -CentraidGeometry.pageMargin)
+            LockerChoicePills(choices: generator.kinds, identifier: "locker-generator-kind") { key in
+                send(LockerHomeEvents.make { $0.generatorKind = .with { $0.key = key } })
+            }
+            .padding(.horizontal, -CentraidGeometry.pageMargin)
+            if generator.lengthMax > generator.lengthMin {
+                Text(generator.lengthLabel)
+                    .centraidType("smallStrong")
                     .foregroundStyle(Theme.color("text", scheme))
-                    .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-                    .padding(12)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                            .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
-                    )
-                    .accessibilityLabel(state.accessibilityLabel)
-                    .accessibilityIdentifier("locker-generator-output")
-                if !state.strength.isEmpty {
-                    Text(state.strength)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                }
-                HStack(spacing: 8) {
-                    KitOutlineButton(label: state.regenerateLabel) { send(Self.event { $0.regenerate = .init() }) }
-                        .accessibilityIdentifier("locker-generator-regenerate")
-                    KitOutlineButton(label: state.copyLabel) { send(Self.event { $0.copy = .init() }) }
-                        .accessibilityIdentifier("locker-generator-copy")
-                }
-                if !state.useLabel.isEmpty {
-                    KitInkButton(label: state.useLabel, action: onUse)
-                        .accessibilityIdentifier("locker-generator-use")
-                }
-                SectionHeader(title: state.kindsLabel).padding(.horizontal, -CentraidGeometry.pageMargin)
-                LockerChoicePills(choices: state.kinds, identifier: "locker-generator-kind") { key in
-                    send(Self.event { $0.kindPicked = .with { $0.key = key } })
+                Slider(
+                    value: Binding(
+                        get: { Double(generator.length) },
+                        set: { value in
+                            let length = UInt32(value.rounded())
+                            if length != generator.length {
+                                send(LockerHomeEvents.make { $0.generatorLength = .with { $0.length = length } })
+                            }
+                        }
+                    ),
+                    in: Double(generator.lengthMin)...Double(generator.lengthMax),
+                    step: 1
+                )
+                .tint(Theme.color("text", scheme))
+                .accessibilityLabel(generator.lengthLabel)
+                .accessibilityIdentifier("locker-generator-length")
+            }
+            if !generator.include.isEmpty {
+                SectionHeader(title: generator.includeLabel).padding(.horizontal, -CentraidGeometry.pageMargin)
+                LockerChoicePills(choices: generator.include, identifier: "locker-generator-include") { key in
+                    send(LockerHomeEvents.make { $0.generatorInclude = .with { $0.key = key } })
                 }
                 .padding(.horizontal, -CentraidGeometry.pageMargin)
-                if state.lengthMax > state.lengthMin {
-                    Text(state.lengthLabel)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
-                    Slider(
-                        value: Binding(
-                            get: { Double(state.length) },
-                            set: { value in
-                                let length = UInt32(value.rounded())
-                                if length != state.length { send(Self.event { $0.length = .with { $0.length = length } }) }
-                            }
-                        ),
-                        in: Double(state.lengthMin)...Double(state.lengthMax),
-                        step: 1
-                    )
-                    .tint(Theme.color("text", scheme))
-                    .accessibilityLabel(state.lengthLabel)
-                    .accessibilityIdentifier("locker-generator-length")
-                }
-                if !state.include.isEmpty {
-                    SectionHeader(title: state.includeLabel).padding(.horizontal, -CentraidGeometry.pageMargin)
-                    LockerChoicePills(choices: state.include, identifier: "locker-generator-include") { key in
-                        send(Self.event { $0.include = .with { $0.key = key } })
-                    }
-                    .padding(.horizontal, -CentraidGeometry.pageMargin)
-                }
-                if !state.lookalikeNote.isEmpty {
-                    Text(state.lookalikeNote)
-                        .centraidType("annotLabel")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
-                }
             }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.vertical, 12)
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if state.hasStatus {
-                StatusLineView(status: state.status, identifier: "locker-generator-status") {}
+            if !generator.lookalikeNote.isEmpty {
+                Text(generator.lookalikeNote)
+                    .centraidType("annotLabel")
+                    .foregroundStyle(Theme.color("textFaint", scheme))
             }
         }
-        .modifier(LockerClipboardRunner(clip: state.hasClipboard ? state.clipboard : nil) { token in
-            send(Self.event { $0.clipboardDone = .with { $0.token = token } })
-        })
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 12)
     }
 }
 
@@ -382,7 +326,7 @@ struct LockerGeneratorView: View {
 /// item stands under two verdicts.
 private struct LockerReviewEntry: Identifiable {
     let section: String
-    let row: Centraid_Screen_V1_LockerRow
+    let row: Centraid_Core_V1_LockerRow
 
     var id: String { section + "/" + row.itemID }
 }

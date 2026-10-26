@@ -1,7 +1,6 @@
 package dev.centraid.android.screens
 
 import dev.centraid.android.kit.LocalShellLine
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,6 +27,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,17 +44,24 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.Confirm
-import centraid.screen.v1.HomeData
-import centraid.screen.v1.HomeEvent
-import centraid.screen.v1.HomeState
-import centraid.screen.v1.HomeStatus
-import centraid.screen.v1.HomeTile
-import centraid.screen.v1.ReadFailure
-import centraid.screen.v1.Springboard
-import centraid.screen.v1.TileBody
-import centraid.screen.v1.TileStatus
-import centraid.screen.v1.VaultLockup
+import centraid.core.v1.Failure
+import centraid.core.v1.HomeData
+import centraid.core.v1.HomeEvent
+import centraid.core.v1.HomeSpringboard
+import centraid.core.v1.HomeState
+import centraid.core.v1.HomeStatus
+import centraid.core.v1.HomeTile
+import centraid.core.v1.HomeTileBody
+import centraid.core.v1.HomeTileStatus
+import centraid.core.v1.HomeTone
+import centraid.core.v1.HomeVault
+import centraid.core.v1.HomeVaultAsk
+import centraid.core.v1.HomeVaultSheet
+import centraid.core.v1.HomeVaultState
+import centraid.core.v1.Route
+import centraid.core.v1.ShellBand
+import centraid.core.v1.ShellBandTab
+import centraid.core.v1.Confirm
 import dev.centraid.android.kit.AppMark
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
@@ -63,26 +71,27 @@ import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.VaultHeader
-import dev.centraid.android.kit.stateLine
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidDark
 import dev.centraid.android.theme.centraidType
-import dev.centraid.android.theme.formatMoney
 import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.design.copy.WordsCopy
-import dev.centraid.shared.shell.BandPolicy
-import dev.centraid.shared.shell.HomeWords
+// TRANSITIONAL (lane H2 deletes it with the Backup tab): the one place Home still
+// words a place Rust does not own yet.
+import dev.centraid.android.kit.TransferRulesSheet
+import dev.centraid.android.screens.words.FirstLaunchScreen
 
 /**
- * Home, the graded springboard (#1020, wave A).
+ * Home, the graded springboard (#1020, wave A; #1135).
  *
- * **THIS VIEW DECIDES NOTHING.** `springboard`, `grid_rows` and
- * `every_tile_unreadable` arrive already decided by `HomeMachine`, and the rows
- * come out of `SpringboardPolicy.rows`. That is what lets this file and
- * `HomeView.swift` draw the same Home: not discipline, but the absence of
- * anywhere for the two to disagree.
+ * **THIS VIEW DECIDES NOTHING.** Home is a Rust screen (`crates/screens/src/shell`):
+ * the `springboard`, `grid_rows`, every tile's count, noun, spoken label and route,
+ * the lockup's words, the switcher's sentences and the band all arrive finished in
+ * [HomeState] and `Navigation.band`. That is what lets this file and
+ * `HomeView.swift` draw the same Home: not discipline, but the absence of anywhere
+ * for the two to disagree. A tap that opens a page sends the route the view carried
+ * ([onOpen]); this file names no destination.
  *
  * **THREE BRANCHES, NEVER TWO**, as on every other screen — and the third one
  * matters more here than anywhere else. A Home that could not load renders a
@@ -98,53 +107,40 @@ import dev.centraid.shared.shell.HomeWords
 @Composable
 public fun HomeScreen(
     state: HomeState,
+    /** The band Rust framed this root with, or null before it says. */
+    band: ShellBand?,
     onEvent: (HomeEvent) -> Unit,
-    onForget: (String) -> Unit,
-    /** Rename a vault (`vault.rename`): its id and the name typed. */
-    onRename: (vaultId: String, name: String) -> Unit = { _, _ -> },
-    /**
-     * Open the transfer-rules sheet (#1025 S4). Defaulted so a preview renders
-     * this screen without one.
-     */
-    onDownloadSettings: () -> Unit = {},
-    /**
-     * Make another vault, or restore (#1029 §1): the vault switcher's two acts
-     * (R-ONBOARD-11). A device holding none never draws this screen
-     * (`FirstLaunchScreen`).
-     */
-    onMakeVault: () -> Unit = {},
-    onRestoreVaults: () -> Unit = {},
-    /** What the last make or restore came to, drawn in the switcher. */
-    vaultStatus: String = "",
-    /**
-     * Open the Backup tab (#1080, R-ONBOARD-9): Home's backup line and the
-     * band's Backup tab are its doors. Defaulted for previews.
-     */
-    onOpenBackup: () -> Unit = {},
-    /** Whether the Backup tab is drawn in place of the springboard. */
-    backupShown: Boolean = false,
-    /** The band's Home, pressed on the Backup tab. */
-    onOpenHome: () -> Unit = {},
-    /** The Backup tab's screen (`BackupSheets.Tab`). */
-    backupTab: @Composable () -> Unit = {},
-    /** Home's search bar's words: the search screen's own placeholder (R-CHROME-6). */
-    searchPlaceholder: String = "",
-    /** The search bar was tapped. Defaulted for previews. */
-    onOpenSearch: () -> Unit = {},
-    /** The appearance key was tapped (R-CHROME-7). Null draws none. */
-    onToggleAppearance: (() -> Unit)? = null,
+    /** Push a route a row or the search key carried. */
+    onOpen: (Route) -> Unit,
+    /** A press on a band place Rust owns: the runtime selects the tab. */
+    onSelectTab: (String) -> Unit,
 ) {
-    // BACK ON THE BACKUP TAB returns to Home, as the band's Home does.
-    BackHandler(enabled = backupShown) { onOpenHome() }
+    // A PHONE THAT HOLDS NO VAULT opens onto the way to make one, not onto a Home with
+    // nothing to read: Rust's gate, drawn in place of Home.
+    state.first_launch?.let { gate ->
+        FirstLaunchScreen(
+            gate = gate,
+            onMake = { onEvent(HomeEvent(make = HomeEvent.MakePressed())) },
+            onRestore = { onEvent(HomeEvent(restore = HomeEvent.RestorePressed())) },
+        )
+        return
+    }
+    val bar = state.bar
+    val failure = state.failure
     // BARE PAPER UNTIL THE LOCKUP LANDS. The shelf says it holds a vault a
-    // moment before the session publishes that vault's lockup, and Home drawn
-    // in that moment said "No vault yet" for a frame between first launch and
-    // the springboard — a flicker. A shelf that holds a vault always has one
-    // in front, so the empty lockup is only ever that moment.
-    if (state.vault?.vault_id.isNullOrEmpty()) {
+    // moment before the session tells Home that vault, and Home drawn in that
+    // moment said "No vault yet" for a frame between first launch and the
+    // springboard — a flicker. A shelf that holds a vault always has one
+    // in front, so the empty lockup is only ever that moment (and a phone that
+    // holds none is a failure, below).
+    if (bar?.vault?.vault_id.isNullOrEmpty() && failure == null) {
         Box(Modifier.fillMaxSize().background(centraidColor("bg")))
         return
     }
+    // THE BACKUP LINE'S DOOR: the backup tab, which Rust selects.
+    val openBackup = { onEvent(HomeEvent(backup = HomeEvent.BackupPressed())) }
+    val search: () -> Unit = { bar?.search_route?.let(onOpen) }
+    val appearance: () -> Unit = { onEvent(HomeEvent(appearance = HomeEvent.AppearancePressed())) }
     Column(
         Modifier
             .fillMaxSize()
@@ -153,39 +149,24 @@ public fun HomeScreen(
         // THE LOCKUP FIRST, ALWAYS. It is chrome for every route, and it is
         // drawn above the three-branch switch on purpose: a Home that failed to
         // read still has to say which vault failed.
-        VaultHeader(
-            vault = state.vault,
-            onSwitchVault = {
-                onEvent(HomeEvent(vault_switch = HomeEvent.VaultSwitchRequested()))
-            },
-            onDownloadSettings = onDownloadSettings,
-            // THE LOCKUP'S SECOND LINE IS THE BACKUP'S STATUS (R-ONBOARD-11),
-            // and its door. Nothing between it and the grid: no backup
-            // sentence, no "Home" title (the band says where the member is),
-            // no settings gear.
-            backup = state.backup_line,
-            onOpenBackup = onOpenBackup,
-            // HOME'S SEARCH KEY (R-CHROME-6), at the lockup's trailing edge;
-            // a tap opens the search over every app. Not on the
-            // Backup tab, which is the backup's and not the springboard's.
-            onSearch = onOpenSearch.takeIf { !backupShown },
-            searchLabel = searchPlaceholder,
-            onAppearance = onToggleAppearance.takeIf { !backupShown },
-        )
-        // THE BACKUP TAB DRAWS IN PLACE OF THE SPRINGBOARD, as Chat does on
-        // iOS, under the vault's lockup: the backup it describes is that
-        // vault's, and the band stays where it is.
-        if (backupShown) {
-            Box(Modifier.weight(1f)) { backupTab() }
-            LocalShellLine.current?.invoke()
-            HomeBand(
-                active = BandPolicy.PLACE_BACKUP,
-                onSelect = { target -> if (target == BandPolicy.PLACE_HOME) onOpenHome() },
+        if (bar != null) {
+            VaultHeader(
+                bar = bar,
+                onSwitchVault = { onEvent(HomeEvent(vault = HomeEvent.VaultPressed())) },
+                onDownloadSettings = { onEvent(HomeEvent(transfer_rules_pressed = HomeEvent.TransferRulesPressed())) },
+                // THE LOCKUP'S SECOND LINE IS THE BACKUP'S STATUS (R-ONBOARD-11),
+                // and its door. Nothing between it and the grid: no backup
+                // sentence, no "Home" title (the band says where the member is),
+                // no settings gear.
+                onOpenBackup = openBackup,
+                // HOME'S SEARCH KEY (R-CHROME-6), at the lockup's trailing edge;
+                // a tap pushes the search over every app. Not on the
+                // Backup tab, which is the backup's and not the springboard's.
+                onSearch = search,
+                onAppearance = appearance,
             )
-            return@Column
         }
-        StatusRibbon(state.data_?.status, onEvent)
-        val failure = state.failure
+        StatusRibbon(state.status, onEvent)
         val data = state.data_
         // THE PAGE TAKES THE SLACK, THE BAND TAKES ITS OWN HEIGHT. The band is
         // never scrolled away, so it is a sibling of the scrolling page and not
@@ -194,45 +175,34 @@ public fun HomeScreen(
         Box(Modifier.weight(1f)) {
             when {
                 failure != null -> FailureBody(failure)
-                data == null -> SpringboardGrid(HomeData(), onEvent)
-                data.springboard == Springboard.SPRINGBOARD_FIRST_RUN -> DayOne(data, onEvent)
-                else -> SpringboardGrid(data, onEvent)
+                data == null -> SpringboardGrid(HomeData(), state.loading_label, onOpen)
+                data.springboard == HomeSpringboard.HOME_SPRINGBOARD_FIRST_RUN ->
+                    DayOne(data, state.loading_label, onOpen)
+                else -> SpringboardGrid(data, state.loading_label, onOpen)
             }
         }
         // THE IMPORT'S LINE, on the band (DESIGN.md's one status line).
         LocalShellLine.current?.invoke()
-        HomeBand(
-            active = BandPolicy.PLACE_HOME,
-            onSelect = { target ->
-                // BACKUP is a tab: where this vault's backup stands, the
-                // backup devices and the recovery key.
-                if (target == BandPolicy.PLACE_BACKUP) onOpenBackup()
-            },
-        )
+        Band(band, onSelectTab)
     }
     // THE SWITCHER IS A SHEET and never a destination. It is a sibling of the
     // column above rather than a child of it, because a sheet inside a
     // scrolling page would scroll.
-    if (state.vault_sheet_open) {
-        VaultSheet(
-            vaults = state.vaults,
-            active = state.vault,
-            onPick = { id ->
-                onEvent(HomeEvent(vault_picked = HomeEvent.VaultPicked(vault_id = id)))
-            },
-            onForget = onForget,
-            onRename = onRename,
-            status = vaultStatus,
-            onMake = {
-                onEvent(HomeEvent(vault_picked = HomeEvent.VaultPicked(vault_id = "")))
-                onMakeVault()
-            },
-            onRestore = {
-                onEvent(HomeEvent(vault_picked = HomeEvent.VaultPicked(vault_id = "")))
-                onRestoreVaults()
-            },
+    val sheet = state.sheet
+    if (sheet != null) VaultSheet(sheet, onEvent)
+    state.transfer_sheet?.let { rules ->
+        TransferRulesSheet(
+            sheet = rules,
+            onPick = { stored -> onEvent(HomeEvent(transfer_rule_chosen = HomeEvent.TransferRuleChosen(stored = stored))) },
+            onDismiss = { onEvent(HomeEvent(transfer_rules_closed = HomeEvent.TransferRulesClosed())) },
         )
     }
+}
+
+/** THE BAND: Rust's places, its words and its lit place; a press selects that tab. */
+@Composable
+internal fun Band(band: ShellBand?, onSelectTab: (String) -> Unit) {
+    HomeBand(tabs = band?.tabs.orEmpty(), onSelect = onSelectTab)
 }
 
 /**
@@ -242,75 +212,39 @@ public fun HomeScreen(
  * switcher that listed only the others would never show a member where they
  * already are, which is the fact most of them opened it to check.
  *
- * Dismissing sends a pick with NO ID, which the machine reads as exactly what
- * it is: shut the sheet, change no vault. The swipe and the tap therefore go
- * through one door rather than two.
+ * Dismissing sends `sheet_closed`, which shuts the sheet and changes no vault.
+ * Every sentence, the roster's order and each row's second line (the header's own
+ * wording, finished by Rust) arrive in [HomeVaultSheet].
  *
- * **EVERY ROW SAYS WHERE ITS VAULT STANDS (#1025 S7-9).** The caption is
- * [stateLine] — the header's own table, called and not restated — so the lockup
- * and the row a member compares it against cannot word one `State` two ways.
- *
- * **AND EVERY ROW CAN BE FORGOTTEN.** Forgetting DELETES the vault: the file,
- * its byte store and its sidecars. That is why it is one tap behind a dialog
- * that NAMES the vault rather than a bare icon — a destructive act that a
- * mis-hit thumb can complete is a destructive act that will be completed by
- * mis-hit thumbs.
- *
- * **It used to be a LOCAL removal** — the gateway kept the vault and kept this
- * device enrolled, so a forget cost a copy and a re-pair got it back. The phone
- * is the vault (#1029 §1): forgetting removes the only live copy. What can
- * survive it is the sealed backup on each gateway the vault was paired with
- * (#1080), as far as a gateway acknowledged it, and only the vault's 24 words
- * bring that back — so the dialog has to say what it now does.
+ * **EVERY ROW CAN BE FORGOTTEN.** Forgetting DELETES the vault: the file, its
+ * byte store and its sidecars. That is why it is one tap behind a dialog that
+ * NAMES the vault rather than a bare icon — a destructive act that a mis-hit
+ * thumb can complete is a destructive act that will be completed by mis-hit
+ * thumbs. The question is Rust's (`sheet.ask`); this draws it.
  */
 @Composable
-private fun VaultSheet(
-    vaults: List<VaultLockup>,
-    active: VaultLockup?,
-    onPick: (String) -> Unit,
-    onForget: (String) -> Unit,
-    onRename: (vaultId: String, name: String) -> Unit,
-    status: String,
-    onMake: () -> Unit,
-    onRestore: () -> Unit,
-) {
-    // WHICH VAULT THE MEMBER IS BEING ASKED ABOUT, held by the sheet and not by
-    // the row: a dialog owned by a row would be unmounted the instant the
-    // roster changed under it, and the roster changes on its own now that
-    // `RosterChanged` streams.
-    var pendingForget by androidx.compose.runtime.remember {
-        androidx.compose.runtime.mutableStateOf<VaultLockup?>(null)
-    }
-    // THE VAULT BEING RENAMED, held here for the same reason, and the name
-    // typed so far — starting on the vault's own, so a small fix is a small edit.
-    var pendingRename by androidx.compose.runtime.remember {
-        androidx.compose.runtime.mutableStateOf<VaultLockup?>(null)
-    }
-    var newName by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+private fun VaultSheet(sheet: HomeVaultSheet, onEvent: (HomeEvent) -> Unit) {
     SheetRoom(
-        title = HomeWords.VAULTS_TITLE,
-        onDismiss = { onPick("") },
+        title = sheet.title,
+        onDismiss = { onEvent(HomeEvent(sheet_closed = HomeEvent.SheetClosed())) },
     ) {
         Column(Modifier.fillMaxWidth().testTag("home-vault-sheet")) {
             // ZERO VAULTS NEVER REACHES THIS SHEET: a device that holds none
             // opens onto `FirstLaunchScreen` instead of Home (`MainActivity`),
-            // which is where "make" and "restore" live now. One vault keeps
-            // the old sentence.
-            when {
-                vaults.size == 1 -> {
-                    Text(
-                        text = HomeWords.VAULTS_ONE,
-                        style = centraidType("small"),
-                        color = centraidColor("textSoft"),
-                        modifier = Modifier.padding(horizontal = PAGE_MARGIN),
-                    )
-                }
+            // which is where "make" and "restore" live now.
+            if (sheet.one_line.isNotEmpty()) {
+                Text(
+                    text = sheet.one_line,
+                    style = centraidType("small"),
+                    color = centraidColor("textSoft"),
+                    modifier = Modifier.padding(horizontal = PAGE_MARGIN),
+                )
             }
-            for (vault in vaults) {
+            for (vault in sheet.vaults) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .clickable { onPick(vault.vault_id) }
+                        .clickable { onEvent(HomeEvent(vault_picked = HomeEvent.VaultPicked(vault_id = vault.vault_id))) }
                         .heightIn(min = 48.dp)
                         .padding(horizontal = PAGE_MARGIN)
                         .testTag("vault-row-${vault.vault_id}"),
@@ -318,7 +252,7 @@ private fun VaultSheet(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(
-                        text = vault.vault_name.take(1).uppercase(),
+                        text = vault.initial,
                         style = centraidType("smallStrong"),
                         color = centraidColor("text"),
                         modifier = Modifier
@@ -329,20 +263,18 @@ private fun VaultSheet(
                     )
                     Column(Modifier.weight(1f)) {
                         Text(
-                            text = HomeWords.vaultName(vault.vault_name),
+                            text = vault.name,
                             style = centraidType("smallStrong"),
                             color = centraidColor("text"),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        // The same sentence the lockup draws, from the same
-                        // function. `STATE_UNSPECIFIED` is never emitted and
-                        // draws nothing, so the row is a name alone rather
-                        // than a name over a blank caption.
-                        val line = stateLine(vault.state)
-                        if (line.isNotEmpty()) {
+                        // The same sentence the lockup draws: Rust words one
+                        // state once. An empty line draws nothing, so the row is
+                        // a name alone rather than a name over a blank caption.
+                        if (vault.state_line.isNotEmpty()) {
                             Text(
-                                text = line,
+                                text = vault.state_line,
                                 style = centraidType("mono"),
                                 color = centraidColor("textFaint"),
                                 maxLines = 1,
@@ -351,35 +283,33 @@ private fun VaultSheet(
                         }
                     }
                     // THE TICK IS THE WHOLE POINT of listing the open one.
-                    if (vault.vault_id == active?.vault_id) {
+                    if (vault.vault_id == sheet.active_vault_id) {
                         CentraidIcon(
                             iconKey = "Check",
                             tint = centraidColor("link"),
                             size = 18.dp,
+                            modifier = Modifier.semantics { contentDescription = sheet.current_label },
                         )
                     }
                     // RENAME, beside Forget and with its own target for the
                     // same reason. A vault that moved is read-only: no rename.
-                    if (vault.state != VaultLockup.State.STATE_FROZEN) {
+                    if (vault.state != HomeVaultState.HOME_VAULT_STATE_FROZEN) {
                         IconKey(
                             iconKey = "Pencil",
-                            label = HomeWords.VAULTS_RENAME,
+                            label = sheet.rename_label,
                             testTag = "vault-rename-${vault.vault_id}",
                             bordered = false,
-                        ) {
-                            newName = vault.vault_name
-                            pendingRename = vault
-                        }
+                        ) { onEvent(HomeEvent(rename_asked = HomeEvent.RenameAsked(vault_id = vault.vault_id))) }
                     }
                     // OUTSIDE the row's own `clickable`, with its own 44dp
                     // target: a forget that shared the row's tap area would be
                     // a switch and a deletion behind one gesture.
                     IconKey(
                         iconKey = "Trash",
-                        label = HomeWords.forgetTitle(vault.vault_name),
+                        label = vault.accessibility_label.let { "${sheet.forget_label} $it" },
                         testTag = "vault-forget-${vault.vault_id}",
                         bordered = false,
-                    ) { pendingForget = vault }
+                    ) { onEvent(HomeEvent(forget_asked = HomeEvent.ForgetAsked(vault_id = vault.vault_id))) }
                 }
             }
             // MAKING AND RESTORING A VAULT LIVE HERE (R-ONBOARD-11): this is
@@ -392,11 +322,15 @@ private fun VaultSheet(
                     .height(CentraidGeometry.HAIRLINE.dp)
                     .background(centraidColor("line")),
             )
-            SwitcherAction(HomeWords.VAULTS_MAKE, "Plus", "vault-found-button", onMake)
-            SwitcherAction(WordsCopy.RESTORE_FIRST_ACTION, "Refresh", "vault-restore-button", onRestore)
-            if (status.isNotEmpty()) {
+            SwitcherAction(sheet.make_label, "Plus", "vault-found-button") {
+                onEvent(HomeEvent(make = HomeEvent.MakePressed()))
+            }
+            SwitcherAction(sheet.restore_label, "Refresh", "vault-restore-button") {
+                onEvent(HomeEvent(restore = HomeEvent.RestorePressed()))
+            }
+            if (sheet.status_line.isNotEmpty()) {
                 Text(
-                    status,
+                    sheet.status_line,
                     style = centraidType("small"),
                     color = centraidColor("textSoft"),
                     modifier = Modifier.padding(horizontal = PAGE_MARGIN, vertical = 8.dp).testTag("vault-status"),
@@ -404,59 +338,68 @@ private fun VaultSheet(
             }
         }
     }
-    val renaming = pendingRename
-    if (renaming != null) {
-        SheetRoom(
-            title = HomeWords.VAULTS_RENAME_TITLE,
-            onDismiss = { pendingRename = null },
-            // A BLANK NAME IS NOT A RENAME: the one act is drawn, but cannot be
-            // pressed until there is a name to save.
-            primary = SheetPrimary(
-                label = HomeWords.VAULTS_RENAME_SAVE,
-                testTag = "vault-rename-save",
-                enabled = newName.isNotBlank(),
-            ) {
-                pendingRename = null
-                onRename(renaming.vault_id, newName)
-            },
-        ) {
-            androidx.compose.material3.OutlinedTextField(
-                value = newName,
-                onValueChange = { newName = it },
-                label = { Text(HomeWords.VAULTS_RENAME_FIELD) },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .imePadding()
-                    .padding(horizontal = PAGE_MARGIN)
-                    .testTag("vault-rename-field"),
-            )
-        }
-    }
-    val pending = pendingForget
-    if (pending != null) {
+    val ask = sheet.ask
+    val rename = ask?.rename
+    if (rename != null) RenameSheet(rename, onEvent)
+    val forget = ask?.forget
+    if (forget != null) {
         // IT NAMES THE VAULT. A confirmation that says "this vault" in a
         // sheet listing several is a confirmation that confirms nothing.
         ConfirmSheet(
             confirm = Confirm(
-                title = HomeWords.forgetTitle(pending.vault_name),
-                body = HomeWords.VAULTS_FORGET_BODY,
-                confirm_label = HomeWords.VAULTS_FORGET,
+                title = forget.title,
+                body = forget.body,
+                confirm_label = forget.confirm_label,
                 destructive = true,
             ),
-            onConfirm = {
-                // The sheet shuts FIRST and with no pick, so the machine
-                // changes no vault: the shelf brings the next holding forward
-                // by itself, and a sheet still open over a roster being
-                // rebuilt is a sheet drawing a vault that no longer exists.
-                pendingForget = null
-                onPick("")
-                onForget(pending.vault_id)
-            },
-            onDismiss = { pendingForget = null },
-            cancelLabel = HomeWords.VAULTS_KEEP,
+            // Rust shuts the sheet and asks the shelf; nothing here sequences it.
+            onConfirm = { onEvent(HomeEvent(ask_confirmed = HomeEvent.AskConfirmed())) },
+            onDismiss = { onEvent(HomeEvent(ask_dismissed = HomeEvent.AskDismissed())) },
+            cancelLabel = forget.cancel_label,
             confirmTag = "vault-forget-confirm",
         )
+    }
+}
+
+/** The rename step: the field starts on the vault's own name, so a small fix is a small edit. */
+@Composable
+private fun RenameSheet(rename: HomeVaultAsk.Rename, onEvent: (HomeEvent) -> Unit) {
+    // THE TEXT IS HELD HERE WHILE THE IME HAS IT and reported on every change:
+    // a field that took its value from the round trip would jump its cursor.
+    var typed by remember(rename.vault_id) { mutableStateOf(rename.name) }
+    SheetRoom(
+        title = rename.title,
+        onDismiss = { onEvent(HomeEvent(ask_dismissed = HomeEvent.AskDismissed())) },
+        // A BLANK NAME IS NOT A RENAME: the one act is drawn, but cannot be
+        // pressed until there is a name to save (Rust says so in `can_save`).
+        primary = SheetPrimary(
+            label = rename.save_label,
+            testTag = "vault-rename-save",
+            enabled = rename.can_save,
+        ) { onEvent(HomeEvent(ask_confirmed = HomeEvent.AskConfirmed())) },
+    ) {
+        androidx.compose.material3.OutlinedTextField(
+            value = typed,
+            onValueChange = {
+                typed = it
+                onEvent(HomeEvent(rename_typed = HomeEvent.RenameTyped(name = it)))
+            },
+            label = { Text(rename.field_label) },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .imePadding()
+                .padding(horizontal = PAGE_MARGIN)
+                .testTag("vault-rename-field"),
+        )
+        if (rename.failure.isNotEmpty()) {
+            Text(
+                rename.failure,
+                style = centraidType("small"),
+                color = centraidColor("textSoft"),
+                modifier = Modifier.padding(horizontal = PAGE_MARGIN, vertical = 8.dp),
+            )
+        }
     }
 }
 
@@ -494,25 +437,28 @@ private fun SwitcherAction(label: String, iconKey: String, testTag: String, onPr
  *
  * The ONLY feedback channel on this screen — no spinner, no toast, no badge, no
  * red dot. `QUIET` is deliberately ignorable and earns no rule; the other two
- * earn one rule and one action, never a filled warning plate.
+ * earn one rule and one action, never a filled warning plate. Its action is a
+ * door: a press sends `status` and Rust says where it goes.
  */
 @Composable
-private fun StatusRibbon(status: HomeStatus?, onEvent: (HomeEvent) -> Unit) {
+private fun StatusRibbon(
+    status: HomeStatus?,
+    onEvent: (HomeEvent) -> Unit,
+) {
     // A RIBBON WITH NOTHING TO SAY IS NOT DRAWN: since All apps left it
     // (R-ONBOARD-11) it carries nothing else, and an empty band above the grid
     // reads as something that failed to render.
     if (status == null || (status.copy.isEmpty() && status.action.isEmpty())) return
-    val loud = status.tone != HomeStatus.Tone.TONE_QUIET
+    val loud = status.tone != HomeTone.HOME_TONE_QUIET
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = if (loud) 40.dp else 32.dp)
+            .clickable(enabled = status.action.isNotEmpty()) { onEvent(HomeEvent(status = HomeEvent.StatusPressed())) }
             .padding(horizontal = PAGE_MARGIN)
             .testTag("home-status")
             .semantics {
-                contentDescription =
-                    listOf(status.copy, status.action).filter { it.isNotEmpty() }
-                        .joinToString(". ")
+                contentDescription = status.accessibility_label
             },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -525,7 +471,7 @@ private fun StatusRibbon(status: HomeStatus?, onEvent: (HomeEvent) -> Unit) {
                     .width(2.dp)
                     .height(24.dp)
                     .background(
-                        if (status.tone == HomeStatus.Tone.TONE_URGENT) {
+                        if (status.tone == HomeTone.HOME_TONE_URGENT) {
                             centraidColor("danger")
                         } else {
                             centraidColor("attention")
@@ -560,7 +506,7 @@ private fun StatusRibbon(status: HomeStatus?, onEvent: (HomeEvent) -> Unit) {
  * empty apps out of one failure is the defect the read law forbids.
  */
 @Composable
-private fun FailureBody(failure: ReadFailure) {
+private fun FailureBody(failure: Failure) {
     Column(
         Modifier
             .padding(PAGE_MARGIN)
@@ -619,7 +565,7 @@ private val HAIRLINE = CentraidGeometry.HAIRLINE.dp
 /**
  * THE HUE KEY'S SPELLING IN THE EMITTED TABLE, and nothing more.
  *
- * `PartyHueWheel` decides WHICH of the eight a face gets and `HomeReads` puts
+ * Rust (`crates/screens/src/shell/tiles.rs`) decides WHICH of the eight a face gets and puts
  * the answer on the wire; this is the eight-row spelling that turns that key
  * into a `NativeTheme` role, and `HomeView.swift` carries the same eight. It is
  * a map and not `"c" + key.replaceFirstChar(…)` because the string form would
@@ -680,7 +626,7 @@ private fun Modifier.bleed(amount: Dp, toFloor: Boolean): Modifier = this
     .offset(x = -amount)
 
 @Composable
-private fun SpringboardGrid(data: HomeData, onEvent: (HomeEvent) -> Unit) {
+private fun SpringboardGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit) {
     // WHICH tiles are drawn and in WHICH rows both arrive decided: `grid_rows`
     // is the machine's packing over every tile, so this
     // file looks each id up and draws it. Nothing here is allowed to disagree
@@ -692,7 +638,7 @@ private fun SpringboardGrid(data: HomeData, onEvent: (HomeEvent) -> Unit) {
             .padding(horizontal = PAGE_MARGIN)
             .padding(top = 10.dp, bottom = 24.dp),
     ) {
-        TileGrid(data, onEvent)
+        TileGrid(data, loading, onOpen)
     }
 }
 
@@ -702,7 +648,7 @@ private fun SpringboardGrid(data: HomeData, onEvent: (HomeEvent) -> Unit) {
  * always here to open. Shared by the springboard and day one.
  */
 @Composable
-private fun TileGrid(data: HomeData, onEvent: (HomeEvent) -> Unit) {
+private fun TileGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit) {
     val byId = data.tiles.associateBy { it.app_id }
     Column(
         Modifier.fillMaxWidth().testTag("home-grid"),
@@ -713,7 +659,7 @@ private fun TileGrid(data: HomeData, onEvent: (HomeEvent) -> Unit) {
             if (tiles.isEmpty()) continue
             Row(horizontalArrangement = Arrangement.spacedBy(TILE_GAP)) {
                 for (tile in tiles) {
-                    TileCard(tile, Modifier.weight(1f), onEvent)
+                    TileCard(tile, Modifier.weight(1f), loading, onOpen)
                 }
                 // A lone small keeps its column rather than stretching over
                 // both: a tile that changed width with its neighbours'
@@ -733,9 +679,8 @@ private fun TileGrid(data: HomeData, onEvent: (HomeEvent) -> Unit) {
  * the chip alone.
  */
 @Composable
-private fun TileCard(tile: HomeTile, modifier: Modifier, onEvent: (HomeEvent) -> Unit) {
-    val app = CentraidCatalog.byId[tile.app_id]
-    val name = app?.name ?: tile.app_id.replaceFirstChar { it.uppercase() }
+private fun TileCard(tile: HomeTile, modifier: Modifier, loading: String, onOpen: (Route) -> Unit) {
+    val name = tile.name
     val count = countText(tile)
     // The em dash is a glyph; a screen reader gets `accessibility_label`.
     Column(
@@ -744,9 +689,9 @@ private fun TileCard(tile: HomeTile, modifier: Modifier, onEvent: (HomeEvent) ->
             .clip(RoundedCornerShape(TILE_RADIUS))
             .background(centraidColor("bgElev"))
             .border(HAIRLINE, centraidColor("line"), RoundedCornerShape(TILE_RADIUS))
-            .clickable {
-                onEvent(HomeEvent(move_picked = HomeEvent.MovePicked(move_id = tile.app_id)))
-            }
+            // WHERE A TAP GOES is the tile's own route; Kotlin names no destination.
+            // A TILE WITH NO ROUTE (it is still reading, or could not be) is not a control.
+            .clickable(enabled = tile.route != null) { tile.route?.let(onOpen) }
             .padding(TILE_PAD)
             // Keyed on the app id. The label carries the live count, so it
             // changes with the vault; the id does not.
@@ -769,7 +714,7 @@ private fun TileCard(tile: HomeTile, modifier: Modifier, onEvent: (HomeEvent) ->
             )
             Text(count, style = centraidType("mono"), color = centraidColor("textFaint"))
         }
-        TileBodyView(tile)
+        TileBodyView(tile, loading)
     }
 }
 
@@ -786,7 +731,7 @@ private fun countText(tile: HomeTile): String {
 }
 
 @Composable
-private fun ColumnScope.TileBodyView(tile: HomeTile) {
+private fun ColumnScope.TileBodyView(tile: HomeTile, loading: String) {
     val body = tile.body
     // Locker's body is a STATE and not a query result, and Photos draws its own
     // waiting state cell by cell — neither falls through to the generic skeleton
@@ -794,8 +739,8 @@ private fun ColumnScope.TileBodyView(tile: HomeTile) {
     // wrong rather than merely plain.
     when {
         body?.locker != null || body?.photos != null -> FilledBody(body)
-        tile.status == TileStatus.TILE_STATUS_LOADING -> Skeleton(body)
-        tile.status != TileStatus.TILE_STATUS_CONTENT -> Text(
+        tile.status == HomeTileStatus.HOME_TILE_STATUS_LOADING -> Skeleton(body, loading)
+        tile.status != HomeTileStatus.HOME_TILE_STATUS_CONTENT -> Text(
             // What to DO, never what is missing. A quiet tile is an invitation.
             tile.empty_copy,
             style = centraidType("control"),
@@ -814,7 +759,7 @@ private fun ColumnScope.TileBodyView(tile: HomeTile) {
  * Matches SwiftUI's `NotesShelf`, which says why.
  */
 @Composable
-private fun NotesShelf(notes: TileBody.Notes, modifier: Modifier) {
+private fun NotesShelf(notes: HomeTileBody.Notes, modifier: Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (notes.notebooks.isEmpty()) {
             notes.recent.forEach { note ->
@@ -862,7 +807,7 @@ private fun NotesShelf(notes: TileBody.Notes, modifier: Modifier) {
 }
 
 @Composable
-private fun ColumnScope.FilledBody(body: TileBody) {
+private fun ColumnScope.FilledBody(body: HomeTileBody) {
     val column = Modifier.weight(1f, fill = true).fillMaxWidth()
     val photos = body.photos
     val docs = body.docs
@@ -932,7 +877,7 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                     }
                 }
                 // Grey squares with no explanation read as a failed render.
-                if (waiting) {
+                if (waiting && photos.absent_line.isNotEmpty()) {
                     // IT DOES NOT NAME THE GATEWAY any more, and did before:
                     // with the byte door built, a vault placed on the device
                     // holds its own photographs, and "these fill in when it is
@@ -940,7 +885,7 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                     // reason. What is true in every case is that the bytes are
                     // not here yet.
                     Text(
-                        HomeWords.PHOTOS_ABSENT,
+                        photos.absent_line,
                         style = centraidType("mono"),
                         color = centraidColor("textFaint"),
                     )
@@ -1048,7 +993,7 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                 // mirrors under RTL rather than stacking the wrong way.
                 people.faces.forEach { face ->
                     // THE PARTY'S OWN HUE, not a grey disc. `face.color` is the
-                    // key `HomeReads` already resolved with the one port of the
+                    // key Rust already resolved with the one port of the
                     // identity wheel; all this does is spell the emitted role.
                     // An unrecognised key draws the neutral disc rather than
                     // reaching `centraidColor`, which fails LOUDLY by design —
@@ -1105,7 +1050,7 @@ private fun ColumnScope.FilledBody(body: TileBody) {
         spent != null -> Column(column, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             spent.amounts.forEach { amount ->
                 Text(
-                    formatMoney(amount),
+                    amount,
                     style = centraidType("mono"),
                     color = centraidColor("text"),
                     maxLines = 1,
@@ -1200,7 +1145,7 @@ private fun appHue(appId: String): Color {
  * is motion that tells a member nothing and then relayouts under them.
  */
 @Composable
-private fun ColumnScope.Skeleton(body: TileBody?) {
+private fun ColumnScope.Skeleton(body: HomeTileBody?, loading: String) {
     // Key by POSITION, not width — People's skeleton is two bars of the SAME width.
     val widths = if (body?.people != null) listOf(0.46f, 0.46f) else listOf(0.88f, 0.70f, 0.54f)
     Column(
@@ -1208,7 +1153,7 @@ private fun ColumnScope.Skeleton(body: TileBody?) {
             .weight(1f, fill = true)
             .fillMaxWidth()
             .padding(top = 4.dp)
-            .semantics { contentDescription = HomeWords.LOADING },
+            .semantics { contentDescription = loading },
         verticalArrangement = Arrangement.spacedBy(9.dp),
     ) {
         widths.forEach { fraction ->
@@ -1231,7 +1176,7 @@ private fun ColumnScope.Skeleton(body: TileBody?) {
  * about the vault, and an unanswered read has not earned it.
  */
 @Composable
-private fun DayOne(data: HomeData, onEvent: (HomeEvent) -> Unit) {
+private fun DayOne(data: HomeData, loading: String, onOpen: (Route) -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -1240,13 +1185,13 @@ private fun DayOne(data: HomeData, onEvent: (HomeEvent) -> Unit) {
             .testTag("home-day-one"),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(HomeWords.DAY_ONE_TITLE, style = centraidType("title"), color = centraidColor("text"))
+        Text(data.day_one_title, style = centraidType("title"), color = centraidColor("text"))
         Text(
-            HomeWords.DAY_ONE_BODY,
+            data.day_one_body,
             style = centraidType("small"),
             color = centraidColor("textSoft"),
         )
-        TileGrid(data, onEvent)
+        TileGrid(data, loading, onOpen)
     }
 }
 

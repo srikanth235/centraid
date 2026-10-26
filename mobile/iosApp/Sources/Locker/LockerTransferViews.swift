@@ -1,60 +1,57 @@
-import LocalAuthentication
 import SwiftUI
-import UniformTypeIdentifiers
 
-import CentraidShared
+/// Export's and import's events, built once.
+enum LockerExportEvents {
+    static func make(_ build: (inout Centraid_Core_V1_LockerExportEvent) -> Void) -> Centraid_Core_V1_LockerExportEvent {
+        var event = Centraid_Core_V1_LockerExportEvent()
+        build(&event)
+        return event
+    }
+}
+
+enum LockerImportEvents {
+    static func make(_ build: (inout Centraid_Core_V1_LockerImportEvent) -> Void) -> Centraid_Core_V1_LockerImportEvent {
+        var event = Centraid_Core_V1_LockerImportEvent()
+        build(&event)
+        return event
+    }
+}
 
 /// `locker.export` — every secret, in a file (#1047 T2; the handoff's
 /// `locker/export`). The lede in the net register, what leaves, the format,
 /// where it goes, and Write the file.
 ///
-/// **THE VIEW DECIDES NOTHING, AND NEVER SEES THE FILE.** The confirm is the
-/// machine's; the owner check is raised here once per `prompt.token` —
-/// `LAContext` `.deviceOwnerAuthentication`, the lock wall's own seam and
-/// outcome map — and answered with `answered`; the file goes from the bridge
-/// to `LockerTransferRoot`'s save sheet and nowhere else.
+/// **THE VIEW DECIDES NOTHING, AND NEVER SEES THE FILE.** The confirm, the
+/// owner check (`OwnerCheck` effect) and the save sheet (`SaveFile` effect) are
+/// Rust's three asks, in order; the file goes from the core to the system's
+/// save sheet and nowhere else.
 struct LockerExportView: View {
-    let data: Data
-    let lock: Data
-    let send: (Data) -> Void
-    let sendLock: (Data) -> Void
+    let state: Centraid_Core_V1_LockerExportState
+    let send: (Centraid_Core_V1_LockerExportEvent) -> Void
+    let sendWall: (Centraid_Core_V1_LockerWallEvent) -> Void
+    let onWords: () -> Void
     let onBack: () -> Void
-    let onDeparted: () -> Void
 
     @Environment(\.colorScheme) private var scheme
-    /// The last prompt token raised: one OS prompt per token.
-    @State private var raised: UInt64 = 0
 
-    private var state: Centraid_Screen_V1_LockerExportState {
-        (try? Centraid_Screen_V1_LockerExportState(serializedBytes: data)) ?? .init()
-    }
-
-    static func event(_ build: (inout Centraid_Screen_V1_LockerExportEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_LockerExportEvent()
-        build(&event)
-        return event.encoded
-    }
-
-    private func content(_ state: Centraid_Screen_V1_LockerExportState) -> ScreenContent<Centraid_Screen_V1_LockerExportData> {
+    private var content: ScreenContent<Centraid_Core_V1_LockerExportData> {
         switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
+        case .loading?, nil: return .loading(true)
         case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .denied(denied)?: return .gated(denied)
         case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
         }
     }
 
     var body: some View {
-        let state = state
-        LockerCovered(lock: lock, sendLock: sendLock, onBack: onBack) {
+        LockerCovered(wall: state.hasWall ? state.wall : nil, backLabel: state.chrome.backLabel, send: sendWall, onWords: onWords, onBack: onBack) {
             PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
                 EmptyView()
             } content: {
-                LockerShield(lock: lock) {
+                LockerShield(secure: state.secure) {
                     ReadStateView(
-                        content: content(state),
-                        onRetry: { send(Self.event { $0.refreshed = .init() }) }
+                        content: content,
+                        onRetry: { send(LockerExportEvents.make { $0.refreshed = .init() }) }
                     ) { export in
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 0) { page(export) }
@@ -71,26 +68,23 @@ struct LockerExportView: View {
                 }
             }
         }
-        .onAppear { raise(state) }
-        .onChange(of: state.hasPrompt ? state.prompt.token : 0) { _, _ in raise(state) }
         .sheet(isPresented: Binding(
             get: { state.hasConfirm },
-            set: { open in if !open, state.hasConfirm { send(Self.event { $0.dismissed = .init() }) } }
+            set: { isOpen in if !isOpen, state.hasConfirm { send(LockerExportEvents.make { $0.dismissed = .init() }) } }
         )) {
-            LockerShield(lock: lock) {
+            LockerShield(secure: state.secure) {
                 ConfirmSheet(
                     state.confirm,
-                    onConfirm: { send(Self.event { $0.confirmed = .init() }) },
-                    onDismiss: { send(Self.event { $0.dismissed = .init() }) }
+                    onConfirm: { send(LockerExportEvents.make { $0.confirmed = .init() }) },
+                    onDismiss: { send(LockerExportEvents.make { $0.dismissed = .init() }) }
                 )
             }
             .modifier(SheetPresentation(detents: ConfirmSheet.detents))
         }
-        .onDisappear(perform: onDeparted)
     }
 
     @ViewBuilder
-    private func page(_ export: Centraid_Screen_V1_LockerExportData) -> some View {
+    private func page(_ export: Centraid_Core_V1_LockerExportData) -> some View {
         Text(export.lede)
             .centraidType("body")
             .foregroundStyle(Theme.color("net", scheme))
@@ -105,7 +99,7 @@ struct LockerExportView: View {
                 .foregroundStyle(Theme.color("textSoft", scheme))
                 .padding(.horizontal, CentraidGeometry.pageMargin)
             LockerChoicePills(choices: export.formats, identifier: "locker-export-format") { key in
-                send(Self.event { $0.format = .with { $0.key = key } })
+                send(LockerExportEvents.make { $0.format = .with { $0.key = key } })
             }
             LockerNote(text: export.formatNote)
         }
@@ -113,7 +107,7 @@ struct LockerExportView: View {
         FieldRow(key: export.whereLabel, value: export.whereValue, note: export.whereNote)
         if !export.commitLabel.isEmpty {
             KitInkButton(label: export.commitLabel) {
-                send(Self.event { $0.commit = .init() })
+                send(LockerExportEvents.make { $0.commit = .init() })
             }
             .accessibilityIdentifier("locker-export-commit")
             .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -121,68 +115,38 @@ struct LockerExportView: View {
         }
         LockerNote(text: export.commitNote)
     }
-
-    /// THE OWNER CHECK, AFRESH: the lock wall's seam, once per token.
-    private func raise(_ state: Centraid_Screen_V1_LockerExportState) {
-        guard state.hasPrompt, state.prompt.token != 0, state.prompt.token > raised else { return }
-        let token = state.prompt.token
-        raised = token
-        LAContext().evaluatePolicy(.deviceOwnerAuthentication, localizedReason: state.prompt.reason) { ok, error in
-            let outcome = ok ? Centraid_Screen_V1_LockerLockEvent.PromptAnswered.Outcome.succeeded : LockerLockSeam.outcome(error)
-            DispatchQueue.main.async {
-                send(Self.event { $0.answered = .with { $0.token = token; $0.outcome = outcome } })
-            }
-        }
-    }
 }
 
-/// `locker.import` — a password-manager file, reviewed and sealed in (#1047
-/// T2; the handoff's `locker/import`). Choose is an intent: the view opens
-/// the system file importer, reads the chosen file's bytes from the
-/// importer's own URL — never copied into this app's storage — and hands
-/// them to the bridge. Every word, verdict and verb is the machine's.
+/// `locker.import` — a password-manager file, reviewed and sealed in (#1047 T2;
+/// the handoff's `locker/import`). Choose is a `PickBytes` effect Rust asks the
+/// shell for; every word, verdict and verb is Rust's.
 struct LockerImportView: View {
-    let data: Data
-    let lock: Data
-    let send: (Data) -> Void
-    let sendLock: (Data) -> Void
-    let onPicked: (String, Data) -> Void
+    let state: Centraid_Core_V1_LockerImportState
+    let send: (Centraid_Core_V1_LockerImportEvent) -> Void
+    let sendWall: (Centraid_Core_V1_LockerWallEvent) -> Void
+    let onWords: () -> Void
     let onBack: () -> Void
-    let onDeparted: () -> Void
 
     @Environment(\.colorScheme) private var scheme
-    @State private var importing = false
 
-    private var state: Centraid_Screen_V1_LockerImportState {
-        (try? Centraid_Screen_V1_LockerImportState(serializedBytes: data)) ?? .init()
-    }
-
-    static func event(_ build: (inout Centraid_Screen_V1_LockerImportEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_LockerImportEvent()
-        build(&event)
-        return event.encoded
-    }
-
-    private func content(_ state: Centraid_Screen_V1_LockerImportState) -> ScreenContent<Centraid_Screen_V1_LockerImportData> {
+    private var content: ScreenContent<Centraid_Core_V1_LockerImportData> {
         switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
+        case .loading?, nil: return .loading(true)
         case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .denied(denied)?: return .gated(denied)
         case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
         }
     }
 
     var body: some View {
-        let state = state
-        LockerCovered(lock: lock, sendLock: sendLock, onBack: onBack) {
+        LockerCovered(wall: state.hasWall ? state.wall : nil, backLabel: state.chrome.backLabel, send: sendWall, onWords: onWords, onBack: onBack) {
             PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
                 EmptyView()
             } content: {
-                LockerShield(lock: lock) {
+                LockerShield(secure: state.secure) {
                     ReadStateView(
-                        content: content(state),
-                        onRetry: { send(Self.event { $0.refreshed = .init() }) }
+                        content: content,
+                        onRetry: { send(LockerImportEvents.make { $0.refreshed = .init() }) }
                     ) { plan in
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 0) { page(plan) }
@@ -199,30 +163,15 @@ struct LockerImportView: View {
                 }
             }
         }
-        .fileImporter(
-            isPresented: $importing,
-            allowedContentTypes: [.commaSeparatedText, .json, .plainText],
-            allowsMultipleSelection: false
-        ) { result in
-            guard case let .success(urls) = result, let url = urls.first else { return }
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            // READ IN PLACE: the file's bytes, from the importer's own URL.
-            if let bytes = try? Data(contentsOf: url) {
-                onPicked(url.lastPathComponent, bytes)
-            }
-        }
-        .onDisappear(perform: onDeparted)
     }
 
     @ViewBuilder
-    private func page(_ plan: Centraid_Screen_V1_LockerImportData) -> some View {
+    private func page(_ plan: Centraid_Core_V1_LockerImportData) -> some View {
         LockerNote(text: plan.lede)
         FieldRow(key: plan.fileLabel, value: plan.fileValue, note: plan.fileNote)
         if !plan.chooseLabel.isEmpty {
             KitOutlineButton(label: plan.chooseLabel) {
-                send(Self.event { $0.choose = .init() })
-                importing = true
+                send(LockerImportEvents.make { $0.choose = .init() })
             }
             .accessibilityIdentifier("locker-import-choose")
             .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -265,11 +214,11 @@ struct LockerImportView: View {
             }
         }
         if !plan.publishLabel.isEmpty {
-            // PUBLISH AND DISCARD ARE ALTERNATIVES: one stack, the note
-            // that says what publishing does between them.
+            // PUBLISH AND DISCARD ARE ALTERNATIVES: one stack, the note that
+            // says what publishing does between them.
             KitChoiceStack {
                 KitInkButton(label: plan.publishLabel) {
-                    send(Self.event { $0.publish = .init() })
+                    send(LockerImportEvents.make { $0.publish = .init() })
                 }
                 .accessibilityIdentifier("locker-import-publish")
                 if !plan.publishNote.isEmpty {
@@ -289,86 +238,10 @@ struct LockerImportView: View {
         }
     }
 
-    private func discard(_ plan: Centraid_Screen_V1_LockerImportData) -> some View {
+    private func discard(_ plan: Centraid_Core_V1_LockerImportData) -> some View {
         KitOutlineButton(label: plan.discardLabel) {
-            send(Self.event { $0.discard = .init() })
+            send(LockerImportEvents.make { $0.discard = .init() })
         }
         .accessibilityIdentifier("locker-import-discard")
-    }
-}
-
-/// THE EXPORT'S SAVE SEAM, AT THE ROOT (`LockerExportBridge.onSave`): the
-/// system exporter over the bytes the core rendered, written by the system
-/// where the member chooses, answered exactly once. No temporary file and no
-/// copy in this app's storage: the document hands its bytes to the exporter.
-struct LockerTransferRoot: View {
-    @State private var exporting = false
-    @State private var file = LockerExportFile(bytes: Data(), type: .commaSeparatedText)
-    @State private var name = ""
-    @State private var answered = false
-
-    var body: some View {
-        Color.clear
-            .onAppear {
-                LockerScreens.exportBridge.onSave = { bytes, fileName, mediaType in
-                    let data = bytes.data
-                    DispatchQueue.main.async {
-                        file = LockerExportFile(bytes: data, type: mediaType == "application/json" ? .json : .commaSeparatedText)
-                        name = fileName
-                        answered = false
-                        exporting = true
-                    }
-                }
-            }
-            .fileExporter(
-                isPresented: $exporting,
-                document: file,
-                contentType: file.type,
-                defaultFilename: name
-            ) { result in
-                answered = true
-                switch result {
-                case .success: LockerScreens.exportBridge.saved()
-                case let .failure(error):
-                    if (error as NSError).code == NSUserCancelledError {
-                        LockerScreens.exportBridge.saveCancelled()
-                    } else {
-                        LockerScreens.exportBridge.saveRefused(sentence: "")
-                    }
-                }
-                // THE BYTES LEAVE THIS VIEW'S STATE with the sheet.
-                file = LockerExportFile(bytes: Data(), type: .commaSeparatedText)
-            }
-            // EXACTLY ONCE: the exporter closed without answering.
-            .onChange(of: exporting) { _, up in
-                guard !up else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    file = LockerExportFile(bytes: Data(), type: .commaSeparatedText)
-                    guard !answered else { return }
-                    answered = true
-                    LockerScreens.exportBridge.saveCancelled()
-                }
-            }
-    }
-}
-
-/// The export as a document the exporter writes, byte for byte.
-struct LockerExportFile: FileDocument {
-    static var readableContentTypes: [UTType] { [.commaSeparatedText, .json] }
-    let bytes: Data
-    let type: UTType
-
-    init(bytes: Data, type: UTType) {
-        self.bytes = bytes
-        self.type = type
-    }
-
-    init(configuration: ReadConfiguration) throws {
-        bytes = configuration.file.regularFileContents ?? Data()
-        type = configuration.contentType
-    }
-
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: bytes)
     }
 }

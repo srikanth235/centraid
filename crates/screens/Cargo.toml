@@ -1,0 +1,39 @@
+[package]
+name = "centraid-screens"
+description = "The screen runtime: every decision a person sees is made here, in Rust (#1135)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_screens"
+path = "src/lib.rs"
+
+[dependencies]
+centraid-api-proto = { path = "../api-proto" }
+centraid-core = { path = "../core" }
+# The folder walk: a document's path, a folder page's crumbs and a Move sheet's labels are
+# the docs crate's one `folder_path` (#1135).
+centraid-apps-docs = { path = "../apps/docs" }
+# The chat's scopes are the assistant's apps (`App::ALL`) and a scope's name is the app's own.
+centraid-assist = { path = "../assist" }
+prost.workspace = true
+serde_json.workspace = true
+# THE ONE PARTY HUE WHEEL: a project and a calendar are drawn in the hue their id lands on.
+centraid-design = { path = "../design" }
+# Locker's one-time-code seed rule is the app crate's (`totp::seed_of`): the
+# editor says why a seed is refused with the core's own sentence, not a copy.
+centraid-apps-locker = { path = "../apps/locker" }
+# The generator draws from the operating system's CSPRNG.
+rand.workspace = true
+# The keyed test driver derives the vault seed from the recovery words.
+centraid-identity = { path = "../identity" }
+# The headless driver founds and seeds a scratch vault (`testing`).
+centraid-ontology = { path = "../ontology" }
+
+[dev-dependencies]
+# Photos' tests stage a photograph's bytes and need the digest the vault names them by.
+centraid-vault = { path = "../vault" }

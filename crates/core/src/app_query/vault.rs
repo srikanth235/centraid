@@ -48,7 +48,7 @@ const PERSON_ENTITY: &str = "person";
 /// containers that matched.
 type Opened = (Vec<Target>, Vec<Target>);
 
-pub(super) fn search(
+pub(crate) fn search(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::VaultSearchRequest,
@@ -264,27 +264,21 @@ mod tests {
 
         fn run(&self, name: &str, input: serde_json::Value) -> serde_json::Value {
             self.writes.set(self.writes.get() + 1);
-            let response = self
+            let outcome = self
                 .handle
-                .call(&wire::Request {
-                    kind: Some(wire::request::Kind::Command(wire::Command {
-                        name: name.to_owned(),
-                        input: serde_json::to_vec(&input).expect("json"),
-                        invoke_key: format!("vault-search-test-{}", self.writes.get()),
-                        ..wire::Command::default()
-                    })),
-                })
+                .command(
+                    name,
+                    &input,
+                    &format!("vault-search-test-{}", self.writes.get()),
+                )
                 .unwrap_or_else(|error| panic!("{name} refused: {error}"));
-            let Some(wire::response::Kind::Command(outcome)) = response.kind else {
-                panic!("a command answered with something else");
-            };
             assert_eq!(
                 outcome.status,
-                wire::CommandStatus::Executed as i32,
-                "{name}: {}",
+                centraid_vault::CommandStatus::Executed,
+                "{name}: {:?}",
                 outcome.reason
             );
-            serde_json::from_slice(&outcome.output).expect("the output is JSON")
+            outcome.output
         }
     }
 
@@ -319,7 +313,10 @@ mod tests {
             .map(|hit| (hit.app_id.as_str(), hit.entity.as_str(), hit.id.as_str()))
             .collect();
         assert!(hits.contains(&("notes", "note", note.as_str())), "{hits:?}");
-        assert!(hits.contains(&("tasks", "task", task.as_str())), "{hits:?}");
+        assert!(
+            hits.contains(&("agenda", "task", task.as_str())),
+            "{hits:?}"
+        );
         assert!(
             hits.contains(&("locker", "locker_item", item.as_str())),
             "{hits:?}"
@@ -358,7 +355,7 @@ mod tests {
         let slipped = scratch.search("cabni");
         let apps: Vec<&str> = slipped.hits.iter().map(|hit| hit.app_id.as_str()).collect();
         assert!(
-            apps.contains(&"notes") && apps.contains(&"tasks"),
+            apps.contains(&"notes") && apps.contains(&"agenda"),
             "{apps:?}"
         );
         assert_eq!(slipped.corrected, "cabin");
@@ -560,7 +557,7 @@ mod tests {
         assert_eq!(hits.len(), 4, "{hits:?}");
         assert_eq!(hits[&("notes", "notebook")], (notebook.as_str(), ""));
         assert_eq!(hits[&("photos", "album")], (album.as_str(), ""));
-        assert_eq!(hits[&("tasks", "project")], (project.as_str(), ""));
+        assert_eq!(hits[&("agenda", "project")], (project.as_str(), ""));
         assert_eq!(hits[&("docs", "folder")], (folder.as_str(), ""));
         // Titles are the names; a container's subtitle is its kind.
         let titled: BTreeSet<&str> = found.hits.iter().map(|hit| hit.title.as_str()).collect();

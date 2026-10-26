@@ -9,10 +9,10 @@
 //
 // ## Why a REQUEST ARM and not a registered command
 //
-// Every other write the shell makes is a `Command` through
-// `centraid_vault::commands::Registry`, and founding cannot be one. The
-// registry's gate (`crates/vault/src/commands/mod.rs`) evaluates a `Principal`
-// against `vault.self_id` and ends in a journal row, and a vault that has not
+// Every other write the shell makes is an `act` (`action.proto`) that runs a
+// registered command through `centraid_vault::commands::Registry`, and founding
+// cannot be one. The registry's gate (`crates/vault/src/commands/mod.rs`)
+// evaluates a principal against `vault.self_id` and ends in a journal row, and a vault that has not
 // been founded has neither. Founding is the act that WRITES them. A command that
 // had to be exempted from the gate would be a second command plane wearing the
 // first one's name.

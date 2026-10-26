@@ -315,7 +315,7 @@ pub(crate) struct ResultSet {
 /// One inverse write, recorded for `undo`.
 #[derive(Debug, Clone)]
 pub(crate) struct Inverse {
-    pub command: String,
+    pub act: crate::native::door::Call,
     pub input: Value,
     pub key: Key,
 }

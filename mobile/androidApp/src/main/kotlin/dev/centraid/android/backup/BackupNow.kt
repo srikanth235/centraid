@@ -20,14 +20,12 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dev.centraid.android.MainActivity
-import dev.centraid.shared.sync.BackupClaim
-import dev.centraid.shared.sync.DrainCopy
-import dev.centraid.shared.sync.DrainPass
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import dev.centraid.android.session.AppSession
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -44,17 +42,16 @@ import kotlinx.coroutines.launch
  * | 34 and up | a user-initiated data transfer job (`setUserInitiated`, `RUN_USER_INITIATED_JOBS`) | the job's notification |
  * | below 34 | a `dataSync` foreground service | its ongoing notification |
  *
- * Both run the same body, [run]: the core's pass, in this process, under the
- * member's rule — the core decides per item what crosses which link, so the
- * job's own constraint is only "a network exists" — and both stop at
- * [BUDGET_MS]. What the pass does not finish, the periodic worker and the next
- * open carry on with: the spool never loses a sealed part.
+ * Both run the same body, [run]: they hold the process while Rust's pass runs
+ * (the member's rule decides per item what crosses which link, so the job's
+ * own constraint is only "a network exists") and both stop at [BUDGET_MS].
+ * What the pass does not finish, the periodic worker and the next open carry
+ * on with: the spool never loses a sealed part.
  *
  * **Started and stopped by the member's run, from a visible app.**
- * `HomeSession.backUpNow` calls [start] as the run begins and [stop] however
- * it ends (seam contract A11's `SyncPass.installBacklog`, installed by
- * `CentraidApplication`); the Backup sheet only sends the event, once the
- * notification grant is answered. A user-initiated job may only be scheduled
+ * Rust's `LongRun` effect calls [start] as the run begins and [stop] however
+ * it ends (`session/ShellEffects.kt`); the Backup sheet only sends the event, once
+ * the notification grant is answered. A user-initiated job may only be scheduled
  * while the app is visible and a foreground service may not be started from
  * the background on Android 12 and up; a refusal answers `false` and the
  * periodic worker remains the backstop. Starting twice is a no-op.
@@ -68,15 +65,6 @@ public object BackupNow {
     public const val BUDGET_MS: Long = 30L * 60L * 1_000L
 
     /**
-     * When another pass in this process already holds a vault's lock
-     * ([DrainPass.Outcome.Busy] — the member's own run, which started this
-     * job, typically), the job waits this long and asks again rather than
-     * ending: the job is what keeps the process alive for that run to finish,
-     * and [stop] ends it when the run does.
-     */
-    internal const val BUSY_RETRY_MS: Long = 5_000L
-
-    /**
      * One id for the job and its notification: there is one "Back up now".
      *
      * NO CLASH WITH WORKMANAGER'S JOBS, though lint's
@@ -88,8 +76,21 @@ public object BackupNow {
     internal const val JOB_ID: Int = 1080
     internal const val NOTIFICATION_ID: Int = 1080
 
+    /**
+     * The notification's words, Rust's (`LongRun`): the title of the run and the name of its
+     * channel. Kept for the job or the service that posts the notification after [start].
+     */
+    @Volatile internal var title: String = ""
+    @Volatile internal var channelName: String = ""
+
     /** Start it. `false` when the platform refused; see the class comment. */
-    public fun start(context: Context): Boolean =
+    public fun start(context: Context, title: String, channelName: String): Boolean {
+        this.title = title
+        this.channelName = channelName
+        return startRun(context)
+    }
+
+    private fun startRun(context: Context): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startJob(context.applicationContext)
         } else {
@@ -139,24 +140,14 @@ public object BackupNow {
     }
 
     /**
-     * THE BODY BOTH RUN: passes over every held vault until the spool is empty
-     * or [BUDGET_MS] is spent, holding the process's one session throughout.
+     * THE BODY BOTH RUN: the process's session held, nothing else. The pass is Rust's (`passes`):
+     * the member's "Back up now" starts it and `LongRun` starts this, so the job exists to hold the
+     * process and its one core for exactly that run, even once the activity is gone; [stop] ends it
+     * when the run does, and [BUDGET_MS] bounds a job nobody is watching.
      */
     internal suspend fun run(context: Context): Boolean {
-        val until = System.currentTimeMillis() + BUDGET_MS
-        return ProcessSession.use(context) { session ->
-            var drained = false
-            while (true) {
-                val left = until - System.currentTimeMillis()
-                if (left <= 0L) break
-                val outcomes = session.drain.run(left)
-                drained = ProcessSession.drained(outcomes)
-                val busy = outcomes.any { it.outcome is DrainPass.Outcome.Busy }
-                if (!busy) break
-                delay(BUSY_RETRY_MS)
-            }
-            drained
-        }
+        AppSession.use(context) { delay(BUDGET_MS) }
+        return false
     }
 }
 
@@ -252,9 +243,9 @@ internal object BackupNotices {
         val manager = NotificationManagerCompat.from(context)
         manager.createNotificationChannel(
             NotificationChannelCompat.Builder(CHANNEL, NotificationManagerCompat.IMPORTANCE_LOW)
-                // THE SHELL'S OWN WORDS (`commonMain`), so the notification and
-                // the screens cannot word one thing two ways.
-                .setName(BackupClaim.TITLE)
+                // RUST'S WORDS (`LongRun`), so the notification and the
+                // screens cannot word one thing two ways.
+                .setName(BackupNow.channelName)
                 .build(),
         )
         val open = PendingIntent.getActivity(
@@ -268,7 +259,7 @@ internal object BackupNotices {
             // monochrome resource the system tints, and the app ships no
             // drawable of its own.
             .setSmallIcon(android.R.drawable.stat_sys_upload)
-            .setContentTitle(DrainCopy.IN_FLIGHT_TITLE)
+            .setContentTitle(BackupNow.title)
             .setProgress(0, 0, true)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

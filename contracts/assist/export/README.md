@@ -10,7 +10,7 @@ What the model sees and how its tokens are written, as the Rust runtime states i
 | `kind_card.txt` | One line per kind: its fields, links, verbs and balance. | `authored/cells.py`, `authored/gen/drills.py` |
 | `date_expr.schema.json` | The JSON Schema of a date expression. | The authoring brief (`authored/BRIEF.md`) |
 | `phrases.json` | The date-phrase table and each phrase's expression. | `authored/gen/drills.py` |
-| `metadata.json` | The metadata table as JSON: kinds, fields, enums, verbs, links, constants. | `authored/cells.py` |
+| `metadata.json` | The metadata table as JSON: kinds, fields, enums, verbs, links, constants, plus the whole app catalog (`catalog`: every action's verb, kind, inverse, sealed fields, chat surface and phrasings, every query's kind and figures) and what the runtime does not run yet (`declared_kinds`, `declared_verbs`, `unbacked_verbs`). | `authored/cells.py` |
 | `errors.json` | The error table: every observation a bad call earns, with its example. | `authored/gen/common.py`, `authored/gen/recover.py` |
 | `prompt.sig.txt` | The system turn over the fixture world in the default (`sig`) tools mode. | `authored/cells.py` |
 | `prompt.compact.txt`, `prompt.full.txt` | The same turn in the other two tools modes. | No script today; review |

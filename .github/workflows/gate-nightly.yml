@@ -97,9 +97,9 @@ jobs:
   # THE KOTLIN HALF ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3, D-1020-B2-3).
   #
   # `cargo xtask gate --profile mobile-jvm` — one step: build the cdylib, run
-  # `./gradlew -p mobile mobileJvm` (`:shared:jvmTest`, `:core:jvmTest` over the
-  # REAL `libcentraid_core_ffi.so`, `:shared:koverXmlReport`), then regenerate
-  # the committed native theme and screen fixtures and fail on drift.
+  # `./gradlew -p mobile mobileJvm` (`:core:jvmTest` over the REAL
+  # `libcentraid_core_ffi.so`), then regenerate the committed native design
+  # tables and screen fixtures and fail on drift.
   #
   # A SEPARATE JOB, not a step of the profile above, because `mobile-jvm` is not
   # a superset of any other profile: it is a second toolchain with its own cold

@@ -33,7 +33,7 @@ import Foundation
 ///
 /// | Path | Made by | What it is |
 /// |---|---|---|
-/// | `vault.db`, `-wal`, `-shm` | `Shelf` (Kotlin) names it; SQLite | the vault |
+/// | `vault.db`, `-wal`, `-shm` | the Rust shelf names it (`crates/screens/src/vault`); SQLite | the vault |
 /// | `vault.bytes` | the core's content store | originals with no OS-library home, and every derivative |
 /// | `vault.backup.db`, `-wal`, `-shm` | the core's backup ledger (`crates/vault/src/backup/ledger.rs`) | destinations, confirmations, the queue — device-local and derived |
 /// | `vault.spool/` | the core's spool | sealed parts waiting for a gateway, which the OS reads while the app is suspended |

@@ -48,9 +48,10 @@ if [ -z "$proto_dir" ]; then
   exit 1
 fi
 
-# Every proto, relative to the proto root and in a stable order.
+# Every proto, relative to the proto root and in a stable order. All of them
+# are `centraid.core.v1`: the app draws its view states (#1135).
 protos() {
-  (cd "$proto_dir" && find . -name '*.proto' | sed 's|^\./||' | LC_ALL=C sort)
+  (cd "$proto_dir" && find ./centraid/core -name '*.proto' | sed 's|^\./||' | LC_ALL=C sort)
 }
 
 generate() {

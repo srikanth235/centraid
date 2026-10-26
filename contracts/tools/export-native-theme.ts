@@ -4,7 +4,7 @@
 // `packages/design` is the one token source with two lowerings from one token
 // set: `toCss()` for web and desktop, `toNativeTheme(scheme)` for native
 // (`packages/design/src/native.ts:213`). The native lowering's own doctrine is
-// already a KMP theme contract — every value concrete and ready to render, no
+// already a native theme contract — every value concrete and ready to render, no
 // `var()`, `calc()`, `color-mix()`, `oklch()`, stylesheet parser or runtime
 // override layer in the mobile path — so a Kotlin `Color` table and a Swift
 // `Theme` struct are not a third and fourth lowering. They are the SAME
@@ -19,20 +19,14 @@
 //
 //   bun contracts/tools/export-native-theme.ts
 //   bun run format
-//   git diff --exit-code design copy mobile
+//   git diff --exit-code design mobile
 //
-// The last line is the gate. It is in `cargo xtask`'s `mobile-jvm` step, so a
-// token change that forgets to regenerate reds in the same place a test would.
+// The last line is the gate. It is `cargo xtask`'s `emitters` step (per PR), so
+// a token change that forgets to regenerate reds in the same place a test would.
 //
-// COPY NO LONGER TRAVELS THIS ROAD, AND THAT IS A SUPERSESSION RATHER THAN A
-// REGRESSION (#1020, wave 6). `export-copy.ts` read v0's per-app `*-copy.ts`
-// leaves under `packages/blueprints`, and wave 6 deleted that tree; the emitter
-// and its input went with it. So `copy/*.json` and
-// `mobile/shared/.../design/Copy.kt` are no longer generated — they are the
-// SOURCE now, the last artifact of a lowering whose upstream is retired, and
-// their own banners say so. Leaving the dead `emitCopy` import here is what
-// made this whole command — the one command that writes every native artifact —
-// unrunnable between the retire commit and wave A.
+// THE KIT'S FIXED WORDS travel a road of their own (`export-native-words.ts`,
+// called below): their source is the Rust catalogue, not `packages/design`,
+// and native views write no other copy (#1135).
 
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -44,7 +38,11 @@ import {
   assertNativeColorRoleContract,
 } from "../../packages/design/src/roles.ts";
 import { emitIdentityCorpus } from "./export-design-corpus.ts";
-import { emitNativeCatalog } from "./export-native-catalog.ts";
+import {
+  KOTLIN_DESIGN_DIR,
+  emitNativeCatalog,
+} from "./export-native-catalog.ts";
+import { emitNativeWords } from "./export-native-words.ts";
 import { FACES, postScriptName } from "./native-theme-faces.ts";
 
 const repositoryRoot = new URL("../..", import.meta.url).pathname;
@@ -181,10 +179,10 @@ writeFileSync(
     {
       $generatedBy: "contracts/tools/export-native-theme.ts",
       $note:
-        "The native lowering of packages/design, emitted for the KMP shared " +
-        "module and for SwiftUI. Regenerate with " +
+        "The native lowering of packages/design, emitted for Compose and " +
+        "SwiftUI. Regenerate with " +
         "`bun contracts/tools/export-native-theme.ts && bun run format`; " +
-        "`git diff --exit-code design copy mobile` is the drift check (#1020).",
+        "`git diff --exit-code design mobile` is the drift check (#1020).",
       // THE ROLE CONTRACT, AS DATA (#1020, D-1020-T1). It is asserted above
       // over the emitted table, in TypeScript; carrying the map lets
       // `crates/design` re-assert the same thing over the same bytes rather
@@ -204,7 +202,7 @@ const header = (): string => {
     `${comment}`,
     `${comment} The native lowering of packages/design (#1020, D-1020-E6). A hand-edited`,
     `${comment} copy of this table is a fourth lowering with no drift gate, which is what`,
-    `${comment} \`git diff --exit-code design copy mobile\` in the mobile-jvm gate step`,
+    `${comment} \`git diff --exit-code design mobile\` in the emitters gate step`,
     `${comment} exists to prevent.`,
     `${comment}`,
     `${comment} THE FACE TABLE BELOW IS EMITTED TOO, and so are the .ttf files it names:`,
@@ -349,20 +347,11 @@ for (const scheme of SCHEMES) {
 }
 kotlinLines.push("}", "");
 
-mkdirSync(
-  path.join(
-    repositoryRoot,
-    "mobile/shared/src/commonMain/kotlin/dev/centraid/design"
-  ),
-  {
-    recursive: true,
-  }
-);
+mkdirSync(path.join(repositoryRoot, KOTLIN_DESIGN_DIR), {
+  recursive: true,
+});
 writeFileSync(
-  path.join(
-    repositoryRoot,
-    "mobile/shared/src/commonMain/kotlin/dev/centraid/design/Tokens.kt"
-  ),
+  path.join(repositoryRoot, KOTLIN_DESIGN_DIR, "Tokens.kt"),
   `${kotlinLines.join("\n")}`
 );
 
@@ -494,21 +483,21 @@ writeFileSync(
 // --- the identity corpus and the app catalogue ----------------------------
 //
 // Both are their OWN emitters and are called here, so one command still emits
-// every artifact it can (#1020, D-1020-T5). Copy is no longer among them — see
-// the banner at the top of this file.
+// every artifact it can (#1020, D-1020-T5), and so are the kit's words (#1135).
 
 const corpusCounts = emitIdentityCorpus(repositoryRoot);
 const catalogCounts = emitNativeCatalog(repositoryRoot);
+const wordCounts = emitNativeWords(repositoryRoot);
 
 console.error(
   `emitted design/native-{theme,catalog}.json, ` +
     `mobile/iosApp/Resources/Fonts and mobile/androidApp/.../res/font ` +
     `(${resolvedFaces.reduce((count, family) => count + family.faces.length, 0)} faces), ` +
-    `mobile/shared .../design/{Tokens,Catalog}.kt and ` +
-    `mobile/iosApp/Design/{Theme,Catalog}.swift ` +
+    `${KOTLIN_DESIGN_DIR}/{Tokens,Catalog,Words}.kt and ` +
+    `mobile/iosApp/Design/{Theme,Catalog,Words}.swift ` +
     `(${colorNames.length} colour roles, ${effectNames.length} non-colour effect ` +
     `entries, ` +
     `${corpusCounts.hues + corpusCounts.initials + corpusCounts.tones} corpus rows, ` +
     `${catalogCounts.apps} apps, ${catalogCounts.icons} icons, ` +
-    `${catalogCounts.paths} icon paths)`
+    `${catalogCounts.paths} icon paths, ${wordCounts.words} kit words)`
 );

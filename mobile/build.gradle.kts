@@ -5,7 +5,7 @@
 // with no Android SDK where nothing can use it — a download to reach a failure.
 // A `buildscript` block is the one place Gradle lets that resolution be
 // conditional, and subprojects inherit the classpath, which is what
-// `mobile/{core,shared}/build.gradle.kts` then apply by id.
+// `mobile/{core,androidApp}/build.gradle.kts` then apply by id.
 //
 // The gate itself (the ANDROID_HOME check and its message) is in
 // `settings.gradle.kts`, which runs first.
@@ -34,7 +34,6 @@ buildscript {
 plugins {
     alias(libs.plugins.kotlin.multiplatform) apply false
     alias(libs.plugins.wire) apply false
-    alias(libs.plugins.kover) apply false
 }
 
 // ONE FILE FOR THE DEPLOYMENT FLOOR (D-1020-E1). Gradle reads it for the
@@ -79,5 +78,5 @@ tasks.register("mobileJvm") {
     description =
         "What `cargo xtask gate`'s mobile-jvm step runs: the JVM-provable half " +
             "of the mobile tree. Everything else is an owner hand-off (mobile/README.md)."
-    dependsOn(":shared:jvmTest", ":core:jvmTest", ":shared:koverXmlReport")
+    dependsOn(":core:jvmTest")
 }

@@ -3,12 +3,10 @@ import SwiftUI
 import UIKit
 #endif
 
-import CentraidShared
-
 /// THE BAND — invariant 1 (#1020, wave A; v0 `screens/home/HomeBand.tsx`).
 ///
 /// One band, never app-themed, never scrolled away, frame destinations only.
-/// The shared `BandPolicy` decides which destinations and in what order; this
+/// Rust (`Navigation.band`) decides which destinations and in what order; this
 /// file draws them and names the one that was pressed. Where a press GOES is
 /// the navigator's, which is why nothing here routes.
 ///
@@ -22,39 +20,36 @@ import CentraidShared
 /// so the band is native-stack chrome drawn at the foot of Home — a tab bar
 /// would make every app a peer of Home and leave nowhere for a cover to come
 /// from.
+///
+/// One place in the band, as Rust worded it (`ShellBandTab`) or, for the two
+/// places this shell still hosts itself, as `HomeView` words them for now.
+struct BandPlace: Hashable {
+    let id: String
+    let label: String
+    let spoken: String
+    let iconKey: String
+    let selected: Bool
+}
+
 struct HomeBand: View {
-    let active: String
+    let places: [BandPlace]
     let onSelect: (String) -> Void
 
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(BandDestinations.tabs, id: \.id) { place in
+            ForEach(places, id: \.id) { place in
                 BandTab(
                     iconKey: place.iconKey,
-                    label: place.short,
-                    // SPEAK WHAT IS PAINTED. v0's band once spoke one noun for
-                    // "Needs you" and painted another, so two members got two
-                    // names for one place.
-                    spoken: place.short + (place.id == active ? ", " + SharedCopy.shared.BAND_CURRENT_SPOKEN : ""),
-                    selected: place.id == active,
+                    label: place.label,
+                    // SPEAK WHAT IS PAINTED, and which place is the current one.
+                    spoken: place.spoken,
+                    selected: place.selected,
                     identifier: "home-band-\(place.id)",
                     onPress: { onSelect(place.id) }
                 )
             }
-            // BACKUP, the band's last place: a tab like Chat, drawn in place of
-            // the springboard — where the backup stands, the backup devices
-            // and the 24 words — so a member never hunts for the one thing
-            // that brings the vault back. Every app is a tile on Home.
-            BandTab(
-                iconKey: "Backup",
-                label: HomeWords.shared.BAND_BACKUP,
-                spoken: HomeWords.shared.BAND_BACKUP_SPOKEN + (active == BandPolicy.shared.PLACE_BACKUP ? ", " + SharedCopy.shared.BAND_CURRENT_SPOKEN : ""),
-                selected: active == BandPolicy.shared.PLACE_BACKUP,
-                identifier: "home-band-backup",
-                onPress: { onSelect(BandPolicy.shared.PLACE_BACKUP) }
-            )
         }
         .padding(BandMetrics.platePad)
         // THE BAND FLOATS (§G), never a flush bar. Its ground is the page's
@@ -62,7 +57,7 @@ struct HomeBand: View {
         // and not `bgChrome`, which sinks on dark — and its edge is
         // `lineStrong`, never the lighter `line`.
         .background(Theme.color("bgElev", scheme))
-        // A PILL (`BandPolicy.BAND_RADIUS`), drawn as `Capsule` so the ends are
+        // A PILL (`BandMetrics.radius`), drawn as `Capsule` so the ends are
         // exact semicircles at whatever height the plate takes.
         .clipShape(Capsule())
         .overlay(
@@ -202,7 +197,7 @@ struct AppBand: View {
                 Capsule()
                     .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
             )
-            .accessibilityLabel(HomeWords.shared.BAND_HOME)
+            .accessibilityLabel(KitWords.BAND_HOME)
             .accessibilityIdentifier("\(app)-band-home")
 
             // ONE plate; the gutter between the tabs is the seam. NO PLATE
@@ -223,7 +218,7 @@ struct AppBand: View {
                 if let onMore {
                     AppBandTab(
                         iconKey: "MoreHoriz",
-                        label: HomeWords.shared.BAND_MORE,
+                        label: KitWords.BAND_MORE,
                         selected: false,
                         rule: rule,
                         identifier: "\(app)-band-more",
@@ -319,7 +314,7 @@ private struct AppBandTab: View {
         }
         .buttonStyle(BandPress(ground: nil, inset: 0))
         .accessibilityIdentifier(identifier)
-        .accessibilityLabel(label + (selected ? ", " + SharedCopy.shared.BAND_CURRENT_SPOKEN : ""))
+        .accessibilityLabel(label + (selected ? ", " + KitWords.BAND_CURRENT : ""))
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : [.isButton])
     }
 }
@@ -357,33 +352,35 @@ private struct BandPress: ButtonStyle {
     }
 }
 
-/// The plate's geometry. The measures `BandPolicy` owns are read from it, so
-/// Compose and SwiftUI draw one band; the rest are this shell's own.
+/// The plate's geometry, the same measures Compose draws (`BandPolicy` in `BandGeometry.kt`), so
+/// the two shells draw one band.
 enum BandMetrics {
-    // `BandPolicy`'s measures: the system Photos app's structure at Home's size.
-    // See `BandPolicy.kt` for where each number comes from.
+    // THE SYSTEM PHOTOS APP'S STRUCTURE AT HOME'S SIZE: a pill whose tabs stand 4
+    // in from its edge, 21 from the screen's bottom edge; the mark is the tiles'
+    // own 22, the tab what a 22 mark and one label line need, and the sides the
+    // page margin, so the band's edges fall on the tiles' edges.
     /// From the screen's side edges — the page margin, so the band's edges fall
     /// on the tiles'.
-    static let inset = CGFloat(BandPolicy.shared.BAND_INSET)
+    static let inset: CGFloat = 18
     /// From the screen's BOTTOM EDGE, into the home-indicator zone — see
     /// `floorPadding`.
-    static let floor = CGFloat(BandPolicy.shared.BAND_FLOOR)
-    static let topGap = CGFloat(BandPolicy.shared.BAND_TOP_GAP)
+    static let floor: CGFloat = 21
+    static let topGap: CGFloat = 8
     /// The pill rung. Drawn as `Capsule`, which is what a radius past half the
     /// height resolves to.
-    static let radius = CGFloat(BandPolicy.shared.BAND_RADIUS)
+    static let radius: CGFloat = 999
     /// Between the plate's edge and the tabs, on every side.
-    static let platePad = CGFloat(BandPolicy.shared.BAND_PLATE_PAD)
-    static let tabMinHeight = CGFloat(BandPolicy.shared.BAND_TAB_MIN_HEIGHT)
+    static let platePad: CGFloat = 4
+    static let tabMinHeight: CGFloat = 46
     /// The plate, and so the home circle's side: a tab and its pad.
-    static let height = CGFloat(BandPolicy.shared.BAND_HEIGHT)
+    static let height: CGFloat = tabMinHeight + 2 * platePad
     /// A Home tile's mark, so the band is never drawn heavier than the page.
-    static let markSize = CGFloat(BandPolicy.shared.BAND_MARK_SIZE)
-    static let iconSize = CGFloat(BandPolicy.shared.BAND_ICON_SIZE)
+    static let markSize: CGFloat = 22
+    static let iconSize: CGFloat = 22
     /// A tab's column: 5 + mark + 1 + one `band` line (15) + 3 = 46.
-    static let tabTop = CGFloat(BandPolicy.shared.BAND_TAB_TOP)
-    static let labelGap = CGFloat(BandPolicy.shared.BAND_LABEL_GAP)
-    static let tabBottom = CGFloat(BandPolicy.shared.BAND_TAB_BOTTOM)
+    static let tabTop: CGFloat = 5
+    static let labelGap: CGFloat = 1
+    static let tabBottom: CGFloat = 3
     // THIS SHELL'S OWN: the policy states no gap between the home circle and the
     // plate, nor the search bar's measures.
     /// Between the home circle and the app's plate.
@@ -427,41 +424,5 @@ enum BandMetrics {
         #else
         return floor
         #endif
-    }
-}
-
-/// The band's destinations, READ FROM THE SHARED POLICY.
-///
-/// `BandPolicy.PLACES` is the one table — Home pinned by law, the next four
-/// pinned places in table order, `gateway` reachable by link and never by band,
-/// a sixth overflowing into More. Restating those ten rows here would be a
-/// second table for one band, and the two would disagree the first time a name
-/// changed; this reads the same rows Compose reads.
-enum BandDestinations {
-    struct Place {
-        let id: String
-        let short: String
-        let iconKey: String
-    }
-
-    static var tabs: [Place] {
-        var places = BandPolicy.shared.bandTabs(pins: BandPolicy.shared.DEFAULT_PINS).map {
-            // `short_`, not `short`: Kotlin/Native suffixes a name that
-            // collides with an Objective-C keyword, and `short` is a C type.
-            Place(id: $0.id, short: $0.short_, iconKey: $0.iconKey)
-        }
-        // CHAT IS THE BAND'S SECOND PLACE, BETWEEN HOME AND MORE. It is added
-        // here and not to `BandPolicy.PLACES` because the on-device chat has
-        // only this shell so far: a shared policy row would draw a Chat tab on
-        // Android that opens nothing, which is a control that lies. When
-        // Android ships chat the row moves into the policy and this line goes.
-        //
-        // ITS MARK IS THE ASSISTANT'S, NOT A SPEECH BUBBLE: the chat is the
-        // on-device assistant, and `Sparkle` is the design system's `ask`
-        // concept (`ICON_CONCEPTS`), so the tab and every ask key agree.
-        if let home = places.firstIndex(where: { $0.id == BandPolicy.shared.PLACE_HOME }) {
-            places.insert(Place(id: BandPolicy.shared.PLACE_CHAT, short: ChatCopy.shared.TAB_LABEL, iconKey: "Sparkle"), at: home + 1)
-        }
-        return places
     }
 }

@@ -1,0 +1,607 @@
+// WHERE A SCREEN IS, AS A VALUE (#1135). A `Route` names a registered screen and
+// carries its arguments; Rust builds every one and hands it to a shell inside a
+// view state (a row's `route`), and the shell sends the same value back as a
+// push. A shell never builds a route of its own.
+//
+// ITS OWN FILE, LEAF, because a view state names a `Route` (a row opens a
+// page) and `Route` names every app's arguments: `screens.proto` imports each
+// app's view file for its `ViewState` arms, so a `Route` defined there would
+// make a cycle. The arguments' enums (`AgendaDestination`) live here for the
+// same reason.
+//
+// HOW AN APP LANE ADDS A ROUTE: one arm in `Route.args`, in the app's reserved
+// range (listed in `screens.proto`), and its small argument message in the
+// app's section below.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+message Route {
+  // The screen's registered name, e.g. `proof.counter`, `agenda.event`.
+  string screen = 1;
+  oneof args {
+    CounterRoute counter = 10;
+    // ---- words (1300-1399, lane H2) ----
+    WordsMakeRoute words_make = 1300;
+    WordsEnterRoute words_enter = 1301;
+    WordsShowRoute words_show = 1302;
+    // ---- agenda (100-199) ----
+    AgendaHomeRoute agenda_home = 100;
+    AgendaEventRoute agenda_event = 101;
+    AgendaEditorRoute agenda_editor = 102;
+    TodoListRoute todo_list = 103;
+    TodoProjectRoute todo_project = 104;
+    TodoDetailRoute todo_detail = 105;
+    TodoCatchUpRoute todo_catch_up = 106;
+    // ---- photos (800-899) ----
+    PhotosHomeRoute photos_home = 800;
+    PhotosShelfRoute photos_shelf = 801;
+    PhotosPickerRoute photos_picker = 802;
+    PhotosPlacesRoute photos_places = 803;
+    PhotosLightboxRoute photos_lightbox = 804;
+    PhotosEditorRoute photos_editor = 805;
+    PhotosDuplicatesRoute photos_duplicates = 806;
+    PhotosDuplicateReviewRoute photos_duplicate_review = 807;
+    // ---- locker (400-499) ----
+    LockerHomeRoute locker_home = 400;
+    LockerItemRoute locker_item = 401;
+    LockerEditorRoute locker_editor = 402;
+    LockerAccessRoute locker_access = 403;
+    LockerExportRoute locker_export = 404;
+    LockerImportRoute locker_import = 405;
+    LockerLockRoute locker_lock = 406;
+    // ---- money (500-599) ----
+    MoneyHomeRoute money_home = 500;
+    MoneyTransactionRoute money_transaction = 501;
+    MoneyTargetRoute money_target = 502;
+    MoneyPageRoute money_search = 503;
+    MoneyPageRoute money_recurring = 504;
+    MoneyPageRoute money_accounts = 505;
+    MoneyPageRoute money_categories = 506;
+    MoneyPageRoute money_rules = 507;
+    MoneyPageRoute money_import = 508;
+    // ---- docs (200-299) ----
+    DocsDriveRoute docs_drive = 200;
+    DocsDocumentRoute docs_document = 201;
+    DocsEditorRoute docs_editor = 202;
+    DocsVersionsRoute docs_versions = 203;
+    // ---- health (300-399) ----
+    HealthHomeRoute health_home = 300;
+    HealthMetricRoute health_metric = 301;
+    HealthWorkoutRoute health_workout = 302;
+    HealthConnectRoute health_connect = 303;
+    // ---- notes (600-699) ----
+    NotesHomeRoute notes_home = 600;
+    NotesEditorRoute notes_editor = 601;
+    NotesHistoryRoute notes_history = 602;
+    // ---- people (700-799) ----
+    PeopleHomeRoute people_home = 700;
+    PeoplePersonRoute people_person = 701;
+    PeopleEditorRoute people_editor = 702;
+    // ---- the kit (900-999) ----
+    TrashRoute trash = 900;
+    // ---- backup (1450-1499, lane H2) ----
+    BackupHomeRoute backup_home = 1450;
+    // ---- the shell: chat (1600-1699) ----
+    ChatRoute chat = 1600;
+    ChatThreadRoute chat_thread = 1601;
+    // ---- the shell: phone imports (1700-1899) ----
+    ImportsRoute imports = 1700;
+    // ---- the shell (1000-1999): Home 1000-1299 ----
+    HomeRoute home = 1000;
+    HomeSearchRoute home_search = 1001;
+    ShellAskRoute ask = 1002;
+  }
+}
+
+// The proof screen's route: no arguments.
+message CounterRoute {}
+
+// ---------------------------------------------------------------------------
+// The 24 words (lane H2)
+// ---------------------------------------------------------------------------
+
+// What `words.enter` is for.
+enum WordsEnterPurpose {
+  // Read as a restore.
+  WORDS_ENTER_PURPOSE_UNSPECIFIED = 0;
+  // A fresh install: bring every vault back from the gateway. If this phone
+  // already holds a seed (the keychain carried it) the screen restores from it
+  // with no words typed.
+  WORDS_ENTER_PURPOSE_RESTORE = 1;
+  // This phone's own vaults: hand the words back so they open keyed again
+  // (Locker's wall). Needs no gateway.
+  WORDS_ENTER_PURPOSE_REKEY = 2;
+  // Bring every vault back with the seed this phone ALREADY holds, no words
+  // typed (#1047, Q-1047-18).
+  WORDS_ENTER_PURPOSE_RESTORE_HELD = 3;
+}
+
+// Where a re-key came from. A restore has one door and ignores it.
+enum WordsEnterOrigin {
+  // Read as Locker's: the first re-key door.
+  WORDS_ENTER_ORIGIN_UNSPECIFIED = 0;
+  WORDS_ENTER_ORIGIN_LOCKER = 1;
+  // pair.laptop's NEEDS_WORDS.
+  WORDS_ENTER_ORIGIN_PAIRING = 2;
+}
+
+// `words.make`: make a vault and, on a phone with no key, its 24 words.
+message WordsMakeRoute {}
+
+// `words.enter`: type the words back (restore or re-key).
+message WordsEnterRoute {
+  WordsEnterPurpose purpose = 1;
+  WordsEnterOrigin origin = 2;
+}
+
+// `words.show`: show the recovery key again, after the owner check.
+message WordsShowRoute {}
+
+// ---------------------------------------------------------------------------
+// Agenda
+// ---------------------------------------------------------------------------
+
+enum AgendaDestination {
+  AGENDA_DESTINATION_UNSPECIFIED = 0;
+  AGENDA_DESTINATION_DAY = 1;
+  AGENDA_DESTINATION_SCHEDULE = 2;
+  AGENDA_DESTINATION_WAITING = 3;
+  // The Inbox, then the projects by area (R-1128-1).
+  AGENDA_DESTINATION_TODO = 4;
+}
+
+// What the add sheet adds: an event, or a to-do.
+enum AgendaEditorKind {
+  AGENDA_EDITOR_KIND_UNSPECIFIED = 0;
+  AGENDA_EDITOR_KIND_EVENT = 1;
+  AGENDA_EDITOR_KIND_TASK = 2;
+}
+
+// Which list the to-do list page shows.
+enum TodoView {
+  TODO_VIEW_UNSPECIFIED = 0;
+  TODO_VIEW_ANYTIME = 1;
+  TODO_VIEW_ALL = 2;
+  TODO_VIEW_LOGBOOK = 3;
+  TODO_VIEW_REMINDERS = 4;
+}
+
+// `agenda.home`: lands on `destination` at today, or on Day when unspecified.
+message AgendaHomeRoute {
+  AgendaDestination destination = 1;
+  // Words waiting in To-do's quick add, focused (Notes' "Send to Agenda");
+  // empty is an empty bar. Naming words also names To-do as the place.
+  string quick_add_title = 2;
+}
+
+// `agenda.event`: one occurrence of an event.
+message AgendaEventRoute {
+  string event_id = 1;
+  string instance_key = 2;
+  optional string original_start_local = 3;
+  // The civil day the row was drawn under: the read's window.
+  string day = 4;
+}
+
+// `agenda.editor`: an empty `event_id` creates (on `day`, as `kind`); a named
+// one edits that occurrence.
+message AgendaEditorRoute {
+  string event_id = 1;
+  string instance_key = 2;
+  optional string original_start_local = 3;
+  string day = 4;
+  // A create's kind; UNSPECIFIED is the kind this device last added.
+  AgendaEditorKind kind = 5;
+}
+
+// `agenda.todo_list`: the Anytime, All, Logbook or Reminders page.
+message TodoListRoute {
+  TodoView view = 1;
+}
+
+// `agenda.project`: one project's page. The name rides along so the head has
+// words before the read lands.
+message TodoProjectRoute {
+  string project_id = 1;
+  string name = 2;
+}
+
+// `agenda.task`: one task's page.
+message TodoDetailRoute {
+  string task_id = 1;
+}
+
+// `agenda.catch_up`: the Overdue work, piled.
+message TodoCatchUpRoute {}
+
+// ---------------------------------------------------------------------------
+// Photos
+// ---------------------------------------------------------------------------
+
+// Where `photos.home` lands. Search is a mode the bar under the title opens,
+// never a band place.
+enum PhotosDestination {
+  PHOTOS_DESTINATION_UNSPECIFIED = 0;
+  PHOTOS_DESTINATION_LIBRARY = 1;
+  PHOTOS_DESTINATION_COLLECTIONS = 2;
+  PHOTOS_DESTINATION_SEARCH = 3;
+}
+
+// Which photographs a shelf page holds. The library is Home's, not a shelf.
+enum PhotosShelfKind {
+  PHOTOS_SHELF_KIND_UNSPECIFIED = 0;
+  PHOTOS_SHELF_KIND_FAVORITES = 1;
+  PHOTOS_SHELF_KIND_VIDEOS = 2;
+  PHOTOS_SHELF_KIND_ARCHIVE = 3;
+  PHOTOS_SHELF_KIND_TRASH = 4;
+  // An album's members; `id` names it.
+  PHOTOS_SHELF_KIND_ALBUM = 5;
+  // A place's live photographs; `id` names it.
+  PHOTOS_SHELF_KIND_PLACE = 6;
+  // Live photographs in no place; `id` is empty.
+  PHOTOS_SHELF_KIND_UNPLACED = 7;
+}
+
+// What the picker picks for.
+enum PhotosPickerPurpose {
+  PHOTOS_PICKER_PURPOSE_UNSPECIFIED = 0;
+  // Photographs to put into the album `album_id` names.
+  PHOTOS_PICKER_PURPOSE_ADD_TO_ALBUM = 1;
+  // One photograph to attach to a chat question. The pick goes back to the chat
+  // screen (`chat.home`) as `ChatEvent.Attached`; no `album_id`.
+  PHOTOS_PICKER_PURPOSE_ATTACH = 2;
+}
+
+// `photos.home`: lands on `destination` (the library when unspecified); a
+// non-empty `query` opens Search on those words.
+message PhotosHomeRoute {
+  PhotosDestination destination = 1;
+  optional string query = 2;
+}
+
+// `photos.shelf`: one shelf. `id` names the album or the place; `title` rides
+// along so the head has words before the read lands.
+message PhotosShelfRoute {
+  PhotosShelfKind kind = 1;
+  string id = 2;
+  string title = 3;
+}
+
+// `photos.picker`: adding to an album. The name rides along so the head says
+// "Add to Portugal" before any read has landed.
+message PhotosPickerRoute {
+  PhotosPickerPurpose purpose = 1;
+  string album_id = 2;
+  string album_name = 3;
+}
+
+// `photos.places`: every place, as cards or a map.
+message PhotosPlacesRoute {}
+
+// `photos.lightbox`: one photograph, and what it browses.
+message PhotosLightboxRoute {
+  string photo_id = 1;
+  // The ids a swipe walks, in the order the opening surface drew them; empty
+  // is the one photograph alone.
+  repeated string neighbour_ids = 2;
+  // The album it was opened from, empty elsewhere: "Make key photo" is offered
+  // only here.
+  string album_id = 3;
+}
+
+// `photos.editor`: crop, rotate and straighten one photograph.
+message PhotosEditorRoute {
+  string photo_id = 1;
+}
+
+// `photos.duplicates`: the near-duplicate sets.
+message PhotosDuplicatesRoute {}
+
+// `photos.duplicate_review`: one set, and the decision about its copies.
+message PhotosDuplicateReviewRoute {
+  // The cluster's key (`PhotosDuplicateCluster.key`).
+  string cluster_key = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Docs
+// ---------------------------------------------------------------------------
+
+// Which shelf the drive page shows.
+enum DocsDestination {
+  DOCS_DESTINATION_UNSPECIFIED = 0;
+  DOCS_DESTINATION_ALL = 1;
+  DOCS_DESTINATION_FOLDERS = 2;
+  DOCS_DESTINATION_STARRED = 3;
+  // Chosen from the More sheet; not a band tab.
+  DOCS_DESTINATION_RECENT = 4;
+}
+
+// `docs.drive`: lands on `destination` (All when unspecified); FOLDERS with a
+// `folder_id` is that folder's page. `parent` is the pushing page's own title,
+// which the page's back control says (#1047); empty is "Docs".
+message DocsDriveRoute {
+  DocsDestination destination = 1;
+  string folder_id = 2;
+  string folder_name = 3;
+  string parent = 4;
+}
+
+// `docs.document`: one document. The title rides along so the head has words
+// before the read lands; `parent` is the pushing page's title.
+message DocsDocumentRoute {
+  string document_id = 1;
+  string title = 2;
+  string parent = 3;
+}
+
+// `docs.editor`: a text document's editor.
+message DocsEditorRoute {
+  string document_id = 1;
+  string title = 2;
+}
+
+// `docs.versions`: one document's version history.
+message DocsVersionsRoute {
+  string document_id = 1;
+  string title = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Health
+// ---------------------------------------------------------------------------
+
+// Which of the band's tabs `health.home` shows. Today · Trends · Workouts are one
+// screen, so a tap on the band changes this value and no stack entry.
+enum HealthDestination {
+  HEALTH_DESTINATION_UNSPECIFIED = 0;
+  HEALTH_DESTINATION_TODAY = 1;
+  HEALTH_DESTINATION_TRENDS = 2;
+  HEALTH_DESTINATION_WORKOUTS = 3;
+}
+
+// A metric page's range: the last 7 days, 30 days, or 12 months.
+enum HealthMetricRange {
+  HEALTH_METRIC_RANGE_UNSPECIFIED = 0;
+  HEALTH_METRIC_RANGE_WEEK = 1;
+  HEALTH_METRIC_RANGE_MONTH = 2;
+  HEALTH_METRIC_RANGE_YEAR = 3;
+}
+
+// `health.home`: UNSPECIFIED is Today.
+message HealthHomeRoute {
+  HealthDestination destination = 1;
+}
+
+// `health.metric`: one metric's key (`steps`, `sleep_min`, ...). `parent` is the
+// pushing page's title, which the back control says; empty reads "Health".
+message HealthMetricRoute {
+  string metric = 1;
+  HealthMetricRange range = 2;
+  string parent = 3;
+}
+
+// `health.workout`: one workout.
+message HealthWorkoutRoute {
+  string activity_id = 1;
+  string parent = 2;
+}
+
+// `health.connect`: what Health may read, and Connect.
+message HealthConnectRoute {
+  string parent = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Notes
+// ---------------------------------------------------------------------------
+
+// Which of the band's places `notes.home` shows. Notes · Notebooks · Journal
+// are one screen, so a tap on the band changes this value and no stack entry.
+enum NotesPlace {
+  NOTES_PLACE_UNSPECIFIED = 0;
+  NOTES_PLACE_NOTES = 1;
+  NOTES_PLACE_NOTEBOOKS = 2;
+  NOTES_PLACE_JOURNAL = 3;
+}
+
+// `notes.home`: UNSPECIFIED is the Notes place. A notebook (or Unfiled) filters
+// the Notes place.
+message NotesHomeRoute {
+  NotesPlace place = 1;
+  string notebook_id = 2;
+  string notebook_name = 3;
+  bool unfiled_only = 4;
+}
+
+// `notes.editor`: an empty `note_id` with `is_new` opens an empty draft, whose
+// first save creates the note under the id the vault mints.
+message NotesEditorRoute {
+  string note_id = 1;
+  bool is_new = 2;
+}
+
+// `notes.history`: one note's versions. The title rides along so the back
+// control has words before the read lands.
+message NotesHistoryRoute {
+  string note_id = 1;
+  string note_title = 2;
+}
+
+// ---------------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------------
+
+// Which list `people.home` shows. People and Touch are one screen, so a tap on
+// the band changes this value and no stack entry.
+enum PeopleDestination {
+  PEOPLE_DESTINATION_UNSPECIFIED = 0;
+  PEOPLE_DESTINATION_PEOPLE = 1;
+  PEOPLE_DESTINATION_TOUCH = 2;
+}
+
+// `people.home`: UNSPECIFIED is People.
+message PeopleHomeRoute {
+  PeopleDestination destination = 1;
+}
+
+// `people.person`: one person's sheet. The name rides along so the app bar has
+// words before the read lands; `log_touch` opens the Log a touch sheet at once
+// (Touch's card action).
+message PeoplePersonRoute {
+  string party_id = 1;
+  string name = 2;
+  bool log_touch = 3;
+}
+
+// `people.editor`: an existing person, or `is_new` with no id: an empty draft
+// whose first save adds the person under the id the vault mints.
+message PeopleEditorRoute {
+  string party_id = 1;
+  bool is_new = 2;
+}
+
+// ---------------------------------------------------------------------------
+// The kit
+// ---------------------------------------------------------------------------
+
+// `<app>.trash`: the kit's one trash screen; the screen name says which app.
+message TrashRoute {}
+
+// `backup.home`: the Backup screen. No arguments.
+message BackupHomeRoute {}
+
+// ---------------------------------------------------------------------------
+// Locker
+// ---------------------------------------------------------------------------
+
+message LockerHomeRoute {
+  LockerDestination destination = 1;
+}
+
+enum LockerDestination {
+  LOCKER_DESTINATION_UNSPECIFIED = 0;
+  LOCKER_DESTINATION_ITEMS = 1;
+  LOCKER_DESTINATION_REVIEW = 2;
+  LOCKER_DESTINATION_GENERATE = 3;
+  // Not a tab: the search bar lands here, closing goes back to Items.
+  LOCKER_DESTINATION_SEARCH = 4;
+}
+
+message LockerItemRoute {
+  string item_id = 1;
+  // The pushing page's title, which the back control says.
+  string parent = 2;
+  // A member action a chat card offered (`reveal:password`, `code:otp_seed`):
+  // once the page has loaded under an open Locker it runs that flow. Empty for
+  // a plain open.
+  string follow = 3;
+}
+
+// AN EXPLICIT SAVE, NOT AUTOSAVE: a secret saved on a pause mid-typing would
+// be a wrong secret the member did not choose. Leaving with changes asks first.
+// A SAVE OF AN EXISTING ITEM IS THE WHOLE DRAFT: `locker.edit-item` REPLACES the
+// type's fields, so a field left empty is cleared and a sealed secret the
+// member did not touch goes as the placeholder `«sealed»`, which keeps it.
+message LockerEditorRoute {
+  LockerEditorMode mode = 1;
+  // EDIT names the item; ADD mints its id in Rust.
+  string item_id = 2;
+  // A new item's type; empty is a login.
+  string type = 3;
+  // The generator's candidate was handed over (`kit` take-once slot): the new
+  // login's password starts as it.
+  bool from_generator = 4;
+}
+
+enum LockerEditorMode {
+  LOCKER_EDITOR_MODE_UNSPECIFIED = 0;
+  LOCKER_EDITOR_MODE_ADD = 1;
+  LOCKER_EDITOR_MODE_EDIT = 2;
+}
+
+message LockerAccessRoute {}
+
+message LockerExportRoute {
+  string parent = 1;
+}
+
+message LockerImportRoute {
+  string parent = 1;
+}
+
+message LockerLockRoute {}
+// Money
+// ---------------------------------------------------------------------------
+
+enum MoneyDestination {
+  MONEY_DESTINATION_UNSPECIFIED = 0;
+  MONEY_DESTINATION_SPENDING = 1;
+  MONEY_DESTINATION_ACTIVITY = 2;
+  MONEY_DESTINATION_CASHFLOW = 3;
+}
+
+// `money.home`: lands on `destination`, Spending when unspecified.
+message MoneyHomeRoute {
+  MoneyDestination destination = 1;
+}
+
+// `money.transaction`: one line.
+message MoneyTransactionRoute {
+  string txn_id = 1;
+  // The title of the page it was pushed from: its back control says it.
+  string parent = 2;
+}
+
+// `money.target`: a category's plan for one month.
+message MoneyTargetRoute {
+  // `YYYY-MM`.
+  string month = 1;
+  string category_id = 2;
+  string currency = 3;
+}
+
+// The pages that take no argument but the title of the page they were pushed
+// from (search, recurring, accounts, categories, rules, import).
+message MoneyPageRoute {
+  string parent = 1;
+}
+
+// ---------------------------------------------------------------------------
+// The shell (1600-1999): chat
+// ---------------------------------------------------------------------------
+
+// `chat.home`: no arguments. The Chat tab's root.
+message ChatRoute {}
+
+// `chat.thread`: a stored chat opened as a page (a search hit on a conversation). The
+// header reads `title` until the thread is read.
+message ChatThreadRoute {
+  string thread_id = 1;
+  string title = 2;
+}
+
+// `imports.camera_roll`, `imports.files`, `imports.made`: the phone imports'
+// headless services, each serving one vault. The camera roll's cursor is kept per
+// vault (a photograph offered to two vaults is two imports).
+message ImportsRoute {
+  string vault_id = 1;
+}
+
+// ---- the shell (1000-1999): Home 1000-1299 ----
+
+// Home takes no arguments: it is the root of the `home` tab.
+message HomeRoute {}
+
+// Home's search takes no arguments.
+message HomeSearchRoute {}
+
+// What a tap on a search's Ask row opens: the assistant, asking `question` in
+// `scope` (an app's id, or empty for every app). The chat lane registers the
+// screen that takes it.
+message ShellAskRoute {
+  string question = 1;
+  string scope = 2;
+}

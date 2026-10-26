@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "health",
   "name": "Health",
-  "description": "Your body's daily record, followed from the phone's health store one way — Apple Health on iOS, Health Connect on Android — into the vault, so it is in your backup and nowhere else. Daily totals (steps, active energy, exercise minutes, sleep, resting heart rate and weight) and workouts, never raw samples. Today shows each number against your own 30-day typical, not a target; Trends shows weeks, months and a year; Workouts lists every workout the store holds. Every typical, average and trend is derived at read time and nothing derived is stored. Nothing is ever written back to the health store, and Chat does not read Health.",
+  "description": "Your body's daily record, followed from the phone's health store one way — Apple Health on iOS, Health Connect on Android — into the vault, so it is in your backup and nowhere else. Daily totals (steps, active energy, exercise minutes, sleep, resting heart rate and weight) and workouts, never raw samples. Today shows each number against your own 30-day typical, not a target; Trends shows weeks, months and a year; Workouts lists every workout the store holds. Every typical, average and trend is derived at read time and nothing derived is stored. Nothing is ever written back to the health store. Chat reads it like any app: the daily figures and workouts are kinds the assistant finds, counts and sums.",
   "version": "0.2.0",
   "iconKey": "Activity",
   "colorKey": "olive",
@@ -55,6 +55,11 @@
         "verbs": "act"
       },
       {
+        "schema": "follow",
+        "table": "stop",
+        "verbs": "act"
+      },
+      {
         "schema": "entity",
         "table": "trash",
         "verbs": "act"
@@ -65,6 +70,17 @@
   "actions": [
     {
       "name": "record-days",
+      "verb": "log",
+      "kind": "daily_figure",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "measurement.record",
+      "phrasings": [
+        "log 8000 steps for today",
+        "record last night's sleep as seven hours",
+        "note my weight as 70 kilos this morning"
+      ],
       "description": "Record a batch of the store's daily totals through measurement.record: a value the vault already holds is not written, a changed one is replaced, a new one added. A day is never deleted.",
       "confirmation": "none",
       "input": {
@@ -124,6 +140,17 @@
     },
     {
       "name": "follow-workouts",
+      "verb": "import",
+      "kind": "workout",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "follow.health",
+      "phrasings": [
+        "pull in my latest workouts",
+        "sync workouts from the health store",
+        "import this week's runs"
+      ],
       "description": "Follow the store's workouts through follow.health: each is an activity of a workout kind and what the store measured, written or corrected in place under the store's own id; one gone from a complete read keeps its row and forgets its source.",
       "confirmation": "none",
       "input": {
@@ -197,6 +224,16 @@
     },
     {
       "name": "delete-workout",
+      "verb": "delete",
+      "kind": "workout",
+      "inverse": null,
+      "sealed": [],
+      "command": "entity.trash",
+      "phrasings": [
+        "delete this morning's run",
+        "remove the duplicate workout",
+        "trash yesterday's swim"
+      ],
       "description": "Move a workout to the trash through entity.trash, like any entity: the vault keeps it thirty days.",
       "confirmation": "none",
       "input": {
@@ -224,28 +261,68 @@
           }
         }
       }
+    },
+    {
+      "name": "stop-following",
+      "verb": "detach",
+      "kind": "daily_figure",
+      "inverse": null,
+      "sealed": [],
+      "command": "follow.stop",
+      "phrasings": [
+        "stop reading my health app",
+        "disconnect Apple Health",
+        "stop following Health Connect"
+      ],
+      "description": "Stop following the phone's health store through follow.stop: the store's origin is retired and its workouts forget their source. Every day and every workout stays, an ordinary row from now on.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["system", "ref"],
+        "additionalProperties": false,
+        "properties": {
+          "system": {
+            "type": "string",
+            "enum": ["contacts", "calendar", "files", "health", "statement"]
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
     }
   ],
   "queries": [
     {
       "name": "today",
+      "kind": "daily_figure",
+      "figures": [
+        "figure",
+        "typical",
+        "usual_range",
+        "workouts_today",
+        "connected_store"
+      ],
       "description": "Today: each metric's figure against your own typical (the median of the 30 whole days before today) and its usual range, today's workouts, whether a store is connected and which metrics have any data.",
       "input": {
         "type": "object",
-        "properties": {
-          "today": {
-            "type": "string",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-          },
-          "day_start": {
-            "type": "string"
-          },
-          "day_end": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false,
-        "required": ["today", "day_start", "day_end"]
+        "properties": {},
+        "additionalProperties": false
       },
       "output": {
         "type": "object",
@@ -254,6 +331,16 @@
     },
     {
       "name": "series",
+      "kind": "daily_figure",
+      "figures": [
+        "buckets",
+        "average",
+        "previous_average",
+        "typical",
+        "best",
+        "total",
+        "days_above_typical"
+      ],
       "description": "One metric over a week, a month or a year: its buckets, the period's per-day average against the one before, the typical, the best day or month, the total for a count, and how many days were above typical.",
       "input": {
         "type": "object",
@@ -270,14 +357,10 @@
           },
           "range": {
             "enum": ["week", "month", "year"]
-          },
-          "today": {
-            "type": "string",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
           }
         },
         "additionalProperties": false,
-        "required": ["metric", "range", "today"]
+        "required": ["metric", "range"]
       },
       "output": {
         "type": "object",
@@ -286,20 +369,18 @@
     },
     {
       "name": "trends",
+      "kind": "daily_figure",
+      "figures": ["average", "previous_average", "buckets"],
       "description": "Every metric over 30 days, 90 days or a year: the period's per-day average against the one before, and a sparkline's buckets. A metric with no data in either period is left out.",
       "input": {
         "type": "object",
         "properties": {
           "range": {
             "enum": ["days_30", "days_90", "year"]
-          },
-          "today": {
-            "type": "string",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
           }
         },
         "additionalProperties": false,
-        "required": ["range", "today"]
+        "required": ["range"]
       },
       "output": {
         "type": "object",
@@ -308,6 +389,8 @@
     },
     {
       "name": "workouts",
+      "kind": "workout",
+      "figures": ["workouts", "count_by_kind"],
       "description": "A page of every workout, newest first, or one kind's, with each kind's count for the filter.",
       "input": {
         "type": "object",
@@ -315,13 +398,13 @@
           "kind_concept_id": {
             "type": "string"
           },
-          "cursor": {
-            "type": "object"
-          },
           "limit": {
             "type": "integer",
             "minimum": 1,
             "maximum": 200
+          },
+          "after": {
+            "type": "string"
           }
         },
         "additionalProperties": false,
@@ -334,6 +417,8 @@
     },
     {
       "name": "workout",
+      "kind": "workout",
+      "figures": ["kind", "span", "measures"],
       "description": "One workout: its kind, span and everything the store measured.",
       "input": {
         "type": "object",
@@ -353,22 +438,108 @@
     },
     {
       "name": "follow-view",
+      "kind": "daily_figure",
+      "figures": ["newest_day", "newest_workout", "daily_totals"],
       "description": "What the follower reads before a pass: the newest day and the newest workout the vault holds, and every daily total since a day, so it sends only what moved.",
       "input": {
         "type": "object",
-        "properties": {
-          "since": {
-            "type": "string",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-          }
-        },
-        "additionalProperties": false,
-        "required": ["since"]
+        "properties": {},
+        "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {}
       }
+    }
+  ],
+  "kinds": [
+    {
+      "id": "daily_figure",
+      "name": "daily figure",
+      "plural": "daily figures",
+      "order": 12,
+      "live": "read",
+      "entity": "measurement",
+      "table": "measurement",
+      "pk": "day",
+      "nameSource": ["measurement", "metric"],
+      "date": {
+        "label": "day",
+        "source": ["measurement", "day"]
+      },
+      "fields": [
+        {
+          "name": "metric",
+          "type": "enum",
+          "source": ["measurement", "metric"],
+          "values": [
+            ["steps", "steps"],
+            ["active_energy_kcal", "active_energy_kcal"],
+            ["exercise_min", "exercise_min"],
+            ["sleep_min", "sleep_min"],
+            ["resting_hr_bpm", "resting_hr_bpm"],
+            ["weight_kg", "weight_kg"]
+          ]
+        },
+        {
+          "name": "value",
+          "type": "number",
+          "source": ["measurement", "value"]
+        }
+      ],
+      "links": [],
+      "trash": false,
+      "container": false
+    },
+    {
+      "id": "workout",
+      "name": "workout",
+      "plural": "workouts",
+      "order": 13,
+      "live": "read",
+      "entity": "activity",
+      "table": "workout",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "date": {
+        "label": "start",
+        "source": ["activity", "starts"]
+      },
+      "fields": [
+        {
+          "name": "moving",
+          "type": "number",
+          "source": ["workout", "moving_s"],
+          "unit": "s"
+        },
+        {
+          "name": "distance",
+          "type": "number",
+          "source": ["workout", "distance_m"],
+          "unit": "m"
+        },
+        {
+          "name": "energy",
+          "type": "number",
+          "source": ["workout", "energy_kcal"],
+          "unit": "kcal"
+        },
+        {
+          "name": "heart_rate",
+          "type": "number",
+          "source": ["workout", "heart_bpm"],
+          "unit": "bpm"
+        },
+        {
+          "name": "climb",
+          "type": "number",
+          "source": ["workout", "climb_m"],
+          "unit": "m"
+        }
+      ],
+      "links": [],
+      "trash": true,
+      "container": false
     }
   ],
   "states": {

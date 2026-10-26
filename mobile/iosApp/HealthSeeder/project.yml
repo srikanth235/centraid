@@ -1,8 +1,8 @@
 # THE SIMULATOR'S HEALTH, SEEDED (#1129) — a debug tool, never part of Centraid.
 #
 # Centraid reads Apple Health and never writes it (R-1129-7): its bundle has no
-# share type, no `NSHealthUpdateUsageDescription`, and `HealthKitReadOnlySpec`
-# fails the build of the Kotlin suite if one appears. A simulator's Health is
+# share type, no `NSHealthUpdateUsageDescription`, and `cargo xtask rules`
+# (`healthkit-read-only`) fails if one appears. A simulator's Health is
 # empty, so something must write a year of days into it before Health has
 # anything to read — and that something is THIS separate app: its own XcodeGen
 # project, its own bundle id, its own entitlement with share types. Centraid's

@@ -32,19 +32,17 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.EmptyState
-import centraid.screen.v1.PhotoCell
+import centraid.core.v1.EmptyState
+import centraid.core.v1.PhotoTile as WireTile
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
-import dev.centraid.design.copy.PhotosCopy
-import dev.centraid.shared.apps.photos.PhotoJustify
-import dev.centraid.shared.kit.MediaFormat
+import centraid.core.v1.PhotosPackedRow
 
 /**
  * ONE CELL RENDERER, FOR EVERY SURFACE THAT DRAWS PHOTOGRAPHS.
  *
  * The library grid, a shelf, the picker and search hits all draw the same
- * [PhotoCell] from the same page read: the same square ground, the same two
+ * [WireTile] (the core's finished tile): the same square ground, the same two
  * empty-cell sentences, the same held overlay and the same download arrow. v0
  * wrote that four times and they drifted — only one ever grew the "no pack at
  * all" sentence, and the picker's cells never showed held state at all, so a
@@ -56,13 +54,7 @@ import dev.centraid.shared.kit.MediaFormat
  */
 @Composable
 public fun PhotoCellsGrid(
-    cells: List<PhotoCell>,
-    /**
-     * TWO DIFFERENT EMPTY-CELL SENTENCES (`docs/mobile-offline.md:224`). A
-     * member with no thumbnail pack and a member whose pack has evicted these
-     * must not read the same words.
-     */
-    packAbsent: Boolean,
+    cells: List<WireTile>,
     modifier: Modifier = Modifier,
     selected: Set<String> = emptySet(),
     /**
@@ -72,6 +64,8 @@ public fun PhotoCellsGrid(
      * not tick.
      */
     taken: Set<String> = emptySet(),
+    /** What a taken cell says after its own label ("Already in this album"), Rust's words. */
+    takenLabel: String = "",
     minimumCell: Int = 96,
     onTap: ((String) -> Unit)? = null,
     onFetch: ((assetId: String, contentHash: String) -> Unit)? = null,
@@ -89,9 +83,9 @@ public fun PhotoCellsGrid(
         items(cells) { cell ->
             PhotoCellSquare(
                 cell = cell,
-                packAbsent = packAbsent,
-                isSelected = cell.asset_id in selected,
-                isTaken = cell.asset_id in taken,
+                isSelected = cell.photo_id in selected,
+                isTaken = cell.photo_id in taken,
+                takenLabel = takenLabel,
                 onTap = onTap,
                 onFetch = onFetch,
             )
@@ -101,16 +95,17 @@ public fun PhotoCellsGrid(
 
 @Composable
 public fun PhotoCellSquare(
-    cell: PhotoCell,
-    packAbsent: Boolean,
+    cell: WireTile,
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
     isTaken: Boolean = false,
+    takenLabel: String = "",
     onTap: ((String) -> Unit)? = null,
     onFetch: ((assetId: String, contentHash: String) -> Unit)? = null,
 ) {
     val path = cell.thumbnail_path
-    val label = cellLabel(cell, packAbsent)
+    val label = cell.accessibility_label
+    val spoken = if (isTaken && takenLabel.isNotEmpty()) "$label, $takenLabel" else label
     Box(
         modifier
             .aspectRatio(1f)
@@ -118,12 +113,12 @@ public fun PhotoCellSquare(
             .background(centraidColor("skel"))
             .then(
                 if (onTap != null && !isTaken) {
-                    Modifier.clickable { onTap(cell.asset_id) }
+                    Modifier.clickable { onTap(cell.photo_id) }
                 } else {
                     Modifier
                 },
             )
-            .semantics { contentDescription = label },
+            .semantics { contentDescription = spoken },
     ) {
         if (!path.isNullOrEmpty()) ContentImage(path) else Text(text = label)
         // WHAT THIS DEVICE HAS OF THIS PHOTOGRAPH, ON TOP OF IT (#1025 S5,
@@ -161,7 +156,7 @@ public fun PhotoCellSquare(
  */
 @Composable
 public fun PhotoTile(
-    cell: PhotoCell,
+    cell: WireTile,
     width: Int,
     height: Int,
     rung: Int,
@@ -173,7 +168,7 @@ public fun PhotoTile(
     onFetch: ((assetId: String, contentHash: String) -> Unit)? = null,
 ) {
     val path = cell.thumbnail_path
-    val label = cellLabel(cell, packAbsent = false)
+    val label = cell.accessibility_label
     Box(
         modifier
             .size(width.dp, height.dp)
@@ -183,7 +178,7 @@ public fun PhotoTile(
             .combinedClickable(
                 onClick = onTap,
                 onLongClick = onLongPress,
-                onClickLabel = if (selecting) PhotosCopy.PHOTOS_SELECT else PhotosCopy.PHOTOS_OPEN,
+                onClickLabel = if (selecting) KitWords.SELECT else KitWords.OPEN,
             )
             .semantics {
                 contentDescription = label
@@ -208,24 +203,6 @@ public fun PhotoTile(
 }
 
 /**
- * A GRID CELL IS AN IMAGE-ONLY CONTROL, so it carries a description even when
- * the image is missing — which is when it matters most. A video and a live
- * photograph say so, because that is what changes what a tap does.
- */
-private fun cellLabel(cell: PhotoCell, packAbsent: Boolean): String {
-    val noun = when {
-        cell.live -> PhotosCopy.PHOTOS_CELL_LIVE
-        cell.kind == PhotoCell.Kind.KIND_VIDEO -> PhotosCopy.PHOTOS_CELL_VIDEO
-        else -> PhotosCopy.PHOTOGRAPH
-    }
-    return when {
-        !cell.thumbnail_path.isNullOrEmpty() -> noun
-        packAbsent -> PhotosCopy.PHOTOS_CELL_NOT_DOWNLOADED.replace("{noun}", noun)
-        else -> PhotosCopy.PHOTOS_CELL_PREVIEW_GONE.replace("{noun}", noun)
-    }
-}
-
-/**
  * The per-cell affordance, and nothing for the states that need none.
  *
  * **The download arrow is drawn ONLY for `HELD_WITHHELD_BY_RULE`.** A
@@ -234,19 +211,19 @@ private fun cellLabel(cell: PhotoCell, packAbsent: Boolean): String {
  *
  * A FETCH IS A LINE AND NOT A SPINNER (DESIGN.md: loading is determinate or
  * static, never a spinner). The byte plane reports completion and not progress
- * (`PhotoCell.fetch_percent`), so the honest mark is words on the tile's own
+ * (`PhotoTile.fetch_percent`), so the honest mark is words on the tile's own
  * chip — v0's state slot, which is one quiet mono line on the page colour.
  */
 @Composable
 private fun BoxScope.HeldState(
-    cell: PhotoCell,
+    cell: WireTile,
     onFetch: ((String, String) -> Unit)?,
 ) {
     val corner = Modifier.align(Alignment.BottomStart).padding(4.dp)
     when {
-        cell.held == PhotoCell.Held.HELD_FETCHING ->
+        cell.held == WireTile.Held.HELD_FETCHING ->
             Text(
-                text = PhotosCopy.PHOTOS_CELL_DOWNLOADING_MARK,
+                text = cell.held_label,
                 style = centraidType("mono"),
                 color = centraidColor("textFaint"),
                 maxLines = 1,
@@ -254,11 +231,11 @@ private fun BoxScope.HeldState(
                     .clip(RoundedCornerShape(RADIUS_SM.dp))
                     .background(centraidColor("bg"))
                     .padding(horizontal = 3.dp, vertical = 1.dp)
-                    .semantics { contentDescription = PhotosCopy.PHOTOS_CELL_DOWNLOADING },
+                    .semantics { contentDescription = cell.accessibility_label },
             )
 
-        cell.held == PhotoCell.Held.HELD_WITHHELD_BY_RULE &&
-            cell.original_hash.isNotEmpty() &&
+        cell.held == WireTile.Held.HELD_WITHHELD_BY_RULE &&
+            cell.content_id.isNotEmpty() &&
             onFetch != null ->
             // A 44 TARGET AROUND A SMALL CHIP: the mark is the tile's size, the
             // press is a thumb's.
@@ -266,10 +243,10 @@ private fun BoxScope.HeldState(
                 Modifier
                     .align(Alignment.BottomStart)
                     .size(TARGET_MIN.dp)
-                    .clickable(onClickLabel = PhotosCopy.PHOTOS_CELL_DOWNLOAD_FULL) {
-                        onFetch(cell.asset_id, cell.original_hash)
+                    .clickable(onClickLabel = cell.held_label) {
+                        onFetch(cell.photo_id, cell.content_id)
                     }
-                    .semantics { contentDescription = PhotosCopy.PHOTOS_CELL_DOWNLOAD_FULL },
+                    .semantics { contentDescription = cell.held_label },
                 contentAlignment = Alignment.BottomStart,
             ) {
                 Box(
@@ -321,12 +298,12 @@ private fun BoxScope.SelectionDot(selected: Boolean, muted: Boolean = false) {
  * with the catalog's play mark, because that is what changes what a tap does.
  */
 @Composable
-private fun BoxScope.KindLine(cell: PhotoCell, rung: Int) {
+private fun BoxScope.KindLine(cell: WireTile, rung: Int) {
     if (rung < TILE_KIND_MIN_RUNG) return
     val text = when {
-        cell.live -> PhotosCopy.PHOTOS_CELL_LIVE_MARK
-        cell.kind == PhotoCell.Kind.KIND_VIDEO && cell.duration_seconds > 0 ->
-            mediaClock(cell.duration_seconds)
+        cell.live -> cell.live_label
+        cell.kind == WireTile.Kind.KIND_VIDEO && cell.duration_seconds > 0 ->
+            cell.duration_label
         else -> null
     }
     val corner = Modifier.align(Alignment.BottomEnd).padding(horizontal = 5.dp, vertical = 4.dp)
@@ -342,43 +319,36 @@ private fun BoxScope.KindLine(cell: PhotoCell, rung: Int) {
             maxLines = 1,
             modifier = corner,
         )
-    } else if (cell.kind == PhotoCell.Kind.KIND_VIDEO) {
+    } else if (cell.kind == WireTile.Kind.KIND_VIDEO) {
         CentraidIcon(iconKey = "Play", tint = centraidColor("onStage"), size = 14.dp, modifier = corner)
     }
 }
 
 /**
- * `1:04`, `12:07`, `1:02:03` — the shared [MediaFormat]'s, so a tile, the player
+ * `1:04`, `12:07`, `1:02:03` — [MediaClock]'s, so a tile, the player
  * and the facts panel state one recording's length the same way.
  */
-public fun mediaClock(seconds: Int): String = MediaFormat.clock(seconds.toLong())
-
-/**
- * A tile's packed box: the cell, and where `PhotoJustify` put its edges. The
- * packing is shared's (`commonMain`) and names tiles by index; the library
- * puts the cell back under each (`libraryRows`).
- */
-public data class JustifiedTile(val cell: PhotoCell, val width: Int, val height: Int)
+public fun mediaClock(seconds: Int): String = MediaClock.clock(seconds.toLong())
 
 /**
  * THE GRID IS THE LOADING STATE (v0's `PhotosGridSkeleton.tsx`, §14).
  *
- * Skeleton tiles at the rung's own geometry, packed by the same `PhotoJustify`
- * so the photographs land where their placeholders stood. The aspect sequence is
- * FIXED — random aspects would flicker — and nothing moves: DESIGN.md's
- * `Loading` is static skeletons, and a shimmer is attention-seeking about work
- * the product can simply describe.
+ * Skeleton tiles at the rung's own geometry, packed by Rust at the width the
+ * shell reported ([rows] is `PhotosLibraryLoading.skeleton`), so the photographs
+ * land where their placeholders stood. The aspect sequence is FIXED — random
+ * aspects would flicker — and nothing moves: DESIGN.md's `Loading` is static
+ * skeletons, and a shimmer is attention-seeking about work the product can
+ * simply describe.
  */
 @Composable
-public fun PhotoGridSkeleton(containerWidth: Int, targetHeight: Int, viewportHeight: Int, modifier: Modifier = Modifier) {
-    val rows = PhotoJustify.skeleton(containerWidth.toDouble(), targetHeight.toDouble(), viewportHeight.toDouble())
+public fun PhotoGridSkeleton(rows: List<PhotosPackedRow>, label: String, modifier: Modifier = Modifier) {
     Column(
-        modifier.semantics { contentDescription = PhotosCopy.PHOTOS_OPENING_LIBRARY },
+        modifier.semantics { contentDescription = label },
         verticalArrangement = Arrangement.spacedBy(GAP.dp),
     ) {
         rows.forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(GAP.dp)) {
-                row.forEach { tile ->
+                row.packed.forEach { tile ->
                     Box(
                         Modifier
                             .size(tile.width.dp, tile.height.dp)
@@ -391,8 +361,8 @@ public fun PhotoGridSkeleton(containerWidth: Int, targetHeight: Int, viewportHei
     }
 }
 
-/** The gutter between tiles, both axes — the 4 base rung halved. Shared's. */
-public const val GAP: Int = PhotoJustify.GAP
+/** The gutter between tiles, both axes — the 4 base rung halved. Rust's packing leaves it. */
+public const val GAP: Int = 2
 
 /** v0's `KIND_MIN_RUNG`: S. */
 private const val TILE_KIND_MIN_RUNG: Int = 1

@@ -46,10 +46,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_five_queries_and_twenty_five_actions() {
+    fn it_declares_five_queries_and_twenty_six_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 5);
-        assert_eq!(manifest.actions.len(), 25);
+        assert_eq!(manifest.actions.len(), 26);
         for name in ["people", "person", "dashboard", "search", "trash"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -98,7 +98,7 @@ mod tests {
         }
     }
 
-    /// THIRTY-THREE SCOPES: ten reads of the vault's own tables and one `act`
+    /// THIRTY-FOUR SCOPES: ten reads of the vault's own tables and one `act`
     /// per command the actions invoke. The `act` half is compared against the
     /// action table rather than transcribed: an action with no scope is an
     /// action the grant does not cover, and a scope with no action is reach
@@ -107,7 +107,7 @@ mod tests {
     fn it_declares_ten_reads_and_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("People declares its reach");
-        assert_eq!(vault.scopes.len(), 33);
+        assert_eq!(vault.scopes.len(), 34);
         let mut declared: Vec<(&str, &str)> = vault
             .scopes
             .iter()
@@ -211,5 +211,16 @@ mod tests {
             fields("save-contact-channel"),
             ["id", "kind", "label", "point_id", "preferred", "value"]
         );
+    }
+
+    /// THE CATALOG NAMES THE COMMAND EACH ACTION RUNS, and it is the command
+    /// the action table runs: chat's verb rows are generated from the first and
+    /// executed through the second.
+    #[test]
+    fn every_action_declares_the_command_its_row_invokes() {
+        for row in crate::commands::ACTIONS {
+            let declared = manifest().action(row.action).expect("a declared action");
+            assert_eq!(declared.command, row.command, "{}", row.action);
+        }
     }
 }

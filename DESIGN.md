@@ -330,7 +330,7 @@ components:
 
 # DESIGN.md — Centraid
 
-This is the normative product constitution and the machine-readable design brief in the official [design.md](https://github.com/google-labs-code/design.md) format. The phone is its base: SwiftUI and Compose over a Kotlin Multiplatform kit and a Rust core, with no desktop shell, no web shell and no blueprint plane ([#1029](https://github.com/srikanth235/centraid/issues/1029), [#1020](https://github.com/srikanth235/centraid/issues/1020)). Values in this file are pinned to [packages/design/src](packages/design/src) by the design-md tests; the official linter runs through `bun run lint:design-md`. The rulings of the web era that no longer govern a surface live in [docs/decisions.md](docs/decisions.md#design-system), each with its supersession marker.
+This is the normative product constitution and the machine-readable design brief in the official [design.md](https://github.com/google-labs-code/design.md) format. The phone is its base: SwiftUI and Compose drawing what a Rust core decides, with no desktop shell, no web shell and no blueprint plane ([#1029](https://github.com/srikanth235/centraid/issues/1029), [#1020](https://github.com/srikanth235/centraid/issues/1020)). Values in this file are pinned to [packages/design/src](packages/design/src) by the design-md tests; the official linter runs through `bun run lint:design-md`. The rulings of the web era that no longer govern a surface live in [docs/decisions.md](docs/decisions.md#design-system), each with its supersession marker.
 
 ## Overview
 
@@ -587,7 +587,7 @@ Rulings that hold for every control:
 
 The house tic this rulebook exists to stop is **defensive reassurance**: a string states a fact and then adds a sentence about what was _not_ lost, not deleted, not sent, not generated. Repeated everywhere, it stops reading as care and starts reading as a product apologising for itself. Reassurance is **positional** — it belongs where the risk decision is actually made, and nowhere else.
 
-Every string has a budget, and the budget is the contract. Copy lives in `copy/<app>.json`, and only there: the Kotlin table both shells read, `dev.centraid.design.copy.<App>Copy`, is generated from it at build time (`:shared:generateCopy`).
+Every string has a budget, and the budget is the contract. Copy lives in the Rust string catalogue, `crates/screens/src/strings`, and only there: a view draws the finished string its `ViewState` carries, and the few fixed words of the kit (`strings/shared.rs`) are emitted into both shells' `Words` tables. The assistant's own turn sentences are `copy/chat.json`.
 
 | Surface | Budget |
 | --- | --- |
@@ -619,7 +619,7 @@ A literal command the member types stays as written (`centraid-gateway pair`), a
 
 **Hard caps.** The surface budgets above are the target; these are the ceiling, by key suffix, in words (a `{placeholder}` is one word): `_LABEL`, `_ACTION`, `_PRIMARY`, `_SECONDARY`, `_BUTTON` 4; `_NOTE`, `_DETAIL`, `_LEDE`, `_STATUS`, `_HINT` 12; `_BODY`, `_LEAD`, `_NOTICE` and errors (`_FAILED`, `_ERROR`, `_REFUSED`, `_DENIED`) 25; `_TITLE` 6. A `·` never joins two thoughts in one string — split it or cut one; it survives only between short metadata facts ("Edited · 3 days ago", six words or fewer).
 
-`bun run lint:copy` ([scripts/lint-copy.mjs](scripts/lint-copy.mjs)) enforces the banned words, the vocabulary's retired terms, the `·` rule and the caps over every `copy/*.json` string. It is a shrink-only ratchet like the controls gate: a per-file budget that only goes down, so fix the string rather than raise it.
+`bun run lint:copy` ([scripts/lint-copy.mjs](scripts/lint-copy.mjs)) enforces the banned words, the vocabulary's retired terms, the `·` rule and the caps over every catalogue string and `copy/chat.json`. It is a shrink-only ratchet like the controls gate: a per-file budget that only goes down, so fix the string rather than raise it.
 
 The reassurance rule cuts both ways, and the second half is as binding as the first. A disclosure keeps its full sentence at exactly the place a member decides whether to let the product do something with their things. A status line, an empty state, or a shelf header making the same promise a fourth time is not more trustworthy; it is noise the disclosure has to compete with.
 
@@ -663,7 +663,7 @@ Do not hardcode colours, font stacks, type sizes, spacing, radii, icon dictionar
 - [docs/decisions.md § Design system](docs/decisions.md#design-system) — what left this file for the phone as its base, with each supersession marker
 - [issue #707](https://github.com/srikanth235/centraid/issues/707) — the Binding Layer brief this constitution implements, quoted in full in the issue; the design-agent prototypes are reference-only and are not kept in the repo
 - [issue #805](https://github.com/srikanth235/centraid/issues/805) — the copy rulebook this constitution's [Copy](#copy) section states, and the U-series ratchet that enforces it
-- [copy/](copy) — the per-app copy tables
+- [crates/screens/src/strings](crates/screens/src/strings) — the copy catalogue; [copy/](copy) — the assistant's turn sentences
 - [docs/traps/design-tokens.md](docs/traps/design-tokens.md) — source-of-truth trap
 - [issue #690](https://github.com/srikanth235/centraid/issues/690) — product-grammar migration intent and review closure
 - `bun run lint:design-md` — official design.md validation

@@ -1,0 +1,257 @@
+// THE KIT'S FIXED WORDS, LOWERED NATIVELY (#1135).
+//
+// Native views write no copy: every sentence a screen shows is a finished
+// string in its Rust `ViewState`. What is left is the handful of words the
+// native KIT itself draws with no view to carry them — a read state's retry
+// verb, a sheet's cancel, a pushed page's spoken back — which are parameters
+// of the kit composables and SwiftUI views, defaulting to these.
+//
+// Their ONE source is the Rust catalogue, `crates/screens/src/strings/shared.rs`,
+// the same entries the screens say through `strings::shared::*`. This emitter
+// reads that file's `catalog!` block (it is data: one `plain key = ("one",
+// "other");` row per word) and writes a Kotlin and a Swift table with the
+// member names the shells call (`KitWords.RETRY`, `KitWords.backTo(parent:)`).
+// A word missing from the Rust file, or a row this reader cannot parse, throws:
+// a silent empty label is the failure this table exists to prevent.
+//
+// CALLED BY `export-native-theme.ts`, so one command emits every native design
+// artifact, and the `emitters` gate step's regenerate-and-diff is the drift
+// check, as for the theme and the catalogue.
+
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+
+import { KOTLIN_DESIGN_DIR } from "./export-native-catalog.ts";
+
+/** The Rust catalogue the words are read from. */
+export const WORDS_SOURCE = "crates/screens/src/strings/shared.rs";
+
+/**
+ * A word the kit shares with one screen's own catalogue is read from there,
+ * as `<module>::<key>`, rather than spelled twice in Rust.
+ */
+const OTHER_SOURCES: Readonly<Record<string, string>> = {
+  home: "crates/screens/src/strings/home.rs",
+};
+
+/** Where the two tables are written. */
+export const KOTLIN_WORDS = `${KOTLIN_DESIGN_DIR}/Words.kt`;
+export const SWIFT_WORDS = "mobile/iosApp/Design/Words.swift";
+
+/**
+ * Member name → the Rust key. EXACTLY the words a native kit view reads; a
+ * word nothing native draws stays Rust's alone (its screens say it).
+ */
+const CONSTANTS: Readonly<Record<string, string>> = {
+  BACK: "back",
+  BAND_CURRENT: "home::band_current_spoken",
+  BAND_HOME: "kit_band_home",
+  BAND_MORE: "kit_band_more",
+  CANCEL: "kit_cancel",
+  CLOSE_SEARCH: "kit_close_search",
+  DISMISS: "kit_dismiss",
+  DONE: "kit_done",
+  LOADING_MORE: "kit_loading_more",
+  OPEN: "kit_open",
+  OPENING: "kit_opening",
+  PENDING: "kit_pending",
+  RETRY: "kit_retry",
+  SAVE: "kit_save",
+  SEARCH: "kit_search",
+  SELECT: "kit_select",
+  SHOW_MORE: "kit_show_more",
+};
+
+/** The two templates the kit fills, each with its one slot. */
+const TEMPLATES = {
+  backTo: { key: "back_to", slot: "parent" },
+  searchCorrected: { key: "search_corrected", slot: "corrected" },
+} as const;
+
+/** Undo a Rust string literal's escapes (the subset a catalogue row uses). */
+function unescapeRust(body: string, key: string): string {
+  return body.replace(
+    /\\(?<code>u\{[0-9a-fA-F]+\}|.)/gu,
+    (_all, code: string) => {
+      if (code.startsWith("u{")) {
+        return String.fromCodePoint(Number.parseInt(code.slice(2, -1), 16));
+      }
+      switch (code) {
+        case "\\":
+          return "\\";
+        case '"':
+          return '"';
+        case "'":
+          return "'";
+        case "n":
+          return "\n";
+        case "t":
+          return "\t";
+        default:
+          throw new Error(
+            `export-native-words: ${key} carries an escape (\\${code}) this reader does not lower`
+          );
+      }
+    }
+  );
+}
+
+/** Every `plain key = ("one", "other");` row of a catalogue file, by key. */
+export function readCatalog(
+  source: string,
+  strict = true
+): Map<string, string> {
+  const literal = String.raw`"((?:[^"\\]|\\.)*)"`;
+  const row = new RegExp(
+    String.raw`^\s*(plain|counted)\s+([a-z0-9_]+)\s*=\s*\(\s*${literal}\s*,\s*${literal}\s*\)\s*;\s*$`,
+    "u"
+  );
+  const words = new Map<string, string>();
+  let inside = false;
+  for (const line of source.split("\n")) {
+    if (/^\s*catalog!\s*\{/u.test(line)) {
+      inside = true;
+      continue;
+    }
+    if (!inside) continue;
+    if (/^\s*\}\s*$/u.test(line)) {
+      inside = false;
+      continue;
+    }
+    if (/^\s*(?:\/\/.*)?$/u.test(line)) continue;
+    const match = row.exec(line);
+    if (match === null) {
+      // A row split over lines is skipped in a file read for one word; the
+      // word's lookup throws if it was that row.
+      if (!strict) continue;
+      throw new Error(
+        `export-native-words: a catalogue row this reader cannot parse: ${line.trim()}`
+      );
+    }
+    const [, kind, key, one] = match;
+    if (kind === "plain") words.set(key, unescapeRust(one, key));
+  }
+  return words;
+}
+
+const quote = (value: string): string =>
+  `"${value
+    .replace(/\\/gu, "\\\\")
+    .replace(/"/gu, '\\"')
+    .replace(/\n/gu, "\\n")
+    .replace(/\t/gu, "\\t")}"`;
+
+/** Kotlin also interpolates `$`. */
+const kotlinQuote = (value: string): string =>
+  quote(value).replace(/\$/gu, "\\$");
+
+const header = (): string[] => [
+  "// GENERATED by contracts/tools/export-native-words.ts from",
+  `// \`${WORDS_SOURCE}\`. Do not edit: change the Rust catalogue.`,
+  "//",
+  "// The words the native kit draws with no view to carry them (#1135). Every",
+  "// kit view takes each word as a parameter defaulting to these, so a screen",
+  "// whose view carries its own word passes it. The `emitters` gate step",
+  "// regenerates this file and fails on any difference.",
+  "",
+];
+
+function lookup(words: Map<string, string>, key: string): string {
+  const text = words.get(key);
+  if (text === undefined || text.length === 0) {
+    throw new Error(
+      `export-native-words: \`${key}\` is not a plain entry of ${WORDS_SOURCE}`
+    );
+  }
+  return text;
+}
+
+function slotted(text: string, slot: string, key: string): void {
+  if (!text.includes(`{${slot}}`)) {
+    throw new Error(
+      `export-native-words: \`${key}\` has no {${slot}} slot: ${text}`
+    );
+  }
+}
+
+export function emitNativeWords(repositoryRoot: string): { words: number } {
+  const words = readCatalog(
+    readFileSync(path.join(repositoryRoot, WORDS_SOURCE), "utf8")
+  );
+  const others = new Map(
+    Object.entries(OTHER_SOURCES).map(([module, file]) => [
+      module,
+      readCatalog(readFileSync(path.join(repositoryRoot, file), "utf8"), false),
+    ])
+  );
+  const constants = Object.entries(CONSTANTS).map(([name, key]) => {
+    const [module, own] = key.includes("::") ? key.split("::") : ["", key];
+    const table = module === "" ? words : others.get(module);
+    if (table === undefined) {
+      throw new Error(`export-native-words: no catalogue named ${module}`);
+    }
+    return [name, lookup(table, own ?? key)] as const;
+  });
+  const backTo = lookup(words, TEMPLATES.backTo.key);
+  slotted(backTo, TEMPLATES.backTo.slot, TEMPLATES.backTo.key);
+  const corrected = lookup(words, TEMPLATES.searchCorrected.key);
+  slotted(
+    corrected,
+    TEMPLATES.searchCorrected.slot,
+    TEMPLATES.searchCorrected.key
+  );
+
+  const kotlin = [
+    ...header(),
+    "package dev.centraid.design",
+    "",
+    "public object KitWords {",
+    ...constants.map(
+      ([name, text]) =>
+        `    public const val ${name}: String = ${kotlinQuote(text)}`
+    ),
+    "",
+    '    /** A pushed page\'s back control, spoken: "Back to People"; "Back" with no parent. */',
+    "    public fun backTo(parent: String): String =",
+    `        if (parent.isBlank()) BACK else ${kotlinQuote(backTo)}.replace("{parent}", parent)`,
+    "",
+    "    /** The line under a search field when the core corrected a typo; [corrected] is `SearchField.corrected`. */",
+    "    public fun searchCorrected(corrected: String): String =",
+    `        ${kotlinQuote(corrected)}.replace("{corrected}", corrected)`,
+    "}",
+    "",
+  ];
+
+  const swift = [
+    ...header(),
+    "import Foundation",
+    "",
+    "public enum KitWords {",
+    ...constants.map(
+      ([name, text]) => `    public static let ${name} = ${quote(text)}`
+    ),
+    "",
+    '    /// A pushed page\'s back control, spoken: "Back to People"; "Back" with no parent.',
+    "    public static func backTo(parent: String) -> String {",
+    "        parent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty",
+    `            ? BACK : ${quote(backTo)}.replacingOccurrences(of: "{parent}", with: parent)`,
+    "    }",
+    "",
+    "    /// The line under a search field when the core corrected a typo; `corrected` is `SearchField.corrected`.",
+    "    public static func searchCorrected(corrected: String) -> String {",
+    `        ${quote(corrected)}.replacingOccurrences(of: "{corrected}", with: corrected)`,
+    "    }",
+    "}",
+    "",
+  ];
+
+  for (const [file, lines] of [
+    [KOTLIN_WORDS, kotlin],
+    [SWIFT_WORDS, swift],
+  ] as const) {
+    const target = path.join(repositoryRoot, file);
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, lines.join("\n"));
+  }
+  return { words: constants.length + 2 };
+}

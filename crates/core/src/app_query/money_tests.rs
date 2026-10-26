@@ -111,7 +111,10 @@ impl Scratch {
     fn tile(&self) -> wire::MoneyHomeTile {
         match self
             .try_money(wire::money_request::Kind::HomeTile(
-                wire::MoneyHomeTileRequest { tz: TZ.to_owned() },
+                wire::MoneyHomeTileRequest {
+                    tz: TZ.to_owned(),
+                    month: String::new(),
+                },
             ))
             .expect("the tile answers")
             .kind
@@ -128,24 +131,19 @@ impl Scratch {
 
     fn run_bytes(&self, name: &str, input: Vec<u8>) -> Result<serde_json::Value> {
         self.writes.set(self.writes.get() + 1);
-        let response = self.handle.call(&wire::Request {
-            kind: Some(wire::request::Kind::Command(wire::Command {
-                name: name.to_owned(),
-                input,
-                invoke_key: format!("money-query-test-{}", self.writes.get()),
-                ..wire::Command::default()
-            })),
-        })?;
-        let Some(wire::response::Kind::Command(outcome)) = response.kind else {
-            panic!("a command answered with something else");
-        };
+        let input: serde_json::Value = serde_json::from_slice(&input).expect("json");
+        let outcome = self.handle.command(
+            name,
+            &input,
+            &format!("money-query-test-{}", self.writes.get()),
+        )?;
         assert_eq!(
             outcome.status,
-            wire::CommandStatus::Executed as i32,
-            "{name}: {}",
+            centraid_vault::CommandStatus::Executed,
+            "{name}: {:?}",
             outcome.reason
         );
-        Ok(serde_json::from_slice(&outcome.output).expect("the output is JSON"))
+        Ok(outcome.output)
     }
 
     fn run(&self, name: &str, input: serde_json::Value) -> serde_json::Value {

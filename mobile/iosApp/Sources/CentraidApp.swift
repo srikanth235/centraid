@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// The iOS composition root (#1020, D-1020-E1).
+/// The iOS composition root (#1020, D-1020-E1; #1135).
 ///
-/// **The views own nothing.** Every one of them takes a finished state message
-/// and forwards events; the state machines are in `CentraidShared`, and this
-/// file is the only one that knows the stack.
+/// **The views own nothing.** Every one of them draws a `ViewState` Rust made and
+/// forwards events; the screens, the vaults, the passes and the imports are Rust's
+/// (`crates/screens`), and this file is the only one that knows the stack.
 ///
 /// ONE ROOT STACK, NO TAB BAR — apps are covers over Home. That is a product
 /// ruling, not a SwiftUI preference.
@@ -18,13 +18,11 @@ struct CentraidApp: App {
     /// THE PROCESS'S ONE SHELL, not a fresh one: a background relaunch may
     /// already have made it (`ShellModel.shared`).
     @StateObject private var shell = ShellModel.shared
-    /// WHAT THE SCENE PHASE DECIDES (#1029 §1; #1080).
-    ///
-    /// The SWITCHER MASK, which was never about the network: a phone in the
-    /// app switcher must not show a member's rows in a snapshot the OS keeps.
-    /// And the two BACKUP occasions: arriving runs a pass, and leaving arms the
-    /// background windows and runs one more under the grace iOS gives a
-    /// leaving app (`ShellModel.becameActive`, `ShellModel.wentToBackground`).
+    /// WHAT THE SCENE PHASE DECIDES (#1029 §1; #1080): the SWITCHER MASK, which
+    /// was never about the network (a phone in the app switcher must not show a
+    /// member's rows in a snapshot the OS keeps), and the app's lifecycle, which
+    /// Rust hears (`AppLifecycle`: the Locker relocks, the pass service runs its
+    /// background pass under the grace iOS gives a leaving app).
     @Environment(\.scenePhase) private var scenePhase
 
     /// REGISTER THE BACKGROUND HANDLERS BEFORE ANYTHING SUBMITS ONE (#1029 W18-1).
@@ -33,184 +31,26 @@ struct CentraidApp: App {
     /// before the app finishes launching, and raises
     /// `NSInternalInconsistencyException` — which **terminates the app**, rather
     /// than failing the task — for a submit whose identifier has no handler.
-    /// `ShellModel.shared` is what eventually submits, and an `init` body runs
-    /// before any of this type's property-wrapper storage is read, so this is
-    /// the one place in the app that is unambiguously launch.
     init() {
         BackgroundPasses.register()
-    }
-
-    /// The navigation root: bare paper until the shelf has answered, then the
-    /// gate or Home. Its own property so the stack's modifier chain stays small
-    /// enough for the type checker.
-    @ViewBuilder private var root: some View {
-        switch shell.holdsNoVault {
-        case .some(true):
-            FirstLaunchView(shell: shell)
-        case .some(false):
-            // BARE PAPER UNTIL THE LOCKUP LANDS. The shelf says it holds a
-            // vault a moment before the session publishes that vault's
-            // lockup, and Home drawn in that moment said "No vault yet" for a
-            // frame between first launch and the springboard. A shelf that
-            // holds a vault always has one in front, so an empty lockup is
-            // only ever that moment.
-            if shell.homeVaultID.isEmpty {
-                BarePaper()
-            } else {
-                HomeView(shell: shell)
-            }
-        case .none:
-            BarePaper()
-        }
     }
 
     var body: some Scene {
         WindowGroup {
             NavigationStack(path: $shell.path) {
-                // THE FIRST-LAUNCH GATE: a device that holds no vault opens
-                // onto the way to make one, not onto a Home with nothing to
-                // read. The shelf's answer, never a count taken here.
-                root
+                ShellRoot(shell: shell)
                     .navigationDestination(for: ShellModel.Route.self) { route in
                         Group {
                             switch route {
-                            // EVERY REGISTERED APP'S SCREENS (K5): the view
-                            // is the one its `AppScreens.register` handed over.
-                            case let .screen(identifier, parameter):
-                                RegisteredScreen(shell: shell, identifier: identifier, parameter: parameter)
-                            case .photos:
-                                PhotosGridView(shell: shell)
-
-                            // THE PHOTOS MINIAPP'S OTHER NINE SCREENS.
-                            //
-                            // Every one takes BYTES and closures, never this
-                            // model: a view that held the shell would be a
-                            // view that could reach past its own screen, and
-                            // the whole execution model is that a view renders
-                            // a finished state and forwards events.
-                            case let .photoShelf(shelf):
-                                PhotoShelfView(
-                                    data: shell.photoShelfState,
-                                    shelf: (try? Centraid_Screen_V1_PhotoShelf(
-                                        serializedBytes: shelf
-                                    )) ?? .init(),
-                                    copy: shell.photoShelfCopy,
-                                    send: { shell.send(screen: PhotosScreens.shelf, event: $0) },
-                                    onOpenAsset: { identifier, neighbours in
-                                        // AN ALBUM'S LIGHTBOX KNOWS ITS ALBUM,
-                                        // for "Make key photo".
-                                        let album = (try? Centraid_Screen_V1_PhotoShelf(
-                                            serializedBytes: shelf
-                                        ))?.album.collectionID ?? ""
-                                        shell.path.append(
-                                            .photoLightbox(identifier, neighbours, album: album)
-                                        )
-                                    },
-                                    onAddPhotographs: { identifier, name in
-                                        shell.path.append(.photoPicker(identifier, name))
-                                    },
-                                    onExport: { identifiers, kind in
-                                        shell.exportShelf(identifiers, as: kind)
-                                    }
-                                )
-
-                            case let .photoLightbox(identifier, _, _):
-                                PhotoLightboxView(
-                                    data: shell.photoLightboxState,
-                                    send: { shell.send(screen: PhotosScreens.lightbox, event: $0) }
-                                )
-                                // THE NEIGHBOURS RIDE THE ROUTE and reach the
-                                // machine through `shell.opened(route)` below,
-                                // so a swipe needs no read. `.id` is what makes
-                                // SwiftUI rebuild when a member swipes from one
-                                // photograph to the next.
-                                .id(identifier)
-                                // EDIT PUSHES THE EDITOR, with the neighbours,
-                                // so a save can come back to the same shelf.
-                                .environment(\.openPhotoEditor) { assetIdentifier, neighbours in
-                                    shell.path.append(.photoEditor(assetIdentifier, neighbours))
-                                }
-
-                            case let .photoPicker(identifier, name):
-                                PhotoPickerView(
-                                    data: shell.photoPickerState,
-                                    collectionIdentifier: identifier,
-                                    collectionName: name,
-                                    // EMPTY, AND NOT A GAP: the picker reads
-                                    // the album's whole membership itself on
-                                    // open (`PhotoPickerMachine.MEMBERS_READ_ID`)
-                                    // — no caller holds more than one page of it.
-                                    alreadyInAlbum: [],
-                                    send: { shell.send(screen: PhotosScreens.picker, event: $0) },
-                                    onFinished: { shell.path.removeLast() }
-                                )
-
-                            case .places:
-                                PlacesView(
-                                    data: shell.placesState,
-                                    send: { shell.send(screen: PhotosScreens.places, event: $0) },
-                                    onOpenPlace: { identifier, name in
-                                        shell.path.append(.photoShelf(shell.placeShelf(
-                                            identifier: identifier,
-                                            name: name
-                                        )))
-                                    },
-                                    onOpenShelf: { shell.path.append(.photoShelf($0)) }
-                                )
-
-                            case .photoDuplicates:
-                                DuplicatesView(
-                                    data: shell.duplicatesState,
-                                    send: { shell.send(screen: PhotosScreens.duplicates, event: $0) },
-                                    onOpenCluster: { identifier in
-                                        shell.path.append(.photoDuplicateReview(identifier))
-                                    }
-                                )
-
-                            case let .photoDuplicateReview(identifier):
-                                DuplicateReviewView(
-                                    data: shell.duplicateReviewState,
-                                    send: { shell.send(screen: PhotosScreens.duplicateReview, event: $0) }
-                                )
-                                .id(identifier)
-
-                            // THE EDITOR (#1029). Cancel pops back onto the
-                            // lightbox it came from; a save replaces that
-                            // lightbox with one on the NEW photograph.
-                            case let .photoEditor(identifier, neighbours):
-                                PhotoEditorView(
-                                    data: shell.photoEditorState,
-                                    send: { shell.send(screen: PhotosScreens.editor, event: $0) },
-                                    onClose: { shell.path.removeLast() },
-                                    onSaved: { saved in
-                                        shell.photoEditSaved(saved, neighbours: neighbours)
-                                    }
-                                )
-                                .id(identifier)
+                            // A SCREEN RUST OWNS, drawn from its view state.
+                            case let .rust(entry):
+                                RustScreenHost(shell: shell, entry: entry)
                             }
                         }
-                        // A SCREEN READS BECAUSE IT WAS OPENED. The machine
-                        // emits its first `ReadPage` from `Opened` and from
-                        // nothing else, so a cover that was pushed and never
-                        // told would sit loading for ever (#1025 S5, lane L5).
-                        // `.task` and not `.onAppear`: a pop back onto this
-                        // cover re-runs it, and a screen a member returned to
-                        // should re-read rather than show the page it had when
-                        // they left.
-                        //
-                        // KEYED ON THE ROUTE. A route SWAPPED IN PLACE — Notes'
-                        // band places, the editor's Done — keeps this
-                        // destination's view and its task, so an unkeyed
-                        // `.task` never told the new screen it opened and it
-                        // sat on its skeleton for ever. `id: route` makes the
-                        // swap a new task (`NavigationAndMountSpec`).
+                        // KEYED ON THE ROUTE: a route swapped in place is a new task.
                         .task(id: route) { shell.opened(route) }
-                        // THE DAY-ONE DOOR (docs/decisions.md, "Onboarding
-                        // without sample data"): an app's empty state offers
-                        // the phone's own data.
-                        .environment(\.importFromPhone, { shell.importFromPhone($0) })
                         // THE ASSISTANT'S DOOR for a search's Ask row (#1097, R-1097-30, #1135).
-                        .environment(\.askChat, { shell.askChat($0.question, scope: $0.scope) })
+                        .environment(\.askChat, { shell.open($0) })
                         // THE IMPORT'S LINE on every route, at the foot (DESIGN.md's
                         // one status line): above the app's band where the page
                         // has one, at the page's own foot where it does not.
@@ -220,36 +60,18 @@ struct CentraidApp: App {
             // THE ROOT'S TINT (DESIGN.md "The controls (mobile)"): `link`
             // ink on every platform control, not system blue.
             .kitRootTint()
-
-            // EVERY APP'S ROOT WATCHER (#1047): Docs' filed-document push and
-            // its picker, Locker's prompt and lifecycle.
-            .background { AppGlobals(shell: shell) }
+            // THE PICKERS A SCREEN CAN ASK FOR WHEREVER THE MEMBER IS: Docs' file
+            // picker and scanner (`PickFile`), and its folder picker (`FollowFolder`).
+            .background {
+                ZStack {
+                    DocsFilesRoot()
+                    DocsFollowRoot()
+                }
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+            }
             // IOS'S CONTACT PICKER, for an import over limited access.
             .modifier(ContactAccessPickerHost(shell: shell))
-            // THE QUESTION A HELD ACCOUNT OR CALENDAR LEAVES (#1127, R-1127-9).
-            .modifier(PhoneFollowQuestionHost(shell: shell))
-            // THE 24 WORDS (#1047 E2): `words.make` and `words.enter`, one
-            // sheet at the root so Locker's wall can raise it from any depth.
-            // A swipe is allowed only where the machine has a way out to hear.
-            .sheet(item: Binding(
-                get: { shell.wordsSheet },
-                set: { if $0 == nil { shell.wordsSwipedAway() } }
-            )) { sheet in
-                switch sheet {
-                case .make:
-                    VaultWordsView(data: shell.vaultWordsState, send: { shell.sendVaultWords($0) })
-                        .interactiveDismissDisabled(!shell.vaultWordsSwipeable)
-                case .enter:
-                    WordsEntryView(data: shell.wordsEntryState, send: { shell.sendWordsEntry($0) })
-                        .interactiveDismissDisabled(!shell.wordsEntrySwipeable)
-                // words.show's swipe is its Dismissed, always heard.
-                case .show:
-                    WordsShowView(data: shell.wordsShowState, send: { shell.sendWordsShow($0) })
-                case .pair:
-                    PairLaptopView(data: shell.pairLaptopState, send: { shell.sendPairLaptop($0) })
-                        .interactiveDismissDisabled(!shell.pairLaptopSwipeable)
-                }
-            }
             // THE SWITCHER MASK. Leaving the foreground paints an opaque mask
             // — not cosmetic: the snapshot iOS keeps for the app switcher is
             // taken once the scene reaches `.background`, of whatever is on
@@ -264,27 +86,14 @@ struct CentraidApp: App {
                 switch phase {
                 case .active:
                     shell.unmask()
-                    // AND DRAIN. The amendment's foreground half (#1029 W18-6):
-                    // the phone backs up while the member is in the app, not
-                    // only in the windows iOS grants. `ShelfDrain` refuses a
-                    // second pass while one runs, so an `inactive` → `active`
-                    // flicker costs nothing.
-                    shell.becameActive()
+                    shell.lifecycle(foreground: true)
                 // `.background` ONLY, never `.inactive` (R-1047-L1's rule for
                 // the lock, applied to the mask): the Locker's own Face ID
                 // prompt makes the scene inactive, and a mask there blacked out
-                // the screen behind the prompt. What `.inactive` alone covered
-                // was the live card while the member's own finger holds the
-                // switcher open — nothing the OS keeps.
+                // the screen behind the prompt.
                 case .background:
                     shell.mask()
-                    // words.show drops its words on leaving (#1047 E5).
-                    shell.leftForeground()
-                    // AND ARM THE NIGHT (#1080): resubmit both background
-                    // windows and run one pass under the background task's
-                    // grace, so what it seals is handed to the OS to carry
-                    // while the app is suspended.
-                    shell.wentToBackground()
+                    shell.lifecycle(foreground: false)
                 case .inactive:
                     break
                 @unknown default:
@@ -295,6 +104,40 @@ struct CentraidApp: App {
     }
 }
 
+/// THE NAVIGATION ROOT: bare paper until Home has drawn, then the first-launch
+/// gate (Rust's, while the phone holds no vault) or Home. Its own view, so a
+/// Home update redraws the root and the stack's modifier chain stays small
+/// enough for the type checker.
+private struct ShellRoot: View {
+    @ObservedObject var shell: ShellModel
+
+    var body: some View {
+        if let store = shell.screens {
+            StoreRoot(shell: shell, store: store)
+        } else {
+            BarePaper()
+        }
+    }
+}
+
+private struct StoreRoot: View {
+    @ObservedObject var shell: ShellModel
+    @ObservedObject var store: ScreenStore
+
+    var body: some View {
+        if let home = store.homeView {
+            if home.hasFirstLaunch {
+                // THE FIRST-LAUNCH GATE: nothing of Home stands behind it.
+                FirstLaunchView(gate: home.firstLaunch, store: store)
+                    .onAppear { shell.path = [] }
+            } else {
+                HomeView(shell: shell)
+            }
+        } else {
+            BarePaper()
+        }
+    }
+}
 #endif
 
 // `HomeView` lives in `HomeView.swift`: Home is the graded springboard

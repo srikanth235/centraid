@@ -1,7 +1,7 @@
-//! # Agenda — four queries, seven actions, and the one recurrence engine
+//! # Agenda — events and tasks, and the one recurrence engine
 //!
-//! 7,818 lines of v0 TypeScript, 4 queries, 7 actions, **17 scopes — the
-//! smallest scope set of any app** (#1020, wave 4 census §A6). Its doctrine,
+//! Tasks are folded into Agenda (#1128): one mini app, one crate, one manifest; the task reads are
+//! [`task`]. The event half (#1020, wave 4 census §A6) has this doctrine,
 //! from the manifest's own description (`manifest.json`, copied verbatim from
 //! v0's `app.json`):
 //!
@@ -48,6 +48,7 @@ pub mod expansion;
 pub mod local;
 pub mod manifest;
 pub mod queries;
+pub mod task;
 pub mod window;
 
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};

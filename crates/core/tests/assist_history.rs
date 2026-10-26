@@ -126,22 +126,11 @@ fn command(
     name: &str,
     input: serde_json::Value,
     key: &str,
-) -> wire::CommandOutcome {
-    let answer = sample
+) -> centraid_vault::commands::CommandOutcome {
+    sample
         .handle
-        .call(&wire::Request {
-            kind: Some(wire::request::Kind::Command(wire::Command {
-                name: name.to_owned(),
-                input: serde_json::to_vec(&input).unwrap(),
-                invoke_key: key.to_owned(),
-                ..wire::Command::default()
-            })),
-        })
-        .expect("a command answers");
-    match answer.kind {
-        Some(wire::response::Kind::Command(outcome)) => outcome,
-        other => panic!("{other:?}"),
-    }
+        .command(name, &input, key)
+        .expect("a command answers")
 }
 
 fn texts(stored: &wire::ChatThread) -> Vec<(bool, String)> {
@@ -172,8 +161,7 @@ fn png(width: u32, height: u32) -> Vec<u8> {
 fn a_completed_turn_is_saved_listed_and_read_back_with_its_cards() {
     let sample = common::chat::sample();
     sample.install(script(&read_tasks()));
-    // Agenda's scope covers tasks (R-1128-F2): the thread is scoped `agenda` and its cards
-    // still name the `tasks` domain.
+    // The tasks are Agenda's (#1128): the thread is scoped `agenda` and its cards name `agenda`.
     let session = sample.start("agenda");
     assert!(
         threads(&sample).is_empty(),
@@ -212,7 +200,7 @@ fn a_completed_turn_is_saved_listed_and_read_back_with_its_cards() {
         answer
             .cards
             .iter()
-            .all(|card| card.app == "tasks" && !card.id.is_empty())
+            .all(|card| card.app == "agenda" && !card.id.is_empty())
     );
 }
 
@@ -461,7 +449,7 @@ fn a_reopened_threads_retry_asks_its_last_question_again() {
 #[test]
 fn a_thread_stored_by_the_routed_plane_still_reopens_and_joins() {
     let sample = common::chat::sample();
-    let routed_tool = r#"{"user":"What is due today?","record":{"kind":"tool","call_json":"{\"tool\":\"tasks.list\",\"args\":{\"view\":\"today\"}}","headline":"2 tasks due today","answer":"Two things are due."}}"#;
+    let routed_tool = r#"{"user":"What is due today?","record":{"kind":"tool","call_json":"{\"tool\":\"agenda.task_list\",\"args\":{\"view\":\"today\"}}","headline":"2 tasks due today","answer":"Two things are due."}}"#;
     let saved = command(
         &sample,
         "thread.save_turn",
@@ -478,10 +466,10 @@ fn a_thread_stored_by_the_routed_plane_still_reopens_and_joins() {
     );
     assert_eq!(
         saved.status,
-        wire::CommandStatus::Executed as i32,
+        centraid_vault::CommandStatus::Executed,
         "{saved:?}"
     );
-    let stored: serde_json::Value = serde_json::from_slice(&saved.output).unwrap();
+    let stored = saved.output;
     let thread_id = stored["thread_id"]
         .as_str()
         .expect("a thread id")
@@ -617,7 +605,7 @@ fn a_deleted_chat_is_gone_and_cannot_be_reopened() {
         serde_json::json!({ "thread_id": sent.thread_id, "title": "Due today" }),
         "rename-1",
     );
-    assert_eq!(renamed.status, wire::CommandStatus::Executed as i32);
+    assert_eq!(renamed.status, centraid_vault::CommandStatus::Executed);
     assert_eq!(threads(&sample)[0].title, "Due today");
 
     let deleted = command(
@@ -627,7 +615,7 @@ fn a_deleted_chat_is_gone_and_cannot_be_reopened() {
         serde_json::json!({ "id": sent.thread_id }),
         "delete-1",
     );
-    assert_eq!(deleted.status, wire::CommandStatus::Executed as i32);
+    assert_eq!(deleted.status, centraid_vault::CommandStatus::Executed);
     assert!(threads(&sample).is_empty());
     assert!(!thread(&sample, &sent.thread_id).found);
     assert!(start_thread(&sample, &sent.thread_id).is_err());
@@ -649,7 +637,7 @@ fn clearing_every_chat_leaves_none_to_list() {
     send(&sample, second, 1, "second chat", false, vec![]);
     assert_eq!(threads(&sample).len(), 2);
     let cleared = command(&sample, "thread.clear", serde_json::json!({}), "clear-1");
-    assert_eq!(cleared.status, wire::CommandStatus::Executed as i32);
+    assert_eq!(cleared.status, centraid_vault::CommandStatus::Executed);
     assert!(threads(&sample).is_empty());
 }
 
@@ -675,14 +663,14 @@ fn a_card_whose_row_is_gone_says_so_at_the_tap() {
     };
     assert!(ask(&card.app, &card.entity, &card.id), "the row is there");
     assert!(!ask(&card.app, &card.entity, "a-row-that-was-deleted"));
-    // A Locker item's card is live while the item is, and a card cannot name Health.
+    // A Locker item's card is live while the item is, and a card cannot name an app that is not on the roster.
     assert!(
         !ask("locker", "locker_item", "a-row-that-was-deleted"),
         "a Locker card is live only while its item is"
     );
     assert!(
-        !ask("health", &card.entity, &card.id),
-        "health is never a card's app"
+        !ask("weather", &card.entity, &card.id),
+        "an app off the roster is never a card's app"
     );
 }
 

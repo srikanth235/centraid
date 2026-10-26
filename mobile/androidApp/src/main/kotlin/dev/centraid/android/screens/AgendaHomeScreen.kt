@@ -1,5 +1,6 @@
 package dev.centraid.android.screens
 
+import dev.centraid.android.kit.SearchAskRow
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,26 +41,26 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.AgendaBandTab
-import centraid.screen.v1.AgendaChrome
-import centraid.screen.v1.AgendaDaySection
-import centraid.screen.v1.AgendaEmpty
-import centraid.screen.v1.AgendaEventRow
-import centraid.screen.v1.AgendaHomeData
-import centraid.screen.v1.AgendaHomeEvent
-import centraid.screen.v1.AgendaHomeState
-import centraid.screen.v1.AgendaMoreRow
-import centraid.screen.v1.AgendaNowLine
-import centraid.screen.v1.AgendaRowStatus
-import centraid.screen.v1.AgendaToolbar
-import centraid.screen.v1.SearchContainer
-import centraid.screen.v1.SearchField
-import centraid.screen.v1.TasksChrome
+import centraid.core.v1.AgendaBandTab
+import centraid.core.v1.AgendaChrome
+import centraid.core.v1.AgendaDaySection
+import centraid.core.v1.AgendaEmpty
+import centraid.core.v1.AgendaEventRow
+import centraid.core.v1.AgendaHomeData
+import centraid.core.v1.AgendaHomeEvent
+import centraid.core.v1.AgendaHomeState
+import centraid.core.v1.AgendaMoreRow
+import centraid.core.v1.AgendaNowLine
+import centraid.core.v1.AgendaRowStatus
+import centraid.core.v1.AgendaToolbar
+import centraid.core.v1.Route
+import centraid.core.v1.SearchContainer
+import centraid.core.v1.TodoChrome
+import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.DeniedGate
-import dev.centraid.android.kit.LocalPhoneImport
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.hueColor
 import dev.centraid.android.kit.KitStepper
@@ -70,17 +71,17 @@ import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.SkeletonBar
 import dev.centraid.android.kit.StatusLine
-import dev.centraid.android.kit.importLabel
 import dev.centraid.android.screens.agenda.AGENDA_TASK_ROW
 import dev.centraid.android.screens.agenda.AgendaNoticeView
 import dev.centraid.android.screens.agenda.AgendaTaskActions
 import dev.centraid.android.screens.agenda.AgendaTaskSheet
 import dev.centraid.android.screens.agenda.AgendaTodoPlace
+import dev.centraid.android.screens.agenda.CATCH_UP
+import dev.centraid.android.screens.agenda.TodoQuickAddBar
+import dev.centraid.android.screens.agenda.TodoRowView
 import dev.centraid.android.screens.agenda.agendaTaskActions
-import dev.centraid.android.screens.tasks.TaskRowView
-import dev.centraid.android.screens.tasks.TasksQuickAddBar
-import dev.centraid.android.screens.tasks.taskGroupKeys
-import dev.centraid.android.screens.tasks.taskGroups
+import dev.centraid.android.screens.agenda.todoGroupKeys
+import dev.centraid.android.screens.agenda.todoGroups
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.android.theme.LocalCentraidTokens
@@ -94,8 +95,10 @@ import dev.centraid.android.theme.LocalCentraidTokens
  *
  * The view owns nothing. Every string is the machine's — `AgendaChrome` for the
  * fixed words, the rows for the rest — and every tap is an `AgendaHomeEvent`
- * forwarded through [onEvent]. The one local value is the search field's text
- * while the IME holds it, and it only ever reports a DIFFERENCE from the state.
+ * forwarded through [onEvent], or, on a row that opens a page, the `Route` it
+ * carries, handed to [onOpen] for the shell to push. The one local value is the
+ * search field's text while the IME holds it, and it only ever reports a
+ * DIFFERENCE from the state.
  *
  * **FOUR BRANCHES, NEVER TWO**: loading draws skeleton rows (not a spinner),
  * failure a sentence and a retry, denied the gate with no band, data the list
@@ -105,6 +108,7 @@ import dev.centraid.android.theme.LocalCentraidTokens
 public fun AgendaHomeScreen(
     state: AgendaHomeState,
     onEvent: (AgendaHomeEvent) -> Unit,
+    onOpen: (Route) -> Unit,
     onHome: () -> Unit,
 ) {
     val chrome = state.chrome ?: AgendaChrome()
@@ -121,8 +125,8 @@ public fun AgendaHomeScreen(
     }
 
     // THE TASK WORDS (`AgendaChrome.tasks`) and the task events every place's rows share.
-    val words = chrome.tasks ?: TasksChrome()
-    val actions = agendaTaskActions(words, onEvent)
+    val words = chrome.tasks ?: TodoChrome()
+    val actions = agendaTaskActions(words, state.data_?.catch_up, onEvent, onOpen)
     val meta = listOfNotNull(
         state.toolbar?.month_label?.takeIf { it.isNotEmpty() },
         state.data_?.event_count_label?.takeIf { it.isNotEmpty() },
@@ -145,13 +149,12 @@ public fun AgendaHomeScreen(
                     label = state.add_label,
                     testTag = if (plusOpensBar) "agenda-add-task" else "agenda-new-event",
                 ) {
-                    onEvent(
-                        if (plusOpensBar) {
-                            AgendaHomeEvent(quick_add_opened = AgendaHomeEvent.QuickAddOpened())
-                        } else {
-                            AgendaHomeEvent(new_event = AgendaHomeEvent.NewEventRequested())
-                        },
-                    )
+                    // THE PLUS IS A ROUTE where it adds (the add sheet), an event where it opens the bar.
+                    if (plusOpensBar) {
+                        onEvent(AgendaHomeEvent(quick_add_opened = AgendaHomeEvent.QuickAddOpened()))
+                    } else {
+                        state.new_event?.let(onOpen)
+                    }
                 }
             } else {
                 null
@@ -201,17 +204,19 @@ public fun AgendaHomeScreen(
                             if (todo != null) {
                                 AgendaTodoPlace(todo, words, actions, onEvent)
                             } else {
-                                AgendaList(state, data, actions, onEvent)
+                                AgendaList(state, data, actions, onEvent, onOpen)
                             }
                         }
                     }
                 }
+                // THE ASK ROW closes a search's answer (#1097); the state holds one only while it is drawn.
+                SearchAskRow(state.search_ask_row, onOpen)
                 // THE TASK WRITE'S STATUS LINE ("Task done", Undo) docks under whichever place's list.
                 StatusLine(state.status, actTag = "agenda-status-action") {
                     onEvent(AgendaHomeEvent(status_acted = AgendaHomeEvent.StatusActed()))
                 }
                 // THE PLUS OPENED THE BAR (To-do only): the keyboard-attached quick add, focus from `focused`.
-                TasksQuickAddBar(
+                TodoQuickAddBar(
                     quickAdd = state.quick_add,
                     placeholder = words.quick_add_placeholder,
                     verb = words.quick_add_verb,
@@ -226,7 +231,7 @@ public fun AgendaHomeScreen(
     }
 
     when (state.sheet) {
-        AgendaHomeState.Sheet.SHEET_MORE -> AgendaMoreSheet(state, chrome, onEvent)
+        AgendaHomeState.Sheet.SHEET_MORE -> AgendaMoreSheet(state, chrome, onEvent, onOpen)
         AgendaHomeState.Sheet.SHEET_READS -> AgendaReadsSheet(chrome, onEvent)
         AgendaHomeState.Sheet.SHEET_FILE, AgendaHomeState.Sheet.SHEET_NEW_PROJECT -> AgendaTaskSheet(state, words, onEvent)
         else -> Unit
@@ -303,6 +308,7 @@ private fun AgendaList(
     data: AgendaHomeData,
     actions: AgendaTaskActions,
     onEvent: (AgendaHomeEvent) -> Unit,
+    onOpen: (Route) -> Unit,
 ) {
     val hasEmpty = data.empty != AgendaEmpty.AGENDA_EMPTY_NONE && data.empty != AgendaEmpty.AGENDA_EMPTY_UNSPECIFIED
     // THE BLOCKS DRAWN ABOVE THE DAYS (#1128): the absence notice and the
@@ -311,16 +317,16 @@ private fun AgendaList(
     // A DAY THAT OWES (Overdue, the notice) is never empty: the fold sends no
     // sentence for it, so an empty state here has nothing above it.
     if (hasEmpty) {
-        AgendaEmptyBlock(data, onEvent, Modifier.fillMaxSize().padding(24.dp))
+        AgendaEmptyBlock(data, state.new_event, onEvent, onOpen, Modifier.fillMaxSize().padding(24.dp))
         return
     }
 
     val listState = rememberLazyListState()
     // NO EVENT OF THE MEMBER'S YET, only marks (due tasks, birthdays): the
-    // phone's calendar is offered quietly above them, at the point of use.
-    val importVerb = importLabel(data.import_source)
-    val door = LocalPhoneImport.current
-    val offersImport = importVerb.isNotEmpty() && door != null
+    // phone's calendar is offered quietly above them, at the point of use. The
+    // tap is an event: the import itself is Rust's (`ImportRequested`).
+    val importVerb = data.import_label
+    val offersImport = importVerb.isNotEmpty()
     // THE KEYS, IN DRAW ORDER, so landing can find its index without the view
     // deciding where to land: the machine's `landing` names the day and
     // whether the now line is the target.
@@ -328,9 +334,9 @@ private fun AgendaList(
         buildList {
             if (offersImport) add("import")
             if (data.notice != null) add("notice")
-            data.overdue?.let { addAll(taskGroupKeys(listOf(it))) }
+            data.overdue?.let { addAll(todoGroupKeys(listOf(it))) }
             data.containers.forEach { add(containerKey(it)) }
-            addAll(taskGroupKeys(data.task_hits))
+            addAll(todoGroupKeys(data.task_hits))
             data.days.forEach { section ->
                 if (section.month_heading != null) add("month-${section.day}")
                 add("day-${section.day}")
@@ -356,39 +362,38 @@ private fun AgendaList(
         state = listState,
         modifier = Modifier.fillMaxSize().testTag("agenda-list"),
     ) {
-        if (offersImport && door != null) {
+        if (offersImport) {
             item(key = "import") {
                 OutlineButton(
                     label = importVerb,
                     testTag = "agenda-import",
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                ) { door(data.import_source) }
+                ) { onEvent(AgendaHomeEvent(import_requested = AgendaHomeEvent.ImportRequested())) }
             }
         }
+        // THE ABSENCE NOTICE's verb opens Catch up: the home's own `catch_up` route.
         data.notice?.let { notice ->
             item(key = "notice") {
-                AgendaNoticeView(notice) { onEvent(AgendaHomeEvent(notice_acted = AgendaHomeEvent.NoticeActed())) }
+                AgendaNoticeView(notice) { if (notice.verb_key == CATCH_UP) data.catch_up?.let(onOpen) }
             }
         }
         // A SEARCH'S PROJECT CONTAINERS (Q-1128-1): the kit's one container row, a tap
-        // `ProjectPicked` with the container's id, which `AgendaRouting` opens as To-do's
-        // project row. Under a search there is no Overdue group, so they lead.
+        // pushes the container's own route, the project page To-do's project row opens.
+        // Under a search there is no Overdue group, so they lead.
         items(data.containers, key = ::containerKey) { container ->
-            SearchContainerRow(container) {
-                onEvent(AgendaHomeEvent(project_picked = AgendaHomeEvent.ProjectPicked(project_id = container.id)))
-            }
+            SearchContainerRow(container, onOpen = onOpen)
         }
         // OVERDUE (Day on today) AND A SEARCH'S TASK HITS: task groups, the Pages' own shape.
-        taskGroups(
+        todoGroups(
             listOfNotNull(data.overdue) + data.task_hits,
             onCheck = actions.onCheck,
-            onPick = actions.onPick,
+            onOpen = actions.onOpen,
             onVerb = actions.onVerb,
             onFile = actions.onFile,
             fileVerb = actions.fileVerb,
             idPrefix = AGENDA_TASK_ROW,
         )
-        data.days.forEach { section -> daySection(section, actions, onEvent) }
+        data.days.forEach { section -> daySection(section, actions, onOpen) }
         item(key = "foot") { Spacer(Modifier.height(16.dp)) }
     }
 }
@@ -403,7 +408,9 @@ private fun containerKey(container: SearchContainer): String = "c-${container.en
 @Composable
 private fun AgendaEmptyBlock(
     data: AgendaHomeData,
+    newEvent: Route?,
     onEvent: (AgendaHomeEvent) -> Unit,
+    onOpen: (Route) -> Unit,
     modifier: Modifier,
 ) {
     Column(
@@ -419,27 +426,25 @@ private fun AgendaEmptyBlock(
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
-        // DAY ONE, WHERE THE PHONE HOLDS A CALENDAR (`import_source`): the
-        // import in place of `empty_action` when the shell provides the
-        // door — null inside a preview — and can read that source. "New
-        // event" stays in the header, so the one action here is the
-        // faster way to the member's own events.
-        val importVerb = importLabel(data.import_source)
-        val door = LocalPhoneImport.current
-        if (importVerb.isNotEmpty() && door != null) {
+        // DAY ONE, WHERE THE PHONE HOLDS A CALENDAR (`import_source`): the import, an event Rust
+        // answers with its own `CalendarRead`, in place of `empty_action`. "New event" stays in the
+        // header, so the one action here is the faster way to the member's own events.
+        val importVerb = data.import_label
+        if (importVerb.isNotEmpty()) {
             OutlineButton(
                 label = importVerb,
                 testTag = "agenda-empty-import",
                 modifier = Modifier.padding(top = 16.dp),
-            ) { door(data.import_source) }
-        } else if (data.empty_action.isNotEmpty() && data.empty != AgendaEmpty.AGENDA_EMPTY_NO_MATCH) {
-            // NO-MATCH'S ACTION IS ASK (#1097, R-1097-30): drawn only where the shell has a Chat tab,
-            // and Android has none, so it draws the sentence without it.
+            ) { onEvent(AgendaHomeEvent(import_requested = AgendaHomeEvent.ImportRequested())) }
+        } else if (data.empty_action.isNotEmpty() && data.empty != AgendaEmpty.AGENDA_EMPTY_NO_MATCH && newEvent != null) {
+            // THE ONE ACTION is the add sheet, the same route the header's Plus pushes. NO-MATCH'S
+            // ACTION IS ASK (#1097, R-1097-30): drawn only where the shell has a Chat tab, and
+            // Android has none, so it draws the sentence without it.
             OutlineButton(
                 label = data.empty_action,
                 testTag = "agenda-empty-action",
                 modifier = Modifier.padding(top = 16.dp),
-            ) { onEvent(AgendaHomeEvent(new_event = AgendaHomeEvent.NewEventRequested())) }
+            ) { onOpen(newEvent) }
         }
     }
 }
@@ -447,7 +452,7 @@ private fun AgendaEmptyBlock(
 private fun LazyListScope.daySection(
     section: AgendaDaySection,
     actions: AgendaTaskActions,
-    onEvent: (AgendaHomeEvent) -> Unit,
+    onOpen: (Route) -> Unit,
 ) {
     section.month_heading?.let { month ->
         item(key = "month-${section.day}") {
@@ -484,16 +489,16 @@ private fun LazyListScope.daySection(
         val task = item.task
         val now = item.now_line
         if (event != null) {
-            item(key = "row-${event.row_key}") { EventRow(event, onEvent) }
+            item(key = "row-${event.row_key}") { EventRow(event, onOpen) }
         } else if (task != null) {
             // A TASK DUE ON THE DAY (R-1128-2): the round box checks it off where it
             // stands, a tap opens it, a long press offers "Move to project". Indented
             // past the date column, to the events' own start.
             item(key = "task-${section.day}-${task.task_id}") {
-                TaskRowView(
+                TodoRowView(
                     task,
                     onCheck = actions.onCheck,
-                    onPick = actions.onPick,
+                    onOpen = actions.onOpen,
                     onFile = actions.onFile,
                     fileVerb = actions.fileVerb,
                     idPrefix = AGENDA_TASK_ROW,
@@ -579,24 +584,14 @@ private fun Ribbon(label: String) {
 }
 
 @Composable
-private fun EventRow(row: AgendaEventRow, onEvent: (AgendaHomeEvent) -> Unit) {
+private fun EventRow(row: AgendaEventRow, onOpen: (Route) -> Unit) {
     val titleInk = if (row.is_past) centraidColor("textFaint") else centraidColor("text")
     val timeInk = if (row.is_past) centraidColor("textFaint") else centraidColor("textSoft")
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 40.dp)
-            .clickable {
-                onEvent(
-                    AgendaHomeEvent(
-                        event_picked = AgendaHomeEvent.EventPicked(
-                            event_id = row.event_id,
-                            instance_key = row.instance_key,
-                            original_start_local = row.original_start_local,
-                        ),
-                    ),
-                )
-            }
+            .clickable { row.route?.let(onOpen) }
             .padding(start = 68.dp, end = 16.dp, top = 6.dp, bottom = 6.dp)
             .testTag("agenda-row-${row.row_key}")
             .clearAndSetSemantics {
@@ -636,8 +631,6 @@ private fun EventRow(row: AgendaEventRow, onEvent: (AgendaHomeEvent) -> Unit) {
 private fun StatusChip(row: AgendaEventRow) {
     val ink = when (row.status) {
         AgendaRowStatus.AGENDA_ROW_STATUS_NEEDS_REPLY -> centraidColor("attention")
-        AgendaRowStatus.AGENDA_ROW_STATUS_CANCEL_ASKED -> centraidColor("net")
-        AgendaRowStatus.AGENDA_ROW_STATUS_PENDING -> centraidColor("textSoft")
         else -> return
     }
     if (row.status_label.isEmpty()) return
@@ -681,6 +674,7 @@ private fun AgendaMoreSheet(
     state: AgendaHomeState,
     chrome: AgendaChrome,
     onEvent: (AgendaHomeEvent) -> Unit,
+    onOpen: (Route) -> Unit,
 ) {
     SheetRoom(
         title = chrome.more_title,
@@ -699,7 +693,12 @@ private fun AgendaMoreSheet(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).semantics { heading() },
                     )
                 }
-                val pick = { onEvent(AgendaHomeEvent(more_row = AgendaHomeEvent.MoreRowPicked(key = row.key))) }
+                // A PLACE'S ROW sends its key first (the sheet closes), then its route is pushed.
+                val pick = {
+                    onEvent(AgendaHomeEvent(more_row = AgendaHomeEvent.MoreRowPicked(key = row.key)))
+                    row.route?.let(onOpen)
+                    Unit
+                }
                 if (row.toggle) {
                     AgendaToggleRow(row, pick)
                 } else {

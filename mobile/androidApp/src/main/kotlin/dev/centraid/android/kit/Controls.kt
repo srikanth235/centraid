@@ -43,7 +43,6 @@ import androidx.compose.ui.unit.dp
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
-import dev.centraid.shared.shell.BandPolicy
 
 /** A radius off the token scale (`sm`, `pill`, ...). A literal radius is a finding. */
 @Composable

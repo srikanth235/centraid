@@ -4,7 +4,7 @@ import SwiftUI
 /// ("Undo"). The sentence and the verb are the machine's; what the verb does
 /// is the screen's own event, which `onAct` sends.
 struct StatusLineView: View {
-    let status: Centraid_Screen_V1_StatusLine
+    let status: Centraid_Core_V1_StatusLine
     var identifier: String = "status-action"
     let onAct: () -> Void
 

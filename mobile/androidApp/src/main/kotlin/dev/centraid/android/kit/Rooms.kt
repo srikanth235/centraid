@@ -46,9 +46,8 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.SecureFlagPolicy
-import centraid.screen.v1.Autosave
-import centraid.screen.v1.SearchField
-import centraid.screen.v1.StatusLine as StatusLineMessage
+import centraid.core.v1.Autosave
+import centraid.core.v1.StatusLine as StatusLineMessage
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 

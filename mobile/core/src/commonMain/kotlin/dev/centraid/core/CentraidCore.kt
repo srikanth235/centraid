@@ -45,11 +45,9 @@ public data class CoreConfiguration(
     /**
      * The vault file.
      *
-     * Named by the shell and by nothing else. It used to be named after the
-     * VAULT — `centraid-replica-<vaultId>.sqlite3` — so that a device could
-     * find a vault's enrolment record before opening the file; there is no
-     * record, so the name is a label and `dev.centraid.shared.shell.Shelf`
-     * asks each file which vault it is instead.
+     * Named by the shell and by nothing else: a label. The Rust shelf
+     * (`crates/screens/src/vault`) asks each file which vault it is; a shell
+     * opening a shelf ([shelf]) names only the directory.
      */
     public val databasePath: String,
     /**
@@ -92,6 +90,16 @@ public data class CoreConfiguration(
     public val vaultSeedHex: String? = null,
     /** The derivation index this vault was minted at. Ignored with no seed. */
     public val vaultIndex: Int = 0,
+    /**
+     * A DIRECTORY OF VAULTS, NOT A VAULT (#1135, lane H2). Set by [shelf]: the
+     * core that opens holds no vault; the library opens every vault under the
+     * directory itself, keys each from the phone's secrets and sends every call
+     * to the one in front. [databasePath] is then only the name the front core
+     * is guarded under, and [create] and [vaultSeedHex] are not read.
+     */
+    public val shelfDir: String? = null,
+    /** A debug build's demo seed, for a shelf's launch. Redacted like [vaultSeedHex]. */
+    public val devSeedHex: String? = null,
 ) {
     /**
      * REDACTED: the generated `toString` of a data class prints every field,
@@ -105,9 +113,18 @@ public data class CoreConfiguration(
         "CoreConfiguration(databasePath=$databasePath, create=$create, " +
             "expectedDigest=$expectedDigest, " +
             "vaultSeedHex=${if (vaultSeedHex == null) "absent" else "<redacted>"}, " +
-            "vaultIndex=$vaultIndex)"
+            "vaultIndex=$vaultIndex" +
+            (shelfDir?.let { ", shelfDir=$it, devSeedHex=${if (devSeedHex == null) "absent" else "<redacted>"}" } ?: "") +
+            ")"
 
     internal fun toJson(uiThreadName: String): String = buildString {
+        if (shelfDir != null) {
+            append("{\"shelf\":").append(quote(shelfDir))
+            devSeedHex?.let { append(",\"devSeed\":").append(quote(it)) }
+            append(",\"uiThreadName\":").append(quote(uiThreadName))
+            append('}')
+            return@buildString
+        }
         append('{')
         append("\"path\":").append(quote(databasePath))
         append(",\"create\":").append(create)
@@ -117,6 +134,24 @@ public data class CoreConfiguration(
                 .append(",\"index\":").append(vaultIndex).append('}')
         }
         append('}')
+    }
+
+    public companion object {
+        /** The file the front core of a shelf is named after (`crates/core` `FRONT_FILE`); it is never made. */
+        public const val FRONT_FILE: String = "custody-probe.sqlite3"
+
+        /**
+         * OPEN A DIRECTORY OF VAULTS (#1135, lane H2): the library holds every
+         * vault under [dir], one directory each, and the handle that comes back is
+         * the only one the shell ever holds.
+         */
+        public fun shelf(dir: String, devSeedHex: String? = null): CoreConfiguration =
+            CoreConfiguration(
+                databasePath = "${dir.trimEnd('/')}/$FRONT_FILE",
+                create = false,
+                shelfDir = dir,
+                devSeedHex = devSeedHex,
+            )
     }
 
     private fun quote(value: String): String = buildString {
@@ -651,8 +686,8 @@ public class CentraidCore private constructor(
  * ## The key is the path as given
  *
  * Not canonicalised, because `commonMain` has no filesystem and the shell hands
- * one absolute path per vault, built in one place
- * (`dev.centraid.shared.shell.Shelf`). A guard that pretended to canonicalise
+ * one absolute path per core, built in one place
+ * ([CoreConfiguration.shelf], under the shelf's directory). A guard that pretended to canonicalise
  * would be claiming a property it cannot check.
  */
 internal class SingleHandleGuard {

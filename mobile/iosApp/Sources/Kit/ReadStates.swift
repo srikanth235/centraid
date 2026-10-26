@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 // THE FOUR READ SHAPES, DRAWN ONCE (K5; DESIGN.md "The seven rooms").
 //
 // The room owns the empty, loading and error states; the app supplies the
@@ -19,17 +17,20 @@ struct ReadStateView<Value, Skeleton: View, Content: View>: View {
     let content: ScreenContent<Value>
     let skeleton: () -> Skeleton
     let onRetry: (() -> Void)?
+    let retryLabel: String
     let data: (Value) -> Content
 
     init(
         content: ScreenContent<Value>,
         @ViewBuilder skeleton: @escaping () -> Skeleton,
         onRetry: (() -> Void)?,
+        retryLabel: String = KitWords.RETRY,
         @ViewBuilder data: @escaping (Value) -> Content
     ) {
         self.content = content
         self.skeleton = skeleton
         self.onRetry = onRetry
+        self.retryLabel = retryLabel
         self.data = data
     }
 
@@ -38,7 +39,7 @@ struct ReadStateView<Value, Skeleton: View, Content: View>: View {
         case .loading:
             skeleton()
         case let .failure(sentence, remedy):
-            FailureView(sentence: sentence, remedy: remedy, onRetry: onRetry)
+            FailureView(sentence: sentence, remedy: remedy, retryLabel: retryLabel, onRetry: onRetry)
         case let .denied(denied):
             DeniedGate(denied)
         case let .data(value):
@@ -51,14 +52,16 @@ extension ReadStateView where Skeleton == RowSkeleton {
     /// The common case: a list, so its skeleton is rows.
     init(
         content: ScreenContent<Value>,
-        loadingLabel: String = KitWords.shared.OPENING,
+        loadingLabel: String = KitWords.OPENING,
         onRetry: (() -> Void)?,
+        retryLabel: String = KitWords.RETRY,
         @ViewBuilder data: @escaping (Value) -> Content
     ) {
         self.init(
             content: content,
             skeleton: { RowSkeleton(label: loadingLabel) },
             onRetry: onRetry,
+            retryLabel: retryLabel,
             data: data
         )
     }
@@ -74,7 +77,7 @@ extension ReadStateView where Skeleton == RowSkeleton {
 struct RowSkeleton: View {
     var rows: Int = 8
     var meta: Bool = true
-    var label: String = KitWords.shared.OPENING
+    var label: String = KitWords.OPENING
 
     @Environment(\.colorScheme) private var scheme
 
@@ -119,7 +122,7 @@ struct RowSkeleton: View {
 struct FailureView: View {
     let sentence: String
     let remedy: String
-    var retryLabel: String = KitWords.shared.RETRY
+    var retryLabel: String = KitWords.RETRY
     let onRetry: (() -> Void)?
 
     @Environment(\.colorScheme) private var scheme
@@ -161,18 +164,15 @@ struct ScreenFailureView: View {
 /// copy table). The strings are finished in the machine; the action is the
 /// screen's own event, so the view takes a closure.
 struct EmptyStateView: View {
-    let empty: Centraid_Screen_V1_EmptyState
+    let empty: Centraid_Core_V1_EmptyState
     var onAction: (() -> Void)? = nil
     /// The action's accessibility id; a screen whose action is its own thing
     /// (search's "Ask about") names it.
     var actionIdentifier: String = "kit-empty-action"
 
     @Environment(\.colorScheme) private var scheme
-    /// The shell's doors for an app's day-one empty (docs/decisions.md,
-    /// "Onboarding without sample data"); nil where the shell offers neither.
-    @Environment(\.importFromPhone) private var importFromPhone
 
-    init(_ empty: Centraid_Screen_V1_EmptyState, actionIdentifier: String = "kit-empty-action", onAction: (() -> Void)? = nil) {
+    init(_ empty: Centraid_Core_V1_EmptyState, actionIdentifier: String = "kit-empty-action", onAction: (() -> Void)? = nil) {
         self.empty = empty
         self.actionIdentifier = actionIdentifier
         self.onAction = onAction
@@ -180,7 +180,7 @@ struct EmptyStateView: View {
 
     /// For a screen whose state carries plain strings rather than the kit message.
     init(headline: String, body: String = "", actionLabel: String = "", onAction: (() -> Void)? = nil) {
-        var empty = Centraid_Screen_V1_EmptyState()
+        var empty = Centraid_Core_V1_EmptyState()
         empty.headline = headline
         empty.body = body
         empty.actionLabel = actionLabel
@@ -199,14 +199,7 @@ struct EmptyStateView: View {
                     .foregroundStyle(Theme.color("textSoft", scheme))
                     .multilineTextAlignment(.center)
             }
-            // WHERE THE PHONE ALREADY HOLDS THE DATA, ITS IMPORT IS THE ACTION,
-            // asked here at the point of use; the app's own add stays in its
-            // header. A shell with no importer for the source draws the app's.
-            if !importLabel(empty.importSource).isEmpty, let importFromPhone {
-                KitOutlineButton(label: importLabel(empty.importSource)) { importFromPhone(empty.importSource) }
-                    .accessibilityIdentifier("kit-empty-import")
-                    .padding(.top, 4)
-            } else if !empty.actionLabel.isEmpty, let onAction {
+            if !empty.actionLabel.isEmpty, let onAction {
                 KitOutlineButton(label: empty.actionLabel, action: onAction)
                     .accessibilityIdentifier(actionIdentifier)
                     .padding(.top, 4)
@@ -223,14 +216,14 @@ struct EmptyStateView: View {
 }
 
 private struct AskChatKey: EnvironmentKey {
-    static let defaultValue: ((Centraid_Screen_V1_SearchAsk) -> Void)? = nil
+    static let defaultValue: ((Centraid_Core_V1_Route) -> Void)? = nil
 }
 
 extension EnvironmentValues {
     /// The shell's "ask the assistant" door, or nil where there is none
-    /// (previews). A search reaches Chat through it, never through a view's
-    /// own routing (#1097, R-1097-30).
-    var askChat: ((Centraid_Screen_V1_SearchAsk) -> Void)? {
+    /// (previews): it pushes the `chat.ask` route the search's `SearchAsk`
+    /// carries (#1097, R-1097-30), and builds none of its own.
+    var askChat: ((Centraid_Core_V1_Route) -> Void)? {
         get { self[AskChatKey.self] }
         set { self[AskChatKey.self] = newValue }
     }
@@ -238,24 +231,27 @@ extension EnvironmentValues {
 
 /// THE ASK ROW AT THE FOOT OF AN APP'S SEARCH ANSWER (#1097, R-1097-30, #1135),
 /// whether or not anything matched. The label, the question and the chat scope
-/// are the machine's (`SearchAsk`); this view only draws the label and hands the
-/// whole row to the shell, which switches to the Chat tab scoped to the app the
-/// member searched from and sends the question. Drawn only where the state holds
+/// are the machine's (`SearchAsk`), and so is the route a tap opens, the
+/// assistant asking the question scoped to the app the member searched from;
+/// this view only draws the label and hands that route to the shell. Drawn only where the state holds
 /// a row (`hasAskRow`): a term typed since, a denial, or an app that offers none
 /// (Locker never does, R-1097-29, and does not draw this view) holds none.
 struct SearchAskRow: View {
-    let ask: Centraid_Screen_V1_SearchAsk
+    let ask: Centraid_Core_V1_SearchAsk
     /// Home records the search as a recent one when its row is pressed.
     var onAsk: (() -> Void)? = nil
+    /// A view whose state carries the Ask's finished route (Home's search) pushes it itself and
+    /// needs no door; every other search hands the row to the shell's.
+    var handoff: (() -> Void)? = nil
 
     @Environment(\.askChat) private var askChat
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        if let askChat {
+        if let press = handoff ?? (ask.hasRoute ? askChat.map({ door in { door(ask.route) } }) : nil) {
             Button {
                 onAsk?()
-                askChat(ask)
+                press()
             } label: {
                 Text(ask.label)
                     .centraidType("smallStrong")
@@ -286,11 +282,11 @@ struct ScreenEmptyView: View {
 /// nowhere in the app to go. `AppPlace` hides its band when its content is
 /// denied.
 struct DeniedGate: View {
-    let denied: Centraid_Screen_V1_Denied
+    let denied: Centraid_Core_V1_Denied
 
     @Environment(\.colorScheme) private var scheme
 
-    init(_ denied: Centraid_Screen_V1_Denied) { self.denied = denied }
+    init(_ denied: Centraid_Core_V1_Denied) { self.denied = denied }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {

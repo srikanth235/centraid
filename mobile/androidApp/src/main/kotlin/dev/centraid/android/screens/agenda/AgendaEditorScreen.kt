@@ -26,11 +26,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.AgendaChoice
-import centraid.screen.v1.AgendaDraft
-import centraid.screen.v1.AgendaEditorData
-import centraid.screen.v1.AgendaEditorEvent
-import centraid.screen.v1.AgendaEditorState
+import centraid.core.v1.AgendaChoice
+import centraid.core.v1.AgendaDraft
+import centraid.core.v1.AgendaEditorData
+import centraid.core.v1.AgendaEditorEvent
+import centraid.core.v1.AgendaEditorState
 import dev.centraid.android.kit.ChoiceFieldRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
@@ -56,7 +56,7 @@ import dev.centraid.android.theme.centraidType
 /**
  * `agenda.editor`: create or edit one occurrence. Not an autosave editor —
  * the draft is the machine's and Save is one write, so the close key and the
- * back gesture forward `LeaveRequested` and the route pops only on
+ * back gesture forward `LeaveRequested` and the shell pops only on
  * `dismissed`. The day and time pickers read and write the draft's civil
  * strings; every label is the state's.
  */
@@ -64,7 +64,6 @@ import dev.centraid.android.theme.centraidType
 internal fun AgendaEditorScreen(
     state: AgendaEditorState,
     onEvent: (AgendaEditorEvent) -> Unit,
-    onDeparted: () -> Unit,
 ) {
     val chrome = state.chrome
     val data = state.data_
@@ -73,7 +72,7 @@ internal fun AgendaEditorScreen(
         title = data?.heading.orEmpty(),
         status = null,
         onClose = leave,
-        onDeparted = onDeparted,
+        onDeparted = {},
         closeLabel = chrome?.close?.ifEmpty { null } ?: KitWords.DONE,
         trailing = if (data?.can_save == true && chrome != null) {
             RoomAction("Check", chrome.save, "agenda-editor-save") { onEvent(AgendaEditorEvent(save = AgendaEditorEvent.SaveTapped())) }
@@ -86,8 +85,7 @@ internal fun AgendaEditorScreen(
             GoneCard(gone, leave)
             return@EditorRoom
         }
-        val write = state.write
-        StatusLine(write?.refusal.orEmpty())
+        StatusLine(state.status?.sentence.orEmpty())
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
             onRetry = { onEvent(AgendaEditorEvent(refreshed = AgendaEditorEvent.Refreshed())) },
@@ -174,7 +172,7 @@ private fun EditorBody(state: AgendaEditorState, data: AgendaEditorData, onEvent
             ChoiceFieldRow(chrome.field_guests, data.guests_label, testTag = "agenda-editor-guests", onTap = {
                 onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_GUESTS)))
             })
-            if (data.repeat_enabled) {
+            if (data.repeats.isNotEmpty()) {
                 ChoiceFieldRow(chrome.field_repeat, data.repeat_label, testTag = "agenda-editor-repeat", onTap = {
                     onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_REPEAT)))
                 })

@@ -107,29 +107,31 @@ fn every_enum_is_exactly_what_the_table_states() {
             gap.column
         );
     }
-    // The four CHECK-backed enums the model speaks today (a transaction's status is the fourth,
-    // #1099).
+    // The six CHECK-backed enums the model speaks today (a transaction's status is the fourth,
+    // #1099, an account's type the fifth, a daily figure's metric the sixth, #1135).
     assert_eq!(
         seen.len(),
-        4,
+        6,
         "an enum field was added or removed: {seen:?}"
     );
 }
 
 /// A task's status is not one command with an argument: each word the model can put a task in is
-/// a command of the vault's own (`task.complete`, `task.reopen`, `task.cancel`), and the words are
-/// exactly the `task.status` CHECK (`every_enum_is_exactly_what_the_table_states`).
+/// an action of its own (`complete`, `reopen`, `cancel`), each running a command of the vault's own
+/// (`task.complete`, `task.reopen`, `task.cancel`), and the words are exactly the `task.status`
+/// CHECK (`every_enum_is_exactly_what_the_table_states`).
 #[test]
 fn every_task_status_is_a_registered_command() {
     let status = Kind::Task.spec().field("status").unwrap();
     let registry = centraid_vault::Registry::with_system_commands().unwrap();
     for (model, vault) in status.values {
-        let command = meta::task_status_command(vault)
-            .unwrap_or_else(|| panic!("no command puts a task in {model}"));
+        let command = meta::task_status_verb(vault)
+            .and_then(|verb| verb.command(Kind::Task))
+            .unwrap_or_else(|| panic!("no action puts a task in {model}"));
         assert!(registry.get(command).is_some(), "{command}");
     }
     assert_eq!(
-        meta::task_status_command("in-process"),
+        meta::task_status_verb("in-process"),
         None,
         "a task has no in-progress status"
     );
@@ -144,9 +146,28 @@ fn every_mapped_command_is_registered() {
             "{command} is not a registered command"
         );
     }
-    for field in KINDS.iter().flat_map(|spec| spec.fields) {
-        if let Some(command) = field.edit {
-            assert!(registry.get(command).is_some(), "{command}");
+}
+
+/// Every field a kind lets chat edit is edited by an action of that kind, and every command such an
+/// action runs is registered: the one lookup is the only place a field's edit is said.
+#[test]
+fn every_editable_field_is_edited_by_an_action_of_its_kind() {
+    let registry = centraid_vault::Registry::with_system_commands().unwrap();
+    for spec in KINDS {
+        for action in meta::edit_actions(spec.kind) {
+            assert!(registry.get(action.command).is_some(), "{}", action.command);
+        }
+        for field in spec.fields {
+            if let Some(action) = meta::edit_action(spec.kind, field.name) {
+                assert_eq!(action.kind, spec.kind);
+                assert!(
+                    action.property_named(field.name).is_some(),
+                    "{}: no property of {} is, or is also called, {}",
+                    action.action,
+                    action.command,
+                    field.name
+                );
+            }
         }
     }
 }

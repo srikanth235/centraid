@@ -1,4 +1,4 @@
-//! THE NINETEEN ACTIONS, as the manifest's table (#1047, #1135).
+//! THE TWENTY ACTIONS, as the manifest's table (#1047, #1135).
 //!
 //! Every Locker action is ONE typed vault command: the projection lives in the
 //! command, not the app. So this module is a table, not logic — the one
@@ -11,8 +11,8 @@
 //! v0's invocation door (`Invocation`, `Commands`, `Outcome`) had no production
 //! caller and is deleted (#1047 T2).
 //!
-//! `reveal` is not an action at all — it is the core's
-//! (`crates/core::locker::phone`), behind the unlock.
+//! `reveal` receipts one reveal and returns a receipt id, never the secret: the
+//! plaintext is the core's (`crates/core::locker::phone`), behind the unlock.
 //!
 //! ## What `export` means (D-1020-L7)
 //!
@@ -29,42 +29,14 @@
 //! gates are on `locker.purge_item` and `locker.export`. Same count, different
 //! gates, and collapsing them loses the non-owner park (census §A0).
 
-/// Whether the **dispatching surface** asks before dispatching.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Confirm {
-    None,
-    Required,
-}
+pub use centraid_apps_kit::actions::{ActionRow, Confirm};
+use centraid_apps_kit::actions::{act, confirmed};
 
-/// One row of the action table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ActionRow {
-    pub action: &'static str,
-    pub command: &'static str,
-    pub confirm: Confirm,
-}
-
-const fn act(action: &'static str, command: &'static str) -> ActionRow {
-    ActionRow {
-        action,
-        command,
-        confirm: Confirm::None,
-    }
-}
-
-const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
-    ActionRow {
-        action,
-        command,
-        confirm: Confirm::Required,
-    }
-}
-
-/// THE TABLE. Nineteen actions, in the manifest's own order. `set-memo` is the
+/// THE TABLE. Twenty actions, in the manifest's own order. `set-memo` is the
 /// seventeenth of v0's (#1047): the memo command existed and no action exposed
 /// it (the handoff's README §8 paper cut). The seven lifecycle actions and the
 /// two tag actions are the vault's shared verbs (#1135).
-pub const ACTIONS: [ActionRow; 19] = [
+pub const ACTIONS: [ActionRow; 20] = [
     act("add-item", "locker.add_item"),
     act("edit-item", "locker.edit_item"),
     act("trash-item", "entity.trash"),
@@ -84,12 +56,13 @@ pub const ACTIONS: [ActionRow; 19] = [
     act("clear-passkey", "locker.clear_passkey"),
     act("set-memo", "locker.set_memo"),
     confirmed("export", "locker.export"),
+    act("reveal", "locker.reveal_receipt"),
 ];
 
 /// The row for an action name.
 #[must_use]
 pub fn action_row(action: &str) -> Option<&'static ActionRow> {
-    ACTIONS.iter().find(|row| row.action == action)
+    centraid_apps_kit::actions::find(&ACTIONS, action)
 }
 
 #[cfg(test)]
@@ -101,7 +74,7 @@ mod tests {
     /// share.
     #[test]
     fn the_table_is_one_command_per_action_and_locker_wraps_no_shared_verb() {
-        assert_eq!(ACTIONS.len(), 19);
+        assert_eq!(ACTIONS.len(), 20);
         let own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)
@@ -115,7 +88,7 @@ mod tests {
             own.len(),
             "a Locker command is invoked twice"
         );
-        assert_eq!(own.len(), 10, "what only Locker has; the rest is shared");
+        assert_eq!(own.len(), 11, "what only Locker has; the rest is shared");
         for row in ACTIONS
             .iter()
             .filter(|row| !row.command.starts_with("locker."))

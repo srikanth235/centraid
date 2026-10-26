@@ -10,45 +10,46 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.Autosave
-import centraid.screen.v1.PeopleEditorEvent
-import centraid.screen.v1.PeopleEditorState
+import centraid.core.v1.PeopleEditorEvent
+import centraid.core.v1.PeopleEditorState
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EditorRoom
 import dev.centraid.android.kit.EmptyStateView
+import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.screenContentOf
+import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
 /**
- * THE PROFILE EDITOR (#1029 app port) in the kit's `EditorRoom`: autosave,
- * close = done. Hue and cadence are inline choices (the cadence is its own
- * write, saved on the tap). The words typed stay local (`EditableFieldRow`)
- * and take the machine's value back only on the baseline while CLEAN.
+ * `people.editor` (#1135) in the kit's `EditorRoom`: autosave, close = done.
+ * The cadence is an inline choice, its own write saved on the tap. The words
+ * typed stay local (`EditableFieldRow`) and take Rust's value back only on the
+ * baseline while CLEAN. Rust flushes the autosave when it sees the page leave.
  */
 @Composable
 public fun PeopleEditorScreen(
     state: PeopleEditorState,
     onEvent: (PeopleEditorEvent) -> Unit,
     onClose: () -> Unit,
-    onDeparted: () -> Unit,
 ) {
     val chrome = state.chrome
     val draft = state.draft
-    val reload = if (state.autosave?.phase == Autosave.Phase.PHASE_CLEAN) Pair(state.party_id, state.baseline) else null
-    val write = state.write
+    val autosave = state.autosave
+    val clean = autosave != null && !autosave.refused && autosave.edit_seq == autosave.saved_seq
+    val reload: Any? = if (clean) Pair(autosave?.base_revision_id, autosave?.saved_seq) else null
     EditorRoom(
         title = chrome?.title.orEmpty(),
-        status = if (draft != null) state.autosave else null,
+        status = if (draft != null) autosave else null,
         closeLabel = chrome?.close_label?.takeIf { it.isNotEmpty() } ?: KitWords.DONE,
         onClose = onClose,
-        onDeparted = onDeparted,
+        onDeparted = {},
     ) {
-        StatusLine(write?.refusal.orEmpty())
+        StatusLine(state.status?.sentence.orEmpty())
         val gone = state.gone
         if (gone != null) {
             EmptyStateView(gone, onAction = null)

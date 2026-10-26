@@ -1,0 +1,620 @@
+// NOTES' SCREENS (#1135): the library, notebooks and journal under one band, the
+// editor with its powerbox, a note's version history, and the kit's `notes.trash`.
+// Every message here is finished state a view draws or an event a view sends;
+// Rust (`crates/screens`, module `notes`) makes every decision, string, count and
+// route. Arms in `screens.proto`: 600-699.
+//
+// Screens: `notes.home` (Notes, Notebooks and Journal are PLACES of one screen,
+// so a tap on the band changes a value and no stack entry), `notes.editor`
+// (autosaving; the link powerbox is a sheet it owns), `notes.history` and the
+// kit's `notes.trash`.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/route.proto";
+
+// ---------------------------------------------------------------------------
+// notes.home
+// ---------------------------------------------------------------------------
+
+message NotesHomeState {
+  NotesPlace place = 1;
+  // The page's heading: "Notes", the notebook it is filtered to, "Unfiled",
+  // "Notebooks" or "Journal".
+  string title = 2;
+  // The band: Notes · Notebooks · Journal, then More. EMPTY while denied.
+  repeated NotesBandTab band = 3;
+  NotesHomeChrome chrome = 4;
+  oneof content {
+    Loading loading = 5;
+    Failure failure = 6;
+    Denied denied = 7;
+    NotesLibraryData library = 8;
+    NotesNotebooksData notebooks = 9;
+    NotesJournalData journal = 10;
+  }
+  // The Notes place's filters and sort as ONE chip row (R-CHROME-1..4).
+  repeated NotesChip chips = 11;
+  // Search is the field under the title; its answer replaces the shelf.
+  NotesSearchState search = 12;
+  // More holds Trash alone.
+  repeated NotesMoreRow more_rows = 13;
+  NotesSheet sheet = 14;
+  // The sheet's content, by which sheet is open.
+  NotesRowMenu menu = 15;
+  repeated NotesChoice choices = 16;
+  optional Confirm confirm = 17;
+  // A refusal's sentence, or what a write did; the screen under it stays.
+  StatusLine status = 18;
+  // The new / rename notebook sheet; absent when closed.
+  optional NotesNotebookForm form = 19;
+  // The journal's new-entry sheet; absent when closed.
+  optional NotesJournalCompose compose = 20;
+  // "New note": the header's one action in the Notes place.
+  Route new_note = 21;
+  // The recent window is the library's current window size.
+  uint32 window = 22;
+}
+
+enum NotesSheet {
+  // No sheet is open.
+  NOTES_SHEET_UNSPECIFIED = 0;
+  NOTES_SHEET_MORE = 1;
+  NOTES_SHEET_SORT = 2;
+  NOTES_SHEET_ROW_MENU = 3;
+  NOTES_SHEET_FILE_INTO = 4;
+  NOTES_SHEET_NOTEBOOK_MENU = 5;
+}
+
+enum NotesLibrarySort {
+  NOTES_LIBRARY_SORT_UNSPECIFIED = 0;
+  NOTES_LIBRARY_SORT_UPDATED = 1;
+  NOTES_LIBRARY_SORT_CREATED = 2;
+  NOTES_LIBRARY_SORT_TITLE = 3;
+}
+
+message NotesBandTab {
+  // `notes`, `notebooks`, `journal` or `more`.
+  string key = 1;
+  string label = 2;
+  string icon_key = 3;
+  bool current = 4;
+}
+
+// The page's fixed words, so a view carries no copy of its own.
+message NotesHomeChrome {
+  string new_notebook = 1;
+  string search_placeholder = 2;
+  string search_label = 3;
+  string search_close = 4;
+  string retry = 5;
+  string loading = 6;
+  string more_title = 7;
+  string file_title = 8;
+  string sort_title = 9;
+  string home = 10;
+  string row_menu_label = 11;
+  string new_entry = 12;
+  string journal_origin = 13;
+  string trash_label = 14;
+  string notebook_menu_title = 15;
+  string cancel = 16;
+  string close = 17;
+  // The header's one action in the Notes place.
+  string new_note = 18;
+}
+
+message NotesChip {
+  // `notebook`, `pinned`, `tag-<concept_id>` or `sort`.
+  string key = 1;
+  string label = 2;
+  bool selected = 3;
+  // Draws a chevron: the sort chip.
+  bool chevron = 4;
+  // What a screen reader says in place of the label.
+  string spoken = 5;
+}
+
+message NotesMoreRow {
+  string key = 1;
+  string label = 2;
+  string icon_key = 3;
+  // Where a tap goes.
+  Route route = 4;
+}
+
+message NotesChoice {
+  string id = 1;
+  string label = 2;
+  bool selected = 3;
+  // For the sort sheet: the order this choice sets.
+  NotesLibrarySort sort = 4;
+}
+
+message NotesRowMenu {
+  string note_id = 1;
+  string title = 2;
+  string pin_label = 3;
+  string file_label = 4;
+  string trash_label = 5;
+  // For a notebook's menu (the same sheet).
+  string rename_label = 6;
+}
+
+message NotesTextRun {
+  string text = 1;
+  bool highlighted = 2;
+}
+
+message NotesNoteRow {
+  string note_id = 1;
+  string title = 2;
+  string snippet = 3;
+  repeated NotesTextRun snippet_runs = 4;
+  // "Edited 3 March · Recipes".
+  string meta = 5;
+  bool pinned = 6;
+  // "2 of 5 done", or empty.
+  string check_label = 7;
+  string accessibility_label = 8;
+  // The one notebook it is filed in; empty for none.
+  string notebook_id = 9;
+  // Where a tap goes: the editor on this note.
+  Route route = 10;
+}
+
+message NotesLibrarySection {
+  NotesSectionHead head = 1;
+  repeated NotesNoteRow rows = 2;
+}
+
+message NotesSectionHead {
+  string title = 1;
+  uint32 count = 2;
+}
+
+message NotesTagChip {
+  string concept_id = 1;
+  string label = 2;
+  bool selected = 3;
+}
+
+message NotesLibraryData {
+  repeated NotesLibrarySection sections = 1;
+  repeated NotesTagChip tags = 2;
+  // "12 notes".
+  string count_label = 3;
+  EmptyState empty = 4;
+  // The recent window filled: older notes exist.
+  bool truncated = 5;
+  string window_end_label = 6;
+  string window_end_verb = 7;
+  bool can_widen = 8;
+}
+
+message NotesSearchState {
+  bool open = 1;
+  string term = 2;
+  // "Including results for “x”".
+  string corrected = 3;
+  repeated SearchContainer containers = 4;
+  // The answer for `term`, once it has landed; absent while the field is empty
+  // or the answer is out.
+  optional NotesSearchResults results = 5;
+  optional SearchAsk ask = 6;
+}
+
+message NotesSearchResults {
+  repeated NotesNoteRow rows = 1;
+  optional EmptyState empty = 2;
+  bool loading = 3;
+}
+
+message NotesNotebooksData {
+  // "Unfiled" first, then every notebook, with its count.
+  repeated NotesNotebookRow rows = 1;
+  EmptyState empty = 2;
+}
+
+message NotesNotebookRow {
+  // `unfiled`, or the notebook's id.
+  string id = 1;
+  string title = 2;
+  // "12 notes", "200+ notes".
+  string count = 3;
+  string accessibility_label = 4;
+  // False for Unfiled, which is no collection and has no menu.
+  bool manageable = 5;
+}
+
+// The new / rename sheet.
+message NotesNotebookForm {
+  // Empty creates; a notebook id renames it.
+  string notebook_id = 1;
+  string title = 2;
+  string name = 3;
+  string placeholder = 4;
+  string confirm_label = 5;
+  string cancel_label = 6;
+  bool can_confirm = 7;
+  // A refusal's sentence over the typed name.
+  string status = 8;
+}
+
+message NotesJournalData {
+  repeated NotesJournalDaySection days = 1;
+  string today = 2;
+  string tz = 3;
+  EmptyState empty = 4;
+  bool truncated = 5;
+  string window_end_verb = 6;
+}
+
+message NotesJournalDaySection {
+  NotesSectionHead head = 1;
+  string day = 2;
+  repeated NotesJournalRow rows = 3;
+}
+
+message NotesJournalRow {
+  string note_id = 1;
+  string title = 2;
+  // The wall clock the entry was written at.
+  string meta = 3;
+  // The checklist tally, or empty.
+  string trailing = 4;
+  string accessibility_label = 5;
+  Route route = 6;
+}
+
+// The new-entry sheet. `day` and `tz` are the day the core read as today and the
+// zone it read it in, so the entry is filed on that day IN that zone.
+message NotesJournalCompose {
+  string day = 1;
+  string tz = 2;
+  string mood = 3;
+  string text = 4;
+  string status = 5;
+  string title = 6;
+  string mood_placeholder = 7;
+  string text_placeholder = 8;
+  string save = 9;
+  string close = 10;
+  bool can_save = 11;
+}
+
+message NotesHomeEvent {
+  oneof kind {
+    // Retry after a failed read.
+    Refreshed refreshed = 1;
+    BandPicked band = 2;
+    // ---- the Notes place ----
+    SearchOpened search_opened = 3;
+    SearchTerm search_term = 4;
+    SearchClosed search_closed = 5;
+    SortPicked sort = 6;
+    PinnedOnlyToggled pinned_only = 7;
+    TagToggled tag = 8;
+    WindowWidened window_widened = 9;
+    ChipPicked chip = 10;
+    SheetOpened sheet_opened = 11;
+    SheetClosed sheet_closed = 12;
+    RowMenuOpened row_menu = 13;
+    PinToggled pin = 14;
+    FileIntoOpened file_into = 15;
+    NotebookChosen notebook_chosen = 16;
+    TrashAsked trash = 17;
+    Confirmed confirmed = 18;
+    Dismissed dismissed = 19;
+    // ---- the Notebooks place ----
+    NotebookPicked notebook_picked = 20;
+    FormOpened form_opened = 21;
+    FormNameEdited form_name = 22;
+    FormDismissed form_dismissed = 23;
+    FormConfirmed form_confirmed = 24;
+    NotebookMenuOpened notebook_menu = 25;
+    NotebookDeleteAsked notebook_delete = 26;
+    // ---- the Journal place ----
+    NewEntryTapped new_entry = 27;
+    ComposeEdited compose_edited = 28;
+    ComposeClosed compose_closed = 29;
+    ComposeSaved compose_saved = 30;
+  }
+
+  message Refreshed {}
+
+  message BandPicked {
+    string key = 1;
+  }
+
+  message SearchOpened {}
+
+  message SearchTerm {
+    string term = 1;
+  }
+
+  message SearchClosed {}
+
+  message SortPicked {
+    NotesLibrarySort sort = 1;
+  }
+
+  message PinnedOnlyToggled {}
+
+  message TagToggled {
+    string concept_id = 1;
+  }
+
+  message WindowWidened {}
+
+  message ChipPicked {
+    string key = 1;
+  }
+
+  message SheetOpened {
+    NotesSheet sheet = 1;
+  }
+
+  message SheetClosed {}
+
+  message RowMenuOpened {
+    string note_id = 1;
+  }
+
+  message PinToggled {
+    string note_id = 1;
+  }
+
+  message FileIntoOpened {
+    string note_id = 1;
+  }
+
+  // The choice the file-into sheet picked; empty is "No notebook".
+  message NotebookChosen {
+    string notebook_id = 1;
+  }
+
+  message TrashAsked {
+    string note_id = 1;
+  }
+
+  message Confirmed {}
+
+  message Dismissed {}
+
+  // A row of the Notebooks place; `unfiled` opens the Notes place on the
+  // unfiled filter.
+  message NotebookPicked {
+    string id = 1;
+  }
+
+  // Empty `notebook_id` opens the create sheet.
+  message FormOpened {
+    string notebook_id = 1;
+  }
+
+  message FormNameEdited {
+    string name = 1;
+  }
+
+  message FormDismissed {}
+
+  message FormConfirmed {}
+
+  message NotebookMenuOpened {
+    string notebook_id = 1;
+  }
+
+  message NotebookDeleteAsked {
+    string notebook_id = 1;
+  }
+
+  message NewEntryTapped {}
+
+  message ComposeEdited {
+    string mood = 1;
+    string text = 2;
+  }
+
+  message ComposeClosed {}
+
+  message ComposeSaved {}
+}
+
+// ---------------------------------------------------------------------------
+// notes.editor
+// ---------------------------------------------------------------------------
+
+message NotesEditorState {
+  string note_id = 1;
+  bool is_new = 2;
+  oneof content {
+    Loading loading = 3;
+    Failure failure = 4;
+    NotesEditorDraft draft = 5;
+  }
+  NotesEditorChrome chrome = 6;
+  Autosave autosave = 7;
+  // The powerbox, while open.
+  optional NotesLinkSheet link = 8;
+  // Where History goes; absent until the note exists.
+  optional Route history = 9;
+  // Where Send to Agenda goes (To-do's quick add holds the words); absent
+  // while there are none.
+  optional Route send_to_agenda = 10;
+  // The note's tags, each removable; empty before the note exists.
+  repeated NotesEditorTag tags = 11;
+}
+
+message NotesEditorTag {
+  string concept_id = 1;
+  string label = 2;
+  // "Remove tag", said for a screen reader.
+  string remove_label = 3;
+}
+
+message NotesEditorDraft {
+  string title = 1;
+  string body = 2;
+  bool pinned = 3;
+}
+
+message NotesEditorChrome {
+  // "Cancel" before the first keystroke of this visit, "Done" after.
+  string close = 1;
+  string title_placeholder = 2;
+  string body_placeholder = 3;
+  string pin_label = 4;
+  string history_label = 5;
+  string send_to_agenda_label = 6;
+  string link_label = 7;
+  // "Saving…", "Saved", the refusal's sentence, or empty.
+  string status = 8;
+  // "New note" or "Note".
+  string title = 9;
+  string menu_label = 10;
+  bool history_enabled = 11;
+  string retry = 12;
+  // The add-tag field's placeholder; empty while the note does not exist (tags need a note).
+  string tag_placeholder = 13;
+}
+
+message NotesLinkSheet {
+  string term = 1;
+  string title = 2;
+  string search_placeholder = 3;
+  string close = 4;
+  string retry = 5;
+  string loading_label = 6;
+  string foot = 7;
+  oneof content {
+    Loading loading = 8;
+    Failure failure = 9;
+    Denied denied = 10;
+    NotesLinkData data = 11;
+  }
+}
+
+message NotesLinkData {
+  repeated NotesLinkDomain domains = 1;
+  EmptyState empty = 2;
+}
+
+message NotesLinkDomain {
+  NotesSectionHead head = 1;
+  repeated NotesLinkTargetRow rows = 2;
+}
+
+message NotesLinkTargetRow {
+  string entity = 1;
+  string id = 2;
+  string title = 3;
+  string subtitle = 4;
+  string app_id = 5;
+  string accessibility_label = 6;
+}
+
+message NotesEditorEvent {
+  oneof kind {
+    TitleEdited title = 1;
+    BodyEdited body = 2;
+    PinToggled pin = 3;
+    LinkRequested link_requested = 4;
+    LinkTerm link_term = 5;
+    LinkPicked link_picked = 6;
+    LinkDismissed link_dismissed = 7;
+    Refreshed refreshed = 8;
+    // Save now (the native Done / back).
+    Saved save = 9;
+    TagAdded tag_added = 10;
+    TagRemoved tag_removed = 11;
+  }
+
+  message TagAdded {
+    string label = 1;
+  }
+
+  message TagRemoved {
+    string label = 1;
+  }
+
+  message TitleEdited {
+    string title = 1;
+  }
+
+  message BodyEdited {
+    string body = 1;
+  }
+
+  message PinToggled {}
+
+  message LinkRequested {}
+
+  message LinkTerm {
+    string term = 1;
+  }
+
+  // A row of the powerbox: the editor looks it up by `id`.
+  message LinkPicked {
+    string id = 1;
+  }
+
+  message LinkDismissed {}
+
+  message Refreshed {}
+
+  message Saved {}
+}
+
+// ---------------------------------------------------------------------------
+// notes.history
+// ---------------------------------------------------------------------------
+
+message NotesHistoryState {
+  string note_id = 1;
+  // The title and chrome.
+  string title = 2;
+  // The note this history is of, by name: the back control's words.
+  string back = 3;
+  string close = 4;
+  string retry = 5;
+  string loading_label = 6;
+  oneof content {
+    Loading loading = 7;
+    Failure failure = 8;
+    Denied denied = 9;
+    NotesHistoryData data = 10;
+  }
+  StatusLine status = 11;
+}
+
+message NotesHistoryData {
+  repeated NotesVersionRow rows = 1;
+  EmptyState empty = 2;
+}
+
+message NotesVersionRow {
+  // The revision's `seq` as text; "0" is the current words.
+  string content_id = 1;
+  string label = 2;
+  string preview = 3;
+  bool current = 4;
+  string restore_label = 5;
+  string accessibility_label = 6;
+}
+
+message NotesHistoryEvent {
+  oneof kind {
+    Refreshed refreshed = 1;
+    RestoreTapped restore = 2;
+  }
+
+  message Refreshed {}
+
+  message RestoreTapped {
+    string content_id = 1;
+  }
+}

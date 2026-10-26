@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// `money.transaction` — one transaction, its facts, the two offers the app
 /// proposes (a transfer, a rule) and the actions (#1099).
 ///
@@ -10,22 +8,20 @@ import CentraidShared
 /// word, the direction, the amount's tone and each action's enabled flag are the
 /// machine's.
 struct MoneyTransactionView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_MoneyTransactionState
+    let send: (Centraid_Core_V1_MoneyTransactionEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_MoneyTransactionState {
-        (try? Centraid_Screen_V1_MoneyTransactionState(serializedBytes: data)) ?? .init()
-    }
-
-    private func event(_ build: (inout Centraid_Screen_V1_MoneyTransactionEvent) -> Void) -> Data {
-        moneyEvent(Centraid_Screen_V1_MoneyTransactionEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_MoneyTransactionEvent) -> Void) -> Centraid_Core_V1_MoneyTransactionEvent {
+        var event = Centraid_Core_V1_MoneyTransactionEvent()
+        build(&event)
+        return event
     }
 
     var body: some View {
-        let state = state
         let content = state.readContent
         let sheetBinding = moneySheetBinding(state.sheet == .category || state.sheet == .name) {
             send(event { $0.sheetClosed = .init() })
@@ -47,7 +43,7 @@ struct MoneyTransactionView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 MoneyStatusFoot(
-                    status: MoneyWords.line(state.hasStatus ? state.status : nil, write: state.write),
+                    status: MoneyWords.line(state.hasStatus ? state.status : nil),
                     identifier: "money-transaction-status"
                 )
             }
@@ -63,7 +59,7 @@ struct MoneyTransactionView: View {
     }
 
     @ViewBuilder
-    private func page(_ transaction: Centraid_Screen_V1_MoneyTransactionData) -> some View {
+    private func page(_ transaction: Centraid_Core_V1_MoneyTransactionData) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(transaction.directionLabel)
                 .centraidType("annotLabel")
@@ -126,7 +122,7 @@ struct MoneyTransactionView: View {
     }
 
     /// The action a fact stands for, when the state offers one.
-    private func actionKey(forFact fact: Centraid_Screen_V1_MoneyFact, in transaction: Centraid_Screen_V1_MoneyTransactionData) -> String? {
+    private func actionKey(forFact fact: Centraid_Core_V1_MoneyFact, in transaction: Centraid_Core_V1_MoneyTransactionData) -> String? {
         guard !fact.action.isEmpty else { return nil }
         return transaction.actions.contains { $0.key == fact.action } ? fact.action : nil
     }
@@ -134,7 +130,7 @@ struct MoneyTransactionView: View {
     /// An offer the app proposes: words, and the member's two choices. Nothing is
     /// written until Accept.
     @ViewBuilder
-    private func offer(_ offer: Centraid_Screen_V1_MoneyOffer, key: String) -> some View {
+    private func offer(_ offer: Centraid_Core_V1_MoneyOffer, key: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(offer.title)
                 .centraidType("smallStrong")
@@ -172,7 +168,7 @@ struct MoneyTransactionView: View {
     }
 
     @ViewBuilder
-    private func sheetContent(_ state: Centraid_Screen_V1_MoneyTransactionState, transaction: Centraid_Screen_V1_MoneyTransactionData?) -> some View {
+    private func sheetContent(_ state: Centraid_Core_V1_MoneyTransactionState, transaction: Centraid_Core_V1_MoneyTransactionData?) -> some View {
         switch state.sheet {
         case .category:
             MoneyChoiceSheet(
@@ -208,20 +204,18 @@ struct MoneyTransactionView: View {
 /// every edit re-reads for the preview; the average, the carry and the preview's
 /// words are the machine's. Save is enabled by the state, not by this file.
 struct MoneyTargetView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_MoneyTargetState
+    let send: (Centraid_Core_V1_MoneyTargetEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
 
-    private var state: Centraid_Screen_V1_MoneyTargetState {
-        (try? Centraid_Screen_V1_MoneyTargetState(serializedBytes: data)) ?? .init()
-    }
-
-    private func event(_ build: (inout Centraid_Screen_V1_MoneyTargetEvent) -> Void) -> Data {
-        moneyEvent(Centraid_Screen_V1_MoneyTargetEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_MoneyTargetEvent) -> Void) -> Centraid_Core_V1_MoneyTargetEvent {
+        var event = Centraid_Core_V1_MoneyTargetEvent()
+        build(&event)
+        return event
     }
 
     var body: some View {
-        let state = state
         let content = state.readContent
         PushedPage(
             title: content.loaded?.title ?? state.chrome.title,
@@ -241,15 +235,17 @@ struct MoneyTargetView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 MoneyStatusFoot(
-                    status: MoneyWords.line(nil, write: state.write),
+                    status: MoneyWords.line(state.hasStatus ? state.status : nil),
                     identifier: "money-target-status"
                 )
             }
         }
+        // SAVED OR REMOVED: Rust says the page is done, the shell pops.
+        .onChange(of: state.finished) { _, finished in if finished { onBack() } }
     }
 
     @ViewBuilder
-    private func page(_ target: Centraid_Screen_V1_MoneyTargetData, state: Centraid_Screen_V1_MoneyTargetState) -> some View {
+    private func page(_ target: Centraid_Core_V1_MoneyTargetData, state: Centraid_Core_V1_MoneyTargetState) -> some View {
         MoneyNote(text: target.monthLabel)
         MoneyTextField(
             key: MoneyWords.meta(target.amountLabel, target.currencyLabel),
@@ -286,22 +282,18 @@ struct MoneyTargetView: View {
 
 /// `money.recurring` — what repeats, per merchant (#1099). A read: nothing here writes.
 struct MoneyRecurringView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_MoneyRecurringState
+    let send: (Centraid_Core_V1_MoneyRecurringEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
 
-    private var state: Centraid_Screen_V1_MoneyRecurringState {
-        (try? Centraid_Screen_V1_MoneyRecurringState(serializedBytes: data)) ?? .init()
-    }
-
     var body: some View {
-        let state = state
         PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
             ReadStateView(
                 content: state.readContent,
-                onRetry: { send(moneyEvent(Centraid_Screen_V1_MoneyRecurringEvent.self) { $0.refreshed = .init() }) }
+                onRetry: { send(Centraid_Core_V1_MoneyRecurringEvent.with { $0.refreshed = .init() }) }
             ) { recurring in
                 if recurring.hasEmpty {
                     EmptyStateView(recurring.empty)

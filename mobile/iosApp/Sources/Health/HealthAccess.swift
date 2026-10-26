@@ -1,49 +1,30 @@
 import Foundation
 import HealthKit
 
-import CentraidShared
-
-/// WHAT THIS PHONE LETS HEALTH READ, AND THE ONE PLACE IT IS ASKED (#1129).
+/// WHAT THIS PHONE LETS HEALTH READ, AND THE ONE PLACE IT IS ASKED (#1129, #1135).
 ///
-/// **The chosen set is the phone's, never the vault's** (R-1129-6): the type keys the member
-/// chose on Connect are kept in this shell's own storage, like a followed folder's access
-/// (R-1127-7), and stated to the shared side through `HealthDevices` — at launch, after Connect
-/// and when the locale changes (`state()`).
+/// **The chosen set is the phone's, never the vault's** (R-1129-6), and it is Rust's to keep:
+/// the screen keeps it in the keychain as a per-device habit and sends it with each
+/// `HealthRead`. HealthKit hides a read grant — a refused or revoked type answers "no data", never
+/// "not allowed" — so nothing here can say what was granted; the member's choice is what Rust
+/// holds.
 ///
-/// **Whether the member went through Connect** is kept here too, because HealthKit hides a read
-/// grant: a refused or revoked type answers "no data", never "not allowed". The reader delivers
-/// nothing until this is set, and Stop clears it.
-///
-/// **THE OS IS ASKED ONLY AT THE MEMBER'S CONNECT TAP** (`request`), for read types only:
-/// `toShare` is empty, always (R-1129-7). Never at launch, never from a pass (R-1127-15).
+/// **THE OS IS ASKED ONLY AT THE MEMBER'S CONNECT TAP** (`request`, when the effect says
+/// `ask_permission`), for read types only: `toShare` is empty, always (R-1129-7). Never at
+/// launch, never from a pass (R-1127-15).
 enum HealthAccess {
     /// One store for the life of the process, as HealthKit asks.
     static let store = HKHealthStore()
 
-    private static let connectedKey = "dev.centraid.health.connected"
-    private static let chosenKey = "dev.centraid.health.chosen"
-
-    /// The member went through Connect and has not stopped since.
-    static var connected: Bool {
-        get { UserDefaults.standard.bool(forKey: connectedKey) }
-        set { UserDefaults.standard.set(newValue, forKey: connectedKey) }
-    }
-
-    /// The type keys the member chose (`steps`, `sleep_min`, …, `workouts`); empty before Connect.
-    static var chosen: [String] {
-        get { UserDefaults.standard.stringArray(forKey: chosenKey) ?? [] }
-        set { UserDefaults.standard.set(newValue, forKey: chosenKey) }
-    }
-
-    /// STATE THE PHONE'S FACTS to every Health screen: this store, the measurement system (display
-    /// only) and the chosen set. HealthKit cannot name a refusal, so `refused` is empty.
-    static func state() {
-        HealthDevices.shared.update(
-            store: HealthDevices.shared.APPLE_HEALTH,
-            metric: Locale.current.measurementSystem == .metric,
-            chosen: chosen,
-            refused: []
-        )
+    /// The type keys Rust names (`HealthRead.chosen`).
+    enum Key {
+        static let steps = "steps"
+        static let sleep = "sleep_min"
+        static let energy = "active_energy_kcal"
+        static let exercise = "exercise_min"
+        static let restingHr = "resting_hr_bpm"
+        static let weight = "weight_kg"
+        static let workouts = "workouts"
     }
 
     /// The HealthKit types behind each chosen key. Workouts read the workout type and the
@@ -52,13 +33,13 @@ enum HealthAccess {
         var types = Set<HKObjectType>()
         for key in keys {
             switch key {
-            case HealthMetrics.steps.key: types.insert(HKQuantityType(.stepCount))
-            case HealthMetrics.sleep.key: types.insert(HKCategoryType(.sleepAnalysis))
-            case HealthMetrics.energy.key: types.insert(HKQuantityType(.activeEnergyBurned))
-            case HealthMetrics.exercise.key: types.insert(HKQuantityType(.appleExerciseTime))
-            case HealthMetrics.restingHr.key: types.insert(HKQuantityType(.restingHeartRate))
-            case HealthMetrics.weight.key: types.insert(HKQuantityType(.bodyMass))
-            case HealthMetrics.companion.WORKOUTS:
+            case Key.steps: types.insert(HKQuantityType(.stepCount))
+            case Key.sleep: types.insert(HKCategoryType(.sleepAnalysis))
+            case Key.energy: types.insert(HKQuantityType(.activeEnergyBurned))
+            case Key.exercise: types.insert(HKQuantityType(.appleExerciseTime))
+            case Key.restingHr: types.insert(HKQuantityType(.restingHeartRate))
+            case Key.weight: types.insert(HKQuantityType(.bodyMass))
+            case Key.workouts:
                 types.insert(HKObjectType.workoutType())
                 types.insert(HKQuantityType(.distanceWalkingRunning))
                 types.insert(HKQuantityType(.distanceCycling))
@@ -73,8 +54,7 @@ enum HealthAccess {
 
     /// ASK THE OS, READ ONLY, for exactly [keys] — the member just tapped Connect. True when the
     /// sheet was answered (HealthKit does not say what was granted); false when this phone has no
-    /// HealthKit or the request failed. The keys are kept, and the phone marked connected, only
-    /// on true.
+    /// HealthKit or the request failed.
     @MainActor
     static func request(_ keys: [String]) async -> Bool {
         guard HKHealthStore.isHealthDataAvailable() else { return false }
@@ -83,16 +63,6 @@ enum HealthAccess {
         } catch {
             return false
         }
-        chosen = keys
-        connected = true
-        state()
         return true
-    }
-
-    /// Health stopped reading the store: nothing more is read until the member connects again.
-    /// The choices are kept, so Connect opens on them.
-    static func stopped() {
-        connected = false
-        state()
     }
 }

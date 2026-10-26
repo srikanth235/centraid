@@ -18,27 +18,23 @@ import dev.centraid.android.kit.AppMark
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.shared.shell.FirstLaunch
-import dev.centraid.shared.shell.HomeWords
+import centraid.core.v1.HomeFirstLaunch
 
 /**
  * THE FIRST-LAUNCH GATE: what a device that holds no vault opens onto, in
  * place of Home. Same screen as iOS `FirstLaunchView`.
  *
  * Every app's mark as one house, one sentence and the two doors, nothing else
- * (`DESIGN.md`'s empty state). The marks are Home's own roster
- * ([FirstLaunch.APPS], #1129), so an app that gets a tile is in the house too;
- * the screen asks the phone for nothing.
+ * (`DESIGN.md`'s empty state). Every word and the house's marks (Home's own
+ * roster, #1129) are Rust's (`HomeState.first_launch`).
  *
- * **It decides nothing**: whether it is up is `Shelf.holdsNoVault`
- * (`MainActivity` reads it), [onMake] opens words.make — which decides whether
- * this phone mints words, makes from a seed it holds, or must restore first —
- * and [onRestore] opens words.enter. Both raise the words sheet over this
- * screen, so cancelling out of either lands back here, and the gate goes only
- * when the shelf holds a vault.
+ * **It decides nothing**: Home draws it while Rust says the phone holds no
+ * vault; [onMake] and [onRestore] are Home's `MakePressed` and `RestorePressed`,
+ * which push the words pages over it, so cancelling out of either lands back
+ * here, and the gate goes only when the shelf holds a vault.
  */
 @Composable
-internal fun FirstLaunchScreen(onMake: () -> Unit, onRestore: () -> Unit) {
+internal fun FirstLaunchScreen(gate: HomeFirstLaunch, onMake: () -> Unit, onRestore: () -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
@@ -50,18 +46,18 @@ internal fun FirstLaunchScreen(onMake: () -> Unit, onRestore: () -> Unit) {
         // THE SENTENCE TAKES THE MIDDLE (the weight) and the doors sit at the
         // foot, as on iOS.
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-            HouseMarks()
+            HouseMarks(gate.apps)
             Text(
-                HomeWords.FIRST_LAUNCH_BODY,
+                gate.body,
                 style = centraidType("title"),
                 color = centraidColor("text"),
                 modifier = Modifier.semantics { heading() }.testTag("first-launch-body"),
             )
         }
         WordsControls(
-            primary = HomeWords.FIRST_LAUNCH_MAKE,
+            primary = gate.make_label,
             primaryEnabled = true,
-            secondary = HomeWords.FIRST_LAUNCH_RESTORE,
+            secondary = gate.restore_label,
             prefix = "first-launch",
             onPrimary = onMake,
             onSecondary = onRestore,
@@ -74,7 +70,7 @@ internal fun FirstLaunchScreen(onMake: () -> Unit, onRestore: () -> Unit) {
  * row at 40dp. A picture, not a list to read, so it is hidden from TalkBack.
  */
 @Composable
-private fun HouseMarks() {
+private fun HouseMarks(apps: List<String>) {
     Column(
         Modifier
             .padding(bottom = 24.dp)
@@ -82,7 +78,7 @@ private fun HouseMarks() {
             .testTag("first-launch-house"),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        FirstLaunch.APPS.chunked(5).forEach { row ->
+        apps.chunked(5).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { appId -> AppMark(appId = appId, size = 40.dp) }
             }

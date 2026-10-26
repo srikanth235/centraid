@@ -3,10 +3,10 @@ import SwiftUI
 /// Agenda's home screen, in SwiftUI (#1046 wave 3).
 ///
 /// **THE VIEW DECIDES NOTHING.** Every word, flag, hue key and label drawn here
-/// is on `AgendaHomeState`, which `AgendaHomeMachine` in `CentraidShared`
-/// folds; this file maps fields to geometry and taps to events. A string
-/// literal below is a bug: the words come from `copy/agenda.json` through the
-/// state's `chrome`.
+/// is on `AgendaHomeState`, which Rust makes (`crates/screens`, module
+/// `agenda`); this file maps fields to geometry and taps to events. A string
+/// literal below is a bug: the words come through the state's `chrome`. A row
+/// that opens a page carries its `Route`, and a tap hands it to `open`.
 ///
 /// Four content branches, never two — loading, failure, denied, data — and the
 /// denied branch draws no band, because a gate with tabs under it would offer
@@ -18,31 +18,25 @@ import SwiftUI
 /// keyboard. Which of those the data holds is the state's (`home.todo`), not a
 /// branch on the destination.
 struct AgendaHomeView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_AgendaHomeState
+    let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onHome: () -> Void
 
     @Environment(\.colorScheme) private var scheme
-    /// The shell's import door, nil where it offers none (and inside an example).
-    @Environment(\.importFromPhone) private var importFromPhone
     /// The quick add holds the keyboard: the band is put away while it does
     /// (as an editor's is, DESIGN.md "The seven rooms"), so the bar sits on the
     /// keyboard and not behind it, and a scroll or the Done key lets it go.
     @State private var quickAddTyping = false
 
-    private var state: Centraid_Screen_V1_AgendaHomeState {
-        (try? Centraid_Screen_V1_AgendaHomeState(serializedBytes: data)) ?? .init()
-    }
-
     var body: some View {
-        let state = state
         let content = readContent(state)
         AppPlace(
             app: "agenda",
             title: state.chrome.title,
             trailing: addAction(state, denied: content.isDenied),
             // SEARCH IS THE BAR UNDER THE TITLE (R-CHROME-2), above the day
-            // bar; a tap opens the field through the machine. None on the
+            // bar; a tap opens the field through Rust. None on the
             // gate, which has nothing to search.
             search: content.isDenied ? nil : SearchSlot(
                 field: searchField(state),
@@ -59,13 +53,16 @@ struct AgendaHomeView: View {
                 tabs: state.band.map { tab in
                     BandView(
                         label: tab.label,
-                        event: AgendaEvents.make { $0.band = .with { $0.key = tab.key } },
+                        event: Data(tab.key.utf8),
                         iconKey: tab.iconKey,
                         selected: tab.current,
                         key: tab.key
                     )
                 },
-                onSelect: send,
+                onSelect: { picked in
+                    let key = String(decoding: picked, as: UTF8.self)
+                    send(AgendaEvents.make { $0.band = .with { $0.key = key } })
+                },
                 onHome: onHome
             )
         } content: {
@@ -84,7 +81,7 @@ struct AgendaHomeView: View {
                     send(AgendaEvents.make { $0.statusActed = .init() })
                 }
                 if !content.isDenied {
-                    TasksQuickAddBar(
+                    TodoQuickAddBar(
                         quickAdd: state.quickAdd,
                         placeholder: state.chrome.tasks.quickAddPlaceholder,
                         verb: state.chrome.tasks.quickAddVerb,
@@ -92,7 +89,7 @@ struct AgendaHomeView: View {
                         onSubmit: { send(AgendaEvents.make { $0.quickAddSubmitted = .init() }) },
                         onFocusChange: { typing in
                             quickAddTyping = typing
-                            // THE KEYBOARD LEFT: the machine puts an empty bar away.
+                            // THE KEYBOARD LEFT: Rust puts an empty bar away.
                             if !typing { send(AgendaEvents.make { $0.quickAddClosed = .init() }) }
                         },
                         fieldIdentifier: "agenda-quick-add",
@@ -102,7 +99,7 @@ struct AgendaHomeView: View {
             }
         }
         .sheet(isPresented: sheetBinding(state, .more)) {
-            AgendaMoreSheet(state: state, send: send)
+            AgendaMoreSheet(state: state, send: send, open: open)
         }
         .sheet(isPresented: sheetBinding(state, .reads)) {
             AgendaReadsSheet(chrome: state.chrome)
@@ -147,13 +144,13 @@ struct AgendaHomeView: View {
 
     /// The state's four content branches as the kit's one read shape.
     private func readContent(
-        _ state: Centraid_Screen_V1_AgendaHomeState
-    ) -> ScreenContent<Centraid_Screen_V1_AgendaHomeData> {
+        _ state: Centraid_Core_V1_AgendaHomeState
+    ) -> ScreenContent<Centraid_Core_V1_AgendaHomeData> {
         switch state.content {
-        case .loading, .none: return .loading(true)
-        case let .failure(failure): return .failed(failure)
-        case let .denied(denied): return .denied(denied)
-        case let .data(home): return .data(home)
+        case .loading?, nil: return .loading(true)
+        case let .failure(failure)?: return .failed(failure)
+        case let .denied(denied)?: return .gated(denied)
+        case let .data(home)?: return .data(home)
         }
     }
 
@@ -163,7 +160,7 @@ struct AgendaHomeView: View {
     /// keyboard, every other place the add sheet. None on the gate, which can
     /// make nothing, and on To-do while the bar cannot be drawn.
     private func addAction(
-        _ state: Centraid_Screen_V1_AgendaHomeState,
+        _ state: Centraid_Core_V1_AgendaHomeState,
         denied: Bool
     ) -> RoomAction? {
         guard !state.addLabel.isEmpty, !denied else { return nil }
@@ -173,14 +170,16 @@ struct AgendaHomeView: View {
                 send(AgendaEvents.make { $0.quickAddOpened = .init() })
             }
         }
+        // THE ADD SHEET is a page: the state carries its route (absent while denied).
+        guard state.hasNewEvent else { return nil }
         return RoomAction(iconKey: "Plus", label: state.addLabel, identifier: "agenda-new-event") {
-            send(AgendaEvents.make { $0.newEvent = .init() })
+            open(state.newEvent)
         }
     }
 
-    /// The machine's search flag and term, as the kit's field state.
-    private func searchField(_ state: Centraid_Screen_V1_AgendaHomeState) -> Centraid_Screen_V1_SearchField {
-        var field = Centraid_Screen_V1_SearchField()
+    /// Rust's search flag and term, as the kit's field state.
+    private func searchField(_ state: Centraid_Core_V1_AgendaHomeState) -> KitSearchField {
+        var field = KitSearchField()
         field.open = state.searchOpen
         field.term = state.searchTerm
         field.corrected = state.searchCorrected
@@ -188,22 +187,21 @@ struct AgendaHomeView: View {
     }
 
     /// The day-one empty's words and import door, as the kit's message.
-    private func emptyState(_ home: Centraid_Screen_V1_AgendaHomeData) -> Centraid_Screen_V1_EmptyState {
-        var empty = Centraid_Screen_V1_EmptyState()
+    private func emptyState(_ home: Centraid_Core_V1_AgendaHomeData) -> Centraid_Core_V1_EmptyState {
+        var empty = Centraid_Core_V1_EmptyState()
         empty.headline = home.emptyTitle
         empty.body = home.emptyBody
         empty.actionLabel = home.emptyAction
-        empty.importSource = home.importSource
         return empty
     }
 
     @ViewBuilder
     private func homeContent(
-        _ home: Centraid_Screen_V1_AgendaHomeData,
-        state: Centraid_Screen_V1_AgendaHomeState
+        _ home: Centraid_Core_V1_AgendaHomeData,
+        state: Centraid_Core_V1_AgendaHomeState
     ) -> some View {
         if home.hasTodo {
-            AgendaTodoList(home: home, state: state, send: send)
+            AgendaTodoList(home: home, state: state, send: send, open: open)
         } else if home.empty != .none, home.empty != .unspecified {
             if home.empty == .noMatch {
                 // A SEARCH THAT FOUND NOTHING: the kit's one no-match state, and the Ask row under it.
@@ -211,23 +209,36 @@ struct AgendaHomeView: View {
                 if state.hasSearchAskRow { SearchAskRow(ask: state.searchAskRow) }
             } else {
                 // WHERE THE PHONE HOLDS A CALENDAR, ITS IMPORT IS DAY ONE'S
-                // ACTION (the kit's empty state draws it); "Add" stays in
+                // ACTION, sent to Rust as `ImportRequested`; "Add" stays in
                 // the header.
                 //
                 // A DAY THAT HOLDS OVERDUE WORK OR THE ABSENCE NOTICE sends no
                 // empty sentence, so it is drawn by the list above.
-                EmptyStateView(emptyState(home), onAction: { send(AgendaEvents.make { $0.newEvent = .init() }) })
+                let offersImport = home.importSource == .calendar
+                EmptyStateView(
+                    emptyState(home),
+                    onAction: offersImport ? nil : { if state.hasNewEvent { open(state.newEvent) } }
+                )
+                if offersImport {
+                    CalendarImportButton(label: home.importLabel, identifier: "kit-empty-import", send: send)
+                }
             }
         } else {
-            AgendaList(home: home, chrome: state.chrome, ask: state.hasSearchAskRow ? state.searchAskRow : nil, send: send)
+            AgendaList(
+                home: home,
+                chrome: state.chrome,
+                ask: state.hasSearchAskRow ? state.searchAskRow : nil,
+                send: send,
+                open: open
+            )
         }
     }
 
     /// READ from the state, WRITTEN as an event — a sheet the member swiped
-    /// away tells the machine, and the machine is what closes it.
+    /// away tells Rust, and Rust is what closes it.
     private func sheetBinding(
-        _ state: Centraid_Screen_V1_AgendaHomeState,
-        _ sheet: Centraid_Screen_V1_AgendaHomeState.Sheet
+        _ state: Centraid_Core_V1_AgendaHomeState,
+        _ sheet: Centraid_Core_V1_AgendaHomeState.Sheet
     ) -> Binding<Bool> {
         Binding(
             get: { state.sheet == sheet },
@@ -239,13 +250,30 @@ struct AgendaHomeView: View {
     }
 }
 
-/// Encoded `AgendaHomeEvent`s. Bytes, because the bridge takes Wire's type and
-/// this side holds SwiftProtobuf's.
+/// `AgendaHomeEvent`s, built.
 enum AgendaEvents {
-    static func make(_ build: (inout Centraid_Screen_V1_AgendaHomeEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_AgendaHomeEvent()
+    static func make(_ build: (inout Centraid_Core_V1_AgendaHomeEvent) -> Void) -> Centraid_Core_V1_AgendaHomeEvent {
+        var event = Centraid_Core_V1_AgendaHomeEvent()
         build(&event)
-        return (try? event.serializedData()) ?? Data()
+        return event
+    }
+}
+
+/// THE PHONE CALENDAR'S IMPORT: the verb is the app's, the tap is Rust's
+/// (`ImportRequested`; Rust asks this shell to read the calendar through the
+/// `CalendarRead` effect).
+private struct CalendarImportButton: View {
+    /// Rust's words (`import_label`, "Import calendar").
+    let label: String
+    let identifier: String
+    let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
+
+    var body: some View {
+        KitOutlineButton(label: label) {
+            send(AgendaEvents.make { $0.importRequested = .init() })
+        }
+        .accessibilityIdentifier(identifier)
+        .padding(.top, 4)
     }
 }
 
@@ -254,9 +282,9 @@ enum AgendaEvents {
 /// The day bar: range label, ‹ ›, and Today — hidden when the state says the
 /// anchor is already today.
 private struct AgendaToolbarView: View {
-    let toolbar: Centraid_Screen_V1_AgendaToolbar
-    let chrome: Centraid_Screen_V1_AgendaChrome
-    let send: (Data) -> Void
+    let toolbar: Centraid_Core_V1_AgendaToolbar
+    let chrome: Centraid_Core_V1_AgendaChrome
+    let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -294,13 +322,12 @@ private struct AgendaToolbarView: View {
 // MARK: - The list
 
 private struct AgendaList: View {
-    let home: Centraid_Screen_V1_AgendaHomeData
-    let chrome: Centraid_Screen_V1_AgendaChrome
+    let home: Centraid_Core_V1_AgendaHomeData
+    let chrome: Centraid_Core_V1_AgendaChrome
     /// The search's Ask row, closing the answer (#1135); nil off a search.
-    let ask: Centraid_Screen_V1_SearchAsk?
-    let send: (Data) -> Void
-    /// The shell's import door, nil where it offers none (and inside an example).
-    @Environment(\.importFromPhone) private var importFromPhone
+    let ask: Centraid_Core_V1_SearchAsk?
+    let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -308,22 +335,19 @@ private struct AgendaList: View {
                 VStack(alignment: .leading, spacing: 0) {
                     // THE PROJECTS WHOSE NAME A SEARCH MATCHED come first (Q-1128-1), in a plain
                     // stack above the lazy one, as Notes and Docs draw theirs.
-                    AgendaSearchContainers(containers: home.containers, send: send)
+                    AgendaSearchContainers(containers: home.containers, open: open)
                     LazyVStack(alignment: .leading, spacing: 0) {
                         // NO EVENT OF THE MEMBER'S YET, only marks (due tasks,
                         // birthdays): the phone's calendar is offered quietly above
                         // them, at the point of use.
-                        if !importLabel(home.importSource).isEmpty, let importFromPhone {
-                            KitOutlineButton(label: importLabel(home.importSource)) {
-                                importFromPhone(home.importSource)
-                            }
-                            .accessibilityIdentifier("agenda-import")
-                            .padding(.horizontal, CentraidGeometry.pageMargin)
-                            .padding(.vertical, 8)
+                        if home.importSource == .calendar {
+                            CalendarImportButton(label: home.importLabel, identifier: "agenda-import", send: send)
+                                .padding(.horizontal, CentraidGeometry.pageMargin)
+                                .padding(.vertical, 8)
                         }
-                        AgendaLeadBlocks(home: home, chrome: chrome, send: send)
+                        AgendaLeadBlocks(home: home, chrome: chrome, send: send, open: open)
                         ForEach(home.days, id: \.day) { section in
-                            AgendaSectionView(section: section, chrome: chrome, send: send)
+                            AgendaSectionView(section: section, chrome: chrome, send: send, open: open)
                                 .id(section.day)
                         }
                     }
@@ -352,18 +376,16 @@ private struct AgendaList: View {
 }
 
 /// A SEARCH'S PROJECT CONTAINERS (Q-1128-1): the kit's one container row, each
-/// tap `ProjectPicked` with the container's id — `AgendaRouting` opens the
-/// project page, as it does for To-do's project row. Nothing without a term.
+/// tap pushing the container's `route` — the project page To-do's project row
+/// opens. Nothing without a term.
 private struct AgendaSearchContainers: View {
-    let containers: [Centraid_Screen_V1_SearchContainer]
-    let send: (Data) -> Void
+    let containers: [Centraid_Core_V1_SearchContainer]
+    let open: (Centraid_Core_V1_Route) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(containers, id: \.id) { container in
-                SearchContainerRow(container: container) { _ in
-                    send(AgendaEvents.make { $0.projectPicked = .with { $0.projectID = container.id } })
-                }
+                SearchContainerRow(container: container) { _ in open(container.route) }
             }
         }
     }
@@ -372,36 +394,40 @@ private struct AgendaSearchContainers: View {
 /// What leads the day list: the absence notice, then the Overdue group, then a
 /// search's task hits — each only when the state sends it (R-1128-3, R-1128-4).
 private struct AgendaLeadBlocks: View {
-    let home: Centraid_Screen_V1_AgendaHomeData
-    let chrome: Centraid_Screen_V1_AgendaChrome
-    let send: (Data) -> Void
+    let home: Centraid_Core_V1_AgendaHomeData
+    let chrome: Centraid_Core_V1_AgendaChrome
+    let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
 
     var body: some View {
+        // THE NOTICE'S VERB AND THE OVERDUE GROUP'S push Catch up, whose route the data carries.
         if home.hasNotice {
-            AgendaNoticeView(notice: home.notice, send: send)
+            AgendaNoticeView(notice: home.notice) { if home.hasCatchUp { open(home.catchUp) } }
         }
         if home.hasOverdue {
-            AgendaTaskGroup(group: home.overdue, chrome: chrome, send: send)
+            AgendaTaskGroup(group: home.overdue, chrome: chrome, send: send, open: open, catchUp: home.hasCatchUp ? home.catchUp : nil)
         }
         ForEach(home.taskHits, id: \.key) { group in
-            AgendaTaskGroup(group: group, chrome: chrome, send: send)
+            AgendaTaskGroup(group: group, chrome: chrome, send: send, open: open, catchUp: nil)
         }
     }
 }
 
-/// A task group drawn full width: the Overdue head (its verb sends `GroupVerb`)
+/// A task group drawn full width: the Overdue head (its verb pushes `catchUp`)
 /// and a search's task hits.
 private struct AgendaTaskGroup: View {
-    let group: Centraid_Screen_V1_TasksRowGroup
-    let chrome: Centraid_Screen_V1_AgendaChrome
-    let send: (Data) -> Void
+    let group: Centraid_Core_V1_TodoRowGroup
+    let chrome: Centraid_Core_V1_AgendaChrome
+    let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
+    let catchUp: Centraid_Core_V1_Route?
 
     var body: some View {
-        TasksGroupView(
+        TodoGroupView(
             group: group,
-            onVerb: { key in send(AgendaEvents.make { $0.groupVerb = .with { $0.key = key } }) },
+            onVerb: { _ in if let catchUp { open(catchUp) } },
             onCheck: { id in send(AgendaEvents.make { $0.taskChecked = .with { $0.taskID = id } }) },
-            onPick: { id in send(AgendaEvents.make { $0.taskPicked = .with { $0.taskID = id } }) },
+            onPick: open,
             fileVerb: chrome.tasks.fileVerb,
             onFile: { id in send(AgendaEvents.make { $0.fileRequested = .with { $0.taskID = id } }) },
             identifierPrefix: "agenda-task-row"
@@ -409,10 +435,10 @@ private struct AgendaTaskGroup: View {
     }
 }
 
-/// The absence notice: one sentence and at most one verb (`NoticeActed`).
+/// The absence notice: one sentence and at most one verb (pushing Catch up).
 private struct AgendaNoticeView: View {
-    let notice: Centraid_Screen_V1_TasksNotice
-    let send: (Data) -> Void
+    let notice: Centraid_Core_V1_TodoNotice
+    let onVerb: () -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -422,7 +448,7 @@ private struct AgendaNoticeView: View {
                 .foregroundStyle(Theme.color("textSoft", scheme))
                 .frame(maxWidth: .infinity, alignment: .leading)
             if !notice.verbLabel.isEmpty {
-                KitOutlineButton(label: notice.verbLabel) { send(AgendaEvents.make { $0.noticeActed = .init() }) }
+                KitOutlineButton(label: notice.verbLabel, action: onVerb)
                     .accessibilityIdentifier("agenda-notice-verb")
             }
         }
@@ -437,9 +463,10 @@ private struct AgendaNoticeView: View {
 /// THE TO-DO PLACE: the Inbox's groups, then the projects by area, then the
 /// new-project verb at the foot — whatever the list holds.
 private struct AgendaTodoList: View {
-    let home: Centraid_Screen_V1_AgendaHomeData
-    let state: Centraid_Screen_V1_AgendaHomeState
-    let send: (Data) -> Void
+    let home: Centraid_Core_V1_AgendaHomeData
+    let state: Centraid_Core_V1_AgendaHomeState
+    let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -447,16 +474,17 @@ private struct AgendaTodoList: View {
         let chrome = state.chrome
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                TasksCountLine(count: todo.countLabel, window: todo.windowLabel)
+                TodoCountLine(count: todo.countLabel, window: todo.windowLabel)
                 if !todo.empty.headline.isEmpty {
                     EmptyStateView(todo.empty, onAction: { send(AgendaEvents.make { $0.todoEmptyActed = .init() }) })
                 }
                 ForEach(todo.groups, id: \.key) { group in
-                    AgendaTaskGroup(group: group, chrome: chrome, send: send)
+                    AgendaTaskGroup(group: group, chrome: chrome, send: send, open: open, catchUp: nil)
                 }
                 ForEach(todo.projects, id: \.key) { group in
                     SectionHeader(title: group.title, count: UInt32(group.rows.count))
-                    ForEach(group.rows, id: \.id) { row in
+                    ForEach(group.rows, id: \.row.id) { project in
+                        let row = project.row
                         CentraidRow(
                             title: row.title,
                             meta: row.meta,
@@ -468,7 +496,7 @@ private struct AgendaTodoList: View {
                             pending: row.pending,
                             accessibility: row.accessibilityLabel,
                             identifier: "agenda-project-\(row.id)"
-                        ) { send(AgendaEvents.make { $0.projectPicked = .with { $0.projectID = row.id } }) }
+                        ) { open(project.route) }
                     }
                 }
                 ShowMoreFooter(visible: todo.canShowMore, label: chrome.tasks.showMore) {
@@ -494,9 +522,10 @@ private struct AgendaTodoList: View {
 }
 
 private struct AgendaSectionView: View {
-    let section: Centraid_Screen_V1_AgendaDaySection
-    let chrome: Centraid_Screen_V1_AgendaChrome
-    let send: (Data) -> Void
+    let section: Centraid_Core_V1_AgendaDaySection
+    let chrome: Centraid_Core_V1_AgendaChrome
+    let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -522,14 +551,14 @@ private struct AgendaSectionView: View {
                     ForEach(Array(section.items.enumerated()), id: \.offset) { _, item in
                         switch item.kind {
                         case let .event(row):
-                            AgendaEventRowView(row: row, day: section.day, send: send)
+                            AgendaEventRowView(row: row, open: open)
                         case let .task(row):
                             // A DATED TASK IS A ROW OF ITS DAY (R-1128-2): the
                             // round box checks it off in place, a tap opens it.
-                            TasksRowView(
+                            TodoRowView(
                                 row: row,
                                 onCheck: { id in send(AgendaEvents.make { $0.taskChecked = .with { $0.taskID = id } }) },
-                                onPick: { id in send(AgendaEvents.make { $0.taskPicked = .with { $0.taskID = id } }) },
+                                onPick: open,
                                 fileVerb: chrome.tasks.fileVerb,
                                 onFile: { id in send(AgendaEvents.make { $0.fileRequested = .with { $0.taskID = id } }) },
                                 embedded: true,
@@ -593,22 +622,14 @@ private struct AgendaSectionView: View {
 }
 
 private struct AgendaEventRowView: View {
-    let row: Centraid_Screen_V1_AgendaEventRow
-    /// The section's day the row is drawn under — the detail's read window.
-    let day: String
-    let send: (Data) -> Void
+    let row: Centraid_Core_V1_AgendaEventRow
+    let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
+        // THE ROW CARRIES ITS PAGE: this occurrence, drawn under the section's day.
         Button {
-            send(AgendaEvents.make {
-                $0.eventPicked = .with {
-                    $0.eventID = row.eventID
-                    $0.instanceKey = row.instanceKey
-                    if row.hasOriginalStartLocal { $0.originalStartLocal = row.originalStartLocal }
-                    $0.day = day
-                }
-            })
+            open(row.route)
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(row.timeLabel)
@@ -621,7 +642,7 @@ private struct AgendaEventRowView: View {
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if !row.statusLabel.isEmpty {
-                    let tone = row.status == .cancelAsked ? "net" : "textSoft"
+                    let tone = "textSoft"
                     Text(row.statusLabel)
                         .centraidType("annotLabel")
                         .foregroundStyle(Theme.color(tone, scheme))
@@ -651,7 +672,7 @@ private struct AgendaEventRowView: View {
 }
 
 private struct AgendaNowLineView: View {
-    let now: Centraid_Screen_V1_AgendaNowLine
+    let now: Centraid_Core_V1_AgendaNowLine
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -674,14 +695,16 @@ private struct AgendaNowLineView: View {
 // MARK: - Sheets
 
 private struct AgendaMoreSheet: View {
-    let state: Centraid_Screen_V1_AgendaHomeState
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_AgendaHomeState
+    let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
 
     /// A `SheetRoom` of `SheetRow`s — what `OptionSheet` draws — with the
     /// title carrying the sheet's id, so the rows keep their own. THE ROWS ARE
-    /// THE MACHINE'S (`more_rows`), the same list Android draws: a calendar
-    /// row is a toggle with its hue dot, and every tap sends the row's key.
+    /// RUST'S (`more_rows`), the same list Android draws: a calendar row is a
+    /// toggle with its hue dot, and every tap sends the row's key; a place's
+    /// row then pushes its `route`.
     var body: some View {
         SheetRoom(title: state.chrome.moreTitle, titleIdentifier: "agenda-more-sheet") {
             ScrollView {
@@ -703,6 +726,7 @@ private struct AgendaMoreSheet: View {
                                 identifier: "agenda-more-\(row.key)"
                             ) {
                                 send(AgendaEvents.make { $0.moreRow = .with { $0.key = row.key } })
+                                if row.hasRoute { open(row.route) }
                             }
                             .accessibilityLabel(row.spoken.isEmpty ? row.label : row.spoken)
                         }
@@ -714,7 +738,7 @@ private struct AgendaMoreSheet: View {
 }
 
 private struct AgendaReadsSheet: View {
-    let chrome: Centraid_Screen_V1_AgendaChrome
+    let chrome: Centraid_Core_V1_AgendaChrome
 
     var body: some View {
         SheetRoom(title: chrome.readsTitle, titleIdentifier: "agenda-reads-sheet") {

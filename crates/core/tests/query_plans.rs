@@ -58,12 +58,12 @@ fn covers(query: &Q) -> &'static str {
         Q::AgendaParties(_) => "agenda.parties",
         Q::AgendaSearch(_) => "agenda.search",
         Q::AgendaEvent(_) => "agenda.event",
-        Q::TasksBoard(_) => "tasks.board",
-        Q::TasksTask(_) => "tasks.task",
-        Q::TasksProjects(_) => "tasks.projects",
-        Q::TasksSearch(_) => "tasks.search",
-        Q::TasksCatchUp(_) => "tasks.catch_up",
-        Q::TasksTrash(_) => "tasks.trash",
+        Q::AgendaTaskBoard(_) => "agenda.task.board",
+        Q::AgendaTask(_) => "agenda.task.task",
+        Q::AgendaTaskProjects(_) => "agenda.task.projects",
+        Q::AgendaTaskSearch(_) => "agenda.task.search",
+        Q::AgendaTaskCatchUp(_) => "agenda.task.catch_up",
+        Q::AgendaTaskTrash(_) => "agenda.task.trash",
         Q::DocsDrive(_) => "docs.drive",
         Q::DocsSearch(_) => "docs.search",
         Q::DocsDocument(_) => "docs.document",
@@ -76,6 +76,7 @@ fn covers(query: &Q) -> &'static str {
         Q::NotesHistory(_) => "notes.history",
         Q::NotesLinkTargets(_) => "notes.link_targets",
         Q::NotesNote(_) => "notes.note",
+        Q::NotesAbout(_) => "notes.about",
         Q::PeopleRoster(_) => "people.roster",
         Q::PeopleTouch(_) => "people.touch",
         Q::PeoplePerson(_) => "people.person",
@@ -92,6 +93,10 @@ fn covers(query: &Q) -> &'static str {
         Q::VaultSearch(_) => "vault.search",
         Q::PhotosSearch(_) => "photos.search",
         Q::PhotosDuplicates(_) => "photos.duplicates",
+        Q::PhotosShelf(_) => "photos.shelf",
+        Q::PhotosPhoto(_) => "photos.photo",
+        Q::PhotosAlbums(_) => "photos.albums",
+        Q::PhotosPlaces(_) => "photos.places",
         Q::MoneySpending(_) => "money.spending",
         Q::MoneyActivity(_) => "money.activity",
         Q::MoneyTransaction(_) => "money.transaction",
@@ -102,6 +107,7 @@ fn covers(query: &Q) -> &'static str {
         Q::MoneyTargetSheet(_) => "money.target_sheet",
         Q::MoneyRecurring(_) => "money.recurring",
         Q::MoneySearch(_) => "money.search",
+        Q::MoneyHomeTile(_) => "money.home_tile",
         Q::HealthToday(_) => "health.today",
         Q::HealthSeries(_) => "health.series",
         Q::HealthTrends(_) => "health.trends",
@@ -144,18 +150,18 @@ fn requests(word: &str) -> Vec<Q> {
             tz: tz(),
             ..Default::default()
         }),
-        Q::TasksTask(wire::TasksTaskRequest {
+        Q::AgendaTask(wire::AgendaTaskRequest {
             task_id: some("task"),
             tz: tz(),
         }),
-        Q::TasksProjects(wire::TasksProjectsRequest { tz: tz() }),
-        Q::TasksSearch(wire::TasksSearchRequest {
+        Q::AgendaTaskProjects(wire::AgendaTaskProjectsRequest { tz: tz() }),
+        Q::AgendaTaskSearch(wire::AgendaTaskSearchRequest {
             term: word.clone(),
             limit: 50,
             tz: tz(),
         }),
-        Q::TasksCatchUp(wire::TasksCatchUpRequest { tz: tz() }),
-        Q::TasksTrash(wire::TasksTrashRequest { tz: tz() }),
+        Q::AgendaTaskCatchUp(wire::AgendaTaskCatchUpRequest { tz: tz() }),
+        Q::AgendaTaskTrash(wire::AgendaTaskTrashRequest { tz: tz() }),
         Q::DocsSearch(wire::DocsSearchRequest {
             term: word.clone(),
             limit: 50,
@@ -189,6 +195,11 @@ fn requests(word: &str) -> Vec<Q> {
         }),
         Q::NotesNote(wire::NotesNoteRequest {
             note_id: some("note"),
+            tz: tz(),
+        }),
+        Q::NotesAbout(wire::NotesAboutRequest {
+            about_id: some("person"),
+            window: 100,
             tz: tz(),
         }),
         Q::PeopleTouch(wire::PeopleTouchRequest { tz: tz() }),
@@ -253,6 +264,19 @@ fn requests(word: &str) -> Vec<Q> {
             correct: true,
         }),
         Q::PhotosDuplicates(wire::PhotosDuplicatesRequest {}),
+        Q::PhotosAlbums(wire::PhotosAlbumsRequest {}),
+        Q::PhotosPlaces(wire::PhotosPlacesRequest {}),
+        Q::PhotosPhoto(wire::PhotosPhotoRequest { id: some("photo") }),
+        Q::PhotosSearch(wire::PhotosSearchRequest {
+            term: String::new(),
+            limit: 50,
+            correct: false,
+        }),
+        Q::PhotosSearch(wire::PhotosSearchRequest {
+            term: "no location".to_owned(),
+            limit: 50,
+            correct: false,
+        }),
         Q::MoneySpending(wire::MoneySpendingRequest {
             tz: tz(),
             month: "2025-06".to_owned(),
@@ -276,6 +300,10 @@ fn requests(word: &str) -> Vec<Q> {
             ..Default::default()
         }),
         Q::MoneyRecurring(wire::MoneyRecurringRequest { tz: tz() }),
+        Q::MoneyHomeTile(wire::MoneyHomeTileRequest {
+            tz: tz(),
+            month: "2025-06".to_owned(),
+        }),
         Q::MoneySearch(wire::MoneySearchRequest {
             tz: tz(),
             month: String::new(),
@@ -303,15 +331,45 @@ fn requests(word: &str) -> Vec<Q> {
         Q::HealthFollowView(wire::HealthFollowViewRequest { tz: tz() }),
     ];
     for view in [
-        wire::TasksView::Today,
-        wire::TasksView::Upcoming,
-        wire::TasksView::Inbox,
-        wire::TasksView::Anytime,
-        wire::TasksView::All,
-        wire::TasksView::Logbook,
+        wire::PhotosShelfView::Live,
+        wire::PhotosShelfView::Favorites,
+        wire::PhotosShelfView::Videos,
+        wire::PhotosShelfView::Archive,
+        wire::PhotosShelfView::Trash,
+        wire::PhotosShelfView::Album,
+        wire::PhotosShelfView::Place,
+        wire::PhotosShelfView::Unplaced,
+    ] {
+        // The first page, and one continued past a dated cursor and into the tail.
+        for after in [
+            None,
+            Some(wire::PhotosCursor {
+                sort_key: "2025-03-01T00:00:00.000Z".to_owned(),
+                id: some("photo"),
+            }),
+            Some(wire::PhotosCursor {
+                sort_key: String::new(),
+                id: some("photo"),
+            }),
+        ] {
+            asked.push(Q::PhotosShelf(wire::PhotosShelfRequest {
+                view: view as i32,
+                id: some("album"),
+                limit: 60,
+                after,
+            }));
+        }
+    }
+    for view in [
+        wire::AgendaTaskView::Today,
+        wire::AgendaTaskView::Upcoming,
+        wire::AgendaTaskView::Inbox,
+        wire::AgendaTaskView::Anytime,
+        wire::AgendaTaskView::All,
+        wire::AgendaTaskView::Logbook,
     ] {
         for project in [String::new(), "project-000001".to_owned()] {
-            asked.push(Q::TasksBoard(wire::TasksBoardRequest {
+            asked.push(Q::AgendaTaskBoard(wire::AgendaTaskBoardRequest {
                 tz: tz(),
                 limit: 100,
                 view: view as i32,
@@ -796,11 +854,11 @@ fn ask(handle: &centraid_core::Handle, query: Q) -> Result<(), String> {
 }
 
 /// Every wire query has an entry in [`requests`]: the names it asks are the names
-/// [`covers`] knows. The wire has 55 queries (`app_query.proto`'s `oneof query`);
+/// [`covers`] knows. The wire has 61 queries (`app_query.proto`'s `oneof query`);
 /// a new one is a compile error in [`covers`], and this count says it was also
 /// asked.
 #[test]
 fn the_sweep_asks_every_query_the_wire_has() {
     let asked: BTreeSet<&str> = requests("word").iter().map(covers).collect();
-    assert_eq!(asked.len(), 55, "{asked:?}");
+    assert_eq!(asked.len(), 61, "{asked:?}");
 }

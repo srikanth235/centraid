@@ -657,7 +657,7 @@ mod tests {
             .map(|n| Turn {
                 user: format!("question {n}"),
                 record: Recorded::Tool {
-                    call_json: r#"{"tool":"tasks.list","args":{}}"#.to_owned(),
+                    call_json: r#"{"tool":"agenda.task_list","args":{}}"#.to_owned(),
                     headline: "2 tasks".to_owned(),
                     answer: format!("answer {n}"),
                 },
@@ -675,7 +675,7 @@ mod tests {
             prompt.contains("answer 6"),
             "a stored read's words are shown"
         );
-        assert!(!prompt.contains("tasks.list"), "and its call is not");
+        assert!(!prompt.contains("agenda.task_list"), "and its call is not");
     }
 
     #[test]

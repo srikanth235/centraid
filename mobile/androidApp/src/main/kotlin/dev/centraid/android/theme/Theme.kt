@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import centraid.screen.v1.Money
+import dev.centraid.android.kit.Money
 import dev.centraid.android.R
 import dev.centraid.design.CentraidTokens
 import dev.centraid.design.NATIVE_TYPE_FACES
@@ -273,7 +273,7 @@ internal fun NativeTheme.color(role: String): Color = Color(
 public fun formatMoney(money: Money): String {
     if (money.currency.isEmpty()) return ""
     val exponent = money.exponent
-    // AN EMPTY LOCALE IS THE DEVICE'S, as on iOS (`Money.render`) and as
+    // AN EMPTY LOCALE IS THE DEVICE'S, as in the Rust formatter and as
     // the retired Tally reads said: "und" was the ROOT locale — no grouping a member
     // recognises and a bare currency sign — so the two shells drew one amount
     // two ways (`contracts/screens/money-render.json`).

@@ -59,10 +59,8 @@ test("binary extensions are skipped and text ones are not", () => {
   ]) {
     assert.equal(isScanned(file), true, file);
   }
-  // The golden corpus binaries and the screen fixtures are the reason `.gz`
-  // and `.bin` are on the list at all.
+  // The golden corpus binaries are the reason `.gz` is on the list.
   assert.equal(isScanned("contracts/golden/issue-929/vault.db.gz"), false);
-  assert.equal(isScanned("contracts/screens/home/content.bin"), false);
 });
 
 test("the allowlist is one named path, not a folder", () => {

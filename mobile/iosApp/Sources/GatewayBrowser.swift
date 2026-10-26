@@ -1,17 +1,14 @@
 import Foundation
 import Network
 
-import CentraidShared
-
 // THE iOS HALF OF Q-1080-D3: ASK THE LAN WHERE A GATEWAY WENT.
 //
-// `commonMain`'s `GatewayRediscovery` decides WHEN to browse (a foreground
-// pass found no paired gateway, at most once every 30 s), WHICH sighting is
-// which gateway (the TXT `gw`, never the instance name) and what the core
-// does with the answer (`refresh_destination` dials each offered address with
-// the pinned certificate and keeps only the ones that answer as that
-// gateway). This file is only the browse: `GatewayBrowser`'s one method,
-// over `NWBrowser`.
+// Rust decides WHEN to browse (the screen that asked, `BrowseGateways`), WHICH
+// sighting is which gateway (the TXT `gw`, never the instance name;
+// `crates/screens/src/pairing/matching.rs`) and what the core does with the
+// answer (`refresh_destination` dials each offered address with the pinned
+// certificate and keeps only the ones that answer as that gateway). This file
+// is only the browse: `GatewayBrowsing` performs the effect over `NWBrowser`.
 //
 // THE PHONE ONLY BROWSES. `NWBrowser` sends a multicast query and reads its
 // answers; nothing here is an `NWListener`, and nothing accepts a connection.
@@ -37,23 +34,23 @@ import CentraidShared
 // all a browse that found less, never one that hangs or raises.
 //
 // NOTHING HERE IS TRUSTED. An address in a sighting is what some machine on
-// the network said; `GatewayMatch.normalise` drops names, loopback,
+// the network said; Rust's `pairing::matching` drops names, loopback,
 // multicast and IPv6 link-local ones, and the core proves identity by the
 // pinned certificate and `/v2/info` before it keeps any.
 
 /// THE BROWSE'S PURE RULES — what a TXT record must carry to be worth a
-/// connection, and how a resolved endpoint is spelled for `GatewayMatch`.
+/// connection, and how a resolved endpoint is spelled for `pairing::matching`.
 enum GatewayBrowse {
-    /// The service type `serve` advertises (`GatewayMatch.SERVICE_TYPE`),
+    /// The service type `serve` advertises (Rust's `pairing::matching`),
     /// which `NSBonjourServices` must list or iOS refuses the browse.
     static let serviceType = "_centraid-gateway._tcp"
 
-    /// The TXT key carrying the gateway's id (`GatewayMatch.ID_KEY`).
+    /// The TXT key carrying the gateway's id (Rust's `pairing::matching`).
     static let idKey = "gw"
 
     /// Whether a TXT record claims an id at all. This is only the filter that
     /// decides what is worth connecting to; whether the id is the paired
-    /// gateway's is `GatewayMatch`'s, and whether the machine IS that gateway
+    /// gateway's is Rust's (`pairing::matching`), and whether the machine IS that gateway
     /// is the core's.
     static func claimsGateway(_ txt: [String: String]) -> Bool {
         txt.contains { key, value in
@@ -64,7 +61,7 @@ enum GatewayBrowse {
 
     /// `a.b.c.d:port` or `[v6]:port`, with an interface scope (`%en0`)
     /// removed, or nil for a host that is a name. A scoped link-local address
-    /// is spelled without its scope and so dropped by `GatewayMatch`, which is
+    /// is spelled without its scope and so dropped by `pairing::matching`, which is
     /// the rule: it cannot be dialled from an advertisement's own words.
     static func spelling(host: NWEndpoint.Host, port: NWEndpoint.Port) -> String? {
         switch host {
@@ -94,8 +91,7 @@ struct FoundService {
     var key: String { "\(endpoint)" }
 }
 
-/// One advertisement as resolved, the platform-neutral twin of the shared
-/// module's `GatewaySighting`.
+/// One advertisement as resolved: what a `GatewaySighting` carries to Rust.
 struct ResolvedService: Equatable {
     let serviceName: String
     let txt: [String: String]
@@ -289,21 +285,71 @@ final class ConnectionResolver: AddressResolver {
     }
 }
 
-/// THE KOTLIN-VISIBLE HALF: `GatewayBrowser` is `commonMain`'s interface
-/// (`sync/GatewayDiscovery.kt`) and this is its iOS implementation, installed
-/// once through `HomeBridge.installGatewayBrowser` (`ShellModel.init`).
-final class BonjourGatewayBrowser: NSObject, GatewayBrowser {
-    func browse(windowMs: Int64, done: @escaping ([GatewaySighting]) -> Void) {
+// MARK: - the `BrowseGateways` effect
+
+/// THE PERFORMER OF `BrowseGateways` (#1135). `on: true` starts a browse for the
+/// screen that asked and keeps it going until `on: false` or that screen is
+/// closed: one window of `window_ms`, answered as `GatewaysSighted` with
+/// everything it resolved, then again every `repeat_ms` (0: once). A window that
+/// finds nothing is an empty answer. The window, the cadence and what the
+/// sightings mean are Rust's; this runs the browse and reports.
+@MainActor
+final class GatewayBrowsing {
+    static let shared = GatewayBrowsing()
+
+    /// One screen's browse; `ended` stops its next window.
+    private final class Session {
+        var ended = false
+    }
+
+    private var sessions: [UInt64: Session] = [:]
+
+    func perform(
+        _ instance: UInt64,
+        _ browse: Centraid_Core_V1_BrowseGateways,
+        answer: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
+    ) {
+        stop(instance)
+        guard browse.on else {
+            answer(.done(Centraid_Core_V1_EffectDone()))
+            return
+        }
+        let session = Session()
+        sessions[instance] = session
+        window(session, browse, answer)
+    }
+
+    func stop(_ instance: UInt64) {
+        sessions.removeValue(forKey: instance)?.ended = true
+    }
+
+    private func window(
+        _ session: Session,
+        _ browse: Centraid_Core_V1_BrowseGateways,
+        _ answer: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
+    ) {
         let run = GatewayBrowseRun(
             finder: NWServiceFinder(),
             resolver: ConnectionResolver(),
-            window: TimeInterval(max(windowMs, 0)) / 1000
+            window: TimeInterval(browse.windowMs) / 1000
         ) { found in
-            let sightings = found.map {
-                GatewaySighting(serviceName: $0.serviceName, txt: $0.txt, addresses: $0.addresses)
+            DispatchQueue.main.async {
+                guard !session.ended else { return }
+                var sighted = Centraid_Core_V1_GatewaysSighted()
+                sighted.sightings = found.map { service in
+                    var sighting = Centraid_Core_V1_GatewaySighting()
+                    sighting.serviceName = service.serviceName
+                    sighting.txt = service.txt
+                    sighting.addresses = service.addresses
+                    return sighting
+                }
+                answer(.gatewaysSighted(sighted))
+                guard browse.repeatMs > 0 else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(browse.repeatMs))) {
+                    guard !session.ended else { return }
+                    GatewayBrowsing.shared.window(session, browse, answer)
+                }
             }
-            // On the main queue, as every shell callback into Kotlin is.
-            DispatchQueue.main.async { done(sightings) }
         }
         run.start()
     }

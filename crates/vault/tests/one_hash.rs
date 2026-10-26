@@ -104,6 +104,19 @@ const SHA256_ALLOWED: &[(&str, &str)] = &[
          agree with ourselves; the RFC's bytes are the point of the file (W0.5-R1)",
     ),
     (
+        "screens/src/chat/asset.rs",
+        "the digest of the two model files the chat downloads is SHA-256 because \
+         that is what their publisher states for them (Hugging Face's LFS object \
+         id): the value is someone else's, checked against the bytes that arrived. \
+         It names nothing inside a vault, and no digest Centraid defines for itself \
+         is SHA-256",
+    ),
+    (
+        "screens/src/chat/model.rs",
+        "carries `ModelDownload.sha256` from `asset.rs` to the shell, which hashes \
+         the file that arrived; same reason as `asset.rs`",
+    ),
+    (
         "xtask/src/artifact.rs",
         "`cargo xtask artifact-key` hashes the tree into a GitHub Actions cache \
          key. It names nothing inside a vault and GitHub's cache is not ours",

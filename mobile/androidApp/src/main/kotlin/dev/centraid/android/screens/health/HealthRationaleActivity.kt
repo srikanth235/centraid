@@ -1,50 +1,34 @@
 package dev.centraid.android.screens.health
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.ui.Modifier
-import centraid.screen.v1.HealthConnectEvent
-import dev.centraid.android.kit.AndroidHealth
-import dev.centraid.android.kit.PushedPage
-import dev.centraid.android.theme.CentraidTheme
-import dev.centraid.android.theme.centraidColor
-import dev.centraid.shared.apps.health.HealthConnectMachine
-import dev.centraid.shared.apps.health.HealthDevices
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import dev.centraid.android.MainActivity
 
 /**
- * "WHAT HEALTH MAY READ", FOR HEALTH CONNECT (#1129). Health Connect lists an app's permissions
- * only when the app says where its rationale lives; the manifest points both the Android 13 action
- * and the Android 14 permission-usage alias here. It draws Health's own words — the Connect
- * machine's lede and its list of types, folded from the phone's facts with no vault and no read —
- * and does nothing else: no switch, no button, nothing asked of the OS.
+ * "WHAT HEALTH MAY READ", FOR HEALTH CONNECT (#1129, #1135). Health Connect lists an app's
+ * permissions only when the app says where its rationale lives; the manifest points both the
+ * Android 13 action and the Android 14 permission-usage alias here. Health's words are Rust's
+ * (`health.connect`: the lede and the list of types), so this draws none of its own: it asks the
+ * app to open that page ([HealthRationale.requested], taken by `RustRoot`) and comes forward.
+ * Nothing is asked of the OS until the member taps Connect there.
  */
 public class HealthRationaleActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        AndroidHealth(this).state()
-        val state = HealthConnectMachine.reduce(
-            HealthConnectMachine.initial(),
-            HealthConnectEvent(opened = HealthConnectEvent.Opened(parent = "", device = HealthDevices.current)),
-        ).state
-        setContent {
-            CentraidTheme {
-                Box(Modifier.fillMaxSize().background(centraidColor("bg")).safeDrawingPadding()) {
-                    PushedPage(
-                        title = state.choices_title,
-                        parentTitle = state.chrome?.back_label.orEmpty(),
-                        onBack = ::finish,
-                    ) {
-                        HealthReads(state)
-                    }
-                }
-            }
-        }
+        HealthRationale.requested = true
+        startActivity(
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        )
+        finish()
     }
+}
+
+/** A request for Health's Connect page from outside the app, until the host takes it. */
+internal object HealthRationale {
+    /** Read by composition; set by [HealthRationaleActivity]. */
+    var requested: Boolean by mutableStateOf(false)
 }

@@ -163,17 +163,15 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         step("osv", run_osv),
         step("release-build", run_release_build),
         step("ts-static", run_ts_static),
-        // THE THREE TREES NO `changes` FILTER CLAIMED (#1020, close pass,
-        // D-1020-CL7). `copy/`, `design/` and `mobile/`'s Kotlin copy table are
-        // GENERATED, and until this step existed the only thing that
-        // regenerated them was `mobile-jvm` — which D-1020-B2-3 keeps out of
-        // `pr` because it is a second toolchain with a 420 s cold cost. So an
-        // edit to a `*-copy.ts` leaf or a `packages/design` token shipped a
-        // committed artifact nobody re-derived, and `lint:path-filters` reported
-        // all three as claimed by nothing: `skipped` counts as a PASS in
-        // ci.yml's `check`, so such a change merged green and unexercised.
-        // Two bun scripts and a clean-tree assertion — the shape `mobile-jvm`
-        // already uses, on the profile that actually runs on a pull request.
+        // THE GENERATED TREES NO `changes` FILTER CLAIMED (#1020, close pass,
+        // D-1020-CL7). `design/` and the shells' design tables (Tokens, Catalog
+        // and the kit's words, Kotlin and Swift, #1135) are GENERATED, and the
+        // only other step that regenerates them is `mobile-jvm` — which
+        // D-1020-B2-3 keeps out of `pr` because it is a second toolchain with a
+        // 420 s cold cost. Without this a `packages/design` token or a
+        // `strings/shared.rs` word shipped a committed artifact nobody
+        // re-derived, merged green and unexercised. Two bun scripts and a
+        // clean-tree assertion, on the profile that runs on a pull request.
         step("emitters", run_emitters),
         // NO DESKTOP OR EXTENSION STEPS: the only shell is mobile, and there is
         // no desktop shell and no browser extension (#1029 §6, R-1047-D3).
@@ -370,11 +368,12 @@ fn has_linked_artifact(names: &[String], member: &str) -> bool {
 ///      (R-CHAT-10). The cdylib reports a model file as `NO_ENGINE`, which
 ///      `AssistRoundTripSpec` accepts; the engine-wired answer is asserted in
 ///      Rust by the `engine` job in `gate.yml`.
-///   2. `./gradlew mobileJvm` = `:shared:jvmTest :core:jvmTest
-///      :shared:koverXmlReport`.
-///   3. The generated-artifact drift check. The token table, the copy tables
-///      and the screen fixtures are all emitted and committed; one emitter, N
-///      committed artifacts, one lint that fails on drift.
+///   2. `./gradlew mobileJvm` = `:core:jvmTest`, the JVM binding's specs.
+///      Screen behaviour is pinned by Rust's `Driver` tests, `cargo xtask
+///      rules` and `packages/design`'s `native-emission.test.ts`.
+///   3. The generated-artifact drift check. The token table, the catalogue,
+///      the kit's words are all emitted and committed;
+///      one emitter, N committed artifacts, one lint that fails on drift.
 ///
 /// WHAT THIS STEP DOES NOT DO, and says so rather than skipping quietly: it
 /// does not compile Compose, does not link Kotlin/Native, does not run a
@@ -418,20 +417,19 @@ fn run_mobile_jvm(ctx: &Ctx) -> Result<Outcome> {
     // THE DRIFT CHECK. `bun` is already a gate dependency (`ts-static`), and
     // the check is a regeneration followed by a clean-tree assertion, which is
     // the same shape `lint:site-tokens` uses for the CSS side.
-    for emitter in [
-        "contracts/tools/export-native-theme.ts",
-        "contracts/tools/build-screen-fixtures.ts",
-    ] {
-        let emitted = process(ctx, "mobile-jvm", "bun", &[emitter])?;
-        if !matches!(emitted, Outcome::Ok(_)) {
-            return Ok(emitted);
-        }
+    let emitted = process(
+        ctx,
+        "mobile-jvm",
+        "bun",
+        &["contracts/tools/export-native-theme.ts"],
+    )?;
+    if !matches!(emitted, Outcome::Ok(_)) {
+        return Ok(emitted);
     }
     // THEN FORMAT, because the committed artifacts are formatted and the
     // emitters do not format. Without this the check fails on every run over a
-    // clean tree — a copy leaf's `functions` array is one line from
-    // `JSON.stringify` and three from oxfmt — which is a drift check that
-    // reports drift that is not there, and a gate nobody believes is a gate
+    // clean tree — a JSON array is one line from `JSON.stringify` and three
+    // from oxfmt — which is a drift check that reports drift that is not there, and a gate nobody believes is a gate
     // nobody reads (#1020 wave 3 lane X3). JSON and YAML in this repository are
     // oxfmt-owned, so the emitter's output is not the committed form until this
     // has run.
@@ -439,18 +437,13 @@ fn run_mobile_jvm(ctx: &Ctx) -> Result<Outcome> {
     if !matches!(formatted, Outcome::Ok(_)) {
         return Ok(formatted);
     }
-    assert_clean_tree(
-        ctx,
-        "mobile-jvm",
-        &["design", "copy", "mobile", "contracts/screens"],
-    )
+    assert_clean_tree(ctx, "mobile-jvm", &["design", "mobile"])
 }
 
 /// `emitters` — the generated trees, regenerated and asserted clean.
 ///
-/// `mobile-jvm` runs the OTHER two emitters (`contracts/screens`) and diffs the
-/// same trees; this step is the half that costs no Gradle, so it can sit on the
-/// per-PR profile. The two overlap on purpose: a drift check that only exists
+/// `mobile-jvm` diffs the same trees after its own emitters; this step is the
+/// half that costs no Gradle, so it can sit on the per-PR profile. The two overlap on purpose: a drift check that only exists
 /// in a nightly profile is a drift check that reports a day late.
 fn run_emitters(ctx: &Ctx) -> Result<Outcome> {
     for emitter in [
@@ -469,7 +462,7 @@ fn run_emitters(ctx: &Ctx) -> Result<Outcome> {
     if !matches!(formatted, Outcome::Ok(_)) {
         return Ok(formatted);
     }
-    assert_clean_tree(ctx, "emitters", &["copy", "design", "mobile"])
+    assert_clean_tree(ctx, "emitters", &["design", "mobile"])
 }
 
 /// THE CLEAN-TREE ASSERTION BOTH DRIFT CHECKS END WITH: nothing under `paths`
@@ -1367,7 +1360,24 @@ fn run_buf(ctx: &Ctx) -> Result<Outcome> {
 
     let mut empty_bases = 0usize;
     for base in &against {
-        let outcome = process(ctx, "buf", "buf", &["breaking", "--against", base])?;
+        // THE BASE IS READ UNDER TODAY'S MODULE LAYOUT (`--against-config`): a
+        // base whose `buf.yaml` split the tree into a different number of
+        // modules cannot be paired image for image, and buf refuses the
+        // comparison outright. The rules are the same WIRE_JSON either way;
+        // only the module boundaries are taken from this commit (#1135, when
+        // `centraid.screen.v1` and its second module were deleted).
+        let outcome = process(
+            ctx,
+            "buf",
+            "buf",
+            &[
+                "breaking",
+                "--against",
+                base,
+                "--against-config",
+                "buf.yaml",
+            ],
+        )?;
         if let Outcome::Failed(detail) = outcome {
             if base_carries_no_schema(ctx, "buf") {
                 empty_bases += 1;

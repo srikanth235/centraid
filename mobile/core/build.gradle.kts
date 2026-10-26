@@ -139,8 +139,7 @@ kotlin {
 // workspace"). `crates/api-proto/proto` is read in place — a copy under
 // `mobile/` would be a second schema with a second `buf` verdict.
 //
-// `:core` generates `centraid.core.v1` only. `:shared` generates
-// `centraid.screen.v1` and depends on this module for the core types, so no
+// `:core` generates `centraid.core.v1` and is the only module that does, so no
 // message is generated twice (two Wire adapters for one message is a decode
 // that succeeds and an `equals` that does not).
 wire {
@@ -213,8 +212,7 @@ tasks.withType<Test>().configureEach {
     )
     // BOTH ARE FILES A SPEC OPENS, SO BOTH ARE INPUTS: a change to the header or
     // to `identity.rs` alone must re-run the specs that compare against them
-    // (`mobile/shared/build.gradle.kts` says why a read that is not an input
-    // passes on yesterday's tree).
+    // (a read that is not an input passes on yesterday's tree).
     inputs.file(repositoryRoot.resolve("crates/core-ffi/include/centraid.h"))
         .withPropertyName("abiHeader")
         .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.NONE)

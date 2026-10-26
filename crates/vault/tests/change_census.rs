@@ -138,3 +138,72 @@ fn a_rollback_reports_nothing_and_does_not_leak_into_the_next_commit() {
         after.tables
     );
 }
+
+/// A TABLE DECLARED `WITHOUT ROWID` IS STILL A TABLE A SCREEN READS. SQLite's `update_hook` never
+/// fires for one, so a commit that wrote only `measurement` (Health's `record-days`) reported an
+/// empty census and no screen redrew (#1135).
+#[test]
+fn a_commit_that_writes_a_without_rowid_table_reports_it() {
+    let scratch = common::Scratch::founded("census-without-rowid").expect("a vault is founded");
+    scratch
+        .vault
+        .commit(|tx| {
+            common::add_person(tx, "p-days", "Days", "2026-01-01T00:00:00.000Z")?;
+            Ok(())
+        })
+        .expect("a person lands");
+
+    let outcome = scratch
+        .vault
+        .commit(|tx| {
+            tx.connection().execute(
+                "INSERT INTO measurement (person_id, day, metric, value)
+                 VALUES ('p-days', '2026-01-01', 'steps', 8000)",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("the measurement lands");
+    assert_eq!(outcome.tables, vec!["measurement".to_owned()]);
+    assert_eq!(outcome.rows, 1);
+
+    // An update and a delete are changes too, and the next commit starts from empty.
+    let changed = scratch
+        .vault
+        .commit(|tx| {
+            tx.connection().execute(
+                "UPDATE measurement SET value = 9000 WHERE person_id = 'p-days'",
+                [],
+            )?;
+            tx.connection()
+                .execute("DELETE FROM measurement WHERE person_id = 'p-days'", [])?;
+            Ok(())
+        })
+        .expect("the measurement changes");
+    assert_eq!(changed.tables, vec!["measurement".to_owned()]);
+    assert_eq!(changed.rows, 2);
+
+    // A rollback leaves nothing for the next commit to report.
+    let refusal = scratch.vault.commit(|tx| {
+        tx.connection().execute(
+            "INSERT INTO measurement (person_id, day, metric, value)
+             VALUES ('p-days', '2026-01-02', 'steps', 1)",
+            [],
+        )?;
+        Err::<(), _>(centraid_vault::VaultError::Invariant {
+            context: "the body refuses after writing".to_owned(),
+        })
+    });
+    assert!(refusal.is_err());
+    let after = scratch
+        .vault
+        .commit(|tx| {
+            tx.connection().execute(
+                "INSERT INTO locker_key (key_id, created_at) VALUES ('after', '2026-01-01T00:00:00.000Z')",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("the vault still works");
+    assert_eq!(after.tables, vec!["locker_key".to_owned()]);
+}

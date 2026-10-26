@@ -1,11 +1,9 @@
 import SwiftUI
 
-import CentraidShared
-
 /// ONE CELL RENDERER, FOR EVERY SURFACE THAT DRAWS PHOTOGRAPHS.
 ///
 /// The library grid, a shelf, the picker and search hits all draw the same
-/// `PhotoCell` from the same page read: the same square ground, the same two
+/// `PhotoTile` the core finished: the same square ground, the same two
 /// empty-cell sentences, the same held overlay and the same download arrow.
 /// v0 wrote that four times (`PhotoTile.tsx`, `AlbumDetail.tsx`,
 /// `PhotoStateView.tsx`, `PhotosSearch.tsx`) and they drifted — only one of
@@ -14,15 +12,11 @@ import CentraidShared
 /// did not have.
 ///
 /// **It takes the WIRE TYPE and not a view model.** Every screen's data case
-/// carries `repeated PhotoCell`, so a per-screen struct in between would be a
+/// carries `repeated PhotoTile`, so a per-screen struct in between would be a
 /// second decode of a message that is already decoded, and a fifth place for
 /// the held derivation to be spelled differently.
 struct PhotoCellsGrid: View {
-    let cells: [Centraid_Screen_V1_PhotoCell]
-    /// TWO DIFFERENT EMPTY-CELL SENTENCES (`docs/mobile-offline.md:224`). A
-    /// member with no thumbnail pack and a member whose pack has evicted these
-    /// must not read the same words.
-    let packAbsent: Bool
+    let cells: [Centraid_Core_V1_PhotoTile]
     /// The member's selection, when this surface has one.
     var selected: Set<String> = []
     /// Assets this surface cannot pick because they are already where the pick
@@ -30,6 +24,8 @@ struct PhotoCellsGrid: View {
     /// a photograph they added last week should find it, and find out why it
     /// will not tick.
     var taken: Set<String> = []
+    /// What a taken cell is spoken as, Rust's ("Already in this album").
+    var takenLabel = ""
     var minimumCell: CGFloat = 96
     var onTap: ((String) -> Void)?
     /// The download arrow. Both ids, because they answer different questions:
@@ -38,12 +34,12 @@ struct PhotoCellsGrid: View {
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: minimumCell), spacing: 2)], spacing: 2) {
-            ForEach(cells, id: \.assetID) { cell in
+            ForEach(cells, id: \.photoID) { cell in
                 PhotoCellSquare(
                     cell: cell,
-                    packAbsent: packAbsent,
-                    isSelected: selected.contains(cell.assetID),
-                    isTaken: taken.contains(cell.assetID),
+                    isSelected: selected.contains(cell.photoID),
+                    isTaken: taken.contains(cell.photoID),
+                    takenLabel: takenLabel,
                     onTap: onTap,
                     onFetch: onFetch
                 )
@@ -57,10 +53,10 @@ struct PhotoCellsGrid: View {
 /// frame, so an image asked for its own size would otherwise grow the row.
 struct PhotoCellSquare: View {
     @Environment(\.colorScheme) private var scheme
-    let cell: Centraid_Screen_V1_PhotoCell
-    let packAbsent: Bool
+    let cell: Centraid_Core_V1_PhotoTile
     var isSelected = false
     var isTaken = false
+    var takenLabel = ""
     var onTap: ((String) -> Void)?
     var onFetch: ((String, String) -> Void)?
 
@@ -68,7 +64,7 @@ struct PhotoCellSquare: View {
         cell.hasThumbnailPath && !cell.thumbnailPath.isEmpty ? cell.thumbnailPath : nil
     }
 
-    private var label: String { PhotoCellLabel.of(cell, packAbsent: packAbsent) }
+    private var label: String { cell.accessibilityLabel }
 
     var body: some View {
         Theme.color("skel", scheme)
@@ -94,7 +90,7 @@ struct PhotoCellSquare: View {
                 // putting it" — so the taken dot is the muted ink.
                 if isTaken {
                     PhotoSelectionDot(selected: true, muted: true)
-                        .accessibilityLabel(PhotosCopy.shared.PHOTOS_ALREADY_IN_ALBUM)
+                        .accessibilityLabel(takenLabel)
                 } else if isSelected {
                     PhotoSelectionDot(selected: true)
                 }
@@ -103,9 +99,9 @@ struct PhotoCellSquare: View {
             .clipped()
             .opacity(isTaken ? 0.45 : 1)
             .contentShape(Rectangle())
-            .onTapGesture { if !isTaken { onTap?(cell.assetID) } }
+            .onTapGesture { if !isTaken { onTap?(cell.photoID) } }
             .accessibilityElement(children: .combine)
-            .accessibilityIdentifier(path ?? "photos.cell.\(cell.assetID)")
+            .accessibilityIdentifier(path ?? "photos.cell.\(cell.photoID)")
             .accessibilityLabel(label)
             .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : [.isButton])
     }
@@ -114,7 +110,7 @@ struct PhotoCellSquare: View {
 /// ONE TILE OF THE JUSTIFIED TIMELINE (v0's `PhotoTile.tsx`, #1029 photos port).
 ///
 /// Its box is fixed from the asset record before a byte arrives — `width` and
-/// `height` come from shared's `PhotoJustify` — and every state paints INSIDE it, so
+/// `height` come from Rust's packing (`PhotosPackedTile`) — and every state paints INSIDE it, so
 /// nothing reflows when a thumbnail lands. Four overlay slots and nothing else
 /// (v0's `tile-overlays.ts`): selection top-trailing, kind bottom-trailing, and
 /// the held state bottom-leading. The fourth, v0's vault rule, marked a
@@ -123,7 +119,7 @@ struct PhotoCellSquare: View {
 /// mark would say nothing.
 struct PhotoTile: View {
     @Environment(\.colorScheme) private var scheme
-    let cell: Centraid_Screen_V1_PhotoCell
+    let cell: Centraid_Core_V1_PhotoTile
     let width: CGFloat
     let height: CGFloat
     let rung: Int
@@ -162,25 +158,10 @@ struct PhotoTile: View {
             .onTapGesture(perform: onTap)
             .onLongPressGesture(minimumDuration: 0.35) { onLongPress?() }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(PhotoCellLabel.of(cell, packAbsent: false))
+            .accessibilityLabel(cell.accessibilityLabel)
             .accessibilityAddTraits(selected ? [.isImage, .isButton, .isSelected] : [.isImage, .isButton])
-            .accessibilityAction(named: selecting ? PhotosCopy.shared.PHOTOS_SELECT : PhotosCopy.shared.PHOTOS_OPEN, onTap)
-            .accessibilityIdentifier(path ?? "photos.tile.\(cell.assetID)")
-    }
-}
-
-/// A GRID CELL IS AN IMAGE-ONLY CONTROL, so it carries a description even when
-/// the image is missing — which is when it matters most. A video and a live
-/// photograph say so, because that is what changes what a tap does.
-enum PhotoCellLabel {
-    static func of(_ cell: Centraid_Screen_V1_PhotoCell, packAbsent: Bool) -> String {
-        let noun = cell.live
-            ? PhotosCopy.shared.PHOTOS_CELL_LIVE
-            : (cell.kind == .video ? PhotosCopy.shared.PHOTOS_CELL_VIDEO : PhotosCopy.shared.PHOTOGRAPH)
-        if cell.hasThumbnailPath && !cell.thumbnailPath.isEmpty { return noun }
-        return packAbsent
-            ? copyFill(PhotosCopy.shared.PHOTOS_CELL_NOT_DOWNLOADED, "noun", noun)
-            : copyFill(PhotosCopy.shared.PHOTOS_CELL_PREVIEW_GONE, "noun", noun)
+            .accessibilityAction(named: selecting ? KitWords.SELECT : KitWords.OPEN, onTap)
+            .accessibilityIdentifier(path ?? "photos.tile.\(cell.photoID)")
     }
 }
 
@@ -196,12 +177,12 @@ enum PhotoCellLabel {
 /// tile's own chip — v0's state slot, one quiet mono line on the page colour.
 struct PhotoHeldMark: View {
     @Environment(\.colorScheme) private var scheme
-    let cell: Centraid_Screen_V1_PhotoCell
+    let cell: Centraid_Core_V1_PhotoTile
     var onFetch: ((String, String) -> Void)?
 
     var body: some View {
         if cell.held == .fetching {
-            Text(PhotosCopy.shared.PHOTOS_CELL_DOWNLOADING_MARK)
+            Text(cell.heldLabel)
                 .centraidType("mono")
                 .foregroundStyle(Theme.color("textFaint", scheme))
                 .lineLimit(1)
@@ -209,11 +190,11 @@ struct PhotoHeldMark: View {
                 .padding(.vertical, 1)
                 .background(Theme.color("bg", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)))
                 .padding(4)
-                .accessibilityIdentifier("photos.cell.fetching.\(cell.assetID)")
-                .accessibilityLabel(PhotosCopy.shared.PHOTOS_CELL_DOWNLOADING)
-        } else if cell.held == .withheldByRule, !cell.originalHash.isEmpty, let onFetch {
+                .accessibilityIdentifier("photos.cell.fetching.\(cell.photoID)")
+                .accessibilityLabel(cell.accessibilityLabel)
+        } else if cell.held == .withheldByRule, !cell.contentID.isEmpty, let onFetch {
             Button {
-                onFetch(cell.assetID, cell.originalHash)
+                onFetch(cell.photoID, cell.contentID)
             } label: {
                 CentraidIconView(iconKey: "Download", tint: Theme.color("text", scheme), size: 14)
                     .padding(3)
@@ -229,8 +210,8 @@ struct PhotoHeldMark: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityIdentifier("photos.cell.download.\(cell.assetID)")
-            .accessibilityLabel(PhotosCopy.shared.PHOTOS_CELL_DOWNLOAD_FULL)
+            .accessibilityIdentifier("photos.cell.download.\(cell.photoID)")
+            .accessibilityLabel(cell.heldLabel)
         }
     }
 }
@@ -267,15 +248,15 @@ struct PhotoSelectionDot: View {
 /// with the catalog's play mark, because that is what changes what a tap does.
 struct PhotoKindLine: View {
     @Environment(\.colorScheme) private var scheme
-    let cell: Centraid_Screen_V1_PhotoCell
+    let cell: Centraid_Core_V1_PhotoTile
     let rung: Int
 
     /// v0's `KIND_MIN_RUNG`: S.
     static let minimumRung = 1
 
     private var text: String? {
-        if cell.live { return PhotosCopy.shared.PHOTOS_CELL_LIVE_MARK }
-        if cell.kind == .video, cell.durationSeconds > 0 { return PhotoTileMetrics.clock(Int(cell.durationSeconds)) }
+        if cell.live { return cell.liveLabel }
+        if cell.kind == .video, cell.durationSeconds > 0 { return cell.durationLabel }
         return nil
     }
 
@@ -302,62 +283,34 @@ struct PhotoKindLine: View {
     }
 }
 
-/// The tile's measures, v0's (`tile-overlays.ts`, `justify.ts`). The rungs and
-/// the gutter are shared's (`PhotosTimeline`, `PhotoJustify`), read across the
-/// bridge so both shells step through one table; the dot and outline are the
-/// tile's own paint.
+/// The tile's measures, v0's (`tile-overlays.ts`). The gutter is Rust's
+/// (`photos::home::layout::GAP`), which also packs the rows; the dot and outline
+/// are the tile's own paint.
 enum PhotoTileMetrics {
     /// The gutter between tiles, both axes — the 4 base rung halved.
-    static let gap = CGFloat(PhotoJustify.shared.GAP)
+    static let gap: CGFloat = 2
     static let dot: CGFloat = 20
     static let dotInset: CGFloat = 6
     static let outline: CGFloat = 2
-    /// The phone's tile heights, XS to L.
-    static let rungHeights: [CGFloat] = PhotosTimeline.shared.RUNG_HEIGHTS.map { CGFloat($0.intValue) }
-
-    static func height(rung: Int) -> CGFloat {
-        rungHeights[Int(PhotosTimeline.shared.clampRung(rung: Int32(rung)))]
-    }
-
-    /// `1:04`, `12:07`, `1:02:03` — the shared `MediaFormat`'s, so a tile, the
-    /// player and the facts panel state one recording's length the same way.
-    static func clock(_ seconds: Int) -> String {
-        MediaFormat.shared.clock(seconds: Int64(seconds))
-    }
-}
-
-/// A tile's packed box: the cell, and where shared's `PhotoJustify` put its
-/// edges. The packing is Kotlin's — it names tiles by index, and this puts the
-/// cell back under each.
-struct JustifiedTile {
-    let cell: Centraid_Screen_V1_PhotoCell
-    let width: CGFloat
-    let height: CGFloat
 }
 
 /// THE GRID IS THE LOADING STATE (v0's `PhotosGridSkeleton.tsx`, §14).
 ///
-/// Skeleton tiles at the rung's own geometry, packed by the same
-/// `PhotoJustify`, so the photographs land where their placeholders stood. The
+/// Skeleton tiles at the rung's own geometry, packed by Rust at the width the
+/// shell reported, so the photographs land where their placeholders stood. The
 /// aspect sequence is FIXED — random aspects would flicker — and nothing moves:
 /// DESIGN.md's `Loading` is static skeletons, and a shimmer is
-/// attention-seeking about work the product can simply describe. The rows are
-/// shared's (`PhotoJustify.skeleton`).
+/// attention-seeking about work the product can simply describe.
 struct PhotoGridSkeleton: View {
     @Environment(\.colorScheme) private var scheme
-    let width: CGFloat
-    let target: CGFloat
-    var viewport: CGFloat = 800
-
-    private var rows: [[PackedTile]] {
-        PhotoJustify.shared.skeleton(containerWidth: Double(width), targetHeight: Double(target), viewportHeight: Double(viewport))
-    }
+    let rows: [Centraid_Core_V1_PhotosPackedRow]
+    let label: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: PhotoTileMetrics.gap) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 HStack(spacing: PhotoTileMetrics.gap) {
-                    ForEach(row, id: \.index) { tile in
+                    ForEach(Array(row.packed.enumerated()), id: \.offset) { _, tile in
                         RoundedRectangle(cornerRadius: Theme.radius("sm", scheme))
                             .fill(Theme.color("skel", scheme))
                             .frame(width: CGFloat(tile.width), height: CGFloat(tile.height))
@@ -366,7 +319,7 @@ struct PhotoGridSkeleton: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(PhotosCopy.shared.PHOTOS_OPENING_LIBRARY)
+        .accessibilityLabel(label)
     }
 }
 

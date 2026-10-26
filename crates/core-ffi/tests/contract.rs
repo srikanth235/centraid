@@ -663,8 +663,8 @@ fn a_rust_panic_never_crosses_the_boundary() {
 /// Every other clause-9 assertion drives `Handle::poison` directly, which is a
 /// Rust-side call no shell can make — so nothing proved that the real library
 /// produces what `mobile/core`'s fake ABI produces. The `debug-fault` feature
-/// makes a `Command` named `debug.panic` panic inside `Handle::call`; it rides
-/// an existing request rather than a sixth symbol, and it is never on in a
+/// makes an `act` on `debug`/`panic` panic inside `Handle::call`; it rides an
+/// existing request rather than a sixth symbol, and it is never on in a
 /// release. Run it with:
 ///
 /// ```text
@@ -677,10 +677,12 @@ fn a_real_panic_inside_call_poisons_the_handle_through_the_abi() {
     let opened = Opened::gateway();
     let fault = envelope(
         1,
-        wire::request::Kind::Command(wire::Command {
-            name: centraid_core::handle::DEBUG_FAULT_COMMAND.to_owned(),
+        wire::request::Kind::Act(Box::new(wire::ActRequest {
+            app: centraid_core::handle::DEBUG_FAULT_APP.to_owned(),
+            action: centraid_core::handle::DEBUG_FAULT_ACTION.to_owned(),
+            invoke_key: "debug-fault".to_owned(),
             ..Default::default()
-        }),
+        })),
     );
 
     // The panic crosses `catch_unwind` and comes back as a CODE, not as an
@@ -717,11 +719,11 @@ fn a_real_panic_inside_call_poisons_the_handle_through_the_abi() {
     }
 }
 
-/// WITHOUT the feature, the fault command is just an unknown command.
+/// WITHOUT the feature, the fault act is just an act on an unknown app.
 ///
 /// The door has to be absent from a default build, and "absent" has to be
 /// checked rather than asserted in a comment: a build that answered
-/// `debug.panic` with a panic because someone left the feature on a default
+/// `debug`/`panic` with a panic because someone left the feature on a default
 /// list would be a release that can be crashed by a request.
 #[cfg(not(feature = "debug-fault"))]
 #[test]
@@ -729,10 +731,12 @@ fn the_fault_door_is_absent_from_a_default_build() {
     let opened = Opened::gateway();
     let fault = envelope(
         1,
-        wire::request::Kind::Command(wire::Command {
-            name: centraid_core::handle::DEBUG_FAULT_COMMAND.to_owned(),
+        wire::request::Kind::Act(Box::new(wire::ActRequest {
+            app: centraid_core::handle::DEBUG_FAULT_APP.to_owned(),
+            action: centraid_core::handle::DEBUG_FAULT_ACTION.to_owned(),
+            invoke_key: "debug-fault".to_owned(),
             ..Default::default()
-        }),
+        })),
     );
     let (code, bytes) = call(opened.handle, &fault);
     assert_ne!(code, CENTRAID_PANICKED, "no panic door in a default build");
@@ -741,7 +745,7 @@ fn the_fault_door_is_absent_from_a_default_build() {
         assert_ne!(
             error.code,
             wire::ErrorCode::Internal as i32,
-            "an unregistered command is a request error, not a crash"
+            "an unknown app is a request error, not a crash"
         );
     }
 }
@@ -1169,20 +1173,29 @@ fn the_app_queries_round_trip_through_call() {
         opened.handle,
         &envelope(
             42,
-            wire::request::Kind::Command(wire::Command {
-                name: "event.propose".to_owned(),
-                input: serde_json::to_vec(&serde_json::json!({
-                    "title": "Morning run",
-                    "starts": "2099-06-01T07:00:00",
-                    "ends": "2099-06-01T08:00:00",
-                    "timing": "floating",
-                    "calendar_id": calendar_id,
-                    "rule": "FREQ=WEEKLY",
-                }))
-                .expect("json"),
+            wire::request::Kind::Act(Box::new(wire::ActRequest {
+                app: "agenda".to_owned(),
+                action: "propose".to_owned(),
+                input: [
+                    ("title", "Morning run"),
+                    ("starts", "2099-06-01T07:00:00"),
+                    ("ends", "2099-06-01T08:00:00"),
+                    ("timing", "floating"),
+                    ("calendar_id", calendar_id.as_str()),
+                    ("rule", "FREQ=WEEKLY"),
+                ]
+                .into_iter()
+                .map(|(name, text)| {
+                    (
+                        name.to_owned(),
+                        wire::Value {
+                            kind: Some(wire::value::Kind::Text(text.to_owned())),
+                        },
+                    )
+                })
+                .collect(),
                 invoke_key: "contract-4e".to_owned(),
-                ..wire::Command::default()
-            }),
+            })),
         ),
     );
     assert_eq!(code, CENTRAID_OK, "the series is written");

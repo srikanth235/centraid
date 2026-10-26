@@ -1,13 +1,14 @@
 package dev.centraid.core
 
-import centraid.core.v1.Command
+import centraid.core.v1.ActRequest
+import centraid.core.v1.ActStatus
 import centraid.core.v1.Envelope
 import centraid.core.v1.PageOrder
 import centraid.core.v1.PageQuery
 import centraid.core.v1.PageRequest
-import centraid.core.v1.Principal
-import centraid.core.v1.PrincipalKind
 import centraid.core.v1.Request
+import centraid.core.v1.Value
+import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.longs.shouldBeGreaterThan
@@ -16,7 +17,6 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.Dispatchers
-import okio.ByteString.Companion.toByteString
 import java.io.File
 import kotlin.time.TimeSource
 
@@ -35,9 +35,9 @@ import kotlin.time.TimeSource
  * seeded from them at three times the measured p95, and the device half is an
  * owner hand-off (`mobile/README.md`).
  *
- * The two screens' read messages are the ones the state machines in `:shared`
- * actually send, so the budget is over the product's reads and not over a
- * synthetic one.
+ * The reads are the ones a screen makes, and the write is the one way a
+ * screen writes (`act`), so the budget is over the product's calls and not
+ * over synthetic ones.
  */
 class AbiRoundTripSpec : StringSpec({
 
@@ -65,21 +65,16 @@ class AbiRoundTripSpec : StringSpec({
                 page.rows.first().values.size shouldBe 2
             }
 
-            // --- a write, through the real command plane -------------------
+            // --- a write, the one way a screen writes: `act` --------------
             val outcome = core.call(
                 Envelope(
                     request_id = 7,
                     request = Request(
-                        command = Command(
-                            name = "person.add",
-                            input = """{"title":"Kotlin $runTag"}"""
-                                .encodeToByteArray()
-                                .toByteString(),
+                        act = ActRequest(
+                            app = "people",
+                            action = "add-person",
+                            input = flatJson("""{"title":"Kotlin $runTag"}"""),
                             invoke_key = "mobile-abi-round-trip-$runTag",
-                            principal = Principal(
-                                kind = PrincipalKind.PRINCIPAL_KIND_OWNER_DEVICE,
-                                caller_id = "mobile-round-trip-device",
-                            ),
                         ),
                     ),
                 ),
@@ -101,10 +96,10 @@ class AbiRoundTripSpec : StringSpec({
             // when the id default is fixed.
             when (outcome) {
                 is CoreOutcome.Answered -> {
-                    val command = outcome.value.response?.command
-                        ?: error("a CommandOutcome")
+                    val acted = outcome.value.response?.act
+                        ?: error("an ActResponse")
                     println(
-                        """{"marker":"abi-command","status":"${command.status}"}""",
+                        """{"marker":"abi-command","status":"${acted.status}"}""",
                     )
                 }
                 is CoreOutcome.Failed -> {
@@ -131,8 +126,8 @@ class AbiRoundTripSpec : StringSpec({
             // for, and on a phone that is battery". It is the wrong reading, and
             // the two lines below are what tell the two apart.
             //
-            // **The events are the WRITE's, five lines up.** `person.add`
-            // runs inside a commit guard, and a deny is receipted — the audit
+            // **The events are the WRITE's, five lines up.** `add-person`
+            // (`person.add`) runs inside a commit guard, and a deny is receipted — the audit
             // rows are a commit whether the command lands or is refused — so the
             // hook reports the tables that commit touched and the core offers
             // one `ChangeEvent` per table. A shell MUST get those: they are what
@@ -513,6 +508,84 @@ class AbiRoundTripSpec : StringSpec({
             when (this) {
                 is CoreOutcome.Answered -> block(value)
                 is CoreOutcome.Failed -> error("refused: $failure")
+            }
+        }
+
+        /**
+         * ONE WRITE, THE WAY A SCREEN MAKES IT: `act(app, action, input)` (#1135).
+         * The ABI carries no raw command; an app's action is named and its input
+         * stated by the manifest's names. Answers the act's output, as text, once
+         * it executed.
+         */
+        suspend fun CentraidCore.act(app: String, action: String, input: String, key: String): String {
+            var output = ""
+            call(
+                Envelope(
+                    request_id = 1,
+                    request = Request(
+                        act = ActRequest(app = app, action = action, input = flatJson(input), invoke_key = key),
+                    ),
+                ),
+            ).shouldBeAnsweredWith { envelope ->
+                val acted = envelope.response?.act ?: error("an ActResponse, got $envelope")
+                withClue("$app.$action: ${acted.reason}") {
+                    acted.status shouldBe ActStatus.ACT_STATUS_EXECUTED
+                }
+                output = acted.output.utf8()
+            }
+            return output
+        }
+
+        /**
+         * A FLAT JSON OBJECT AS AN ACT'S INPUT: strings, integers, booleans and
+         * arrays of numbers, each a wire `Value`. A boolean crosses as 1 or 0 and an
+         * array as its JSON text, which the core decodes by the manifest's schema.
+         */
+        fun flatJson(json: String): Map<String, Value> {
+            val out = linkedMapOf<String, Value>()
+            var at = json.indexOf('{') + 1
+            fun skip() {
+                while (json[at].isWhitespace()) at++
+            }
+            fun string(): String {
+                check(json[at] == '"') { "a string at $at in $json" }
+                at++
+                val text = StringBuilder()
+                while (json[at] != '"') {
+                    if (json[at] == '\\') at++
+                    text.append(json[at])
+                    at++
+                }
+                at++
+                return text.toString()
+            }
+            while (true) {
+                skip()
+                if (json[at] == '}') return out
+                val name = string()
+                skip()
+                check(json[at] == ':') { "a colon at $at in $json" }
+                at++
+                skip()
+                out[name] = when {
+                    json[at] == '"' -> Value(text = string())
+                    // An array crosses as its JSON text, which the core parses by
+                    // the schema; a spec's arrays hold no strings.
+                    json[at] == '[' -> {
+                        val start = at
+                        at = json.indexOf(']', at) + 1
+                        Value(text = json.substring(start, at))
+                    }
+                    json.startsWith("true", at) -> Value(integer = 1L).also { at += 4 }
+                    json.startsWith("false", at) -> Value(integer = 0L).also { at += 5 }
+                    else -> {
+                        val start = at
+                        while (json[at] == '-' || json[at].isDigit()) at++
+                        Value(integer = json.substring(start, at).toLong())
+                    }
+                }
+                skip()
+                if (json[at] == ',') at++
             }
         }
     }

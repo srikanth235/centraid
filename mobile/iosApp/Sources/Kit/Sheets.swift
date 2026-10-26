@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 /// THE CONFIRM: the machine's `Confirm` (title, the one full sentence the copy
 /// table allows, the verb) in a `SheetRoom`. **Destructive is the outlined
 /// `net` button** — the handoff's "destructive outline" — and Cancel is always
@@ -10,16 +8,16 @@ struct ConfirmSheet: View {
     /// Its detents, named so a host that shields it can state them again.
     static let detents: Set<PresentationDetent> = [.height(280), .medium]
 
-    let confirm: Centraid_Screen_V1_Confirm
-    var cancelLabel: String = KitWords.shared.CANCEL
+    let confirm: Centraid_Core_V1_Confirm
+    var cancelLabel: String = KitWords.CANCEL
     let onConfirm: () -> Void
     let onDismiss: () -> Void
 
     @Environment(\.colorScheme) private var scheme
 
     init(
-        _ confirm: Centraid_Screen_V1_Confirm,
-        cancelLabel: String = KitWords.shared.CANCEL,
+        _ confirm: Centraid_Core_V1_Confirm,
+        cancelLabel: String = KitWords.CANCEL,
         onConfirm: @escaping () -> Void,
         onDismiss: @escaping () -> Void
     ) {

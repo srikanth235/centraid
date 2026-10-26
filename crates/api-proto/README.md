@@ -1,17 +1,14 @@
 # `crates/api-proto` — the schema workspace
 
-Two protobuf packages, two compatibility promises, one generator ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
+One protobuf package, one generator ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
 
-## The two promises
+## The promise
 
 | Package | Files | `buf breaking` runs against | What the promise means |
 | --- | --- | --- | --- |
 | `centraid.core.v1` | `proto/centraid/core/v1/*.proto` | the PR base **and every released `v*` tag inside the version window** (N = 3 minors) | The C ABI's language between a shell and the core it links, which ship in one artifact. Rule category **WIRE_JSON** since [#1080](https://github.com/srikanth235/centraid/issues/1080): no gateway speaks it any more (the gateway's protocol is its own, `crates/gateway/src/rules`), so a deleted message or file reaches no install; what is refused is a byte read under a new meaning — a changed number, wire type or JSON name, and a deletion whose name and number are not both reserved. |
-| `centraid.screen.v1` | `proto/centraid/screen/v1/screen.proto` | the PR base only | Shell-internal. The KMP shared module, SwiftUI and Compose ship in one artifact with the core that produces these messages, so a rename costs a recompile. Rule category **WIRE_JSON** — the wire and its JSON mapping stay compatible, names may move. |
 
-Both packages carry the same category now, and `buf.yaml` at the repository root still implements them as two modules over one import root, each excluding the other's subtree, so the promise can diverge again without restructuring the workspace.
-
-`centraid.screen.v1` may disappear entirely: open question 10 decides whether screen contracts stay protobuf or become Kotlin sealed classes plus SKIE — one of its three exit criteria has tripped and a device measurement settles the other two ([D-1020-X3](../../docs/decisions.md)). Nothing in `centraid.core.v1` moves either way.
+The screen runtime's wire (route stacks, events, view states, effects) is part of this package: `screens.proto` and the per-app `*_screens.proto` files ([#1135](https://github.com/srikanth235/centraid/issues/1135)).
 
 ## The tree
 
@@ -19,16 +16,14 @@ Both packages carry the same category now, and `buf.yaml` at the repository root
 | --- | --- |
 | `value.proto` | `Value` (SQLite's five storage classes), `NullValue`, `RecordKey` |
 | `row.proto` | `RowImage`, `PriorDelta` — the absent-versus-NULL and delta-prior contracts |
-| `command.proto` | `Command`, `Principal`, `CommandOutcome` |
 | `query.proto` | `PageQuery`, `PageOrder`, `PageCursor`, `PageRequest`, `Page`, `Row` |
 | `change.proto` | `ChangeEvent`, `HealthEvent`, `ConnectivityEvent` |
 | `handshake.proto` | `Hello`, `UpgradeRequired`, `Unsupported` |
 | `error.proto` | `ErrorCode` (closed), `Error`, and `VaultMoved`, the one companion a refusal carries |
 | `envelope.proto` | `Envelope`, `Request`, `Response`, `Event`, `Cancel` |
 | `vault.proto` | `FoundRequest` — founding a vault over the ABI |
-| `phone.proto` | the phone's backup plane: pair, drain, hand-off, settle, reconcile, pins, fetch an original, restore, status, releasable/released, library_assets ([#1080](https://github.com/srikanth235/centraid/issues/1080)) |
+| `phone.proto` | the phone's backup plane: pair, drain, hand-off, settle, reconcile, pins, fetch an original, restore, status, releasable/released, library_assets, and `TransferRule`, the member's one setting for originals ([#1080](https://github.com/srikanth235/centraid/issues/1080)) |
 | `originals.proto` | the originals on this phone and the albums whose originals stay |
-| `screen/v1/screen.proto` | `ScreenState`, `ScreenEvent`, the per-screen states and `SeatState` — one file by design (D-1020-E3a) |
 
 Each file carries its own reasoning in comments.
 
@@ -36,9 +31,9 @@ Each file carries its own reasoning in comments.
 
 `build.rs`: [`protox`](https://docs.rs/protox) parses the tree in pure Rust and produces a `FileDescriptorSet`; [`prost-build`](https://docs.rs/prost-build) emits the Rust. **There is no `protoc` binary** on the build machines, and a codegen step that shells out to one is a step that works on one laptop.
 
-`buf` is not in the build path. `buf.gen.yaml` documents what the other three consumers (Swift, Kotlin, TypeScript) generate, and `buf lint` / `buf breaking` are steps of `cargo xtask gate --profile pr`.
+`buf` is not in the build path. `buf.gen.yaml` documents what the other consumers (Swift, Kotlin) generate, and `buf lint` / `buf breaking` are steps of `cargo xtask gate --profile pr`.
 
-`build.rs` names every file rather than globbing. `tests/tree.rs` asserts the list and the directory agree, and that there are exactly two packages each declaring the package its directory implies.
+`build.rs` names every file rather than globbing. `tests/tree.rs` asserts the list and the directory agree, and that there is exactly one package, declaring the package its directory implies.
 
 ## How to add a field
 

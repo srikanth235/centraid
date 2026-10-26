@@ -3,149 +3,91 @@ package dev.centraid.android.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
-import dev.centraid.android.kit.RowSkeleton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.PhotoPickerEvent
-import centraid.screen.v1.PhotoPickerState
+import centraid.core.v1.PhotosPickerEvent
+import centraid.core.v1.PhotosPickerState
 import dev.centraid.android.kit.InkButton
+import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.PhotoCellsGrid
+import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.ScreenEmpty
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
-import dev.centraid.design.copy.PhotosCopy
-import dev.centraid.shared.apps.photos.PhotoPickerMachine
 
 /**
- * ADDING PHOTOGRAPHS TO AN ALBUM (#1029, photos port; v0's `PhotoPicker.tsx`).
+ * ADDING PHOTOGRAPHS TO AN ALBUM, drawn from the core's [PhotosPickerState]
+ * (#1135): the library as a grid with what the album already holds drawn as
+ * taken, the one ink button, and the sentence "an album points to a photo where
+ * it lives". Rust (`photos/picker.rs`) decides what can be picked, what Add
+ * writes and when the picker is [PhotosPickerState.finished]; this draws it.
  *
- * A pushed screen and not a dialog, which is v0's own choice and the right one
- * on a phone: choosing from a whole library is a place a member goes, not a
- * card they hold open.
- *
- * **Its picked set is its own.** No selection bar goes to the shell: the
- * shelf's bar belongs to "these photographs", and this screen's one verb is
- * "add these to THIS album". A shelf that could be picked from would carry an
- * album id on every surface that shows one.
- *
- * **No search field.** v0 states the reason and it still holds: search is its
- * own screen with its own unreachable state, and a silent miss here would be
- * pretence.
+ * A refused add is `status`, above the grid and never instead of it, so the
+ * member keeps the library they were choosing from.
  *
  * The SwiftUI twin is `mobile/iosApp/Sources/PhotoPickerView.swift`.
  */
 @Composable
 public fun PhotoPickerScreen(
-    state: PhotoPickerState,
-    onEvent: (PhotoPickerEvent) -> Unit,
-    /**
-     * The picker is done with itself. Adding is the end of this screen and the
-     * pop is the shell's — v0 navigates back on a successful batch.
-     *
-     * Defaulted so a preview and a fixture render this screen without one.
-     */
+    state: PhotosPickerState,
+    onEvent: (PhotosPickerEvent) -> Unit,
     onFinished: () -> Unit = {},
 ) {
+    LaunchedEffect(state.finished) { if (state.finished) onFinished() }
     Column(
         modifier = Modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column {
-            // THE NAME IS ON THE STATE BEFORE ANY READ HAS LANDED, because
-            // it rode in with `Opened` off the route. A head that waited a
-            // round trip would paint under the previous screen's title.
-            Text(
-                text = PhotosCopy.PHOTOS_PICKER_TITLE.replace("{name}", state.collection_name),
-                style = centraidType("bodyStrong"),
-                color = centraidColor("text"),
-            )
-            // NOTHING HAS BEEN ADDED YET, and the line says so while a
-            // member picks. A picked set is not a write, and a member
-            // should not have to guess when the album changed.
-            Text(
-                text = chosenSentence(state),
-                style = centraidType("small"),
-                color = centraidColor("textSoft"),
-            )
+            Text(text = state.title, style = centraidType("bodyStrong"), color = centraidColor("text"))
+            Text(text = state.chosen_label, style = centraidType("small"), color = centraidColor("textSoft"))
         }
-        // THE ONE INK BUTTON (§18) — and it cannot fire with nothing picked,
-        // so it is drawn disabled rather than absent: a control that appears
-        // when a member picks is a control that moves under their thumb.
+        // The one ink button: drawn disabled with nothing picked rather than absent,
+        // so it does not move under a thumb.
         InkButton(
-            label = if (state.picked_asset_ids.isEmpty()) {
-                PhotosCopy.PHOTOS_ADD
-            } else {
-                PhotosCopy.PHOTOS_ADD_COUNT.replace("{count}", "${state.picked_asset_ids.size}")
-            },
+            label = state.add_label,
             testTag = "picker-add",
-            enabled = state.picked_asset_ids.isNotEmpty(),
-            onPress = {
-                onEvent(PhotoPickerEvent(confirm = PhotoPickerEvent.ConfirmRequested()))
-                onFinished()
-            },
+            enabled = state.add_enabled,
+            onPress = { onEvent(PhotosPickerEvent(confirm = PhotosPickerEvent.ConfirmRequested())) },
         )
+        Text(text = state.refers_note, style = centraidType("small"), color = centraidColor("textSoft"))
 
-        // ADDING REFERS, IT DOES NOT COPY — v0's sentence, verbatim, and the
-        // fact that makes this screen safe to use. Nothing is duplicated and
-        // nothing moves.
-        Text(
-            text = PhotoPickerMachine.REFERS_NOT_COPIES,
-            style = centraidType("small"),
-            color = centraidColor("textSoft"),
-        )
+        state.status?.let { ScreenFailure(it.sentence, "") }
 
-        // AN ADD WAS REFUSED, AND THE GRID STAYS.
-        //
-        // Above the cells and outside the `when` below: a refusal drawn through
-        // the read's `failure` would replace the library mid-pick and take the
-        // member's picks off the screen they were choosing from. That is what
-        // `write_failure` is a separate field for.
-        val refusal = state.write_failure
-        if (refusal != null) ScreenFailure(refusal.sentence, refusal.remedy)
-
-        // A WIRE PROPERTY IS CROSS-MODULE PUBLIC API, so Kotlin will not
-        // smart-cast it after a null check. Binding each arm's value to a local
-        // first is what makes the branches type-check.
         val loading = state.loading
         val failure = state.failure
         val data = state.data_
         when {
             loading != null -> RowSkeleton()
-
-            // A FAILED READ IS NOT AN EMPTY LIBRARY, and on this screen the
-            // difference decides what a member does next: one means there is
-            // nothing left to add, the other means they must not conclude that.
             failure != null -> ScreenFailure(failure.sentence, failure.remedy)
-
-            data != null ->
-                if (data.cells.isEmpty()) {
-                    ScreenEmpty(sentence = PhotoPickerMachine.NOTHING_LEFT)
+            data != null -> {
+                val empty = data.empty
+                if (empty != null) {
+                    ScreenEmpty(sentence = empty.headline, remedy = empty.body)
                 } else {
-                    // TAKEN, NOT HIDDEN. A member hunting for the photograph
-                    // they added last week should find it, and find out why it
-                    // will not tick. `PhotoCellsGrid` draws `taken` and refuses
-                    // the tap; the machine refuses it a second time, because
-                    // the rule is the machine's and not the drawing's.
+                    // TAKEN, NOT HIDDEN: a member hunting for the photograph they
+                    // added last week finds it, and finds out why it will not tick.
                     PhotoCellsGrid(
-                        cells = data.cells,
-                        packAbsent = data.thumbnail_pack_absent,
-                        selected = state.picked_asset_ids.toSet(),
-                        taken = state.already_in_album_asset_ids.toSet(),
-                        onTap = { assetId ->
-                            onEvent(PhotoPickerEvent(pick = PhotoPickerEvent.PickToggled(assetId)))
+                        cells = data.cells.map { it.tile!! },
+                        selected = data.cells.filter { it.picked }.map { it.tile!!.photo_id }.toSet(),
+                        taken = data.cells.filter { it.taken }.map { it.tile!!.photo_id }.toSet(),
+                        takenLabel = data.taken_label,
+                        onTap = { photoId ->
+                            onEvent(PhotosPickerEvent(pick = PhotosPickerEvent.PickToggled(photo_id = photoId)))
                         },
                     )
+                    if (data.can_show_more) {
+                        KitLink(
+                            label = data.show_more_label,
+                            onClick = { onEvent(PhotosPickerEvent(load_more = PhotosPickerEvent.LoadMore())) },
+                        )
+                    }
                 }
+            }
         }
     }
 }
-
-private fun chosenSentence(state: PhotoPickerState): String =
-    if (state.picked_asset_ids.isEmpty()) {
-        PhotosCopy.PHOTOS_PICKER_NOTHING_CHOSEN
-    } else {
-        PhotosCopy.PHOTOS_CHOSEN.replace("{count}", "${state.picked_asset_ids.size}")
-    }

@@ -5,7 +5,7 @@
 //! is a sentence of the chat's copy, filled from the step's effect. No second generation, so the
 //! same effect always reads the same, and the copy rulebook (`DESIGN.md` § Copy) governs every word.
 //!
-//! The sentences live in `copy/chat.json`, the file the shells' `ChatCopy.kt` mirrors, under the
+//! The sentences live in `copy/chat.json`, under the
 //! `SAID_` prefix, and are compiled in from there: this module owns the key names and the fill
 //! points, and a test fails when a key here is missing from the file or a placeholder is left open.
 

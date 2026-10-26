@@ -1,6 +1,5 @@
 package dev.centraid.android.kit
 
-import dev.centraid.shared.shell.HomeWords
 
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -52,16 +51,15 @@ import androidx.compose.ui.unit.dp
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.design.copy.SharedCopy
-import dev.centraid.shared.shell.BandPolicy
+import centraid.core.v1.ShellBandTab
 
 /**
  * THE BAND — invariant 1 (#1020, wave A; v0 `screens/home/HomeBand.tsx`).
  *
  * One band, never app-themed, never scrolled away, frame destinations only.
- * [BandPolicy] decides which destinations and in what order; this file draws
- * them and names the one that was pressed. Where a press GOES is the
- * navigator's, which is why nothing here routes.
+ * Rust (`Navigation.band`, #1135) decides which places, in what order, their
+ * words and which one is lit; this file draws them and names the one that was
+ * pressed. Where a press GOES is the navigator's, which is why nothing here routes.
  *
  * **NO ACTIVE BAR, NO TINTED CHIP, NO BADGE.** Selection is carried by the
  * label's weight and ink alone: `band` (400) in `textSoft` when it is not the
@@ -71,7 +69,7 @@ import dev.centraid.shared.shell.BandPolicy
  */
 @Composable
 public fun HomeBand(
-    active: String,
+    tabs: List<ShellBandTab>,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -98,33 +96,19 @@ public fun HomeBand(
             .padding(BandPolicy.BAND_PLATE_PAD.dp)
             .testTag("home-band"),
     ) {
-        BandPolicy.bandTabs().forEach { place ->
+        tabs.forEach { place ->
             BandTab(
-                iconKey = place.iconKey,
-                label = place.short,
-                // SPEAK WHAT IS PAINTED. v0's band once spoke one noun for
-                // "Needs you" and painted another, so two members got two names
-                // for one place.
-                spoken = place.short + if (place.id == active) ", " + SharedCopy.BAND_CURRENT_SPOKEN else "",
-                selected = place.id == active,
-                testTag = "home-band-${place.id}",
-                onPress = { onSelect(place.id) },
+                iconKey = place.icon_key,
+                label = place.label,
+                // SPEAK WHAT IS PAINTED, and which place is the current one:
+                // both are Rust's words.
+                spoken = place.spoken,
+                selected = place.selected,
+                testTag = "home-band-${place.tab}",
+                onPress = { onSelect(place.tab) },
                 modifier = Modifier.weight(1f),
             )
         }
-        // BACKUP, the band's last place: a tab drawn in place of the
-        // springboard — where the backup stands, the backup devices and the 24
-        // words — so a member never hunts for the one thing that brings the
-        // vault back. Every app is a tile on Home.
-        BandTab(
-            iconKey = "Backup",
-            label = HomeWords.BAND_BACKUP,
-            spoken = HomeWords.BAND_BACKUP_SPOKEN + if (active == "backup") ", " + SharedCopy.BAND_CURRENT_SPOKEN else "",
-            selected = active == "backup",
-            testTag = "home-band-backup",
-            onPress = { onSelect("backup") },
-            modifier = Modifier.weight(1f),
-        )
     }
 }
 
@@ -308,7 +292,7 @@ public fun AppBand(
                 .border(CentraidGeometry.HAIRLINE.dp, centraidColor("lineStrong"), CircleShape)
                 .testTag("$app-band-home")
                 .semantics {
-                    contentDescription = HomeWords.BAND_HOME
+                    contentDescription = KitWords.BAND_HOME
                     role = Role.Button
                 },
             contentAlignment = Alignment.Center,
@@ -348,7 +332,7 @@ public fun AppBand(
                 if (onMore != null) {
                     AppBandTabView(
                         iconKey = "MoreHoriz",
-                        label = HomeWords.BAND_MORE,
+                        label = KitWords.BAND_MORE,
                         selected = false,
                         testTag = "$app-band-more",
                         onPress = onMore,
@@ -393,7 +377,7 @@ private fun AppBandTabView(
             .padding(top = BandPolicy.BAND_TAB_TOP.dp, bottom = BandPolicy.BAND_TAB_BOTTOM.dp)
             .testTag(testTag)
             .semantics {
-                contentDescription = label + if (selected) ", " + SharedCopy.BAND_CURRENT_SPOKEN else ""
+                contentDescription = label + if (selected) ", " + KitWords.BAND_CURRENT else ""
                 role = Role.Tab
                 this.selected = selected
             },

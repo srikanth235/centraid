@@ -1,0 +1,281 @@
+// THE VIEW VOCABULARY EVERY APP'S SCREENS SHARE (#1135): the three states of a
+// read, the empty state, the status line, the confirm, the autosave line. Rust
+// finishes every sentence in these; SwiftUI and Compose draw them.
+//
+// A LEAF FILE (it imports only `route.proto`), so an app's own `<app>_screens.proto`
+// and `screens.proto` can both import it without a cycle.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/route.proto";
+
+// THE READ LAW: a failed read is not an empty list. A view has three states —
+// loading, a `Failure`, data — and never two.
+message Failure {
+  // A finished sentence for the member.
+  string sentence = 1;
+  // Something the member can do about it; empty when nothing.
+  string remedy = 2;
+}
+
+// The loading state. A message rather than a bare `bool`, so the oneof can hold
+// it as a present value and a decode of an unset oneof stays distinguishable
+// from "loading" — the same reason `centraid.core.v1.NullValue` is a message.
+message Loading {
+  // True on the FIRST load of this screen, false on a refresh over rows the
+  // screen is already showing. A spinner over an empty frame and a spinner over
+  // last night's rows are different screens.
+  bool first_load = 1;
+}
+
+// THE VAULT WOULD NOT LET THIS APP READ — a state, not an error (law 1's
+// fourth shape where a screen has one). Finished strings; `receipt` names what
+// was asked and refused, so a member can find the grant.
+message Denied {
+  string title = 1;
+  string body = 2;
+  string receipt = 3;
+}
+
+// A list with nothing in it, said once: one sentence and at most one action
+// (DESIGN.md's copy table). `action_label` empty means no action; the action
+// itself is the screen's own event.
+message EmptyState {
+  string headline = 1;
+  string body = 2;
+  string action_label = 3;
+  // `offers_example`, which put "See an example" under an app's day-one
+  // empty state, retired with the preview (R-ONBOARD-12).
+  reserved 4;
+  reserved "offers_example";
+  // WHERE THE PHONE ALREADY HOLDS THIS APP'S DATA, on an app's day-one empty
+  // state only. A shell that can read that source draws its import as the
+  // empty state's action in place of `action_label` — asked here, at the point
+  // of use, never as an up-front permission wall — and a shell that cannot
+  // draws `action_label` as before. The app's own add stays in its header.
+  ImportSource import_source = 5;
+}
+
+// A SOURCE ON THE PHONE ITSELF that an app's day-one empty state can import
+// from in one tap (docs/decisions.md, "Onboarding without sample data"). The
+// OS asks its own permission when the member taps it, never before.
+enum ImportSource {
+  IMPORT_SOURCE_UNSPECIFIED = 0;
+  // The phone's contacts, into People: a person per contact, with its phone
+  // numbers, email addresses and birthday.
+  IMPORT_SOURCE_CONTACTS = 1;
+  // The phone's calendars the member writes to, into Agenda: each event from
+  // a week back to two months on, timed or all-day, free or busy as the
+  // calendar holds it. Subscribed and birthday calendars are not read.
+  IMPORT_SOURCE_CALENDAR = 2;
+  // The phone's open reminders, into Tasks: a task per reminder, with its due
+  // day and notes. iOS has a system source; Android has none, so its shell
+  // draws the app's own action.
+  IMPORT_SOURCE_REMINDERS = 3;
+}
+
+// THE ONE ASK A SEARCH OFFERS (#1135), finished by `SearchLaw` so every app reads
+// it the same way: `label` is the row's words ("Ask about “x”"), `question` is
+// what the chat is sent ("Find x"), and `scope` is the chat scope to open it in,
+// the id of the app the member searched from (`agenda`, `notes`, ...), or EMPTY
+// for Home's, which asks the assistant across every app.
+message SearchAsk {
+  string label = 1;
+  string question = 2;
+  string scope = 3;
+  // The page a tap opens: `chat.ask`, the assistant asking `question` in `scope`. A
+  // shell pushes it; it builds no route of its own.
+  Route route = 4;
+}
+
+// A CONTAINER AS A SEARCH RESULT (#1097, R-1097-19..21): one notebook, album,
+// project or Docs folder, finished in Rust so Home's search and the owning
+// apps' own searches draw the same row and open it by the same push.
+message SearchContainer {
+  // The index's entity kind (`notebook`, `album`, `project`, `folder`) and the
+  // row's own id.
+  string entity = 1;
+  string id = 2;
+  // The app it opens in: `notes`, `photos`, `agenda`, `docs`.
+  string app_id = 3;
+  // What it IS, in a word: "Notebook", "Album", "Project", "Group", "Folder".
+  string kind_label = 4;
+  string title = 5;
+  // The kit's glyph for that kind (`Book`, `Image`, `List`, `Users`, `Folder`).
+  string icon_key = 6;
+  // "Notebook, Cabin".
+  string accessibility_label = 7;
+  // WHERE A TAP GOES: the page that opens this container, as the route the
+  // shell pushes.
+  Route route = 8;
+}
+
+// AN EDITOR THAT SAVES AS THE MEMBER WRITES (#1015 D3: close = done).
+//
+// `edit_seq` counts edits; `saved_seq` is the last edit the vault committed;
+// `saving_seq` is the edit in flight. Unsaved words exist exactly when
+// `edit_seq > saved_seq`, and a change arriving from the vault while they do
+// sets `remote_changed` instead of replacing them. There is no vault-side
+// revision check: the last save on this phone wins.
+message Autosave {
+  Phase phase = 1;
+  uint64 edit_seq = 2;
+  uint64 saved_seq = 3;
+  string base_revision_id = 4;
+  optional Failure failure = 5;
+  bool remote_changed = 6;
+  uint64 saving_seq = 7;
+  // The key the save in flight was submitted under, one per `edit_seq`.
+  string invoke_key = 8;
+  // THE STATUS LINE'S WORDS (#1047): "Saved", "Edited", "Saving…", the
+  // refusal's own sentence or "Not saved", "Changed on another device" — set
+  // by the kit's law with every phase, so no shell spells them. Empty before
+  // the law has written a phase.
+  string label = 9;
+  // THE SAVE WAS REFUSED, set by the kit's law with every phase and `label`:
+  // the line inks `net` and an editor stops concealing on it. A shell reads
+  // this, never `phase`.
+  bool refused = 10;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_CLEAN = 1;
+    PHASE_DIRTY = 2;
+    PHASE_SAVING = 3;
+    PHASE_SAVED = 4;
+    PHASE_REFUSED = 5;
+    // Kept for the stale-base compare a later slice adds; nothing reaches it.
+    PHASE_CONFLICT = 6;
+  }
+}
+
+// A decision the member confirms. Full sentences, because only a destructive
+// confirm earns them (DESIGN.md); `destructive` draws the outlined `net` action.
+message Confirm {
+  string title = 1;
+  string body = 2;
+  string confirm_label = 3;
+  bool destructive = 4;
+}
+
+// A row's status as a finished label and a tone. `seam` is "not yet", `net`
+// is owe/leaves (DESIGN.md).
+message StatusChip {
+  string label = 1;
+  Tone tone = 2;
+
+  enum Tone {
+    TONE_UNSPECIFIED = 0;
+    TONE_NEUTRAL = 1;
+    TONE_SEAM = 2;
+    TONE_NET = 3;
+    TONE_WARNING = 4;
+  }
+}
+
+// The simple list row: search hits, notebooks, projects, settings-like rows.
+// A row whose fields carry meaning (`AgendaEventRow`) stays the
+// app's own and maps onto the same native primitive in the view.
+message ListRow {
+  string id = 1;
+  string title = 2;
+  string meta = 3;
+  string trailing = 4;
+  // In draw order; a row draws every one (People's "Overdue" and "Birthday ·
+  // in 3 days" side by side). Empty draws none.
+  repeated StatusChip chips = 5;
+  string hue_key = 6;
+  string accessibility_label = 7;
+  bool dimmed = 8;
+  bool pending = 9;
+  // How `trailing` is inked: NEUTRAL is ink, NET is owe/leaves (DESIGN.md).
+  // UNSPECIFIED is ink too, so a row with a plain count sets nothing.
+  StatusChip.Tone trailing_tone = 10;
+}
+
+// THE ONE STATUS LINE (DESIGN.md: no toast). One clause, at most one verb.
+// A screen carries it where it says what a write did — "Task done" with
+// Undo — and `action_label` empty is a line with no verb. What the verb does
+// is the screen's own event (`StatusActed`).
+message StatusLine {
+  string sentence = 1;
+  // "Undo", or empty.
+  string action_label = 2;
+  // The vault refused a write: the sentence is the core's.
+  bool refused = 3;
+}
+
+// ---------------------------------------------------------------------------
+// The kit's trash screen (`<app>.trash`, arm 900 of Route/ScreenEvent/ViewState)
+// ---------------------------------------------------------------------------
+
+// One trashed row, finished: `meta` is "Deleted Wed 11 March" (and the app's
+// "Erased ..." clause where it states one). The verbs are the app's own words;
+// `purge_label` is empty where the app has no destroy path.
+message TrashRow {
+  string id = 1;
+  string title = 2;
+  string meta = 3;
+  string icon_key = 4;
+  string restore_label = 5;
+  string purge_label = 6;
+}
+
+message TrashData {
+  repeated TrashRow rows = 1;
+  EmptyState empty = 2;
+  // "Empty trash"; empty when the app cannot empty its trash, or has nothing in it.
+  string empty_label = 3;
+}
+
+// What a trash screen shows. The screen name (`<app>.trash`) says which app.
+message TrashView {
+  string app_id = 1;
+  // "Trash", and the back control's words: the app the trash belongs to
+  // ("Agenda"), because the page was pushed from it.
+  string title = 2;
+  string back_label = 3;
+  oneof content {
+    Loading loading = 4;
+    Failure failure = 5;
+    Denied denied = 6;
+    TrashData data = 7;
+  }
+  // The confirm on screen: a purge of one row, or the emptying of the shelf.
+  optional Confirm confirm = 8;
+  // A refusal's sentence, over the list; the list stays.
+  StatusLine status = 9;
+  uint32 purge_window_days = 10;
+}
+
+message TrashEvent {
+  oneof kind {
+    // The failure's "Try again".
+    Refreshed refreshed = 1;
+    // Restore asks nothing: it undoes.
+    RestoreTapped restore = 2;
+    // Destroying asks first (`Confirm`), in full sentences.
+    PurgeTapped purge = 3;
+    EmptyTapped empty = 4;
+    Confirmed confirmed = 5;
+    Dismissed dismissed = 6;
+  }
+
+  message Refreshed {}
+
+  message RestoreTapped {
+    string id = 1;
+  }
+
+  message PurgeTapped {
+    string id = 1;
+  }
+
+  message EmptyTapped {}
+
+  message Confirmed {}
+
+  message Dismissed {}
+}

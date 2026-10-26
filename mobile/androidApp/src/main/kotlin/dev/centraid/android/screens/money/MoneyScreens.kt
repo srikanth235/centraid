@@ -1,5 +1,6 @@
 package dev.centraid.android.screens.money
 
+import dev.centraid.android.kit.SearchAskRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,17 +14,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.MoneyHomeEvent
-import centraid.screen.v1.MoneyHomeState
-import centraid.screen.v1.MoneyRecurringEvent
-import centraid.screen.v1.MoneyRecurringState
-import centraid.screen.v1.MoneySearchEvent
-import centraid.screen.v1.MoneySearchState
-import centraid.screen.v1.MoneyTargetEvent
-import centraid.screen.v1.MoneyTargetState
-import centraid.screen.v1.MoneyTransactionEvent
-import centraid.screen.v1.MoneyTransactionState
-import centraid.screen.v1.SearchField
+import centraid.core.v1.MoneyHomeEvent
+import centraid.core.v1.MoneyHomeState
+import centraid.core.v1.MoneyRecurringEvent
+import centraid.core.v1.MoneyRecurringState
+import centraid.core.v1.MoneySearchEvent
+import centraid.core.v1.MoneySearchState
+import centraid.core.v1.MoneyTargetEvent
+import centraid.core.v1.MoneyTargetState
+import centraid.core.v1.MoneyTransactionEvent
+import centraid.core.v1.MoneyTransactionState
+import dev.centraid.android.kit.SearchField
+import centraid.core.v1.Route
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
@@ -45,13 +47,13 @@ import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RoomChip
 import dev.centraid.android.kit.RoomSearch
-import dev.centraid.android.kit.SearchContainerRow
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.ShowMoreFooter
 import dev.centraid.android.kit.StatusChipView
 import dev.centraid.android.kit.StatusLine
+import dev.centraid.android.kit.toneInk
 import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -61,9 +63,15 @@ import dev.centraid.android.theme.centraidType
 // ---------------------------------------------------------------------------
 
 @Composable
-internal fun MoneyHomeScreen(state: MoneyHomeState, onEvent: (MoneyHomeEvent) -> Unit, onHome: () -> Unit) {
+internal fun MoneyHomeScreen(
+    state: MoneyHomeState,
+    onEvent: (MoneyHomeEvent) -> Unit,
+    onOpen: (Route) -> Unit,
+    onHome: () -> Unit,
+) {
     val chrome = state.chrome
-    val addStatement = { onEvent(MoneyHomeEvent(add = MoneyHomeEvent.AddStatement())) }
+    // The Plus and the day-one action go where Rust says: an import.
+    val addStatement: () -> Unit = { chrome?.import_route?.let(onOpen) }
     AppPlace(
         app = "money",
         title = chrome?.title.orEmpty(),
@@ -78,7 +86,7 @@ internal fun MoneyHomeScreen(state: MoneyHomeState, onEvent: (MoneyHomeEvent) ->
                 placeholder = placeholder,
                 onTerm = {},
                 onClose = {},
-                onOpen = { onEvent(MoneyHomeEvent(search_opened = MoneyHomeEvent.SearchOpened())) },
+                onOpen = { chrome?.search_route?.let(onOpen) },
             )
         },
         // THE FILTER ROW is month, account and category; no sort chip (R-CHROME-3).
@@ -110,9 +118,9 @@ internal fun MoneyHomeScreen(state: MoneyHomeState, onEvent: (MoneyHomeEvent) ->
             LazyColumn {
                 if (home.shows_month) item(key = "month") { MonthStepper(state, onEvent) }
                 when (state.destination) {
-                    MoneyHomeState.Destination.DESTINATION_ACTIVITY -> activity(state, onEvent, addStatement)
+                    MoneyHomeState.Destination.DESTINATION_ACTIVITY -> activity(state, onEvent, onOpen, addStatement)
                     MoneyHomeState.Destination.DESTINATION_CASHFLOW -> cashflow(state, addStatement)
-                    else -> spending(state, onEvent, addStatement)
+                    else -> spending(state, onOpen, addStatement)
                 }
             }
         }
@@ -122,8 +130,12 @@ internal fun MoneyHomeScreen(state: MoneyHomeState, onEvent: (MoneyHomeEvent) ->
     when (state.sheet) {
         MoneyHomeState.Sheet.SHEET_MORE -> OptionSheet(
             title = chrome?.more_title.orEmpty(),
-            options = chrome?.more_rows.orEmpty().map { SheetOption(key = it.key, label = it.label, iconKey = it.icon_key, detail = it.meta) },
-            onPick = { key -> onEvent(MoneyHomeEvent(more = MoneyHomeEvent.MorePicked(key = key))) },
+            options = chrome?.more_rows.orEmpty().map { SheetOption(key = it.route?.screen.orEmpty(), label = it.label, iconKey = it.icon_key, detail = it.meta) },
+            onPick = { key ->
+                // The sheet closes behind the page the row opens.
+                onEvent(MoneyHomeEvent(more_opened = MoneyHomeEvent.MoreOpened()))
+                chrome?.more_rows.orEmpty().firstOrNull { it.route?.screen == key }?.route?.let(onOpen)
+            },
             onDismiss = close,
         )
         MoneyHomeState.Sheet.SHEET_MONTH -> OptionSheet(
@@ -173,7 +185,7 @@ private fun MonthStepper(state: MoneyHomeState, onEvent: (MoneyHomeEvent) -> Uni
     }
 }
 
-private fun LazyListScope.spending(state: MoneyHomeState, onEvent: (MoneyHomeEvent) -> Unit, addStatement: () -> Unit) {
+private fun LazyListScope.spending(state: MoneyHomeState, onOpen: (Route) -> Unit, addStatement: () -> Unit) {
     val spending = state.data_?.spending ?: return
     val empty = spending.empty
     if (empty != null) {
@@ -187,21 +199,19 @@ private fun LazyListScope.spending(state: MoneyHomeState, onEvent: (MoneyHomeEve
     }
     spending.tables.forEach { table ->
         item(key = "table-${table.currency}") { MoneySection(table.heading) }
-        items(table.rows, key = { "c-${table.currency}-${it.category_id}" }) { line ->
+        items(table.rows, key = { "c-${table.currency}-${it.route?.money_target?.category_id}" }) { line ->
             CentraidRow(
                 title = line.label,
                 meta = if (line.has_plan) money(line.planned) else "",
                 trailing = money(if (line.has_plan) line.left else line.spent),
                 trailingTone = if (line.over) {
-                    centraid.screen.v1.StatusChip.Tone.TONE_NET
+                    centraid.core.v1.StatusChip.Tone.TONE_NET
                 } else {
-                    centraid.screen.v1.StatusChip.Tone.TONE_NEUTRAL
+                    centraid.core.v1.StatusChip.Tone.TONE_NEUTRAL
                 },
                 a11y = spoken(line.accessibility_label, if (line.has_plan) line.left else line.spent),
-                testTag = "money-category-${line.category_id}",
-                onTap = {
-                    onEvent(MoneyHomeEvent(category_line = MoneyHomeEvent.CategoryLinePicked(category_id = line.category_id, currency = table.currency)))
-                },
+                testTag = "money-category-${line.route?.money_target?.category_id}",
+                onTap = { line.route?.let(onOpen) },
             )
         }
     }
@@ -212,7 +222,7 @@ private fun LazyListScope.spending(state: MoneyHomeState, onEvent: (MoneyHomeEve
                 title = spending.recurring_label,
                 meta = spending.recurring_meta,
                 testTag = "money-recurring",
-                onTap = { onEvent(MoneyHomeEvent(recurring = MoneyHomeEvent.RecurringOpened())) },
+                onTap = { spending.recurring_route?.let(onOpen) },
             )
         }
     }
@@ -223,7 +233,12 @@ private fun LazyListScope.spending(state: MoneyHomeState, onEvent: (MoneyHomeEve
     item(key = "window") { MoneyNote(spending.window_note) }
 }
 
-private fun LazyListScope.activity(state: MoneyHomeState, onEvent: (MoneyHomeEvent) -> Unit, addStatement: () -> Unit) {
+private fun LazyListScope.activity(
+    state: MoneyHomeState,
+    onEvent: (MoneyHomeEvent) -> Unit,
+    onOpen: (Route) -> Unit,
+    addStatement: () -> Unit,
+) {
     val activity = state.data_?.activity ?: return
     val empty = activity.empty
     if (empty != null) {
@@ -239,7 +254,7 @@ private fun LazyListScope.activity(state: MoneyHomeState, onEvent: (MoneyHomeEve
     activity.sections.forEach { section ->
         item(key = "day-${section.day}") { MoneySection(section.heading) }
         items(section.rows, key = { "t-${it.txn_id}" }) { row ->
-            MoneyRowView(row) { onEvent(MoneyHomeEvent(transaction = MoneyHomeEvent.TransactionPicked(txn_id = row.txn_id))) }
+            MoneyRowView(row) { row.route?.let(onOpen) }
         }
     }
     item(key = "window") {
@@ -260,16 +275,15 @@ private fun LazyListScope.cashflow(state: MoneyHomeState, addStatement: () -> Un
         items(series.months, key = { "m-${series.currency}-${it.month}" }) { month ->
             CentraidRow(
                 title = month.label,
-                meta = listOf(month.rate_label, if (month.partial) dev.centraid.design.copy.MoneyCopy.PARTIAL_MONTH else "")
-                    .filter { it.isNotEmpty() }.joinToString(" · "),
+                meta = month.meta,
                 trailing = money(month.net),
                 trailingTone = month.net_tone,
                 dimmed = month.partial,
                 a11y = spoken(month.accessibility_label, month.net),
                 testTag = "money-month-${month.month}",
             )
-            MoneyFigureRow(centraid.screen.v1.MoneyFigure(label = dev.centraid.design.copy.MoneyCopy.IN, amount = month.incoming))
-            MoneyFigureRow(centraid.screen.v1.MoneyFigure(label = dev.centraid.design.copy.MoneyCopy.OUT, amount = month.outgoing))
+            MoneyFigureRow(centraid.core.v1.MoneyFigure(label = series.in_label, amount = month.incoming))
+            MoneyFigureRow(centraid.core.v1.MoneyFigure(label = series.out_label, amount = month.outgoing))
         }
     }
     flow.definitions.forEach { fact -> item(key = "def-${fact.label}") { FieldRow(key = fact.label, value = fact.detail) } }
@@ -289,7 +303,7 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
         title = chrome?.title.orEmpty(),
         parentTitle = chrome?.back_label.orEmpty(),
         onBack = onBack,
-        status = status?.sentence.orEmpty().ifEmpty { state.write?.refusal.orEmpty() },
+        status = status?.sentence.orEmpty(),
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -307,7 +321,7 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
                     Text(
                         money(tx.amount),
                         style = centraidType("display"),
-                        color = dev.centraid.android.kit.toneInk(tx.amount_tone, neutral = "text"),
+                        color = toneInk(tx.amount_tone, neutral = "text"),
                         modifier = Modifier.padding(horizontal = KitGeometry.GUTTER),
                     )
                     Text(
@@ -378,7 +392,7 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
 
 /** An offer the app proposes: words, and the member's two choices. Nothing is written until Accept. */
 @Composable
-private fun OfferCard(offer: centraid.screen.v1.MoneyOffer, key: String, onEvent: (MoneyTransactionEvent) -> Unit) {
+private fun OfferCard(offer: centraid.core.v1.MoneyOffer, key: String, onEvent: (MoneyTransactionEvent) -> Unit) {
     MoneySection(offer.title)
     MoneyNote(offer.body, ink = "text")
     MoneyNote(offer.detail)
@@ -404,7 +418,7 @@ internal fun MoneyTargetScreen(state: MoneyTargetState, onEvent: (MoneyTargetEve
         title = data?.title.orEmpty().ifEmpty { chrome?.title.orEmpty() },
         parentTitle = chrome?.back_label.orEmpty(),
         onBack = onBack,
-        status = state.write?.refusal.orEmpty(),
+        status = state.status?.sentence.orEmpty(),
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -440,7 +454,7 @@ internal fun MoneyTargetScreen(state: MoneyTargetState, onEvent: (MoneyTargetEve
                 }
                 item(key = "preview") {
                     MoneyHeading(target.preview_label)
-                    MoneyFigureRow(centraid.screen.v1.MoneyFigure(label = target.preview_label, amount = target.preview))
+                    MoneyFigureRow(centraid.core.v1.MoneyFigure(label = target.preview_label, amount = target.preview))
                     MoneyNote(target.preview_note)
                 }
                 item(key = "save") {
@@ -491,7 +505,7 @@ internal fun MoneyRecurringScreen(state: MoneyRecurringState, onEvent: (MoneyRec
                             title = row.merchant,
                             meta = listOf(row.meta, row.detail).filter { it.isNotEmpty() }.joinToString(" · "),
                             trailing = money(row.amount),
-                            chips = row.chips,
+                            chips = row.chips.map { it },
                             a11y = spoken(row.accessibility_label, row.amount),
                             testTag = "money-recurring-${row.key}",
                         )
@@ -514,14 +528,14 @@ internal fun MoneyRecurringScreen(state: MoneyRecurringState, onEvent: (MoneyRec
 internal fun MoneySearchScreen(
     state: MoneySearchState,
     onEvent: (MoneySearchEvent) -> Unit,
+    onOpen: (Route) -> Unit,
     onBack: () -> Unit,
-    onOpenContainer: (centraid.screen.v1.ChatCard) -> Unit = {},
 ) {
     val chrome = state.chrome
     PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back_label.orEmpty(), onBack = onBack) {
         androidx.compose.foundation.layout.Column {
             CentraidSearchField(
-                field = state.field_ ?: SearchField(open_ = true),
+                field = SearchField(open_ = true, term = state.term),
                 placeholder = state.placeholder,
                 onTerm = { onEvent(MoneySearchEvent(term = MoneySearchEvent.TermChanged(term = it))) },
                 onClose = { onEvent(MoneySearchEvent(cleared = MoneySearchEvent.Cleared())) },
@@ -538,16 +552,18 @@ internal fun MoneySearchScreen(
                 ) { search ->
                     val empty = search.empty
                     if (search.rows.isEmpty() && empty != null) {
-                        EmptyStateView(empty, onAction = null)
+                        androidx.compose.foundation.layout.Column {
+                            EmptyStateView(empty, onAction = null)
+                            SearchAskRow(search.ask, onOpen)
+                        }
                     } else {
                         LazyColumn {
-                            items(state.field_?.containers.orEmpty(), key = { "c-${it.entity}-${it.id}" }) { container ->
-                                SearchContainerRow(container, onOpen = onOpenContainer)
-                            }
                             item(key = "count") { StatusLine(search.count_label) }
                             items(search.rows, key = { "t-${it.txn_id}" }) { row ->
-                                MoneyRowView(row) { onEvent(MoneySearchEvent(transaction = MoneySearchEvent.TransactionPicked(txn_id = row.txn_id))) }
+                                MoneyRowView(row) { row.route?.let(onOpen) }
                             }
+                            // THE ASK ROW closes the answer (#1097).
+                            item(key = "ask") { SearchAskRow(search.ask, onOpen) }
                         }
                     }
                 }

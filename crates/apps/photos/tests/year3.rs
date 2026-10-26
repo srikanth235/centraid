@@ -5,9 +5,10 @@
 //! declares: 90,000 photographs and 3,000 near-duplicate families of three, with
 //! every 250th trashed, every 500th archived, every 50th starred, 400 places, 40
 //! albums of 50, and a burst every hundredth pair. Each number is a bound a read
-//! was built to trip: the library window against a keyset cursor that shares its
-//! timestamp in pairs, the 200-row trash shelf, and the duplicates read's
-//! 4,000-fingerprint cap against 9,000 fingerprints.
+//! was built to trip: the library shelf walked by a cursor over capture times that
+//! tie in pairs, the trash shelf, the collections and the places over the whole
+//! library, and the duplicates read's 4,000-fingerprint cap against 9,000
+//! fingerprints.
 //!
 //! **The numbers are PROJECTED PROVENANCE** (D-1020-D3-7's pattern). They were
 //! taken on `ci-linux-x64-4c` against a file-backed vault in a debug build with
@@ -26,7 +27,9 @@ use centraid_apps_kit::fixtures::{
 };
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_apps_photos::duplicates::{CLUSTER_ROWS, Fingerprint, duplicate_clusters};
-use centraid_apps_photos::queries::{LibraryInput, SHELF_ROWS, load_library};
+use centraid_apps_photos::overview::load_albums;
+use centraid_apps_photos::places::load_places;
+use centraid_apps_photos::shelf::{Shelf, ShelfCursor, ShelfData, ShelfInput, load_shelf};
 use centraid_vault::Vault;
 use centraid_vault::clock::{FixedClock, SeededIds};
 
@@ -130,108 +133,141 @@ fn the_generator_writes_the_counts_it_declares() {
     );
 }
 
+fn first_page(world: &Seeded, shelf: Shelf, limit: usize) -> ShelfData {
+    read(world, |door| {
+        load_shelf(
+            door,
+            &ShelfInput {
+                shelf,
+                limit,
+                after: None,
+            },
+            NOW_MS,
+        )
+        .expect("the shelf reads")
+    })
+}
+
 #[test]
 fn the_shrunken_axis_goes_through_the_same_statements() {
     let world = seeded(SMALL);
-    let data = read(&world, |door| {
-        load_library(door, &LibraryInput::default(), NOW_MS).expect("the library reads")
-    });
-    // The window FILLED: 1,000 photographs against a 500 window, so `truncated`
-    // is the page's own cursor and not a row count.
-    assert!(data.truncated, "older photographs exist beyond the window");
-    assert!(data.tail.is_some());
-    // The window is the newest 500; the trash, the archive and the folded
-    // originals of a burst are taken out of it, so the shelf is shorter.
-    assert!(!data.photos.is_empty() && data.photos.len() < 500);
-    // The trash shelf is non-empty and bounded.
-    assert_eq!(data.trash.len(), world.counts.trashed.min(SHELF_ROWS));
-    // The album and place joins are real.
-    assert_eq!(data.albums.len(), SMALL.albums);
-    assert_eq!(data.places.len(), SMALL.places);
-    assert!(data.photos.iter().any(|photo| photo.place.is_some()));
-    assert!(data.photos.iter().any(|photo| photo.favorite));
-    // A burst folds its older still: a burst is two photographs, and the library
-    // draws at most one of them.
-    let drawn: Vec<&str> = data
-        .photos
+    let live = first_page(&world, Shelf::Live, 120);
+    // The library is bigger than a page, so the shelf says where the next one starts.
+    assert_eq!(live.cells.len(), 120);
+    assert!(live.next.is_some());
+    // The total is exact: the live rows less the older still of every burst.
+    let total = live.total.expect("the first page counts");
+    let rows = world.counts.live_assets;
+    assert!(
+        total <= rows && rows - total <= world.counts.bursts,
+        "{total} of {rows}"
+    );
+    // The trash shelf is every trashed photograph; the archive every archived one.
+    let trash = first_page(&world, Shelf::Trash, 200);
+    assert_eq!(trash.total, Some(world.counts.trashed));
+    assert_eq!(
+        first_page(&world, Shelf::Archive, 200).total,
+        Some(world.counts.archived - archived_and_trashed(&world))
+    );
+    // The collections and the places are real.
+    let albums = read(&world, |door| load_albums(door, NOW_MS).expect("reads"));
+    assert_eq!(albums.albums.len(), SMALL.albums);
+    assert_eq!(albums.live.count, total);
+    assert_eq!(albums.trash.count, world.counts.trashed);
+    let places = read(&world, |door| load_places(door, NOW_MS).expect("reads"));
+    assert_eq!(places.places.len(), SMALL.places);
+    assert!(live.cells.iter().any(|cell| cell.favorite));
+    // A burst folds its older still: the library draws at most one photograph of a burst.
+    let drawn: Vec<&str> = live
+        .cells
         .iter()
-        .filter_map(|photo| photo.photo.burst.as_deref())
+        .filter_map(|cell| cell.burst.as_deref())
         .collect();
     let distinct: std::collections::BTreeSet<&str> = drawn.iter().copied().collect();
-    assert!(!drawn.is_empty(), "the window holds bursts");
-    assert_eq!(
-        drawn.len(),
-        distinct.len(),
-        "an older still of a burst is folded under its newer"
-    );
+    assert_eq!(drawn.len(), distinct.len());
 }
 
-/// THE CURSOR WALKS THE LIBRARY WITHOUT REPEATING A ROW.
+/// Photographs that are both archived and trashed, which the archive shelf leaves
+/// to the trash.
+fn archived_and_trashed(world: &Seeded) -> usize {
+    let trash = first_page(world, Shelf::Trash, 200);
+    let all = read(world, |door| {
+        centraid_apps_kit::rules::Standing::read(door).expect("standing")
+    });
+    let mut count = 0;
+    let mut page = trash;
+    loop {
+        count += page
+            .cells
+            .iter()
+            .filter(|cell| all.is_archived(&cell.photo_id))
+            .count();
+        let Some(next) = page.next.clone() else {
+            return count;
+        };
+        page = read(world, |door| {
+            load_shelf(
+                door,
+                &ShelfInput {
+                    shelf: Shelf::Trash,
+                    limit: 200,
+                    after: Some(next.clone()),
+                },
+                NOW_MS,
+            )
+            .expect("the shelf reads")
+        });
+    }
+}
+
+/// THE CURSOR WALKS THE LIBRARY WITHOUT REPEATING OR LOSING A ROW.
 ///
 /// This is the property the keyset pair exists for, and the shrunken axis is built
-/// to trip it: two photographs share every `taken_at`, so a cursor on the
-/// timestamp alone stops at a tie.
-///
-/// **A `taken_at` CURSOR CANNOT BE EXACT, AND THAT IS THE FINDING.** The app's
-/// `before` is a bare timestamp, not the `(sort, pk)` pair the kit's page contract
-/// insists on, so at a tie the page either repeats the tied row (`<=`) or drops it
-/// (`<`). It drops: a photograph that shares its `taken_at` with the page's last
-/// row is skipped. The walk therefore asserts what is TRUE: no row is seen twice,
-/// and the rows that went missing are the tie partners of a page boundary plus the
-/// older stills a burst folds. (The phone's own grid reads by keyset pair and has
-/// no such gap; this is the app query's cursor.)
+/// to trip it: two photographs share every `taken_at`, so a cursor on the timestamp
+/// alone stops at a tie. The shelf's cursor is the `(capture time, id)` pair carried
+/// as a predicate, so a page boundary inside a tie loses nothing: the walk reaches
+/// EVERY cell the exact total counts, once. (The `before` cursor of the retired
+/// `library` query dropped the tie partner of every page boundary.)
 #[test]
-fn a_cursor_walk_over_tied_capture_times_repeats_no_row_and_loses_at_most_a_tie_a_page() {
+fn a_cursor_walk_over_tied_capture_times_repeats_no_row_and_loses_none() {
     let world = seeded(SMALL);
     let mut seen: Vec<String> = Vec::new();
-    let mut before: Option<String> = None;
+    let mut after: Option<ShelfCursor> = None;
+    let mut total = None;
     let mut pages = 0_usize;
     // A stated bound on the walk itself: 1,000 photographs at 100 a page is ten
     // pages, and a walk that needed forty is a walk that is repeating.
     for _ in 0..40 {
-        let data = read(&world, |door| {
-            load_library(
+        let page = read(&world, |door| {
+            load_shelf(
                 door,
-                &LibraryInput {
-                    limit: Some(100),
-                    before: before.clone(),
+                &ShelfInput {
+                    shelf: Shelf::Live,
+                    limit: 100,
+                    after: after.clone(),
                 },
                 NOW_MS,
             )
             .expect("the page reads")
         });
-        if data.photos.is_empty() {
-            break;
-        }
         pages += 1;
-        seen.extend(data.photos.iter().map(|photo| photo.photo.photo_id.clone()));
-        let tail = data.tail.clone();
-        if tail == before || tail.is_none() {
-            break;
+        total = total.or(page.total);
+        seen.extend(page.cells.iter().map(|cell| cell.photo_id.clone()));
+        match page.next {
+            Some(next) => after = Some(next),
+            None => break,
         }
-        before = tail;
     }
     let mut unique = seen.clone();
     unique.sort();
     unique.dedup();
     assert_eq!(seen.len(), unique.len(), "no row was seen twice");
-    let live = world
-        .vault
-        .read(|connection| Ok(live_photo_count(connection).expect("counts")))
-        .expect("a read");
-    let reached = i64::try_from(unique.len()).expect("a count");
-    assert!(
-        reached <= live,
-        "the walk cannot reach more rows than exist"
+    assert_eq!(
+        Some(seen.len()),
+        total,
+        "every cell the total counts was reached"
     );
-    let lost = live - reached;
-    let bound = i64::try_from(pages + world.counts.bursts).expect("a count");
-    assert!(
-        lost <= bound,
-        "the walk lost {lost} of {live} rows over {pages} pages and {} bursts, more than a \
-         tie-per-boundary and the folded originals explain",
-        world.counts.bursts
-    );
+    assert!(pages <= 12, "{pages} pages for 1,000 photographs");
 }
 
 /// THE CLUSTERS ARE THE FAMILIES, and nothing else: every cluster is one family,
@@ -240,7 +276,7 @@ fn a_cursor_walk_over_tied_capture_times_repeats_no_row_and_loses_at_most_a_tie_
 fn the_duplicates_are_the_seeded_families_and_no_photograph_crosses_one() {
     let world = seeded(SMALL);
     let clusters = read(&world, |door| {
-        duplicate_clusters(door, media_cluster).expect("the duplicates read")
+        duplicate_clusters(door, 0, media_cluster).expect("the duplicates read")
     });
     assert_eq!(clusters.len(), SMALL.near_duplicate_families);
     for cluster in &clusters {
@@ -286,48 +322,47 @@ fn measure(label: &str, shape: Year3PhotosShape) {
     assert_eq!(world.counts.assets, shape.assets);
 
     let started = Instant::now();
-    let data = read(&world, |door| {
-        load_library(door, &LibraryInput::default(), NOW_MS).expect("the library reads")
-    });
+    let live = first_page(&world, Shelf::Live, 120);
     eprintln!(
-        "{label}: the library (500 window) folded {} rows + {} trashed in {:?}",
-        data.photos.len(),
-        data.trash.len(),
+        "{label}: the library shelf (120 cells and the exact total {:?}) in {:?}",
+        live.total,
         started.elapsed()
     );
-    assert!(data.truncated);
-    assert!(data.photos.len() < 500);
-    assert_eq!(data.trash.len(), SHELF_ROWS, "the trash shelf is bounded");
+    assert_eq!(live.cells.len(), 120);
+    assert!(live.total.expect("a total") < world.counts.live_assets);
 
     let started = Instant::now();
-    let wide = read(&world, |door| {
-        load_library(
-            door,
-            &LibraryInput {
-                limit: Some(2_000),
-                before: None,
-            },
-            NOW_MS,
-        )
-        .expect("the library reads")
-    });
+    let trash = first_page(&world, Shelf::Trash, 200);
     eprintln!(
-        "{label}: the library (2,000 asked, one page served) folded {} rows in {:?}",
-        wide.photos.len(),
+        "{label}: the trash shelf ({} cells of {:?}) in {:?}",
+        trash.cells.len(),
+        trash.total,
         started.elapsed()
     );
-    // THE DECLARED CEILING IS UNREACHABLE IN ONE READ (D-1020-P11): the library's
-    // sort column is nullable, so a continued page over it is refused and the
-    // window is one 500-row page. Asking for 2,000 measures the same page as
-    // asking for 500, which is also what v0 measures; the number is here so the
-    // receipt can say so with a figure and not a claim.
-    assert_eq!(wide.window, 2_000, "the ASK is reported, not the clamp");
-    assert_eq!(wide.photos.len(), data.photos.len(), "one page served");
-    assert!(wide.truncated);
+    assert_eq!(trash.total, Some(world.counts.trashed));
+
+    let started = Instant::now();
+    let albums = read(&world, |door| load_albums(door, NOW_MS).expect("reads"));
+    eprintln!(
+        "{label}: the collections ({} albums, {} live) in {:?}",
+        albums.albums.len(),
+        albums.live.count,
+        started.elapsed()
+    );
+    assert_eq!(albums.albums.len(), shape.albums);
+
+    let started = Instant::now();
+    let places = read(&world, |door| load_places(door, NOW_MS).expect("reads"));
+    eprintln!(
+        "{label}: the places ({}) in {:?}",
+        places.places.len(),
+        started.elapsed()
+    );
+    assert_eq!(places.places.len(), shape.places);
 
     let started = Instant::now();
     let clusters = read(&world, |door| {
-        duplicate_clusters(door, media_cluster).expect("the duplicates read")
+        duplicate_clusters(door, 0, media_cluster).expect("the duplicates read")
     });
     eprintln!(
         "{label}: duplicates clustered {} families from the first {CLUSTER_ROWS} fingerprints in {:?}",
@@ -336,8 +371,20 @@ fn measure(label: &str, shape: Year3PhotosShape) {
     );
     // More fingerprints stand behind the families than the read takes (4,000), so
     // the review surface is cut at its cap rather than reporting every family.
-    assert_eq!(clusters.len(), CLUSTER_ROWS / shape.family_size);
+    // (The live photographs among the first 4,000 fingerprints: the archived and the
+    // trashed ones among them are not offered, so a family or two is a pair.)
+    assert!(clusters.len() <= CLUSTER_ROWS / shape.family_size);
+    assert!(clusters.len() > CLUSTER_ROWS / shape.family_size - CLUSTER_ROWS / 100);
     assert!(clusters.len() < shape.near_duplicate_families);
+    let started = Instant::now();
+    let counted = read(&world, |door| {
+        centraid_apps_photos::duplicate_cluster_count(door, media_cluster).expect("counts")
+    });
+    eprintln!(
+        "{label}: the clusters counted without reading a member: {counted} in {:?}",
+        started.elapsed()
+    );
+    assert_eq!(counted, clusters.len());
 }
 
 /// THE `year3-photos` VOLUME: 90,000 photographs, 3,000 families. Ignored by

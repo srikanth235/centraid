@@ -288,7 +288,7 @@ fn the_token_estimate_never_undercounts_the_real_tokenizer() {
         ),
         (
             "json",
-            r#"{"tool":"tasks.list","args":{"view":"today"}}"#.repeat(8),
+            r#"{"tool":"agenda.task_list","args":{"view":"today"}}"#.repeat(8),
         ),
         ("punctuation", "!?;:,.()[]{}<>/\\|-_=+*&^%$#@~ ".repeat(10)),
         (

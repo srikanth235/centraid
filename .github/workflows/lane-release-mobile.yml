@@ -175,14 +175,13 @@ jobs:
           sudo xcode-select --switch "/Applications/Xcode_${version}.app" ||
             echo "OWNER HAND-OFF: ${version} is not on this runner image."
 
-      - name: Link the shared framework
-        working-directory: mobile
+      # THE CORE'S STATIC LIBRARY, built for the iOS slices the project links
+      # (`iosApp/CoreBridge` maps its header to `CentraidCoreC`). There is no
+      # Kotlin framework in the app any more (#1135).
+      - name: Build the core's iOS slices
         run: |
-          # Cinterop needs an Apple toolchain, which this runner has - so klib
-          # cross-compilation goes back on. On Linux it is off, and
-          # mobile/gradle.properties says why in full.
-          ./gradlew -Pkotlin.native.enableKlibsCrossCompilation=true \
-            :shared:linkReleaseFrameworkIosArm64 --no-daemon
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+          mobile/scripts/ios-core.sh
 
       # `protobuf` and `swift-protobuf` are `protoc` and `protoc-gen-swift`.
       # `xcodegen generate` runs `mobile/scripts/generate-swift-protos.sh` first
@@ -211,9 +210,8 @@ jobs:
       - name: The fixture test - one fixture, two languages
         working-directory: mobile/iosApp
         run: |
-          # THE OTHER HALF of mobile/shared's ScreenFixtureSpec, over the same
-          # 19 files in contracts/screens. This is the first machine in the
-          # pipeline that can run it.
+          # The SwiftUI shell's unit tests, the first machine in the pipeline
+          # that can run them.
           # A SIMULATOR BUNDLE, NOT `swift test`: `Sources/` imports UIKit.
           xcodebuild -scheme Centraid \
             -destination 'platform=iOS Simulator,name=iPhone 16' test

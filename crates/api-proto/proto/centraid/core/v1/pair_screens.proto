@@ -1,0 +1,151 @@
+// PAIR (#1135, lane H2): pairing a gateway and finding it again. See
+// `plumbing_screens.proto` for the arm ranges; this lane's are 1400-1449 for
+// events, views and routes and 1340-1349 for effects.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// ---------------------------------------------------------------------------
+// `pair.laptop`: the pairing screen
+// ---------------------------------------------------------------------------
+
+// PAIR THIS PHONE'S VAULT WITH ONE OF THE MEMBER'S GATEWAYS (#1080; #1047 E4).
+//
+// The gateway prints a pairing payload (`centraid-gateway pair`): a square to
+// scan and the same text to paste, carrying its addresses, its certificate's
+// fingerprint and a one-use secret. The core connects with that pin, pairs and
+// keeps the gateway as one more backup destination. The screen shows the
+// gateway's label and address and the pairing's safety number, 60 digits in 12
+// groups of 5, which the gateway prints when the pairing lands: the comparison
+// is the member's. A second gateway pairs the same way.
+//
+//   (open) ─ keyed ───────────────────────────> WAITING ─ Primary / scan ─> PAIRING
+//          ├ keyed: no ─────────────────────> NEEDS_WORDS (re-key door)           │
+//          └ no vault ──────────────────────> NEEDS_WORDS (no door)               ▼
+//   WAITING <─ Primary (same text) ─ FAILED <─ refusal            PAIRED <─ a safety number
+//
+// **Only a keyed vault can pair.** A pairing is signed for by the vault's
+// identity key, which only a core opened with the seed holds; an unkeyed vault
+// is sent to its words first rather than refused by an error a member cannot
+// act on.
+//
+// The code is not a secret the way the words are: its secret is spent on first
+// use and expires, so pasting is allowed and the screen is not shielded.
+message PairLaptopState {
+  Phase phase = 1;
+  string title = 2;
+  string body = 3;
+  // WAITING and FAILED: what is in the paste field, and its label. Empty when
+  // no field is drawn.
+  string payload = 4;
+  string payload_label = 5;
+  // WAITING and FAILED: "Scan QR code", on every phone. It is the intent
+  // `ScanTapped`; Rust asks the shell to read a code (`ScanCode`).
+  string scan_label = 6;
+  string notice = 7;
+  string primary_label = 8;
+  bool primary_enabled = 9;
+  string secondary_label = 10;
+  // PAIRING: what is happening.
+  string progress = 11;
+  string accessibility_label = 12;
+  // PAIRED: the safety number to compare with the gateway's terminal, in its 12
+  // groups of 5, drawn in a monospaced face and never shortened. A pairing with
+  // no number is refused, never shown as this empty.
+  string safety_number = 13;
+  // NEEDS_WORDS on a vault that opened without its words: "Enter your recovery
+  // key", the intent `WordsTapped`. Empty otherwise.
+  string words_label = 14;
+  // The screen is done (cancelled, Done, or handing over to the words): the
+  // shell pops it.
+  bool finished = 15;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_WAITING = 1;
+    PHASE_PAIRING = 2;
+    PHASE_PAIRED = 3;
+    // `notice` says why; primary tries again with the same text.
+    PHASE_FAILED = 4;
+    // This vault opens without its words, so it has no identity to pair with:
+    // `body` sends the member to the words first.
+    PHASE_NEEDS_WORDS = 5;
+  }
+}
+
+message PairLaptopEvent {
+  oneof kind {
+    PayloadTyped typed = 1;
+    // INTENT: Rust asks the shell to read a code (`ScanCode`); what it reads
+    // comes back as `CodeScanned` and pairs at once.
+    ScanTapped scan = 2;
+    Primary primary = 3;
+    Secondary secondary = 4;
+    // INTENT: the words screen opens for a re-key in pairing's terms. Rust
+    // finishes this screen and asks the shell to push the route (`OpenRoute`).
+    WordsTapped words = 5;
+  }
+
+  message PayloadTyped {
+    string text = 1;
+  }
+
+  message ScanTapped {}
+
+  message Primary {}
+
+  message Secondary {}
+
+  message WordsTapped {}
+}
+
+// ---------------------------------------------------------------------------
+// Effects (1340-1349): reading a code, and browsing the network for gateways
+// ---------------------------------------------------------------------------
+
+// Read one QR code. The shell raises its camera, and on a phone with none its
+// photo picker (a screenshot of the square is still a scan). `photo_label`
+// names a "choose a photo" control drawn on the camera view, so a screenshot is
+// one tap away; empty draws none. Answered once with `CodeScanned`; a member who
+// backs out, a camera that is refused and a phone that has neither are
+// `EffectFailed` (`cancelled` / `denied`), which the screen words or ignores.
+message ScanCode {
+  string photo_label = 1;
+}
+
+// The code read. EMPTY `text` is a photo that held no square: it is an
+// outcome, not a failure.
+message CodeScanned {
+  string text = 1;
+}
+
+// Browse the local network for `_centraid-gateway._tcp` (Bonjour on iOS, NSD
+// on Android). `on: true` starts a browse for the screen that asked and keeps
+// it going until `on: false` or the screen is gone; the shell browses for
+// `window_ms`, answers `GatewaysSighted` with everything it resolved, and while
+// the browse is on browses again every `repeat_ms` (0: once). One effect id
+// answers each window. **Outbound only**: the phone sends a multicast question
+// and reads replies; it opens no listening socket. A platform that refuses the
+// browse (no local-network grant, no Wi-Fi) answers an empty list.
+message BrowseGateways {
+  bool on = 1;
+  uint32 window_ms = 2;
+  uint32 repeat_ms = 3;
+}
+
+// One advertisement of `_centraid-gateway._tcp`, as the platform resolved it.
+// Nothing here is trusted: it is what some machine on the network said.
+message GatewaySighting {
+  // The DNS-SD instance name (`centraid-gateway-<first 8 of the id>`). Never an
+  // identity.
+  string service_name = 1;
+  // The TXT record's key/value pairs.
+  map<string, string> txt = 2;
+  // `host:port` for each address the instance resolved to; IPv6 in brackets.
+  repeated string addresses = 3;
+}
+
+message GatewaysSighted {
+  repeated GatewaySighting sightings = 1;
+}

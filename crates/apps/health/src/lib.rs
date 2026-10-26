@@ -16,7 +16,7 @@
 //! The crate holds no SQL (`cargo xtask rules`, `sql-confinement`): [`door`] states its reads as
 //! `PageQuery` values with stated ceilings, [`figures`] is pure, and [`queries`] is the six
 //! answers `health.proto` carries. The writes are the vault's `health.*` commands, which the
-//! shell's follower engine sends; Chat does not read Health (R-1129-11).
+//! shell's follower engine sends; Chat reads Health like any app (#1135).
 
 pub mod civil;
 pub mod door;

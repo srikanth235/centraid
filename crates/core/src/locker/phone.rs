@@ -80,6 +80,22 @@ pub fn answer(
     request: &wire::LockerSessionRequest,
     changes: &crate::events::ChangeFeed,
 ) -> Result<wire::LockerSessionResponse> {
+    let mut answered = step(vault, registry, owner, keys, cell, request, changes)?;
+    // WHETHER AN UNLOCK CAN SUCCEED rides every answer, so a wall never raises
+    // the OS prompt for a core that would refuse it.
+    answered.keyed = keys.is_some();
+    Ok(answered)
+}
+
+fn step(
+    vault: &Vault,
+    registry: &Registry,
+    owner: &Principal,
+    keys: Option<&crate::phone::Keyring>,
+    cell: &Cell,
+    request: &wire::LockerSessionRequest,
+    changes: &crate::events::ChangeFeed,
+) -> Result<wire::LockerSessionResponse> {
     use wire::locker_session_request::Step;
     let now = vault.clock().now_ms();
     match &request.step {
@@ -469,13 +485,14 @@ pub fn locked_for(vault: &Vault, cell: &Cell, name: &str, input: &serde_json::Va
 pub fn seal_command(
     vault: &Vault,
     cell: &Cell,
-    command: &wire::Command,
+    name: &str,
+    input: &[u8],
 ) -> Result<Option<Vec<u8>>> {
-    if !SEALING_COMMANDS.contains(&command.name.as_str()) || command.input.is_empty() {
+    if !SEALING_COMMANDS.contains(&name) || input.is_empty() {
         return Ok(None);
     }
     let mut input: serde_json::Value =
-        serde_json::from_slice(&command.input).map_err(|error| CoreError::InvalidRequest {
+        serde_json::from_slice(input).map_err(|error| CoreError::InvalidRequest {
             detail: format!("a command's input is canonical JSON in bytes: {error}"),
         })?;
     if !input.is_object() {
@@ -487,7 +504,7 @@ pub fn seal_command(
             .filter(|text| !text.is_empty() && *text != SEALED_PLACEHOLDER)
             .map(str::to_owned)
     };
-    if command.name == "locker.set_field" {
+    if name == "locker.set_field" {
         return seal_field(vault, cell, input, plaintext);
     }
     let mut carried: Vec<(&str, String)> = SEALED_ITEM_CELLS
@@ -522,11 +539,10 @@ pub fn seal_command(
         })?;
     // A NEW ITEM'S PASSWORD IS A CHANGE by definition; an edit's is one only
     // if it differs from what is stored.
-    if command.name == "locker.add_item" && carried.iter().any(|(column, _)| *column == "password")
-    {
+    if name == "locker.add_item" && carried.iter().any(|(column, _)| *column == "password") {
         input["password_rotated"] = serde_json::Value::Bool(true);
     }
-    if command.name == "locker.edit_item"
+    if name == "locker.edit_item"
         && let Some((_, typed)) = carried.iter().find(|(column, _)| *column == "password")
     {
         let stored = vault

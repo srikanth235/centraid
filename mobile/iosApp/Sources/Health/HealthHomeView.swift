@@ -1,28 +1,26 @@
 import SwiftUI
 
-import CentraidShared
-
-/// `health.home` — Today · Trends · Workouts, More a sheet (#1129), on the kit.
+/// `health.home` — Today · Trends · Workouts, More a sheet (#1129, #1135), on the kit.
 ///
 /// **THE VIEW DECIDES NOTHING.** `HealthHomeState` carries the band, the segments, the chips,
 /// every word, figure and unit, and every length as basis points; this file lays them out and
-/// forwards events. `AppPlace` owns the header and the band; `ReadStateView` owns loading,
-/// failure and the denied gate (no band while denied). Health has no create verb and no search:
-/// its rows enter by reading the phone's store. Where each intent leads is
-/// `HealthScreens.routeIntent`; Stop is the shell's own act (`ShellModel.stopHealth`).
+/// forwards events (Rust makes them: `crates/screens`, module `health`). `AppPlace` owns the
+/// header and the band; `ReadStateView` owns loading, failure and the denied gate (no band while
+/// denied). A row that opens a page carries its `Route` and a tap hands it to `open`. Health has
+/// no create verb and no search: its rows enter by reading the phone's store, which Rust asks
+/// the shell to do (`HealthRead`, `ScreenStore`).
 struct HealthHomeView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_HealthHomeState
+    let send: (Centraid_Core_V1_HealthHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onHome: () -> Void
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_HealthHomeState {
-        (try? Centraid_Screen_V1_HealthHomeState(serializedBytes: data)) ?? .init()
-    }
-
-    private func event(_ build: (inout Centraid_Screen_V1_HealthHomeEvent) -> Void) -> Data {
-        healthEvent(Centraid_Screen_V1_HealthHomeEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_HealthHomeEvent) -> Void) -> Centraid_Core_V1_HealthHomeEvent {
+        var event = Centraid_Core_V1_HealthHomeEvent()
+        build(&event)
+        return event
     }
 
     var body: some View {
@@ -39,43 +37,50 @@ struct HealthHomeView: View {
             )
         }
         AppPlace(
-            app: AppIds.shared.HEALTH,
+            app: "health",
             title: chrome.title,
             trailing: nil,
             chips: chips,
             showsBand: !content.isDenied && !state.band.isEmpty
         ) {
             AppBand(
-                app: AppIds.shared.HEALTH,
+                app: "health",
                 tabs: state.band.map { tab in
                     BandView(
                         label: tab.label,
-                        event: event { $0.band = .with { $0.key = tab.key } },
+                        event: Data(tab.key.utf8),
                         iconKey: tab.iconKey,
-                        selected: tab.current
+                        selected: tab.current,
+                        key: tab.key
                     )
                 },
-                onSelect: send,
+                onSelect: { picked in
+                    let key = String(decoding: picked, as: UTF8.self)
+                    send(event { $0.band = .with { $0.key = key } })
+                },
                 onHome: onHome
             )
         } content: {
-            ReadStateView(
-                content: content,
-                onRetry: { send(event { $0.refreshed = .init() }) }
-            ) { home in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        if !state.segments.isEmpty {
-                            segments(state.segments)
+            VStack(spacing: 0) {
+                ReadStateView(
+                    content: content,
+                    onRetry: { send(event { $0.refreshed = .init() }) }
+                ) { home in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            if !state.segments.isEmpty {
+                                segments(state.segments)
+                            }
+                            page(home, state: state)
                         }
-                        page(home, state: state)
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .padding(.top, 8)
+                        .padding(.bottom, 24)
                     }
-                    .padding(.horizontal, CentraidGeometry.pageMargin)
-                    .padding(.top, 8)
-                    .padding(.bottom, 24)
+                    .refreshable { send(event { $0.refreshed = .init() }) }
+                    .accessibilityIdentifier("health-home-list")
                 }
-                .refreshable { send(event { $0.refreshed = .init() }) }
-                .accessibilityIdentifier("health-home-list")
+                StatusLineView(status: state.status, identifier: "health-status-action") {}
             }
         }
         .sheet(isPresented: healthSheetBinding(sheetIsOpen(state)) { send(event { $0.sheetClosed = .init() }) }) {
@@ -83,7 +88,7 @@ struct HealthHomeView: View {
         }
     }
 
-    private func segments(_ segments: [Centraid_Screen_V1_HealthChip]) -> some View {
+    private func segments(_ segments: [Centraid_Core_V1_HealthChip]) -> some View {
         KitSegmented(
             options: segments.map { (key: $0.key, label: $0.label) },
             selected: segments.first(where: \.active)?.key ?? "",
@@ -96,11 +101,11 @@ struct HealthHomeView: View {
     // MARK: - The three destinations
 
     @ViewBuilder
-    private func page(_ home: Centraid_Screen_V1_HealthHomeData, state: Centraid_Screen_V1_HealthHomeState) -> some View {
+    private func page(_ home: Centraid_Core_V1_HealthHomeData, state: Centraid_Core_V1_HealthHomeState) -> some View {
         if home.hasEmpty {
             // NOT CONNECTED: one sentence and Connect, on every tab.
             EmptyStateView(home.empty, actionIdentifier: "health-connect-open") {
-                send(event { $0.connect = .init() })
+                open(home.connect)
             }
         } else {
             if !home.dayLabel.isEmpty, state.destination == .today {
@@ -117,7 +122,7 @@ struct HealthHomeView: View {
     }
 
     @ViewBuilder
-    private func today(_ today: Centraid_Screen_V1_HealthTodayData) -> some View {
+    private func today(_ today: Centraid_Core_V1_HealthTodayData) -> some View {
         hero(today.hero)
         if !today.metrics.isEmpty {
             HealthCard(padding: 0) {
@@ -131,8 +136,7 @@ struct HealthHomeView: View {
                 }
                 ForEach(Array(today.metrics.enumerated()), id: \.offset) { index, line in
                     if index > 0 { KitHairline() }
-                    let metric = line.metric
-                    HealthMetricLineView(line: line) { send(event { $0.metric = .with { $0.metric = metric } }) }
+                    HealthMetricLineView(line: line) { open(line.route) }
                 }
             }
         }
@@ -145,7 +149,7 @@ struct HealthHomeView: View {
                 HealthCard(padding: 0) {
                     ForEach(Array(today.workouts.enumerated()), id: \.offset) { index, row in
                         if index > 0 { KitHairline() }
-                        workoutRow(row)
+                        HealthWorkoutRow(row: row) { open(row.route) }
                     }
                 }
             }
@@ -155,9 +159,8 @@ struct HealthHomeView: View {
     }
 
     /// STEPS, DRAWN LARGE: the figure, when, the typical, and the day on the member's own range.
-    private func hero(_ hero: Centraid_Screen_V1_HealthMetricLine) -> some View {
-        let metric = hero.metric
-        return Button { send(event { $0.metric = .with { $0.metric = metric } }) } label: {
+    private func hero(_ hero: Centraid_Core_V1_HealthMetricLine) -> some View {
+        Button { open(hero.route) } label: {
             HealthCard(padding: 20) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(hero.label)
@@ -199,7 +202,7 @@ struct HealthHomeView: View {
     }
 
     @ViewBuilder
-    private func trends(_ trends: Centraid_Screen_V1_HealthTrendsData) -> some View {
+    private func trends(_ trends: Centraid_Core_V1_HealthTrendsData) -> some View {
         if trends.hasEmpty {
             EmptyStateView(trends.empty)
         } else {
@@ -210,9 +213,8 @@ struct HealthHomeView: View {
         }
     }
 
-    private func trendRow(_ row: Centraid_Screen_V1_HealthTrendRow) -> some View {
-        let metric = row.metric
-        return Button { send(event { $0.metric = .with { $0.metric = metric } }) } label: {
+    private func trendRow(_ row: Centraid_Core_V1_HealthTrendRow) -> some View {
+        Button { open(row.route) } label: {
             HealthCard {
                 HStack(spacing: 14) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -248,7 +250,7 @@ struct HealthHomeView: View {
     }
 
     @ViewBuilder
-    private func workouts(_ workouts: Centraid_Screen_V1_HealthWorkoutsData, chrome: Centraid_Screen_V1_HealthHomeChrome) -> some View {
+    private func workouts(_ workouts: Centraid_Core_V1_HealthWorkoutsData, chrome: Centraid_Core_V1_HealthHomeChrome) -> some View {
         if workouts.hasEmpty {
             EmptyStateView(workouts.empty)
         } else {
@@ -261,7 +263,7 @@ struct HealthHomeView: View {
                     HealthCard(padding: 0) {
                         ForEach(Array(section.rows.enumerated()), id: \.offset) { index, row in
                             if index > 0 { KitHairline() }
-                            workoutRow(row)
+                            HealthWorkoutRow(row: row) { open(row.route) }
                         }
                     }
                 }
@@ -270,14 +272,9 @@ struct HealthHomeView: View {
         }
     }
 
-    private func workoutRow(_ row: Centraid_Screen_V1_HealthWorkoutLine) -> some View {
-        let id = row.activityID
-        return HealthWorkoutRow(row: row) { send(event { $0.workout = .with { $0.activityID = id } }) }
-    }
-
     // MARK: - Sheets
 
-    private func sheetIsOpen(_ state: Centraid_Screen_V1_HealthHomeState) -> Bool {
+    private func sheetIsOpen(_ state: Centraid_Core_V1_HealthHomeState) -> Bool {
         switch state.sheet {
         case .more, .reads, .stop: return true
         default: return false
@@ -285,7 +282,7 @@ struct HealthHomeView: View {
     }
 
     @ViewBuilder
-    private func sheetContent(_ state: Centraid_Screen_V1_HealthHomeState) -> some View {
+    private func sheetContent(_ state: Centraid_Core_V1_HealthHomeState) -> some View {
         let chrome = state.chrome
         let close = { send(event { $0.sheetClosed = .init() }) }
         switch state.sheet {
@@ -298,7 +295,11 @@ struct HealthHomeView: View {
                         label: row.label,
                         destructive: row.tone == .net,
                         identifier: "health-more-\(key)"
-                    ) { send(event { $0.more = .with { $0.key = key } }) }
+                    ) {
+                        // The sheet goes either way; a row with a route also opens its page.
+                        send(event { $0.more = .with { $0.key = key } })
+                        if row.hasRoute { open(row.route) }
+                    }
                 }
             }
         case .reads:
@@ -317,7 +318,7 @@ struct HealthHomeView: View {
             }
         case .stop:
             ConfirmSheet(
-                stopConfirm(state),
+                state.stop,
                 cancelLabel: chrome.stopCancel,
                 onConfirm: { send(event { $0.stop = .init() }) },
                 onDismiss: close
@@ -325,15 +326,5 @@ struct HealthHomeView: View {
         default:
             EmptyView()
         }
-    }
-
-    /// The stop confirm, in the chrome's own sentences; destructive as the More row that opened it is.
-    private func stopConfirm(_ state: Centraid_Screen_V1_HealthHomeState) -> Centraid_Screen_V1_Confirm {
-        var confirm = Centraid_Screen_V1_Confirm()
-        confirm.title = state.chrome.stopTitle
-        confirm.body = state.chrome.stopBody
-        confirm.confirmLabel = state.chrome.stopConfirm
-        confirm.destructive = state.moreRows.first { $0.key == HealthHomeMachine.shared.MORE_STOP }?.tone == .net
-        return confirm
     }
 }

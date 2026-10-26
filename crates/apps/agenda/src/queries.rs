@@ -197,7 +197,7 @@ pub struct BirthdayFact {
 
 /// What `day-context` answers.
 ///
-/// **NO DUE WORK**: a dated task is a row in its day, read from `tasks.board`
+/// **NO DUE WORK**: a dated task is a row in its day, read from `agenda.task.board`
 /// (R-1128-F1, #1128).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DayContextData {

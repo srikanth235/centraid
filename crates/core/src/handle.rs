@@ -51,13 +51,16 @@ use crate::events::{EventQueue, Next};
 /// precisely because it must not be here.
 const CAPABILITIES: &[&str] = &[];
 
-/// The command name that triggers the `debug-fault` panic.
+/// The app an `act` names to trigger the `debug-fault` panic.
 ///
 /// Public so a shell's own clause-9 test can name it without copying a string,
-/// and **not** a registered command: `Registry` never sees it, so a build
-/// without the feature answers it as an unknown command like any other typo
-/// (#1020 wave 3, lane E finding 4).
-pub const DEBUG_FAULT_COMMAND: &str = "debug.panic";
+/// and **not** an app the catalogue carries: a build without the feature
+/// answers an act on it as an unknown app like any other typo (#1020 wave 3,
+/// lane E finding 4).
+pub const DEBUG_FAULT_APP: &str = "debug";
+
+/// The action, on [`DEBUG_FAULT_APP`], that triggers the `debug-fault` panic.
+pub const DEBUG_FAULT_ACTION: &str = "panic";
 
 /// THE ONLY CALLER THERE IS, AS A RECEIPT NAMES IT (#1029 §1).
 ///
@@ -70,7 +73,43 @@ pub const DEBUG_FAULT_COMMAND: &str = "debug.panic";
 pub const OWNER_DEVICE: &str = "this-device";
 
 /// The type a shell holds. Opaque across the C ABI.
+///
+/// A cheap clone of one [`HandleState`]: a job that must outlive a call (the
+/// screen runtime's `off_thread`) takes its own `Handle` and the core stays
+/// one, whoever holds it.
+#[derive(Clone)]
 pub struct Handle {
+    state: Arc<HandleState>,
+}
+
+impl std::ops::Deref for Handle {
+    type Target = HandleState;
+
+    fn deref(&self) -> &HandleState {
+        &self.state
+    }
+}
+
+impl Handle {
+    fn new(make: impl FnOnce(std::sync::Weak<HandleState>) -> HandleState) -> Handle {
+        Handle {
+            state: Arc::new_cyclic(|me| make(me.clone())),
+        }
+    }
+
+    /// The handle a [`HandleState`] belongs to; `None` once the last `Handle`
+    /// is gone.
+    #[must_use]
+    pub fn of(state: &HandleState) -> Option<Handle> {
+        state.me.upgrade().map(|state| Handle { state })
+    }
+}
+
+/// Everything a [`Handle`] is. Public only so `Handle` can deref to it.
+#[doc(hidden)]
+pub struct HandleState {
+    /// This state's own `Arc`, so `&self` can mint a [`Handle`].
+    me: std::sync::Weak<HandleState>,
     /// THE VAULT, WHEN THERE IS ONE.
     ///
     /// `None` is a core opened at a path with no file and `create: false` —
@@ -165,6 +204,16 @@ pub struct Handle {
     /// only; see [`crate::assist`]. `pub(crate)` because that module is where
     /// `Request::Assist` is answered.
     pub(crate) assist: crate::assist::Hub,
+    /// THE SCREEN RUNTIME, once a shell-facing library has attached one
+    /// (#1135, lane C2): see [`crate::screens`].
+    screens: std::sync::OnceLock<Arc<dyn crate::screens::ScreenHost>>,
+    /// THE DIRECTORY OF VAULTS THIS CORE IS THE DOOR TO, when it is one
+    /// (#1135, lane H2): see [`crate::vaults`]. Read once by whoever builds the
+    /// shelf ([`Self::shelf_config`]).
+    shelf_config: Option<crate::config::ShelfConfig>,
+    /// THE SHELF, once the screen runtime built one: the vaults a shell's calls
+    /// are routed to.
+    vaults: std::sync::OnceLock<Arc<dyn crate::vaults::Vaults>>,
 }
 
 /// THE CLOCK AND ID SOURCE A CORE WAS OPENED WITH, kept for the life of the
@@ -200,6 +249,7 @@ impl Core {
             expected_digest,
             seed,
             spool_ceiling,
+            shelf: shelf_config,
         } = config;
         // BEFORE THE FILE IS TOUCHED. A stale core that opened the vault and
         // then refused would have already run whatever migration its own
@@ -260,12 +310,14 @@ impl Core {
             None => None,
             Some((seed, index)) => Some(crate::phone::Keyring::derive(&seed, index)?),
         };
-        Ok(Handle {
+        let registry = Arc::new(Registry::with_system_commands()?);
+        Ok(Handle::new(|me| HandleState {
+            me,
             plane: crate::phone::Plane::of(&path).with_ceiling(spool_ceiling),
             path,
             keys,
             vault: Arc::new(Mutex::new(vault)),
-            registry: Arc::new(Registry::with_system_commands()?),
+            registry,
             ui_thread_name,
             events: Arc::new(EventQueue::new()),
             staging: crate::stage::Staging::default(),
@@ -282,7 +334,10 @@ impl Core {
             owned_bytes: Mutex::new(None),
             locker: Arc::new(Mutex::new(None)),
             assist: crate::assist::Hub::new(),
-        })
+            screens: std::sync::OnceLock::new(),
+            shelf_config,
+            vaults: std::sync::OnceLock::new(),
+        }))
     }
 
     /// Open (or create) the file and put the content store beside it.
@@ -349,7 +404,7 @@ impl Core {
     }
 }
 
-impl Handle {
+impl HandleState {
     /// The event queue, so a producer (sync, the applier) can push to it.
     #[must_use]
     pub fn events(&self) -> Arc<EventQueue> {
@@ -503,6 +558,9 @@ impl Handle {
     pub fn call(&self, request: &wire::Request) -> Result<wire::Response> {
         self.assert_not_on_the_ui_thread();
         self.check_open()?;
+        if let Some(front) = self.foreground_for(request) {
+            return front.call(request);
+        }
         let kind = request_kind(request);
         let request_id = {
             let mut session = self.lock_session();
@@ -514,6 +572,14 @@ impl Handle {
             session.settle(request_id);
         }
         self.forget_cancel(request_id);
+        // THE LEDGER MOVED, WHETHER OR NOT THE DOOR SUCCEEDED: a pass that
+        // stopped on an unreachable gateway still recorded what it did. A
+        // screen reading `backup-status` hears it as a change to
+        // [`crate::phone::backup_reads::TABLE`].
+        if crate::phone::backup_reads::moves_the_ledger(request) {
+            crate::events::ChangeFeed::new(self.events())
+                .tables_changed(&[crate::phone::backup_reads::TABLE.to_owned()]);
+        }
         answer
     }
 
@@ -526,6 +592,9 @@ impl Handle {
     pub fn call_with_id(&self, request: &wire::Request, request_id: u64) -> Result<wire::Response> {
         self.assert_not_on_the_ui_thread();
         self.check_open()?;
+        if let Some(front) = self.foreground_for(request) {
+            return front.call_with_id(request, request_id);
+        }
         let kind = request_kind(request);
         {
             let mut session = self.lock_session();
@@ -540,6 +609,103 @@ impl Handle {
         answer
     }
 
+    /// THE ONE READ (#1135): [`crate::load::load`] over this core's vault.
+    ///
+    /// # Errors
+    /// Whatever `load` refuses with; [`CoreError::Unpaired`] with no file.
+    pub fn load(&self, request: &wire::LoadRequest) -> Result<wire::LoadResponse> {
+        if let Some(front) = self.foreground_for_load(request) {
+            return front.load(request);
+        }
+        // Some of the shell's reads are the phone's own ledger (the backup's
+        // status, the held vaults), not a vault table: they need the handle.
+        if request.app == crate::shell::ID
+            && let Some(answer) = crate::phone::shell_reads::load(self, request)
+        {
+            return answer;
+        }
+        self.with_vault(|vault| crate::load::load(vault, request))
+    }
+
+    /// THE ONE WRITE (#1135): [`crate::act::act`] over this core's vault, with
+    /// the change feed, the owner and the duplicate-tap record it needs.
+    ///
+    /// # Errors
+    /// Whatever `act` refuses with; [`CoreError::Unpaired`] with no file.
+    pub fn act(&self, request: &wire::ActRequest) -> Result<wire::ActResponse> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return front.act(request);
+        }
+        let changes = crate::events::ChangeFeed::new(self.events());
+        let owner = self.owner();
+        self.with_vault(|vault| {
+            crate::act::act(
+                &crate::act::Ctx {
+                    vault,
+                    locker: &self.locker,
+                    registry: &self.registry,
+                    owner: &owner,
+                    changes: &changes,
+                    plane: &self.plane,
+                },
+                request,
+            )
+        })
+    }
+
+    /// Attach the screen runtime. Once per core: a second attach is ignored,
+    /// because two runtimes would each own a route stack.
+    pub fn attach_screens(&self, host: Arc<dyn crate::screens::ScreenHost>) {
+        let _ = self.screens.set(host);
+    }
+
+    /// The directory of vaults this core is the door to, when it was opened as
+    /// one ([`crate::CoreConfig::fronting`]).
+    #[must_use]
+    pub fn shelf_config(&self) -> Option<&crate::config::ShelfConfig> {
+        self.shelf_config.as_ref()
+    }
+
+    /// Attach the shelf. Once per core: a second attach is ignored.
+    pub fn attach_vaults(&self, vaults: Arc<dyn crate::vaults::Vaults>) {
+        let _ = self.vaults.set(vaults);
+    }
+
+    /// The shelf, when this core is the door to one.
+    #[must_use]
+    pub fn vaults(&self) -> Option<&Arc<dyn crate::vaults::Vaults>> {
+        self.vaults.get()
+    }
+
+    /// THE VAULT IN FRONT, when this core is a shelf's door and the phone holds
+    /// one. A core that is not a door answers its own requests, and so does a
+    /// door with nothing in front: it holds no vault, so a read says
+    /// [`CoreError::Unpaired`] as it always did.
+    pub(crate) fn foreground_if_shelved(&self) -> Option<Handle> {
+        self.vaults.get()?.foreground_core()
+    }
+
+    /// Where `request` goes: the vault in front, unless it is the front's own
+    /// business — the screen runtime (it lives here and reads through the
+    /// vault in front), the words and a restore (they need no vault), the
+    /// handshake, and the shelf's own read.
+    fn foreground_for(&self, request: &wire::Request) -> Option<Handle> {
+        use wire::request::Kind as K;
+        self.vaults.get()?;
+        match &request.kind {
+            None | Some(K::Hello(_) | K::Screen(_) | K::Phrase(_) | K::Restore(_)) => None,
+            Some(K::Load(load)) => self.foreground_for_load(load),
+            Some(_) => self.foreground_if_shelved(),
+        }
+    }
+
+    fn foreground_for_load(&self, request: &wire::LoadRequest) -> Option<Handle> {
+        if crate::phone::shell_reads::is_front_read(request) {
+            return None;
+        }
+        self.foreground_if_shelved()
+    }
+
     /// Cancel an in-flight **unbounded** operation.
     ///
     /// A bounded read is refused rather than cancelled, and the refusal is
@@ -550,6 +716,9 @@ impl Handle {
     /// read finishing.
     pub fn cancel(&self, request_id: u64) -> Result<()> {
         self.check_open()?;
+        if let Some(front) = self.foreground_if_shelved() {
+            return front.cancel(request_id);
+        }
         // `Session::cancel` already holds the three answers: `Ok(false)` for an
         // id nobody is waiting for, `Err(NotCancellable)` for a bounded read,
         // `Ok(true)` for an unbounded one. Re-deriving them here would be a
@@ -586,10 +755,47 @@ impl Handle {
     /// `debug-fault` door injects found it on its first run.
     pub fn next_event(&self, timeout: Duration) -> Result<Option<wire::Event>> {
         self.check_open()?;
-        match self.events.next(timeout) {
-            Next::Event(event) => Ok(Some(event)),
-            Next::Timeout => Ok(None),
-            Next::Closed => Err(CoreError::Closed),
+        // THE SCREEN RUNTIME IS DRIVEN FROM HERE (#1135, lane C2). A change
+        // event is a reason to re-render and a wake is a timer that elapsed;
+        // both are handled with `&self` as the screens' door to the core, on
+        // the shell's own event thread (never the UI thread), so a runtime
+        // needs no reference to this handle that outlives a call.
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            match self.events.next(left) {
+                Next::Event(event) => {
+                    let host = self.screens.get();
+                    match (&event.kind, host) {
+                        // A wake is the runtime's own marker: it is handled
+                        // here and never reaches the shell.
+                        (Some(wire::event::Kind::Wake(_)), host) => {
+                            if let Some(host) = host {
+                                host.wake(self);
+                            }
+                        }
+                        (Some(wire::event::Kind::JobDone(done)), host) => {
+                            if let Some(host) = host {
+                                host.job_done(self, done.job, done.bytes.clone());
+                            }
+                        }
+                        // THE ASSISTANT'S STREAM goes to the screens that listen (the chat)
+                        // and on to the shell too, like a change: the stream is part of the ABI,
+                        // and a shell with a runtime simply ignores it.
+                        (Some(wire::event::Kind::Assist(assist)), Some(host)) => {
+                            host.assist(self, assist);
+                            return Ok(Some(event));
+                        }
+                        (Some(wire::event::Kind::Change(change)), Some(host)) => {
+                            host.changed(self, std::slice::from_ref(&change.table));
+                            return Ok(Some(event));
+                        }
+                        _ => return Ok(Some(event)),
+                    }
+                }
+                Next::Timeout => return Ok(None),
+                Next::Closed => return Err(CoreError::Closed),
+            }
         }
     }
 
@@ -602,6 +808,10 @@ impl Handle {
     pub fn close(&self) {
         self.closed.store(true, Ordering::SeqCst);
         self.events.close();
+        // THE VAULTS THE SHELF HOLDS GO WITH THE DOOR TO THEM.
+        if let Some(vaults) = self.vaults.get() {
+            vaults.close_all();
+        }
     }
 
     /// CLOSE THE FILE ITSELF, so what is on disk is the whole vault.
@@ -641,6 +851,12 @@ impl Handle {
         }
     }
 
+    /// Zero the Locker session now, if one is unlocked: the rule for leaving the
+    /// foreground, and for a vault the member switched away from.
+    pub fn relock(&self) {
+        crate::locker::phone::relock(&self.locker);
+    }
+
     /// Whether this handle is closed.
     #[must_use]
     pub fn is_closed(&self) -> bool {
@@ -676,6 +892,33 @@ impl Handle {
             .clone()
     }
 
+    /// THE LOCKER SESSION (#1047, D-5): one step of `Request.locker`. A shell
+    /// asks it over the ABI; the screen runtime asks it through
+    /// [`crate::screens::ScreenCtx::locker`], the same step on the same session.
+    ///
+    /// # Errors
+    /// The session's own refusals; [`CoreError::Unpaired`] with no file.
+    pub fn locker_session(
+        &self,
+        request: &wire::LockerSessionRequest,
+    ) -> Result<wire::LockerSessionResponse> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return front.locker_session(request);
+        }
+        let changes = crate::events::ChangeFeed::new(self.events());
+        self.with_vault(|vault| {
+            crate::locker::phone::answer(
+                vault,
+                &self.registry,
+                &self.owner(),
+                self.keys.as_ref(),
+                &self.locker,
+                request,
+                &changes,
+            )
+        })
+    }
+
     /// Run a body with the vault. The **one** way anything reaches the file.
     ///
     /// Refuses [`CoreError::Unpaired`] when this seat holds no copy. That is a
@@ -709,6 +952,18 @@ impl Handle {
         body(held.as_ref())
     }
 
+    /// The backup's standing as the ledger and the vault say it: the one
+    /// reading behind the `backup_status` door and the shell's `backup-status`
+    /// query. It dials nobody.
+    ///
+    /// # Errors
+    /// The ledger's or the spool's refusal, or a vault that will not read.
+    pub(crate) fn backup_standing(&self) -> Result<wire::BackupStatusResponse> {
+        self.with_vault_if_any(|vault| {
+            crate::phone::backup_status(&self.plane, vault, self.keys.as_ref())
+        })
+    }
+
     /// Whether this core holds a copy of the vault.
     ///
     /// The fact a shell draws its first screen from, alongside
@@ -731,11 +986,58 @@ impl Handle {
     /// WHO THIS CORE'S COMMANDS RUN AS (#1029 §1).
     ///
     /// Taken from the handle and never from the request. See
-    /// [`crate::api::invoke`] for why there is nothing else it could be, and
+    /// `crate::api::invoke` for why there is nothing else it could be, and
     /// [`OWNER_DEVICE`] for what a receipt ends up naming.
     #[must_use]
     pub fn owner(&self) -> centraid_vault::Principal {
         centraid_vault::Principal::owner(OWNER_DEVICE)
+    }
+
+    /// RUN ONE REGISTERED COMMAND BY NAME, IN RUST (#1135).
+    ///
+    /// Not a door a shell reaches: the FFI carries no command request, and a
+    /// screen's write is [`Self::act`]. This is for the Rust beside the core
+    /// that names a command no app's manifest declares — the vault shelf's
+    /// `vault.rename`, a seeding tool, a test laying the rows it reads — and it
+    /// takes the one write path `act` and the chat's confirmed card take
+    /// (`crate::api::command`): a Locker secret is sealed under the open
+    /// session, the change feed is told after the commit. `invoke_key` is
+    /// required and remembered by nothing: the same key twice runs twice
+    /// (`tests/replay.rs`).
+    ///
+    /// # Errors
+    /// [`CoreError::InvalidRequest`] for an empty key or a refused seal; the
+    /// vault's own failures; [`CoreError::Unpaired`] with no file.
+    pub fn command(
+        &self,
+        name: &str,
+        input: &serde_json::Value,
+        invoke_key: &str,
+    ) -> Result<centraid_vault::commands::CommandOutcome> {
+        self.check_open()?;
+        if let Some(front) = self.foreground_if_shelved() {
+            return front.command(name, input, invoke_key);
+        }
+        let call = crate::api::Invocation {
+            name: name.to_owned(),
+            input: serde_json::to_vec(input).map_err(|error| CoreError::Invariant {
+                context: format!("a command's input is not JSON: {error}"),
+            })?,
+            invoke_key: invoke_key.to_owned(),
+        };
+        let changes = crate::events::ChangeFeed::new(self.events());
+        let owner = self.owner();
+        self.with_vault(|vault| {
+            crate::api::command(
+                vault,
+                &self.locker,
+                &self.registry,
+                &owner,
+                &call,
+                &changes,
+                None,
+            )
+        })
     }
 
     /// THE DOOR A CHAT'S NATIVE SESSION READS AND WRITES THROUGH (#1088).
@@ -751,6 +1053,7 @@ impl Handle {
             self.events(),
             self.owner(),
             Arc::clone(&self.locker),
+            crate::phone::Plane::of(&self.path),
         )
     }
 
@@ -808,13 +1111,14 @@ impl Handle {
         // exist — so nothing proved that the real library produces what a fake
         // ABI produces.
         //
-        // It rides the EXISTING `Command` request rather than a new symbol:
+        // It rides the EXISTING `Act` request rather than a new symbol:
         // clause 10 says five symbols and means it, and a shell that needed a
         // sixth to test the fifth would have a sixth in production.
         // `abi-five-symbols` still counts five, because nothing is exported.
         #[cfg(feature = "debug-fault")]
-        if let K::Command(command) = kind
-            && command.name == DEBUG_FAULT_COMMAND
+        if let K::Act(act) = kind
+            && act.app == DEBUG_FAULT_APP
+            && act.action == DEBUG_FAULT_ACTION
         {
             panic!("debug-fault: a deliberate panic for a shell's clause-9 test");
         }
@@ -836,41 +1140,10 @@ impl Handle {
             K::Found(request) => Ok(response(wire::response::Kind::Found(self.with_vault(
                 |vault| crate::api::found(vault, &self.registry, &self.owner(), request),
             )?))),
-            K::Command(command) => {
-                let changes = crate::events::ChangeFeed::new(self.events());
-                Ok(response(wire::response::Kind::Command(self.with_vault(
-                    |vault| {
-                        // A LOCKER SECRET IS SEALED in the one write path the chat's
-                        // confirmed card shares (#1047, D-5, #1135): `api::command`.
-                        crate::api::command(
-                            vault,
-                            &self.locker,
-                            &self.registry,
-                            &self.owner(),
-                            command,
-                            &changes,
-                        )
-                        .and_then(crate::api::wire_outcome)
-                    },
-                )?)))
-            }
             // THE LOCKER SESSION (#1047, D-5). See `crate::locker::phone`.
-            K::Locker(request) => {
-                let changes = crate::events::ChangeFeed::new(self.events());
-                Ok(response(wire::response::Kind::Locker(self.with_vault(
-                    |vault| {
-                        crate::locker::phone::answer(
-                            vault,
-                            &self.registry,
-                            &self.owner(),
-                            self.keys.as_ref(),
-                            &self.locker,
-                            request,
-                            &changes,
-                        )
-                    },
-                )?)))
-            }
+            K::Locker(request) => Ok(response(wire::response::Kind::Locker(
+                self.locker_session(request)?,
+            ))),
             // THE PASS (#1080). Not through `with_vault` for its whole length:
             // the vault is held for the snapshot's copy and the reads a pass
             // makes, never across the network, so a screen's reads go on while
@@ -913,9 +1186,7 @@ impl Handle {
             // A STATUS READ ANSWERS WITH OR WITHOUT A VAULT: the ledger is
             // beside the file, and the content counts need the file.
             K::BackupStatus(_) => Ok(response(wire::response::Kind::BackupStatus(
-                self.with_vault_if_any(|vault| {
-                    crate::phone::backup_status(&self.plane, vault, self.keys.as_ref())
-                })?,
+                self.backup_standing()?,
             ))),
             // THE 24 WORDS NEED NO VAULT EITHER (#1047 E1): a first launch
             // mints them before there is a vault to found, and a restore
@@ -940,6 +1211,40 @@ impl Handle {
             // app crate's, through `app_query::VaultDoor`.
             K::AppQuery(request) => Ok(response(wire::response::Kind::AppQuery(Box::new(
                 self.with_vault(|vault| crate::app_query::answer(vault, request))?,
+            )))),
+            // THE ONE READ (#1135): the app's manifest names the query, the core
+            // reads its arguments by name and runs the app's own query.
+            K::Load(request) => Ok(response(wire::response::Kind::Load(Box::new(
+                self.load(request)?,
+            )))),
+            // THE SCREEN RUNTIME (#1135, lane C2): navigation and a screen's
+            // events. A core with no runtime attached refuses by name.
+            K::Screen(request) => {
+                let host = self.screens.get().ok_or_else(|| CoreError::Unsupported {
+                    type_url: "centraid.core.v1.ScreenRequest".to_owned(),
+                })?;
+                // LEAVING THE FOREGROUND RELOCKS THE LOCKER (D-5), whether or
+                // not a Locker screen is open to hear it: the session is the
+                // core's, so the rule is too.
+                if let Some(wire::screen_request::Kind::Lifecycle(lifecycle)) = &request.kind
+                    && !lifecycle.foreground
+                {
+                    crate::locker::phone::relock(&self.locker);
+                    // EVERY HELD VAULT'S SESSION, not only the one in front.
+                    if let Some(vaults) = self.vaults.get() {
+                        for core in vaults.awake() {
+                            core.relock();
+                        }
+                    }
+                }
+                Ok(response(wire::response::Kind::Screen(Box::new(
+                    host.call(self, request)?,
+                ))))
+            }
+            // THE ONE WRITE (#1135): the app's manifest names the action; the
+            // core runs the duplicate-tap, frozen-vault and schema rules.
+            K::Act(request) => Ok(response(wire::response::Kind::Act(Box::new(
+                self.act(request)?,
             )))),
             // MONEY'S IMPORT PLAN AND HOME'S TILE (#1099). See `money.proto`;
             // `with_vault` like an app query, because they ARE page reads. The
@@ -1308,7 +1613,6 @@ fn request_kind(request: &wire::Request) -> RequestKind {
         Some(
             K::Hello(_)
             | K::Page(_)
-            | K::Command(_)
             // A LOCATION LOOKUP IS BOUNDED: it is capped at
             // `api::MAX_CONTENT_URLS` rows of index reads and moves no bytes.
             | K::ContentUrls(_)
@@ -1340,6 +1644,12 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // walks a declared fan-out and every expansion a declared instance
             // cap, and reaching one is `ReadBoundReached`, not a longer read.
             | K::AppQuery(_)
+            // `load` IS AN APP QUERY BY THE MANIFEST'S NAME, with the same
+            // ceilings; `act` IS ONE COMMAND, one commit.
+            | K::Load(_)
+            | K::Act(_)
+            // A SCREEN EVENT IS A HANDFUL OF `load`s and `act`s, each bounded.
+            | K::Screen(_)
             // MONEY'S PLAN IS BOUNDED: one file of at most 8 MiB and 20,000
             // rows read once, and the same declared fan-outs an app query has.
             | K::Money(_)
@@ -1476,34 +1786,25 @@ mod tests {
         let blob =
             centraid_vault::bytes::BlobStore::put(&scratch.handle.bytes().expect("a door"), &png)
                 .expect("the store takes it");
-        let Some(wire::response::Kind::Command(outcome)) = scratch
+        let outcome = scratch
             .handle
-            .call(&wire::Request {
-                kind: Some(wire::request::Kind::Command(wire::Command {
-                    name: "photo.add".to_owned(),
-                    input: serde_json::to_vec(&serde_json::json!({
-                        "blob": blob,
-                        "size": png.len(),
-                        "media_type": "image/png",
-                    }))
-                    .expect("json"),
-                    invoke_key: "content-urls-library".to_owned(),
-                    ..wire::Command::default()
-                })),
-            })
-            .expect("the command answers")
-            .kind
-        else {
-            panic!("a command answers with an outcome");
-        };
+            .command(
+                "photo.add",
+                &serde_json::json!({
+                    "blob": blob,
+                    "size": png.len(),
+                    "media_type": "image/png",
+                }),
+                "content-urls-library",
+            )
+            .expect("the command answers");
         assert_eq!(
             outcome.status,
-            wire::CommandStatus::Executed as i32,
-            "{}",
+            centraid_vault::CommandStatus::Executed,
+            "{:?}",
             outcome.reason
         );
-        let output: serde_json::Value =
-            serde_json::from_slice(&outcome.output).expect("the output is JSON");
+        let output = outcome.output;
         let reference = wire::ContentRef {
             content_id: blob.clone(),
             owner_type: "photo".to_owned(),
@@ -1837,7 +2138,7 @@ mod tests {
         assert_eq!(request_kind(&hello()), RequestKind::Bounded);
         assert_eq!(
             request_kind(&wire::Request {
-                kind: Some(wire::request::Kind::Command(wire::Command::default())),
+                kind: Some(wire::request::Kind::Act(Box::default())),
             }),
             RequestKind::Bounded
         );
@@ -2244,13 +2545,7 @@ mod tests {
         assert!(page.next.is_none());
     }
 
-    /// THE PRINCIPAL COMES OFF THE HANDLE (#1029 §1).
-    ///
-    /// A command carrying no principal at all used to be refused —
-    /// `principal_from_wire` answered `InvalidRequest` — because a gateway
-    /// serving seats had a second caller to authorise. There is no second
-    /// caller, so the field is not read and its absence is not a refusal.
-    /// A WRITE THROUGH THE CALL DOOR PUSHES A CHANGE EVENT (#1029 §1).
+    /// A WRITE PUSHES A CHANGE EVENT (#1029 §1).
     ///
     /// The last hole in the loop: `EventQueue` was bounded, coalescing and
     /// fully tested, and the only thing that ever pushed a change event into
@@ -2261,21 +2556,15 @@ mod tests {
     #[test]
     fn a_command_that_writes_pushes_a_change_event_naming_the_table() {
         let scratch = Scratch::founded();
-        let answer = scratch
+        let outcome = scratch
             .handle
-            .call(&wire::Request {
-                kind: Some(wire::request::Kind::Command(wire::Command {
-                    name: "person.add".to_owned(),
-                    input: br#"{"title":"Ada Lovelace"}"#.to_vec(),
-                    invoke_key: "w2-change-event".to_owned(),
-                    ..Default::default()
-                })),
-            })
+            .command(
+                "person.add",
+                &serde_json::json!({ "title": "Ada Lovelace" }),
+                "w2-change-event",
+            )
             .expect("the command runs");
-        let Some(wire::response::Kind::Command(outcome)) = answer.kind else {
-            panic!("a command outcome");
-        };
-        assert_eq!(outcome.status, wire::CommandStatus::Executed as i32);
+        assert_eq!(outcome.status, centraid_vault::CommandStatus::Executed);
 
         let mut tables = Vec::new();
         while let Ok(Some(event)) = scratch.handle.next_event(Duration::from_millis(20)) {
@@ -2289,75 +2578,44 @@ mod tests {
         );
     }
 
+    /// THE PRINCIPAL COMES OFF THE HANDLE (#1029 §1).
+    ///
+    /// A command once carried its caller's principal on the request, and one
+    /// carrying none was refused, because a gateway serving seats had a second
+    /// caller to authorise. There is no second caller and no field to state
+    /// one in: a command runs as [`Handle::owner`], and running one states
+    /// nothing about who is asking.
     #[test]
-    fn a_command_with_no_principal_is_answered_rather_than_refused() {
+    fn a_command_runs_as_the_handles_owner_without_being_told() {
         let scratch = Scratch::founded();
         let outcome = scratch
             .handle
-            .call(&wire::Request {
-                kind: Some(wire::request::Kind::Command(wire::Command {
-                    name: "person.add".to_owned(),
-                    input: br#"{"title":"Ada","cadence_days":0}"#.to_vec(),
-                    invoke_key: "w1-principal-from-the-handle".to_owned(),
-                    // ABSENT, and that is the assertion.
-                    principal: None,
-                    ..Default::default()
-                })),
-            })
+            .command(
+                "person.add",
+                &serde_json::json!({ "title": "Ada", "cadence_days": 0 }),
+                "w1-principal-from-the-handle",
+            )
             .expect("the command is answered");
-        let Some(wire::response::Kind::Command(answer)) = outcome.kind else {
-            panic!("a command outcome comes back");
-        };
         assert_eq!(
-            answer.status,
-            wire::CommandStatus::Executed as i32,
-            "the command ran; reason was `{}`",
-            answer.reason
+            outcome.status,
+            centraid_vault::CommandStatus::Executed,
+            "the command ran; reason was `{:?}`",
+            outcome.reason
         );
     }
 
-    /// AND A PRINCIPAL ON THE REQUEST CANNOT RAISE ONE.
-    ///
-    /// The field survives on the wire (deleting it is the contracts lane's),
-    /// so the thing worth asserting is that filling it changes nothing: a
-    /// caller's claim about its own authority is not a grant.
+    /// THE KEY IS REQUIRED: it is the caller's correlation key, and a command
+    /// with none is a request error rather than a run.
     #[test]
-    fn a_principal_on_the_request_does_not_change_who_the_command_runs_as() {
+    fn a_command_with_no_invoke_key_is_refused_before_it_runs() {
         let scratch = Scratch::founded();
-        let run = |principal: Option<wire::Principal>, key: &str| {
-            let outcome = scratch
+        let refused =
+            scratch
                 .handle
-                .call(&wire::Request {
-                    kind: Some(wire::request::Kind::Command(wire::Command {
-                        name: "person.add".to_owned(),
-                        input: br#"{"title":"Grace","cadence_days":0}"#.to_vec(),
-                        invoke_key: key.to_owned(),
-                        principal,
-                        ..Default::default()
-                    })),
-                })
-                .expect("the command is answered");
-            let Some(wire::response::Kind::Command(answer)) = outcome.kind else {
-                panic!("a command outcome comes back");
-            };
-            answer.status
-        };
-        let plain = run(None, "w1-principal-plain");
-        // An AGENT is the strongest thing the old wire vocabulary could claim,
-        // and it rode an owner it named itself.
-        let claimed = run(
-            Some(wire::Principal {
-                kind: wire::PrincipalKind::Agent as i32,
-                caller_id: "_assistant".to_owned(),
-                principal_id: "_assistant".to_owned(),
-                surface: "money".to_owned(),
-                on_behalf_of_owner: true,
-            }),
-            "w1-principal-claimed",
-        );
-        assert_eq!(
-            plain, claimed,
-            "the request's principal is not read, so it cannot change the answer"
+                .command("person.add", &serde_json::json!({ "title": "Ada" }), "");
+        assert!(
+            matches!(refused, Err(CoreError::InvalidRequest { .. })),
+            "{refused:?}"
         );
     }
 }

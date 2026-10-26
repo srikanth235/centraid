@@ -4,9 +4,8 @@
 // `chat` schema, rung eleven): a thread, its messages, and each message's cards
 // and attachments. These are the READS. They ride `app_query.proto` at numbers
 // 70-72, the way every app's phone queries do; the WRITES are registered
-// commands (`chat.save_turn`, `chat.rename_thread`, `chat.delete_thread`,
-// `chat.clear`) that the core runs itself at the end of a turn or a shell sends
-// through `Request::Command`. Nothing here writes.
+// commands (`thread.save_turn`, `thread.rename`, ...) that the core runs itself
+// at the end of a turn or that a screen names as an `act`. Nothing here writes.
 //
 // A CARD IS A SNAPSHOT, NOT A REFERENCE (R-CHAT-3). `ChatStoredCard` is what the
 // answer said; the row it names may be gone. `chat_card` is the question a

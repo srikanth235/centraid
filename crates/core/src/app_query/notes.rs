@@ -69,7 +69,7 @@ fn count(value: usize) -> u32 {
     u32::try_from(value).unwrap_or(u32::MAX)
 }
 
-pub(super) fn library(
+pub(crate) fn library(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::NotesLibraryRequest,
@@ -122,7 +122,7 @@ pub(super) fn library(
     )
 }
 
-pub(super) fn notebooks(door: &VaultDoor<'_>) -> Result<Answer> {
+pub(crate) fn notebooks(door: &VaultDoor<'_>) -> Result<Answer> {
     settle(door, notes::load_notebooks(door), |data| {
         Answer::NotesNotebooks(wire::NotesNotebooks {
             unfiled_count: count(data.unfiled_count),
@@ -142,7 +142,7 @@ pub(super) fn notebooks(door: &VaultDoor<'_>) -> Result<Answer> {
     })
 }
 
-pub(super) fn journal(
+pub(crate) fn journal(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -187,7 +187,7 @@ pub(super) fn journal(
     )
 }
 
-pub(super) fn search(
+pub(crate) fn search(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::NotesSearchRequest,
@@ -238,7 +238,7 @@ pub(super) fn search(
     })
 }
 
-pub(super) fn link_targets(
+pub(crate) fn link_targets(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::NotesLinkTargetsRequest,
@@ -281,7 +281,7 @@ pub(super) fn link_targets(
 /// `dtstart`) or a floating wall clock is already civil, so its date part IS
 /// the day; an instant — a `Z` or an offset after the date — is read in the
 /// zone, and with no zone it has no day. Anything else is not a when: EMPTY.
-pub(super) fn subtitle_day(zone: Option<&FireZone>, subtitle: &str) -> String {
+pub(crate) fn subtitle_day(zone: Option<&FireZone>, subtitle: &str) -> String {
     let text = subtitle.trim();
     let bytes = text.as_bytes();
     let dated = bytes.len() >= 10
@@ -321,7 +321,7 @@ pub(super) fn subtitle_day(zone: Option<&FireZone>, subtitle: &str) -> String {
     day_if(zone, Some(&format!("{}T{time}", &text[..10])))
 }
 
-pub(super) fn trash(
+pub(crate) fn trash(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::NotesTrashRequest,
@@ -337,7 +337,7 @@ pub(super) fn trash(
     })
 }
 
-pub(super) fn history(
+pub(crate) fn history(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::NotesHistoryRequest,
@@ -366,7 +366,30 @@ pub(super) fn history(
     )
 }
 
-pub(super) fn note(
+pub(crate) fn about(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    asked: &wire::NotesAboutRequest,
+) -> Result<Answer> {
+    let zone = zone_of(vault, &asked.tz)?;
+    settle(
+        door,
+        queries::load_about(door, &asked.about_id, window_of(asked.window)),
+        |data| {
+            Answer::NotesAbout(wire::NotesAbout {
+                notes: data
+                    .notes
+                    .into_iter()
+                    .map(|row| row_to_wire(row, &zone))
+                    .collect(),
+                truncated: data.truncated,
+                window: count(data.window),
+            })
+        },
+    )
+}
+
+pub(crate) fn note(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::NotesNoteRequest,
@@ -393,6 +416,19 @@ pub(super) fn note(
                 deleted_at: note.deleted_at,
                 purge_at: note.purge_at,
                 notebook_id: note.notebook_id,
+                tags: note
+                    .tags
+                    .into_iter()
+                    .map(|tag| wire::NotesTag {
+                        concept_id: tag.concept_id,
+                        label: tag.label,
+                    })
+                    .collect(),
+                attachments: note
+                    .attachments
+                    .into_iter()
+                    .map(attachment_to_wire)
+                    .collect(),
             })
         },
     )
@@ -558,27 +594,21 @@ mod tests {
 
         fn run(&self, name: &str, input: serde_json::Value) -> serde_json::Value {
             self.writes.set(self.writes.get() + 1);
-            let response = self
+            let outcome = self
                 .handle
-                .call(&wire::Request {
-                    kind: Some(wire::request::Kind::Command(wire::Command {
-                        name: name.to_owned(),
-                        input: serde_json::to_vec(&input).expect("json"),
-                        invoke_key: format!("notes-query-test-{}", self.writes.get()),
-                        ..wire::Command::default()
-                    })),
-                })
+                .command(
+                    name,
+                    &input,
+                    &format!("notes-query-test-{}", self.writes.get()),
+                )
                 .unwrap_or_else(|error| panic!("{name} refused: {error}"));
-            let Some(wire::response::Kind::Command(outcome)) = response.kind else {
-                panic!("a command answered with something else");
-            };
             assert_eq!(
                 outcome.status,
-                wire::CommandStatus::Executed as i32,
-                "{name}: {}",
+                centraid_vault::CommandStatus::Executed,
+                "{name}: {:?}",
                 outcome.reason
             );
-            serde_json::from_slice(&outcome.output).expect("the output is JSON")
+            outcome.output
         }
 
         fn create(&self, title: &str, body: &str) -> String {

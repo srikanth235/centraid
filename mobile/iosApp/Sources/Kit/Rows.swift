@@ -1,7 +1,5 @@
 import SwiftUI
 
-import CentraidShared
-
 // ONE ROW SHAPE, ONE SECTION HEAD, ONE FIELD ROW (K5; handoff README l.22-27:
 // "one row shape per app reused by every list in it; the section head with a
 // count and a text verb; the field row of key, value and note; the chip").
@@ -18,11 +16,11 @@ struct CentraidRow: View {
     var meta: String = ""
     var trailing: String = ""
     var trailingTone: String = "text"
-    var chips: [Centraid_Screen_V1_StatusChip] = []
+    var chips: [Centraid_Core_V1_StatusChip] = []
     var hueKey: String = ""
     var dimmed: Bool = false
     var pending: Bool = false
-    var pendingLabel: String = KitWords.shared.PENDING
+    var pendingLabel: String = KitWords.PENDING
     var accessibility: String = ""
     var identifier: String = ""
     var onTap: (() -> Void)? = nil
@@ -30,7 +28,7 @@ struct CentraidRow: View {
     @Environment(\.colorScheme) private var scheme
 
     /// A row the machine already folded into the kit's `ListRow`.
-    init(_ row: Centraid_Screen_V1_ListRow, onTap: (() -> Void)? = nil) {
+    init(_ row: Centraid_Core_V1_ListRow, onTap: (() -> Void)? = nil) {
         self.init(
             title: row.title,
             meta: row.meta,
@@ -51,12 +49,12 @@ struct CentraidRow: View {
         meta: String = "",
         trailing: String = "",
         trailingTone: String = "text",
-        chip: Centraid_Screen_V1_StatusChip? = nil,
-        chips: [Centraid_Screen_V1_StatusChip] = [],
+        chip: Centraid_Core_V1_StatusChip? = nil,
+        chips: [Centraid_Core_V1_StatusChip] = [],
         hueKey: String = "",
         dimmed: Bool = false,
         pending: Bool = false,
-        pendingLabel: String = KitWords.shared.PENDING,
+        pendingLabel: String = KitWords.PENDING,
         accessibility: String = "",
         identifier: String = "",
         onTap: (() -> Void)? = nil
@@ -162,17 +160,17 @@ private struct OptionalIdentifier: ViewModifier {
 /// whose ink is the tone. `seam` is "not yet", `net` is "owe / leaves",
 /// `warning` is a caution; everything else is soft ink.
 struct StatusChipView: View {
-    let chip: Centraid_Screen_V1_StatusChip
+    let chip: Centraid_Core_V1_StatusChip
 
     @Environment(\.colorScheme) private var scheme
 
-    init(_ chip: Centraid_Screen_V1_StatusChip) { self.chip = chip }
+    init(_ chip: Centraid_Core_V1_StatusChip) { self.chip = chip }
 
     private var tone: String { Self.ink(chip.tone, neutral: "textSoft") }
 
     /// A tone's ink role. `neutral` is what NEUTRAL and UNSPECIFIED draw — soft
     /// ink on a chip, plain ink on a row's trailing figure.
-    static func ink(_ tone: Centraid_Screen_V1_StatusChip.Tone, neutral: String) -> String {
+    static func ink(_ tone: Centraid_Core_V1_StatusChip.Tone, neutral: String) -> String {
         switch tone {
         case .seam: return "seam"
         case .net: return "net"
@@ -194,25 +192,29 @@ struct StatusChipView: View {
     }
 }
 
+/// A SECTION HEAD'S WORDS: a title, an optional count and a text verb, every
+/// one of them the state's.
+struct KitSectionHead {
+    var title = ""
+    var count: UInt32?
+    var verbLabel = ""
+}
+
 /// THE SECTION HEAD: a title, its count, and a text verb at the end ("See
 /// all", "Clear"). Never a chevron-only control — the verb is a word.
 struct SectionHeader: View {
-    let head: Centraid_Screen_V1_SectionHead
+    let head: KitSectionHead
     var onVerb: (() -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
 
-    init(_ head: Centraid_Screen_V1_SectionHead, onVerb: (() -> Void)? = nil) {
+    init(_ head: KitSectionHead, onVerb: (() -> Void)? = nil) {
         self.head = head
         self.onVerb = onVerb
     }
 
     init(title: String, count: UInt32? = nil, verb: String = "", onVerb: (() -> Void)? = nil) {
-        var head = Centraid_Screen_V1_SectionHead()
-        head.title = title
-        if let count { head.count = count }
-        head.verbLabel = verb
-        self.init(head, onVerb: onVerb)
+        self.init(KitSectionHead(title: title, count: count, verbLabel: verb), onVerb: onVerb)
     }
 
     var body: some View {
@@ -221,8 +223,8 @@ struct SectionHeader: View {
                 .centraidType("eyebrow")
                 .foregroundStyle(Theme.color("textSoft", scheme))
                 .accessibilityAddTraits(.isHeader)
-            if head.hasCount {
-                Text("\(head.count)")
+            if let count = head.count {
+                Text("\(count)")
                     .centraidType("eyebrow")
                     .foregroundStyle(Theme.color("textFaint", scheme))
             }
@@ -250,7 +252,7 @@ struct SectionHeader: View {
 struct ShowMoreFooter: View {
     let visible: Bool
     var loading: Bool = false
-    var label: String = KitWords.shared.SHOW_MORE
+    var label: String = KitWords.SHOW_MORE
     let onMore: () -> Void
 
     var body: some View {
@@ -396,19 +398,19 @@ enum KitHue {
 /// or folder a member typed the name of. ONE ROW for Home's search and for the
 /// four owning apps' own search results — its glyph by kind, its title, its kind
 /// in a soft word — drawn above the result rows. The machine finished every
-/// word and the glyph (`SearchContainer`); a tap hands the row's reference
-/// (`target`) to the shell's one row router and decides nothing itself. Its id is
+/// word and the glyph (`SearchContainer`); a tap hands the row's `route` to
+/// the page, which pushes it, and decides nothing itself. Its id is
 /// `search-container-<entity>-<id>`, the same everywhere.
 struct SearchContainerRow: View {
-    let container: Centraid_Screen_V1_SearchContainer
-    let onOpen: (Centraid_Screen_V1_ChatCard) -> Void
+    let container: Centraid_Core_V1_SearchContainer
+    let onOpen: (Centraid_Core_V1_Route) -> Void
 
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         Button {
-            guard container.hasTarget else { return }
-            onOpen(container.target)
+            guard container.hasRoute else { return }
+            onOpen(container.route)
         } label: {
             HStack(spacing: 12) {
                 CentraidIconView(iconKey: container.iconKey, tint: Theme.color("textSoft", scheme), size: 18)
@@ -441,8 +443,8 @@ struct SearchContainerRow: View {
 /// stack above its first item moved the scroll position and left the answer
 /// scrolled out of sight (Tasks' own search, #1097).
 struct SearchContainerList: View {
-    let containers: [Centraid_Screen_V1_SearchContainer]
-    let onOpen: (Centraid_Screen_V1_ChatCard) -> Void
+    let containers: [Centraid_Core_V1_SearchContainer]
+    let onOpen: (Centraid_Core_V1_Route) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

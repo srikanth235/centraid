@@ -13,12 +13,12 @@
 //! against two, and two vaults holding the same rows under the same name would
 //! prove nothing: a switch that quietly did not happen would look exactly like
 //! one that did. `--only` is what makes the difference VISIBLE on the
-//! springboard — a vault seeded `--only docs,tasks,agenda` draws People, Notes
+//! springboard — a vault seeded `--only docs,agenda` draws People, Notes
 //! and Photos as genuinely empty, which is a state the grid already knows
 //! how to say and does not have to invent.
 //!
 //! **One scenario across eight apps** — agenda, docs, locker, money, notes,
-//! people, photos and tasks: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
+//! people, photos and agenda: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
 //! Chris, with notes and a packing list. A demo
 //! corpus is for reading like somebody's life rather than like
 //! `Item 1, Item 2`.
@@ -34,8 +34,8 @@
 //! whose items carry no secret leaves reveal, copy and Review with nothing to
 //! walk, so this core is opened with [`DEMO_WORDS`] at index 0 — the public
 //! BIP39 all-`abandon` vector, printed as `CENTRAID_DEMO_WORDS` — and each
-//! item goes through the shell's own door: a Locker unlock, then
-//! `locker.add_item` through `Handle::call`, which seals the typed secret
+//! item goes through the core's sealing path: a Locker unlock, then
+//! `locker.add_item` through `Handle::command`, which seals the typed secret
 //! under `K` before the command plane sees it. A phone opened with those same
 //! words reveals them; any other words answer `DID_NOT_OPEN`. The secrets are
 //! test values (a published test card number, made-up passwords), never
@@ -256,15 +256,15 @@ fn main() {
             centraid_core::example::seed(vault, &registry, &principal, &|app| wanted.has(app), now)
         })
         .expect("the scenario seeds");
-    // LOCKER THROUGH THE SHELL'S DOOR, not `Vault::execute`: sealing is the
-    // core's, in `Handle::call`, so these writes need the handle free of the
+    // LOCKER THROUGH THE CORE'S SEALING PATH, not `Vault::execute`: sealing is
+    // the core's, in `Handle::command`, so these writes need the handle free of the
     // `with_vault` borrow above.
     if wanted.has("locker") {
         report.refused.extend(seed_locker(&handle));
     }
     // WHAT HOME WILL DRAW, READ BACK BEFORE THE HANDLE CLOSES. Each number is
-    // the row count of the table that app's Home tile pages (`HomeReads.READS`
-    // in `mobile/shared`).
+    // the row count of the table that app's Home tile pages (`crates/screens`'s
+    // `shell::tiles`).
     let self_id = handle
         .with_vault(|vault| Ok(vault.self_id()?.unwrap_or_default()))
         .expect("the self person reads");
@@ -337,7 +337,7 @@ fn main() {
 /// self id is the predicate's one bind). Locker
 /// counts live, unarchived items, as its tile does; the trashed demo item is
 /// not one.
-const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
+const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 7] = [
     ("photos", "photo", "id", None),
     ("docs", "document", "id", None),
     (
@@ -346,17 +346,12 @@ const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
         "id",
         Some("kind = 'note' AND deleted_at IS NULL"),
     ),
+    // THE TASKS ARE AGENDA'S (#1128): its events and its tasks are one app's rows.
     (
         "agenda",
         "entity",
         "id",
-        Some("kind = 'event' AND deleted_at IS NULL"),
-    ),
-    (
-        "tasks",
-        "entity",
-        "id",
-        Some("kind = 'task' AND deleted_at IS NULL"),
+        Some("kind IN ('event', 'task') AND deleted_at IS NULL"),
     ),
     (
         "people",
@@ -579,28 +574,17 @@ fn seed_passkey(handle: &centraid_core::Handle) -> Result<(), String> {
         "user_handle": "owner", "display_name": "Cabin booking", "credential_id": "demo-credential-1",
         "algorithm": "ES256", "private_key": sealed, "key_id": key_id
     });
-    let answer = handle
-        .call(&wire::Request {
-            kind: Some(wire::request::Kind::Command(wire::Command {
-                name: "locker.set_passkey".to_owned(),
-                input: serde_json::to_vec(&input).map_err(|error| error.to_string())?,
-                invoke_key: "seed-demo-locker-passkey".to_owned(),
-                ..wire::Command::default()
-            })),
-        })
+    let outcome = handle
+        .command("locker.set_passkey", &input, "seed-demo-locker-passkey")
         .map_err(|error| error.to_string())?;
-    match answer.kind {
-        Some(wire::response::Kind::Command(outcome))
-            if outcome.status == wire::CommandStatus::Executed as i32 =>
-        {
-            Ok(())
-        }
-        Some(wire::response::Kind::Command(outcome)) => Err(outcome.reason),
-        other => Err(format!("answered as {other:?}")),
+    if outcome.status == centraid_vault::CommandStatus::Executed {
+        Ok(())
+    } else {
+        Err(outcome.reason.unwrap_or_default())
     }
 }
 
-/// Seed Locker through `Handle::call`: unlock, write, relock. Answers the
+/// Seed Locker through the handle: unlock, write (`Handle::command`), relock. Answers the
 /// refusals, in the report's words.
 fn seed_locker(handle: &centraid_core::Handle) -> Vec<String> {
     use wire::locker_session_request::Step;
@@ -618,22 +602,10 @@ fn seed_locker(handle: &centraid_core::Handle) -> Vec<String> {
         return refused;
     }
     for (index, (name, input)) in locker_items().into_iter().enumerate() {
-        let answer = handle.call(&wire::Request {
-            kind: Some(wire::request::Kind::Command(wire::Command {
-                name: name.to_owned(),
-                input: serde_json::to_vec(&input).expect("a seed input is JSON"),
-                invoke_key: format!("seed-demo-locker-{index}"),
-                ..wire::Command::default()
-            })),
-        });
-        let why = match answer.map(|response| response.kind) {
-            Ok(Some(wire::response::Kind::Command(outcome)))
-                if outcome.status == wire::CommandStatus::Executed as i32 =>
-            {
-                continue;
-            }
-            Ok(Some(wire::response::Kind::Command(outcome))) => outcome.reason,
-            Ok(other) => format!("answered as {other:?}"),
+        let answer = handle.command(name, &input, &format!("seed-demo-locker-{index}"));
+        let why = match answer {
+            Ok(outcome) if outcome.status == centraid_vault::CommandStatus::Executed => continue,
+            Ok(outcome) => outcome.reason.unwrap_or_default(),
             Err(error) => error.to_string(),
         };
         eprintln!("seed-demo-vault: {name} refused: {why}");

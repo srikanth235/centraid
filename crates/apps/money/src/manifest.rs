@@ -5,7 +5,7 @@
 //! is parsed by the kit at load time: two copies of "which tables does Money
 //! write" is how the two answers drift, and the drift is invisible because both
 //! copies look right. Each action's `input` is the vault command's own schema,
-//! copied verbatim; `the_action_schemas_are_the_vaults` proves it.
+//! copied verbatim (but for the words chat reads); `every_action_is_a_vault_command_with_its_schema` proves it.
 
 use std::sync::OnceLock;
 
@@ -48,10 +48,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_eleven_queries_and_twenty_two_actions() {
+    fn it_declares_twelve_queries_and_twenty_three_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 11);
-        assert_eq!(manifest.actions.len(), 22);
+        assert_eq!(manifest.queries.len(), 12);
+        assert_eq!(manifest.actions.len(), 23);
         for name in [
             "spending",
             "activity",
@@ -64,6 +64,7 @@ mod tests {
             "recurring",
             "home-tile",
             "search",
+            "import-plan",
         ] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -152,6 +153,20 @@ mod tests {
         );
     }
 
+    /// The input without the words only the conversation surface reads: the names chat says a
+    /// property under (`aliases`) and the ids it leaves for the core (`x-minted`, `x-target`).
+    fn chat_words_removed(schema: &serde_json::Value) -> serde_json::Value {
+        match schema {
+            serde_json::Value::Object(map) => serde_json::Value::Object(
+                map.iter()
+                    .filter(|(key, _)| !matches!(key.as_str(), "aliases" | "x-minted" | "x-target"))
+                    .map(|(key, value)| (key.clone(), chat_words_removed(value)))
+                    .collect(),
+            ),
+            other => other.clone(),
+        }
+    }
+
     /// An action's input is its command's own schema, copied verbatim: two
     /// copies of "what does `txn.categorize` take" is how the two drift.
     #[test]
@@ -163,7 +178,7 @@ mod tests {
                 .get(row.command)
                 .unwrap_or_else(|| panic!("{} is not a vault command", row.command));
             assert_eq!(
-                &manifest().action(row.action).expect("declared").input,
+                &chat_words_removed(&manifest().action(row.action).expect("declared").input),
                 registered.schema(),
                 "{}'s input is not {}'s schema",
                 row.action,
@@ -182,5 +197,16 @@ mod tests {
     #[test]
     fn it_creates_no_tables_of_its_own() {
         assert!(manifest().ext_tables.is_empty());
+    }
+
+    /// THE CATALOG NAMES THE COMMAND EACH ACTION RUNS, and it is the command
+    /// the action table runs: chat's verb rows are generated from the first and
+    /// executed through the second.
+    #[test]
+    fn every_action_declares_the_command_its_row_invokes() {
+        for row in crate::commands::ACTIONS {
+            let declared = manifest().action(row.action).expect("a declared action");
+            assert_eq!(declared.command, row.command, "{}", row.action);
+        }
     }
 }

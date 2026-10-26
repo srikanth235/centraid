@@ -3,18 +3,19 @@ import Foundation
 import Security
 import UIKit
 
-import CentraidShared
-
 // THE BACKGROUND MOVER (#1080 rulings 1, 2, 7; seam contract §2, A6, A10).
 //
 // iOS continues exactly one kind of transfer while an app is suspended: a file
 // upload or download handed to a background `URLSession`. That is why the
 // carrier is HTTPS to the member's own gateway (ruling 2): the core prepares
-// sealed parts in the spool while the app is alive, Kotlin asks the core for a
-// `handoff` batch and hands it here, the OS moves the files with the app
-// suspended, and every finished task is reported back through `UploadEvents`
-// so the core can `settle` it. Android does all of this in-process and has no
-// twin of this file.
+// sealed parts in the spool while the app is alive, the pass scheduler in Rust
+// (`crates/screens/src/passes`) asks the core for a `handoff` batch and hands it
+// here as an `UploadsOp` effect, the OS moves the files with the app suspended,
+// and every finished task is reported back as a `ShellFact` (`UploadSettled`,
+// `UploadsDrained`) so Rust can `settle` it. The decisions (reconcile before
+// handoff, the batch caps) are Rust's; this file is the OS adapter and the hold
+// that keeps a relaunch's reports until a runtime exists. Android does all of
+// this in-process and has no twin of this file.
 //
 // Four rules this file keeps, each with its reason:
 //
@@ -116,7 +117,7 @@ struct UploadTag: Codable, Equatable {
 }
 
 /// One part the core handed off, in this file's own terms — so the delegate
-/// and its tests never need the Kotlin types.
+/// and its tests never need the wire types.
 struct UploadOrder: Equatable {
     let name: String
     let path: String
@@ -226,7 +227,7 @@ enum UploadOutcome {
 /// not secrets, and they are kept in one property list beside the vaults:
 /// under `Documents`, which `VaultFileProtection.secure` sweeps out of iCloud
 /// backup and into `completeUntilFirstUserAuthentication` (R-1029-8). A file
-/// at that level is not a vault (`Shelf` lists `<dir>/*/vault.db`).
+/// at that level is not a vault (the Rust shelf lists `<dir>/*/vault.db`).
 final class UploadPins: @unchecked Sendable {
     struct Pin: Codable, Equatable {
         /// The gateway certificate's DER, as the core kept it at `pair`.
@@ -308,13 +309,12 @@ final class UploadPins: @unchecked Sendable {
 
 /// THE ONE BACKGROUND SESSION.
 ///
-/// Non-isolated and locked, because Kotlin may call [enqueue] from any thread;
+/// Non-isolated and locked, because [enqueue] may be called from any thread;
 /// the session's delegate queue is the MAIN queue, so every callback below is
-/// on the main thread — which is what lets a report cross into Kotlin, whose
-/// suspend functions are callable from Swift on the main thread only.
+/// on the main thread, where the store that reports it to Rust lives.
 final class BackgroundUploader: NSObject, @unchecked Sendable {
     /// Not a `BGTaskScheduler` identifier: a background session needs no
-    /// `Info.plist` key, and `BackgroundIdentifierSpec` does not list it.
+    /// `Info.plist` key, and `project.yml` does not list it.
     static let identifier = "dev.centraid.uploads"
 
     static let shared = BackgroundUploader(pins: UploadPins(at: UploadPins.defaultLocation))
@@ -527,34 +527,28 @@ extension BackgroundUploader: URLSessionDataDelegate {
     }
 }
 
-/// THE KOTLIN-VISIBLE HALF (seam contract §2): `BackgroundUploads` is
-/// `commonMain`'s interface and this is its iOS implementation.
-extension BackgroundUploader: BackgroundUploads {
-    func enqueue(batch: [HandoffPart]) {
-        enqueue(batch.map { part in
+/// THE HAND-OFF, AS RUST ASKS FOR IT (`UploadsOp`): the whole requests the core prepared, in this
+/// file's own terms. Rust decides what to hand off and when (reconcile, then the batch, never more
+/// than the cap); this only gives the OS what it was handed.
+extension BackgroundUploader {
+    func enqueue(parts: [Centraid_Core_V1_HandoffPart]) {
+        enqueue(parts.map { part in
             UploadOrder(
                 name: part.name,
                 path: part.path,
                 url: part.url,
                 method: part.method,
-                // `value_`: Wire spells the proto's `value` with a trailing
-                // underscore, and Kotlin/Native exports it as Wire spells it.
-                headers: part.headers.map { UploadOrder.Header(name: $0.name, value: $0.value_) },
-                size: UInt64(bitPattern: part.size),
-                gateway: part.gateway_id,
-                vault: part.vault_id,
-                allowsCellular: part.allows_cellular
+                headers: part.headers.map { UploadOrder.Header(name: $0.name, value: $0.value) },
+                size: part.size,
+                gateway: part.gatewayID,
+                vault: part.vaultID,
+                allowsCellular: part.allowsCellular
             )
         })
     }
-
-    func pending() -> Int32 { Int32(clamping: pendingCount) }
-
-    func cancelAll() { cancelEverything() }
 }
 
-/// Where finished uploads go: the core's `UploadEvents`, or a hold until it
-/// is attached.
+/// Where finished uploads go: the pass scheduler, or a hold until it is attached.
 protocol UploadSink: AnyObject {
     @MainActor func settled(_ upload: SettledUpload) async
     @MainActor func drained() async
@@ -562,9 +556,9 @@ protocol UploadSink: AnyObject {
 
 /// THE ORDERED, MAIN-ACTOR ROAD FROM THE OS TO THE CORE.
 ///
-/// Every report is chained behind the one before it, because a Kotlin
-/// suspend call is awaited and two awaited calls started together would land
-/// in either order. iOS's completion handler for a relaunch is held here and
+/// Every report is chained behind the one before it, because a report to
+/// Rust is awaited and two awaited calls started together would land in
+/// either order. iOS's completion handler for a relaunch is held here and
 /// called once the core has settled and chained the next batch — or after
 /// [finishWithinSeconds], whichever is first, because iOS suspends an app
 /// that keeps it longer and stops relaunching one that never answers.
@@ -639,36 +633,28 @@ final class UploadSettlement {
     }
 }
 
-/// The core's `UploadEvents`, as a sink. `@MainActor` because a Kotlin suspend
-/// function is callable from Swift on the main thread only.
+/// The pass scheduler's sink: what the OS reports goes to Rust as facts (`UploadSettled`,
+/// `UploadsDrained`), in order. `@MainActor` because the store is.
 @MainActor
-final class CoreUploadSink: UploadSink {
-    private let events: UploadEvents
+final class ScreenUploadSink: UploadSink {
+    private let store: ScreenStore
 
-    init(_ events: UploadEvents) {
-        self.events = events
+    init(_ store: ScreenStore) {
+        self.store = store
     }
 
     func settled(_ upload: SettledUpload) async {
-        do {
-            try await events.settled(
-                name: upload.name,
-                httpStatus: Int32(clamping: upload.httpStatus),
-                error: upload.error,
-                gatewayId: upload.gateway,
-                vaultId: upload.vault
-            )
-        } catch {
-            NSLog("centraid: a settle did not reach the core: %@", "\(error)")
-        }
+        var fact = Centraid_Core_V1_UploadSettled()
+        fact.name = upload.name
+        fact.httpStatus = UInt32(clamping: upload.httpStatus)
+        fact.error = upload.error ?? ""
+        fact.gatewayID = upload.gateway
+        fact.vaultID = upload.vault
+        store.report(.settled(fact))
     }
 
     func drained() async {
-        do {
-            try await events.sessionDrained()
-        } catch {
-            NSLog("centraid: the uploads' drain did not reach the core: %@", "\(error)")
-        }
+        store.report(.drained(Centraid_Core_V1_UploadsDrained()))
     }
 }
 

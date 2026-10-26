@@ -240,7 +240,7 @@ fn a_turn_crosses_the_abi_and_its_events_come_back_encoded_and_in_order() {
         answer
             .cards
             .iter()
-            .all(|card| card.app == "tasks" && card.entity == "task")
+            .all(|card| card.app == "agenda" && card.entity == "task")
     );
 
     let kinds: Vec<&'static str> = opened

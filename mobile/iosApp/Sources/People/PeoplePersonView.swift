@@ -1,40 +1,36 @@
 import SwiftUI
 
-/// One person — facts, channels, dates, notes and the touch log — on the kit
-/// (#1029 app port). A `PushedPage` from People.
+/// `people.person` — one person: facts, channels, dates, notes and the touch log
+/// (#1135). A `PushedPage` from People.
 ///
-/// **THE VIEW DECIDES NOTHING.** The four write sheets, the merge choices and
-/// the confirms are all the machine's (`PeoplePersonState.sheet`, `.confirm`);
-/// this file draws whichever one the state holds and hands each keystroke back
-/// as the sheet's own event. `EditRequested` and `ChannelTapped` are intents
-/// `PeopleScreens` routes; `done` (a person moved to the trash) pops.
+/// **THE VIEW DECIDES NOTHING.** The four write sheets, the merge choices, the
+/// confirms and the status are all Rust's (`PeoplePersonState.sheet`, `.confirm`,
+/// `.status`); this file draws whichever one the state holds and hands each
+/// keystroke back as the sheet's own event. Edit is a `Route` the state carries;
+/// a channel's tap is an event and Rust asks this shell to call, mail, map or
+/// copy it; `done` (a person moved to the trash) pops.
 struct PeoplePersonView: View {
-    let data: Data
-    let opened: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_PeoplePersonState
+    let send: (Centraid_Core_V1_PeoplePersonEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_PeoplePersonState {
-        (try? Centraid_Screen_V1_PeoplePersonState(serializedBytes: data)) ?? .init()
-    }
-
-    private var content: ScreenContent<Centraid_Screen_V1_PeoplePersonData> {
+    private var content: ScreenContent<Centraid_Core_V1_PeoplePersonData> {
         switch state.content {
-        case let .loading(loading): return .loading(loading.firstLoad)
-        case let .failure(failure): return .failed(failure)
-        case let .denied(denied): return .denied(denied)
-        case let .data(data): return .data(data)
-        case .gone, .none: return .loading(true)
+        case let .loading(loading)?: return .loading(loading.firstLoad)
+        case let .failure(failure)?: return .failed(failure)
+        case let .denied(denied)?: return .gated(denied)
+        case let .data(data)?: return .data(data)
+        case .gone?, nil: return .loading(true)
         }
     }
 
     var body: some View {
-        let state = state
         let chrome = state.chrome
-        let person: Centraid_Screen_V1_PeoplePersonData? = {
-            if case let .data(data) = state.content { return data }
+        let person: Centraid_Core_V1_PeoplePersonData? = {
+            if case let .data(data)? = state.content { return data }
             return nil
         }()
         PushedPage(
@@ -42,13 +38,13 @@ struct PeoplePersonView: View {
             parentTitle: chrome.back,
             onBack: onBack
         ) {
-            if person != nil, !chrome.edit.isEmpty {
+            if person != nil, state.hasEdit, !chrome.edit.isEmpty {
                 ToolbarVerb(label: chrome.edit, identifier: "people-person-edit") {
-                    send(PeopleEvents.person { $0.edit = .init() })
+                    open(state.edit)
                 }
             }
         } content: {
-            if case let .gone(gone) = state.content {
+            if case let .gone(gone)? = state.content {
                 EmptyStateView(gone)
             } else {
                 ReadStateView(
@@ -62,8 +58,8 @@ struct PeoplePersonView: View {
         }
         .sheet(isPresented: Binding(
             get: { state.hasSheet && !state.hasConfirm },
-            set: { open in
-                guard !open, state.hasSheet else { return }
+            set: { shown in
+                guard !shown, state.hasSheet else { return }
                 send(PeopleEvents.person { $0.sheetClosed = .init() })
             }
         )) {
@@ -71,8 +67,8 @@ struct PeoplePersonView: View {
         }
         .sheet(isPresented: Binding(
             get: { state.hasConfirm },
-            set: { open in
-                guard !open, state.hasConfirm else { return }
+            set: { shown in
+                guard !shown, state.hasConfirm else { return }
                 send(PeopleEvents.person { $0.dismissed = .init() })
             }
         )) {
@@ -89,11 +85,15 @@ struct PeoplePersonView: View {
 }
 
 private struct PeoplePersonBody: View {
-    let person: Centraid_Screen_V1_PeoplePersonData
-    let state: Centraid_Screen_V1_PeoplePersonState
-    let send: (Data) -> Void
+    let person: Centraid_Core_V1_PeoplePersonData
+    let state: Centraid_Core_V1_PeoplePersonState
+    let send: (Centraid_Core_V1_PeoplePersonEvent) -> Void
 
     @Environment(\.colorScheme) private var scheme
+
+    private func openSheet(_ which: Centraid_Core_V1_PeoplePersonEvent.SheetOpened.Which) {
+        send(PeopleEvents.person { $0.sheetOpened = .with { $0.which = which } })
+    }
 
     var body: some View {
         let chrome = state.chrome
@@ -101,20 +101,28 @@ private struct PeoplePersonBody: View {
             LazyVStack(alignment: .leading, spacing: 0) {
                 header
                 actions(chrome)
-                if !state.status.isEmpty {
-                    PeopleStatusLine(text: state.status)
+                if state.hasStatus, !state.status.sentence.isEmpty {
+                    PeopleStatusLine(text: state.status.sentence)
                 }
                 ForEach(Array(person.facts.enumerated()), id: \.offset) { _, fact in
                     FieldRow(key: fact.label, value: fact.value)
                 }
 
-                SectionHeader(person.channelsHead)
+                SectionHeader(
+                    title: person.channelsHead.title,
+                    count: person.channelsHead.count,
+                    verb: person.channelsHead.verbLabel
+                ) { openSheet(.channel) }
                 if person.channels.isEmpty { PeopleStatusLine(text: person.channelsEmpty) }
                 ForEach(person.channels, id: \.channelID) { channel in
                     channelRow(channel)
                 }
 
-                SectionHeader(person.datesHead)
+                SectionHeader(
+                    title: person.datesHead.title,
+                    count: person.datesHead.count,
+                    verb: person.datesHead.verbLabel
+                ) { openSheet(.date) }
                 if person.dates.isEmpty { PeopleStatusLine(text: person.datesEmpty) }
                 ForEach(person.dates, id: \.dateID) { date in
                     HStack(spacing: 0) {
@@ -125,26 +133,36 @@ private struct PeoplePersonBody: View {
                             accessibility: date.accessibilityLabel,
                             identifier: "people-date-\(date.dateID)"
                         )
-                        KitIconKey(
-                            iconKey: "Bell",
-                            label: date.toggleLabel,
-                            tint: date.reminderOn ? "text" : "textFaint",
-                            identifier: "people-reminder-\(date.dateID)"
-                        ) {
-                            send(PeopleEvents.person { $0.reminder = .with { $0.dateID = date.dateID } })
+                        if date.toggleable {
+                            KitIconKey(
+                                iconKey: "Bell",
+                                label: date.toggleLabel,
+                                tint: date.reminderOn ? "text" : "textFaint",
+                                identifier: "people-reminder-\(date.dateID)"
+                            ) {
+                                send(PeopleEvents.person { $0.reminder = .with { $0.dateID = date.dateID } })
+                            }
+                            .accessibilityAddTraits(date.reminderOn ? .isSelected : [])
+                            .padding(.trailing, 8)
                         }
-                        .accessibilityAddTraits(date.reminderOn ? .isSelected : [])
-                        .padding(.trailing, 8)
                     }
                 }
 
-                SectionHeader(person.notesHead)
+                SectionHeader(
+                    title: person.notesHead.title,
+                    count: person.notesHead.count,
+                    verb: person.notesHead.verbLabel
+                ) { openSheet(.note) }
                 if person.notes.isEmpty { PeopleStatusLine(text: person.notesEmpty) }
                 ForEach(person.notes, id: \.annotationID) { note in
                     CentraidRow(title: note.text, meta: note.whenLabel, identifier: "people-note-\(note.annotationID)")
                 }
 
-                SectionHeader(person.touchesHead)
+                SectionHeader(
+                    title: person.touchesHead.title,
+                    count: person.touchesHead.count,
+                    verb: person.touchesHead.verbLabel
+                ) { openSheet(.logTouch) }
                 if person.touches.isEmpty { PeopleStatusLine(text: person.touchesEmpty) }
                 ForEach(person.touches, id: \.interactionID) { touch in
                     CentraidRow(
@@ -158,10 +176,8 @@ private struct PeoplePersonBody: View {
 
                 KitChoiceStack {
                     if !chrome.merge.isEmpty {
-                        KitOutlineButton(label: chrome.merge) {
-                            send(PeopleEvents.person { $0.sheetOpened = .with { $0.which = .merge } })
-                        }
-                        .accessibilityIdentifier("people-person-merge")
+                        KitOutlineButton(label: chrome.merge) { openSheet(.merge) }
+                            .accessibilityIdentifier("people-person-merge")
                     }
                     if !chrome.moveToTrash.isEmpty {
                         KitOutlineButton(label: chrome.moveToTrash, tone: "net") {
@@ -211,8 +227,8 @@ private struct PeoplePersonBody: View {
         .padding(.vertical, 12)
     }
 
-    private func actions(_ chrome: Centraid_Screen_V1_PeoplePersonChrome) -> some View {
-        let verbs: [(String, Centraid_Screen_V1_PeoplePersonEvent.SheetOpened.Which, String)] = [
+    private func actions(_ chrome: Centraid_Core_V1_PeoplePersonChrome) -> some View {
+        let verbs: [(String, Centraid_Core_V1_PeoplePersonEvent.SheetOpened.Which, String)] = [
             (chrome.logTouch, .logTouch, "log-touch"),
             (chrome.addNote, .note, "add-note"),
             (chrome.addDate, .date, "add-date"),
@@ -221,10 +237,8 @@ private struct PeoplePersonBody: View {
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(verbs.filter { !$0.0.isEmpty }, id: \.2) { verb in
-                    KitOutlineButton(label: verb.0) {
-                        send(PeopleEvents.person { $0.sheetOpened = .with { $0.which = verb.1 } })
-                    }
-                    .accessibilityIdentifier("people-person-\(verb.2)")
+                    KitOutlineButton(label: verb.0) { openSheet(verb.1) }
+                        .accessibilityIdentifier("people-person-\(verb.2)")
                 }
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -232,7 +246,7 @@ private struct PeoplePersonBody: View {
         .padding(.bottom, 8)
     }
 
-    private func channelRow(_ channel: Centraid_Screen_V1_PeopleChannelRow) -> some View {
+    private func channelRow(_ channel: Centraid_Core_V1_PeopleChannelRow) -> some View {
         HStack(spacing: 0) {
             CentraidRow(
                 title: channel.value,
@@ -269,18 +283,18 @@ private struct PeoplePersonBody: View {
 
 // MARK: - The write sheets
 
-/// WHICHEVER SHEET THE MACHINE HOLDS. Each field's text is the view's own
-/// `@State` (seeded once, like every editor field), handed over as the
-/// sheet's `TextChanged` / `SecondTextChanged`.
+/// WHICHEVER SHEET RUST HOLDS. Each field's text is the view's own `@State`
+/// (seeded once, like every editor field), handed over as the sheet's
+/// `TextChanged` / `SecondTextChanged`.
 private struct PeoplePersonSheetView: View {
-    let sheet: Centraid_Screen_V1_PeoplePersonSheet
-    let send: (Data) -> Void
+    let sheet: Centraid_Core_V1_PeoplePersonSheet
+    let send: (Centraid_Core_V1_PeoplePersonEvent) -> Void
 
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         switch sheet.kind {
-        case let .logTouch(log):
+        case let .logTouch(log)?:
             frameRoom(log.frame) {
                 PeopleKindChips(kinds: log.kinds, send: send)
                 PeopleSheetField(
@@ -296,7 +310,7 @@ private struct PeoplePersonSheetView: View {
                         .foregroundStyle(Theme.color("textSoft", scheme))
                 }
             }
-        case let .note(note):
+        case let .note(note)?:
             frameRoom(note.frame) {
                 PeopleSheetField(
                     key: "",
@@ -306,7 +320,7 @@ private struct PeoplePersonSheetView: View {
                     onEdit: { text in send(PeopleEvents.person { $0.text = .with { $0.text = text } }) }
                 )
             }
-        case let .date(date):
+        case let .date(date)?:
             frameRoom(date.frame) {
                 PeopleSheetField(
                     key: date.labelField,
@@ -331,7 +345,7 @@ private struct PeoplePersonSheetView: View {
                     send(PeopleEvents.person { $0.flag = .init() })
                 }
             }
-        case let .channel(channel):
+        case let .channel(channel)?:
             frameRoom(channel.frame) {
                 PeopleKindChips(kinds: channel.kinds, send: send)
                 PeopleSheetField(
@@ -352,7 +366,7 @@ private struct PeoplePersonSheetView: View {
                     send(PeopleEvents.person { $0.flag = .init() })
                 }
             }
-        case let .merge(merge):
+        case let .merge(merge)?:
             SheetRoom(title: merge.title) {
                 if !merge.body.isEmpty {
                     Text(merge.body)
@@ -360,12 +374,12 @@ private struct PeoplePersonSheetView: View {
                         .foregroundStyle(Theme.color("textSoft", scheme))
                 }
                 switch merge.content {
-                case .loading, .none:
+                case .loading?, nil:
                     RowSkeleton(rows: 3, label: merge.title)
                         .frame(height: 170)
-                case let .failure(failure):
+                case let .failure(failure)?:
                     FailureView(sentence: failure.sentence, remedy: failure.remedy, onRetry: nil)
-                case let .choices(choices):
+                case let .choices(choices)?:
                     if choices.hasEmpty {
                         EmptyStateView(choices.empty)
                     } else {
@@ -390,20 +404,20 @@ private struct PeoplePersonSheetView: View {
                 }
                 cancel(merge.cancelLabel)
             }
-        case .none:
+        case nil:
             EmptyView()
         }
     }
 
     private func frameRoom<Fields: View>(
-        _ frame: Centraid_Screen_V1_PeopleSheetFrame,
+        _ frame: Centraid_Core_V1_PeopleSheetFrame,
         @ViewBuilder fields: @escaping () -> Fields
     ) -> some View {
         SheetRoom(
             title: frame.title,
             status: frame.hasFailure ? frame.failure.sentence : "",
             primary: SheetPrimary(label: frame.submitLabel) {
-                guard frame.submitEnabled, !frame.sending else { return }
+                guard frame.submitEnabled else { return }
                 send(PeopleEvents.person { $0.submitted = .init() })
             },
             outlines: frame.cancelLabel.isEmpty ? [] : [
@@ -427,10 +441,10 @@ private struct PeoplePersonSheetView: View {
     }
 }
 
-/// A sheet's kind choice: one chip per kind, the machine's selection lit.
+/// A sheet's kind choice: one chip per kind, Rust's selection lit.
 private struct PeopleKindChips: View {
-    let kinds: [Centraid_Screen_V1_PeopleKindChoice]
-    let send: (Data) -> Void
+    let kinds: [Centraid_Core_V1_PeopleKindChoice]
+    let send: (Centraid_Core_V1_PeoplePersonEvent) -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -445,7 +459,7 @@ private struct PeopleKindChips: View {
     }
 }
 
-/// A sheet's text field: typed text held here, seeded once from the machine.
+/// A sheet's text field: typed text held here, seeded once from Rust.
 private struct PeopleSheetField: View {
     let key: String
     let seed: String
@@ -471,7 +485,7 @@ private struct PeopleSheetField: View {
     }
 }
 
-/// A sheet's on/off: the machine's flag, flipped by its `FlagToggled`.
+/// A sheet's on/off: Rust's flag, flipped by its `FlagToggled`.
 private struct PeopleFlagRow: View {
     let label: String
     let on: Bool

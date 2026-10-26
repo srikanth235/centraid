@@ -87,45 +87,14 @@ pub struct CommandsUnavailable {
     pub command: &'static str,
 }
 
-/// Whether the conversation surface asks before dispatching. Carried here so
-/// the table and the manifest can be checked against each other; the dispatcher
-/// itself is permissionless (`manifest.ts:51`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Confirm {
-    None,
-    Required,
-}
-
-/// One row of the action table: the manifest's action name, the command it
-/// invokes, and whether the surface confirms first.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ActionRow {
-    pub action: &'static str,
-    pub command: &'static str,
-    pub confirm: Confirm,
-}
-
-const fn act(action: &'static str, command: &'static str) -> ActionRow {
-    ActionRow {
-        action,
-        command,
-        confirm: Confirm::None,
-    }
-}
-
-const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
-    ActionRow {
-        action,
-        command,
-        confirm: Confirm::Required,
-    }
-}
+pub use centraid_apps_kit::actions::{ActionRow, Confirm};
+use centraid_apps_kit::actions::{act, confirmed};
 
 /// THE TABLE. Twenty-two actions, in the manifest's own order. A close, an archive
 /// and a name for a line are the shared verbs (`flag.set`, `flag.clear`,
 /// `entity.retitle`): Money wraps none of them, so two actions may name one command.
 /// Confirmation is asked for what cannot be taken back or touches many rows.
-pub const ACTIONS: [ActionRow; 22] = [
+pub const ACTIONS: [ActionRow; 23] = [
     act("add-account", "account.add"),
     act("edit-account", "account.edit"),
     act("close-account", "flag.set"),
@@ -148,6 +117,7 @@ pub const ACTIONS: [ActionRow; 22] = [
     act("add-category", "category.add"),
     confirmed("merge-category", "category.merge"),
     act("archive-category", "flag.set"),
+    act("unarchive-category", "flag.clear"),
 ];
 
 /// The `act` scopes Money declares, derived from the action table: one per
@@ -170,7 +140,7 @@ pub fn act_scope_tables() -> Vec<(&'static str, &'static str)> {
 
 /// The row for an action, if it is declared.
 pub fn action_row(action: &str) -> Option<&'static ActionRow> {
-    ACTIONS.iter().find(|row| row.action == action)
+    centraid_apps_kit::actions::find(&ACTIONS, action)
 }
 
 /// Invoke one action through `door`. An undeclared action is `Failed`, not a

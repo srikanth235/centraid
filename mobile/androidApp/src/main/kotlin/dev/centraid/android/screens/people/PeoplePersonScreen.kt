@@ -12,12 +12,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.PeopleKindChoice
-import centraid.screen.v1.PeoplePersonData
-import centraid.screen.v1.PeoplePersonEvent
-import centraid.screen.v1.PeoplePersonSheet
-import centraid.screen.v1.PeoplePersonState
-import centraid.screen.v1.PeopleSheetFrame
+import centraid.core.v1.PeopleKindChoice
+import centraid.core.v1.PeoplePersonData
+import centraid.core.v1.PeoplePersonEvent
+import centraid.core.v1.PeoplePersonSheet
+import centraid.core.v1.PeoplePersonState
+import centraid.core.v1.PeopleSheetFrame
+import centraid.core.v1.Route
+import centraid.core.v1.StatusChip
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
@@ -43,21 +45,21 @@ import dev.centraid.android.theme.centraidType
 private typealias Which = PeoplePersonEvent.SheetOpened.Which
 
 /**
- * ONE PERSON (#1029 app port): a `PushedPage` back to People. Facts,
- * channels, dates, notes and the touch log, each section's verb opening its
- * write sheet; the confirm is the machine's `Confirm`. `ChannelTapped` and
- * `EditRequested` are intents the route answers (the OS for a channel, the
- * editor for Edit); `done` is the route's pop.
+ * `people.person` (#1135): a `PushedPage` back to People. Facts, channels, dates,
+ * notes and the touch log, each section's verb opening its write sheet; the
+ * confirm is Rust's `Confirm`. A channel's tap is an event: Rust asks this shell
+ * to call, mail, map or copy it (`OpenUrl`, `OpenMap`, `ClipboardSet`). Edit is
+ * the [Route] Rust built; `done` is the host's pop.
  */
 @Composable
 public fun PeoplePersonScreen(
     state: PeoplePersonState,
     onEvent: (PeoplePersonEvent) -> Unit,
+    onOpen: (Route) -> Unit,
     onBack: () -> Unit,
 ) {
     val chrome = state.chrome
     val data = state.data_
-    val write = state.write
     fun open(which: Which) = onEvent(PeoplePersonEvent(sheet_opened = PeoplePersonEvent.SheetOpened(which)))
     PushedPage(
         title = data?.name ?: state.name_hint,
@@ -70,7 +72,7 @@ public fun PeoplePersonScreen(
         } else {
             null
         },
-        status = write?.refusal.orEmpty().ifEmpty { state.status },
+        status = state.status?.sentence.orEmpty(),
     ) {
         val gone = state.gone
         if (gone != null) {
@@ -81,7 +83,7 @@ public fun PeoplePersonScreen(
                 onRetry = { onEvent(PeoplePersonEvent(refreshed = PeoplePersonEvent.Refreshed())) },
                 retryLabel = chrome?.retry.orEmpty(),
                 skeleton = { RowSkeleton(label = chrome?.loading.orEmpty()) },
-            ) { person -> PersonBody(person, state, onEvent, ::open) }
+            ) { person -> PersonBody(person, state, onEvent, onOpen, ::open) }
         }
     }
 
@@ -100,6 +102,7 @@ private fun PersonBody(
     person: PeoplePersonData,
     state: PeoplePersonState,
     onEvent: (PeoplePersonEvent) -> Unit,
+    onOpen: (Route) -> Unit,
     open: (Which) -> Unit,
 ) {
     val chrome = state.chrome
@@ -118,15 +121,21 @@ private fun PersonBody(
                         Text(person.cadence_line, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
                     }
                 }
-                person.due_chip?.let { StatusChipView(it) }
+                person.due_chip?.let { chip ->
+                    StatusChipView(
+                        StatusChip(label = chip.label, tone = StatusChip.Tone.fromValue(chip.tone.value) ?: StatusChip.Tone.TONE_UNSPECIFIED),
+                    )
+                }
             }
         }
         if (chrome != null) {
             item(key = "acts") {
                 Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)) {
                     OutlineButton(chrome.log_touch, testTag = "people-log-touch") { open(Which.WHICH_LOG_TOUCH) }
-                    OutlineButton(chrome.edit, testTag = "people-edit", modifier = Modifier.padding(start = 8.dp)) {
-                        onEvent(PeoplePersonEvent(edit = PeoplePersonEvent.EditRequested()))
+                    state.edit?.let { route ->
+                        OutlineButton(chrome.edit, testTag = "people-edit", modifier = Modifier.padding(start = 8.dp)) {
+                            onOpen(route)
+                        }
                     }
                 }
             }
@@ -134,10 +143,10 @@ private fun PersonBody(
         items(person.facts, key = { "f-" + it.label }) { fact -> FieldRow(fact.label, fact.value_) }
 
         person.channels_head?.let { head ->
-            item(key = "channels-head") { SectionHeader(head) { open(Which.WHICH_CHANNEL) } }
+            item(key = "channels-head") { SectionHeader(head.toKit()) { open(Which.WHICH_CHANNEL) } }
         }
         if (person.channels.isEmpty() && person.channels_empty.isNotEmpty()) {
-            item(key = "channels-empty") { Quiet(person.channels_empty) }
+            item(key = "channels-empty") { RailEmpty(person.channels_empty) }
         }
         items(person.channels, key = { "c-" + it.channel_id }) { channel ->
             CentraidRow(
@@ -145,6 +154,7 @@ private fun PersonBody(
                 meta = listOf(channel.kind_label, channel.label, channel.preferred_label, channel.duplicate_note)
                     .filter { it.isNotEmpty() }
                     .joinToString(" · "),
+                a11y = channel.accessibility_label,
                 testTag = "people-channel-${channel.channel_id}",
                 onTap = { onEvent(PeoplePersonEvent(channel = PeoplePersonEvent.ChannelTapped(channel.channel_id))) },
             ) {
@@ -168,17 +178,19 @@ private fun PersonBody(
             }
         }
 
-        person.dates_head?.let { head -> item(key = "dates-head") { SectionHeader(head) { open(Which.WHICH_DATE) } } }
+        person.dates_head?.let { head -> item(key = "dates-head") { SectionHeader(head.toKit()) { open(Which.WHICH_DATE) } } }
         if (person.dates.isEmpty() && person.dates_empty.isNotEmpty()) {
-            item(key = "dates-empty") { Quiet(person.dates_empty) }
+            item(key = "dates-empty") { RailEmpty(person.dates_empty) }
         }
         items(person.dates, key = { "d-" + it.date_id }) { date ->
             CentraidRow(
                 title = date.label,
-                meta = listOf(date.day_label, date.when_label, date.reminder_label).filter { it.isNotEmpty() }.joinToString(" · "),
+                meta = listOf(date.day_label, date.reminder_label).filter { it.isNotEmpty() }.joinToString(" · "),
+                trailing = date.when_label,
+                a11y = date.accessibility_label,
                 testTag = "people-date-${date.date_id}",
             ) {
-                if (date.toggle_label.isNotEmpty()) {
+                if (date.toggleable && date.toggle_label.isNotEmpty()) {
                     OutlineButton(
                         date.toggle_label,
                         testTag = "people-reminder-${date.date_id}",
@@ -188,19 +200,19 @@ private fun PersonBody(
             }
         }
 
-        person.notes_head?.let { head -> item(key = "notes-head") { SectionHeader(head) { open(Which.WHICH_NOTE) } } }
+        person.notes_head?.let { head -> item(key = "notes-head") { SectionHeader(head.toKit()) { open(Which.WHICH_NOTE) } } }
         if (person.notes.isEmpty() && person.notes_empty.isNotEmpty()) {
-            item(key = "notes-empty") { Quiet(person.notes_empty) }
+            item(key = "notes-empty") { RailEmpty(person.notes_empty) }
         }
         items(person.notes, key = { "n-" + it.annotation_id }) { note ->
             CentraidRow(title = note.text, meta = note.when_label, testTag = "people-note-${note.annotation_id}")
         }
 
         person.touches_head?.let { head ->
-            item(key = "touches-head") { SectionHeader(head) { open(Which.WHICH_LOG_TOUCH) } }
+            item(key = "touches-head") { SectionHeader(head.toKit()) { open(Which.WHICH_LOG_TOUCH) } }
         }
         if (person.touches.isEmpty() && person.touches_empty.isNotEmpty()) {
-            item(key = "touches-empty") { Quiet(person.touches_empty) }
+            item(key = "touches-empty") { RailEmpty(person.touches_empty) }
         }
         items(person.touches, key = { "t-" + it.interaction_id }) { touch ->
             CentraidRow(
@@ -228,16 +240,6 @@ private fun PersonBody(
     }
 }
 
-@Composable
-private fun Quiet(sentence: String) {
-    Text(
-        sentence,
-        style = centraidType("annotLabel"),
-        color = centraidColor("textSoft"),
-        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
-    )
-}
-
 /** The four write sheets and the merge choices: each one a `SheetRoom` over its frame. */
 @Composable
 private fun PersonSheet(sheet: PeoplePersonSheet, onEvent: (PeoplePersonEvent) -> Unit) {
@@ -249,7 +251,7 @@ private fun PersonSheet(sheet: PeoplePersonSheet, onEvent: (PeoplePersonEvent) -
     sheet.log_touch?.let { s ->
         FramedSheet(s.frame, onEvent) {
             Kinds(s.kinds, kind)
-            // THE SHEET'S IDENTITY is the reload: a fresh sheet takes the machine's words once.
+            // THE SHEET'S IDENTITY is the reload: a fresh sheet takes Rust's words once.
             EditableFieldRow(
                 key = s.note_label,
                 value = s.note,
@@ -259,7 +261,7 @@ private fun PersonSheet(sheet: PeoplePersonSheet, onEvent: (PeoplePersonEvent) -
                 testTag = "people-sheet-note",
                 onEdit = text,
             )
-            if (s.hint.isNotEmpty()) Quiet(s.hint)
+            if (s.hint.isNotEmpty()) RailEmpty(s.hint)
         }
     }
     sheet.note?.let { s ->
@@ -325,7 +327,7 @@ private fun PersonSheet(sheet: PeoplePersonSheet, onEvent: (PeoplePersonEvent) -
     }
     sheet.merge?.let { s ->
         SheetRoom(title = s.title, onDismiss = close) {
-            if (s.body.isNotEmpty()) Quiet(s.body)
+            if (s.body.isNotEmpty()) RailEmpty(s.body)
             when (val content = screenContentOf(s.loading, s.failure, s.choices)) {
                 is ScreenContent.Loading -> RowSkeleton(rows = 3)
                 is ScreenContent.Failure -> FailureView(content.sentence, content.remedy, onRetry = null)
@@ -333,7 +335,7 @@ private fun PersonSheet(sheet: PeoplePersonSheet, onEvent: (PeoplePersonEvent) -
                 is ScreenContent.Data -> {
                     val empty = content.value.empty
                     if (content.value.choices.isEmpty() && empty != null) {
-                        Quiet(empty.headline)
+                        RailEmpty(empty.headline)
                     }
                     content.value.choices.forEach { choice ->
                         CentraidRow(
@@ -362,8 +364,8 @@ private fun FramedSheet(
         title = f.title,
         onDismiss = { onEvent(PeoplePersonEvent(sheet_closed = PeoplePersonEvent.SheetClosed())) },
         status = f.failure?.sentence.orEmpty(),
-        // THE ONE INK BUTTON is drawn always, and pressable only while the machine says it can act.
-        primary = SheetPrimary(label = f.submit_label, testTag = "people-sheet-submit", enabled = f.submit_enabled && !f.sending) {
+        // THE ONE INK BUTTON is drawn always, and pressable only while Rust says it can act.
+        primary = SheetPrimary(label = f.submit_label, testTag = "people-sheet-submit", enabled = f.submit_enabled) {
             onEvent(PeoplePersonEvent(submitted = PeoplePersonEvent.SheetSubmitted()))
         },
     ) { content() }

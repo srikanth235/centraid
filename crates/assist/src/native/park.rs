@@ -14,7 +14,7 @@
 //! The steps themselves are kept, in order, as [`ParkedStep`]s. The step that ends the turn carries
 //! them as `effect.pending` ([`PendingWrite`]): one per session, in memory, dismissed by a new
 //! message and inert in a reopened thread. [`Session::confirm`] checks that the rows the steps
-//! address still read as they did, runs the steps through [`crate::native::door::Door::run_keyed`] call by call and
+//! address still read as they did, runs the steps through [`crate::native::door::Door::act_keyed`] call by call and
 //! reads the vault after each, so the after-write text is the vault's own; [`Session::dismiss`]
 //! puts the session back as the turn found it. `Door` documents what the core owes both.
 //!
@@ -43,7 +43,7 @@ use std::collections::BTreeMap;
 use serde_json::{Value, json};
 
 use crate::native::dates::Stamp;
-use crate::native::door::Ran;
+use crate::native::door::{Call, Ran};
 use crate::native::meta::{Kind, Verb, Via};
 use crate::native::world::{Edge, Key, Row, Val, World};
 
@@ -79,7 +79,8 @@ impl Writes {
 pub struct ParkedStep {
     /// The write call of the turn that made the step (an index into its calls, in order).
     pub call: usize,
-    pub command: String,
+    /// What the step runs: the manifest action, with its command.
+    pub act: Call,
     pub input: Value,
     /// The patched world's answer: an id the vault mints inside a command (a `revision_id`, the
     /// successor of a repeating task) is a placeholder the real run replaces. A created row's id is
@@ -232,7 +233,7 @@ impl PendingWrite {
             "turn": self.turn,
             "verbs": self.verbs,
             "preview": self.preview,
-            "steps": self.steps.iter().map(|step| json!({"command": step.command, "input": crate::native::member::masked(&step.input)})).collect::<Vec<_>>(),
+            "steps": self.steps.iter().map(|step| json!({"command": step.act.command, "input": crate::native::member::masked(&step.input)})).collect::<Vec<_>>(),
             "destructive": self.destructive(),
             "not_undoable": self.not_undoable,
         })
@@ -473,10 +474,18 @@ pub(crate) fn apply(
         "entity.restore" => restore_entity(world, bin, cx, input),
         "entity.purge" => purge_entity(world, input),
         "flag.set" | "flag.clear" => flag_entity(world, input, command == "flag.set"),
+        "tag.add" | "tag.remove" => tag_entity(world, input),
         "edge.add" | "edge.remove" => edge_entity(world, input, command == "edge.add"),
         "locker.add_item" => locker_add(world, cx, input),
         "locker.edit_item" => locker_edit(world, cx, input),
         "locker.reveal_receipt" => Ok(ok(json!({"receipt_id": cx.id("receipt_id")}))),
+        "account.add" => account_add(world, cx, input),
+        "category.add" => category_add(world, cx, input),
+        "account.edit" => account_edit(world, cx, input),
+        "rule.edit" => rule_edit(world, cx, input),
+        "txn.link_transfer" | "txn.unlink_transfer" => {
+            transfer(world, input, command == "txn.link_transfer")
+        }
         other => Err(format!(
             "error: park has no patch for {other}; the write cannot be shown before it is made."
         )),
@@ -751,6 +760,22 @@ fn flag_entity(world: &mut World, input: &Value, on: bool) -> Result<Ran, String
             },
             Val::Bool(on),
         );
+    }
+    Ok(ok(json!({"changed": true})))
+}
+
+/// A tag: a word the member puts on a row. The world does not read tags, so the patch is the
+/// vault's refusals and nothing else: the row is there and live, and the label is a word.
+fn tag_entity(world: &mut World, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    if key_of(world, id).is_none_or(|key| world.rows[&key].trashed) {
+        return Ok(refused("entity_takes_a_tag", &gone(world, id)));
+    }
+    if text(input, "label").is_none_or(|label| label.trim().is_empty()) {
+        return Ok(refused(
+            "label_is_a_word",
+            "a label needs at least one character",
+        ));
     }
     Ok(ok(json!({"changed": true})))
 }
@@ -1250,6 +1275,7 @@ fn note_create(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
         nonempty(text(input, "body").unwrap_or_default()),
     );
     row.fields.insert("pinned", Val::Bool(false));
+    row.fields.insert("starred", Val::Bool(false));
     world.rows.insert(row.key(), row);
     if let Some(notebook) = text(input, "notebook_id") {
         edge(
@@ -1486,10 +1512,11 @@ impl Session {
     /// Run one write step: the vault runs it ([`Writes::Run`]), or the patched world takes it
     /// and the step is parked ([`Writes::Park`]), or both ([`Writes::Shadow`]). The clock moves
     /// on first in every mode, so a session's writes land in the order they were made.
-    pub(crate) fn write_step(&mut self, command: &str, input: &Value) -> Result<Ran, String> {
+    pub(crate) fn write_step(&mut self, call: &Call, input: &Value) -> Result<Ran, String> {
+        let command = call.command;
         self.note_sealed_moves(command, input);
         match self.flags.writes {
-            Writes::Run => self.door.step(command, input.clone()),
+            Writes::Run => self.door.step(call, input.clone()),
             Writes::Park => {
                 self.park_first();
                 self.door.advance();
@@ -1497,7 +1524,7 @@ impl Session {
                 if ran.ok {
                     self.park.steps.push(ParkedStep {
                         call: self.park.calls.len(),
-                        command: command.to_owned(),
+                        act: *call,
                         input: input.clone(),
                         output: ran.output.clone(),
                     });
@@ -1505,7 +1532,7 @@ impl Session {
                 Ok(ran)
             }
             Writes::Shadow => {
-                let real = self.door.step(command, input.clone())?;
+                let real = self.door.step(call, input.clone())?;
                 if real.ok {
                     match self.patch(command, input, Some(&real.output)) {
                         Ok(ran) if ran.ok => {}
@@ -1535,13 +1562,14 @@ impl Session {
     }
 
     /// A write that must succeed (a follow-up of a create).
-    pub(crate) fn write_must(&mut self, command: &str, input: Value) -> Result<Value, String> {
-        let ran = self.write_step(command, &input)?;
+    pub(crate) fn write_must(&mut self, call: &Call, input: Value) -> Result<Value, String> {
+        let ran = self.write_step(call, &input)?;
         if ran.ok {
             Ok(ran.output)
         } else {
             Err(format!(
-                "{command} refused {input}: {}",
+                "{} refused {input}: {}",
+                call.command,
                 ran.reason.unwrap_or_default()
             ))
         }
@@ -1773,6 +1801,178 @@ fn locker_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> 
     Ok(ok(json!({"item_id": id, "template_fields": 0})))
 }
 
+/// A new account: its type, its currency (the vault's when it names none) and a zero opening.
+fn account_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").map_or_else(|| cx.id("id"), str::to_owned);
+    let title = text(input, "title")
+        .unwrap_or_default()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut row = new_row(Kind::Account, &id, &title, cx);
+    if let Some(model) = Kind::Account
+        .spec()
+        .field("type")
+        .and_then(|field| field.model_value(text(input, "type").unwrap_or_default()))
+    {
+        row.fields.insert("type", Val::Enum(model));
+    }
+    let currency =
+        text(input, "currency").map_or_else(|| world.currency.clone(), str::to_uppercase);
+    row.fields.insert("currency", Val::Text(currency.clone()));
+    row.fields.insert(
+        "opening",
+        Val::Money(int(input, "opening_minor").unwrap_or(0), currency),
+    );
+    row.fields.insert(
+        "on_budget",
+        Val::Bool(
+            input
+                .get("on_budget")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+        ),
+    );
+    world.rows.insert(row.key(), row);
+    Ok(ok(json!({"id": id})))
+}
+
+/// A category the member makes: its id and key are its folded name, under its group's.
+fn category_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let title = text(input, "title")
+        .unwrap_or_default()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let parent = text(input, "parent_id");
+    let group_key = parent.map(|parent| parent.trim_start_matches("category:").to_owned());
+    let folded = centraid_vault::model::fold_label(&title);
+    let key = match &group_key {
+        Some(group) => format!("{group}.{folded}"),
+        None => folded,
+    };
+    let id = format!("category:{key}");
+    if world.rows.contains_key(&(Kind::Category, id.clone())) {
+        return Ok(refused("category_is_new", "that category already exists"));
+    }
+    let mut row = new_row(Kind::Category, &id, &title, cx);
+    put(&mut row, "key", nonempty(&key));
+    put(
+        &mut row,
+        "group",
+        parent
+            .and_then(|parent| world.rows.get(&(Kind::Category, parent.to_owned())))
+            .map(|group| Val::Text(group.name.clone())),
+    );
+    world.rows.insert(row.key(), row);
+    Ok(ok(json!({"id": id})))
+}
+
+/// An account's rename, type and budget membership: the fields the world reads.
+fn account_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    let Some(row) = world
+        .rows
+        .get_mut(&(Kind::Account, id.to_owned()))
+        .filter(|row| !row.trashed)
+    else {
+        return Ok(refused("account_live", &gone_text(id)));
+    };
+    let old_name = row.name.clone();
+    if let Some(title) = text(input, "title") {
+        row.name = title.trim().to_owned();
+    }
+    let new_name = row.name.clone();
+    if let Some(vault) = text(input, "type")
+        && let Some(model) = Kind::Account
+            .spec()
+            .field("type")
+            .and_then(|field| field.model_value(vault))
+    {
+        row.fields.insert("type", Val::Enum(model));
+    }
+    if let Some(on) = input.get("on_budget").and_then(Value::as_bool) {
+        row.fields.insert("on_budget", Val::Bool(on));
+    }
+    row.updated = cx.now.clone();
+    // a transaction names its account: a rename reads through every line of it
+    if old_name != new_name {
+        for line in world
+            .rows
+            .values_mut()
+            .filter(|r| r.kind == Kind::Transaction)
+        {
+            if line.fields.get("account") == Some(&Val::Text(old_name.clone())) {
+                line.fields.insert("account", Val::Text(new_name.clone()));
+            }
+        }
+    }
+    Ok(ok(json!({"id": id})))
+}
+
+/// A rule's text (upper-cased as the vault matches it), category and order.
+fn rule_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default().to_owned();
+    let category = text(input, "category_id").and_then(|category| {
+        world
+            .rows
+            .get(&(Kind::Category, category.to_owned()))
+            .map(|row| row.name.clone())
+    });
+    let Some(row) = world.rows.get_mut(&(Kind::Rule, id.clone())) else {
+        return Ok(refused("rule_exists", &gone_text(&id)));
+    };
+    if let Some(matched) = text(input, "text") {
+        row.name = matched
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_ascii_uppercase();
+    }
+    if let Some(title) = category {
+        row.fields.insert("category", Val::Text(title));
+    }
+    if let Some(position) = input
+        .get("position")
+        .and_then(Value::as_f64)
+        .filter(|position| position.abs() < 1e9)
+    {
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "the filter keeps position finite and under a billion in magnitude"
+        )]
+        row.fields.insert("position", Val::Num(position as i64));
+    }
+    row.updated = cx.now.clone();
+    Ok(ok(json!({"id": id})))
+}
+
+/// Two lines pointing at each other (or at nothing): the `transfer` field of both halves.
+fn transfer(world: &mut World, input: &Value, link: bool) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default().to_owned();
+    let Some(this) = world.rows.get(&(Kind::Transaction, id.clone())) else {
+        return Ok(refused("transaction_exists", &gone_text(&id)));
+    };
+    let other = if link {
+        text(input, "other_id").unwrap_or_default().to_owned()
+    } else {
+        match this.field("transfer") {
+            Some(Val::Text(partner)) => partner.clone(),
+            _ => String::new(),
+        }
+    };
+    for (from, to) in [(&id, &other), (&other, &id)] {
+        if let Some(row) = world.rows.get_mut(&(Kind::Transaction, from.clone())) {
+            put(row, "transfer", link.then(|| Val::Text(to.clone())));
+        }
+    }
+    Ok(ok(json!({"changed": true})))
+}
+
+fn gone_text(id: &str) -> String {
+    format!("there is nothing with the id `{id}`")
+}
+
 fn locker_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
     let id = text(input, "item_id").unwrap_or_default();
     let Some(row) = world
@@ -1922,21 +2122,20 @@ impl Session {
             .unwrap_or_else(|| self.world.clone());
         let steps = self.park.steps.clone();
         let calls = self.park.calls.clone();
-        let (inverses, not_undoable) = self
-            .writes
-            .iter()
-            .filter(|(turn, ..)| *turn == self.turn)
-            .fold(
-                (Vec::new(), Vec::new()),
-                |(mut inverses, mut notes), (_, list, more)| {
-                    inverses.extend(
-                        list.iter()
-                            .map(|inverse| (inverse.command.clone(), inverse.input.clone())),
-                    );
-                    notes.extend(more.iter().cloned());
-                    (inverses, notes)
-                },
-            );
+        let (inverses, not_undoable) =
+            self.writes
+                .iter()
+                .filter(|(turn, ..)| *turn == self.turn)
+                .fold(
+                    (Vec::new(), Vec::new()),
+                    |(mut inverses, mut notes), (_, list, more)| {
+                        inverses.extend(list.iter().map(|inverse| {
+                            (inverse.act.command.to_owned(), inverse.input.clone())
+                        }));
+                        notes.extend(more.iter().cloned());
+                        (inverses, notes)
+                    },
+                );
         let mut ids = Vec::new();
         for step in &steps {
             strings(&step.input, &mut ids);
@@ -2050,7 +2249,7 @@ impl Session {
         if pending
             .steps
             .iter()
-            .any(|step| self.door.locked_for(&step.command, &step.input))
+            .any(|step| self.door.locked_for(step.act.command, &step.input))
         {
             return Confirmed::Locked;
         }
@@ -2081,7 +2280,7 @@ impl Session {
     fn run_pending(&mut self, pending: &PendingWrite) -> Confirmed {
         self.sealed_moves.clear();
         for step in &pending.steps {
-            self.note_sealed_moves(&step.command, &step.input);
+            self.note_sealed_moves(step.act.command, &step.input);
         }
         let Ok(fresh) = self.load_world() else {
             return Confirmed::Refused {
@@ -2127,12 +2326,12 @@ impl Session {
                 let key = format!("{}:{index}", pending.id);
                 let refusal = |predicate: String, reason: String| Confirmed::Refused {
                     step: index,
-                    command: step.command.clone(),
+                    command: step.act.command.to_owned(),
                     predicate,
                     reason,
                     landed,
                 };
-                match self.door.run_keyed(&key, &step.command, input) {
+                match self.door.act_keyed(&key, &step.act, input) {
                     Ok(ran) if ran.ok => {
                         // an id the patch made up for a row the vault names itself is the vault's now
                         if let (Some(parked), Some(real)) =

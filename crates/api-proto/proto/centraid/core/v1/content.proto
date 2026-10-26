@@ -54,7 +54,7 @@ message ContentUrl {
   // The local path, when this device holds the bytes.
   //
   // A PATH INSIDE THE APP'S OWN CONTAINER on mobile, which is what
-  // `centraid.screen.v1.PhotoCell.thumbnail_path` has always meant, and a
+  // a photo cell's thumbnail path has always meant, and a
   // `centraid://` URL on a desktop seat once that handler lands. Absent is a
   // REAL ANSWER — a seat that has the row and not the bytes yet — and
   // `absent_reason` says which kind of absent in a member's words.

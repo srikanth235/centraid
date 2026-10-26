@@ -101,12 +101,43 @@ impl Candidates {
     }
 }
 
-/// Every candidate for one domain, backed and dataless apart.
-fn candidates(app: App, world: &World, today: Date) -> Candidates {
+/// Where a question is drawn from: an app, or the one app that holds two kinds of thing. Agenda's
+/// events and its tasks are asked about in turn (#1128), and each reads its own rows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Source {
+    /// Agenda's tasks.
+    Tasks,
+    /// Agenda's events.
+    Events,
+    /// Any other app.
+    Other(App),
+}
+
+impl Source {
+    /// The app a question from here is asked in.
+    const fn app(self) -> App {
+        match self {
+            Self::Tasks | Self::Events => App::Agenda,
+            Self::Other(app) => app,
+        }
+    }
+
+    /// Every source a chat scoped to `app` reads: Agenda reads its events, then its tasks.
+    fn of(app: App) -> Vec<Self> {
+        match app {
+            App::Agenda => vec![Self::Events, Self::Tasks],
+            other => vec![Self::Other(other)],
+        }
+    }
+}
+
+/// Every candidate from one source, backed and dataless apart.
+fn candidates(source: Source, world: &World, today: Date) -> Candidates {
+    let app = source.app();
     let mut backed = Vec::new();
     let mut dataless = Vec::new();
-    match app {
-        App::Tasks => {
+    match source {
+        Source::Tasks => {
             let tasks = || live(world, Kind::Task).filter(|row| unfinished(row));
             let due = |row: &Row| row.date.map(|stamp| stamp.date);
             if tasks().any(|row| due(row) == Some(today)) {
@@ -129,7 +160,7 @@ fn candidates(app: App, world: &World, today: Date) -> Candidates {
             dataless.push(say(app, "What is coming up?"));
             dataless.push(say(app, "What is overdue?"));
         }
-        App::Agenda => {
+        Source::Events | Source::Other(App::Agenda) => {
             let week_end = today.saturating_add(jiff::Span::new().days(6));
             let coming = || {
                 live(world, Kind::Event).filter(move |row| {
@@ -149,7 +180,7 @@ fn candidates(app: App, world: &World, today: Date) -> Candidates {
             dataless.push(say(app, "What is on tomorrow?"));
             dataless.push(say(app, "What is on today?"));
         }
-        App::People => {
+        Source::Other(App::People) => {
             let me = world.me_key();
             let others = || live(world, Kind::Person).filter(|row| row.key() != me);
             if let Some(person) = first_by(others(), |row| (!row.starred(), by_name(row))) {
@@ -162,7 +193,7 @@ fn candidates(app: App, world: &World, today: Date) -> Candidates {
             dataless.push(say(app, "Who did I talk to lately?"));
             dataless.push(say(app, "Who have I starred?"));
         }
-        App::Photos => {
+        Source::Other(App::Photos) => {
             if let Some(photo) = first_by(live(world, Kind::Photo), newest) {
                 backed.push(say(
                     app,
@@ -173,7 +204,7 @@ fn candidates(app: App, world: &World, today: Date) -> Candidates {
             dataless.push(say(app, "What albums do I have?"));
             dataless.push(say(app, "Which photos are starred?"));
         }
-        App::Notes => {
+        Source::Other(App::Notes) => {
             if let Some(note) = first_by(live(world, Kind::Note), newest) {
                 backed.push(say(
                     app,
@@ -184,7 +215,7 @@ fn candidates(app: App, world: &World, today: Date) -> Candidates {
             dataless.push(say(app, "What notebooks do I have?"));
             dataless.push(say(app, "Which notes are starred?"));
         }
-        App::Money => {
+        Source::Other(App::Money) => {
             // The newest transaction's name (a world holds only recent months, `Flags::money`).
             if let Some(transaction) = first_by(live(world, Kind::Transaction), |row| {
                 std::cmp::Reverse((row.date, row.id.clone()))
@@ -198,14 +229,21 @@ fn candidates(app: App, world: &World, today: Date) -> Candidates {
             dataless.push(say(app, "What was my biggest expense this month?"));
             dataless.push(say(app, "What came in this month?"));
         }
+        // Health's rows are daily figures and workouts, not entities a chip can name, so none is
+        // backed; each question is one its `today`, `series` and `workouts` queries answer.
+        Source::Other(App::Health) => {
+            dataless.push(say(app, "How did I sleep this week?"));
+            dataless.push(say(app, "How many steps did I take today?"));
+            dataless.push(say(app, "What workouts did I do lately?"));
+        }
         // A Locker item's title is a chip a member did not ask to see, so none is backed; each
         // question reads plain fields (`type`, `starred`) and never a sealed value (R-1088-3).
-        App::Locker => {
+        Source::Other(App::Locker) => {
             dataless.push(say(app, "What is in my Locker?"));
             dataless.push(say(app, "Which logins do I have saved?"));
             dataless.push(say(app, "Which Locker items are starred?"));
         }
-        App::Docs => {
+        Source::Other(App::Docs) => {
             if let Some(doc) = first_by(live(world, Kind::Document), newest) {
                 backed.push(say(app, format!("Find the {}", lead_words(&doc.name, 3))));
             }
@@ -218,13 +256,13 @@ fn candidates(app: App, world: &World, today: Date) -> Candidates {
 }
 
 /// The apps an unscoped chat draws from, in the order it tries them.
-const OPENING_ORDER: [App; 6] = [
-    App::Tasks,
-    App::Agenda,
-    App::People,
-    App::Photos,
-    App::Notes,
-    App::Docs,
+const OPENING_ORDER: [Source; 6] = [
+    Source::Tasks,
+    Source::Events,
+    Source::Other(App::People),
+    Source::Other(App::Photos),
+    Source::Other(App::Notes),
+    Source::Other(App::Docs),
 ];
 
 fn push_new(out: &mut Vec<Suggestion>, suggestion: Suggestion) {
@@ -249,7 +287,7 @@ fn interleave(out: &mut Vec<Suggestion>, lists: &[&[Suggestion]]) {
 /// there is one, otherwise one each from the first apps in [`OPENING_ORDER`]
 /// that hold something.
 ///
-/// A SCOPE READS EVERY DOMAIN IT COVERS ([`App::covers`], R-1128-F2): Agenda's
+/// A SCOPE READS EVERY SOURCE IT HAS ([`Source::of`], #1128): Agenda's
 /// offers questions about events and tasks, the backed ones of each in turn
 /// before any that need no data, so a vault with both is asked about both.
 #[must_use]
@@ -257,9 +295,9 @@ pub fn suggest_in(world: &World, today: Date, scope: Option<App>) -> Vec<Suggest
     let mut out = Vec::new();
     match scope {
         Some(app) => {
-            let per_domain: Vec<Candidates> = app
-                .covers()
-                .map(|domain| candidates(domain, world, today))
+            let per_domain: Vec<Candidates> = Source::of(app)
+                .into_iter()
+                .map(|source| candidates(source, world, today))
                 .collect();
             let backed: Vec<&[Suggestion]> = per_domain.iter().map(|c| &c.backed[..]).collect();
             let dataless: Vec<&[Suggestion]> = per_domain.iter().map(|c| &c.dataless[..]).collect();
@@ -362,7 +400,7 @@ mod tests {
             open_task("t2", "Rotate the tires", "2026-10-01"),
             row(Kind::List, "l1", "Tahoe trip"),
         ]);
-        // Tasks is read through Agenda's scope (R-1128-F2); this vault holds no event, so
+        // Tasks are Agenda's (#1128); this vault holds no event, so
         // every backed question is about its tasks.
         let got = suggest_in(&w, TODAY, Some(App::Agenda));
         assert_eq!(
@@ -373,7 +411,7 @@ mod tests {
                 "What is left in Tahoe trip?"
             ]
         );
-        assert!(got.iter().all(|s| s.app == App::Tasks));
+        assert!(got.iter().all(|s| s.app == App::Agenda));
     }
 
     #[test]
@@ -397,8 +435,7 @@ mod tests {
             ]
         );
         let apps: Vec<App> = got.iter().map(|s| s.app).collect();
-        assert_eq!(apps, [App::Agenda, App::Tasks, App::Agenda]);
-        assert!(got.iter().all(|s| s.app.opens_in() == App::Agenda));
+        assert_eq!(apps, [App::Agenda, App::Agenda, App::Agenda]);
     }
 
     #[test]
@@ -426,10 +463,10 @@ mod tests {
     #[test]
     fn an_empty_app_still_offers_three_questions_that_need_no_data() {
         let w = world([]);
-        for app in App::SCOPES {
+        for app in App::ALL {
             let got = suggest_in(&w, TODAY, Some(app));
             assert_eq!(got.len(), SUGGESTIONS, "{app:?}");
-            assert!(got.iter().all(|s| s.app.opens_in() == app), "{app:?}");
+            assert!(got.iter().all(|s| s.app == app), "{app:?}");
         }
     }
 
@@ -453,7 +490,7 @@ mod tests {
             ]
         );
         let apps: Vec<App> = got.iter().map(|s| s.app).collect();
-        assert_eq!(apps, [App::Tasks, App::Agenda, App::People]);
+        assert_eq!(apps, [App::Agenda, App::Agenda, App::People]);
     }
 
     #[test]
@@ -506,7 +543,7 @@ mod tests {
         let mut reversed = rows();
         reversed.reverse();
         let backward = world(reversed);
-        for scope in std::iter::once(None).chain(App::SCOPES.into_iter().map(Some)) {
+        for scope in std::iter::once(None).chain(App::ALL.into_iter().map(Some)) {
             assert_eq!(
                 suggest_in(&forward, TODAY, scope),
                 suggest_in(&backward, TODAY, scope),
@@ -558,7 +595,7 @@ mod tests {
         use crate::native::phrases::dates_line;
         let now = TODAY.at(9, 0, 0, 0);
         let mut said = 0;
-        for app in App::SCOPES {
+        for app in App::ALL {
             for suggestion in suggest_in(&world([]), TODAY, Some(app)) {
                 let text = &suggestion.text;
                 if ["today", "tomorrow", "this week"]

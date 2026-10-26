@@ -77,7 +77,7 @@ use centraid_vault::clock::SystemClock;
 use super::link::{self, GatewayStore, Reached, Unreached};
 use super::{Keyring, Plane, now_ms, plane_error, row_backed_up, store_error};
 use crate::error::{CoreError, Result};
-use crate::handle::Handle;
+use crate::handle::HandleState as Handle;
 use crate::stage::{Planned, bytes_of_parts, window_within};
 
 /// A snapshot is taken at most this often unless the member asks or a pass
@@ -197,7 +197,7 @@ fn rule_of(value: i32) -> wire::TransferRule {
 
 impl Conditions {
     /// What a drain request says. An unspecified rule is `WIFI_ONLY`
-    /// (`command.proto`).
+    /// (`phone.proto`).
     #[must_use]
     pub fn of(request: &wire::DrainRequest) -> Self {
         Self {

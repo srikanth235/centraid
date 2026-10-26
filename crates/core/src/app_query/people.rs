@@ -60,7 +60,7 @@ fn clock(zone: &FireZone, now: &str) -> Result<Clock> {
     })
 }
 
-pub(super) fn roster(
+pub(crate) fn roster(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -105,7 +105,7 @@ pub(super) fn roster(
     })
 }
 
-pub(super) fn touch(
+pub(crate) fn touch(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -170,7 +170,7 @@ pub(super) fn touch(
     )
 }
 
-pub(super) fn person(
+pub(crate) fn person(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -190,7 +190,7 @@ pub(super) fn person(
     )
 }
 
-pub(super) fn trash(
+pub(crate) fn trash(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::PeopleTrashRequest,
@@ -222,7 +222,7 @@ pub(super) fn trash(
 /// The index holds a person's nickname, role, where they were met, their contact
 /// points and the notes about them beside their name, so it is the whole search
 /// and [`people::roster::rank_hits`] ranks one list.
-pub(super) fn search(
+pub(crate) fn search(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -555,27 +555,21 @@ mod tests {
 
         fn run(&self, name: &str, input: serde_json::Value) -> serde_json::Value {
             self.writes.set(self.writes.get() + 1);
-            let response = self
+            let outcome = self
                 .handle()
-                .call(&wire::Request {
-                    kind: Some(wire::request::Kind::Command(wire::Command {
-                        name: name.to_owned(),
-                        input: serde_json::to_vec(&input).expect("json"),
-                        invoke_key: format!("people-query-test-{}", self.writes.get()),
-                        ..wire::Command::default()
-                    })),
-                })
+                .command(
+                    name,
+                    &input,
+                    &format!("people-query-test-{}", self.writes.get()),
+                )
                 .unwrap_or_else(|error| panic!("{name} refused: {error}"));
-            let Some(wire::response::Kind::Command(outcome)) = response.kind else {
-                panic!("a command answered with something else");
-            };
             assert_eq!(
                 outcome.status,
-                wire::CommandStatus::Executed as i32,
-                "{name}: {}",
+                centraid_vault::CommandStatus::Executed,
+                "{name}: {:?}",
                 outcome.reason
             );
-            serde_json::from_slice(&outcome.output).expect("the output is JSON")
+            outcome.output
         }
 
         fn add(&self, name: &str, cadence_days: i64) -> String {

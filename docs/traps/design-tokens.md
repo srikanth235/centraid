@@ -12,12 +12,12 @@ Agents hardcode hex/rgb, invent parallel CSS variables or Kotlin/Swift colour ta
 | CSS emit | `toCss()` (`packages/design/src/css.ts`) | Light and dark theme blocks for web surfaces |
 | App-surface CSS emit | `toBlueprintCss()` (`packages/design/src/blueprint.ts`) | The app-surface token language — not a hand fork of the shell tokens |
 | Element layer | `packages/design/src/elements/` (`@centraid/design/elements`, `kit.css`) | The browser substrate; see [below](#the-two-layers-of-packagesdesign) |
-| Native | `toNativeTheme(scheme)` (`packages/design/src/native.ts`), emitted by `bun contracts/tools/export-native-theme.ts` into `design/native-theme.json`, `mobile/shared/src/commonMain/kotlin/dev/centraid/design/Tokens.kt` and `mobile/iosApp/Design/Theme.swift` ([design-machinery.md](../design-machinery.md)) | The same lowering, emitted — every value concrete, no `var()` or runtime override layer |
+| Native | `toNativeTheme(scheme)` (`packages/design/src/native.ts`), emitted by `bun contracts/tools/export-native-theme.ts` into `design/native-theme.json`, `mobile/androidApp/src/main/kotlin/dev/centraid/android/design/Tokens.kt` and `mobile/iosApp/Design/Theme.swift` ([design-machinery.md](../design-machinery.md)) | The same lowering, emitted — every value concrete, no `var()` or runtime override layer |
 | Public sites | `scripts/site-tokens.mjs` (`bun run site:tokens`, checked by `bun run lint:site-tokens`) | See [design-machinery.md](../design-machinery.md#the-public-web-surfaces) |
 
 Barrel: `@centraid/design` (`packages/design/src/index.ts`). Prefer `themes.light` / `themes.dark` over the legacy `colors` alias for new code.
 
-**Generated artifacts are regenerated, never edited.** The gate's `emitters` step (`pr`) and `mobile-jvm` step both rerun the emitters, run `bun run format`, and fail on `git diff --exit-code -- copy design mobile`. `copy/*.json` and `mobile/.../design/Copy.kt` are the exception: their upstream was retired and they are now edited by hand, as their own banners say.
+**Generated artifacts are regenerated, never edited.** The gate's `emitters` step (`pr`) and `mobile-jvm` step both rerun the emitters, run `bun run format`, and fail on `git diff --exit-code -- design mobile`. The copy is no artifact: it is Rust (`crates/screens/src/strings`), and only the kit's fixed words are emitted (`design/Words.kt`, `Words.swift`, from `strings/shared.rs`).
 
 Every surface lowers `packages/design`; a colour written anywhere else is a token that belongs there instead.
 

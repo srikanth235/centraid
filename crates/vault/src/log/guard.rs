@@ -304,7 +304,49 @@ pub(crate) fn is_index(table: &str) -> bool {
 /// Not SQLite's own, not the search index, and not the journal, which every
 /// command writes and no screen reads.
 pub(crate) fn is_reportable(table: &str) -> bool {
-    !table.starts_with("sqlite_") && table != "journal" && !is_index(table)
+    !table.starts_with("sqlite_")
+        && table != "journal"
+        && table != WITHOUT_ROWID_TOUCHED
+        && !is_index(table)
+}
+
+/// The scratch table the `WITHOUT ROWID` triggers write to, one row per changed row.
+const WITHOUT_ROWID_TOUCHED: &str = "centraid_without_rowid_touched";
+
+/// SQLite's `update_hook` NEVER FIRES FOR A `WITHOUT ROWID` TABLE (it reports a rowid, and these
+/// have none), so a commit that wrote only one — Health's `measurement`, Docs' `revision`,
+/// Money's `budget` — reported an empty census and no screen redrew (#1135).
+///
+/// For each such table, a TEMP trigger per verb records its name in a temp scratch table; the guard
+/// reads that table with the hook's tally. Temp objects live on this connection only, are
+/// transactional (a rollback takes the rows with it) and never touch the vault file.
+///
+/// Called once per connection from [`Vault`]'s one wrapper, after the ladder has made the tables.
+pub(crate) fn install_without_rowid_census(connection: &Connection) -> Result<()> {
+    connection.execute_batch(&format!(
+        "CREATE TEMP TABLE IF NOT EXISTS {WITHOUT_ROWID_TOUCHED} (name TEXT NOT NULL)"
+    ))?;
+    let mut statement = connection.prepare(
+        "SELECT name FROM pragma_table_list WHERE schema = 'main' AND type = 'table' AND wr = 1",
+    )?;
+    let names = statement
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    drop(statement);
+    for name in names.into_iter().filter(|name| is_reportable(name)) {
+        for (verb, event) in [
+            ("insert", "INSERT"),
+            ("update", "UPDATE"),
+            ("delete", "DELETE"),
+        ] {
+            connection.execute_batch(&format!(
+                "CREATE TEMP TRIGGER IF NOT EXISTS centraid_touched_{verb}_{name}
+                 AFTER {event} ON main.\"{name}\"
+                 BEGIN INSERT INTO temp.{WITHOUT_ROWID_TOUCHED} (name) VALUES ('{name}'); END"
+            ))?;
+        }
+    }
+    Ok(())
 }
 
 /// Point the connection's `update_hook` at `census` for the length of a commit.
@@ -333,10 +375,23 @@ fn install_hook(connection: &Connection, census: &Census) -> Result<()> {
 /// the next statement on this connection.
 fn take_census(connection: &Connection, census: &Census) -> Tally {
     let _ = connection.update_hook(None::<fn(Action, &str, &str, i64)>);
-    let Ok(mut held) = census.lock() else {
-        return Tally::default();
+    let mut tally = match census.lock() {
+        Ok(mut held) => std::mem::take(&mut *held),
+        Err(_) => Tally::default(),
     };
-    std::mem::take(&mut *held)
+    // The `WITHOUT ROWID` tables the hook cannot see. After a ROLLBACK the scratch rows are
+    // already gone; the delete also clears the commit that just landed.
+    if let Ok(mut statement) =
+        connection.prepare_cached(&format!("SELECT name FROM temp.{WITHOUT_ROWID_TOUCHED}"))
+        && let Ok(rows) = statement.query_map([], |row| row.get::<_, String>(0))
+    {
+        for name in rows.flatten() {
+            tally.rows += 1;
+            tally.tables.insert(name);
+        }
+    }
+    let _ = connection.execute_batch(&format!("DELETE FROM temp.{WITHOUT_ROWID_TOUCHED}"));
+    tally
 }
 
 #[cfg(test)]

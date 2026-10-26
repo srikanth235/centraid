@@ -1,4 +1,4 @@
-//! THE TWENTY-FIVE ACTIONS, as command invocations.
+//! THE TWENTY-SIX ACTIONS, as command invocations.
 //!
 //! Every People action is a thin invocation of ONE typed vault command: the
 //! projection lives in the command, not the app, so this module is a table, not
@@ -109,40 +109,11 @@ pub struct CommandsUnavailable {
     pub command: &'static str,
 }
 
-/// Whether the **dispatching surface** asks before dispatching. This is the
-/// manifest's `confirmation`, not the command definition's `confirm`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Confirm {
-    None,
-    Required,
-}
+pub use centraid_apps_kit::actions::{ActionRow, Confirm};
+use centraid_apps_kit::actions::{act, confirmed};
 
-/// One row of the action table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ActionRow {
-    pub action: &'static str,
-    pub command: &'static str,
-    pub confirm: Confirm,
-}
-
-const fn act(action: &'static str, command: &'static str) -> ActionRow {
-    ActionRow {
-        action,
-        command,
-        confirm: Confirm::None,
-    }
-}
-
-const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
-    ActionRow {
-        action,
-        command,
-        confirm: Confirm::Required,
-    }
-}
-
-/// THE TABLE. Twenty-five actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 25] = [
+/// THE TABLE. Twenty-six actions, in the manifest's own order.
+pub const ACTIONS: [ActionRow; 26] = [
     act("add-person", "person.add"),
     act("edit-person", "person.edit"),
     act("set-cadence", "person.edit"),
@@ -168,12 +139,13 @@ pub const ACTIONS: [ActionRow; 25] = [
     act("save-contact-channel", "person.save_contact_point"),
     confirmed("delete-contact-channel", "person.remove_contact_point"),
     confirmed("merge-people", "person.merge"),
+    act("follow-contacts", "follow.contacts"),
 ];
 
 /// One action's row, by the name the manifest gives it.
 #[must_use]
 pub fn action_row(action: &str) -> Option<&'static ActionRow> {
-    ACTIONS.iter().find(|row| row.action == action)
+    centraid_apps_kit::actions::find(&ACTIONS, action)
 }
 
 /// The `act` scopes People declares, derived from the action table.
@@ -227,7 +199,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_person_verbs_are_the_persons_own() {
-        assert_eq!(ACTIONS.len(), 25);
+        assert_eq!(ACTIONS.len(), 26);
         assert_eq!(
             commands("person."),
             [

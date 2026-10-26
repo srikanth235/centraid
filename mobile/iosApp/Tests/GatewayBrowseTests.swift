@@ -2,8 +2,6 @@ import Foundation
 import Network
 import XCTest
 
-import CentraidShared
-
 @testable import CentraidApp
 
 /// THE iOS GATEWAY BROWSE, WITHOUT A NETWORK (#1080, Q-1080-D3).
@@ -16,7 +14,8 @@ import CentraidShared
 /// are not provable without a Bonjour responder; the simulator walk and
 /// `docs/release/v1-handoffs.md` carry those. Each rule has its negative
 /// beside it: a result with no `gw` is never connected to, a second answer is
-/// never delivered, and an answer after the window is ignored.
+/// never delivered, and an answer after the window is ignored. Which sighting
+/// is which gateway is Rust's (`crates/screens/tests/pairing.rs`).
 final class GatewayBrowseTests: XCTestCase {
     private let id = String(repeating: "ab", count: 32)
 
@@ -142,23 +141,6 @@ final class GatewayBrowseTests: XCTestCase {
         finder.fail()
         wait(for: [answer], timeout: 2)
         XCTAssertEqual(answers, 1)
-    }
-
-    /// The Swift-built sighting is the one the shared match reads: the TXT
-    /// `gw` is the identity, and the instance name is nobody's.
-    func testTheSharedMatchReadsWhatThisFileHandsIt() {
-        let sighting = GatewaySighting(
-            serviceName: "centraid-gateway-abababab",
-            txt: ["gw": id],
-            addresses: ["192.168.1.44:7443"]
-        )
-        XCTAssertTrue(GatewayMatch.shared.isGateway(sighting: sighting, gatewayId: id))
-        let stranger = GatewaySighting(serviceName: "centraid-gateway-abababab", txt: [:], addresses: ["192.168.1.44:7443"])
-        XCTAssertFalse(GatewayMatch.shared.isGateway(sighting: stranger, gatewayId: id))
-        XCTAssertEqual(
-            GatewayMatch.shared.candidates(gatewayId: id, recorded: [], sightings: [sighting]),
-            ["192.168.1.44:7443"]
-        )
     }
 
     // MARK: fakes

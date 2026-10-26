@@ -32,8 +32,6 @@
 //! compares units, so a port that "fixed" this would go red, and the receipt
 //! carries the finding rather than this crate carrying a divergence.
 
-pub mod copy;
-
 use std::collections::BTreeMap;
 
 /// The ink brand (`packages/design/src/themes/shared.ts:18`).

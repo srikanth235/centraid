@@ -8,69 +8,65 @@ import android.os.Build
 import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
-import dev.centraid.design.copy.PhotosCopy
-import dev.centraid.shared.apps.photos.CopyExportScreen
-import dev.centraid.shared.apps.photos.LocatedOriginal
-import dev.centraid.shared.apps.photos.ShelfCopies
+import centraid.core.v1.ContentRef
+import centraid.core.v1.ContentUrlRequest
+import centraid.core.v1.EffectFailed
+import centraid.core.v1.EffectResult
+import centraid.core.v1.Envelope
+import centraid.core.v1.ExportOriginals
+import centraid.core.v1.LoadRequest
+import centraid.core.v1.OriginalsExported
+import centraid.core.v1.Request
+import centraid.core.v1.Value
+import dev.centraid.core.CentraidCore
+import dev.centraid.core.CoreOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** What a shelf asked the shell to do with its pick's originals. */
-public sealed interface ShelfExport {
-    /** The share sheet. `keepLocation` false takes the place out of every file first. */
-    public data class Send(val keepLocation: Boolean) : ShelfExport
-
-    /** This device's own photos, bytes as they are. */
-    public data object Save : ShelfExport
-}
-
 /**
- * A COPY OF A PICK, HANDED TO THE PLATFORM (#1029, the photos port) — a
- * shelf's selection or the library's, whichever [CopyExportScreen] asked.
+ * THE ORIGINALS OF A PICK, HANDED TO THE PLATFORM (#1135): the generic
+ * `ExportOriginals` performer. "Send a copy" puts copies in the system share
+ * sheet; "Download original" puts them in this device's own photos. Neither
+ * writes to the vault. Rust (`photos/shelf.rs`) asks for it with the photograph
+ * ids, owns every sentence and reads the closed [OriginalsExported] this answers;
+ * this file does what only Android can — find each original on this phone, take
+ * the place out of the bytes, the chooser, `MediaStore`.
  *
- * "Send a copy" puts copies of the originals in the system share sheet;
- * "Download original" puts them in this device's own photos. Neither writes to
- * the vault, so neither is a reducer's business: `ShelfCopies.kt` finds the
- * originals and owns every sentence, this file does what only Android can —
- * the files, the chooser, `MediaStore` — and the result comes back through
- * [CopyExportScreen.exportSettled] as the one clause that screen shows.
+ * **HOW AN ORIGINAL IS FOUND.** Two trips through the core's one door: `photos.photo`
+ * for each photograph's content item, then the byte door ([ContentUrlRequest]) for
+ * where those bytes are on this device. A photograph whose original is not here
+ * is counted in `missing` rather than silently dropped.
  *
- * **THE LOCATION IS TAKEN OUT OF THE BYTES, OR NOTHING IS SENT** (#816). A
- * place left out of the words while the file carries its coordinates discloses
- * it anyway. A photograph's GPS tags are cleared in place on the COPY with
- * `ExifInterface` — no re-encode, so capture time and orientation survive — and
- * a format `ExifInterface` cannot rewrite (HEIF, a video) stops the whole send
- * with `ShelfCopies.LOCATION_NOT_REMOVABLE` rather than going out whole.
+ * **THE LOCATION IS TAKEN OUT OF THE BYTES, OR NOTHING IS SENT** (#816). A place
+ * left out of the words while the file carries its coordinates discloses it
+ * anyway. A photograph's GPS tags are cleared in place on the COPY with
+ * `ExifInterface` — no re-encode, so capture time and orientation survive — and a
+ * format `ExifInterface` cannot rewrite (HEIF, a video) stops the whole send
+ * with `STATUS_LOCATION_NOT_REMOVABLE` rather than going out whole.
  *
- * The copies live under `cacheDir/shared-copies/batch` — inside the one folder
- * the lightbox's `FileProvider` serves (`PhotoHandOff`, `res/xml/
- * shared_copies.xml`), in a subfolder of their own so neither hand-off clears
- * the other's — and each send clears the previous send's: they are plaintext
- * outside the vault, and a chooser does not say when it is done.
+ * The copies live under `cacheDir/shared-copies/batch`, inside the one folder
+ * the lightbox's `FileProvider` serves (`res/xml/shared_copies.xml`), and each
+ * send clears the previous send's: they are plaintext outside the vault, and a
+ * chooser does not say when it is done.
  *
- * The SwiftUI twin is `ShelfCopyExport.swift`; the two are kept in step by hand.
+ * The SwiftUI twin is `ShelfCopyExport.swift`.
  */
-public suspend fun exportShelfCopies(
+internal suspend fun performExportOriginals(
     context: Context,
-    bridge: CopyExportScreen,
-    assetIds: List<String>,
-    export: ShelfExport,
-) {
-    val located = kotlinx.coroutines.suspendCancellableCoroutine { done ->
-        bridge.locateOriginals(assetIds) { done.resumeWith(Result.success(it)) }
-    }
-    if (located.originals.isEmpty()) {
-        bridge.exportSettled(ShelfCopies.NONE_HERE)
-        return
-    }
-    when (export) {
-        is ShelfExport.Send -> {
-            val files = withContext(Dispatchers.IO) { prepare(context, located.originals, export.keepLocation) }
-            if (files == null) {
-                bridge.exportSettled(ShelfCopies.LOCATION_NOT_REMOVABLE)
-                return
-            }
+    core: CentraidCore,
+    export: ExportOriginals,
+): EffectResult {
+    val located = locateOriginals(core, export.photo_ids)
+    val missing = located.missing
+    fun exported(status: OriginalsExported.Status, handed: Int = 0) = EffectResult(
+        originals_exported = OriginalsExported(status = status, handed = handed, missing = missing),
+    )
+    if (located.originals.isEmpty()) return exported(OriginalsExported.Status.STATUS_NONE_HERE)
+    return when (export.mode) {
+        ExportOriginals.Mode.MODE_SEND -> {
+            val files = withContext(Dispatchers.IO) { prepare(context, located.originals, export.keep_location, export) }
+                ?: return exported(OriginalsExported.Status.STATUS_LOCATION_NOT_REMOVABLE)
             val authority = context.packageName + COPIES_AUTHORITY_SUFFIX
             val uris = ArrayList(files.map { FileProvider.getUriForFile(context, authority, it) })
             val send = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
@@ -79,23 +75,77 @@ public suspend fun exportShelfCopies(
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             context.startActivity(
-                Intent.createChooser(send, PhotosCopy.PHOTOS_SEND_COPY).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                Intent.createChooser(send, export.chooser_title.ifEmpty { null }).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
-            // THE CHOOSER SAYS WHAT IT DID; this says only what did not go.
-            bridge.exportSettled(ShelfCopies.missingSentence(located.missing))
+            exported(OriginalsExported.Status.STATUS_DONE, files.size)
         }
 
-        ShelfExport.Save -> {
-            val saved = withContext(Dispatchers.IO) { saveToPhotos(context, located.originals) }
-            bridge.exportSettled(
-                if (saved < 0) {
-                    ShelfCopies.EXPORT_FAILED_SENTENCE
-                } else {
-                    ShelfCopies.savedSentence(saved, located.missing)
-                },
-            )
+        ExportOriginals.Mode.MODE_SAVE -> {
+            val saved = withContext(Dispatchers.IO) { saveToPhotos(context, located.originals, export) }
+            if (saved < 0) {
+                exported(OriginalsExported.Status.STATUS_FAILED)
+            } else {
+                exported(OriginalsExported.Status.STATUS_DONE, saved)
+            }
+        }
+
+        else -> EffectResult(failed = EffectFailed(reason = "no export mode"))
+    }
+}
+
+/** One original this device holds, located for a platform hand-off. */
+internal data class LocatedOriginal(
+    val assetId: String,
+    val path: String,
+    val mediaType: String,
+    val isVideo: Boolean,
+)
+
+/** What [locateOriginals] found, and how many of the pick it did not. */
+internal data class Located(val originals: List<LocatedOriginal>, val missing: Int)
+
+/** `ContentUrlRequest`'s own ceiling (`MAX_CONTENT_URLS`), asked in slices. */
+private const val URL_BATCH: Int = 100
+
+/** WHERE EACH PICKED ORIGINAL IS ON THIS DEVICE, in the pick's order, and how many are not here. */
+private suspend fun locateOriginals(core: CentraidCore, photoIds: List<String>): Located {
+    val ids = photoIds.filter { it.isNotEmpty() }.distinct()
+    // The content item and the form of each photograph, from the one read.
+    val known = LinkedHashMap<String, Pair<String, Boolean>>()
+    for (id in ids) {
+        val outcome = core.call(
+            Envelope(
+                request = Request(
+                    load = LoadRequest(app = "photos", query = "photo", params = mapOf("id" to Value(text = id))),
+                ),
+            ),
+        )
+        val cell = (outcome as? CoreOutcome.Answered)?.value?.response?.load?.answer?.photos_photo?.photo?.cell
+        if (cell != null && cell.content_id.isNotEmpty()) known[id] = cell.content_id to (cell.form == "video")
+    }
+    val found = mutableListOf<LocatedOriginal>()
+    known.keys.chunked(URL_BATCH).forEach { slice ->
+        val refs = slice.map { id ->
+            ContentRef(content_id = known.getValue(id).first, owner_type = "photo", owner_id = id)
+        }
+        val outcome = core.call(Envelope(request = Request(content_urls = ContentUrlRequest(refs = refs))))
+        val urls = (outcome as? CoreOutcome.Answered)?.value?.response?.content_urls?.urls.orEmpty()
+        // ONE ANSWER PER REF, IN ORDER (`ContentUrls`' own rule), so the zip is by
+        // position and a short answer pairs nothing wrongly.
+        slice.forEachIndexed { index, id ->
+            val url = urls.getOrNull(index)
+            val path = url?.path
+            if (url != null && url.content_id == refs[index].content_id && !path.isNullOrEmpty()) {
+                found += LocatedOriginal(
+                    assetId = id,
+                    path = path,
+                    mediaType = url.media_type,
+                    isVideo = known.getValue(id).second,
+                )
+            }
         }
     }
+    return Located(found, ids.size - found.size)
 }
 
 /** `<applicationId>.photocopies` — the manifest's one `FileProvider`, `PhotoHandOff`'s. */
@@ -108,12 +158,12 @@ private const val COPIES_FOLDER: String = "shared-copies/batch"
  * Copies under [COPIES_FOLDER], named by type, the location taken out unless
  * the member kept it. Null when a file's location could not be taken out.
  */
-private fun prepare(context: Context, originals: List<LocatedOriginal>, keepLocation: Boolean): List<File>? {
+private fun prepare(context: Context, originals: List<LocatedOriginal>, keepLocation: Boolean, export: ExportOriginals): List<File>? {
     val folder = File(context.cacheDir, COPIES_FOLDER)
     folder.deleteRecursively()
     folder.mkdirs()
     return originals.mapIndexed { index, original ->
-        val target = File(folder, fileName(original, index))
+        val target = File(folder, fileName(original, index, export))
         val copied = runCatching { File(original.path).copyTo(target, overwrite = true) }.isSuccess
         if (!copied) return null
         if (!keepLocation && !stripLocation(target, original)) return null
@@ -169,7 +219,7 @@ private val GPS_TAGS: List<String> = listOf(
  * those devices the save is refused with the export-failed sentence rather
  * than a permission prompt nothing else in Photos needs.
  */
-private fun saveToPhotos(context: Context, originals: List<LocatedOriginal>): Int {
+private fun saveToPhotos(context: Context, originals: List<LocatedOriginal>, export: ExportOriginals): Int {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return -1
     val resolver = context.contentResolver
     var saved = 0
@@ -180,7 +230,7 @@ private fun saveToPhotos(context: Context, originals: List<LocatedOriginal>): In
             MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         }
         val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName(original, index))
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName(original, index, export))
             put(MediaStore.MediaColumns.MIME_TYPE, original.mediaType.ifEmpty { if (original.isVideo) "video/mp4" else "image/jpeg" })
             put(MediaStore.MediaColumns.RELATIVE_PATH, if (original.isVideo) "Movies/Centraid" else "Pictures/Centraid")
             put(MediaStore.MediaColumns.IS_PENDING, 1)
@@ -199,9 +249,9 @@ private fun saveToPhotos(context: Context, originals: List<LocatedOriginal>): In
     return saved
 }
 
-/** `Photo 1.jpg`, `Video 2.mp4` — the extension from the media type the byte door reported. */
-private fun fileName(original: LocatedOriginal, index: Int): String {
-    val stem = if (original.isVideo) PhotosCopy.PHOTOS_CELL_VIDEO else PhotosCopy.PHOTOGRAPH
+/** `Photo 1.jpg`, `Video 2.mp4` — Rust's stems, the extension from the media type the byte door reported. */
+private fun fileName(original: LocatedOriginal, index: Int, export: ExportOriginals): String {
+    val stem = if (original.isVideo) export.video_stem else export.photo_stem
     val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(original.mediaType)
         ?: if (original.isVideo) "mp4" else "jpg"
     return "$stem ${index + 1}.$ext"

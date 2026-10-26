@@ -83,7 +83,43 @@ pub struct CoreConfig {
     /// needs a spool of one part, not gigabytes of test data. A shell passes
     /// nothing, and the C ABI cannot set it.
     pub spool_ceiling: Option<u64>,
+    /// THIS CORE IS THE DOOR TO A DIRECTORY OF VAULTS, not to one (#1135, lane
+    /// H2). The core opened here holds no vault; the shelf the screen runtime
+    /// builds opens every vault under [`ShelfConfig::dir`] and the shell's calls
+    /// reach whichever is in front. `None` is an ordinary single-vault core.
+    pub shelf: Option<ShelfConfig>,
 }
+
+/// The directory a shelf holds its vaults in, and the one debug hook it takes.
+pub struct ShelfConfig {
+    /// Where every vault this phone holds lives: one directory per vault.
+    pub dir: PathBuf,
+    /// A debug build's demo seed (128 lowercase hex characters), stored where a
+    /// real seed lives so the demo vault opens keyed through the ordinary path.
+    /// Never `Debug`-printed: it is a key.
+    pub dev_seed: Option<String>,
+}
+
+impl ShelfConfig {
+    /// A shelf over `dir`.
+    pub fn new(dir: impl Into<PathBuf>) -> Self {
+        Self {
+            dir: dir.into(),
+            dev_seed: None,
+        }
+    }
+
+    /// The path of the core that holds no vault: the words and a restore are
+    /// asked through it, and its directory is where a restore lays each vault
+    /// down. The file is never made (`create` is false).
+    #[must_use]
+    pub fn front_path(&self) -> PathBuf {
+        self.dir.join(FRONT_FILE)
+    }
+}
+
+/// The name of the file the vault-less front core is opened at.
+pub const FRONT_FILE: &str = "custody-probe.sqlite3";
 
 impl CoreConfig {
     /// A core over `path`, creating the file when it is not there.
@@ -97,7 +133,17 @@ impl CoreConfig {
             expected_digest: None,
             seed: None,
             spool_ceiling: None,
+            shelf: None,
         }
+    }
+
+    /// A core that is the door to the directory of vaults `shelf` names: it
+    /// holds no vault of its own and is never created.
+    #[must_use]
+    pub fn fronting(shelf: ShelfConfig) -> Self {
+        let mut config = Self::new(shelf.front_path()).opening_existing();
+        config.shelf = Some(shelf);
+        config
     }
 
     /// Open `path` only if it is already there.

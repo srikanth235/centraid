@@ -22,7 +22,9 @@ mod doc_links;
 mod gate;
 mod ledger;
 mod measure;
+mod native_rules;
 mod rules;
+mod screens_catalog;
 mod select;
 #[cfg(test)]
 mod testing;
@@ -73,6 +75,14 @@ enum Command {
         /// entry in it can be seen rather than inferred.
         #[arg(long)]
         reads: bool,
+    },
+    /// Write the Rust catalogue of every app's actions and queries from the
+    /// manifests (`crates/screens/src/catalog.rs`), or with `--check` fail
+    /// when the committed file is stale (#1135).
+    ScreensCatalog {
+        /// Compare instead of write.
+        #[arg(long)]
+        check: bool,
     },
     /// Print the repository root every path-based rule will scan.
     ///
@@ -129,8 +139,8 @@ pub enum Profile {
     Nightly,
     /// `nightly` plus the restore drill and the VPS smoke.
     Release,
-    /// The Kotlin/Gradle JVM suites: `:shared:jvmTest`, `:core:jvmTest` — a
-    /// real ABI round trip against the real cdylib — and the generated-artifact
+    /// The Kotlin/Gradle JVM suite: `:core:jvmTest` — a real ABI round trip
+    /// against the real cdylib — and the generated-artifact
     /// drift check. NOT a superset of any other profile and not charged to
     /// `pr`: a different toolchain with a different cold cost, and one number
     /// answering for two build systems answers for neither (D-1020-B2-3).
@@ -288,6 +298,13 @@ fn main() -> ExitCode {
             }
         },
         Command::Rules => rules::print_report(&root),
+        Command::ScreensCatalog { check } => match screens_catalog::run(&root, check) {
+            Ok(()) => true,
+            Err(error) => {
+                eprintln!("xtask: {error:#}");
+                false
+            }
+        },
         Command::DocLinks => match doc_links::check(&root) {
             Ok(report) => {
                 print!("{}", report.block());

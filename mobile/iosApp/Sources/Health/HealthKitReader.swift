@@ -1,80 +1,99 @@
 import Foundation
 import HealthKit
 
-import CentraidShared
-
-/// HEALTHKIT, READ ONLY (#1129; R-1129-7): the iOS half of `HealthReader`.
+/// HEALTHKIT, READ ONLY (#1129, #1135; R-1129-7): the iOS half of the `HealthRead` effect,
+/// answered with a `HealthSnapshot`.
 ///
 /// **NOTHING IS EVER WRITTEN.** Authorization is `toShare: []` (`HealthAccess.request`), the
 /// entitlement's access list is empty, the bundle declares no `NSHealthUpdateUsageDescription`,
-/// and nothing under `Sources/` saves or deletes a HealthKit object — `HealthKitReadOnlySpec`
+/// and nothing under `Sources/` saves or deletes a HealthKit object — `healthkit-read-only` (`cargo xtask rules`)
 /// reads all four.
 ///
-/// **NEVER ASKS.** A pass reads over what the member granted at Connect; it never asks for
-/// authorization (R-1127-15). HealthKit hides whether a READ was granted — a refused type simply
-/// answers nothing — so whether the member went through Connect at all is kept by the shell
-/// (`HealthAccess.connected`), and `nil` is delivered when they did not.
+/// **ASKS ONLY WHEN THE EFFECT SAYS SO.** `ask_permission` is the member's Connect tap; a pass
+/// reads over what the member granted and never asks for authorization (R-1127-15). HealthKit
+/// hides whether a READ was granted — a refused type simply answers nothing — so whether the
+/// member went through Connect at all is Rust's to keep (a keychain habit), and it only sends a
+/// pass to a phone that did.
 ///
-/// What a pass reads, for the types the member chose only (R-1129-6):
+/// What a read covers, for the types the member chose only (R-1129-6):
 /// - **Daily totals** from one `HKStatisticsCollectionQuery` per quantity type, anchored at the
-///   phone's local midnight with a one-day interval, over `totalsFrom`…now: the store's own
+///   phone's local midnight with a one-day interval, over `totals_from`…now: the store's own
 ///   statistics, so a watch and a phone counting the same steps count once. Steps, active energy
 ///   and exercise minutes are `.cumulativeSum`, resting heart rate `.discreteAverage`, weight
 ///   `.mostRecent` (kg).
 /// - **Sleep** from `sleepAnalysis` samples: the asleep values only, every source's intervals
 ///   MERGED (a union, so the watch and the phone are not counted twice), each merged run's
 ///   minutes keyed to the local day it ENDS on — the day the member woke.
-/// - **Workouts** started at or after `workoutsSince`: the store's own id, the
-///   `HKWorkoutActivityType` case's name (`HealthKinds.TABLE`'s iOS keys; any other kind is
-///   `other`), UTC instants, moving seconds, and the figures the workout's own statistics hold.
-///   A failed query makes the read incomplete, which removes nothing (R-1129-5).
+/// - **Workouts** started at or after `workouts_since_ms`: the store's own id, the
+///   `HKWorkoutActivityType` case's name (`kinds.rs`' iOS keys; any other kind is `other`), UTC
+///   instants, moving seconds, and the figures the workout's own statistics hold. A failed query
+///   makes the read incomplete, which removes nothing (R-1129-5).
 ///
-/// Off the main thread; `deliver` is called exactly once.
-final class HealthKitReader: NSObject, HealthReader {
-    func read(window: HealthWindow, deliver: @escaping (HealthRead?) -> Void) {
-        guard HKHealthStore.isHealthDataAvailable(), HealthAccess.connected else {
-            deliver(nil)
-            return
+/// This reads and decides nothing else: Rust diffs the days, maps the kind and judges
+/// completeness.
+enum HealthKitReader {
+    /// The effect's answer: a snapshot, or a refusal by value when HealthKit is not on this phone
+    /// or the member's Connect sheet failed.
+    static func snapshot(_ read: Centraid_Core_V1_HealthRead) async -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
+        guard HKHealthStore.isHealthDataAvailable() else { return .failed(denied("health data is not available")) }
+        if read.askPermission {
+            guard await HealthAccess.request(read.chosen) else { return .failed(denied("health access not given")) }
         }
-        let chosen = HealthAccess.chosen
         let store = HealthAccess.store
-        Task.detached(priority: .utility) {
-            deliver(await Self.read(store: store, window: window, chosen: chosen))
-        }
+        return await Task.detached(priority: .utility) {
+            .health(await Self.read(store: store, read: read))
+        }.value
     }
 
-    // MARK: - One pass
+    private static func denied(_ reason: String) -> Centraid_Core_V1_EffectFailed {
+        var failed = Centraid_Core_V1_EffectFailed()
+        failed.reason = reason
+        failed.denied = true
+        return failed
+    }
 
-    private static func read(store: HKHealthStore, window: HealthWindow, chosen: [String]) async -> HealthRead {
+    /// This install's id, minted once and kept off the vault (R-1127-10): the same one the calendar
+    /// stamps, so a followed workout's `local:` link names this phone.
+    private static var deviceID: String {
+        let key = "dev.centraid.install-id"
+        if let known = UserDefaults.standard.string(forKey: key) { return known }
+        let minted = UUID().uuidString
+        UserDefaults.standard.set(minted, forKey: key)
+        return minted
+    }
+
+    // MARK: - One read
+
+    private static func read(store: HKHealthStore, read: Centraid_Core_V1_HealthRead) async -> Centraid_Core_V1_HealthSnapshot {
+        let chosen = read.chosen
         let days = HealthCalendarDays()
-        var totals: [HealthDayTotal] = []
-        if let from = days.start(of: window.totalsFrom) {
+        var totals: [Centraid_Core_V1_HealthDayTotal] = []
+        if let from = days.start(of: read.totalsFrom) {
             for metric in DailyMetric.all where chosen.contains(metric.key) {
                 totals += await statistics(store: store, metric: metric, from: from, days: days)
             }
-            if chosen.contains(HealthMetrics.sleep.key) {
-                totals += await sleep(store: store, from: from, through: window.today, days: days)
+            if chosen.contains(HealthAccess.Key.sleep) {
+                totals += await sleep(store: store, from: from, through: read.today, days: days)
             }
         }
-        var workouts: [PhoneWorkout] = []
+        var workouts: [Centraid_Core_V1_HealthPhoneWorkout] = []
         var complete = true
-        if chosen.contains(HealthMetrics.companion.WORKOUTS) {
-            let since = Date(timeIntervalSince1970: TimeInterval(window.workoutsSince) / 1000)
-            if let read = await workoutsSince(store: store, since: since) {
-                workouts = read
+        if chosen.contains(HealthAccess.Key.workouts) {
+            let since = Date(timeIntervalSince1970: TimeInterval(read.workoutsSinceMs) / 1000)
+            if let found = await workoutsSince(store: store, since: since) {
+                workouts = found
             } else {
                 complete = false
             }
         }
-        return HealthRead(
-            store: .appleHealth,
-            days: totals,
-            workouts: workouts,
-            chosen: chosen,
-            refused: [],
-            workoutsComplete: complete,
-            storePresent: true
-        )
+        var out = Centraid_Core_V1_HealthSnapshot()
+        out.store = .appleHealth
+        out.storePresent = true
+        out.days = totals
+        out.workouts = workouts
+        out.workoutsComplete = complete
+        out.deviceID = deviceID
+        return out
     }
 
     // MARK: - Daily totals
@@ -87,16 +106,16 @@ final class HealthKitReader: NSObject, HealthReader {
         let unit: HKUnit
 
         static let all: [DailyMetric] = [
-            DailyMetric(key: HealthMetrics.steps.key, type: .stepCount, option: .cumulativeSum, unit: .count()),
-            DailyMetric(key: HealthMetrics.energy.key, type: .activeEnergyBurned, option: .cumulativeSum, unit: .kilocalorie()),
-            DailyMetric(key: HealthMetrics.exercise.key, type: .appleExerciseTime, option: .cumulativeSum, unit: .minute()),
+            DailyMetric(key: HealthAccess.Key.steps, type: .stepCount, option: .cumulativeSum, unit: .count()),
+            DailyMetric(key: HealthAccess.Key.energy, type: .activeEnergyBurned, option: .cumulativeSum, unit: .kilocalorie()),
+            DailyMetric(key: HealthAccess.Key.exercise, type: .appleExerciseTime, option: .cumulativeSum, unit: .minute()),
             DailyMetric(
-                key: HealthMetrics.restingHr.key,
+                key: HealthAccess.Key.restingHr,
                 type: .restingHeartRate,
                 option: .discreteAverage,
                 unit: HKUnit.count().unitDivided(by: .minute())
             ),
-            DailyMetric(key: HealthMetrics.weight.key, type: .bodyMass, option: .mostRecent, unit: .gramUnit(with: .kilo)),
+            DailyMetric(key: HealthAccess.Key.weight, type: .bodyMass, option: .mostRecent, unit: .gramUnit(with: .kilo)),
         ]
 
         func value(_ statistics: HKStatistics) -> Double? {
@@ -112,7 +131,7 @@ final class HealthKitReader: NSObject, HealthReader {
 
     /// The store's statistics for [metric], one bucket a local day from [from] to now. A day the
     /// store has nothing for is absent, never a zero; a query that fails reads nothing.
-    private static func statistics(store: HKHealthStore, metric: DailyMetric, from: Date, days: HealthCalendarDays) async -> [HealthDayTotal] {
+    private static func statistics(store: HKHealthStore, metric: DailyMetric, from: Date, days: HealthCalendarDays) async -> [Centraid_Core_V1_HealthDayTotal] {
         let type = HKQuantityType(metric.type)
         let now = Date()
         let predicate = HKQuery.predicateForSamples(withStart: from, end: now, options: [])
@@ -125,15 +144,23 @@ final class HealthKitReader: NSObject, HealthReader {
                 intervalComponents: DateComponents(day: 1)
             )
             query.initialResultsHandler = { _, collection, _ in
-                var out: [HealthDayTotal] = []
+                var out: [Centraid_Core_V1_HealthDayTotal] = []
                 collection?.enumerateStatistics(from: from, to: now) { statistics, _ in
                     guard let value = metric.value(statistics), value.isFinite else { return }
-                    out.append(HealthDayTotal(day: days.key(statistics.startDate), metric: metric.key, value: value))
+                    out.append(dayTotal(days.key(statistics.startDate), metric.key, value))
                 }
                 continuation.resume(returning: out)
             }
             store.execute(query)
         }
+    }
+
+    private static func dayTotal(_ day: String, _ metric: String, _ value: Double) -> Centraid_Core_V1_HealthDayTotal {
+        var total = Centraid_Core_V1_HealthDayTotal()
+        total.day = day
+        total.metric = metric
+        total.value = value
+        return total
     }
 
     // MARK: - Sleep
@@ -148,7 +175,7 @@ final class HealthKitReader: NSObject, HealthReader {
 
     /// Minutes asleep per day woken, for the nights that end on [from]'s day through [through].
     /// The samples are read from a day earlier, so the first night's start is not cut off.
-    private static func sleep(store: HKHealthStore, from: Date, through: String, days: HealthCalendarDays) async -> [HealthDayTotal] {
+    private static func sleep(store: HKHealthStore, from: Date, through: String, days: HealthCalendarDays) async -> [Centraid_Core_V1_HealthDayTotal] {
         let type = HKCategoryType(.sleepAnalysis)
         let start = days.calendar.date(byAdding: .day, value: -1, to: from) ?? from
         let predicate = HKQuery.predicateForSamples(withStart: start, end: Date(), options: [])
@@ -171,7 +198,7 @@ final class HealthKitReader: NSObject, HealthReader {
             guard day >= first, day <= through else { continue }
             minutes[day, default: 0] += run.1.timeIntervalSince(run.0) / 60
         }
-        return minutes.keys.sorted().map { HealthDayTotal(day: $0, metric: HealthMetrics.sleep.key, value: minutes[$0] ?? 0) }
+        return minutes.keys.sorted().map { dayTotal($0, HealthAccess.Key.sleep, minutes[$0] ?? 0) }
     }
 
     /// THE UNION of [intervals]: overlapping or touching intervals from any source become one run,
@@ -191,7 +218,7 @@ final class HealthKitReader: NSObject, HealthReader {
     // MARK: - Workouts
 
     /// Every workout that started at or after [since], or nil when the query failed.
-    private static func workoutsSince(store: HKHealthStore, since: Date) async -> [PhoneWorkout]? {
+    private static func workoutsSince(store: HKHealthStore, since: Date) async -> [Centraid_Core_V1_HealthPhoneWorkout]? {
         let predicate = HKQuery.predicateForSamples(withStart: since, end: nil, options: [.strictStartDate])
         let found: [HKWorkout]? = await withCheckedContinuation { continuation in
             let query = HKSampleQuery(
@@ -212,7 +239,7 @@ final class HealthKitReader: NSObject, HealthReader {
         .distanceWalkingRunning, .distanceCycling, .distanceSwimming, .distanceWheelchair, .distanceDownhillSnowSports,
     ]
 
-    private static func workout(_ workout: HKWorkout) -> PhoneWorkout {
+    private static func workout(_ workout: HKWorkout) -> Centraid_Core_V1_HealthPhoneWorkout {
         let distance = distances.lazy
             .compactMap { workout.statistics(for: HKQuantityType($0))?.sumQuantity()?.doubleValue(for: .meter()) }
             .first
@@ -221,22 +248,22 @@ final class HealthKitReader: NSObject, HealthReader {
             .averageQuantity()?
             .doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
         let elevation = (workout.metadata?[HKMetadataKeyElevationAscended] as? HKQuantity)?.doubleValue(for: .meter())
-        return PhoneWorkout(
-            id: workout.uuid.uuidString,
-            kind: kind(workout.workoutActivityType),
-            startedAt: HealthInstant.utc(workout.startDate),
-            endedAt: HealthInstant.utc(workout.endDate),
-            movingSec: workout.duration > 0 ? KotlinLong(value: Int64(workout.duration.rounded())) : nil,
-            distanceM: distance.map { KotlinDouble(value: $0) },
-            energyKcal: energy.map { KotlinDouble(value: $0) },
-            avgHrBpm: heart.map { KotlinLong(value: Int64($0.rounded())) },
-            elevationGainM: elevation.map { KotlinDouble(value: $0) },
-            recordedBy: workout.sourceRevision.source.name
-        )
+        var out = Centraid_Core_V1_HealthPhoneWorkout()
+        out.id = workout.uuid.uuidString
+        out.kind = kind(workout.workoutActivityType)
+        out.startedAt = HealthInstant.utc(workout.startDate)
+        out.endedAt = HealthInstant.utc(workout.endDate)
+        if workout.duration > 0 { out.movingSec = Int64(workout.duration.rounded()) }
+        if let distance { out.distanceM = distance }
+        if let energy { out.energyKcal = energy }
+        if let heart { out.avgHrBpm = Int64(heart.rounded()) }
+        if let elevation { out.elevationGainM = elevation }
+        out.recordedBy = workout.sourceRevision.source.name
+        return out
     }
 
-    /// THE KIND'S SWIFT CASE NAME, the word `HealthKinds.TABLE` keys on. Its names ARE the
-    /// table's iOS keys (`HealthKitReadOnlySpec` compares them); a kind the table does not name is
+    /// THE KIND'S SWIFT CASE NAME, the word `crates/screens/src/health/kinds.rs` keys on. Its names ARE the
+    /// table's iOS keys (the `healthkit-read-only` rule compares them); a kind the table does not name is
     /// `other`.
     static func kind(_ type: HKWorkoutActivityType) -> String {
         switch type {

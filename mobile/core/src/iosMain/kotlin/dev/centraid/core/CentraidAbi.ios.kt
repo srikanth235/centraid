@@ -36,7 +36,7 @@ import kotlin.concurrent.atomics.AtomicLong
  * **THIS FILE IS NOT COMPILED IN CI TODAY.** Kotlin/Native's iOS targets need a
  * macOS host, and `cargo xtask gate`'s `mobile-jvm` step runs on Linux. What
  * proves it is the owner hand-off in `mobile/README.md`
- * (`./gradlew :shared:linkDebugFrameworkIosSimulatorArm64`), and the risk of an
+ * (a Kotlin/Native link of `:core`), and the risk of an
  * unbuilt actual is named in the receipt rather than hidden behind a green JVM
  * run. Nothing above `:core` can tell the two actuals apart, which is the point
  * of `CentraidAbi`.

@@ -14,7 +14,6 @@ import dev.centraid.android.theme.centraidDark
 import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.CentraidGeometry
 import dev.centraid.design.NativeAppMark
-import dev.centraid.shared.nav.AppHomes
 
 /**
  * The Binding Layer app mark (#1020, wave A; v0 `kit/components/AppMark.tsx`).
@@ -38,8 +37,7 @@ public fun AppMark(
     mutedBackground: Color = Color.Transparent,
     mutedInk: Color = Color.Transparent,
 ) {
-    // A domain draws the mark of the app it opens in (`tasks` is Agenda's, #1128).
-    val app = AppHomes.appOf(appId)
+    val app = appId
     val marks = if (centraidDark()) CentraidCatalog.darkMarks else CentraidCatalog.lightMarks
     val mark: NativeAppMark? = marks[app]
     val iconKey = CentraidCatalog.byId[app]?.iconKey ?: return

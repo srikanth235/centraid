@@ -1,26 +1,22 @@
 import SwiftUI
 
-import CentraidShared
-
-/// `health.workout` — one workout (#1129), on the kit.
+/// `health.workout` — one workout (#1129, #1135), on the kit.
 ///
 /// **THE VIEW DECIDES NOTHING.** The kind, the title, when, each figure the store measured with
 /// its unit, and the foot that says who recorded it and where it was read from are
-/// `HealthWorkoutState`'s. Splits stay on the phone (R-1129-9). A workout no longer in the vault
-/// is the state's `gone`.
+/// `HealthWorkoutState`'s (Rust makes them: `crates/screens`, module `health`). Splits stay on
+/// the phone (R-1129-9). A workout no longer in the vault is the state's `gone`.
 struct HealthWorkoutView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_HealthWorkoutState
+    let send: (Centraid_Core_V1_HealthWorkoutEvent) -> Void
     let onBack: () -> Void
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_HealthWorkoutState {
-        (try? Centraid_Screen_V1_HealthWorkoutState(serializedBytes: data)) ?? .init()
-    }
-
-    private func event(_ build: (inout Centraid_Screen_V1_HealthWorkoutEvent) -> Void) -> Data {
-        healthEvent(Centraid_Screen_V1_HealthWorkoutEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_HealthWorkoutEvent) -> Void) -> Centraid_Core_V1_HealthWorkoutEvent {
+        var event = Centraid_Core_V1_HealthWorkoutEvent()
+        build(&event)
+        return event
     }
 
     private let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
@@ -53,7 +49,7 @@ struct HealthWorkoutView: View {
     }
 
     @ViewBuilder
-    private func page(_ workout: Centraid_Screen_V1_HealthWorkoutData) -> some View {
+    private func page(_ workout: Centraid_Core_V1_HealthWorkoutData) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(workout.kindLabel)
                 .centraidType("eyebrow")

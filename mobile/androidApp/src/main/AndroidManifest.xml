@@ -69,7 +69,7 @@
     <!-- Health, READ ONLY (#1129, R-1129-7): Health Connect's daily totals
          and workouts, asked for when the member taps Connect on Health's
          Connect page and for exactly the types chosen there, never at launch
-         (`screens/health/HealthConnectAct.kt`). No WRITE_ permission is ever
+         (`kit/ScreenEffects.kt`). No WRITE_ permission is ever
          declared: nothing is written back (`HealthConnectReadOnlySpec`). The
          last three are a workout's figures; READ_HEALTH_DATA_HISTORY lets the
          first read reach the year it keeps, not only the 30 days before the

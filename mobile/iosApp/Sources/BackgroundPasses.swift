@@ -32,28 +32,29 @@ import UIKit
 /// * **`setTaskCompleted` on EVERY path, including expiration, exactly once.**
 ///   A task that ends without it is killed and its app is penalised in
 ///   scheduling, which is a backup that gets rarer every time it fails.
-/// * **Resubmit at the start, at the end, and at every background entry.** A
+/// * **The next window is Rust's to ask for, on every path.** A
 ///   `BGTaskRequest` is one-shot: a handler that does not ask for the next
 ///   window runs once in the life of an install, and one that asks only on
-///   success stops for good the first time a laptop is off. The scene phase
-///   calls [resubmitAll] on `.background` (#1080).
+///   success stops for good the first time a laptop is off. The pass scheduler
+///   sends `ScheduleWindows` at launch, at every background entry, on a rule
+///   change and at the end of every pass; [schedule] performs it.
 /// * **A cold background launch opens the vaults first.** iOS may launch the
 ///   app straight into a window with no scene; the handler touches
 ///   `ShellModel.shared`, which opens the core, and waits up to
-///   [installWaitSeconds] for the shell to install [pass].
+///   [installWaitSeconds] for the shell to set [store].
 ///
-/// Nothing here decides what a pass IS — [pass] is installed by the shell, for
-/// the same reason `SyncPass.install` exists on the Android half: the pass is
-/// `commonMain`'s and a copy spelled in a platform file is a second answer.
+/// Nothing here decides what a pass IS or which windows exist: the pass
+/// scheduler in Rust (`crates/screens/src/passes`) says which windows to keep
+/// scheduled (`ScheduleWindows`, performed by [schedule]) and runs the pass a
+/// granted window starts (`ShellFact.window`, sent by [run]); this file maps
+/// them onto BGTaskScheduler and completes the task when Rust says the pass
+/// ended (`PassWindowDone`).
 enum BackgroundPasses {
-    typealias Pass = @MainActor (TimeInterval) async -> Bool
-
     /// The short window: iOS grants a `BGAppRefreshTask` seconds, not minutes.
     ///
-    /// These two identifiers are `IosBackgroundTasks.PERMITTED_IDENTIFIERS` in
-    /// `mobile/shared/src/iosMain/.../PlatformServices.ios.kt` and the
-    /// `BGTaskSchedulerPermittedIdentifiers` array in `project.yml`. One fact in
-    /// three files; `BackgroundIdentifierSpec` compares all three.
+    /// These two identifiers are the `BGTaskSchedulerPermittedIdentifiers` array
+    /// in `project.yml` too: one fact in two files, and a submit of an identifier
+    /// the plist does not list terminates the app.
     static let refreshIdentifier = "dev.centraid.sync-pass"
 
     /// The long one: minutes, on power, with a network.
@@ -73,25 +74,26 @@ enum BackgroundPasses {
     /// install the pass before it completes honestly without one.
     static let installWaitSeconds: TimeInterval = 20
 
-    /// Fifteen minutes, the same floor `IosBackgroundTasks.EARLIEST_SECONDS`
-    /// uses and the same one WorkManager enforces on the Android half.
+    /// Fifteen minutes, the floor WorkManager enforces on the Android half too.
     static let earliestSeconds: TimeInterval = 15 * 60
 
-    /// THE PASS, INSTALLED BY THE SHELL once the session exists.
-    ///
-    /// Takes the deadline this window has in seconds and answers whether every
-    /// held vault's spool was emptied — which is what `setTaskCompleted`
-    /// takes. Nil before the shell has installed one.
-    @MainActor static var pass: Pass? {
+    /// THE SCREEN STORE, SET BY THE SHELL once the core exists: the road to the pass
+    /// scheduler in Rust. Nil before it; a window that opens first waits a bounded
+    /// time for it.
+    @MainActor static var store: ScreenStore? {
         didSet {
-            guard let pass else { return }
+            guard let store else { return }
             let waiting = waiters
             waiters.removeAll()
-            waiting.values.forEach { $0.resume(returning: pass) }
+            waiting.values.forEach { $0.resume(returning: store) }
         }
     }
 
-    @MainActor private static var waiters: [UUID: CheckedContinuation<Pass?, Never>] = [:]
+    @MainActor private static var waiters: [UUID: CheckedContinuation<ScreenStore?, Never>] = [:]
+
+    /// WHETHER THE OS TOOK EVERY WINDOW RUST LAST ASKED FOR (`BackgroundProbe`): nil
+    /// before the first `ScheduleWindows`, false when Background App Refresh refused one.
+    @MainActor private(set) static var registered: Bool?
 
     /// Install both handlers. **Called once, at launch, before any submit.**
     static func register() {
@@ -99,11 +101,25 @@ enum BackgroundPasses {
         register(identifier: processingIdentifier, budget: processingBudgetSeconds)
     }
 
-    /// Ask for the next window of BOTH kinds. The scene phase calls this on
-    /// every `.background` (#1080), so leaving the app is what arms the night.
-    static func resubmitAll() {
-        resubmit(identifier: refreshIdentifier)
-        resubmit(identifier: processingIdentifier)
+    /// Keep exactly the windows Rust asked for scheduled (`ScheduleWindows`), and answer which
+    /// the OS took. A window that requires charging is a processing request (network and
+    /// power); the others are app-refresh requests; a one-off has no earliest date.
+    @MainActor static func schedule(_ windows: [Centraid_Core_V1_Window]) -> Centraid_Core_V1_WindowsScheduled {
+        var answer = Centraid_Core_V1_WindowsScheduled()
+        var refusals: [String] = []
+        for window in windows {
+            let identifier = window.requiresCharging || window.periodMinutes == 0
+                ? processingIdentifier : refreshIdentifier
+            if let refusal = submit(identifier: identifier, oneOff: window.periodMinutes == 0) {
+                answer.refused.append(window.name)
+                refusals.append("\(window.name): \(refusal)")
+            } else {
+                answer.taken.append(window.name)
+            }
+        }
+        answer.refusal = refusals.joined(separator: "; ")
+        registered = answer.refused.isEmpty
+        return answer
     }
 
     private static func register(identifier: String, budget: TimeInterval) {
@@ -113,23 +129,21 @@ enum BackgroundPasses {
     }
 
     private static func run(_ task: BGTask, identifier: String, budget: TimeInterval) {
-        // THE NEXT WINDOW IS ASKED FOR FIRST as well as last. A pass that
-        // crashes or is expired mid-pass has still asked, so the failure costs
-        // one window rather than every window after it.
-        resubmit(identifier: identifier)
         let completion = TaskCompletion(task)
+        // The window's name, as Rust scheduled it: the processing request is the night shift.
+        let name = identifier == processingIdentifier ? "centraid-night-shift" : "centraid-sync-pass"
         let work = Task { @MainActor in
             // A COLD BACKGROUND LAUNCH HAS NO SESSION YET: opening it is
-            // `ShellModel`'s, and the pass is installed when it exists.
+            // `ShellModel`'s, and the store is set when the core exists.
             _ = ShellModel.shared
-            guard let pass = await installed(within: installWaitSeconds) else {
+            guard let store = await installed(within: installWaitSeconds) else {
                 // NOT A FAILURE TO CLAIM AS SUCCESS. `false` is the honest
                 // answer: no pass ran in this window.
                 completion.finish(false)
                 return
             }
-            let drained = await pass(budget)
-            resubmit(identifier: identifier)
+            // RUST RUNS THE PASS AND ASKS FOR THE NEXT WINDOW (`ScheduleWindows`) on every path.
+            let drained = await store.windowGranted(name, budgetMs: UInt64(budget * 1000))
             completion.finish(drained)
         }
         // EXPIRATION IS iOS TAKING THE WINDOW BACK. Cancelling stops the pass
@@ -138,13 +152,14 @@ enum BackgroundPasses {
         // `setTaskCompleted` is owed on this path too.
         task.expirationHandler = {
             work.cancel()
+            Task { @MainActor in store?.windowExpired(name) }
             completion.finish(false)
         }
     }
 
-    /// The installed pass, now or within [seconds], or nil.
-    @MainActor private static func installed(within seconds: TimeInterval) async -> Pass? {
-        if let pass { return pass }
+    /// The store, now or within [seconds], or nil.
+    @MainActor private static func installed(within seconds: TimeInterval) async -> ScreenStore? {
+        if let store { return store }
         let ticket = UUID()
         return await withCheckedContinuation { continuation in
             waiters[ticket] = continuation
@@ -156,29 +171,34 @@ enum BackgroundPasses {
         }
     }
 
-    /// Ask for the next window of the same kind.
+    /// Submit one window; the refusal's words, or nil when iOS took it.
     ///
     /// The request classes are not interchangeable: a refresh identifier takes a
     /// `BGAppRefreshTaskRequest` and a processing identifier takes a
     /// `BGProcessingTaskRequest`, and submitting the wrong class for an
     /// identifier is another exception.
-    private static func resubmit(identifier: String) {
+    private static func submit(identifier: String, oneOff: Bool) -> String? {
         let request: BGTaskRequest
         if identifier == processingIdentifier {
             let processing = BGProcessingTaskRequest(identifier: identifier)
             processing.requiresNetworkConnectivity = true
-            // ON POWER (#1080): see the header. The same answer
-            // `IosBackgroundTasks` submits at launch; the two must agree.
+            // ON POWER (#1080): see the header.
             processing.requiresExternalPower = true
             request = processing
         } else {
             request = BGAppRefreshTaskRequest(identifier: identifier)
         }
-        request.earliestBeginDate = Date(timeIntervalSinceNow: earliestSeconds)
+        // A ONE-OFF (a capture or an import) has no earliest date: iOS may run it as soon as it likes.
+        if !oneOff { request.earliestBeginDate = Date(timeIntervalSinceNow: earliestSeconds) }
         // A REFUSAL IS NOT A CRASH. `submit` throws when Background App Refresh
-        // is off, and that is a setting, not a bug: the member is already told
-        // about it through `BackgroundTasks.Registration`.
-        try? BGTaskScheduler.shared.submit(request)
+        // is off, and that is a setting, not a bug: the member is told through
+        // the registration Rust words (`WindowsScheduled`).
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
     }
 }
 

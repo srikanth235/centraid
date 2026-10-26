@@ -114,7 +114,7 @@ fn a_turn_is_one_commit_with_its_cards_and_attachments() {
             "question": { "text": "what   is due\ntoday?", "attachments": [
               { "form": "image", "label": "receipt", "thumbnail_data_uri": PIXEL }] },
             "answer": { "outcome": "answered", "text": "Rent.", "record_json": "{\"read\":1}",
-                        "cards": [card("tasks", "task", "t1")] }
+                        "cards": [card("agenda", "task", "t1")] }
           }
         }),
     );
@@ -155,7 +155,7 @@ fn a_turn_is_one_commit_with_its_cards_and_attachments() {
         )
         .unwrap();
     let cards: Value = serde_json::from_str(&cards).unwrap();
-    assert_eq!(cards[0]["app"], "tasks");
+    assert_eq!(cards[0]["app"], "agenda");
     assert_eq!(cards[0]["id"], "t1");
     // The reader gives it back whole.
     let stored = w
@@ -317,11 +317,14 @@ fn the_roster_is_the_schemas_not_a_check() {
         input["scope_app"] = scope;
         w.run("thread.save_turn", input).status
     };
-    assert_eq!(attempt(json!(null), "tasks"), CommandStatus::Executed);
-    // Health is never named; Locker is a card domain and a scope (the owner's ruling of
-    // 2026-10-22); `tasks` is a domain that is no scope (R-1128-F2).
+    assert_eq!(attempt(json!(null), "agenda"), CommandStatus::Executed);
+    // Health and Locker are apps a card names and a scope (the owner's rulings of 2026-10-22 and
+    // 2026-10-24); there is no `tasks` app, the tasks are Agenda's (#1128).
+    assert_ne!(attempt(json!(null), "tasks"), CommandStatus::Executed);
     assert_eq!(attempt(json!(null), "locker"), CommandStatus::Executed);
-    assert_ne!(attempt(json!(null), "health"), CommandStatus::Executed);
+    assert_eq!(attempt(json!(null), "health"), CommandStatus::Executed);
+    assert_eq!(attempt(json!("health"), "notes"), CommandStatus::Executed);
+    assert_ne!(attempt(json!(null), "weather"), CommandStatus::Executed);
     assert_ne!(attempt(json!("tasks"), "notes"), CommandStatus::Executed);
     assert_eq!(attempt(json!("locker"), "notes"), CommandStatus::Executed);
     assert_eq!(attempt(json!("photos"), "notes"), CommandStatus::Executed);
@@ -459,7 +462,11 @@ fn a_card_is_live_while_its_row_is_and_an_unknown_word_is_not_evidence_of_a_hole
         !vault.chat_card_row_exists("notes", "task", &note).unwrap(),
         "a note is no task"
     );
-    assert!(!vault.chat_card_row_exists("health", "note", &note).unwrap());
+    assert!(
+        !vault
+            .chat_card_row_exists("weather", "note", &note)
+            .unwrap()
+    );
     assert!(
         !vault
             .chat_card_row_exists("locker", "locker_item", "no-such-item")
@@ -497,4 +504,34 @@ fn threads_list_newest_activity_first() {
     assert_eq!(order(&w.scratch.vault), [b.clone(), a.clone()]);
     w.turn(Some(&a), "more", answered("m"));
     assert_eq!(order(&w.scratch.vault), [a, b]);
+}
+
+/// ONE APP IS ONE WORD (#1128, principle 6 of the model): no app word is in the vault's DDL. A
+/// thread's `scope` is a bare column the `thread.save_turn` command holds to the roster, never a
+/// CHECK; the chat screen's scope list is the same roster (`crates/screens/tests/chat_model.rs`).
+#[test]
+fn the_ddl_holds_no_app_word_and_a_threads_scope_is_a_bare_column() {
+    let ddl_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../contracts/schema/vault-ddl.sql");
+    let ddl = std::fs::read_to_string(ddl_path).expect("the vault DDL");
+    let thread = ddl
+        .split("CREATE TABLE thread (")
+        .nth(1)
+        .and_then(|rest| rest.split(") STRICT;").next())
+        .expect("the thread table");
+    assert!(thread.contains("scope TEXT,") && !thread.contains("CHECK"));
+    // `health` is also the word of a phone store a followed origin names (`follow.system`); it is
+    // the one roster word the DDL spells, as a store and never as an app.
+    let outside_stores: String = ddl
+        .lines()
+        .filter(|line| !line.contains("system IN ("))
+        .collect::<Vec<_>>()
+        .join("\n");
+    for app in centraid_vault::roster::APPS {
+        assert!(
+            !outside_stores.contains(&format!("'{}'", app.id)),
+            "{}",
+            app.id
+        );
+    }
 }

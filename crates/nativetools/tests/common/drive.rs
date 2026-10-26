@@ -28,8 +28,15 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
         Kind::Notebook => "Recipes",
         Kind::Folder => "Taxes",
         Kind::List => "Home",
-        // read-only (#1099, R-1099-8): no verb applies, so no pair is driven
-        Kind::Transaction => return None,
+        // Money's kinds (#1135): only the pairs the catalog runs directly are driven; the rest
+        // are cards the member finishes (a mass, a secret-free irreversible act)
+        Kind::Transaction => "To savings",
+        Kind::Account => "Everyday",
+        Kind::Rule => "BLUE BOTTLE",
+        Kind::Category => "Pets fund",
+        Kind::Budget => return None,
+        // Health's kinds are read-only in chat (#1135): no verb applies.
+        Kind::DailyFigure | Kind::Workout => return None,
     };
     Some(match verb {
         "create" => {
@@ -49,7 +56,14 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
                 Kind::Notebook => json!({"name": "Travel"}),
                 Kind::Folder => json!({"name": "Medical"}),
                 Kind::List => json!({"name": "Errands"}),
-                Kind::Photo | Kind::Transaction => return None,
+                Kind::Account => json!({"name": "Holiday fund", "type": "savings"}),
+                Kind::Category => json!({"name": "Pets"}),
+                Kind::Photo
+                | Kind::Transaction
+                | Kind::Budget
+                | Kind::Rule
+                | Kind::DailyFigure
+                | Kind::Workout => return None,
             };
             measure(
                 session,
@@ -62,6 +76,7 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
                 Kind::Note => json!({"body+": "and salt"}),
                 Kind::Task => json!({"effort": 45}),
                 Kind::LockerItem => json!({"username": "sam2"}),
+                Kind::Rule => json!({"position": 1}),
                 _ => json!({"name": format!("{subject} renamed")}),
             };
             measure(session, json!({"verb": "edit", "rows": row, "args": args}))
@@ -115,6 +130,8 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
             let row = number(session, name, target);
             measure(session, json!({"verb": "delete", "rows": row}))
         }
+        // a trashed album leaves the model with what it held, so no selector reaches it
+        "restore" if kind == Kind::Album => return None,
         "restore" => {
             // The fixture's own trashed task where it has one (its trashed person is past the restore window); otherwise
             // delete one first.
@@ -143,7 +160,18 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
             measure(session, json!({"verb": "restore", "rows": row}))
         }
         "star" | "unstar" => {
+            // the fixture's notes are pinned, not starred: star one first to have one to unstar
+            if kind == Kind::Note && verb == "unstar" {
+                let row = number(session, name, "Dal");
+                let starred = settled(session, "act", json!({"verb": "star", "rows": row}));
+                assert!(
+                    starred["text"].as_str().unwrap().starts_with("starred"),
+                    "{}",
+                    starred["text"]
+                );
+            }
             let row_name = match (kind, verb) {
+                (Kind::Note, _) => "Dal",
                 (Kind::Person, "star") => "Benedikt",
                 (Kind::Person, _) => "Neha Rao",
                 (Kind::Document, "star") => "Lease",
@@ -177,6 +205,27 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
                 session,
                 json!({"verb": verb, "rows": found[0], "args": args}),
             )
+        }
+        // THE CATALOG'S OWN VERBS: a label on a row, and the archive flag of a Locker item or a photograph
+        "tag" | "untag" => {
+            let row = number(session, name, subject);
+            measure(
+                session,
+                json!({"verb": verb, "rows": row, "args": "label: urgent"}),
+            )
+        }
+        "unlink" => {
+            let row = number(session, name, subject);
+            measure(session, json!({"verb": "unlink", "rows": row}))
+        }
+        "archive" | "unarchive" => {
+            let row_name = if matches!(kind, Kind::Account | Kind::Category | Kind::Photo) {
+                subject
+            } else {
+                "Bank"
+            };
+            let row = number(session, name, row_name);
+            measure(session, json!({"verb": verb, "rows": row}))
         }
         "log" => {
             let row = number(session, name, subject);

@@ -1,58 +1,52 @@
 import SwiftUI
 
-import CentraidShared
+/// The access history's events, built once.
+enum LockerAccessEvents {
+    static func make(_ build: (inout Centraid_Core_V1_LockerAccessEvent) -> Void) -> Centraid_Core_V1_LockerAccessEvent {
+        var event = Centraid_Core_V1_LockerAccessEvent()
+        build(&event)
+        return event
+    }
+}
 
 /// `locker.access` — the whole Locker's access history (#1047, Q-1047-21; the
 /// handoff's `locker/access`): every unlock, reveal, copy, one-time code and
 /// export, newest first, pushed from the More sheet's Access history row.
 ///
 /// **THE VIEW DECIDES NOTHING, AND THERE IS NOTHING TO CONCEAL.** The page is
-/// read-only: one lede, the machine's rows — the item page's own history rows
+/// read-only: one lede, Rust's rows — the item page's own history rows
 /// (`LockerFieldRowView`), each now also naming the item — and a note. A row
 /// names the act, the item and the minute and never a value, so no verb is
 /// drawn and nothing here is selectable. It is covered by the lock wall and
 /// shielded from capture like every Locker page, because an item's title is
 /// inside Locker.
 struct LockerAccessView: View {
-    let data: Data
-    let lock: Data
-    let send: (Data) -> Void
-    let sendLock: (Data) -> Void
+    let state: Centraid_Core_V1_LockerAccessState
+    let send: (Centraid_Core_V1_LockerAccessEvent) -> Void
+    let sendWall: (Centraid_Core_V1_LockerWallEvent) -> Void
+    let onWords: () -> Void
     let onBack: () -> Void
-    let onDeparted: () -> Void
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_LockerAccessState {
-        (try? Centraid_Screen_V1_LockerAccessState(serializedBytes: data)) ?? .init()
-    }
-
-    static func event(_ build: (inout Centraid_Screen_V1_LockerAccessEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_LockerAccessEvent()
-        build(&event)
-        return event.encoded
-    }
-
-    private func content(_ state: Centraid_Screen_V1_LockerAccessState) -> ScreenContent<Centraid_Screen_V1_LockerAccessData> {
+    private var content: ScreenContent<Centraid_Core_V1_LockerAccessData> {
         switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
+        case .loading?, nil: return .loading(true)
         case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .denied(denied)?: return .gated(denied)
         case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
         }
     }
 
     var body: some View {
-        let state = state
-        LockerCovered(lock: lock, sendLock: sendLock, onBack: onBack) {
+        LockerCovered(wall: state.hasWall ? state.wall : nil, backLabel: state.chrome.backLabel, send: sendWall, onWords: onWords, onBack: onBack) {
             PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
                 EmptyView()
             } content: {
-                LockerShield(lock: lock) {
+                LockerShield(secure: state.secure) {
                     ReadStateView(
-                        content: content(state),
-                        onRetry: { send(Self.event { $0.refreshed = .init() }) }
+                        content: content,
+                        onRetry: { send(LockerAccessEvents.make { $0.refreshed = .init() }) }
                     ) { access in
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 0) { page(access) }
@@ -62,11 +56,10 @@ struct LockerAccessView: View {
                 }
             }
         }
-        .onDisappear(perform: onDeparted)
     }
 
     @ViewBuilder
-    private func page(_ access: Centraid_Screen_V1_LockerAccessData) -> some View {
+    private func page(_ access: Centraid_Core_V1_LockerAccessData) -> some View {
         Text(access.lede)
             .centraidType("body")
             .foregroundStyle(Theme.color("textSoft", scheme))
@@ -81,5 +74,30 @@ struct LockerAccessView: View {
             }
             LockerNote(text: access.history.note)
         }
+    }
+}
+
+/// `locker.lock` — the wall as a page, pushed by a caller that needs the key
+/// (chat). Rust asks the owner check on appearing and sets `finished` once the
+/// Locker is open, so this pops itself.
+struct LockerLockPageView: View {
+    let state: Centraid_Core_V1_LockerLockState
+    let sendWall: (Centraid_Core_V1_LockerWallEvent) -> Void
+    let onWords: () -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        Group {
+            if let wall = state.wall {
+                PushedPage(title: "", parentTitle: state.closeLabel, onBack: onClose) {
+                    EmptyView()
+                } content: {
+                    LockerWallView(wall: wall, send: sendWall, onWords: onWords)
+                }
+            } else {
+                BarePaper()
+            }
+        }
+        .onChange(of: state.finished) { _, done in if done { onClose() } }
     }
 }

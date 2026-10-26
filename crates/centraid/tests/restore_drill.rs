@@ -198,24 +198,16 @@ fn derivative(parent: &wire::StageHandle, tier: &str, bytes: &[u8]) -> wire::Sta
 }
 
 fn command(handle: &Handle, name: &str, input: &serde_json::Value, key: &str) -> serde_json::Value {
-    let wire::response::Kind::Command(outcome) = ask(
-        handle,
-        wire::request::Kind::Command(wire::Command {
-            name: name.to_owned(),
-            input: serde_json::to_vec(input).expect("json"),
-            invoke_key: key.to_owned(),
-            ..wire::Command::default()
-        }),
-    ) else {
-        panic!("a command answers");
-    };
+    let outcome = handle
+        .command(name, input, key)
+        .unwrap_or_else(|error| panic!("{name} refused: {error}"));
     assert_eq!(
         outcome.status,
-        wire::CommandStatus::Executed as i32,
-        "{name}: {}",
+        centraid_core::CommandStatus::Executed,
+        "{name}: {:?}",
         outcome.reason
     );
-    serde_json::from_slice(&outcome.output).expect("json")
+    outcome.output
 }
 
 fn add_asset(handle: &Handle, staged: &wire::StageHandle, kind: &str) {

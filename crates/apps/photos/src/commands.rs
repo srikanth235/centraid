@@ -1,4 +1,4 @@
-//! THE NINETEEN ACTIONS, as command invocations.
+//! THE TWENTY-ONE ACTIONS, as command invocations.
 //!
 //! Every Photos action is a thin invocation of ONE typed vault command: the
 //! projection lives in the command, not the app. So this module is a table, not
@@ -8,9 +8,10 @@
 //! command (`rename-album` and `name-place` are both `entity.retitle`), and an
 //! action's input is its command's input, verbatim (#1135).
 //!
-//! **What a photograph's two flags are.** A heart is `flag.set` of `starred` and the
-//! archive is `flag.set` of `archived`: one verb, two words, the same shape Photos'
-//! star and Notes' pin take.
+//! **What a photograph's two flags are.** A heart is `flag.set` of `starred`
+//! (`flag-photo`) and the archive is `flag.set` of `archived` (`archive-photo`):
+//! one verb, two words, each its own action so a screen and the chat say which one
+//! they mean, and each is the inverse of its `clear` twin.
 //!
 //! **Faces are gone.** `answer-face` and `request-enrichment` left with the
 //! recognition surfaces nothing produces (R-FP-10, Q-1047-2).
@@ -103,46 +104,18 @@ pub struct CommandsUnavailable {
     pub command: &'static str,
 }
 
-/// Whether the **dispatching surface** asks before dispatching. This is the
-/// manifest's `confirmation`, not the command definition's `confirm` — two
-/// different gates (census §A0).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Confirm {
-    None,
-    Required,
-}
+pub use centraid_apps_kit::actions::{ActionRow, Confirm};
+use centraid_apps_kit::actions::{act, confirmed};
 
-/// One row of the action table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ActionRow {
-    pub action: &'static str,
-    pub command: &'static str,
-    pub confirm: Confirm,
-}
-
-const fn act(action: &'static str, command: &'static str) -> ActionRow {
-    ActionRow {
-        action,
-        command,
-        confirm: Confirm::None,
-    }
-}
-
-const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
-    ActionRow {
-        action,
-        command,
-        confirm: Confirm::Required,
-    }
-}
-
-/// THE TABLE. Eighteen actions, eighteen commands, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 19] = [
+/// THE TABLE. Twenty-one actions, in the manifest's own order.
+pub const ACTIONS: [ActionRow; 21] = [
     act("upload", "photo.add"),
     act("edit-photo", "photo.edit"),
     act("retitle-photo", "entity.retitle"),
     act("flag-photo", "flag.set"),
     act("unflag-photo", "flag.clear"),
+    act("archive-photo", "flag.set"),
+    act("unarchive-photo", "flag.clear"),
     act("delete-photo", "entity.trash"),
     act("restore-photo", "entity.restore"),
     // THE TWO CONFIRM-GATED ACTIONS: one trashed photograph forever, and an
@@ -164,7 +137,7 @@ pub const ACTIONS: [ActionRow; 19] = [
 /// One action's row, by the name the manifest gives it.
 #[must_use]
 pub fn action_row(action: &str) -> Option<&'static ActionRow> {
-    ACTIONS.iter().find(|row| row.action == action)
+    centraid_apps_kit::actions::find(&ACTIONS, action)
 }
 
 /// The `act` scopes Photos declares, derived from the action table.
@@ -202,7 +175,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_photo_verbs_are_the_photographs_own() {
-        assert_eq!(ACTIONS.len(), 19);
+        assert_eq!(ACTIONS.len(), 21);
         let own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)

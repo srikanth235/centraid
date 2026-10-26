@@ -156,7 +156,7 @@ fn limit_of(asked: &wire::ChatThreadsRequest) -> usize {
 }
 
 /// `chat.threads`: the list, or — with a `term` — the threads the term finds.
-pub(super) fn threads(
+pub(crate) fn threads(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::ChatThreadsRequest,
@@ -233,7 +233,7 @@ pub(super) fn threads(
 }
 
 /// `chat.thread`.
-pub(super) fn thread(vault: &Vault, asked: &wire::ChatThreadRequest) -> Result<Answer> {
+pub(crate) fn thread(vault: &Vault, asked: &wire::ChatThreadRequest) -> Result<Answer> {
     let Some(stored) = vault.chat_thread(&asked.thread_id)? else {
         return Ok(Answer::ChatThread(wire::ChatThread::default()));
     };
@@ -245,7 +245,7 @@ pub(super) fn thread(vault: &Vault, asked: &wire::ChatThreadRequest) -> Result<A
 }
 
 /// `chat.card`.
-pub(super) fn card(vault: &Vault, asked: &wire::ChatCardRequest) -> Result<Answer> {
+pub(crate) fn card(vault: &Vault, asked: &wire::ChatCardRequest) -> Result<Answer> {
     Ok(Answer::ChatCard(wire::ChatCardLive {
         exists: vault.chat_card_row_exists(&asked.app, &asked.entity, &asked.id)?,
     }))

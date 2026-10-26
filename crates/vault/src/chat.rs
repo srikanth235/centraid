@@ -162,6 +162,7 @@ fn card_kind(entity: &str) -> Option<Kind> {
     match entity {
         "transaction" => Some(Kind::Txn),
         "project" => Some(Kind::Project),
+        "workout" => Some(Kind::Activity),
         other => Kind::parse(other),
     }
 }
@@ -425,7 +426,7 @@ impl Vault {
     /// Whether the row a card names is still in the vault and not in the trash.
     ///
     /// A card is a snapshot with no foreign key, so this is asked at the moment of a tap. An app a
-    /// card may not name ([`crate::roster`]: one that does not exist, or Health) is answered
+    /// card may not name ([`crate::roster`]: one that does not exist) is answered
     /// `false`; an ENTITY word this does not interpret, of a real app, is answered `true`, because
     /// the shell opens whatever it has a route for and an unknown card is not evidence that a row
     /// is gone.
@@ -433,7 +434,7 @@ impl Vault {
     /// # Errors
     /// [`crate::error::VaultError`] when the vault itself is unreadable.
     pub fn chat_card_row_exists(&self, app: &str, entity: &str, row_id: &str) -> Result<bool> {
-        if !crate::roster::is_card_app(app) {
+        if !crate::roster::is_app(app) {
             return Ok(false);
         }
         let Some(kind) = card_kind(entity) else {

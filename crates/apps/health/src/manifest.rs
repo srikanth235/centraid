@@ -7,6 +7,7 @@
 
 use std::sync::OnceLock;
 
+use centraid_apps_kit::actions::{ActionRow, act};
 use centraid_apps_kit::manifest::{Manifest, parse_manifest};
 
 /// The manifest, as committed.
@@ -16,10 +17,11 @@ pub const MANIFEST_JSON: &str = include_str!("../manifest.json");
 pub const APP_ID: &str = "health";
 
 /// The action each vault command is declared as.
-pub const ACTIONS: [(&str, &str); 3] = [
-    ("record-days", "measurement.record"),
-    ("follow-workouts", "follow.health"),
-    ("delete-workout", "entity.trash"),
+pub const ACTIONS: [ActionRow; 4] = [
+    act("record-days", "measurement.record"),
+    act("follow-workouts", "follow.health"),
+    act("delete-workout", "entity.trash"),
+    act("stop-following", "follow.stop"),
 ];
 
 /// The parsed manifest.
@@ -53,7 +55,7 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_six_queries_and_three_actions() {
+    fn it_declares_six_queries_and_four_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 6);
         for name in [
@@ -67,7 +69,8 @@ mod tests {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
         assert_eq!(manifest.actions.len(), ACTIONS.len());
-        for (action, _) in ACTIONS {
+        for row in ACTIONS {
+            let (action, _) = (row.action, row.command);
             let declared = manifest.action(action).expect("declared");
             assert_eq!(declared.confirmation, Confirmation::None, "{action}");
         }
@@ -77,7 +80,10 @@ mod tests {
     fn every_action_is_a_vault_command_with_its_schema() {
         let registry = centraid_vault::commands::Registry::with_system_commands()
             .expect("the registry builds");
-        for (action, command) in ACTIONS {
+        for ActionRow {
+            action, command, ..
+        } in ACTIONS
+        {
             let registered = registry
                 .get(command)
                 .unwrap_or_else(|| panic!("{command} is not a vault command"));
@@ -89,10 +95,10 @@ mod tests {
         }
     }
 
-    /// HEALTH READS THE VAULT'S OWN TABLES AND WRITES THROUGH THREE COMMANDS: its days, the health
-    /// follow and the shared trash. It reaches no other app's verbs.
+    /// HEALTH READS THE VAULT'S OWN TABLES AND WRITES THROUGH FOUR COMMANDS: its days, the health
+    /// follow, the stop of a follow and the shared trash. It reaches no other app's verbs.
     #[test]
-    fn health_reads_the_vaults_tables_and_acts_through_three_commands() {
+    fn health_reads_the_vaults_tables_and_acts_through_four_commands() {
         use centraid_apps_kit::manifest::ScopeVerbs;
         let vault = manifest().vault.as_ref().expect("a vault block");
         for scope in &vault.scopes {
@@ -104,7 +110,7 @@ mod tests {
                 scope.table
             );
         }
-        let commands: Vec<&str> = ACTIONS.iter().map(|(_, command)| *command).collect();
+        let commands: Vec<&str> = ACTIONS.iter().map(|row| row.command).collect();
         assert_eq!(
             manifest().act_scope_disagreements(&commands),
             Vec::<String>::new()
@@ -117,5 +123,18 @@ mod tests {
         assert_eq!(states.designed.len(), CANONICAL_DESIGNED_STATES.len());
         assert!(states.excluded.is_empty());
         assert!(manifest().ext_tables.is_empty());
+    }
+
+    /// THE CATALOG NAMES THE COMMAND EACH ACTION RUNS, and it is the command
+    /// the action table runs: chat's verb rows are generated from the first.
+    #[test]
+    fn every_action_declares_the_command_it_invokes() {
+        for ActionRow {
+            action, command, ..
+        } in super::ACTIONS
+        {
+            let declared = manifest().action(action).expect("a declared action");
+            assert_eq!(declared.command, command, "{action}");
+        }
     }
 }

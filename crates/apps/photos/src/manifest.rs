@@ -44,17 +44,19 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_three_queries_and_nineteen_actions() {
+    fn it_declares_six_queries_and_twenty_one_actions() {
         let manifest = manifest();
         // v0's eight less `faces`, `face-queue` and `people` (Q-1047-2), and less
         // `storage` and `enrichment-status`, whose producers left with the custody
-        // sweep and the enricher (R-1135-5).
-        assert_eq!(manifest.queries.len(), 3);
-        assert_eq!(manifest.actions.len(), 19);
-        for name in ["library", "search", "duplicates"] {
+        // sweep and the enricher (R-1135-5); then the screens' reads: one shelf, one
+        // photograph, the collections and the places.
+        assert_eq!(manifest.queries.len(), 6);
+        assert_eq!(manifest.actions.len(), 21);
+        for name in ["search", "duplicates", "shelf", "photo", "albums", "places"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
         for name in [
+            "library",
             "faces",
             "face-queue",
             "people",
@@ -244,5 +246,16 @@ mod tests {
             manifest().act_scope_disagreements(&commands),
             Vec::<String>::new()
         );
+    }
+
+    /// THE CATALOG NAMES THE COMMAND EACH ACTION RUNS, and it is the command
+    /// the action table runs: chat's verb rows are generated from the first and
+    /// executed through the second.
+    #[test]
+    fn every_action_declares_the_command_its_row_invokes() {
+        for row in crate::commands::ACTIONS {
+            let declared = manifest().action(row.action).expect("a declared action");
+            assert_eq!(declared.command, row.command, "{}", row.action);
+        }
     }
 }

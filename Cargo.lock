@@ -488,6 +488,7 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "blake3",
  "centraid-ontology",
+ "centraid-vault",
  "hex",
  "proptest",
  "rusqlite",
@@ -541,7 +542,6 @@ name = "centraid-apps-people"
 version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
- "centraid-design",
  "centraid-ontology",
  "centraid-vault",
  "rusqlite",
@@ -555,19 +555,6 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
  "centraid-media",
- "centraid-ontology",
- "centraid-search",
- "centraid-vault",
- "rusqlite",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "centraid-apps-tasks"
-version = "1.0.0-alpha.0"
-dependencies = [
- "centraid-apps-kit",
  "centraid-ontology",
  "centraid-search",
  "centraid-vault",
@@ -629,7 +616,6 @@ dependencies = [
  "centraid-apps-notes",
  "centraid-apps-people",
  "centraid-apps-photos",
- "centraid-apps-tasks",
  "centraid-assist",
  "centraid-blobs",
  "centraid-gateway",
@@ -643,6 +629,7 @@ dependencies = [
  "hex",
  "hmac",
  "image",
+ "jsonschema",
  "prost",
  "rustix",
  "serde",
@@ -666,6 +653,7 @@ dependencies = [
  "centraid-identity",
  "centraid-ontology",
  "centraid-protocol",
+ "centraid-screens",
  "centraid-vault",
  "hex",
  "libloading",
@@ -788,6 +776,24 @@ dependencies = [
  "centraid-api-proto",
  "prost",
  "thiserror",
+]
+
+[[package]]
+name = "centraid-screens"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "centraid-api-proto",
+ "centraid-apps-docs",
+ "centraid-apps-locker",
+ "centraid-assist",
+ "centraid-core",
+ "centraid-design",
+ "centraid-identity",
+ "centraid-ontology",
+ "centraid-vault",
+ "prost",
+ "rand",
+ "serde_json",
 ]
 
 [[package]]

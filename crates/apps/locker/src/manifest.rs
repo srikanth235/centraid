@@ -93,13 +93,13 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_five_queries_and_nineteen_actions() {
+    fn it_declares_six_queries_and_twenty_actions() {
         let manifest = manifest();
         // v0's eight less the two autofill queries, deleted with the fill
         // plane (R-1047-D3), and the Watchtower review, deleted with the
         // weak/reused scoring (Q-1047-16).
-        assert_eq!(manifest.queries.len(), 5);
-        assert_eq!(manifest.actions.len(), 19);
+        assert_eq!(manifest.queries.len(), 6);
+        assert_eq!(manifest.actions.len(), 20);
         for name in ["items", "item", "search", "trash", "access"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -167,13 +167,13 @@ mod tests {
     /// scopes are the manifest's declaration of what the app may ask the core
     /// to open, and they are still exactly three.
     #[test]
-    fn it_declares_twenty_eight_scopes_and_the_three_reveals_are_lockers_own() {
+    fn it_declares_twenty_nine_scopes_and_the_three_reveals_are_lockers_own() {
         let manifest = manifest();
         let vault = manifest
             .vault
             .as_ref()
             .expect("Locker declares its vault reach");
-        assert_eq!(vault.scopes.len(), 28);
+        assert_eq!(vault.scopes.len(), 29);
 
         let reveals: Vec<String> = vault
             .scopes
@@ -303,5 +303,16 @@ mod tests {
             manifest().act_scope_disagreements(&commands),
             Vec::<String>::new()
         );
+    }
+
+    /// THE CATALOG NAMES THE COMMAND EACH ACTION RUNS, and it is the command
+    /// the action table runs: chat's verb rows are generated from the first and
+    /// executed through the second.
+    #[test]
+    fn every_action_declares_the_command_its_row_invokes() {
+        for row in crate::commands::ACTIONS {
+            let declared = manifest().action(row.action).expect("a declared action");
+            assert_eq!(declared.command, row.command, "{}", row.action);
+        }
     }
 }

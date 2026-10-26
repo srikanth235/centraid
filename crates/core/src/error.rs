@@ -200,7 +200,8 @@ impl CoreError {
     /// the whole mechanism: a database message, a file path, a SQL fragment or
     /// a panic payload cannot reach a member through a function that does not
     /// look at them. `to_wire` keeps the raw text in `detail` for the audit
-    /// trail, which is where `command.proto`'s rule says a predicate belongs.
+    /// trail, which is where `action.proto`'s rule for `ActResponse.reason` says
+    /// a predicate belongs.
     #[must_use]
     pub fn sentence(&self) -> String {
         sentence_for_code(self.code()).to_owned()

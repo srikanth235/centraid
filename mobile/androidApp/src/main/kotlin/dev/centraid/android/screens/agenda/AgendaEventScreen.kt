@@ -14,14 +14,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.AgendaEventData
-import centraid.screen.v1.AgendaEventEvent
-import centraid.screen.v1.AgendaEventState
-import centraid.screen.v1.AgendaGone
-import centraid.screen.v1.AgendaParkedCard
-import centraid.screen.v1.AgendaScopeChoice
-import centraid.screen.v1.EmptyState
-import centraid.screen.v1.SectionHead
+import centraid.core.v1.AgendaEventData
+import centraid.core.v1.AgendaEventEvent
+import centraid.core.v1.AgendaEventState
+import centraid.core.v1.AgendaGone
+import centraid.core.v1.AgendaScopeChoice
+import centraid.core.v1.Route
+import centraid.core.v1.EmptyState
+import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EmptyStateView
@@ -36,32 +36,31 @@ import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
-import dev.centraid.android.kit.StatusChipView
 import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
 /**
  * `agenda.event`: one occurrence, pushed from the list. RSVP is a row of
- * choices; Edit is an intent the route turns into the editor; Cancel asks a
- * confirm (a one-off) or the scope sheet (a series). Gone and parked are
- * cards; every word is the state's. The call link is the shell's: [onCall]
+ * choices; Edit carries the editor's route, which [onOpen] has the shell push;
+ * Cancel asks a confirm (a one-off) or the scope sheet (a series). Gone is a
+ * card; every word is the state's. The call link is the shell's: [onCall]
  * hands `call_uri` to whatever app on the phone opens it.
  */
 @Composable
 internal fun AgendaEventScreen(
     state: AgendaEventState,
     onEvent: (AgendaEventEvent) -> Unit,
+    onOpen: (Route) -> Unit,
     onBack: () -> Unit,
     onCall: (String) -> Unit,
 ) {
     val chrome = state.chrome
-    val write = state.write
     PushedPage(
         title = chrome?.title.orEmpty(),
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
-        status = write?.refusal.orEmpty(),
+        status = state.status?.sentence.orEmpty(),
     ) {
         val gone = state.gone
         if (gone != null) {
@@ -69,21 +68,13 @@ internal fun AgendaEventScreen(
             return@PushedPage
         }
         Column(Modifier.fillMaxSize()) {
-            val parked = state.parked
-            if (parked != null) {
-                ParkedCard(
-                    parked,
-                    onRetry = { onEvent(AgendaEventEvent(parked_retried = AgendaEventEvent.ParkedRetried())) },
-                    onDismiss = { onEvent(AgendaEventEvent(parked_dismissed = AgendaEventEvent.ParkedDismissed())) },
-                )
-            }
             ReadStateView(
                 content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
                 onRetry = { onEvent(AgendaEventEvent(refreshed = AgendaEventEvent.Refreshed())) },
                 retryLabel = chrome?.retry?.ifEmpty { null } ?: KitWords.RETRY,
                 skeleton = { RowSkeleton(rows = 5, label = chrome?.loading?.ifEmpty { null } ?: KitWords.OPENING) },
                 modifier = Modifier.weight(1f),
-            ) { data -> EventBody(data, onEvent, onCall) }
+            ) { data -> EventBody(data, onEvent, onOpen, onCall) }
         }
     }
     if (state.sheet == AgendaEventState.Sheet.SHEET_CANCEL_SCOPE && chrome != null) {
@@ -111,7 +102,12 @@ internal fun AgendaEventScreen(
 }
 
 @Composable
-private fun EventBody(data: AgendaEventData, onEvent: (AgendaEventEvent) -> Unit, onCall: (String) -> Unit) {
+private fun EventBody(
+    data: AgendaEventData,
+    onEvent: (AgendaEventEvent) -> Unit,
+    onOpen: (Route) -> Unit,
+    onCall: (String) -> Unit,
+) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("agenda-event")) {
         Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)) {
             Text(
@@ -122,8 +118,6 @@ private fun EventBody(data: AgendaEventData, onEvent: (AgendaEventEvent) -> Unit
             )
             if (data.date_label.isNotEmpty()) Text(data.date_label, style = centraidType("body"), color = centraidColor("text"))
             if (data.when_label.isNotEmpty()) Text(data.when_label, style = centraidType("small"), color = centraidColor("textSoft"))
-            val chip = data.chip
-            if (chip != null) StatusChipView(chip, Modifier.padding(top = 6.dp))
         }
         if (data.calendar_name.isNotEmpty()) {
             CentraidRow(title = data.calendar_name, hueKey = data.calendar_hue_key, testTag = "agenda-event-calendar")
@@ -186,7 +180,11 @@ private fun EventBody(data: AgendaEventData, onEvent: (AgendaEventEvent) -> Unit
                     ink = if (!action.enabled) "textFaint" else if (action.destructive) "net" else "text",
                     modifier = Modifier.padding(end = 8.dp),
                 ) {
-                    if (action.enabled) onEvent(AgendaEventEvent(action = AgendaEventEvent.ActionPicked(key = action.key)))
+                    // A BUTTON THAT OPENS A PAGE (Edit) carries its route; Cancel is an event.
+                    val route = action.route
+                    if (action.enabled) {
+                        if (route != null) onOpen(route) else onEvent(AgendaEventEvent(action = AgendaEventEvent.ActionPicked(key = action.key)))
+                    }
                 }
             }
         }
@@ -237,16 +235,3 @@ internal fun ScopeSheet(
 internal fun GoneCard(gone: AgendaGone, onAction: () -> Unit) {
     EmptyStateView(EmptyState(headline = gone.title, body = gone.body, action_label = gone.action_label), onAction = onAction)
 }
-
-@Composable
-private fun ParkedCard(parked: AgendaParkedCard, onRetry: () -> Unit, onDismiss: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(KitGeometry.GUTTER).testTag("agenda-parked")) {
-        Text(parked.title, style = centraidType("smallStrong"), color = centraidColor("net"))
-        if (parked.body.isNotEmpty()) Text(parked.body, style = centraidType("small"), color = centraidColor("textSoft"))
-        Row(Modifier.padding(top = 8.dp)) {
-            if (parked.retry_label.isNotEmpty()) OutlineButton(parked.retry_label, testTag = "agenda-parked-retry", modifier = Modifier.padding(end = 8.dp), onPress = onRetry)
-            if (parked.dismiss_label.isNotEmpty()) OutlineButton(parked.dismiss_label, testTag = "agenda-parked-dismiss", onPress = onDismiss)
-        }
-    }
-}
-

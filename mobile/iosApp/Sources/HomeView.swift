@@ -1,177 +1,174 @@
 import SwiftUI
 
-import CentraidShared
+// HOME, DRAWN FROM RUST (#1135, lane H1). The springboard is a Rust screen
+// (`crates/screens/src/shell`): it reads one tile per app, grades the grid,
+// words every tile and the lockup, and carries the route each tile opens.
+// This file only draws `Centraid_Core_V1_HomeState` and sends `HomeEvent`s; it
+// writes no copy, counts nothing and names no destination.
 
-/// Home, the graded springboard, in SwiftUI (#1020, wave A).
-///
-/// **THIS VIEW DECIDES NOTHING.** `springboard`, `every_tile_unreadable`
-/// and `grid_rows` all arrive decided by `HomeMachine`;
-/// the switch below reads them. That is what makes it possible for this file and
-/// `HomeScreen.kt` to draw the same Home — not discipline, but the absence of
-/// anywhere for the two to disagree.
-///
-/// **EVERY VALUE HERE IS A TOKEN OR A STATED GEOMETRY**, from `Theme.swift` over
-/// the emitted table and from the constants below, which carry v0's own names
-/// and reasons. SwiftUI's semantic ramp (`.primary`, `.secondary`,
-/// `.quaternary`) and SF Symbols are absent on purpose: they are Apple's system,
-/// not this one, and the first build of this screen used them — which is exactly
-/// why it did not look like the product.
+/// The words a skeleton tile speaks, handed down from `HomeState.loadingLabel`.
+private struct HomeLoadingLabelKey: EnvironmentKey {
+    static let defaultValue = ""
+}
+
+extension EnvironmentValues {
+    fileprivate var homeLoadingLabel: String {
+        get { self[HomeLoadingLabelKey.self] }
+        set { self[HomeLoadingLabelKey.self] = newValue }
+    }
+}
+
+extension Centraid_Core_V1_ViewState {
+    /// Home's state when this is Home's view.
+    var homeState: Centraid_Core_V1_HomeState? {
+        if case let .home(state)? = kind { return state }
+        return nil
+    }
+}
+
+/// The place the band is showing, as Rust selects it: Home's springboard, or the
+/// chat's or the backup's tab root drawn in its place.
 struct HomeView: View {
     @ObservedObject var shell: ShellModel
-    @Environment(\.colorScheme) private var scheme
     /// The Chat composer has the keyboard (`ChatView` reports it).
     @State private var chatTyping = false
 
-    private var state: Centraid_Screen_V1_HomeState {
-        (try? Centraid_Screen_V1_HomeState(serializedBytes: shell.homeState)) ?? .init()
+    var body: some View {
+        if let store = shell.screens {
+            HomeRoot(shell: shell, store: store, chatTyping: $chatTyping)
+        } else {
+            BarePaper()
+        }
+    }
+}
+
+/// Home over the screen store, so a Rust push redraws it.
+private struct HomeRoot: View {
+    @ObservedObject var shell: ShellModel
+    @ObservedObject var store: ScreenStore
+    @Binding var chatTyping: Bool
+    @Environment(\.colorScheme) private var scheme
+
+    private var home: Centraid_Core_V1_HomeState? {
+        store.homeInstance.flatMap { store.views[$0] }?.homeState
+    }
+
+    /// THE BAND'S PLACES, Rust's (`Navigation.band`): the words, the marks and which is lit.
+    private var places: [BandPlace] {
+        (store.navigation?.band.tabs ?? []).map { tab in
+            BandPlace(
+                id: tab.tab,
+                label: tab.label,
+                spoken: tab.spoken,
+                iconKey: tab.iconKey,
+                selected: tab.selected
+            )
+        }
+    }
+
+    /// The root of the backup tab, once Rust has opened it.
+    private var backupRoot: UInt64? {
+        store.entries(of: RustScreens.backupTab).first?.instance
     }
 
     var body: some View {
-        let home = state
+        let home = home ?? Centraid_Core_V1_HomeState()
         VStack(alignment: .leading, spacing: 0) {
             // THE CHAT TAB DRAWS IN PLACE OF THE SPRINGBOARD, with a header of
-            // its own: the drawer, the chat's title with the vault named beside
-            // it ("<vault> · on this phone", so which vault the chat reads is
-            // still the one fact it keeps saying), and a menu. Switching the
-            // vault is Home's. While the composer has the keyboard the band
-            // steps aside, so the field sits on the keyboard's edge; dragging
-            // the thread or tapping outside the composer brings it back.
+            // its own; while the composer has the keyboard the band steps aside.
             if shell.tab == .chat {
                 ChatView(
                     chat: shell.chat,
                     typing: $chatTyping,
-                    onOpenCard: { card, among in shell.openChatCard(card, among: among) },
+                    onOpenRoute: { shell.open($0) },
                     onSetScope: { shell.setChatScope($0) }
                 )
             } else if shell.tab == .backup {
                 // THE BACKUP TAB DRAWS IN PLACE OF THE SPRINGBOARD, as Chat
                 // does, under the vault's lockup: the backup it describes is
                 // that vault's, and the band stays where it is.
-                VaultHeader(vault: home.vault, shell: shell, backup: home.backupLine)
-                BackupView(
-                    data: shell.backupState,
-                    shell: shell,
-                    send: { shell.sendBackup($0) },
-                    onAddDestination: { shell.addBackupDestination() },
-                    onShowWords: { shell.backupShowWords() }
-                )
+                VaultHeader(bar: home.bar, shell: shell, store: store)
+                if let backupRoot {
+                    RustScreenView(shell: shell, store: store, instance: backupRoot, entry: nil)
+                        .id(backupRoot)
+                } else {
+                    BarePaper()
+                }
             } else {
                 homeContent(home)
             }
 
-            // A SIBLING OF THE PAGE, NEVER INSIDE IT: the band is never
-            // scrolled away, so it cannot live in the scroll view, and nothing
-            // subtracts its height from the page because it is a flex peer.
-            // THE IMPORT'S LINE, on the band (DESIGN.md's one status line).
-            ShellBanner(shell: shell)
+            // A SIBLING OF THE PAGE, NEVER INSIDE IT: the band is never scrolled away.
+            ShellBanner(shell: shell, store: store)
             if !(shell.tab == .chat && chatTyping) {
-                HomeBand(active: shell.tab == .chat ? BandPolicy.shared.PLACE_CHAT : shell.tab == .backup ? BandPolicy.shared.PLACE_BACKUP : BandPolicy.shared.PLACE_HOME) { target in
-                    switch target {
-                    case BandPolicy.shared.PLACE_HOME: shell.openHomeTab()
-                    // PRESSED WHILE CHAT IS SHOWING it only shuts the drawer: it
-                    // is already where it was asked to go, and starting over
-                    // here would be harm no member asked for.
-                    case BandPolicy.shared.PLACE_CHAT:
-                        if shell.tab == .chat {
-                            shell.chat.toggleDrawer(false)
-                        } else {
-                            shell.openChatTab()
-                        }
-                    // BACKUP is a tab like Chat: where this vault's backup
-                    // stands, the backup devices, and the 24 words. The apps
-                    // are tiles on Home.
-                    case BandPolicy.shared.PLACE_BACKUP: shell.openBackup()
-                    default: break
-                    }
-                }
+                // A PLACE IS SELECTED BY RUST; pressed again while Chat shows, it shuts the drawer.
+                HomeBand(places: places) { target in shell.select(place: target) }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        // EDGE TO EDGE. Painted inside the safe area only, the page ground stops
-        // at the notch and the home indicator and the window's own black shows
-        // through — which reads as the app sitting in a letterbox.
+        // EDGE TO EDGE: the page ground reaches the notch and the home indicator.
         .background(Theme.color("bg", scheme).ignoresSafeArea())
         // THE CHAT BELONGS TO THE VAULT IN FRONT: when it changes the thread,
         // its session and its cards are the old vault's and are dropped.
-        .onChange(of: home.vault.vaultID, initial: true) { _, id in
+        .onChange(of: home.bar.vault.vaultID, initial: true) { _, id in
             shell.vaultChanged(to: id)
         }
-        // THE TRANSFER RULES (#1025 S4). Reached from the header's own
-        // "N originals waiting for Wi-Fi" line, because the control a member
-        // wants next is the one that decided the line they just read.
-        .sheet(isPresented: $shell.transferRulesOpen) {
-            TransferRulesSheet(shell: shell)
-        }
-        // A REAL BINDING here too, for the same reason: a constant binding
-        // would leave the state saying it is open over a sheet that is gone —
-        // the next press of the lockup would then set a flag that is already
-        // set and nothing would appear. Dismissing sends a pick with no id,
-        // which the machine reads as exactly what it is: shut the sheet,
-        // change no vault.
+        // A COVER WAS POPPED BACK TO HOME: the Locker's open state and any tile
+        // may have moved without a table changing.
+        .onAppear { store.sendHome(.shown(.init())) }
+        .environment(\.homeLoadingLabel, home.loadingLabel)
+        // THE TRANSFER RULES (#1025 S4), reached from the "originals waiting" line: Rust's
+        // sheet (`HomeState.transfer_sheet`); dismissing it tells Rust.
         .sheet(
             isPresented: Binding(
-                get: { home.vaultSheetOpen },
+                get: { home.hasTransferSheet },
                 set: { open in
-                    if !open { shell.send(screen: HomeMachine.shared.SCREEN_ID, event: HomeEvents.vaultPicked("")) }
+                    if !open { store.sendHome(.transferRulesClosed(.init())) }
                 }
             )
         ) {
-            VaultSheet(vaults: home.vaults, active: home.vault, shell: shell)
+            TransferRulesSheet(sheet: home.transferSheet, store: store)
         }
+        // A REAL BINDING: dismissing shuts the sheet in Rust, which owns it.
+        .sheet(
+            isPresented: Binding(
+                get: { home.hasSheet },
+                set: { open in
+                    if !open { store.sendHome(.sheetClosed(.init())) }
+                }
+            )
+        ) {
+            VaultSheet(sheet: home.sheet, store: store)
+        }
+        // THE PHONE'S SCHEME MOVED while the app is in front: Home is told it.
+        .onChange(of: scheme) { _, _ in shell.tellPhoneScheme() }
     }
 
-    /// HOME'S OWN PLACE: the lockup, the ribbon and the three
-    /// branches. Chat takes the place of all but the lockup.
+    /// HOME'S OWN PLACE: the lockup, the ribbon and the three branches.
     @ViewBuilder
-    private func homeContent(_ home: Centraid_Screen_V1_HomeState) -> some View {
-            // THE LOCKUP FIRST, ALWAYS. It is chrome for every route, and it is
-            // drawn above the three-branch switch on purpose: a Home that
-            // failed to read still has to say which vault failed.
-            // THE LOCKUP'S SECOND LINE IS THE BACKUP'S STATUS (R-ONBOARD-11),
-            // and the door to the Backup tab. Nothing between it and the
-            // grid: no backup sentence, no "Home" title (the band says where
-            // the member is), no settings gear — making or restoring a vault
-            // is the vault switcher's, the transfer rule the Backup tab's.
-            VaultHeader(
-                vault: home.vault,
-                shell: shell,
-                backup: home.backupLine,
-                onOpenBackup: { shell.openBackup() },
-                // HOME'S SEARCH KEY (R-CHROME-6), at the lockup's trailing
-                // edge; a tap pushes the search over every app.
-                onSearch: { HomeSearchScreens.open(shell) },
-                searchLabel: HomeSearchBar.placeholder(shell),
-                onAppearance: { shell.toggleAppearance() }
-            )
-            StatusRibbon(status: home.data.status, shell: shell)
-
-            // THREE BRANCHES, NEVER TWO. A Home that could not load renders its
-            // sentence; it does NOT render an empty springboard, which would be
-            // seven empty apps invented out of one failure.
-            switch home.content {
-            case .loading, .none:
-                Springboard(data: home.data, shell: shell)
-            case let .failure(failure):
-                FailureBody(failure: failure)
-            case let .data(data):
-                VStack(alignment: .leading, spacing: 0) {
-                    if data.springboard == .firstRun {
-                        DayOne(data: data, shell: shell)
-                    } else {
-                        Springboard(data: data, shell: shell)
-                    }
+    private func homeContent(_ home: Centraid_Core_V1_HomeState) -> some View {
+        // THE LOCKUP FIRST, ALWAYS: a Home that failed to read still has to say
+        // which vault failed.
+        VaultHeader(bar: home.bar, shell: shell, store: store)
+        if home.hasStatus {
+            StatusRibbon(status: home.status, store: store)
+        }
+        // THREE BRANCHES, NEVER TWO. A Home that could not load renders its
+        // sentence; it does NOT render an empty springboard.
+        switch home.content {
+        case .loading, .none:
+            Springboard(data: Centraid_Core_V1_HomeData(), shell: shell)
+        case let .failure(failure):
+            FailureBody(failure: failure)
+        case let .data(data):
+            VStack(alignment: .leading, spacing: 0) {
+                if data.springboard == .firstRun {
+                    DayOne(data: data, shell: shell)
+                } else {
+                    Springboard(data: data, shell: shell)
                 }
             }
-    }
-}
-
-/// The bar's words are the search screen's own (`HomeSearchChrome`), so the
-/// placeholder on Home and the field it opens cannot say two things.
-enum HomeSearchBar {
-    @MainActor
-    static func placeholder(_ shell: ShellModel) -> String {
-        ((try? Centraid_Screen_V1_HomeSearchState(serializedBytes: shell.state(HomeSearchScreens.screen))) ?? .init())
-            .chrome.placeholder
+        }
     }
 }
 
@@ -212,14 +209,14 @@ private let hairline = CentraidGeometry.hairline
 
 /// THE HUE KEY'S SPELLING IN THE EMITTED TABLE, and nothing more.
 ///
-/// `PartyHueWheel` decides WHICH of the eight a face gets and `HomeReads` puts
+/// Rust's identity wheel decides WHICH of the eight a face gets and puts
 /// the answer on the wire; this is the eight-row spelling that turns that key
 /// into a `Theme` role, and `HomeScreen.kt` carries the same eight. It is a
 /// dictionary and not `"c" + key.capitalized` because the string form would
 /// hand any key at all to `Theme.color`, which trips a `preconditionFailure`
 /// correctly for a role that does not exist — the wrong failure for a launcher
-/// tile drawing whatever a producer sent. `PartyHueWheelSpec` asserts every key
-/// has a role in the emitted table and that both view trees name all eight.
+/// tile drawing whatever a producer sent. `crates/screens/tests/shell_home.rs` asserts
+/// both view trees name all eight.
 private let partyHueRoles: [String: String] = [
     "rose": "cRose",
     "amber": "cAmber",
@@ -235,47 +232,40 @@ private let partyHueRoles: [String: String] = [
 ///
 /// The ONLY feedback channel on this screen — no spinner, no toast, no badge, no
 /// red dot. `quiet` is deliberately ignorable and earns no rule; the other two
+
+/// The vault at a glance, and how it stands on this device.
+///
+/// The ONLY feedback channel on this screen — no spinner, no toast, no badge, no
+/// red dot. `quiet` is deliberately ignorable and earns no rule; the other two
 /// get one rule and one action, never a filled warning plate.
 private struct StatusRibbon: View {
-    let status: Centraid_Screen_V1_HomeStatus
-    @ObservedObject var shell: ShellModel
+    let status: Centraid_Core_V1_HomeStatus
+    @ObservedObject var store: ScreenStore
     @Environment(\.colorScheme) private var scheme
 
-    // ONLY THE TWO TONES THAT EARN A RULE. `!= .quiet` was true for
-    // `.unspecified`, which is what a Home with no `data` hands this view: the
-    // no-vault branch drew a 2pt attention rule over nothing at all.
+    // ONLY THE TWO TONES THAT EARN A RULE.
     private var loud: Bool { status.tone == .attention || status.tone == .urgent }
 
     var body: some View {
-        // A RIBBON WITH NOTHING TO SAY IS NOT DRAWN AT ALL: an empty band
-        // above the grid reads as something that failed to render, and since
-        // All apps left it (R-ONBOARD-11) the ribbon carries nothing else.
+        // A RIBBON WITH NOTHING TO SAY IS NOT DRAWN AT ALL.
         if !status.copy.isEmpty || !status.action.isEmpty {
             ribbon
         }
     }
 
-    /// THE ACTION'S DOOR, by the machine's `destination`: the Backup tab, or
-    /// this app's page in Settings where the phone's own grant is changed.
-    private var opener: (() -> Void)? {
+    /// THE ACTION'S DOOR is Rust's: the press is an event and Rust chooses the
+    /// tab or the settings page. No door (`DESTINATION_NONE`) is plain text.
+    private var hasDoor: Bool {
         switch status.destination {
-        case .backup:
-            return { shell.openBackup() }
-        case .phone, .notifications:
-            return {
-                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-                UIApplication.shared.open(url)
-            }
-        case .none, .unspecified, .UNRECOGNIZED:
-            return nil
+        case .backup, .phone, .notifications: return true
+        case .none, .unspecified, .UNRECOGNIZED: return false
         }
     }
 
     private var ribbon: some View {
         HStack(spacing: 8) {
             if loud {
-                // ONE RULE in the tone's colour, and nothing else. A filled
-                // plate behind a sentence is a second chrome.
+                // ONE RULE in the tone's colour, and nothing else.
                 Rectangle()
                     .fill(Theme.color(status.tone == .urgent ? "danger" : "attention", scheme))
                     .frame(width: 2, height: 24)
@@ -289,11 +279,9 @@ private struct StatusRibbon: View {
             }
             Spacer(minLength: 0)
             if !status.action.isEmpty {
-                if let open = opener {
-                    KitLink(label: status.action, action: open)
+                if hasDoor {
+                    KitLink(label: status.action) { store.sendHome(.status(.init())) }
                 } else {
-                    // NO DOOR (`DESTINATION_NONE`) IS PLAIN TEXT: a true
-                    // sentence, not a button that does nothing.
                     Text(status.action)
                         .centraidType("smallStrong")
                         .foregroundStyle(Theme.color("link", scheme))
@@ -303,26 +291,19 @@ private struct StatusRibbon: View {
         .padding(.horizontal, pageMargin)
         .frame(minHeight: loud ? 40 : 32)
         .accessibilityIdentifier("home-status")
-        // A quiet signal with nowhere to go is still a true sentence, so it is
-        // read as text rather than offered as a button that does nothing.
-        // WITH A DOOR the action is its own element (a link a member can
-        // activate); without one the ribbon reads as a single sentence.
-        .accessibilityElement(children: opener == nil ? .combine : .contain)
+        .accessibilityElement(children: hasDoor ? .contain : .combine)
         .accessibilityLabel(
-            opener == nil
-                ? [status.copy, status.action].filter { !$0.isEmpty }.joined(separator: ". ")
-                : status.copy
+            hasDoor ? status.copy : status.accessibilityLabel
         )
     }
 }
 
-/// A Home that could not load at all.
+/// A Home that could not load at all (no vault, or the read failed).
 ///
-/// Distinct from every tile being unreadable: that Home loaded and could not
-/// read its apps, and still shows them. This one has no grid, because inventing
-/// seven empty apps out of one failure is the defect the read law forbids.
+/// This Home has no grid, because inventing eight empty apps out of one failure
+/// is the defect the read law forbids.
 private struct FailureBody: View {
-    let failure: Centraid_Screen_V1_ReadFailure
+    let failure: Centraid_Core_V1_Failure
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -343,7 +324,7 @@ private struct FailureBody: View {
 }
 
 private struct Springboard: View {
-    let data: Centraid_Screen_V1_HomeData
+    let data: Centraid_Core_V1_HomeData
     @ObservedObject var shell: ShellModel
 
     var body: some View {
@@ -360,15 +341,15 @@ private struct Springboard: View {
 /// with nothing in it draws what to do, so Docs, Agenda and People are
 /// always here to open. Shared by the springboard and day one.
 private struct TileGrid: View {
-    let data: Centraid_Screen_V1_HomeData
+    let data: Centraid_Core_V1_HomeData
     @ObservedObject var shell: ShellModel
 
-    /// `grid_rows` is `HomeMachine`'s packing, so this view looks each id up
+    /// `grid_rows` is Rust's packing, so this view looks each id up
     /// and draws it. The first build packed rows here and let Compose's span
     /// logic pack them on Android — two packers for one grid, and
     /// `.gridCellColumns` is silently ignored outside a `Grid`. One packer, in
     /// the machine, is the fix.
-    private var byID: [String: Centraid_Screen_V1_HomeTile] {
+    private var byID: [String: Centraid_Core_V1_HomeTile] {
         Dictionary(data.tiles.map { ($0.appID, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
@@ -403,46 +384,25 @@ private struct TileGrid: View {
         .accessibilityIdentifier("home-grid")
     }
 }
-
 /// One tile: THE HEADER IS INVARIANT — icon chip, name, count, in that order.
 ///
-/// It is what makes seven unlike bodies read as one grid. Home itself takes no
+/// It is what makes eight unlike bodies read as one grid. Home itself takes no
 /// identity hue; the hue belongs to the app a tile previews, and it appears on
-/// the chip alone.
+/// the chip alone. A tap pushes the route the tile carries.
 private struct TileCard: View {
-    let tile: Centraid_Screen_V1_HomeTile
+    let tile: Centraid_Core_V1_HomeTile
     @ObservedObject var shell: ShellModel
     @Environment(\.colorScheme) private var scheme
 
-    private var name: String {
-        CentraidCatalog.byID[tile.appID]?.name ?? tile.appID.capitalized
-    }
-
-    /// A count a read ACTUALLY RETURNED, or the withheld glyph.
-    ///
-    /// The em dash is the honest half: a count the read did not return is not
-    /// a `0`, which would be a lie about what a member holds. A capped count
-    /// says `N+` rather than printing its ceiling as a fact.
+    /// A count a read ACTUALLY RETURNED, or the withheld glyph: a count the read
+    /// did not return is not a `0`. A capped count says `N+`.
     private var count: String {
         guard tile.hasCount else { return "—" }
         return tile.count.capped ? "\(tile.count.value)+" : "\(tile.count.value)"
     }
 
     /// PHOTOS TAKES THE CARD'S SLACK ITSELF, so it is the one body that gets no
-    /// trailing `Spacer` under it.
-    ///
-    /// Every other body is a few lines of type with the rest of the card left
-    /// over, and the `Spacer` below is where that leftover is sent — v0's
-    /// `margin-top:auto` on the last line of an event, a face row or a figure.
-    /// The mosaic is the opposite shape: `mosaicCss` is `flex:1`, so the strip
-    /// is what stretches and it finishes ON the card's floor.
-    ///
-    /// The two cannot both be in the `VStack`. A `Spacer` and a
-    /// `maxHeight: .infinity` child are equally flexible, so SwiftUI splits the
-    /// slack between them — and the trailing `Spacer` also brings the stack's
-    /// own 16 with it, which is why a card whose ideal height exactly matched
-    /// its proposal still drew 28 of dead ground under the photographs. One
-    /// flexible child per card, and for Photos it is the mosaic.
+    /// trailing `Spacer` under it (one flexible child per card).
     private var bodyTakesTheSlack: Bool {
         if case .photos = tile.body.kind { return true }
         return false
@@ -450,27 +410,14 @@ private struct TileCard: View {
 
     var body: some View {
         Button {
-            // TWO THINGS, AND THEY ARE DIFFERENT THINGS (#1025 S5).
-            //
-            // The machine is told a move was picked — that is Home's own state,
-            // and the springboard grades itself on it. The NAVIGATION is the
-            // shell's: a `ScreenEffect` carrying a route would put SwiftUI's
-            // navigation stack inside a reducer that has no idea one exists,
-            // and Compose's is a different stack again.
-            //
-            // Nothing pushed a route before this. Every screen in the shell was
-            // reachable only by being constructed by hand in a preview: the
-            // band drew its tabs, the tiles drew their bodies, and a tap moved
-            // nothing. It was invisible because Home is the root and Home is
-            // what every screenshot showed.
-            shell.send(screen: HomeMachine.shared.SCREEN_ID, event: HomeEvents.movePicked(tile.appID))
-            if let route = TileCard.route(for: tile) { shell.path.append(route) }
+            // A tile with no route is not tappable (loading, or unreadable).
+            if tile.hasRoute { shell.open(tile.route) }
         } label: {
             VStack(alignment: .leading, spacing: 16) {
                 // Invariant header — see this type's comment.
                 HStack(spacing: 8) {
                     AppMark(appID: tile.appID, size: 22)
-                    Text(name)
+                    Text(tile.name)
                         .centraidType("smallStrong")
                         .foregroundStyle(Theme.color("text", scheme))
                         .lineLimit(1)
@@ -482,10 +429,7 @@ private struct TileCard: View {
                 TileBodyView(tile: tile)
                 if !bodyTakesTheSlack { Spacer(minLength: 0) }
             }
-            // PADDING FIRST, THEN THE FLOOR. The floor is the CARD's height and
-            // v0 states it on the box that carries the padding, so measuring it
-            // on the content instead makes every tile a full pad taller than
-            // the one Compose draws.
+            // PADDING FIRST, THEN THE FLOOR: the floor is the CARD's height.
             .padding(tilePad)
             .frame(maxWidth: .infinity, minHeight: tileMinHeight, alignment: .topLeading)
             .background(Theme.color("bgElev", scheme))
@@ -501,25 +445,10 @@ private struct TileCard: View {
         .accessibilityIdentifier("home-tile-\(tile.appID)")
         .accessibilityLabel(tile.accessibilityLabel)
     }
-
-    /// Where this tile leads, or nowhere.
-    ///
-    /// Three apps have a screen in this shell. The other five have a tile and
-    /// no destination yet, and `nil` is the honest answer for them — pushing a
-    /// blank cover would be worse than a tap that stays put.
-    ///
-    /// Notes leads to the Notes place once its shelf is drawn, and to a new
-    /// note on an empty vault (`NotesRouting.tile`).
-    static func route(for tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? {
-        // Photos is the one app still routed by its own case; every other
-        // app's tile route is its `AppScreens.tileRoute` (K5).
-        if tile.appID == AppIds.shared.PHOTOS { return .photos }
-        return AppRegistry.tileRoute(tile)
-    }
 }
 
 private struct TileBodyView: View {
-    let tile: Centraid_Screen_V1_HomeTile
+    let tile: Centraid_Core_V1_HomeTile
     @Environment(\.colorScheme) private var scheme
 
     /// Locker's body is a STATE and not a query result, and Photos draws its own
@@ -549,12 +478,11 @@ private struct TileBodyView: View {
         }
     }
 }
-
 private struct ContentBody: View {
-    let body_: Centraid_Screen_V1_TileBody
+    let body_: Centraid_Core_V1_HomeTileBody
     @Environment(\.colorScheme) private var scheme
 
-    init(body: Centraid_Screen_V1_TileBody) { self.body_ = body }
+    init(body: Centraid_Core_V1_HomeTileBody) { self.body_ = body }
 
     var body: some View {
         switch body_.kind {
@@ -640,7 +568,7 @@ private struct ContentBody: View {
                 HStack(spacing: -7) {
                     ForEach(people.faces, id: \.partyID) { face in
                         // THE PARTY'S OWN HUE, not a grey disc. `face.color` is
-                        // the key `HomeReads` already resolved with the one
+                        // the key Rust already resolved with the one
                         // port of the identity wheel; all this does is spell
                         // the emitted role. An unrecognised key draws the
                         // neutral disc rather than reaching `Theme.color`,
@@ -692,7 +620,7 @@ private struct ContentBody: View {
                 // No lock glyph beside "Locked" — that says it twice. A STATE
                 // label, not a control, so the chip is an outline and not a fill.
                 // THE MACHINE'S WORD FOR THE STATE (R-1047-L7): "Locked" or
-                // "Open", from `HomeReads.lockerOpen` — never spelt here.
+                // "Open", from Rust — never spelt here.
                 Text(locker.stateLabel)
                     .centraidType("eyebrow")
                     .foregroundStyle(
@@ -719,7 +647,7 @@ private struct ContentBody: View {
             // formatter) and the caption is the machine's.
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(Array(spent.amounts.enumerated()), id: \.offset) { _, amount in
-                    Text(Money.render(amount))
+                    Text(amount)
                         .centraidType("mono")
                         .monospacedDigit()
                         .foregroundStyle(Theme.color("text", scheme))
@@ -764,7 +692,6 @@ private struct ContentBody: View {
         }
     }
 }
-
 /// NOTES' SHELF (`HomeNotesTile`): the notebooks holding notes in soft ink,
 /// each with its count, and the newest note's title alone at the foot. A vault
 /// with nothing filed draws its newest notes instead, and no foot — the first
@@ -775,7 +702,7 @@ private struct ContentBody: View {
 /// read as congested. What is left is two inks and air — the shelf soft, the
 /// note full — and every line is one line, truncated rather than wrapped.
 private struct NotesShelf: View {
-    let notes: Centraid_Screen_V1_TileBody.Notes
+    let notes: Centraid_Core_V1_HomeTileBody.Notes
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -811,14 +738,13 @@ private struct NotesShelf: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
-
 /// The mosaic bleeds to the card's edge: the CELLS are the mosaic, so there is
 /// no ground and no min height, and the negative inset cancels `tilePad`
-/// exactly. Which assets fill the cells is the machine's (`HomeReads`): it
+/// exactly. Which assets fill the cells is Rust's: it
 /// steps over an asset with no thumbnail, and keeps the newest four as grey
 /// cells only when none of the window can be drawn.
 private struct PhotoMosaic: View {
-    let photos: Centraid_Screen_V1_TileBody.Photos
+    let photos: Centraid_Core_V1_HomeTileBody.Photos
     @Environment(\.colorScheme) private var scheme
 
     private var waiting: Bool {
@@ -883,15 +809,15 @@ private struct PhotoMosaic: View {
             // (`margin: … ' + (grey ? '0' : '-' + R.gap.m)`): the sentence under
             // the strip needs the 12 back, and a line of type bled past the
             // card's edge is clipped rather than merely tight.
-            .padding(.bottom, waiting ? 0 : -tilePad)
+            .padding(.bottom, waiting && !photos.absentLine.isEmpty ? 0 : -tilePad)
             // Grey squares with no explanation read as a failed render.
-            if waiting {
+            if waiting, !photos.absentLine.isEmpty {
                 // IT DOES NOT NAME THE GATEWAY any more, and did before: with
                 // the byte door built, a vault placed on the device holds its
                 // own photographs, and "these fill in when it is back" was a
                 // sentence about a connection that is not the reason. What is
                 // true in every case is that the bytes are not here yet.
-                Text(HomeWords.shared.PHOTOS_ABSENT)
+                Text(photos.absentLine)
                     .centraidType("mono")
                     .foregroundStyle(Theme.color("textFaint", scheme))
             }
@@ -903,17 +829,17 @@ private struct PhotoMosaic: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
-
 /// STATIC BARS, NEVER A SPINNER.
 ///
 /// A read in flight holds its slot at full geometry, and the bars stand where
 /// the lines will: a spinner over a tile that is about to hold three lines of
 /// prose is motion that tells a member nothing and then relayouts under them.
 private struct Skeleton: View {
-    let body_: Centraid_Screen_V1_TileBody
+    let body_: Centraid_Core_V1_HomeTileBody
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.homeLoadingLabel) private var loadingLabel
 
-    init(body: Centraid_Screen_V1_TileBody) { self.body_ = body }
+    init(body: Centraid_Core_V1_HomeTileBody) { self.body_ = body }
 
     private var widths: [CGFloat] {
         // Key by POSITION, not width — People's skeleton is two bars of the
@@ -937,19 +863,9 @@ private struct Skeleton: View {
         // `GeometryReader` has no intrinsic height and would otherwise eat the
         // whole card.
         .frame(height: 56)
-        .accessibilityLabel(HomeWords.shared.LOADING)
+        .accessibilityLabel(loadingLabel)
     }
 }
-
-/// Minor units and an exponent FROM THE CORE, never the host's guess.
-///
-/// v0 divided by 100 unconditionally and formatted with the device's locale, so
-/// one vault rendered differently on two phones. JPY has no minor unit and BHD
-/// has three; the exponent travels with the amount for exactly this — stated by
-/// the core from the kit's one table (`PageQuery.with_minor_units`).
-///
-// `Money.render` lives in `Kit/Money.swift` (K5).
-
 /// Day one: the vault holds nothing anywhere.
 ///
 /// Reached ONLY when every readable tile has settled and is empty. A
@@ -957,17 +873,17 @@ private struct Skeleton: View {
 /// this page is a claim about the vault, and an unanswered read has not
 /// earned it.
 private struct DayOne: View {
-    let data: Centraid_Screen_V1_HomeData
+    let data: Centraid_Core_V1_HomeData
     @ObservedObject var shell: ShellModel
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text(HomeWords.shared.DAY_ONE_TITLE)
+                Text(data.dayOneTitle)
                     .centraidType("title")
                     .foregroundStyle(Theme.color("text", scheme))
-                Text(HomeWords.shared.DAY_ONE_BODY)
+                Text(data.dayOneBody)
                 .centraidType("small")
                 .foregroundStyle(Theme.color("textSoft", scheme))
                 TileGrid(data: data, shell: shell)
@@ -979,82 +895,63 @@ private struct DayOne: View {
         .accessibilityIdentifier("home-day-one")
     }
 }
-
 /// THE VAULT SWITCHER, and the only control that changes what the whole app is
-/// reading (#1020, wave A).
+/// reading. Every word, the roster's order and the questions it asks are Rust's
+/// (`HomeVaultSheet`); the press is an event, and the shelf's act is the shell's.
 ///
-/// It lists EVERY vault the device holds, the open one included and ticked. A
-/// switcher that listed only the others would never show a member where they
-/// already are, which is the fact most of them opened it to check.
-///
-/// A row with no id cannot be switched to and is not drawn: a vault whose file
-/// would not open is a door that does not open, and offering it is worse than
-/// omitting it. The roster the shell hands in has already dropped those.
+/// It lists EVERY vault the device holds, the open one included and ticked.
 private struct VaultSheet: View {
-    let vaults: [Centraid_Screen_V1_VaultLockup]
-    let active: Centraid_Screen_V1_VaultLockup
-    @ObservedObject var shell: ShellModel
+    let sheet: Centraid_Core_V1_HomeVaultSheet
+    @ObservedObject var store: ScreenStore
     @Environment(\.colorScheme) private var scheme
-    /// THE VAULT A CONFIRMATION IS ABOUT, and not a bare `Bool`: an alert that
-    /// only knew it was open could not name what it was about to delete, and
-    /// "Forget this vault?" over a list of four is the dialogue a member taps
-    /// through and then regrets.
-    @State private var forgetting: Centraid_Screen_V1_VaultLockup?
-    /// THE VAULT BEING RENAMED and the name typed so far. The field starts on
-    /// the vault's own name, so a small fix is a small edit.
-    @State private var renaming: Centraid_Screen_V1_VaultLockup?
-    @State private var newName = ""
 
     var body: some View {
         // A SHEETROOM: the room owns the grabber, the title and the gutter,
         // and the roster scrolls inside it.
-        SheetRoom(title: HomeWords.shared.VAULTS_TITLE, titleIdentifier: "home-vault-sheet") {
+        SheetRoom(title: sheet.title, titleIdentifier: "home-vault-sheet") {
             roster
         }
-        .sheet(item: Binding(get: { forgetting.map(VaultPick.init) }, set: { if $0 == nil { forgetting = nil } })) { pick in
-            forgetConfirm(pick.vault)
+        .sheet(item: Binding(get: { forgetAsk }, set: { if $0 == nil { store.sendHome(.askDismissed(.init())) } })) { ask in
+            forgetConfirm(ask)
         }
-        .sheet(item: Binding(get: { renaming.map(VaultPick.init) }, set: { if $0 == nil { renaming = nil } })) { pick in
-            renameSheet(pick.vault)
+        .sheet(item: Binding(get: { renameAsk }, set: { if $0 == nil { store.sendHome(.askDismissed(.init())) } })) { ask in
+            renameSheet(ask)
         }
     }
 
-    /// A vault a sheet is about, as `.sheet(item:)` needs it (which also keeps
-    /// the sheet's words through its dismissal).
-    private struct VaultPick: Identifiable {
-        let vault: Centraid_Screen_V1_VaultLockup
-        var id: String { vault.vaultID }
+    private var forgetAsk: AskItem<Centraid_Core_V1_HomeVaultAsk.Forget>? {
+        if sheet.hasAsk, case let .forget(forget)? = sheet.ask.kind { return AskItem(value: forget, id: forget.vaultID) }
+        return nil
+    }
+
+    private var renameAsk: AskItem<Centraid_Core_V1_HomeVaultAsk.Rename>? {
+        if sheet.hasAsk, case let .rename(rename)? = sheet.ask.kind { return AskItem(value: rename, id: rename.vaultID) }
+        return nil
+    }
+
+    /// A question a sheet is about, as `.sheet(item:)` needs it.
+    private struct AskItem<Value>: Identifiable {
+        let value: Value
+        let id: String
     }
 
     private var roster: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // ZERO VAULTS NEVER REACHES THIS SHEET: a device that holds none
-            // opens onto `FirstLaunchView` instead of Home (`CentraidApp`),
-            // which is where "make" and "restore" live now. One vault keeps
-            // the existing sentence (switching is not a choice of one, but
-            // Forget still is).
-            if vaults.count == 1 {
-                Text(HomeWords.shared.VAULTS_ONE)
+            if !sheet.oneLine.isEmpty {
+                Text(sheet.oneLine)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
                     .padding(.bottom, 8)
             }
 
-            // THE ROSTER IS DRAWN AS THE SHELF LISTS IT: the order is
-            // `Shelf`'s, and this view sorts nothing.
+            // THE ROSTER IS DRAWN AS THE SHELF LISTS IT: this view sorts nothing.
             List {
-            ForEach(vaults, id: \.vaultID) { vault in
+            ForEach(sheet.vaults, id: \.vaultID) { vault in
                 Button {
-                    if vault.vaultID != active.vaultID {
-                        shell.clearStaleGatewayStatus()
-                    }
-                    shell.send(
-                        screen: HomeMachine.shared.SCREEN_ID,
-                        event: HomeEvents.vaultPicked(vault.vaultID)
-                    )
+                    store.sendHome(.vaultPicked(.with { $0.vaultID = vault.vaultID }))
                 } label: {
                     HStack(spacing: 12) {
-                        Text(String(vault.vaultName.prefix(1)).uppercased())
+                        Text(vault.initial)
                             .centraidType("smallStrong")
                             .foregroundStyle(Theme.color("text", scheme))
                             .frame(width: 30, height: 30)
@@ -1064,15 +961,11 @@ private struct VaultSheet: View {
                             )
                         VStack(alignment: .leading, spacing: 0) {
                             HStack(spacing: 8) {
-                                Text(HomeWords.shared.vaultName(name: vault.vaultName))
+                                Text(vault.name)
                                     .centraidType("smallStrong")
                                     .foregroundStyle(Theme.color("text", scheme))
                             }
-                            // THE SAME SECOND LINE THE HEADER DRAWS, from the
-                            // same `stateLine` and the same `RosterChanged`
-                            // stream (#1025 S7-9). A switcher that showed only
-                            // names made a member switch INTO a vault to find
-                            // out whether it had synced.
+                            // THE SAME SECOND LINE THE HEADER DRAWS.
                             if !vault.stateLine.isEmpty {
                                 Text(vault.stateLine)
                                     .centraidType("mono")
@@ -1082,43 +975,36 @@ private struct VaultSheet: View {
                         }
                         Spacer(minLength: 0)
                         // THE TICK IS THE WHOLE POINT of listing the open one.
-                        if vault.vaultID == active.vaultID {
+                        if vault.vaultID == sheet.activeVaultID {
                             CentraidIconView(
                                 iconKey: "Check",
                                 tint: Theme.color("link", scheme),
                                 size: 18
                             )
-                            .accessibilityLabel(HomeWords.shared.VAULTS_CURRENT)
+                            .accessibilityLabel(sheet.currentLabel)
                         }
                     }
                     .frame(minHeight: 44)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("vault-row-\(vault.vaultID)")
-                // FORGET IS A SWIPE AND NOT A ROW CONTROL (#1025 S7-9). The
-                // row's whole width is the switch — the one thing a member
-                // opens this sheet to do — so a second tappable target inside
-                // it would sit in the way of the first. A destructive trailing
-                // swipe is where iOS puts a delete, and `allowsFullSwipe` is
-                // off because this deletes the device's copy and a full swipe
-                // is a gesture a thumb makes by accident.
-                //
-                // RENAME SITS BESIDE IT, and in the row's long-press menu,
-                // because a swipe is a gesture nobody finds by looking: the
-                // menu is the discoverable door, the swipe the quick one. A
-                // vault that moved is read-only and offers no rename.
+                // FORGET IS A SWIPE AND NOT A ROW CONTROL: the row's whole width
+                // is the switch. `allowsFullSwipe` is off because this deletes
+                // the device's copy and a full swipe is a gesture a thumb makes
+                // by accident. RENAME SITS BESIDE IT and in the long-press menu;
+                // a vault that moved is read-only and offers no rename.
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
-                        forgetting = vault
+                        store.sendHome(.forgetAsked(.with { $0.vaultID = vault.vaultID }))
                     } label: {
-                        Label(HomeWords.shared.VAULTS_FORGET, systemImage: "trash")
+                        Label(sheet.forgetLabel, systemImage: "trash")
                     }
                     .accessibilityIdentifier("vault-forget-\(vault.vaultID)")
                     if vault.state != .frozen {
                         Button {
-                            startRename(vault)
+                            store.sendHome(.renameAsked(.with { $0.vaultID = vault.vaultID }))
                         } label: {
-                            Label(HomeWords.shared.VAULTS_RENAME, systemImage: "pencil")
+                            Label(sheet.renameLabel, systemImage: "pencil")
                         }
                         .tint(Theme.color("link", scheme))
                         .accessibilityIdentifier("vault-rename-\(vault.vaultID)")
@@ -1127,32 +1013,32 @@ private struct VaultSheet: View {
                 .contextMenu {
                     if vault.state != .frozen {
                         Button {
-                            startRename(vault)
+                            store.sendHome(.renameAsked(.with { $0.vaultID = vault.vaultID }))
                         } label: {
-                            Label(HomeWords.shared.VAULTS_RENAME, systemImage: "pencil")
+                            Label(sheet.renameLabel, systemImage: "pencil")
                         }
                     }
-                    // DELETE, behind the same confirmation the swipe opens.
                     Button(role: .destructive) {
-                        forgetting = vault
+                        store.sendHome(.forgetAsked(.with { $0.vaultID = vault.vaultID }))
                     } label: {
-                        Label(HomeWords.shared.VAULTS_FORGET, systemImage: "trash")
+                        Label(sheet.forgetLabel, systemImage: "trash")
                     }
                 }
             }
 
-            // MAKING AND RESTORING A VAULT LIVE HERE (R-ONBOARD-11): this is
-            // the sheet about the vaults this phone holds, and Home has no
-            // settings gear to hide them behind. In the same list, so a long
-            // roster scrolls them with it rather than clipping either.
+            // MAKING AND RESTORING A VAULT LIVE HERE (R-ONBOARD-11), in the same
+            // list, so a long roster scrolls them with it.
             Section {
-                switcherAction(HomeWords.shared.VAULTS_MAKE, icon: "Plus", id: "vault-found-button") { shell.makeVault() }
-                switcherAction(WordsCopy.shared.RESTORE_FIRST_ACTION, icon: "Refresh", id: "vault-restore-button") { shell.openRestore() }
-                    .listRowSeparator(.hidden)
-                // THE LAST OUTCOME, IN A MEMBER'S WORDS (what a make or a
-                // restore came to).
-                if !shell.gatewayStatus.isEmpty {
-                    Text(shell.gatewayStatus)
+                switcherAction(sheet.makeLabel, spoken: sheet.makeSpoken, icon: "Plus", id: "vault-found-button") {
+                    store.sendHome(.make(.init()))
+                }
+                switcherAction(sheet.restoreLabel, icon: "Refresh", id: "vault-restore-button") {
+                    store.sendHome(.restore(.init()))
+                }
+                .listRowSeparator(.hidden)
+                // THE LAST OUTCOME, IN A MEMBER'S WORDS (what a make or a restore came to).
+                if !sheet.statusLine.isEmpty {
+                    Text(sheet.statusLine)
                         .centraidType("small")
                         .foregroundStyle(Theme.color("textSoft", scheme))
                         .listRowSeparator(.hidden)
@@ -1166,45 +1052,41 @@ private struct VaultSheet: View {
         }
     }
 
-    /// THE CONFIRM NAMES THE VAULT, and what it says changed with the
-    /// product (#1029 §1). Forgetting used to delete this device's COPY —
-    /// the replica and its bytes — and the gateway kept the vault and kept
-    /// this device enrolled, so the sentence could truthfully say the way
-    /// back was a fresh ticket. **The phone is the vault.** There is no
-    /// copy elsewhere and no ticket, so Forget destroys the vault, and a
-    /// confirm that still offered a way back would be the one place this
-    /// shell lies about what a destructive button does.
-    private func forgetConfirm(_ vault: Centraid_Screen_V1_VaultLockup) -> some View {
+    private func forgetConfirm(_ ask: AskItem<Centraid_Core_V1_HomeVaultAsk.Forget>) -> some View {
         ConfirmSheet(
             .with {
-                $0.title = HomeWords.shared.forgetTitle(name: vault.vaultName)
-                $0.body = HomeWords.shared.VAULTS_FORGET_BODY
-                $0.confirmLabel = HomeWords.shared.VAULTS_FORGET
+                $0.title = ask.value.title
+                $0.body = ask.value.body
+                $0.confirmLabel = ask.value.confirmLabel
                 $0.destructive = true
             },
-            cancelLabel: KitWords.shared.CANCEL,
-            onConfirm: {
-                shell.forget(vaultID: vault.vaultID)
-                forgetting = nil
-            },
-            onDismiss: { forgetting = nil }
+            cancelLabel: ask.value.cancelLabel,
+            onConfirm: { store.sendHome(.askConfirmed(.init())) },
+            onDismiss: { store.sendHome(.askDismissed(.init())) }
         )
     }
 
     /// A RENAME IS A SHEET HOLDING THE FIELD, with Save as its one ink button.
-    private func renameSheet(_ vault: Centraid_Screen_V1_VaultLockup) -> some View {
+    /// The name typed lives in Rust (`RenameTyped`); a refusal is its `failure`.
+    private func renameSheet(_ ask: AskItem<Centraid_Core_V1_HomeVaultAsk.Rename>) -> some View {
         SheetRoom(
-            title: HomeWords.shared.VAULTS_RENAME_TITLE,
+            title: ask.value.title,
+            status: ask.value.failure,
             primary: SheetPrimary(
-                label: HomeWords.shared.VAULTS_RENAME_SAVE,
-                enabled: !newName.trimmingCharacters(in: .whitespaces).isEmpty,
+                label: ask.value.saveLabel,
+                enabled: ask.value.canSave,
                 identifier: "vault-rename-save"
             ) {
-                shell.renameVault(vaultID: vault.vaultID, name: newName)
-                renaming = nil
+                store.sendHome(.askConfirmed(.init()))
             }
         ) {
-            TextField(HomeWords.shared.VAULTS_RENAME_FIELD, text: $newName)
+            TextField(
+                ask.value.fieldLabel,
+                text: Binding(
+                    get: { ask.value.name },
+                    set: { name in store.sendHome(.renameTyped(.with { $0.name = name })) }
+                )
+            )
                 .textInputAutocapitalization(.words)
                 .centraidType("body")
                 .foregroundStyle(Theme.color("text", scheme))
@@ -1218,13 +1100,8 @@ private struct VaultSheet: View {
         }
     }
 
-    private func startRename(_ vault: Centraid_Screen_V1_VaultLockup) {
-        newName = vault.vaultName
-        renaming = vault
-    }
-
     /// One of the switcher's two acts: a mark and a label, a full-width row.
-    private func switcherAction(_ label: String, icon: String, id: String, action: @escaping () -> Void) -> some View {
+    private func switcherAction(_ label: String, spoken: String = "", icon: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
                 CentraidIconView(iconKey: icon, tint: Theme.color("text", scheme), size: 18)
@@ -1242,41 +1119,7 @@ private struct VaultSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(spoken.isEmpty ? label : spoken)
         .accessibilityIdentifier(id)
     }
-}
-
-/// Encoded events, so a view forwards bytes and never a decision.
-enum HomeEvents {
-    static func movePicked(_ id: String) -> Data {
-        var event = Centraid_Screen_V1_HomeEvent()
-        event.movePicked = .with { $0.moveID = id }
-        return (try? event.serializedBytes()) ?? Data()
-    }
-
-    static func opened() -> Data {
-        var event = Centraid_Screen_V1_HomeEvent()
-        event.opened = .init()
-        return (try? event.serializedBytes()) ?? Data()
-    }
-
-    static func refreshed() -> Data {
-        var event = Centraid_Screen_V1_HomeEvent()
-        event.refreshed = .init()
-        return (try? event.serializedBytes()) ?? Data()
-    }
-
-    static func vaultSwitch() -> Data {
-        var event = Centraid_Screen_V1_HomeEvent()
-        event.vaultSwitch = .init()
-        return (try? event.serializedBytes()) ?? Data()
-    }
-
-    /// An empty id is a DISMISSAL: shut the sheet, change no vault.
-    static func vaultPicked(_ id: String) -> Data {
-        var event = Centraid_Screen_V1_HomeEvent()
-        event.vaultPicked = .with { $0.vaultID = id }
-        return (try? event.serializedBytes()) ?? Data()
-    }
-
 }

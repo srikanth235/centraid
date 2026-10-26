@@ -44,6 +44,7 @@
 
 #![forbid(unsafe_code)]
 
+pub(crate) mod act;
 pub mod api;
 /// AN APP'S OWN QUERY, RUN IN THE CORE (#1046): the page door an app crate
 /// reads through, and Agenda's answers as `agenda.proto` spells them.
@@ -52,6 +53,7 @@ pub mod app_query;
 /// through the query path, and `Request::Assist`'s arm. The plane itself is
 /// `centraid-assist`.
 pub mod assist;
+pub(crate) mod catalog;
 pub mod config;
 pub mod convert;
 pub mod error;
@@ -62,6 +64,7 @@ pub mod events;
 pub mod example;
 pub mod handle;
 pub mod identity;
+pub mod load;
 pub mod locker;
 /// THE ORIGINALS ON THIS PHONE, AND THE ALBUMS WHOSE ORIGINALS STAY (#1029,
 /// the photos port). See `originals.proto`.
@@ -70,14 +73,21 @@ pub mod originals;
 /// the status the shell draws, and the doors beside the pass. See
 /// `phone.proto`.
 pub mod phone;
+pub mod screens;
+/// THE SHELL'S OWN CATALOGUE (#1135): the reads that are no one app's, named in
+/// one manifest beside the eight apps' and served by `load` the same way.
+pub mod shell;
 pub mod stage;
 /// THE STARTER ROWS a member's first vault is founded with: ordinary rows of
 /// theirs, best-effort, declared as data. See `vault.proto`'s `FoundContent`.
 pub mod starters;
+pub mod vaults;
 
 /// Lane C's generated types, re-exported so a consumer needs one dependency.
 pub use centraid_api_proto::core_v1 as api_proto;
-pub use config::CoreConfig;
+/// What [`Handle::command`] answers: the vault's own outcome of one run.
+pub use centraid_vault::commands::{CommandOutcome, CommandStatus};
+pub use config::{CoreConfig, ShelfConfig};
 pub use error::{CoreError, Result, sentence_for_code};
 pub use events::{ChangeFeed, EVENT_QUEUE_CAP, EventQueue};
 pub use handle::{Core, Handle};

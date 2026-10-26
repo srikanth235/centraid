@@ -467,6 +467,23 @@ mod tests {
         );
     }
 
+    /// Files landing move a screen (#1025 S7, D-1025-S7-20): a landed byte is a
+    /// change on `photo` carrying the PHOTOGRAPH ids, and an empty landing is
+    /// nothing. This pins what the Kotlin grid's `PendingWriteSpec` asserted
+    /// from the other side before the grid moved to Rust.
+    #[test]
+    fn bytes_landing_are_a_change_on_the_photographs_that_own_them() {
+        let queue = std::sync::Arc::new(EventQueue::new());
+        let feed = ChangeFeed::new(std::sync::Arc::clone(&queue));
+        feed.blobs_arrived(&[]);
+        assert_eq!(queue.depth(), 0, "an empty landing is not an event");
+        feed.blobs_arrived(&["a-1".to_owned(), "a-2".to_owned()]);
+        assert_eq!(
+            queue.next(Duration::from_millis(10)),
+            Next::Event(change("photo", &["a-1", "a-2"]))
+        );
+    }
+
     #[test]
     fn a_timeout_with_nothing_waiting_is_not_an_error() {
         let queue = EventQueue::new();

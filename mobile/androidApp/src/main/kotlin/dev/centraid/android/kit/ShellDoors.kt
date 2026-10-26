@@ -13,36 +13,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import centraid.screen.v1.ImportSource
 import dev.centraid.android.theme.centraidColor
-import dev.centraid.design.copy.AgendaCopy
-import dev.centraid.design.copy.PeopleCopy
-
-/**
- * IMPORT WHERE THE PHONE ALREADY HOLDS THE DATA (`EmptyState.import_source`,
- * `AgendaHomeData.import_source`). ONE DOOR, KEYED BY SOURCE: the shell's
- * importers — permission asked at the tap, the phone's store read, the shared
- * importer run on the member's vault — behind one handler. Null when no vault
- * is open, and then the empty state draws its own action.
- *
- * The door is only ever called with a source [importLabel] names: a screen
- * reads the label first, and an empty label is "this shell cannot read that".
- */
-public val LocalPhoneImport: ProvidableCompositionLocal<((ImportSource) -> Unit)?> = staticCompositionLocalOf { null }
-
-/**
- * THE IMPORT'S VERB FOR [source], or "" WHERE ANDROID HAS NOTHING TO READ:
- * Contacts and Calendar are the phone's own stores; Android has no system
- * reminders, so a Reminders source draws the app's own action instead.
- */
-public fun importLabel(source: ImportSource): String = when (source) {
-    ImportSource.IMPORT_SOURCE_CONTACTS -> PeopleCopy.IMPORT_CONTACTS
-    ImportSource.IMPORT_SOURCE_CALENDAR -> AgendaCopy.IMPORT_CALENDAR
-    else -> ""
-}
 
 /**
  * THE SHELL'S STATUS LINE, handed down to whichever place draws it above its

@@ -1,4 +1,4 @@
-//! THE DEMO SCENARIO: one weekend at Tahoe, across seven apps.
+//! THE DEMO SCENARIO: one weekend at Tahoe, across six apps.
 //!
 //! Maya, Jake, Grandpa Ray and Chris, notes and a packing list, a week on the
 //! calendar, a camera roll with real bytes, and an uneven expense ledger — a
@@ -40,9 +40,7 @@ use crate::error::Result;
 
 /// The apps the scenario seeds through [`seed`], in the order it seeds them.
 /// Locker is not one of them, and never will be: see the module header.
-pub const APPS: [&str; 7] = [
-    "people", "notes", "docs", "photos", "tasks", "agenda", "money",
-];
+pub const APPS: [&str; 6] = ["people", "notes", "docs", "photos", "agenda", "money"];
 
 /// What a seeding pass did not do.
 ///
@@ -110,10 +108,9 @@ pub fn seed(
     if wanted("photos") {
         seed_photos(&mut seeder, now_ms);
     }
-    if wanted("tasks") {
-        seed_tasks(&mut seeder, now_ms);
-    }
+    // THE TASKS ARE AGENDA'S (#1128): one app, so one name to seed them under.
     if wanted("agenda") {
+        seed_tasks(&mut seeder, now_ms);
         seed_agenda(&mut seeder, now_ms);
     }
     if wanted("money") {

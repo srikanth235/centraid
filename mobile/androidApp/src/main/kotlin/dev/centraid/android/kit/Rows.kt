@@ -35,15 +35,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.Autosave
-import centraid.screen.v1.ChatCard
-import centraid.screen.v1.ListRow
-import centraid.screen.v1.SearchContainer
-import centraid.screen.v1.SectionHead
-import centraid.screen.v1.StatusChip
+import centraid.core.v1.Autosave
+import centraid.core.v1.ListRow
+import centraid.core.v1.SearchContainer
+import centraid.core.v1.StatusChip
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
-import dev.centraid.shared.kit.TypedText
 
 /**
  * THE ONE ROW SHAPE (hand-off v17: "one row shape per app reused by every list
@@ -451,29 +448,48 @@ private val PARTY_HUES: Set<String> =
 /** The same eight, as the theme's colour roles. */
 private val PARTY_ROLES: Set<String> = PARTY_HUES.mapTo(mutableSetOf()) { "c" + it.replaceFirstChar(Char::uppercaseChar) }
 
+
 /**
- * A CONTAINER AS A SEARCH RESULT (#1097): the notebook, album, project, group
- * or folder a member typed the name of. ONE ROW for Home's search and for the
- * four owning apps' own search results — its glyph by kind, its title, its kind
- * in a soft word — drawn above the result rows. The machine finished every
- * word and the glyph ([SearchContainer]); a tap hands the row's reference
- * ([SearchContainer.target]) to the shell's one row router and decides nothing
- * itself. Its id is `search-container-<entity>-<id>`, the same everywhere.
+ * THE SAME ROW FROM THE SCREEN RUNTIME'S CONTAINER (#1135): a tap hands the
+ * container's own [centraid.core.v1.Route] to the shell, which pushes it.
  */
 @Composable
 public fun SearchContainerRow(
-    container: SearchContainer,
+    container: centraid.core.v1.SearchContainer,
     modifier: Modifier = Modifier,
-    onOpen: (ChatCard) -> Unit,
+    onOpen: (centraid.core.v1.Route) -> Unit,
 ) {
-    val target = container.target
+    val route = container.route
+    SearchContainerLine(
+        container.entity,
+        container.id,
+        container.icon_key,
+        container.title,
+        container.kind_label,
+        container.accessibility_label,
+        modifier,
+        onTap = if (route != null) ({ onOpen(route) }) else null,
+    )
+}
+
+@Composable
+private fun SearchContainerLine(
+    entity: String,
+    id: String,
+    iconKey: String,
+    title: String,
+    kindLabel: String,
+    accessibilityLabel: String,
+    modifier: Modifier,
+    onTap: (() -> Unit)?,
+) {
     Column(
         modifier
             .fillMaxWidth()
-            .then(if (target != null) Modifier.clickable { onOpen(target) } else Modifier)
-            .testTag("search-container-${container.entity}-${container.id}")
+            .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
+            .testTag("search-container-$entity-$id")
             .clearAndSetSemantics {
-                contentDescription = container.accessibility_label
+                contentDescription = accessibilityLabel
                 role = Role.Button
             },
     ) {
@@ -484,9 +500,9 @@ public fun SearchContainerRow(
                 .padding(horizontal = KitGeometry.GUTTER),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CentraidIcon(iconKey = container.icon_key, tint = centraidColor("textSoft"), size = 18.dp)
+            CentraidIcon(iconKey = iconKey, tint = centraidColor("textSoft"), size = 18.dp)
             Text(
-                container.title,
+                title,
                 style = centraidType("body"),
                 color = centraidColor("text"),
                 maxLines = 1,
@@ -494,7 +510,7 @@ public fun SearchContainerRow(
                 modifier = Modifier.padding(start = 12.dp).weight(1f),
             )
             Text(
-                container.kind_label,
+                kindLabel,
                 style = centraidType("small"),
                 color = centraidColor("textSoft"),
                 maxLines = 1,

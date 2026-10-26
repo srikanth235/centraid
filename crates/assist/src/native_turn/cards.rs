@@ -1,7 +1,6 @@
 //! A RESULT IS THE CHAT'S EXISTING CARD (R-1088-7): the kind to app and entity table.
 //!
-//! The runtime's rows are twelve kinds; the chat's card names one of seven apps (Money's is the
-//! seventh, since rung fifteen) and an entity the
+//! The runtime's rows are fourteen kinds; the chat's card names one of eight apps and an entity the
 //! shell routes by. This is the one place that says which. A card is a reference (`app`,
 //! `entity`, `id`) and a few words; the app's own tile draws the row.
 //!
@@ -19,13 +18,16 @@
 //! | list | tasks | `project` | the project |
 //! | transaction | money | `transaction` | the transaction's page |
 //! | locker item | locker | `locker_item` | the item's page, behind the Locker's lock wall |
+//! | workout | health | `workout` | the workout's page |
+//! | daily figure | health | `daily_figure` | Health's front door: a day's total has no page of its own |
+//! | account, category, budget, rule | money | the kind's name | Money's home |
 //!
 //! The album, notebook and folder routes are the shell's since the containers became search results
 //! (#1097, `ChatRouting.swift`): the card's `id` is the container's id and its `title` the name the route needs.
 //! The kinds with no row route open their app's home, which is what the shell does with any entity
 //! it has no route for (`ChatRouting.appHome`): a tap that reached nothing would read as a broken
 //! card. Giving one a route is a shell change and no schema change: `chat_message_card.entity` holds
-//! any non-empty word, and `app` is one of the seven this table maps into.
+//! any non-empty word, and `app` is one of the eight this table maps into.
 
 use jiff::civil::Date;
 
@@ -61,20 +63,42 @@ const fn row(kind: Kind, app: App, entity: &'static str) -> CardKind {
     }
 }
 
+const fn home(kind: Kind, app: App, entity: &'static str) -> CardKind {
+    CardKind {
+        kind,
+        app,
+        entity,
+        opens: Opens::AppHome,
+    }
+}
+
 /// THE TABLE. Every kind.
-pub const TABLE: [CardKind; 12] = [
+pub const TABLE: [CardKind; 18] = [
     row(Kind::Person, App::People, "person"),
     row(Kind::Event, App::Agenda, "event"),
-    row(Kind::Task, App::Tasks, "task"),
+    row(Kind::Task, App::Agenda, "task"),
     row(Kind::Note, App::Notes, "note"),
     row(Kind::Document, App::Docs, "document"),
     row(Kind::Photo, App::Photos, "photo"),
     row(Kind::Album, App::Photos, "album"),
     row(Kind::Notebook, App::Notes, "notebook"),
     row(Kind::Folder, App::Docs, "folder"),
-    row(Kind::List, App::Tasks, "project"),
+    row(Kind::List, App::Agenda, "project"),
     row(Kind::Transaction, App::Money, "transaction"),
     row(Kind::LockerItem, App::Locker, "locker_item"),
+    row(Kind::Workout, App::Health, "workout"),
+    CardKind {
+        kind: Kind::DailyFigure,
+        app: App::Health,
+        entity: "daily_figure",
+        opens: Opens::AppHome,
+    },
+    // Money's account, category, budget and rule have no page of their own in the shell's row
+    // routes: a tap opens Money's home, where the lists they live in are one tap away.
+    home(Kind::Account, App::Money, "account"),
+    home(Kind::Category, App::Money, "category"),
+    home(Kind::Budget, App::Money, "budget"),
+    home(Kind::Rule, App::Money, "rule"),
 ];
 
 /// How a kind is drawn.
@@ -110,28 +134,6 @@ pub fn card_of(row: &Row, _today: Date) -> Option<Card> {
 mod tests {
     use super::*;
 
-    /// The shells' routes, as the one shared table states them: the entities a
-    /// tap opens by row. Both shells route through `RowRoutes` (iOS through
-    /// `ChatRouting.route`, Android through `destination`).
-    const ROUTING: &str = include_str!(
-        "../../../../mobile/shared/src/commonMain/kotlin/dev/centraid/shared/nav/RowRoutes.kt"
-    );
-
-    /// Whether the table has an arm `AppIds.<APP> to <ENTITY> ->`, the entity
-    /// read through the file's own `const val <ENTITY>: String = "<entity>"`.
-    fn routes_row(app: &str, entity: &str) -> bool {
-        let declared = format!(": String = \"{entity}\"");
-        let Some(constant) = ROUTING.lines().find_map(|line| {
-            let line = line.trim();
-            line.ends_with(&declared)
-                .then(|| line.split("const val ").nth(1)?.split(':').next())
-                .flatten()
-        }) else {
-            return false;
-        };
-        ROUTING.contains(&format!("AppIds.{} to {constant} ->", app.to_uppercase()))
-    }
-
     #[test]
     fn every_kind_has_one_row() {
         for kind in Kind::ALL {
@@ -143,10 +145,7 @@ mod tests {
     #[test]
     fn a_card_never_carries_a_sealed_value_and_every_app_is_one_the_chat_stores() {
         for entry in TABLE {
-            assert!(
-                centraid_vault::roster::is_card_app(entry.app.id()),
-                "{entry:?}"
-            );
+            assert!(centraid_vault::roster::is_app(entry.app.id()), "{entry:?}");
             assert!(App::from_id(entry.app.id()).is_some(), "{entry:?}");
         }
         // A Locker item's card holds its title and its type, the plain half of the row.
@@ -166,18 +165,6 @@ mod tests {
         assert_eq!(card.app, App::Locker);
     }
 
-    #[test]
-    fn the_shells_row_routes_are_exactly_the_entries_that_open_a_row() {
-        for entry in TABLE {
-            assert_eq!(
-                routes_row(entry.app.id(), entry.entity),
-                entry.opens == Opens::Row,
-                "{} {}: RowRoutes.kt and the table disagree about whether a tap opens the row",
-                entry.app.id(),
-                entry.entity
-            );
-        }
-    }
     #[test]
     fn a_transaction_card_names_money_opens_its_row_and_carries_the_signed_amount() {
         use crate::native::dates::Stamp;

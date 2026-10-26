@@ -19,9 +19,9 @@ syntax = "proto3";
 package centraid.core.v1;
 
 import "centraid/core/v1/app_query.proto";
+import "centraid/core/v1/action.proto";
 import "centraid/core/v1/assist.proto";
 import "centraid/core/v1/change.proto";
-import "centraid/core/v1/command.proto";
 import "centraid/core/v1/content.proto";
 import "centraid/core/v1/error.proto";
 import "centraid/core/v1/handshake.proto";
@@ -30,6 +30,7 @@ import "centraid/core/v1/money.proto";
 import "centraid/core/v1/originals.proto";
 import "centraid/core/v1/phone.proto";
 import "centraid/core/v1/query.proto";
+import "centraid/core/v1/screens.proto";
 import "centraid/core/v1/vault.proto";
 
 message Envelope {
@@ -63,10 +64,17 @@ message Request {
   //                         life. `drain` (15) is the door it stood in for,
   //                         and it is a different message with a deadline and
   //                         an acked txid, so the number does not come back.
-  reserved 10;
+  //
+  // AND THE RAW COMMAND, RETIRED BY THE ONE WRITE (#1135):
+  //   5  `command`        — a registered command by name, with a principal
+  //                         the core never read. Every screen writes through
+  //                         `act` (36), which names an app's action and is
+  //                         answered once per key; a raw name over the ABI
+  //                         was a second write door beside it.
+  reserved 5, 10;
+  reserved "command";
   oneof kind {
     Hello hello = 1;
-    Command command = 5;
     PageRequest page = 6;
     ContentUrlRequest content_urls = 11;
     // A SHELL STREAMS BYTES IN AND THE CORE NAMES THEM (#1025 S4). See
@@ -128,18 +136,25 @@ message Request {
     // WHICH ASSET A LIBRARY ITEM WAS BACKED UP AS (#1127, A20): how an edit made
     // in place finds the photograph it is an edit of. See `phone.proto`.
     LibraryAssetsRequest library_assets = 34;
+    // THE ONE READ AND THE ONE WRITE (#1135). See `action.proto`.
+    LoadRequest load = 35;
+    ActRequest act = 36;
+    // Screen events and navigation (#1135, lane C2): `screens.proto`.
+    ScreenRequest screen = 37;
   }
 }
 
 message Response {
   // 4 `log`, 5 `rebootstrap_required`, 6 `snapshot_head`, 7 `outcome`,
-  // 10 `pair` and 11 `devices_list` were the answers to the requests above.
-  // The numbers are retired, not reused.
+  // 10 `pair` and 11 `devices_list` were the answers to the requests above,
+  // and 8 `command` was the raw command's outcome (#1135): `act` (36) answers
+  // every write. The numbers are retired, not reused.
+  reserved 8;
+  reserved "command";
   oneof kind {
     Hello hello = 1;
     UpgradeRequired upgrade_required = 2;
     Unsupported unsupported = 3;
-    CommandOutcome command = 8;
     Page page = 9;
     ContentUrls content_urls = 12;
     StageResponse stage = 13;
@@ -168,6 +183,9 @@ message Response {
     MoneyResponse money = 32;
     RefreshDestinationResponse refresh_destination = 33;
     LibraryAssetsResponse library_assets = 34;
+    LoadResponse load = 35;
+    ActResponse act = 36;
+    ScreenResponse screen = 38;
   }
 }
 
@@ -178,6 +196,15 @@ message Event {
     ConnectivityEvent connectivity = 3;
     // A running chat turn: its activity, cards, sentence and outcome.
     AssistEvent assist = 4;
+    // A screen's new view state, pushed by Rust (a table changed, a timer
+    // fired): `screens.proto`.
+    ScreenUpdate screen = 5;
+    // The screen runtime's own timer marker. The core handles it inside
+    // `next_event` and never hands it to a shell.
+    ScreenWake wake = 6;
+    // A screen's off-thread job finished. Handled by the core inside
+    // `next_event`, like `wake`; a shell never sees it.
+    ScreenJobDone job_done = 7;
   }
 }
 

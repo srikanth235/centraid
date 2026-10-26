@@ -76,6 +76,9 @@ CREATE INDEX event_by_place    ON event(place_id) WHERE place_id IS NOT NULL;
 -- index event_by_start on event
 CREATE INDEX event_by_start    ON event(starts, id);
 
+-- index journal_by_invoke_key on journal
+CREATE UNIQUE INDEX journal_by_invoke_key ON journal(invoke_key) WHERE invoke_key IS NOT NULL;
+
 -- index locker_item_address_item_idx on locker_item_address
 CREATE INDEX locker_item_address_item_idx ON locker_item_address(item_id, position);
 
@@ -102,6 +105,9 @@ CREATE INDEX message_attachment_by_thumb  ON message_attachment(thumb) WHERE thu
 
 -- index note_by_notebook on note
 CREATE INDEX note_by_notebook ON note(notebook_id) WHERE notebook_id IS NOT NULL;
+
+-- index photo_by_burst on photo
+CREATE INDEX photo_by_burst       ON photo(burst) WHERE burst IS NOT NULL;
 
 -- index photo_by_edited_from on photo
 CREATE INDEX photo_by_edited_from ON photo(edited_from) WHERE edited_from IS NOT NULL;
@@ -338,7 +344,14 @@ CREATE TABLE journal (
   command TEXT NOT NULL,
   input   TEXT NOT NULL CHECK (json_valid(input)),
   outcome TEXT NOT NULL CHECK (outcome IN ('executed','refused','failed')),
-  detail  TEXT
+  detail  TEXT,
+  -- The key an `act` carried and a digest of what it asked, written with the commit it names, so a
+  -- delivery the phone repeats after a restart is answered `replayed` and writes nothing (#1135).
+  -- Only an executed command carries one; a retention pass that drops the row drops the memory.
+  invoke_key TEXT,
+  asked      TEXT,
+  CHECK ((invoke_key IS NULL) = (asked IS NULL)),
+  CHECK (invoke_key IS NULL OR outcome = 'executed')
 ) STRICT;
 
 -- table locker_item on locker_item

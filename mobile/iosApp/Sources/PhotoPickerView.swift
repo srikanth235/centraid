@@ -1,129 +1,80 @@
-import Foundation
-import SwiftProtobuf
 import SwiftUI
 
-import CentraidShared
-
-/// ADDING PHOTOGRAPHS TO AN ALBUM, in SwiftUI (#1029, photos port; v0's
-/// `PhotoPicker.tsx`).
+/// ADDING PHOTOGRAPHS TO AN ALBUM, drawn from the core's `PhotosPickerState`
+/// (#1135): the library as a grid with what the album already holds drawn as
+/// taken, the one filled button, and the sentence "an album points to a photo
+/// where it lives". `crates/screens/src/photos/picker.rs` decides what can be
+/// picked, what Add writes and when the picker is `finished`; this draws it.
 ///
-/// A pushed screen and not a modal card, which is v0's own choice and the right
-/// one on a phone: choosing from a whole library is a place a member goes, not
-/// a sheet they hold open.
+/// A refused add is `status`, above the grid and never instead of it, so the
+/// member keeps the library they were choosing from.
 ///
-/// **Its picked set is its own.** No selection bar is handed to the shell: the
-/// shelf's five-target bar belongs to "these photographs", and this screen's
-/// one verb is "add these to THIS album". A shelf that could be picked from
-/// would carry an album id on every surface that shows one.
-///
-/// **No search field.** v0 states the reason and it still holds: search is its
-/// own screen with its own unreachable state, and a silent miss here would be
-/// pretence.
+/// The Compose twin is `androidApp/.../screens/PhotoPickerScreen.kt`.
 struct PhotoPickerView: View {
     @Environment(\.colorScheme) private var scheme
 
-    /// The encoded `PhotoPickerState` the bridge published.
-    let data: Data
+    let state: Centraid_Core_V1_PhotosPickerState
+    let send: (Centraid_Core_V1_PhotosPickerEvent) -> Void
+    /// The picker is done with itself: adding is the end of this screen.
+    let onFinished: () -> Void
 
-    /// WHERE THE PICKED ASSETS ARE GOING, from the route.
-    ///
-    /// All three ride the destination (`nav/Navigation.kt`,
-    /// `Destination.PhotoPicker`, plus the album's membership from the surface
-    /// that pushed this screen), because the view is what sends `Opened` and
-    /// `Opened` carries all three. The name is there so the head says "Add to
-    /// Portugal" before any read has landed.
-    let collectionIdentifier: String
-    let collectionName: String
-
-    /// WHAT THE CALLER ALREADY KNOWS THE ALBUM HOLDS, and it may be nothing.
-    ///
-    /// The picker reads the album's whole membership itself on open
-    /// (`PhotoPickerMachine.MEMBERS_READ_ID`, a second statement beside the
-    /// asset page) and unions it with this, so a caller that holds one page of
-    /// the album — which is every caller — is not the limit of what draws as
-    /// taken.
-    let alreadyInAlbum: [String]
-
-    /// One encoded `PhotoPickerEvent`, back to the bridge.
-    let send: (Data) -> Void
-
-    /// The picker is done with itself. Adding is the end of this screen, and
-    /// the pop is the shell's — v0 navigates back on a successful batch.
-    var onFinished: () -> Void = {}
-
-    private var state: PhotoPickerStateView { PhotoPickerStateView(data: data) }
+    private func event(_ build: (inout Centraid_Core_V1_PhotosPickerEvent) -> Void) {
+        var event = Centraid_Core_V1_PhotosPickerEvent()
+        build(&event)
+        send(event)
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                // ADDING REFERS, IT DOES NOT COPY — v0's sentence, verbatim,
-                // and the fact that makes this screen safe to use. Nothing is
-                // duplicated and nothing moves.
-                Text(PhotoPickerStateView.refersNotCopies)
+                Text(state.refersNote)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
 
-                // AN ADD WAS REFUSED, AND THE GRID STAYS.
-                //
-                // Above the cells and outside the `content` switch: a refusal
-                // drawn through the read's `failure` would replace the library
-                // mid-pick and take the member's picks off the screen they were
-                // choosing from. That is what `write_failure` is a separate
-                // field for.
-                if let refusal = state.writeFailure {
-                    ScreenFailureView(sentence: refusal.sentence, remedy: refusal.remedy)
+                if state.hasStatus {
+                    ScreenFailureView(sentence: state.status.sentence, remedy: "")
                         .accessibilityIdentifier("photos.picker.writeFailure")
                 }
 
                 switch state.content {
-                case .loading:
+                case .loading?, nil:
                     RowSkeleton()
-                case let .denied(denied):
-                    DeniedGate(denied)
-                case let .failure(sentence, remedy):
-                    // A FAILED READ IS NOT AN EMPTY LIBRARY, and on this screen
-                    // the difference decides what a member does next: one means
-                    // there is nothing left to add, the other means they must
-                    // not conclude that.
-                    ScreenFailureView(sentence: sentence, remedy: remedy)
-                case let .data(cells, packAbsent):
-                    if cells.isEmpty {
-                        ScreenEmptyView(sentence: PhotoPickerStateView.nothingLeft)
+                case let .failure(failure)?:
+                    // A FAILED READ IS NOT AN EMPTY LIBRARY.
+                    ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
+                case let .data(data)?:
+                    if data.hasEmpty {
+                        ScreenEmptyView(sentence: data.empty.headline, remedy: data.empty.body)
                     } else {
-                        // TAKEN, NOT HIDDEN. A member hunting for the
-                        // photograph they added last week should find it, and
-                        // find out why it will not tick. `PhotoCellsGrid` draws
-                        // `taken` and refuses the tap.
+                        // TAKEN, NOT HIDDEN: a member hunting for the photograph
+                        // they added last week finds it, and finds out why it
+                        // will not tick.
                         PhotoCellsGrid(
-                            cells: cells,
-                            packAbsent: packAbsent,
-                            selected: state.picked,
-                            taken: state.taken,
-                            onTap: { identifier in
-                                send(state.pickEvent(assetIdentifier: identifier))
-                            }
+                            cells: data.cells.map(\.tile),
+                            selected: Set(data.cells.filter(\.picked).map(\.tile.photoID)),
+                            taken: Set(data.cells.filter(\.taken).map(\.tile.photoID)),
+                            takenLabel: data.takenLabel,
+                            onTap: { identifier in event { $0.pick = .with { $0.photoID = identifier } } }
                         )
+                        if data.canShowMore {
+                            KitLink(label: data.showMoreLabel) { event { $0.loadMore = .init() } }
+                        }
                     }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .contentMargins(.horizontal, CentraidGeometry.pageMargin, for: .scrollContent)
-        .navigationTitle(copyFill(PhotosCopy.shared.PHOTOS_PICKER_TITLE, "name", collectionName))
+        .navigationTitle(state.title)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                // THE ONE FILLED ELEMENT (§18) — and it cannot fire with
-                // nothing picked, so it is disabled rather than absent: a
-                // control that appears when a member picks is a control that
-                // moves under their thumb.
-                ToolbarVerb(
-                    label: state.picked.isEmpty ? PhotosCopy.shared.PHOTOS_ADD : copyFill(PhotosCopy.shared.PHOTOS_ADD_COUNT, "count", "\(state.picked.count)"),
-                    identifier: "photos.picker.add"
-                ) {
-                    send(state.confirmEvent)
-                    onFinished()
+                // THE ONE FILLED ELEMENT (§18), disabled with nothing picked
+                // rather than absent: a control that appears when a member
+                // picks is a control that moves under their thumb.
+                ToolbarVerb(label: state.addLabel, identifier: "photos.picker.add") {
+                    event { $0.confirm = .init() }
                 }
-                .disabled(state.picked.isEmpty)
+                .disabled(!state.addEnabled)
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -131,7 +82,7 @@ struct PhotoPickerView: View {
                 Rectangle()
                     .fill(Theme.color("line", scheme))
                     .frame(height: CentraidGeometry.hairline)
-                Text(state.chosenSentence)
+                Text(state.chosenLabel)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -140,96 +91,8 @@ struct PhotoPickerView: View {
             }
             .background(Theme.color("bgElev", scheme).ignoresSafeArea(edges: .bottom))
         }
-        .onAppear {
-            send(
-                state.openedEvent(
-                    collectionIdentifier: collectionIdentifier,
-                    collectionName: collectionName,
-                    alreadyInAlbum: alreadyInAlbum
-                )
-            )
+        .onChange(of: state.finished) { _, done in
+            if done { onFinished() }
         }
     }
-}
-
-/// The thin decoder between the picker's bytes and its view.
-///
-/// Its own struct in its own file rather than an addition to `StateViews.swift`,
-/// which is shared by every lane of this port.
-struct PhotoPickerStateView {
-    let data: Data
-
-    /// v0's two sentences, verbatim. Static because they are constants of the
-    /// screen and not of a state — a member reads the first one before any read
-    /// has landed.
-    static let refersNotCopies = PhotosCopy.shared.PHOTOS_ALBUM_REFERS
-    static let nothingLeft = PhotosCopy.shared.PHOTOS_PICKER_NOTHING_LEFT
-
-    private var state: Centraid_Screen_V1_PhotoPickerState {
-        (try? Centraid_Screen_V1_PhotoPickerState(serializedBytes: data)) ?? .init()
-    }
-
-    var content: ScreenContent<([Centraid_Screen_V1_PhotoCell], Bool)> {
-        switch state.content {
-        case let .failure(failure):
-            return .failure(failure.sentence, failure.remedy)
-        case let .data(data):
-            return .data((data.cells, data.thumbnailPackAbsent))
-        case let .loading(loading):
-            return .loading(loading.firstLoad)
-        case .none:
-            return .loading(true)
-        }
-    }
-
-    var picked: Set<String> { Set(state.pickedAssetIds) }
-
-    var taken: Set<String> { Set(state.alreadyInAlbumAssetIds) }
-
-    /// A WRITE WAS REFUSED. Its own slot, never the read's `failure`. See the
-    /// twin in `PhotoShelfView.swift`.
-    var writeFailure: Centraid_Screen_V1_ReadFailure? {
-        state.hasWriteFailure ? state.writeFailure : nil
-    }
-
-    /// THE COUNT OF WHAT IS PICKED. A picked set is not a write; the Add button
-    /// is where the album changes.
-    var chosenSentence: String {
-        picked.isEmpty
-            ? PhotosCopy.shared.PHOTOS_PICKER_NOTHING_CHOSEN
-            : copyFill(PhotosCopy.shared.PHOTOS_CHOSEN, "count", "\(picked.count)")
-    }
-
-    func openedEvent(
-        collectionIdentifier: String,
-        collectionName: String,
-        alreadyInAlbum: [String]
-    ) -> Data {
-        var event = Centraid_Screen_V1_PhotoPickerEvent()
-        event.opened = .with {
-            $0.collectionID = collectionIdentifier
-            $0.collectionName = collectionName
-            $0.alreadyInAlbumAssetIds = alreadyInAlbum
-        }
-        return event.encodedPickerEvent
-    }
-
-    func pickEvent(assetIdentifier: String) -> Data {
-        var event = Centraid_Screen_V1_PhotoPickerEvent()
-        event.pick = .with { $0.assetID = assetIdentifier }
-        return event.encodedPickerEvent
-    }
-
-    var confirmEvent: Data {
-        var event = Centraid_Screen_V1_PhotoPickerEvent()
-        event.confirm = .init()
-        return event.encodedPickerEvent
-    }
-}
-
-private extension SwiftProtobuf.Message {
-    /// See `PhotoShelfView.swift`'s twin: a private extension is file scoped,
-    /// so each of these files spells its own rather than sharing a name with
-    /// `StateViews.swift`'s `encoded`.
-    var encodedPickerEvent: Data { (try? serializedData()) ?? Data() }
 }

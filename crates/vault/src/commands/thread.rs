@@ -133,7 +133,7 @@ fn answer_schema() -> Value {
 fn save_turn_schema() -> &'static str {
     static SCHEMA: OnceLock<String> = OnceLock::new();
     SCHEMA.get_or_init(|| {
-        let mut scopes: Vec<Value> = roster::scopes().map(Value::from).collect();
+        let mut scopes: Vec<Value> = roster::ids().map(Value::from).collect();
         scopes.push(Value::Null);
         json!({
           "type": "object",

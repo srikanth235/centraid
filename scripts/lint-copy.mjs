@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // Copy ratchet gate (DESIGN.md "## Copy").
 //
-// Every member-facing string lives in `copy/<app>.json` under `strings`. The
+// Every member-facing string lives in the Rust catalogue,
+// `crates/screens/src/strings/*.rs` (one `catalog!` row per sentence, #1135),
+// except the assistant's own turn sentences, which are `copy/chat.json`'s
+// `strings` (read by `crates/assist`). The
 // Copy section's budgets and bans are only as good as the next hand that
 // writes a string, so this gate makes the countable half of them mechanical.
 // Each rule id names the ruling it enforces:
@@ -26,9 +29,11 @@
 //       "Copy" budgets are tighter, and the lane that writes a string
 //       writes to those.
 //
-// A string counts once per rule, however many times it offends. The scan
-// reads `strings` only; `$comment`, `functions`, `routes`, `moreRoutes` and
-// `shelves` are metadata, not copy.
+// A string counts once per rule, however many times it offends. A catalogue
+// row's key is its name upper-cased (`kit_retry` → `KIT_RETRY`, so the caps'
+// suffixes read the same), and a counted row's two forms are one string: a
+// rule either form breaks counts once. In `copy/chat.json` the scan reads
+// `strings` only; `$comment` and `functions` are metadata, not copy.
 //
 // BUDGET. Like lint-native-controls.mjs this is a ratchet, not a judgment
 // call at commit time: BUDGET maps `rule -> { file: count }` with today's
@@ -44,7 +49,69 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
+const CATALOG_DIR = "crates/screens/src/strings";
 const COPY_DIR = "copy";
+
+const LITERAL = String.raw`"((?:[^"\\]|\\.)*)"`;
+const ROW = new RegExp(
+  String.raw`\b(plain|counted)\s+([a-z0-9_]+)\s*=\s*\(\s*${LITERAL}\s*,\s*${LITERAL}\s*,?\s*\)\s*;`,
+  "gu"
+);
+
+/** Undo the escapes a catalogue row's Rust string literal uses. */
+function unescapeRust(body) {
+  return body.replace(/\\(?<code>u\{[0-9a-fA-F]+\}|.)/gu, (_all, code) => {
+    if (code.startsWith("u{")) {
+      return String.fromCodePoint(Number.parseInt(code.slice(2, -1), 16));
+    }
+    return { n: "\n", t: "\t" }[code] ?? code;
+  });
+}
+
+/**
+ * The rows of a Rust catalogue file: `{ KEY: [one, other] }`. Only the text
+ * inside a `catalog! { … }` block is read, so a doc comment that quotes a row
+ * is not copy; a row may span lines.
+ */
+export function catalogStrings(source) {
+  const out = {};
+  const opener = /\bcatalog!\s*\{/gu;
+  for (const open of source.matchAll(opener)) {
+    let depth = 1;
+    let at = open.index + open[0].length;
+    const start = at;
+    let inString = false;
+    for (; at < source.length && depth > 0; at += 1) {
+      const char = source[at];
+      if (inString) {
+        if (char === "\\") at += 1;
+        else if (char === '"') inString = false;
+      } else if (char === '"') inString = true;
+      else if (char === "{") depth += 1;
+      else if (char === "}") depth -= 1;
+    }
+    const body = source.slice(start, at - 1);
+    for (const row of body.matchAll(ROW)) {
+      out[row[2].toUpperCase()] = [unescapeRust(row[3]), unescapeRust(row[4])];
+    }
+  }
+  return out;
+}
+
+/** Findings for one catalogue file: each key's rules, once, across both forms. */
+export function scanCatalog(source) {
+  const out = [];
+  for (const [key, forms] of Object.entries(catalogStrings(source))) {
+    const seen = new Map();
+    for (const form of forms) {
+      for (const f of lintString(key, form)) {
+        if (!seen.has(f.rule)) seen.set(f.rule, f);
+      }
+    }
+    for (const f of seen.values()) out.push({ key, ...f });
+  }
+  return out;
+}
 
 /** Words are whitespace tokens that carry a letter or digit, so a dash or a
  *  dot between phrases is not a word and `{name}` is exactly one. */
@@ -141,22 +208,37 @@ export function scanStrings(strings) {
   return out;
 }
 
-/** Measure the tree: `{ rule: { "copy/x.json": count } }` plus the findings. */
+/** Measure the tree: `{ rule: { "<file>": count } }` plus the findings. */
 export function measure(root = ROOT) {
-  const dir = path.resolve(root, COPY_DIR);
   const measured = {};
   const findings = [];
   const missing = [];
-  if (!existsSync(dir)) return { measured, findings, missing: [COPY_DIR] };
-  for (const name of readdirSync(dir).sort()) {
-    if (!name.endsWith(".json")) continue;
-    const rel = `${COPY_DIR}/${name}`;
-    const doc = JSON.parse(readFileSync(path.resolve(dir, name), "utf8"));
-    for (const f of scanStrings(doc.strings)) {
+  const record = (rel, found) => {
+    for (const f of found) {
       (measured[f.rule] ??= {})[rel] = (measured[f.rule][rel] ?? 0) + 1;
       findings.push({ file: rel, ...f });
     }
-  }
+  };
+  const catalog = path.resolve(root, CATALOG_DIR);
+  if (existsSync(catalog)) {
+    for (const name of readdirSync(catalog).sort()) {
+      if (!name.endsWith(".rs")) continue;
+      const rel = `${CATALOG_DIR}/${name}`;
+      record(
+        rel,
+        scanCatalog(readFileSync(path.resolve(catalog, name), "utf8"))
+      );
+    }
+  } else missing.push(CATALOG_DIR);
+  const dir = path.resolve(root, COPY_DIR);
+  if (existsSync(dir)) {
+    for (const name of readdirSync(dir).sort()) {
+      if (!name.endsWith(".json")) continue;
+      const rel = `${COPY_DIR}/${name}`;
+      const doc = JSON.parse(readFileSync(path.resolve(dir, name), "utf8"));
+      record(rel, scanStrings(doc.strings));
+    }
+  } else missing.push(COPY_DIR);
   return { measured, findings, missing };
 }
 
@@ -167,19 +249,19 @@ const BUDGET = {
   "copy-dot-join": {
     // IN_TRASH_LAPSED, IMPORT_COUNTS, STATUS_ROSTER_SHOWN: short metadata
     // facts and counts, the one sanctioned use of " · ".
-    "copy/docs.json": 1,
-    "copy/locker.json": 1,
-    "copy/people.json": 1,
+    "crates/screens/src/strings/docs.rs": 1,
+    "crates/screens/src/strings/locker.rs": 1,
+    "crates/screens/src/strings/people.rs": 1,
   },
   "copy-over-budget": {
     // EXPORT_LEDE: the plaintext-export warning, a security disclosure, which
     // keeps a full sentence (DESIGN.md "Copy").
-    "copy/locker.json": 1,
+    "crates/screens/src/strings/locker.rs": 1,
     // PHOTOS_KEEP_ORIGINALS_LABEL, OWN_LABEL: toggle and checkbox labels, and
     // ENDPOINT_LABEL, RESTORE_HELD_OWN_LABEL: field and list prompts — the
     // `_LABEL` suffix also names these, and they are not buttons.
-    "copy/photos.json": 1,
-    "copy/words.json": 3,
+    "crates/screens/src/strings/custody.rs": 3,
+    "crates/screens/src/strings/photos.rs": 1,
   },
 };
 
