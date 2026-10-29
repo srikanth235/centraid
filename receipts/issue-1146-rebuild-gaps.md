@@ -741,17 +741,16 @@ Three finished wave branches merged into the umbrella, each as its own `--no-ff`
 
 - **R-1146-I-1.** The wire-query count in `query_plans.rs` is 58. _Why:_ it is the number of `oneof query` fields in `app_query.proto`; the test exists to keep the two equal.
 - **R-1146-I-2.** The Trash bullet follows wave 3 (R-1146-3-2). `docs/decisions.md` row R-1135-5-7 needs a "superseded by R-1146-3-2" marker; wave 3's doc pass owns it, and it was not added here.
-- **R-1146-I-3.** Wave 3's two later commits are merged as they stand. Their `search-budget` result is green (notes 2 letters p95 22.3 ms against the 80 ms ceiling; before the fix it was 254.6 ms on this tree). They also turn one test red; see Open.
+- **R-1146-I-3.** Wave 3's two later commits are merged as they stand. Their `search-budget` result is green (notes 2 letters p95 22.3 ms against the 80 ms ceiling; before the fix it was 254.6 ms on this tree). They first turned one test red; wave 3's `a8d97a63` fixed it.
 
 #### Exit list
 
-1. `cargo test --workspace`: green at `2072acb0` and at `430fb5c5` (two failures fixed on the way: the `query_plans` count above, and a stale `libcentraid_core_ffi.so` that `cargo build -p centraid-core-ffi` refreshed). **Red at `48caef67`**, see Open.
+Final head `191f0e4e` (wave 3's third fix, `a8d97a63`, merged: the launch tidy thread holds the core only for a batch).
+
+1. `cargo test --workspace`: green (inside the `pr` gate, 734.6 s). Earlier on the way: a stale `libcentraid_core_ffi.so` (refreshed with `cargo build -p centraid-core-ffi`) and the `query_plans` count (R-1146-I-1).
 2. `git diff --exit-code contracts/schema` after regenerating: clean.
-3. `cargo xtask gate --profile pr`. At `430fb5c5`: every step ok except `search-budget` (notes 2 letters `ch` p95 254.57 ms against 80 ms), wall 1506 s on a cold tree. At `48caef67` (after wave 3's fix): `search-budget` ok (190.6 s), `test` FAIL, every other step ok or SKIP (buf, deny, ci-policy, secrets, osv: tools missing), wall 696 s.
-4. `cargo xtask gate --profile mobile-jvm`: **not run to a result.** Maven Central answered HTTP 429 on every attempt (nine attempts, 9 Too Many Requests, spaced 1 to 4 minutes); no failure of any other kind.
+3. `cargo xtask gate --profile pr`: PASS, wall 1087 s (warm tree). buf, deny, ci-policy, secrets and osv are SKIP (tools missing). `search-budget` ok. On the way: at `430fb5c5` the gate failed `search-budget` (notes 2 letters `ch` p95 254.57 ms against 80 ms; wall 1506 s cold), and at `48caef67` it failed `test` on `a_phone_killed_mid_stage_leaves_nothing_and_stages_again` (`(0, 1)` against `(1, 1)`; it went away with `TIDY_IDLE` raised, and wave 3's `a8d97a63` fixed it). I touched neither the budget nor the test.
+4. `cargo xtask gate --profile mobile-jvm`: PASS after retries. Maven Central answered 429 on nine earlier attempts (no failure of any other kind) and three more 429s showed in the final run's log, which gradle retried through.
 5. Pushed after each merge; the pre-push hook passed.
 
-#### Open
-
-- **`a_phone_killed_mid_stage_leaves_nothing_and_stages_again`** (`crates/core/tests/backup_edges.rs:1211`) fails deterministically at `48caef67`: `(content_confirmed, content_total)` is `(0, 1)`, expected `(1, 1)`. It passed at `430fb5c5`. Setting `TIDY_IDLE` in `crates/core/src/handle.rs` to 300 s makes it pass, so wave 3's idle-gated launch tidy (`bbd0d6ff`/`38541879`) is the cause. Staging goes through the spool, not the vault, so the tidy sees the vault idle while a library item is mid-stage. Wave 3 owns the fix.
-- **mobile-jvm** needs a rerun when Maven Central stops rate-limiting.
+R-1146-I-3 is closed: wave 3's later commits fixed `search-budget` (notes 2 letters p95 22.3 ms) and the staging test.
