@@ -469,6 +469,7 @@
 <div class="colrow"><span class="cn">entity_kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.kind</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">stated</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">seen_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">gone_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="schemahdr" data-group="locker"><span class="sid">locker</span><h3>Locker</h3><p class="sdesc">An entity kind whose secrets stay in sealed cells nothing entity-wide reads: items, their custom fields, passkeys, aliases and addresses. Each item remembers when it was last used. Its tags, star and archive are the vault's; a generic page read passes it by, and the assistant reads its plain rows as the owner does, never a sealed value.</p></div>
 <div class="tbl rv in" data-group="locker" data-table="locker_item"><header><h4>locker_item</h4><p class="tp">A sealed item: a login, card, note, wifi network or other type. Its title, stamps and trash are its entity's; its secrets are sealed cells.</p></header>
@@ -548,7 +549,7 @@
 <div class="colrow"><span class="cn">failed_unlocks</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">failed_unlock_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<p class="note" data-tables="41" data-columns="307">41 tables and 307 columns, read off a vault this build founded.</p>
+<p class="note" data-tables="41" data-columns="308">41 tables and 308 columns, read off a vault this build founded.</p>
 <!-- schema:end -->
     </div>
     <div class="physcard rv">

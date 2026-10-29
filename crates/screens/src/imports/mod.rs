@@ -16,7 +16,8 @@
 //! `follow.*` decides what a file gone from a complete read does, so nothing is held for a
 //! question), `PhoneDevice` (the shell mints the install id and sends it with every listing),
 //! `PhonePages` (the vault's own `files-followed` read), `Staging` and `StageFileBridge` (the stage
-//! door is the shell's, streaming; Rust names the bytes by `claim-bytes`), and `PhoneImport`'s
+//! door is the shell's, streaming; the record names the bytes and their size and `follow-files`
+//! claims them), and `PhoneImport`'s
 //! `write`/`executed`/`quote` (`act` with generated ids).
 
 pub mod camera_roll;

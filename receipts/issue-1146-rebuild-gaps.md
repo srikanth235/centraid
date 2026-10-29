@@ -579,3 +579,70 @@ Added:
 - `crates/vault/tests/action_keys.rs`
 - `crates/vault/tests/format_identity.rs`
 - `crates/vault/tests/revision_kept.rs`
+
+### Wave 2 — Phone follow
+
+One follow engine (`crates/vault/src/commands/follow.rs`) now carries the guards the rebuild left to screens or to nobody: the owner is never a phone's record, a read that lost most of an origin's rows is doubted for every system alike, a returned record restores the row its absence trashed, a second phone re-finds a first phone's tombstones and a gone tombstone is forgotten, a followed file claims its bytes in `follow.files`, a series that moves re-keys or drops the days it would strand, a statement is an account's (one origin per account, no phone named, never stopped, the bank's words kept), and `person.merge` sweeps every foreign key into an entity, carries the phone link and is confirmed.
+
+#### Rulings
+
+- **R-1146-2-0 (root).** The owner check is one function, `entity::is_self`; match, link, trash and absence all ask it.
+- **R-1146-2-1.** The vanish guard lives in `settle_absent`: a complete read that no longer holds at least 5 of an origin's followed live rows (same phone, inside the read's window) and more than half of them trashes and forgets nothing and reports `doubted: n`. Applies to `Gone::Trash` systems (contacts, calendar, files). _Why:_ one mechanism, not a copy per screen; the files screen's copy is deleted. The member is **not asked** (R-1127-9 keeps Keep as the default and there is no ask surface); the count is in the answer.
+- **R-1146-2-2.** `source.gone_at` (schema column) records the trash a follower made; only a row whose `deleted_at = gone_at` and which the member has not edited is restored on the record's return. _Why:_ a member's trash must stand, and nothing else tells the two apart.
+- **R-1146-2-3.** A second phone's record is matched to another phone's *tombstone* by the same match key (stated words), never revived; tombstones of the same phone are not matched (a genuinely new contact with a purged one's name is added). A tombstone absent from a complete read is deleted, unless the read is doubted.
+- **R-1146-2-4.** Overrides of a moved series are re-keyed to the single day the series has on the same date, else dropped (`event::rekey_stranded`, run from the follower's `settle`).
+- **R-1146-2-5.** Statement origin: found by `(system, fills)`; `origin_one_statement_per_account` unique index; CHECKs forbid `device_id` on statement origins and sources; `follow.stop` refuses statements; fixed fields keep their first stated value in `source.stated`.
+- **R-1146-2-6.** `follow.files` records carry `size`; the command claims the blob (`blob::stage`) and refuses "say how large" when the bytes are neither held nor sized. The shell action `claim-bytes` is deleted (its subject is gone).
+- **R-1146-2-7.** `person.merge` is `Risk::Medium` + `confirm`, like a purge; the reference sweep covers every FK whose target is `person` or `entity` and whose target column is `id`, except `edge` (rewritten) and kind rows' own `id` link.
+
+#### Red-first (all on the wave-1 base, in `crates/vault/tests/follow_gaps.rs`)
+
+| Finding | Test | Red line seen |
+| --- | --- | --- |
+| H2 owner matched | `a_contact_named_like_the_owner_is_added_beside_the_owner_never_matched_to_it` | `left: (Some(1), Some(0)) right: (Some(0), Some(1))` |
+| H2 owner trashed | `a_source_the_owner_somehow_holds_is_forgotten_and_the_owner_is_not_trashed` | `the owner went to the trash: {... "trashed":1}` |
+| H3/M9 one guard | `a_read_that_lost_most_of_what_the_vault_follows_trashes_nothing_for_every_system` | `contacts: {... "trashed":5} left: (Some(5), None) right: (Some(0), Some(5))` |
+| restore on return | `a_record_that_returns_restores_the_row_its_absence_trashed_and_adds_nothing` | `Ann is still in the trash` |
+| second phone, tombstones | `another_phone_re_finds_a_purged_row_s_tombstone_and_never_revives_it` | `Ada was added again: {"added":1,...} left: 1 right: 0` |
+| forget tombstone | `a_tombstone_whose_record_is_gone_from_a_complete_read_is_forgotten` | `the tombstone table only grows left: 1 right: 0` |
+| merge confirm | `a_merge_is_confirmed_like_every_destructive_command` | `person.merge purges a person and is not confirmed` |
+| merge phone link | `a_merge_carries_the_phone_link_to_the_survivor` | `the phone still follows the survivor left: 0 right: 1` |
+| merge FK sweep | `a_merge_re_points_every_foreign_key_into_an_entity_not_a_hand_list` | (person-only filter restored as a throwaway) `the attachment names the survivor, not nothing left: None` |
+| claim in command | `a_followed_file_claims_its_bytes_in_the_command_that_names_them` | `follow.files: FOREIGN KEY constraint failed` |
+| M15 re-key | `a_series_that_moves_in_the_day_takes_its_overrides_with_it` | `left: [("2026-03-09T09:00:00", 1)] right: [("2026-03-09T10:00:00", 1)]` |
+| M15 drop | `a_series_that_no_longer_lands_on_an_override_s_day_drops_it` | `a day nothing will read is not kept left: [("2026-03-09T09:00:00", 1)] right: []` |
+| M16 origin per account | `an_account_has_one_statement_origin_whatever_ref_an_import_names` | `left: 2 right: 1` |
+| M16 no device / no stop | `a_statement_line_names_no_device_and_a_statement_is_never_stopped` | `a statement is not a phone store left: 1 right: 0` |
+| bank's words | `the_banks_words_stay_in_the_statement_whatever_the_line_is_called_now` | `left: "Amazon Marketplace" right: "AMZN MKTP US*2K4"` |
+
+#### Falsification of the two riskiest claims
+
+- *Only the follower's own trash is undone.* Throwaway: made the restore branch unconditional. `a_record_that_returns…` failed at `assert!(w.trashed(&ben))` (the member's trash was undone). Reverted.
+- *The owner is nobody's record.* Throwaway: removed the owner skip in `match_existing`. The owner test failed with `follow.contacts: a source never names the vault's owner` (the `link` backstop caught it). Reverted.
+
+#### Exit list
+
+- Red-first tests: failing on the base, passing now (15 in `follow_gaps`).
+- `cargo test -p centraid-vault`, `-p centraid-screens`, `-p centraid-core`, the four app crates: green.
+- `contracts/schema/vault-ddl.sql`, `SCHEMA_DIGEST`, ontology page, screens catalog regenerated. `vault-commands.txt` unchanged (no command added or removed).
+- `cargo xtask gate --profile pr`: first run FAILED in `test` on `centraid-apps-health manifest::every_action_is_a_vault_command_with_its_schema` (four app manifests copy `follow.*`'s schema; fixed by adding `size`); the rerun's result is in the final message. Skips: buf, cargo-deny, actionlint, gitleaks, osv-scanner (not installed).
+- `mobile-jvm`: not run; no `mobile/` file or proto changed.
+
+#### Files
+
+Changed: `contracts/migrations/001_baseline.sql`, `contracts/schema/vault-ddl.sql`, `crates/vault/src/commands/{entity,event,follow,person}.rs`, `crates/vault/src/format.rs`, `docs/vault-ontology.md`, `scripts/docs-site/src/content/ontology-body.html`, `crates/screens/src/imports/{files,mod}.rs`, `crates/screens/src/catalog.rs`, `crates/core/src/shell.rs`, `crates/core/src/shell/manifest.json`, `crates/apps/{agenda,health,money,people}/manifest.json`, `receipts/issue-1146-rebuild-gaps.md`. Added: `crates/vault/tests/follow_gaps.rs`.
+
+Owner hand-offs: none (no native file changed).
+
+Not done: a member-facing "ask" for a doubted read (no surface; R-1127-9). Outside the wave: the `format-check` pre-commit hook exits 2 when the only staged oxfmt-owned file is an ignored generated one (`ontology-body.html`).
+
+#### Changelog line
+
+A phone that loses most of a calendar, address book or folder at once no longer clears it from the vault, a contact that comes back is restored, and merging two people keeps everything that pointed at either.
+
+#### Decision rows
+
+| **R-1146-2-1** | One vanish guard in the follow engine for every system: a complete read that loses at least five followed rows and more than half of them trashes nothing and reports `doubted`; the member is not asked. _Why:_ one mechanism, not a copy per screen. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-2-2** | The follower remembers the trash it made (`source.gone_at`); the record's return restores an untouched row, and a member's trash stands. _Why:_ the two trashes are otherwise indistinguishable. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-2-5** | A statement is an account's: one origin per account, no `device_id`, never stopped, and `source.stated` keeps the bank's first words. _Why:_ it is not a phone store. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-2-7** | `person.merge` is confirmed like a purge and re-points every foreign key into an entity derived from the file. _Why:_ it ends a person and a hand list drifts. [#1146](https://github.com/srikanth235/centraid/issues/1146) |

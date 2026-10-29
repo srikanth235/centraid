@@ -352,29 +352,88 @@ fn occurrence_at(times: &Times, rule: &str, original_start: &str) -> Option<Occu
         .find(|occurrence| occurrence.wall_start == original_start)
 }
 
-/// How many of the series' occurrence rows match no day of the series as it is.
-fn stranded(connection: &Connection, id: &str, times: &Times, rule: Option<&str>) -> Result<usize> {
-    let keys: Vec<String> = connection
+/// The distinct keys the series' occurrence rows carry, in order.
+fn override_keys(connection: &Connection, id: &str) -> Result<Vec<String>> {
+    Ok(connection
         .prepare("SELECT DISTINCT original_start FROM occurrence WHERE series_id = ?1 ORDER BY 1")?
         .query_map([id], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?;
-    let (Some(first), Some(last)) = (keys.first(), keys.last()) else {
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// The days the series produces over the span its `keys` cover, by series-local
+/// wall clock; `None` when the span cannot be searched (the caller then treats
+/// every key as stranded).
+fn live_days(times: &Times, rule: &str, keys: &[String]) -> Option<BTreeSet<String>> {
+    let (first, last) = (keys.first()?, keys.last()?);
+    let ((from, _), (_, to)) = (
+        search_window(first, SEARCH_WINDOW_DAYS)?,
+        search_window(last, SEARCH_WINDOW_DAYS)?,
+    );
+    Some(
+        expand_series(times, rule, &from, &to, 2_000)
+            .into_iter()
+            .map(|occurrence| occurrence.wall_start)
+            .collect(),
+    )
+}
+
+/// How many of the series' occurrence rows match no day of the series as it is.
+fn stranded(connection: &Connection, id: &str, times: &Times, rule: Option<&str>) -> Result<usize> {
+    let keys = override_keys(connection, id)?;
+    if keys.is_empty() {
         return Ok(0);
-    };
-    let Some(rule) = rule else {
+    }
+    let Some(live) = rule.and_then(|rule| live_days(times, rule, &keys)) else {
         return Ok(keys.len());
     };
-    let (Some((from, _)), Some((_, to))) = (
-        search_window(first, SEARCH_WINDOW_DAYS),
-        search_window(last, SEARCH_WINDOW_DAYS),
-    ) else {
-        return Ok(keys.len());
-    };
-    let live: BTreeSet<String> = expand_series(times, rule, &from, &to, 2_000)
-        .into_iter()
-        .map(|occurrence| occurrence.wall_start)
-        .collect();
     Ok(keys.iter().filter(|key| !live.contains(*key)).count())
+}
+
+/// A followed series whose rule or start moved: every override that no day of the
+/// series lands on any more is **re-keyed** to the day the series now has on the
+/// same date when there is exactly one (a standup moved from nine to ten keeps its
+/// skipped week), and dropped otherwise, so the series never holds a row no
+/// occurrence will read ([#1146](https://github.com/srikanth235/centraid/issues/1146)).
+/// A series whose rule the expander cannot read is left as it is.
+fn rekey_stranded(connection: &Connection, id: &str) -> Result<()> {
+    let keys = override_keys(connection, id)?;
+    if keys.is_empty() {
+        return Ok(());
+    }
+    let row = row_of(connection, id)?;
+    let live = match row.rule.as_deref() {
+        None => BTreeSet::new(),
+        Some(rule) if rrule::inspect(rule).is_err() => return Ok(()),
+        Some(rule) => live_days(&row.times, rule, &keys).unwrap_or_default(),
+    };
+    for key in keys.iter().filter(|key| !live.contains(*key)) {
+        let date = key.get(..10).unwrap_or(key);
+        let same_date: Vec<&String> = live
+            .iter()
+            .filter(|day| day.get(..10).unwrap_or(day) == date)
+            .collect();
+        match same_date.as_slice() {
+            [target] => {
+                // A day the target already has an override for keeps its own.
+                connection.execute(
+                    "UPDATE OR IGNORE occurrence SET original_start = ?3
+                      WHERE series_id = ?1 AND original_start = ?2",
+                    rusqlite::params![id, key, target],
+                )?;
+                connection.execute(
+                    "DELETE FROM occurrence WHERE series_id = ?1 AND original_start = ?2",
+                    [id, key],
+                )?;
+            }
+            _ => {
+                connection.execute(
+                    "DELETE FROM occurrence WHERE series_id = ?1 AND original_start = ?2",
+                    [id, key],
+                )?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn rule_refusal(rule: &str) -> Option<String> {
@@ -838,7 +897,8 @@ pub(crate) fn settle(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<()> {
         "UPDATE event SET rule_supported = ?2 WHERE id = ?1",
         rusqlite::params![id, rule.is_none_or(|rule| rrule::inspect(&rule).is_ok())],
     )?;
-    Ok(())
+    // The rule or the start may have moved: no day is left that nothing reads.
+    rekey_stranded(ctx.connection(), id)
 }
 
 /// What happened to one day of a series, as the row holds it.
