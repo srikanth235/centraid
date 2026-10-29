@@ -357,7 +357,7 @@ fn issue_9_a_message_with_two_calls_runs_the_first_and_says_so() {
 }
 
 #[test]
-fn issue_11_a_restore_past_the_window_says_so() {
+fn issue_11_a_restore_past_the_window_comes_back_until_the_launch_pass() {
     let mut world = fixture();
     world["locker"]
         .as_array_mut()
@@ -366,23 +366,10 @@ fn issue_11_a_restore_past_the_window_says_so() {
     let seeded = seeded_with(&world);
     let mut session = seeded.session();
     let gym = common::trashed_number(&mut session, "locker item", "gym");
-    let refused = call(&mut session, "act", json!({"verb": "restore", "rows": gym}));
-    let reply = refused["text"].as_str().unwrap();
-    assert!(
-        reply.contains(
-            "it is in the trash but past the vault's restore window, so it cannot come back"
-        ),
-        "{reply}"
-    );
-    // nothing can lift it: the runtime ends the turn in a decline (D-1044-10), not an
-    // `error:` the model would have to act on
-    assert_eq!(refused["ends_turn"], true, "{reply}");
-    assert_eq!(refused["effect"]["tool"], "decline", "{reply}");
-    assert_eq!(refused["effect"]["decline"]["reason"], "not_found");
-    assert!(refused["effect"].get("error").is_none(), "{reply}");
-    assert!(reply.ends_with(
-        "declined: not_found · the runtime ended the turn: a row past its restore window cannot be brought back"
-    ), "{reply}");
+    let restored = call(&mut session, "act", json!({"verb": "restore", "rows": gym}));
+    let reply = restored["text"].as_str().unwrap();
+    assert!(reply.contains("back from the trash"), "{reply}");
+    assert!(restored["effect"].get("error").is_none(), "{reply}");
 }
 
 #[test]

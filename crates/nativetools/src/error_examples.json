@@ -775,17 +775,7 @@
   "act.restore_name_it_is_in_the": {
     "tool": "act",
     "argument": "verb",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "restore",
-          "kind": "person",
-          "name": "Old Contact",
-          "trashed": true
-        }
-      }
-    ]
+    "why_none": "the vault no longer refuses a restore past the window: the launch pass empties an overdue row, and until it runs the row restores (#1146); no fixture row reaches this line"
   },
   "act.create_x_was_refused_x": {
     "tool": "act",
