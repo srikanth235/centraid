@@ -390,7 +390,7 @@ fn a_file_with_no_row_is_swept_and_a_file_with_one_is_not() {
     let swept = w
         .scratch
         .vault
-        .sweep_unclaimed_files(launch, 1_000)
+        .sweep_unclaimed_files(launch, "", 1_000)
         .expect("sweeps");
     assert_eq!(swept.removed, vec![stray.clone()]);
     assert!(!w.on_disk(&stray));
@@ -399,7 +399,7 @@ fn a_file_with_no_row_is_swept_and_a_file_with_one_is_not() {
 }
 
 #[test]
-fn the_file_sweep_is_bounded_and_resumes() {
+fn the_file_sweep_looks_at_a_bounded_batch_and_resumes() {
     use std::time::{Duration, SystemTime};
     let w = World::new();
     let launch = SystemTime::now();
@@ -407,18 +407,26 @@ fn the_file_sweep_is_bounded_and_resumes() {
         let stray = w.put(&format!("stray {n}"));
         written_at(&w, &stray, launch - Duration::from_secs(60));
     }
-    let first = w.scratch.vault.sweep_unclaimed_files(launch, 2).unwrap();
-    assert_eq!(first.removed.len(), 2);
-    assert!(first.more);
-    let mut total = first.removed.len();
+    // Two files looked at per batch: five strays take three batches, and the
+    // batches together look at every file once.
+    let mut removed = 0;
+    let mut batches = 0;
+    let mut after = String::new();
     loop {
-        let next = w.scratch.vault.sweep_unclaimed_files(launch, 2).unwrap();
-        total += next.removed.len();
-        if !next.more {
-            break;
+        let batch = w
+            .scratch
+            .vault
+            .sweep_unclaimed_files(launch, &after, 2)
+            .unwrap();
+        assert!(batch.removed.len() <= 2, "a batch looks at two files");
+        removed += batch.removed.len();
+        batches += 1;
+        match batch.next {
+            Some(next) => after = next,
+            None => break,
         }
     }
-    assert_eq!(total, 5);
+    assert_eq!((removed, batches), (5, 3));
 }
 
 // ---------------------------------------------------------------------------
