@@ -394,10 +394,11 @@ fn overrides(series: &Series, now_ms: i64, device_zone: &str) -> Value {
             // A link and a place are stated only where they are the day's own.
             let own = |day_text: &str, series_text: &str| {
                 let day_text = day_text.trim();
-                (day_text != series_text.trim())
-                    .then_some(day_text)
-                    .unwrap_or_default()
-                    .to_owned()
+                if day_text == series_text.trim() {
+                    String::new()
+                } else {
+                    day_text.to_owned()
+                }
             };
             json!({
                 "original_start": key_of(day),

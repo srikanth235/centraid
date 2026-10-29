@@ -333,8 +333,8 @@ fn a_phone_s_moved_day_keeps_its_timing_link_and_place_through_the_follower() {
         w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&place]),
         "The depot"
     );
-    // Said again: the same place, not another.
-    follow(
+    // Said again, in other case: the same place, and nothing to update.
+    let told = follow(
         &w,
         "home",
         None,
@@ -347,6 +347,11 @@ fn a_phone_s_moved_day_keeps_its_timing_link_and_place_through_the_follower() {
         w.one::<i64>("SELECT COUNT(*) FROM place", &[]),
         1,
         "a location said twice is one place"
+    );
+    assert_eq!(
+        told["updated"].as_i64(),
+        Some(0),
+        "the same word is no change: {told}"
     );
 }
 
