@@ -31,6 +31,8 @@ pub struct Destination {
     /// its operator revoked the token, so every acknowledgement this phone still
     /// holds for it describes a gateway that is gone. Pair it again.
     pub pair_again: bool,
+    /// The bytes it acknowledged, as this phone recorded them (#1144).
+    pub held_bytes: u64,
 }
 
 /// The ledger's reading of one vault's backup.
@@ -53,6 +55,16 @@ pub struct Reading {
     pub waiting: BTreeMap<i32, u64>,
     /// The vault moved to another phone; this one is read-only.
     pub frozen: bool,
+    /// WHAT EACH APP'S BACKUP HOLDS (#1144), in the catalogue's order; empty
+    /// when the core could not say (no vault, or no keys to name its files).
+    pub apps: Vec<wire::AppHolding>,
+    /// Every app's bytes, the videos left out not among them, and of those
+    /// what a gateway acknowledged.
+    pub total_bytes: u64,
+    pub confirmed_bytes: u64,
+    /// The videos the member left out, and their bytes.
+    pub left_out_items: u64,
+    pub left_out_bytes: u64,
 }
 
 impl Reading {
@@ -89,6 +101,7 @@ impl Reading {
                     last_seen_ms: Some(destination.last_seen_ms).filter(|at| *at > 0),
                     last_ack_ms: Some(destination.last_ack_ms).filter(|at| *at > 0),
                     pair_again: destination.pair_again,
+                    held_bytes: destination.held_bytes,
                 })
                 .collect(),
             last_snapshot_ms: status.last_snapshot_ms,
@@ -100,6 +113,11 @@ impl Reading {
             spool_bytes: status.spool_bytes,
             waiting,
             frozen: status.frozen,
+            apps: status.apps.clone(),
+            total_bytes: status.total_bytes,
+            confirmed_bytes: status.confirmed_bytes,
+            left_out_items: status.left_out_items,
+            left_out_bytes: status.left_out_bytes,
         }
     }
 }

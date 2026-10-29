@@ -3,6 +3,10 @@
 //! labels and what the last act did. A thing is "backed up" only once a gateway
 //! acknowledged it and the phone recorded that (#1080): no sentence here says
 //! more than that.
+//!
+//! The byte figures and the per-app rows (#1144) are here too: "All 5.0 GB from
+//! 8 apps is backed up.", "312 notes · 38 MB", "Holds 5.1 GB". A count in them
+//! is `{count}`, filled with the grouped number, so `{n}` only picks the form.
 
 catalog! {
     plain backup_add_destination = ("Add backup device", "Add backup device");
@@ -13,10 +17,36 @@ catalog! {
     plain backup_ago_minute = ("1 minute ago", "1 minute ago");
     plain backup_ago_minutes = ("{n} minutes ago", "{n} minutes ago");
     plain backup_ago_now = ("just now", "just now");
+    counted backup_app_agenda = ("{count} event or task", "{count} events and tasks");
+    plain backup_app_backed_up = ("Backed up", "Backed up");
+    plain backup_app_detail = ("{what} · {size}", "{what} · {size}");
+    counted backup_app_docs = ("{count} document", "{count} documents");
+    counted backup_app_edits = ("{count} edit waiting", "{count} edits waiting");
+    plain backup_app_health = ("{days}, {workouts}", "{days}, {workouts}");
+    counted backup_app_health_days = ("{count} day", "{count} days");
+    counted backup_app_health_workouts = ("{count} workout", "{count} workouts");
+    counted backup_app_left_out = ("{count} video, {size}, left out", "{count} videos, {size}, left out");
+    counted backup_app_locker = ("{count} item", "{count} items");
+    counted backup_app_money = ("{count} transaction", "{count} transactions");
+    plain backup_app_not_backed_up = ("Not backed up", "Not backed up");
+    counted backup_app_notes = ("{count} note", "{count} notes");
+    plain backup_app_of = ("{confirmed} of {what}", "{confirmed} of {what}");
+    counted backup_app_people = ("{count} person", "{count} people");
+    counted backup_app_photos = ("{count} photo or video", "{count} photos and videos");
+    counted backup_app_photos_only = ("{count} photo", "{count} photos");
+    plain backup_app_waiting = ("{count} waiting", "{count} waiting");
+    counted backup_apps = ("{count} app", "{count} apps");
+    plain backup_apps_heading = ("In this backup", "In this backup");
     plain backup_battery = ("Battery saving can pause backups while Centraid is closed.", "Battery saving can pause backups while Centraid is closed.");
     plain backup_battery_action = ("Allow background backup", "Allow background backup");
+    plain backup_bytes_all = ("All {total} from {apps} is backed up.", "All {total} from {apps} is backed up.");
+    plain backup_bytes_left_out = ("{size} of videos is left out.", "{size} of videos is left out.");
+    plain backup_bytes_none = ("{total} from {apps}, none of it backed up yet.", "{total} from {apps}, none of it backed up yet.");
+    plain backup_bytes_some = ("{part} from {apps} is backed up.", "{part} from {apps} is backed up.");
+    plain backup_bytes_of = ("{part} of {whole}", "{part} of {whole}");
     plain backup_dest_pair_again = ("Pair it again", "Pair it again");
     plain backup_devices_heading = ("Backup devices", "Backup devices");
+    plain backup_held = ("Holds {size}", "Holds {size}");
     plain backup_forget = ("Forget", "Forget");
     plain backup_forget_failed = ("Couldn't forget {name}. Try again.", "Couldn't forget {name}. Try again.");
     plain backup_forgotten_not_revoked = ("Forgot {name}, but it wasn't told. Run “centraid-gateway pairings revoke” there.", "Forgot {name}, but it wasn't told. Run “centraid-gateway pairings revoke” there.");
@@ -39,7 +69,7 @@ catalog! {
     plain backup_line_unpaired = ("Not backed up. Pair a backup device.", "Not backed up. Pair a backup device.");
     plain backup_now = ("Back up now", "Back up now");
     plain backup_now_running = ("Backing up…", "Backing up…");
-    plain backup_progress = ("Backing up — {counts}", "Backing up — {counts}");
+    plain backup_progress = ("Backing up — {size} to go", "Backing up — {size} to go");
     plain backup_refused = ("Your backup device refused the backup. It may be full. Nothing was lost.", "Your backup device refused the backup. It may be full. Nothing was lost.");
     plain backup_rule_heading = ("Wi-Fi and cellular", "Wi-Fi and cellular");
     plain backup_seen = ("Reached {when}", "Reached {when}");

@@ -116,6 +116,28 @@ message BackupDestinationRow {
   string accessibility_label = 4;
   // This gateway refused the phone's token: `detail` says to pair it again.
   bool pair_again = 5;
+  // What it holds, finished: "Holds 5.1 GB". Empty when it holds nothing
+  // this phone recorded (#1144).
+  string held = 6;
+}
+
+// ONE APP'S PART OF THE BACKUP (#1144), finished: "In this backup" draws one
+// per app, biggest first.
+message BackupAppRow {
+  // The catalogue's id, for the app's mark: `photos`, `notes`.
+  string app_id = 1;
+  // "Notes".
+  string name = 2;
+  // What it holds and its size: "312 notes · 38 MB", "1,203 of 1,240 photos
+  // and videos · 4.0 of 4.4 GB".
+  string detail = 3;
+  // What was left out of it, or empty: "37 videos, 8.4 GB, left out".
+  string note = 4;
+  // "Backed up", "37 waiting", "3 edits waiting", "Not backed up".
+  string status = 5;
+  // Something of it is not backed up: `status` is drawn as a wait.
+  bool waiting = 6;
+  string accessibility_label = 7;
 }
 
 // One choice of the transfer rule, with the sentence a member reads.
@@ -202,6 +224,9 @@ message BackupHomeData {
   string key_sync_label = 25;
   bool key_synced = 26;
   BackupInk ink = 27;
+  // "In this backup" and one row per app (#1144); empty heading, no section.
+  string apps_heading = 28;
+  repeated BackupAppRow apps = 29;
 }
 
 message BackupHomeEvent {

@@ -57,13 +57,20 @@ pub fn frozen(locale: Locale, unacked: u64, since: &str) -> String {
 }
 
 /// Bytes in a member's units: decimal, because a phone's own storage screen is
-/// decimal, and whole units, because "3.27183 MB" is a number nobody can use.
+/// decimal, and whole units, because "3.27183 MB" is a number nobody can use —
+/// except gigabytes under a hundred, which keep one decimal, because "4 GB"
+/// and "4.9 GB" are a phone's worth of photographs apart (#1144). Every figure
+/// is rounded DOWN: a size said never claims a byte more than there is.
 #[must_use]
 pub fn bytes(count: u64) -> String {
     match count {
         0..=999 => format!("{count} bytes"),
         1_000..=999_999 => format!("{} KB", count / 1_000),
         1_000_000..=999_999_999 => format!("{} MB", count / 1_000_000),
+        1_000_000_000..=99_999_999_999 => {
+            let tenths = count / 100_000_000;
+            format!("{}.{} GB", tenths / 10, tenths % 10)
+        }
         _ => format!("{} GB", count / 1_000_000_000),
     }
 }

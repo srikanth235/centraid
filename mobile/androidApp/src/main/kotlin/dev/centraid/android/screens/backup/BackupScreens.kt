@@ -44,11 +44,13 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import centraid.core.v1.BackupAppRow
 import centraid.core.v1.BackupHomeData
 import centraid.core.v1.BackupHomeEvent
 import centraid.core.v1.BackupHomeState
 import centraid.core.v1.BackupInk
 import centraid.core.v1.Route
+import dev.centraid.android.kit.AppMark
 import dev.centraid.android.kit.FailureView
 import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitSpinner
@@ -188,6 +190,8 @@ private fun BackupPage(
         // A KEY ON THIS PHONE ALONE IS THE PAGE'S FIRST CONCERN: a lost phone takes
         // every vault with it, whatever is backed up.
         if (model.key_warning) RecoveryKey(model, onEvent, onShowWords)
+        // WHAT EACH APP'S BACKUP HOLDS (#1144), biggest first as the screen orders it.
+        if (model.apps.isNotEmpty()) Section(model.apps_heading) { Apps(model.apps) }
         if (paired) Section(model.devices_heading) { Destinations(model, onEvent, onAddDestination) }
         if (model.rule_choices.isNotEmpty()) {
             Section(model.rule_label) {
@@ -412,6 +416,10 @@ private fun Destinations(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     Text(row.label, style = centraidType("smallStrong"), color = centraidColor("text"))
+                    // WHAT IT HOLDS, as this phone recorded its acknowledgements.
+                    if (row.held.isNotEmpty()) {
+                        Text(row.held, style = centraidType("small"), color = centraidColor("text"))
+                    }
                     if (row.detail.isNotEmpty()) {
                         Text(row.detail, style = centraidType("mono"), color = centraidColor("textFaint"))
                     }
@@ -445,6 +453,53 @@ private fun Destinations(
                 testTag = "backup-add-destination",
                 modifier = Modifier.padding(top = 12.dp),
                 onPress = onAddDestination,
+            )
+        }
+    }
+}
+
+/**
+ * "IN THIS BACKUP" (#1144): one row per app — its mark, its name, what it holds and
+ * its size, what was left out of it, and whether it is backed up. A row that waits
+ * draws its status in the attention tone (iOS `BackupHomeView.apps`).
+ */
+@Composable
+private fun Apps(rows: List<BackupAppRow>) {
+    Column {
+        rows.forEach { row ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .padding(vertical = 8.dp)
+                    .testTag("backup-app-" + row.app_id)
+                    .clearAndSetSemantics { contentDescription = row.accessibility_label.ifEmpty { row.name } },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                AppMark(appId = row.app_id, size = 32.dp)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(row.name, style = centraidType("smallStrong"), color = centraidColor("text"))
+                    if (row.detail.isNotEmpty()) {
+                        Text(row.detail, style = centraidType("annotLabel"), color = centraidColor("textFaint"))
+                    }
+                    if (row.note.isNotEmpty()) {
+                        Text(row.note, style = centraidType("annotLabel"), color = centraidColor("textFaint"))
+                    }
+                }
+                if (row.status.isNotEmpty()) {
+                    Text(
+                        row.status,
+                        style = centraidType(if (row.waiting) "annotLabelOn" else "annotLabel"),
+                        color = centraidColor(if (row.waiting) "attention" else "textFaint"),
+                    )
+                }
+            }
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(CentraidGeometry.HAIRLINE.dp)
+                    .background(centraidColor("line")),
             )
         }
     }

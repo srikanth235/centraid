@@ -13,6 +13,7 @@
 //! | [`fetch`] | `fetch_original`, and the derivatives a restore brings back |
 //! | [`restore`] | `restore`: every vault back from 24 words and a gateway's pairing payload |
 //! | [`link`] | the client to one gateway, and the plane's `Store` over it |
+//! | [`holdings`] | what each app's backup holds, for `backup_status` |
 //! | this file | `backup_status`, `pins`, `forget_destination`, `releasable`, `released` |
 //!
 //! # WHERE THE PLANE'S STATE LIVES, AND WHY IT IS NOT IN THE VAULT
@@ -42,6 +43,7 @@
 pub(crate) mod backup_reads;
 pub mod drain;
 pub mod fetch;
+pub(crate) mod holdings;
 pub mod link;
 pub mod pair;
 pub mod phrase;
@@ -351,6 +353,7 @@ pub fn wire_destination(destination: &Destination) -> wire::Destination {
         // `backup_status` reads the ledger's mark; a pairing's answer and the
         // pins are the destination as it was written.
         pair_again: false,
+        held_bytes: 0,
     }
 }
 
@@ -628,6 +631,20 @@ pub(crate) struct Standing {
     /// Plaintext bytes of every file some name of which no gateway holds.
     pub pending_bytes: u64,
     pub waiting: BTreeMap<i32, u64>,
+    /// Where each file stands, in the order of the `files` counted: what the
+    /// Backup screen's per-app rows are made from ([`holdings`]).
+    pub outcomes: Vec<Outcome>,
+}
+
+/// Where one file the vault knows stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Outcome {
+    /// A gateway holds its bytes and a snapshot it acknowledged holds its row.
+    Confirmed,
+    /// Not backed up yet, for a reason the line names.
+    Waiting,
+    /// A video the member left out of the backup.
+    LeftOut,
 }
 
 /// Count where the vault's files stand. `files` and `keys` are absent on a
@@ -663,18 +680,22 @@ pub(crate) fn standing(
         // BACKED UP IS THE BYTES AND THE ROW: either alone restores nothing.
         if bytes_held && row_backed_up(file, records_at) {
             out.confirmed += 1;
+            out.outcomes.push(Outcome::Confirmed);
             continue;
-        }
-        if !bytes_held {
-            out.pending_bytes = out.pending_bytes.saturating_add(file.len);
         }
         let kind = drain::Kind::of_file(file);
         if !conditions.counts(kind) {
             // A video the member left out of the backup is not waiting: it
             // is the member's choice, and the line counts it as not backed
-            // up without a reason to wait out.
+            // up without a reason to wait out. Nor are its bytes still to
+            // back up: "380 MB to go" counts what will move (#1144).
+            out.outcomes.push(Outcome::LeftOut);
             continue;
         }
+        if !bytes_held {
+            out.pending_bytes = out.pending_bytes.saturating_add(file.len);
+        }
+        out.outcomes.push(Outcome::Waiting);
         let reason = if !paired {
             wire::WaitReason::Gateway
         } else if let Some(reason) = unreached {
@@ -733,12 +754,14 @@ pub fn backup_status(
         .filter(|snapshot| snapshot.acked_ms.is_some())
         .map(|snapshot| snapshot.taken_at_ms)
         .max();
-    let standing = match (vault, keys) {
+    let (standing, held) = match (vault, keys) {
         (Some(vault), Some(keys)) => {
             let files = content_files(vault).map_err(plane_error)?;
-            standing(&ledger, &files, &keys.backup, plane.asking())?
+            let standing = standing(&ledger, &files, &keys.backup, plane.asking())?;
+            let held = holdings::read(vault, &ledger, &files, &standing.outcomes)?;
+            (standing, held)
         }
-        _ => Standing::default(),
+        _ => (Standing::default(), holdings::Held::default()),
     };
     let records_waiting: u64 = ledger
         .queued()
@@ -756,6 +779,9 @@ pub fn backup_status(
         let mut row = wire_destination(destination);
         row.pair_again = ledger
             .unauthorized(&destination.gateway_id)
+            .map_err(plane_error)?;
+        row.held_bytes = ledger
+            .held_bytes(&destination.gateway_id)
             .map_err(plane_error)?;
         wired.push(row);
     }
@@ -776,6 +802,11 @@ pub fn backup_status(
             })
             .collect(),
         frozen: moved(&ledger)?.is_some(),
+        total_bytes: held.total_bytes,
+        confirmed_bytes: held.confirmed_bytes,
+        left_out_items: held.left_out_items,
+        left_out_bytes: held.left_out_bytes,
+        apps: held.apps,
     })
 }
 

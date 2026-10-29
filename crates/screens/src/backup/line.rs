@@ -10,6 +10,7 @@
 use centraid_api_proto::core_v1 as wire;
 use wire::backup_line::Tone;
 
+use super::claim::bytes;
 use super::reading::Reading;
 use crate::strings::{Locale, backup as words, fill};
 
@@ -66,6 +67,7 @@ pub fn line(
         return finish(wire::BackupLine {
             unpaired: true,
             total: reading.content_total,
+            detail: detail(locale, reading),
             sentence: words::backup_line_unpaired(locale),
             status: words::backup_status_unpaired(locale),
             tone: Tone::Attention as i32,
@@ -84,13 +86,13 @@ pub fn line(
             waiting,
             sentence: words::backup_line_pair_again(locale),
             status: words::backup_status_pair_again(locale),
-            detail: counts(locale, reading),
+            detail: detail(locale, reading),
             tone: Tone::Attention as i32,
             pair_again: true,
             ..Default::default()
         });
     }
-    let detail = counts(locale, reading);
+    let detail = detail(locale, reading);
     let Some(acked) = reading.last_ack_ms else {
         return finish(wire::BackupLine {
             confirmed: reading.content_confirmed,
@@ -144,6 +146,71 @@ pub fn line(
         } as i32,
         ..Default::default()
     })
+}
+
+/// THE LINE'S SECOND CLAUSE, IN BYTES (#1144): "All 5.0 GB from 8 apps is
+/// backed up.", "4.6 of 5.0 GB from 8 apps is backed up.", and when the
+/// member left videos out, what that left out: "8.4 GB of videos is left out."
+/// A reading with no per-app rows (a core that could not name its files) says
+/// the counts instead ([`counts`]).
+#[must_use]
+pub fn detail(locale: Locale, reading: &Reading) -> String {
+    if reading.apps.is_empty() {
+        return counts(locale, reading);
+    }
+    let count = u64::try_from(reading.apps.len()).unwrap_or(u64::MAX);
+    let apps = fill(
+        &words::backup_apps(locale, count),
+        &[("count", &grouped(count))],
+    );
+    let total = bytes(reading.total_bytes);
+    let backed = if reading.confirmed_bytes == 0 {
+        fill(
+            &words::backup_bytes_none(locale),
+            &[("total", &total), ("apps", &apps)],
+        )
+    } else if reading.confirmed_bytes >= reading.total_bytes {
+        fill(
+            &words::backup_bytes_all(locale),
+            &[("total", &total), ("apps", &apps)],
+        )
+    } else {
+        fill(
+            &words::backup_bytes_some(locale),
+            &[
+                (
+                    "part",
+                    &of_bytes(locale, reading.confirmed_bytes, reading.total_bytes),
+                ),
+                ("apps", &apps),
+            ],
+        )
+    };
+    if reading.left_out_bytes == 0 {
+        return backed;
+    }
+    let left = fill(
+        &words::backup_bytes_left_out(locale),
+        &[("size", &bytes(reading.left_out_bytes))],
+    );
+    format!("{backed} {left}")
+}
+
+/// "4.6 of 5.0 GB" when both are in one unit, "380 MB of 5.0 GB" when not.
+#[must_use]
+pub fn of_bytes(locale: Locale, part: u64, whole: u64) -> String {
+    let (part, whole) = (bytes(part), bytes(whole));
+    let unit = |said: &str| said.rsplit_once(' ').map(|(_, unit)| unit.to_owned());
+    match (part.rsplit_once(' '), unit(&whole)) {
+        (Some((number, part_unit)), Some(whole_unit)) if part_unit == whole_unit => fill(
+            &words::backup_bytes_of(locale),
+            &[("part", number), ("whole", &whole)],
+        ),
+        _ => fill(
+            &words::backup_bytes_of(locale),
+            &[("part", &part), ("whole", &whole)],
+        ),
+    }
 }
 
 /// "1,203 of 1,240 photos and files", "All 1,240 photos and files", or empty for
