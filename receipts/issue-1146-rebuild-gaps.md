@@ -152,3 +152,178 @@ Deleted:
 Added:
 
 - `receipts/issue-1146-rebuild-gaps.md`
+
+### Lane 1B — No journal; a format that names itself
+
+Owner rulings J, D3, D4 and the revision rule of #1146. The vault kept a `journal` row for every command it was asked to run, and the input of a typed secret or chat turn lived there as a token while everything else lived there whole; it is gone. Its three jobs now have a home each, the entity `version` that nothing compared is dropped, a file names its format, and a revision cannot be deleted by hand.
+
+- **The vault.** `contracts/migrations/001_baseline.sql` founds no `journal` table, index or trigger. `action_key (key, asked, at) STRICT, WITHOUT ROWID` (plus `action_key_by_at`) is written in the executed command's own commit by `action_key::remember`, which also forgets the keys older than thirty days; `Vault::execute_keyed` finds a key inside the commit and answers `replayed` with nothing run, so two deliveries racing for the lock still run once. A refusal, a failed precondition and a handler error write nothing (the old "failed" row, written after the rollback, is gone). `vault.writes` and `vault.written_at` are bumped in the commit guard (`bump_writes`) when the census saw a reportable row or a `WITHOUT ROWID` table touched, with the census muted for the bump. `entity.version` is dropped and `touch` stamps `updated_at` only. `revision_is_kept` refuses a direct DELETE while the entity exists. `crates/vault/src/format.rs` holds `APPLICATION_ID` (`CEN2`), `EARLIER_APPLICATION_ID` (`CEN1`), `SCHEMA_DIGEST` and `schema_digest`; `Vault::open` and restore check them. `journal.rs` is deleted; the sealed scrub moved to `commands/sealed.rs`, and the tokeniser that fed the journal (`redact_command_input`) went with it, since nothing stores an input.
+- **The backup plane.** `History` reads `writes` and `written_at` from the vault row (`receipts` renamed `writes`); the manifest is version 3 and carries `writes` and `written_at_ms` (no census count of a table, `RECEIPT_TABLE` gone); `head_is_ahead` in `crates/core/src/phone/pair.rs` compares them. Restore adds a `schema` check after the header and refuses an earlier-model file before the partial is renamed.
+- **The core.** `act` and `command_keyed` use `action_key::{KeyMark, Recalled}`; `invocation_id` leaves `CommandOutcome` and `ActResponse` (field 5 reserved). The page door's refusal sweep names `action_key` where it named `journal`.
+- **Docs Activity.** The `activity` query, its `journal` scope, core arm, route data (`DocsDocumentData` 9 and 10, chrome 6), strings, `DocsActivity*` messages, `app_query` 33 (both arms) and the two native views are removed, the numbers and names reserved. `docs/decisions.md` R-1135-5-11 is marked superseded.
+- **Notes.** `NotesNote.row_version` (field 9) and `NoteRow.version`/`EditorNote.row_version` are removed; the proto number and name are reserved.
+- **The harness.** `nativetools` tests counted the commands run through the journal. The vault keeps no such record, so `vaultio::watch` and `vaultio::commands_run` count what `Handle::run` ran for a file a test watches (nothing else is counted); the tests' `journal(world)` helper reads that.
+
+#### Rulings
+
+R-1146-1B-1 to R-1146-1B-7 are the root's (action keys; no invocation id; the write counter; Docs Activity gone; no version; format identity; revision is kept) and are implemented as written. All nine are in `docs/decisions.md` under "The journal is gone (#1146)", with R-FP-10, and the rows they supersede are marked.
+
+- **R-1146-1B-8** — _Finding:_ the manifest's `census` carried the journal's row count; a census count of `vault` (one row) cannot stand in. _Choice:_ the manifest is version 3 with `writes` and `written_at_ms` as fields; a version-2 manifest is refused by its version, with no compatibility (R-FP-10). _Why:_ the figure takeover compares should be the counter itself. [#1146](https://github.com/srikanth235/centraid/issues/1146)
+- **R-1146-1B-9** — _Finding:_ SQLite stores the statement text it was given, comments included, so a digest of the raw text changes when a comment is edited, and the FTS5 shadow tables are worded by the module, which differs between SQLite builds. _Choice:_ the digest reads statements without comments and with collapsed whitespace and leaves out `sqlite_*` rows (the statistics `PRAGMA optimize` writes among them) and the shadow tables; `Vault::open` checks it for a file at the head (after the climb for one that was behind) and `Vault::create` does not. _Why:_ any change to a table or index must move the constant, and nothing else may.
+- **R-1146-1B-10** (receipt only) — _Finding:_ `nativetools` tests proved "this write ran once" and "a parked write reached the vault" by reading `journal`. _Choice:_ a recorder in the harness's own door, for watched files only. The alternative, the vault's write counter, says that something was written, not which command, and `verb_coverage` needs the command.
+- **R-1146-1B-11** (receipt only) — _Finding:_ `entity.retitle` refuses a chat with "a chat is renamed with `thread.rename`", and its comment gave the journal as the reason (a title is the first thing the member said). With no journal the reason is gone. _Choice:_ behaviour kept, the words that named the journal removed. _Why:_ not mine to change; recorded in the report for the owner.
+
+#### Red-first
+
+Tests written against aa1c47d9 and run before the fix, each failing for the reason it names:
+
+- `crates/vault/tests/action_keys.rs`: `a_keyed_act_is_answered_replayed_after_a_restart_and_runs_once`, `a_refused_or_failed_command_writes_nothing_anywhere` and `the_write_counter_grows_by_one_per_changing_commit_and_not_for_a_no_op` failed at `no such column: writes`; `a_key_older_than_thirty_days_is_trimmed_by_the_next_keyed_commit` at `no such table: action_key`; `a_founded_vault_has_no_journal_and_holds_action_keys_instead` at `nothing in the founded file is the journal`; the entity-version assertion printed the founded column list `["n", "id", "kind", "title", "created_at", "updated_at", "version", "deleted_at", "purge_at"]`.
+- `crates/vault/tests/revision_kept.rs`: the direct DELETE succeeded — `refused: CommitResult { value: (), rows: 1, tables: ["revision"] }` from `expect_err`.
+- `crates/vault/tests/format_identity.rs`: `a_file_of_the_earlier_model_is_refused_with_a_sentence` and `a_file_whose_schema_is_not_this_versions_is_refused_with_a_sentence` failed at `the file was opened`.
+- `crates/vault/tests/backup_snapshot.rs`: `a_restore_refuses_a_file_of_an_earlier_model_or_another_schema_and_leaves_nothing` failed because the restore succeeded (`expect_err` got `Restored { … }`).
+
+Tests whose subject the journal was were deleted or rewritten: `commands.rs` (`a_command_executes_and_the_gate_writes_its_journal_row`, `every_command_is_journalled_in_order_and_seq_is_the_position` and `the_journal_refuses_a_rewrite_and_allows_retention` deleted or rewritten to what a refusal now leaves; `touch_stamps_once_per_commit` reads `updated_at`), `chat.rs` (`the_journal_keeps_a_token_never_what_was_said` became `a_refusal_never_quotes_what_was_said`), `locker_commands.rs` (`a_duplicates_nested_field_ciphertext_never_lands_in_the_journal` deleted; its scrub is covered by `commands::sealed::tests::a_secret_inside_an_array_element_is_scrubbed`), `locker_plaintext_gate.rs` (the journal reader reads `action_key`), `core/tests/{action_plane,replay,assist_channel}.rs` (no `invocation_id`), `core/tests/query_plans.rs` (59 queries, not 60), `crates/apps/docs` (the activity cases) and the `shared_verbs`, `money_health` and `notes` tests that read `version` (now `updated_at`, with the clock moved). In `plans.rs` the two full-scan cases that queried `entity.version` query the unindexed `note.body`, so the finder is still exercised.
+
+#### Falsification of the two riskiest claims
+
+1. _"The bump is not among the commit's tables."_ The `muted` check in the hook was removed. `the_write_counter_grows_by_one_per_changing_commit_and_not_for_a_no_op` failed: `the bump is not a change a screen re-reads: ["container", "entity", "vault"]`. Restored.
+2. _"A purge still removes a revision with its entity."_ The trigger's `WHEN EXISTS (SELECT 1 FROM entity …)` guard was removed. `a_revision_cannot_be_deleted_but_goes_with_its_entity` failed on the purge: `runs: Sqlite(SqliteFailure(… ConstraintViolation …, Some("a revision is kept while its entity is")))`. Restored; the cascade runs after the entity row is gone, so the guard finds none.
+
+#### Verification
+
+- `cargo xtask gate --profile local` — **PASS** (cold: 889 s of the 3,200 s cold ceiling; fmt, clippy `-D warnings`, `cargo test --workspace` (825.8 s; `cargo-nextest` is not installed, so the whole workspace ran), restore-drill, the 15 rules, doc-links and ledgers all ok). Two earlier attempts failed for reasons that were mine: `sql-confinement` refused the SQL string literals of the new core-ffi contract test (the two ways to make a file this build refuses are now `testdoor::stamp_earlier_model` and `add_stray_table`), and clippy's `items_after_test_module` caught the same two functions placed after `mod tests` in `testdoor.rs`. A third attempt's test step died with `No such file or directory` because the container's quota was full and I deleted stale test executables while it ran; nothing in the tree was at fault.
+- `cargo xtask gate --profile mobile-jvm` — **PASS** on the first run (208 s of 420 s; no Maven `429`).
+- `cargo test -p centraid-vault` — 434 green (227 unit incl. `format::tests`, `action_keys` 6, `revision_kept` 1, `format_identity` 3, `commitments` 18, `backup_snapshot` 4, `restore_drill`, `ladder_ddl` 3, `ontology_page`).
+- `cargo test -p centraid-core` — 448 green (269 lib; `action_plane`, `replay`, `assist_channel`, `assist_door`, `phone_backup`, `query_plans` with the wire at 59 queries).
+- `cargo test -p centraid-apps-docs -p centraid-apps-notes -p centraid-api-proto -p centraid-core-ffi -p centraid-assist -p centraid` — 46, 36, 10, 56 (the refusals-at-open test among them), 188 and 9 green; `-p centraid-screens` 368 lib plus 903 across every integration binary; `-p centraid-nativetools` 733 across every integration binary (run a few binaries at a time, the disk being what it was). `cargo test -p centraid-core-ffi --test spike` needed `cargo build -p centraid-core-ffi` first (the stale-cdylib trap in `crates/core-ffi/tests/spike.rs`).
+- Regenerated by their own commands and equal to a fresh render, `git diff --exit-code contracts/schema` clean: `contracts/schema/vault-ddl.sql` (`export-ladder-ddl`), `contracts/schema/vault-commands.txt` (`export-commands`; no command added or removed), the published ontology page (`export-ontology-page`), `crates/screens/src/catalog.rs` (`cargo xtask screens-catalog`) and `contracts/assist/export` (`nativetools export`: only the Docs `activity` query left `metadata.json`).
+- `grep -rnw journal crates mobile contracts` (`.rs .sql .proto .kt .swift`) outside the Notes and People "journal" feature — what is left is `journal_mode`/`journal_size_limit`, SQLite's rollback journal and `-journal` sidecar, the comments in the proto `reserved` blocks, `ladder_ddl.rs`'s `nothing_the_model_deleted_is_founded` list, `action_keys.rs`' own subject, and the name of the `journal(world)` helper in the `nativetools` tests (it reads the harness recorder now).
+- `grep -rn "invoke_key\|journal_by\|RECEIPT_TABLE\|invocation_id\|row_version" crates mobile contracts` — `invocation_id` and `row_version` only as `reserved` names and the prose that says they are reserved; `invoke_key` only as `ActRequest`'s own field (and the comments about it). **`row_version` also stays on `locker_item_field` and `locker_item_passkey`** (`contracts/migrations/001_baseline.sql`, with `contracts/schema/vault-ddl.sql`): it is the recursion guard of those two tables' `touch_updated_at` triggers, not a compared version; see "Not done".
+- `grep -n version contracts/migrations/001_baseline.sql` — no `entity.version`.
+
+#### Not done, and why
+
+- **The native app views are not compiled here** (no Android SDK, no Xcode); `:core:jvmTest` does not build `mobile/androidApp` or `mobile/iosApp`. The Kotlin and Swift edits are deletions of the Docs Activity list (`DocsDocumentView.swift`, `DocsScreens.kt`) and of one assertion each in `NotesQueryRoundTripSpec.kt` and `DocsQueryRoundTripSpec.kt`. The Swift protos are generated at build time (none is tracked), so none was regenerated. Owner hand-off: build both apps and open a document in Docs.
+- **`row_version` on `locker_item_field` and `locker_item_passkey`** is not removed. The ruling is about `entity.version`; these columns stop their triggers re-firing, and dropping them means giving those triggers another guard. Recommended: a follow-up that does it, or an owner ruling to keep them.
+- **`entity.retitle` still refuses a chat** (R-1146-1B-11): the sentence that named the journal is gone and the refusal stays. With no journal, a chat's title could take the shared verb; the owner decides.
+- **The on-device model's retrain.** `contracts/assist/export/metadata.json` lost the Docs `activity` query; the prompt and tool files did not change. Whether to refreeze the training data is the owner's.
+- **Old-format manifests and files** are refused, not read (R-FP-10); there is no migration to write.
+
+#### Files
+
+Changed:
+
+- `ARCHITECTURE.md`
+- `CHANGELOG.md`
+- `SECURITY.md`
+- `contracts/assist/export/metadata.json`
+- `contracts/migrations/001_baseline.sql`
+- `contracts/schema/vault-ddl.sql`
+- `crates/api-proto/proto/centraid/core/v1/action.proto`
+- `crates/api-proto/proto/centraid/core/v1/app_query.proto`
+- `crates/api-proto/proto/centraid/core/v1/docs.proto`
+- `crates/api-proto/proto/centraid/core/v1/docs_screens.proto`
+- `crates/api-proto/proto/centraid/core/v1/notes.proto`
+- `crates/api-proto/proto/centraid/core/v1/phone.proto`
+- `crates/api-proto/proto/centraid/core/v1/vault.proto`
+- `crates/api-proto/tests/roundtrip.rs`
+- `crates/apps/docs/README.md`
+- `crates/apps/docs/manifest.json`
+- `crates/apps/docs/src/lib.rs`
+- `crates/apps/docs/src/manifest.rs`
+- `crates/apps/docs/src/queries.rs`
+- `crates/apps/docs/tests/phone.rs`
+- `crates/apps/docs/tests/reads.rs`
+- `crates/apps/notes/README.md`
+- `crates/apps/notes/src/editor.rs`
+- `crates/apps/notes/src/lib.rs`
+- `crates/apps/notes/src/queries.rs`
+- `crates/assist/src/native/act.rs`
+- `crates/assist/src/native/door.rs`
+- `crates/assist/src/native/member.rs`
+- `crates/assist/src/native/world.rs`
+- `crates/centraid/src/bin/seed-demo-vault.rs`
+- `crates/core-ffi/CONTRACT.md`
+- `crates/core-ffi/tests/contract.rs`
+- `crates/core/src/act.rs`
+- `crates/core/src/act/inverse.rs`
+- `crates/core/src/api.rs`
+- `crates/core/src/app_query.rs`
+- `crates/core/src/app_query/docs.rs`
+- `crates/core/src/app_query/docs_tests.rs`
+- `crates/core/src/app_query/notes.rs`
+- `crates/core/src/assist/door.rs`
+- `crates/core/src/example.rs`
+- `crates/core/src/load.rs`
+- `crates/core/src/phone/pair.rs`
+- `crates/core/tests/action_plane.rs`
+- `crates/core/tests/assist_channel.rs`
+- `crates/core/tests/assist_door.rs`
+- `crates/core/tests/query_plans.rs`
+- `crates/core/tests/replay.rs`
+- `crates/nativetools/src/vaultio.rs`
+- `crates/nativetools/tests/common/mod.rs`
+- `crates/nativetools/tests/park.rs`
+- `crates/nativetools/tests/park_confirm.rs`
+- `crates/nativetools/tests/verb_coverage.rs`
+- `crates/screens/src/catalog.rs`
+- `crates/screens/src/docs/document.rs`
+- `crates/screens/src/docs/fold.rs`
+- `crates/screens/src/docs/mod.rs`
+- `crates/screens/src/kit/act.rs`
+- `crates/screens/src/strings/docs.rs`
+- `crates/screens/tests/docs_document.rs`
+- `crates/vault/README.md`
+- `crates/vault/src/access.rs`
+- `crates/vault/src/backup/drill.rs`
+- `crates/vault/src/backup/restore.rs`
+- `crates/vault/src/backup/snapshot.rs`
+- `crates/vault/src/commands/blob.rs`
+- `crates/vault/src/commands/entity.rs`
+- `crates/vault/src/commands/locker.rs`
+- `crates/vault/src/commands/mod.rs`
+- `crates/vault/src/commands/thread.rs`
+- `crates/vault/src/custody/README.md`
+- `crates/vault/src/error.rs`
+- `crates/vault/src/file.rs`
+- `crates/vault/src/lib.rs`
+- `crates/vault/src/log/guard.rs`
+- `crates/vault/src/migrations.rs`
+- `crates/vault/src/ontology_doc.rs`
+- `crates/vault/src/plans.rs`
+- `crates/vault/src/testdoor.rs`
+- `crates/vault/tests/backup_snapshot.rs`
+- `crates/vault/tests/change_census.rs`
+- `crates/vault/tests/chat.rs`
+- `crates/vault/tests/commands.rs`
+- `crates/vault/tests/commitments.rs`
+- `crates/vault/tests/ladder_ddl.rs`
+- `crates/vault/tests/locker_commands.rs`
+- `crates/vault/tests/locker_plaintext_gate.rs`
+- `crates/vault/tests/money_health.rs`
+- `crates/vault/tests/notes.rs`
+- `crates/vault/tests/restore_drill.rs`
+- `crates/vault/tests/shared_verbs.rs`
+- `docs/decisions.md`
+- `docs/glossary.md`
+- `docs/protocol.md`
+- `docs/vault-ontology.md`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/docs/DocsScreens.kt`
+- `mobile/core/src/jvmTest/kotlin/dev/centraid/core/DocsQueryRoundTripSpec.kt`
+- `mobile/core/src/jvmTest/kotlin/dev/centraid/core/NotesQueryRoundTripSpec.kt`
+- `mobile/iosApp/Sources/Docs/DocsDocumentView.swift`
+- `scripts/docs-site/src/content/ontology-body.html`
+- `receipts/issue-1146-rebuild-gaps.md`
+
+Deleted:
+
+- `crates/vault/src/journal.rs`
+
+Added:
+
+- `crates/vault/src/action_key.rs`
+- `crates/vault/src/commands/sealed.rs`
+- `crates/vault/src/format.rs`
+- `crates/vault/tests/action_keys.rs`
+- `crates/vault/tests/format_identity.rs`
+- `crates/vault/tests/revision_kept.rs`
