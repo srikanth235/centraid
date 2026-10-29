@@ -225,6 +225,15 @@ message RollAsset {
   // was walked.
   bool changed_in_place = 6;
   repeated RollResource resources = 7;
+  // What the library itself knows of the item, each 0 or absent when it does not (#1146 D5): the
+  // pixel box, a movie's length in seconds, and where it was taken. A coordinate pair is both
+  // halves or neither; the core writes them as the photograph's `width`, `height`, `duration_s`
+  // and `place`.
+  int32 width = 8;
+  int32 height = 9;
+  double duration_s = 10;
+  optional double latitude = 11;
+  optional double longitude = 12;
 
   enum Kind {
     KIND_UNSPECIFIED = 0;

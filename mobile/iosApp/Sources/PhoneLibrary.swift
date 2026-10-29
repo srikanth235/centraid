@@ -1,4 +1,5 @@
 #if os(iOS)
+import CoreLocation
 import Foundation
 import ImageIO
 import Photos
@@ -164,6 +165,15 @@ enum PhoneLibrary {
         rolled.capturedAt = iso(epochMillis: cursor.epochMillis)
         rolled.capturedUtcOffsetMinutes = Int32(await captureOffset(of: asset))
         rolled.captureGroup = live || edited ? identifier : ""
+        // WHAT THE LIBRARY KNOWS (#1146 D5): the pixel box, a movie's length and where it was taken,
+        // each only when Photos has it (a coordinate pair or nothing).
+        rolled.width = Int32(clamping: max(asset.pixelWidth, 0))
+        rolled.height = Int32(clamping: max(asset.pixelHeight, 0))
+        if asset.mediaType == .video { rolled.durationS = max(asset.duration, 0) }
+        if let coordinate = asset.location?.coordinate, CLLocationCoordinate2DIsValid(coordinate) {
+            rolled.latitude = coordinate.latitude
+            rolled.longitude = coordinate.longitude
+        }
         if camera {
             rolled.resources.append(resource(LibraryRefs.camera(identifier), .cameraOriginal))
         }
