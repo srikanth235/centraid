@@ -498,7 +498,7 @@ fn a_plan_a_carry_and_a_checkpoint_are_idempotent_rows_not_figures() {
     );
     world.ok(
         "account.set_opening",
-        json!({ "id": account, "opening_minor": 5_000 }),
+        json!({ "id": account, "opening_minor": 5_000, "opening_on": "2026-01-01" }),
     );
     assert_eq!(world.count("SELECT opening_minor FROM account", &[]), 5_000);
 }

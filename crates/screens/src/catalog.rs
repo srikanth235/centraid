@@ -2025,6 +2025,7 @@ pub mod act {
             pub id: Option<String>,
             pub on_budget: Option<bool>,
             pub opening_minor: Option<i64>,
+            pub opening_on: Option<String>,
         }
         impl AddAccount {
             pub const NAME: &str = "add-account";
@@ -2038,6 +2039,7 @@ pub mod act {
                 if let Some(it) = self.id { map.insert("id".to_owned(), text(it)); }
                 if let Some(it) = self.on_budget { map.insert("on_budget".to_owned(), flag(it)); }
                 if let Some(it) = self.opening_minor { map.insert("opening_minor".to_owned(), whole(it)); }
+                if let Some(it) = self.opening_on { map.insert("opening_on".to_owned(), text(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
@@ -2172,11 +2174,12 @@ pub mod act {
             }
         }
 
-        /// State where an account stood before its first line; every balance after it is derived from that.
+        /// State where an account stood on a day (opening_on, required unless the amount is 0); every balance after that day is derived from it, and lines on or before it are already in it.
         #[derive(Clone, Debug, Default)]
         pub struct SetOpeningBalance {
             pub account_id: String,
             pub opening_minor: i64,
+            pub opening_on: Option<String>,
         }
         impl SetOpeningBalance {
             pub const NAME: &str = "set-opening-balance";
@@ -2185,6 +2188,7 @@ pub mod act {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("id".to_owned(), text(self.account_id));
                 map.insert("opening_minor".to_owned(), whole(self.opening_minor));
+                if let Some(it) = self.opening_on { map.insert("opening_on".to_owned(), text(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
@@ -2441,13 +2445,14 @@ pub mod act {
             }
         }
 
-        /// Add a rule: a line whose words match goes in a category.
+        /// Add a rule: a line whose words match goes in a category and, when display_name is sent, shows that name (the payee) instead of the bank's words.
         #[derive(Clone, Debug, Default)]
         pub struct AddRule {
             pub category_id: String,
             pub r#match: AddRuleMatch,
             pub text: String,
             pub account_id: Field<String>,
+            pub display_name: Field<String>,
             pub id: Option<String>,
             pub max: Field<i64>,
             pub min: Field<i64>,
@@ -2462,6 +2467,7 @@ pub mod act {
                 map.insert("match".to_owned(), text(self.r#match.wire()));
                 map.insert("text".to_owned(), text(self.text));
                 put_field(&mut map, "account_id", self.account_id, |it| text(it));
+                put_field(&mut map, "display_name", self.display_name, |it| text(it));
                 if let Some(it) = self.id { map.insert("id".to_owned(), text(it)); }
                 put_field(&mut map, "max", self.max, |it| whole(it));
                 put_field(&mut map, "min", self.min, |it| whole(it));
@@ -2498,6 +2504,7 @@ pub mod act {
             pub rule_id: String,
             pub account_id: Field<String>,
             pub category_id: Option<String>,
+            pub display_name: Field<String>,
             pub r#match: Option<EditRuleMatch>,
             pub max: Field<i64>,
             pub min: Field<i64>,
@@ -2512,6 +2519,7 @@ pub mod act {
                 map.insert("id".to_owned(), text(self.rule_id));
                 put_field(&mut map, "account_id", self.account_id, |it| text(it));
                 if let Some(it) = self.category_id { map.insert("category_id".to_owned(), text(it)); }
+                put_field(&mut map, "display_name", self.display_name, |it| text(it));
                 if let Some(it) = self.r#match { map.insert("match".to_owned(), text(it.wire())); }
                 put_field(&mut map, "max", self.max, |it| whole(it));
                 put_field(&mut map, "min", self.min, |it| whole(it));

@@ -14,6 +14,12 @@
 //! `is`, two for `matches`, one for `contains`) plus one for each of the lower
 //! bound, the upper bound and the account that is set.
 //!
+//! A rule may also carry a **display name**: the payee, as the member wants to read it. Applying the
+//! rule retitles a line it decides (the last matching rule that has a name wins, as for the
+//! category) whose title is still the bank's words; a title the member chose stays unless `overwrite`
+//! says to replace it. The bank's words are never touched: they stay in `source.stated`, and the
+//! match reads them.
+//!
 //! `apply` and `centraid_apps_money::rules` implement ONE spec, independently,
 //! and a test in the app crate runs both against the same fixture.
 
@@ -78,6 +84,8 @@ pub struct Rule {
     pub max: Option<i64>,
     pub account: Option<String>,
     pub category: String,
+    /// The name a matched line shows, when the rule has one.
+    pub display_name: Option<String>,
     pub position: f64,
 }
 
@@ -120,6 +128,7 @@ struct Draft {
     max: Option<i64>,
     account: Option<String>,
     category: String,
+    display_name: Option<String>,
 }
 
 impl Draft {
@@ -135,7 +144,13 @@ impl Draft {
     }
 }
 
-fn parse(id: &str, pattern: &str, category: String, position: f64) -> Rule {
+fn parse(
+    id: &str,
+    pattern: &str,
+    category: String,
+    display_name: Option<String>,
+    position: f64,
+) -> Rule {
     let pattern: Json = serde_json::from_str(pattern).unwrap_or(Json::Null);
     let text = |key: &str| pattern.get(key).and_then(Json::as_str).map(str::to_owned);
     Rule {
@@ -146,6 +161,7 @@ fn parse(id: &str, pattern: &str, category: String, position: f64) -> Rule {
         max: pattern.get("max").and_then(Json::as_i64),
         account: text("account"),
         category,
+        display_name,
         position,
     }
 }
@@ -153,13 +169,14 @@ fn parse(id: &str, pattern: &str, category: String, position: f64) -> Rule {
 /// Every rule, in the order they apply.
 pub fn load(connection: &rusqlite::Connection) -> Result<Vec<Rule>> {
     let mut rules: Vec<Rule> = connection
-        .prepare("SELECT id, pattern, category_id, position FROM rule")?
+        .prepare("SELECT id, pattern, category_id, display_name, position FROM rule")?
         .query_map([], |row| {
             Ok(parse(
                 &row.get::<_, String>(0)?,
                 &row.get::<_, String>(1)?,
                 row.get(2)?,
                 row.get(3)?,
+                row.get(4)?,
             ))
         })?
         .collect::<rusqlite::Result<_>>()?;
@@ -194,6 +211,10 @@ fn draft(ctx: &CommandCtx<'_, '_>, base: Option<&Rule>, stored: Option<&Json>) -
         max: int("max", base.and_then(|rule| rule.max)),
         account: text("account_id", base.and_then(|rule| rule.account.clone())),
         category: text("category_id", base.map(|rule| rule.category.clone())).unwrap_or_default(),
+        display_name: text(
+            "display_name",
+            base.and_then(|rule| rule.display_name.clone()),
+        ),
     }
 }
 
@@ -208,6 +229,9 @@ fn judge(ctx: &CommandCtx<'_, '_>, draft: &Draft, moved: bool) -> Result<Option<
         return Ok(Some(
             "The smallest amount is more than the largest.".to_owned(),
         ));
+    }
+    if draft.display_name.as_deref().is_some_and(str::is_empty) {
+        return Ok(Some("A name needs a letter in it.".to_owned()));
     }
     if draft.min.is_some_and(|min| min < 0) || draft.max.is_some_and(|max| max < 0) {
         return Ok(Some("An amount range is never negative.".to_owned()));
@@ -227,17 +251,17 @@ fn judge(ctx: &CommandCtx<'_, '_>, draft: &Draft, moved: bool) -> Result<Option<
 
 fn stored(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Option<(Rule, Json)>> {
     use rusqlite::OptionalExtension;
-    let row: Option<(String, String, f64)> = ctx
+    let row: Option<(String, String, Option<String>, f64)> = ctx
         .connection()
         .query_row(
-            "SELECT pattern, category_id, position FROM rule WHERE id = ?1",
+            "SELECT pattern, category_id, display_name, position FROM rule WHERE id = ?1",
             [id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .optional()?;
-    Ok(row.map(|(pattern, category, position)| {
+    Ok(row.map(|(pattern, category, display_name, position)| {
         let json = serde_json::from_str(&pattern).unwrap_or(Json::Null);
-        (parse(id, &pattern, category, position), json)
+        (parse(id, &pattern, category, display_name, position), json)
     }))
 }
 
@@ -264,9 +288,16 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         )?,
     };
     ctx.connection().execute(
-        "INSERT INTO rule (id, pattern, category_id, position, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params![id, draft.pattern(), draft.category, position, ctx.now],
+        "INSERT INTO rule (id, pattern, category_id, display_name, position, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![
+            id,
+            draft.pattern(),
+            draft.category,
+            draft.display_name,
+            position,
+            ctx.now
+        ],
     )?;
     Ok(json!({ "id": id, "position": position }))
 }
@@ -291,9 +322,15 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         .and_then(Json::as_f64)
         .unwrap_or(rule.position);
     let changed = ctx.connection().execute(
-        "UPDATE rule SET pattern = ?2, category_id = ?3, position = ?4
-          WHERE id = ?1 AND (pattern, category_id, position) IS NOT (?2, ?3, ?4)",
-        rusqlite::params![id, draft.pattern(), draft.category, position],
+        "UPDATE rule SET pattern = ?2, category_id = ?3, display_name = ?5, position = ?4
+          WHERE id = ?1 AND (pattern, category_id, display_name, position) IS NOT (?2, ?3, ?5, ?4)",
+        rusqlite::params![
+            id,
+            draft.pattern(),
+            draft.category,
+            position,
+            draft.display_name
+        ],
     )? > 0;
     Ok(json!({ "id": id, "changed": changed }))
 }
@@ -325,12 +362,12 @@ fn apply(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         .and_then(Json::as_bool)
         .unwrap_or(false);
     let rules = load(ctx.connection())?;
-    type History = (String, String, i64, Option<String>, String);
+    type History = (String, String, i64, Option<String>, String, String);
     let lines: Vec<History> = ctx
         .connection()
         .prepare(
             "SELECT t.id, t.account_id, abs(t.amount_minor), t.category_id,
-                    COALESCE(json_extract(s.stated, '$.title'), e.title)
+                    COALESCE(json_extract(s.stated, '$.title'), e.title), e.title
                FROM txn t JOIN entity e ON e.id = t.id
                LEFT JOIN source s ON s.entity_id = t.id
               WHERE e.deleted_at IS NULL AND t.status <> 'void'
@@ -343,13 +380,15 @@ fn apply(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
                 row.get(2)?,
                 row.get(3)?,
                 row.get(4)?,
+                row.get(5)?,
             ))
         })?
         .collect::<rusqlite::Result<_>>()?;
-    let (mut matched, mut recategorised) = (0usize, 0usize);
-    for (id, account, magnitude, held, words) in lines {
+    let (mut matched, mut recategorised, mut renamed) = (0usize, 0usize, 0usize);
+    for (id, account, magnitude, held, words, title) in lines {
         let text = normalise(&words);
         let mut decided: Option<&str> = None;
+        let mut named: Option<&str> = None;
         let mut asked = only.is_none();
         for rule in rules
             .iter()
@@ -357,6 +396,7 @@ fn apply(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         {
             asked |= only == Some(rule.id.as_str());
             decided = Some(&rule.category);
+            named = rule.display_name.as_deref().or(named);
         }
         let Some(category) = decided.filter(|_| asked) else {
             continue;
@@ -372,8 +412,44 @@ fn apply(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             ctx.touch(&id)?;
             recategorised += 1;
         }
+        // The bank's words are the line's name until the member or a rule gives it another.
+        if let Some(name) = named
+            && (overwrite || title == words)
+            && title != name
+            && ctx.connection().execute(
+                "UPDATE entity SET title = ?2 WHERE id = ?1",
+                [&id, name],
+            )? > 0
+        {
+            ctx.touch(&id)?;
+            renamed += 1;
+        }
     }
-    Ok(json!({ "matched": matched, "recategorised": recategorised }))
+    Ok(json!({ "matched": matched, "recategorised": recategorised, "renamed": renamed }))
+}
+
+/// A statement line the vault has just added takes the payee the rules name for it: the last
+/// matching rule with a display name decides, as for the category. The title still holds the bank's
+/// words (the statement states them in `source.stated`, which this never touches). Only an ADDED
+/// line runs this, so a re-import never takes a name the member has since changed.
+pub(crate) fn name_new_line(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<()> {
+    let (account, magnitude, words): (String, i64, String) = ctx.connection().query_row(
+        "SELECT t.account_id, abs(t.amount_minor), e.title
+           FROM txn t JOIN entity e ON e.id = t.id WHERE t.id = ?1",
+        [id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    let text = normalise(&words);
+    let named = load(ctx.connection())?
+        .into_iter()
+        .filter(|rule| rule.matches(&text, magnitude, &account))
+        .filter_map(|rule| rule.display_name)
+        .next_back();
+    if let Some(name) = named.filter(|name| *name != words) {
+        ctx.connection()
+            .execute("UPDATE entity SET title = ?2 WHERE id = ?1", [id, &name])?;
+    }
+    Ok(())
 }
 
 /// The properties a rule's commands share, written once.
@@ -385,6 +461,7 @@ macro_rules! rule_properties {
         "max": { "type": ["integer", "null"], "minimum": 0 },
         "account_id": { "type": ["string", "null"], "minLength": 1 },
         "category_id": { "type": "string", "minLength": 1 },
+        "display_name": { "type": ["string", "null"], "maxLength": 80 },
         "position": { "type": "number", "minimum": 0 }"#
     };
 }
@@ -474,6 +551,7 @@ mod tests {
             max: None,
             account: None,
             category: "category:food".to_owned(),
+            display_name: None,
             position: 0.0,
         }
     }

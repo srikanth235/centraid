@@ -402,6 +402,9 @@ message MoneyRules {
     reserved 8;
     reserved "display_name";
     uint32 specificity = 9;
+    // The payee a rule gives the lines it files, instead of the bank's words (#1146 D9). A
+    // new number: 8 stays reserved with the old name.
+    optional string rename_to = 10;
   }
 }
 

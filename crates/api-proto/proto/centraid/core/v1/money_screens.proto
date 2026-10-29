@@ -981,6 +981,9 @@ message MoneyRuleEditor {
   string amount_max_label = 27;
   bool limits_enabled = 28;
   string amount_note = 29;
+  // The payee the rule gives a line it files (empty: the bank's words stay), and its label.
+  string rename_text = 30;
+  string rename_label = 31;
 
   enum Mode {
     MODE_UNSPECIFIED = 0;
@@ -1009,6 +1012,11 @@ message MoneyRulesEvent {
     SheetClosed sheet_closed = 15;
     ConfirmAccepted confirm_accepted = 16;
     ConfirmDismissed confirm_dismissed = 17;
+    RenameEdited rename = 18;
+  }
+
+  message RenameEdited {
+    string text = 1;
   }
 
   message AddTapped {}

@@ -8,7 +8,7 @@
 //! category, a plan, a rule) or a fact the bank stated (a line, a checkpoint).
 //!
 //! - **An account** is an entity with a currency, a type and the balance it
-//!   opened with. Its bank number, when it has one, and the column layout its
+//!   opened with on a day (`opening_on`: lines on or before it are already in that balance). Its bank number, when it has one, and the column layout its
 //!   statements were last read with live on the **statement origin** that fills
 //!   it (`origin.ref`, `origin.config`); with no number the origin's `ref` is the
 //!   account's own id, so every account has exactly one origin from birth.
@@ -167,7 +167,20 @@ fn pre_new_account(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
             "Another account already has that bank number.".to_owned(),
         ));
     }
-    Ok(None)
+    opening_sentence(ctx)
+}
+
+/// An opening balance is as of a real day; one that is not nothing needs its day, or no
+/// one can say which lines it already holds.
+fn opening_sentence(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let day = ctx.optional_str("opening_on");
+    if let Some(day) = day
+        && !is_day(ctx.connection(), day)?
+    {
+        return Ok(Some("That is not a real date.".to_owned()));
+    }
+    Ok((integer(ctx, "opening_minor").unwrap_or(0) != 0 && day.is_none())
+        .then(|| "An opening balance needs the day it was true.".to_owned()))
 }
 
 fn add_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
@@ -185,13 +198,14 @@ fn add_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         None => connection.query_row("SELECT currency FROM vault", [], |row| row.get(0))?,
     };
     connection.execute(
-        "INSERT INTO account (id, type, currency, opening_minor, on_budget)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
+        "INSERT INTO account (id, type, currency, opening_minor, opening_on, on_budget)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         rusqlite::params![
             id,
             ctx.required_str("type")?,
             currency,
             integer(ctx, "opening_minor").unwrap_or(0),
+            ctx.optional_str("opening_on"),
             i64::from(flag(ctx, "on_budget").unwrap_or(true)),
         ],
     )?;
@@ -306,11 +320,23 @@ fn edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     Ok(json!({ "id": id, "changed": changed }))
 }
 
+fn pre_set_opening(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    if let Some(sentence) = pre_account(ctx)? {
+        return Ok(Some(sentence));
+    }
+    opening_sentence(ctx)
+}
+
 fn set_opening(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let id = ctx.required_str("id")?;
     let changed = ctx.connection().execute(
-        "UPDATE account SET opening_minor = ?2 WHERE id = ?1 AND opening_minor IS NOT ?2",
-        rusqlite::params![id, integer(ctx, "opening_minor").unwrap_or(0)],
+        "UPDATE account SET opening_minor = ?2, opening_on = ?3
+          WHERE id = ?1 AND (opening_minor, opening_on) IS NOT (?2, ?3)",
+        rusqlite::params![
+            id,
+            integer(ctx, "opening_minor").unwrap_or(0),
+            ctx.optional_str("opening_on")
+        ],
     )? > 0;
     if changed {
         ctx.touch(id)?;
@@ -796,9 +822,9 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "account_is_new_and_named",
         check: pre_new_account,
     }];
-    const ACCOUNT: &[CommandCondition] = &[CommandCondition {
-        predicate: "account_exists",
-        check: pre_account,
+    const SET_OPENING: &[CommandCondition] = &[CommandCondition {
+        predicate: "account_exists_and_opening_has_its_day",
+        check: pre_set_opening,
     }];
     const EDIT_ACCOUNT: &[CommandCondition] = &[CommandCondition {
         predicate: "account_edit_is_sound",
@@ -888,7 +914,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
                 "on_budget": { "type": "boolean" },
                 "external_ref": { "type": "string", "minLength": 1, "maxLength": 64 },
-                "opening_minor": { "type": "integer" }
+                "opening_minor": { "type": "integer" },
+                "opening_on": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
               }
             }"#,
             Idempotency::Once,
@@ -923,11 +950,12 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "additionalProperties": false,
               "properties": {
                 "id": { "type": "string", "minLength": 1 },
-                "opening_minor": { "type": "integer" }
+                "opening_minor": { "type": "integer" },
+                "opening_on": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
               }
             }"#,
             Idempotency::Idempotent,
-            ACCOUNT,
+            SET_OPENING,
             set_opening,
         ),
         CommandDefinition::plain(

@@ -5510,7 +5510,7 @@
       ]
     },
     {
-      "card": "account: name, type (checking|savings|credit_card|cash), currency, opening (USD), on_budget (yes|no) · verbs: create edit archive unarchive",
+      "card": "account: name, type (checking|savings|credit_card|cash), currency, opening (USD), opening_on, on_budget (yes|no) · verbs: create edit archive unarchive",
       "container": false,
       "date": null,
       "entity": "account",
@@ -5563,6 +5563,16 @@
           "values": []
         },
         {
+          "name": "opening_on",
+          "source": {
+            "column": "opening_on",
+            "table": "account"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
           "name": "on_budget",
           "source": {
             "column": "on_budget",
@@ -5594,6 +5604,7 @@
         "type",
         "currency",
         "opening",
+        "opening_on",
         "on_budget"
       ]
     },
@@ -5770,6 +5781,7 @@
     "account.id",
     "account.on_budget",
     "account.opening_minor",
+    "account.opening_on",
     "account.type",
     "activity.starts",
     "budget.amount_minor",

@@ -510,6 +510,9 @@ const USERNAME_ALIASES: [&str; 4] = ["username", "login_username", "user", "logi
 const PASSWORD_ALIASES: [&str; 3] = ["password", "login_password", "pass"];
 const OTP_ALIASES: [&str; 5] = ["otpauth", "totp", "login_totp", "otp", "otp_seed"];
 const NOTES_ALIASES: [&str; 4] = ["notes", "note", "extra", "comments"];
+const TYPE_ALIASES: [&str; 1] = ["type"];
+/// LastPass writes a secure note as a row whose address is this.
+const LASTPASS_NOTE_URL: &str = "http://sn";
 const FAVORITE_ALIASES: [&str; 3] = ["favorite", "favourite", "fav"];
 const TAGS_ALIASES: [&str; 1] = ["tags"];
 const ARCHIVED_ALIASES: [&str; 1] = ["archived"];
@@ -539,6 +542,7 @@ fn read_csv(text: &str) -> Result<ImportFile, ReadRefusal> {
     let title = column_of(&header, &TITLE_ALIASES);
     let otp = column_of(&header, &OTP_ALIASES);
     let notes = column_of(&header, &NOTES_ALIASES);
+    let kind = column_of(&header, &TYPE_ALIASES);
     let favorite = column_of(&header, &FAVORITE_ALIASES);
     let tags = column_of(&header, &TAGS_ALIASES);
     let archived = column_of(&header, &ARCHIVED_ALIASES);
@@ -550,21 +554,39 @@ fn read_csv(text: &str) -> Result<ImportFile, ReadRefusal> {
                     .map(|value| value.trim().to_owned())
                     .unwrap_or_default()
             };
-            let address = cell(url);
+            let mut address = cell(url);
             let named = cell(title);
+            // A SECURE NOTE (LastPass: the address `http://sn`; Bitwarden: `type = note`) is a
+            // note whose body is the sealed `content`, never a login with a plain `notes`.
+            let secure_note = address.eq_ignore_ascii_case(LASTPASS_NOTE_URL)
+                || matches!(
+                    cell(kind).to_lowercase().as_str(),
+                    "note" | "securenote" | "secure note"
+                );
+            if secure_note {
+                address.clear();
+            }
             let mut columns = BTreeMap::new();
-            for (column, value) in [
-                ("username", cell(username)),
-                ("password", cell(password)),
-                ("url", address.clone()),
-                ("otp_seed", cell(otp)),
-                ("notes", cell(notes)),
-            ] {
+            let body = cell(notes);
+            let cells = if secure_note {
+                vec![("content", body)]
+            } else {
+                vec![
+                    ("username", cell(username)),
+                    ("password", cell(password)),
+                    ("url", address.clone()),
+                    ("otp_seed", cell(otp)),
+                    ("notes", body),
+                ]
+            };
+            for (column, value) in cells {
                 if !value.is_empty() {
                     columns.insert(column.to_owned(), value);
                 }
             }
-            normalise_seed(&mut columns);
+            if !secure_note {
+                normalise_seed(&mut columns);
+            }
             let truthy = |value: String| {
                 matches!(
                     value.to_lowercase().as_str(),
@@ -572,7 +594,7 @@ fn read_csv(text: &str) -> Result<ImportFile, ReadRefusal> {
                 )
             };
             Entry {
-                item_type: "login".to_owned(),
+                item_type: if secure_note { "note" } else { "login" }.to_owned(),
                 title: if named.is_empty() {
                     host_of(&address).unwrap_or_default()
                 } else {
@@ -788,6 +810,26 @@ mod tests {
             assert_eq!(entry.column("password"), "pw-1");
             assert_eq!(entry.column("url"), "https://bank.example/login");
         }
+    }
+
+    /// A SECURE NOTE IS A NOTE (#1146 D2c): LastPass marks one with the address `http://sn`,
+    /// Bitwarden with `type = note`; the body is the sealed `content`, not a login's `notes`.
+    #[test]
+    fn a_secure_note_row_reads_as_a_note_whose_body_is_its_content() {
+        let lastpass = "url,username,password,extra,name,grouping,fav\nhttp://sn,,,body one,Safe code,,0\n";
+        let bitwarden = "folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,login_password,login_totp\n,0,note,Door code,body two,,0,,,,\n,0,login,Bank,a note,,0,https://bank.example,ada,pw,\n";
+        let entries = read(lastpass.as_bytes()).expect("reads").entries;
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].item_type, "note");
+        assert_eq!(entries[0].column("content"), "body one");
+        assert_eq!(entries[0].column("notes"), "");
+        assert_eq!(entries[0].column("url"), "");
+        let entries = read(bitwarden.as_bytes()).expect("reads").entries;
+        assert_eq!(entries[0].item_type, "note");
+        assert_eq!(entries[0].column("content"), "body two");
+        assert_eq!(entries[0].column("notes"), "");
+        assert_eq!(entries[1].item_type, "login");
+        assert_eq!(entries[1].column("notes"), "a note");
     }
 
     #[test]
