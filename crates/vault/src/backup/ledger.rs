@@ -817,6 +817,20 @@ impl Ledger {
         Ok(rows.collect::<rusqlite::Result<BTreeSet<_>>>()?)
     }
 
+    /// The bytes `gateway_id` acknowledged, as each acknowledgement recorded
+    /// them: what "Holds 5.1 GB" says (#1144).
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn held_bytes(&self, gateway_id: &str) -> Result<u64> {
+        let total: i64 = self.connection.query_row(
+            "SELECT coalesce(sum(size), 0) FROM confirmed WHERE gateway_id = ?1",
+            params![gateway_id],
+            |row| row.get(0),
+        )?;
+        Ok(u64::try_from(total).unwrap_or(0))
+    }
+
     /// Whether `gateway_id` acknowledged `name`.
     ///
     /// # Errors

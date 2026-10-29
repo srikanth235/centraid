@@ -13,6 +13,7 @@
 //! |---|---|
 //! | [`naming`] | the keys from the root key, and the names the vault's content implies |
 //! | [`files`] | every file the vault knows by hash, with what a pass decides by |
+//! | [`holdings`] | what the vault holds by kind, for the Backup screen's per-app rows |
 //! | [`snapshot`] | the page-identical copy, its ranges and manifest; plan, spool, settle |
 //! | [`store`] | the [`store::Store`] trait one destination answers, and [`store::MemoryStore`] |
 //! | [`ledger`] | `<stem>.backup.db`: destinations, the queue, confirmations, snapshots |
@@ -38,6 +39,7 @@
 
 pub mod drill;
 pub mod files;
+pub mod holdings;
 pub mod ledger;
 pub mod mover;
 pub mod naming;

@@ -747,7 +747,9 @@ fn keychain_set(value: &str) -> wire::Effect {
     }))
 }
 
-fn app_name(locale: Locale, app: &str) -> String {
+/// An app's name, by the catalogue's id: Home's tiles and the Backup screen's
+/// rows say it the same way.
+pub(crate) fn app_name(locale: Locale, app: &str) -> String {
     match app {
         "agenda" => words::app_agenda(locale),
         "docs" => words::app_docs(locale),

@@ -28,11 +28,12 @@ use std::time::Duration;
 use centraid_api_proto::core_v1 as wire;
 use wire::screen_event::Kind as E;
 
+use super::claim::bytes;
 use super::doors::{self, Done};
 use super::key::KeyCustody;
 use super::reading::{self, Destination, Standing};
 use super::rule::{self, TransferRule};
-use super::{line, routes};
+use super::{apps, line, routes};
 use crate::custody::secrets::{self, SeedWrite, VaultSecrets};
 use crate::kit::read::{Reading, failure};
 use crate::screen::{Ctx, Screen};
@@ -489,26 +490,40 @@ impl Backup {
         .flatten()
         .collect::<Vec<_>>()
         .join(" · ");
+        // WHAT IT HOLDS, as this phone recorded its acknowledgements (#1144).
+        let held = if destination.held_bytes == 0 {
+            String::new()
+        } else {
+            fill(
+                &words::backup_held(locale),
+                &[("size", &bytes(destination.held_bytes))],
+            )
+        };
+        let accessibility_label = [label.as_str(), &held, &detail]
+            .into_iter()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(". ");
         wire::BackupDestinationRow {
             gateway_id: destination.gateway_id.clone(),
-            accessibility_label: format!("{label}. {detail}"),
+            accessibility_label,
             label,
             detail,
             pair_again: destination.pair_again,
+            held,
         }
     }
 
-    /// "Backing up — 1,203 of 1,240 photos and files" while items are still to be
-    /// acknowledged; plain "Backing up…" when there is nothing to count, or
-    /// nothing but the records left to send.
+    /// "Backing up — 380 MB to go" while bytes are still to move (#1144);
+    /// plain "Backing up…" when nothing is left to count.
     fn progress(&self, locale: Locale) -> String {
         if !self.backing_up_now {
             return String::new();
         }
         match self.reading() {
-            Some(reading) if reading.content_total > 0 && reading.unconfirmed() > 0 => fill(
+            Some(reading) if reading.pending_bytes > 0 => fill(
                 &words::backup_progress(locale),
-                &[("counts", &line::counts(locale, reading))],
+                &[("size", &bytes(reading.pending_bytes))],
             ),
             _ => words::backup_now_running(locale),
         }
@@ -583,8 +598,18 @@ impl Backup {
         } else {
             wire::BackupInk::None
         };
+        let app_rows = self
+            .reading()
+            .map(|reading| apps::rows(locale, reading))
+            .unwrap_or_default();
         wire::BackupHomeData {
             title: words::backup_title(locale),
+            apps_heading: if app_rows.is_empty() {
+                String::new()
+            } else {
+                words::backup_apps_heading(locale)
+            },
+            apps: app_rows,
             line: Some(line::line(locale, self.reading(), frozen, now)),
             devices_heading: if destinations.is_empty() {
                 String::new()

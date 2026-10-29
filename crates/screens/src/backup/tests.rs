@@ -587,6 +587,7 @@ fn the_status_reads_the_ledger_destinations_counts_and_why_the_rest_waits() {
             (wire::WaitReason::Charger, 0),
         ]),
         frozen: true,
+        ..Default::default()
     };
     let read = reading(&wired);
     assert_eq!(read.unconfirmed(), 3);
@@ -698,11 +699,14 @@ fn a_pass_is_told_in_one_sentence_per_reason_and_a_deadline_is_not_an_error() {
 }
 
 #[test]
-fn bytes_are_decimal_whole_units() {
+fn bytes_are_decimal_and_rounded_down() {
     assert_eq!(claim::bytes(999), "999 bytes");
     assert_eq!(claim::bytes(12_345), "12 KB");
     assert_eq!(claim::bytes(340_000_000), "340 MB");
-    assert_eq!(claim::bytes(2_999_999_999), "2 GB");
+    // GIGABYTES UNDER A HUNDRED KEEP ONE DECIMAL, never rounded up (#1144).
+    assert_eq!(claim::bytes(2_999_999_999), "2.9 GB");
+    assert_eq!(claim::bytes(5_000_000_000), "5.0 GB");
+    assert_eq!(claim::bytes(120_400_000_000), "120 GB");
 }
 
 #[test]
@@ -972,6 +976,7 @@ fn back_up_now_needs_a_gateway_a_vault_that_has_not_moved_and_no_run_already_goi
 
     let mut running = Page::open(wire::BackupStatusResponse {
         content_confirmed: 7,
+        pending_bytes: 380_000_000,
         ..both()
     });
     running.say(tap.clone());
@@ -979,11 +984,12 @@ fn back_up_now_needs_a_gateway_a_vault_that_has_not_moved_and_no_run_already_goi
     assert_eq!(running.jobs, vec![doors::PASS.to_owned()]);
     let data = running.data();
     assert!(data.backing_up_now && !data.back_up_now_enabled);
-    assert_eq!(data.progress, "Backing up — 7 of 10 photos and files");
+    // BYTES TO GO, while bytes are to move (#1144).
+    assert_eq!(data.progress, "Backing up — 380 MB to go");
     // A SECOND PRESS STARTS NOTHING HERE: the run is already going.
     running.say(tap.clone());
     assert_eq!(running.jobs.len(), 1);
-    // NOTHING LEFT TO COUNT is said plainly, never "all 10" while it runs.
+    // NOTHING LEFT TO MOVE is said plainly, never "0 bytes to go" while it runs.
     let mut whole = Page::open(both());
     whole.say(tap);
     assert_eq!(whole.data().progress, words::backup_now_running(EN));
@@ -1556,4 +1562,226 @@ fn the_screens_two_hand_offs_are_routes_the_shell_pushes() {
     ));
     assert_eq!(routes::add_destination().screen, "pair.laptop");
     assert_eq!(routes::show_key().screen, "words.show");
+}
+
+// ---- every app's data, in bytes (#1144) ----------------------------------
+
+const GB: u64 = 1_000_000_000;
+const MB: u64 = 1_000_000;
+
+fn holding(app: &str, items: u64, bytes: u64) -> wire::AppHolding {
+    wire::AppHolding {
+        app_id: app.to_owned(),
+        items,
+        items_confirmed: items,
+        bytes,
+        bytes_confirmed: bytes,
+        ..Default::default()
+    }
+}
+
+/// The design's backed-up phone: eight apps, 5.0 GB, all of it acknowledged.
+fn eight_apps() -> Vec<wire::AppHolding> {
+    vec![
+        holding("agenda", 640, 6 * MB),
+        holding("docs", 58, 412 * MB),
+        wire::AppHolding {
+            workouts: 96,
+            ..holding("health", 731, 3 * MB)
+        },
+        holding("locker", 86, 96 * MB),
+        holding("money", 3_412, 21 * MB),
+        holding("notes", 312, 38 * MB),
+        holding("people", 418, 14 * MB),
+        holding("photos", 1_240, 4_410 * MB),
+    ]
+}
+
+fn with_apps(apps: Vec<wire::AppHolding>) -> wire::BackupStatusResponse {
+    let total_bytes = apps.iter().map(|app| app.bytes).sum();
+    let confirmed_bytes = apps.iter().map(|app| app.bytes_confirmed).sum();
+    wire::BackupStatusResponse {
+        destinations: vec![wire::Destination {
+            held_bytes: 5_100 * MB,
+            ..home_laptop()
+        }],
+        apps,
+        total_bytes,
+        confirmed_bytes,
+        ..status(Vec::new())
+    }
+}
+
+#[test]
+fn the_line_totals_every_app_in_bytes() {
+    let backed = Page::open(with_apps(eight_apps())).data();
+    let line = backed.line.expect("a line");
+    assert_eq!(line.detail, "All 5.0 GB from 8 apps is backed up.");
+    assert!(line.accessibility_label.contains("All 5.0 GB from 8 apps"));
+
+    // CATCHING UP says how far, in one unit.
+    let mut apps = eight_apps();
+    apps[7].bytes_confirmed = 4_010 * MB;
+    apps[7].items_confirmed = 1_203;
+    apps[7].waiting = 37;
+    let catching = Page::open(with_apps(apps)).data();
+    assert_eq!(
+        catching.line.expect("a line").detail,
+        "4.6 of 5.0 GB from 8 apps is backed up."
+    );
+
+    // VIDEOS LEFT OUT are said apart, never read as missing.
+    let mut apps = eight_apps();
+    apps[7] = wire::AppHolding {
+        left_out_items: 37,
+        left_out_bytes: 8_400 * MB,
+        ..holding("photos", 1_203, 4_000 * MB)
+    };
+    let left = Page::open(wire::BackupStatusResponse {
+        left_out_items: 37,
+        left_out_bytes: 8_400 * MB,
+        ..with_apps(apps)
+    })
+    .data();
+    assert_eq!(
+        left.line.expect("a line").detail,
+        "All 4.5 GB from 8 apps is backed up. 8.4 GB of videos is left out."
+    );
+
+    // NOTHING ACKNOWLEDGED YET says so, with what there is.
+    let mut apps = eight_apps();
+    for app in &mut apps {
+        app.bytes_confirmed = 0;
+    }
+    let none = Page::open(wire::BackupStatusResponse {
+        destinations: Vec::new(),
+        ..with_apps(apps)
+    })
+    .data();
+    assert_eq!(
+        none.line.expect("a line").detail,
+        "5.0 GB from 8 apps, none of it backed up yet."
+    );
+
+    // A READING WITH NO PER-APP ROWS keeps the counts.
+    let bare = Page::open(both()).data();
+    assert_eq!(bare.line.expect("a line").detail, "All 10 photos and files");
+    assert!(bare.apps.is_empty() && bare.apps_heading.is_empty());
+}
+
+#[test]
+fn in_this_backup_lists_every_app_biggest_first_with_what_it_holds() {
+    let data = Page::open(with_apps(eight_apps())).data();
+    assert_eq!(data.apps_heading, "In this backup");
+    let drawn: Vec<(&str, &str, &str)> = data
+        .apps
+        .iter()
+        .map(|row| (row.name.as_str(), row.detail.as_str(), row.status.as_str()))
+        .collect();
+    assert_eq!(
+        drawn,
+        [
+            ("Photos", "1,240 photos and videos · 4.4 GB", "Backed up"),
+            ("Docs", "58 documents · 412 MB", "Backed up"),
+            ("Locker", "86 items · 96 MB", "Backed up"),
+            ("Notes", "312 notes · 38 MB", "Backed up"),
+            ("Money", "3,412 transactions · 21 MB", "Backed up"),
+            ("People", "418 people · 14 MB", "Backed up"),
+            ("Agenda", "640 events and tasks · 6 MB", "Backed up"),
+            ("Health", "731 days, 96 workouts · 3 MB", "Backed up"),
+        ]
+    );
+    assert!(
+        data.apps
+            .iter()
+            .all(|row| !row.waiting && row.note.is_empty())
+    );
+    assert_eq!(
+        data.apps[3].accessibility_label,
+        "Notes. 312 notes · 38 MB. Backed up"
+    );
+    assert_eq!(data.apps[0].app_id, "photos");
+    // EACH BACKUP DEVICE SAYS WHAT IT HOLDS.
+    assert_eq!(data.destinations[0].held, "Holds 5.1 GB");
+    assert!(
+        data.destinations[0]
+            .accessibility_label
+            .contains("Holds 5.1 GB")
+    );
+}
+
+#[test]
+fn a_row_says_what_waits_and_never_more_than_was_acknowledged() {
+    let mut apps = eight_apps();
+    apps[7] = wire::AppHolding {
+        items_confirmed: 1_203,
+        bytes_confirmed: 4_000 * MB,
+        waiting: 37,
+        ..holding("photos", 1_240, 4_400 * MB)
+    };
+    apps[1] = wire::AppHolding {
+        items_confirmed: 56,
+        bytes_confirmed: 400 * MB,
+        waiting: 2,
+        ..holding("docs", 58, 412 * MB)
+    };
+    apps[5].edits_waiting = 3;
+    apps[0].edits_waiting = 1;
+    let data = Page::open(with_apps(apps)).data();
+    let row = |id: &str| {
+        data.apps
+            .iter()
+            .find(|row| row.app_id == id)
+            .expect("a row")
+            .clone()
+    };
+    let photos = row("photos");
+    assert_eq!(
+        photos.detail,
+        "1,203 of 1,240 photos and videos · 4.0 of 4.4 GB"
+    );
+    assert_eq!(
+        (photos.status.as_str(), photos.waiting),
+        ("37 waiting", true)
+    );
+    assert_eq!(row("docs").detail, "56 of 58 documents · 400 of 412 MB");
+    let notes = row("notes");
+    assert_eq!(
+        (notes.status.as_str(), notes.waiting),
+        ("3 edits waiting", true)
+    );
+    assert_eq!(row("agenda").status, "1 edit waiting");
+    assert_eq!(row("money").status, "Backed up");
+
+    // NEVER ACKNOWLEDGED: no row says "Backed up".
+    let never = Page::open(wire::BackupStatusResponse {
+        acked_at_ms: None,
+        ..with_apps(eight_apps())
+    })
+    .data();
+    assert!(
+        never
+            .apps
+            .iter()
+            .all(|row| row.status == "Not backed up" && row.waiting)
+    );
+}
+
+#[test]
+fn videos_left_out_are_the_photos_rows_note() {
+    let mut apps = eight_apps();
+    apps[7] = wire::AppHolding {
+        left_out_items: 37,
+        left_out_bytes: 8_400 * MB,
+        ..holding("photos", 1_203, 4 * GB)
+    };
+    let data = Page::open(with_apps(apps)).data();
+    let photos = &data.apps[0];
+    assert_eq!(photos.detail, "1,203 photos · 4.0 GB");
+    assert_eq!(photos.note, "37 videos, 8.4 GB, left out");
+    assert_eq!(photos.status, "Backed up");
+    assert_eq!(
+        photos.accessibility_label,
+        "Photos. 1,203 photos · 4.0 GB. 37 videos, 8.4 GB, left out. Backed up"
+    );
 }

@@ -5,6 +5,7 @@
 //! | Piece | What it decides |
 //! |---|---|
 //! | [`home`] | the screen `backup.home`: the line, the gateways, the controls, the key |
+//! | [`apps`] | "In this backup": one row per app, what it holds and whether it is backed up |
 //! | [`line`] | the one honest line Home draws too: never more than a gateway acknowledged |
 //! | [`reading`] | the ledger's reading, and the `backup-status` query behind it |
 //! | [`rule`] | the member's transfer rule and the videos bit, as this phone keeps them |
@@ -24,6 +25,7 @@
 use crate::Registry;
 use crate::custody::secrets::VaultSecrets;
 
+pub mod apps;
 pub mod claim;
 mod doors;
 pub mod freeze;

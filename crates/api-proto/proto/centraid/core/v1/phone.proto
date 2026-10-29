@@ -408,7 +408,8 @@ message BackupStatusResponse {
   optional int64 acked_at_ms = 2;
   // Bytes still to back up: the number a shell draws as "3.2 MB left". The
   // plaintext length of every file the vault knows that some gateway has not
-  // acknowledged whole, plus the snapshot parts waiting in the spool.
+  // acknowledged whole, plus the snapshot parts waiting in the spool. A video
+  // the member left out is not counted: it is not to back up (#1144).
   uint64 pending_bytes = 3;
   // EVERY GATEWAY THIS PHONE IS PAIRED WITH (#1080). Like everything here, read
   // from the device's ledger: nothing is dialled to draw a screen.
@@ -434,6 +435,46 @@ message BackupStatusResponse {
   // A GATEWAY ANSWERED `VAULT_MOVED`: another phone holds this vault's writer
   // epoch, and this one is read-only for it (#1029 F1). Nothing is wiped.
   bool frozen = 11;
+  // WHAT EACH APP'S BACKUP HOLDS (#1144), one row per app in the product's
+  // order. Empty on a core holding no vault, or no keys to name its files by.
+  repeated AppHolding apps = 12;
+  // THE BACKUP IN BYTES: every app's size, the vault file and every file it
+  // knows, less the videos the member left out; and of that, what a gateway
+  // acknowledged. The apps' rows add up to these.
+  uint64 total_bytes = 13;
+  uint64 confirmed_bytes = 14;
+  // THE VIDEOS THE MEMBER LEFT OUT ("Include videos" off, as the last pass was
+  // told it): how many originals, and their bytes. Not in `total_bytes`.
+  uint64 left_out_items = 15;
+  uint64 left_out_bytes = 16;
+}
+
+// ONE APP'S PART OF THE BACKUP (#1144). Counts come from the app's own
+// tables; a size is the app's own files (a photograph's or a document's
+// original and its derivatives) plus its share of the vault file and of the
+// files no one app owns, shared by record rows.
+message AppHolding {
+  // The app's id, as the catalogue names it: `photos`, `notes`.
+  string app_id = 1;
+  // What the app holds, in its own unit: photographs and videos, documents,
+  // notes, transactions, people, events and tasks, Locker items; for Health,
+  // the days with a reading.
+  uint64 items = 2;
+  // Health's workouts; zero for every other app.
+  uint64 workouts = 3;
+  // Of `items`, the ones a gateway acknowledged with their row (Photos and
+  // Docs only; a records-only app's rows travel whole in each snapshot).
+  uint64 items_confirmed = 4;
+  uint64 bytes = 5;
+  uint64 bytes_confirmed = 6;
+  // Originals no gateway holds yet, the videos left out not among them.
+  uint64 waiting = 7;
+  // Rows written since the newest snapshot a gateway acknowledged: they wait
+  // for the next one. Zero before any snapshot was acknowledged.
+  uint64 edits_waiting = 8;
+  // The videos left out of this app's backup, and their bytes.
+  uint64 left_out_items = 9;
+  uint64 left_out_bytes = 10;
 }
 
 // One reason things wait, and how many (`BackupStatusResponse.waiting`).
@@ -511,6 +552,10 @@ message Destination {
   // refused; this says it is not. Cleared by pairing again, or by the gateway
   // accepting the token. Set only by `backup_status`; `pins` leaves it false.
   bool pair_again = 7;
+  // THE BYTES THIS GATEWAY ACKNOWLEDGED, as this phone recorded them (#1144):
+  // every snapshot range and file it holds for this vault, old snapshots'
+  // included. Set only by `backup_status`.
+  uint64 held_bytes = 8;
 }
 
 // A PAIRED GATEWAY, FOUND AGAIN AT NEW ADDRESSES (#1080, Q-1080-D3).

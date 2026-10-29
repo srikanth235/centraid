@@ -111,6 +111,12 @@ struct BackupHomeView: View {
                     recoveryKey(model)
                 }
 
+                // WHAT EACH APP'S BACKUP HOLDS (#1144), biggest first as the
+                // screen orders it.
+                if !model.apps.isEmpty {
+                    section(model.appsHeading) { apps(model) }
+                }
+
                 if paired {
                     section(model.devicesHeading) { destinations(model) }
                 }
@@ -260,6 +266,12 @@ struct BackupHomeView: View {
                         Text(row.label)
                             .centraidType("smallStrong")
                             .foregroundStyle(Theme.color("text", scheme))
+                        // WHAT IT HOLDS, as this phone recorded its acknowledgements.
+                        if !row.held.isEmpty {
+                            Text(row.held)
+                                .centraidType("small")
+                                .foregroundStyle(Theme.color("text", scheme))
+                        }
                         if !row.detail.isEmpty {
                             Text(row.detail)
                                 .centraidType("mono")
@@ -293,6 +305,53 @@ struct BackupHomeView: View {
                 KitOutlineButton(label: model.addDestinationLabel) { open(model.addDestination) }
                     .padding(.top, 12)
                     .accessibilityIdentifier("backup-add-destination")
+            }
+        }
+    }
+
+    /// "IN THIS BACKUP" (#1144): one row per app — its mark, its name, what it
+    /// holds and its size, what was left out of it, and whether it is backed
+    /// up. A row that waits draws its status in the attention tone.
+    @ViewBuilder
+    private func apps(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(model.apps, id: \.appID) { row in
+                HStack(alignment: .center, spacing: 12) {
+                    AppMark(appID: row.appID, size: 32)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.name)
+                            .centraidType("smallStrong")
+                            .foregroundStyle(Theme.color("text", scheme))
+                        if !row.detail.isEmpty {
+                            Text(row.detail)
+                                .centraidType("annotLabel")
+                                .foregroundStyle(Theme.color("textFaint", scheme))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        if !row.note.isEmpty {
+                            Text(row.note)
+                                .centraidType("annotLabel")
+                                .foregroundStyle(Theme.color("textFaint", scheme))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    if !row.status.isEmpty {
+                        Text(row.status)
+                            .centraidType(row.waiting ? "annotLabelOn" : "annotLabel")
+                            .foregroundStyle(Theme.color(row.waiting ? "attention" : "textFaint", scheme))
+                            .multilineTextAlignment(.trailing)
+                    }
+                }
+                .frame(minHeight: 56)
+                .padding(.vertical, 8)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.name : row.accessibilityLabel)
+                .accessibilityIdentifier("backup-app-\(row.appID)")
+                // THE PAGE IS ALREADY INSET, so the rule is the plain hairline.
+                Rectangle()
+                    .fill(Theme.color("line", scheme))
+                    .frame(height: CentraidGeometry.hairline)
             }
         }
     }
