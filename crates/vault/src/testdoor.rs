@@ -162,6 +162,29 @@ pub fn text_of_tables(
     Ok(out)
 }
 
+/// Make a founded, closed vault file one this build refuses as the model before #1135: stamp it with
+/// that model's `application_id` ([`crate::format::EARLIER_APPLICATION_ID`]). For a test of what
+/// crosses the ABI when `Vault::open` says no (#1146).
+///
+/// # Errors
+/// SQLite's refusal to open or write the file.
+pub fn stamp_earlier_model(path: &std::path::Path) -> rusqlite::Result<()> {
+    Connection::open(path)?.pragma_update(
+        None,
+        "application_id",
+        crate::format::EARLIER_APPLICATION_ID,
+    )
+}
+
+/// Make a founded, closed vault file one this build refuses for its tables: add one the baseline
+/// does not have.
+///
+/// # Errors
+/// SQLite's refusal to open or write the file.
+pub fn add_stray_table(path: &std::path::Path) -> rusqlite::Result<()> {
+    Connection::open(path)?.execute_batch("CREATE TABLE stray (x TEXT)")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

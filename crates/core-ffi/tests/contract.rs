@@ -921,18 +921,20 @@ fn an_open_that_refuses_an_ordinary_file_never_answers_ok() {
 fn a_vault_of_the_earlier_model_or_another_schema_is_refused_with_a_line_that_says_so() {
     let dir = centraid_ontology::scratch::scratch_dir();
     std::fs::create_dir_all(&dir).expect("the directory is made");
-    for (name, change, said) in [
+    type Change = fn(&std::path::Path) -> centraid_vault::rusqlite::Result<()>;
+    let cases: [(&str, Change, &str); 2] = [
         (
             "earlier.db",
-            "PRAGMA application_id = 1128615473",
+            centraid_vault::testdoor::stamp_earlier_model,
             "made by an earlier version of Centraid that this one cannot open",
         ),
         (
             "other.db",
-            "CREATE TABLE stray (x TEXT)",
+            centraid_vault::testdoor::add_stray_table,
             "does not match this version of Centraid",
         ),
-    ] {
+    ];
+    for (name, change, said) in cases {
         let path = dir.join(name);
         {
             let handle = centraid_core::Core::open(centraid_core::CoreConfig::new(&path))
@@ -942,11 +944,7 @@ fn a_vault_of_the_earlier_model_or_another_schema_is_refused_with_a_line_that_sa
                 .expect("it founds");
             handle.close();
         }
-        {
-            let connection =
-                centraid_vault::rusqlite::Connection::open(&path).expect("the file opens");
-            connection.execute_batch(change).expect("the file changes");
-        }
+        change(&path).expect("the file changes");
         let config = format!(
             r#"{{"path":{:?},"create":false}}"#,
             path.display().to_string()

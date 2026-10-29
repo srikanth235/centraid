@@ -30,7 +30,7 @@ const UNDRIVEN: &[(&str, &str, &str)] = &[
         "reveal",
         "locker item",
         "a reveal runs no command: it ends the turn in a member action the member completes in \
-         Locker, whose own flow writes the receipt (#1135); tests/locker_parity.rs drives it",
+         Locker, whose own flow stamps the item (#1146); tests/locker_parity.rs drives it",
     ),
     (
         "restore",

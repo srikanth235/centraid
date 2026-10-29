@@ -21,8 +21,7 @@
 //
 // Same answer `vault.proto` gives for founding, one layer further out. A
 // registered command runs through `centraid_vault::commands::Registry`, whose
-// gate order evaluates its principal against `vault.self_id` and ends in a
-// receipt row. **A restore has no vault to be a principal in** — that is the
+// gate order evaluates its principal against `vault.self_id`. **A restore has no vault to be a principal in** — that is the
 // whole of what it is for — and a drain is not a write to the vault at all: it
 // moves sealed ciphertext of what the vault holds out to a gateway. Neither
 // is a command, and a command exempted from the gate order would be a second
@@ -896,7 +895,7 @@ message ReleasedResponse {
 //
 // **It needs no vault**, like `restore`: a phone making its first vault, or
 // restoring onto a fresh install, has none. It is bounded, and it is not a
-// command, so it writes no receipt — the words and the seed reach no row, no
+// command, so it writes no action key — the words and the seed reach no row, no
 // log line and no error detail. A refused `seed` names the count or "not a
 // valid phrase", never a word.
 message PhraseRequest {
