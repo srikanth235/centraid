@@ -121,9 +121,7 @@ fn step(
             relock(cell);
             Ok(state_of(cell, now))
         }
-        Some(Step::Unlock(asked)) => {
-            unlock(vault, registry, owner, keys, cell, now, &asked.tz, changes)
-        }
+        Some(Step::Unlock(asked)) => unlock(vault, registry, owner, keys, cell, &asked.tz, changes),
         Some(Step::UnlockFailed(asked)) => {
             unlock_failed(vault, registry, owner, cell, now, &asked.tz, changes)
         }
@@ -203,10 +201,10 @@ fn unlock(
     owner: &Principal,
     keys: Option<&crate::phone::Keyring>,
     cell: &Cell,
-    now_ms: i64,
     tz: &str,
     changes: &crate::events::ChangeFeed,
 ) -> Result<wire::LockerSessionResponse> {
+    let now_ms = vault.clock().now_ms();
     let vault_id = vault.self_id()?.ok_or_else(|| CoreError::InvalidRequest {
         detail: "this file is not a founded vault, so it has no Locker".to_owned(),
     })?;
