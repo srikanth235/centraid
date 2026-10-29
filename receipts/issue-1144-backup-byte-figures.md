@@ -26,7 +26,8 @@ cargo test -p centraid-core --lib holdings          # 4 passed: the fold, the sh
 cargo test -p centraid-core --test backup_holdings  # 2 passed: against a real gateway
 cargo test -p centraid-core --test query_plans      # 2 passed: no new scan, no allowlist row
 cargo test -p centraid-screens                      # 368 lib + every integration binary passed
-cargo xtask gate --profile local
 ```
+
+`cargo xtask gate --profile local` was started and did not finish: the container's disk filled during its test step. The commit hook's governance checks and the push hook's static checks passed; the `pr` profile is CI's to run.
 
 **Not verified:** the Android view is not compiled (no Android SDK here), and the iOS view is not compiled (no Xcode here). Neither was checked on a device.
