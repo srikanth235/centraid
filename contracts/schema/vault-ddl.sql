@@ -795,6 +795,11 @@ CREATE TRIGGER message_outcome_settles_once BEFORE UPDATE OF outcome ON message
 CREATE TRIGGER revision_is_history BEFORE UPDATE ON revision
   BEGIN SELECT RAISE(ABORT, 'a revision is history'); END;
 
+-- trigger revision_is_kept on revision
+CREATE TRIGGER revision_is_kept BEFORE DELETE ON revision
+  WHEN EXISTS (SELECT 1 FROM entity WHERE id = old.entity_id)
+  BEGIN SELECT RAISE(ABORT, 'a revision is kept while its entity is'); END;
+
 -- trigger source_tombstone_is_final on source
 CREATE TRIGGER source_tombstone_is_final BEFORE UPDATE OF entity_id ON source
   WHEN old.entity_id IS NULL AND new.entity_id IS NOT NULL

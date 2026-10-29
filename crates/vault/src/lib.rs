@@ -35,6 +35,7 @@ pub mod commands;
 pub mod custody;
 pub mod error;
 pub mod file;
+pub mod format;
 pub mod index;
 pub mod log;
 pub mod migrations;
@@ -68,7 +69,8 @@ pub use commands::{
 };
 pub use error::{IntentRefusal, RebootstrapReason, Result, VaultError};
 pub use file::Vault;
+pub use format::{APPLICATION_ID, SCHEMA_DIGEST};
 pub use log::{ChangeCensus, CommitResult, CommitTx};
-pub use migrations::{APPLICATION_ID, head_version};
+pub use migrations::head_version;
 pub use snapshot::{Fault, SnapshotHead, Step, build_snapshot};
 pub use value::{RowImage, Value};

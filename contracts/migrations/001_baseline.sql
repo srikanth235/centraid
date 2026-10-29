@@ -213,6 +213,11 @@ CREATE TABLE revision (
 ) STRICT, WITHOUT ROWID;
 CREATE TRIGGER revision_is_history BEFORE UPDATE ON revision
   BEGIN SELECT RAISE(ABORT, 'a revision is history'); END;
+-- Nothing deletes a revision by hand: it goes only with its entity (the foreign key's cascade runs
+-- after the entity row is gone, so it finds no entity and is allowed).
+CREATE TRIGGER revision_is_kept BEFORE DELETE ON revision
+  WHEN EXISTS (SELECT 1 FROM entity WHERE id = old.entity_id)
+  BEGIN SELECT RAISE(ABORT, 'a revision is kept while its entity is'); END;
 
 -- An act's key and a digest of what it asked, written in the commit it names, so a delivery the
 -- phone repeats after a restart is answered `replayed` and runs nothing (#1146). Only an executed

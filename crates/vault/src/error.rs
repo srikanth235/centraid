@@ -99,6 +99,22 @@ pub enum VaultError {
         expected: i64,
     },
 
+    /// A file the model before #1135 made ([`crate::format::EARLIER_APPLICATION_ID`]). There is no
+    /// compatibility with it (R-FP-10): no migration, and no guess at what its tables mean.
+    #[error("{path} was made by an earlier version of Centraid that this one cannot open")]
+    EarlierModel { path: PathBuf },
+
+    /// A file of this model whose tables are not the ones this build was written against
+    /// ([`crate::format::SCHEMA_DIGEST`]).
+    #[error(
+        "the vault at {path} does not match this version of Centraid: its tables are not the ones this version expects"
+    )]
+    SchemaMismatch {
+        path: PathBuf,
+        found: String,
+        expected: String,
+    },
+
     /// A file a NEWER build wrote. The core never guesses a schema down.
     #[error("{path} is at schema version {found}; this build understands {expected}")]
     DowngradeRefused {

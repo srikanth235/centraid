@@ -2,7 +2,7 @@
 //!
 //! ## Two axes, and v0's is not one of them (D-1020-D1-2)
 //!
-//! A vault file carries `PRAGMA application_id = 0x43454E31` (`CEN1`) and
+//! A vault file carries `PRAGMA application_id = 0x43454E32` (`CEN2`, [`crate::format`]) and
 //! `PRAGMA user_version = <the ladder's length>`. There is no compatibility
 //! with any earlier file ([#1135](https://github.com/srikanth235/centraid/issues/1135),
 //! R-FP-10): the version axis starts at 1 and counts this ladder's own rungs.
@@ -35,10 +35,6 @@
 use rusqlite::Connection;
 
 use crate::error::{Result, VaultError};
-
-/// `CEN1` as a big-endian four-byte tag: the `application_id` a v1 vault
-/// carries, so `file` and a human can tell one from any other SQLite database.
-pub const APPLICATION_ID: i64 = 0x4345_4e31;
 
 /// One rung of the ladder.
 pub struct Migration {
@@ -229,11 +225,6 @@ mod tests {
             );
         }
         assert!(BASELINE_SQL.contains("CREATE VIRTUAL TABLE search "));
-    }
-
-    #[test]
-    fn the_application_id_spells_cen1() {
-        assert_eq!(APPLICATION_ID.to_be_bytes()[4..], *b"CEN1");
     }
 
     #[test]
