@@ -182,7 +182,11 @@ fn lapsed_blobs(vault: &Vault) -> Result<std::collections::HashSet<String>> {
                 .map(|(hash, _)| hash)
                 .collect::<HashSet<_>>())
         })
-        .map_err(|error| invariant(format!("the vault would not say which blobs have lapsed: {error}")))
+        .map_err(|error| {
+            invariant(format!(
+                "the vault would not say which blobs have lapsed: {error}"
+            ))
+        })
 }
 
 #[cfg(test)]

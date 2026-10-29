@@ -114,6 +114,37 @@ pub fn forget_derivatives(connection: &Connection) -> usize {
         .unwrap_or(0)
 }
 
+/// How many entities carry this id: one while it is there, none once purged.
+#[must_use]
+pub fn entity_rows(connection: &Connection, id: &str) -> i64 {
+    connection
+        .query_row("SELECT COUNT(*) FROM entity WHERE id = ?1", [id], |row| {
+            row.get(0)
+        })
+        .unwrap_or(0)
+}
+
+/// A note in the trash whose window ran out long ago, for a test of the launch
+/// pass that must not hand-write SQL.
+///
+/// # Errors
+/// The commit's own.
+pub fn add_overdue_trashed_note(vault: &crate::Vault, id: &str) -> crate::Result<()> {
+    vault.commit(|tx| {
+        tx.insert_entity(id, crate::model::Kind::Note, id, "2020-01-01T00:00:00.000Z")?;
+        tx.connection()
+            .execute("INSERT INTO note (id, body) VALUES (?1, 'words')", [id])?;
+        tx.connection().execute(
+            "UPDATE entity SET deleted_at = '2020-01-02T00:00:00.000Z',
+                               purge_at = '2020-02-01T00:00:00.000Z'
+              WHERE id = ?1",
+            [id],
+        )?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
 fn pairs(connection: &Connection, sql: &str) -> Vec<(String, String)> {
     let Ok(mut statement) = connection.prepare(sql) else {
         return Vec::new();

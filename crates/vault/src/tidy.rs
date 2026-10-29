@@ -139,7 +139,10 @@ impl Vault {
                     more: true,
                 });
             }
-            if store.remove(&id).map_err(|e| invariant("delete a file", &e))? {
+            if store
+                .remove(&id)
+                .map_err(|e| invariant("delete a file", &e))?
+            {
                 removed.push(id);
             }
         }

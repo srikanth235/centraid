@@ -168,7 +168,11 @@ fn a_row_still_inside_its_window_is_not_taken_by_the_pass() {
     let (id, _) = w.document("Recent", "recent");
     w.ok("entity.trash", json!({ "id": id }));
     w.scratch.clock.advance_ms(29 * DAY_MS);
-    let emptied = w.scratch.vault.empty_overdue_trash(&w.registry, 100).unwrap();
+    let emptied = w
+        .scratch
+        .vault
+        .empty_overdue_trash(&w.registry, 100)
+        .unwrap();
     assert_eq!(emptied.purged, 0);
     assert_eq!(
         w.one::<i64>("SELECT COUNT(*) FROM entity WHERE id = ?1", &[&id]),
@@ -215,10 +219,7 @@ fn purging_a_calendar_or_a_folder_an_origin_fills_clears_the_origin() {
         }
         w.ok("entity.purge", json!({ "id": holder }));
         assert_eq!(
-            w.one::<i64>(
-                "SELECT COUNT(*) FROM origin WHERE fills IS NOT NULL",
-                &[]
-            ),
+            w.one::<i64>("SELECT COUNT(*) FROM origin WHERE fills IS NOT NULL", &[]),
             0,
             "the {system} origin follows nothing once its target is gone"
         );
@@ -248,7 +249,12 @@ fn moving_a_section_to_another_project_takes_its_tasks_with_it() {
         w.scratch
             .vault
             .commit(|tx| {
-                tx.insert_entity(id, centraid_vault::model::Kind::Task, id, "2026-03-01T09:00:00.000Z")?;
+                tx.insert_entity(
+                    id,
+                    centraid_vault::model::Kind::Task,
+                    id,
+                    "2026-03-01T09:00:00.000Z",
+                )?;
                 tx.connection().execute(
                     "INSERT INTO task (id, project_id, section_id) VALUES (?1, ?2, ?3)",
                     rusqlite::params![id, from, section],
@@ -444,7 +450,10 @@ fn the_backup_lists_no_blob_only_a_lapsed_entity_names() {
     assert!(!listed.contains(&lapsing_blob), "past its purge date");
     assert!(!listed.contains(&thumb), "its thumbnail follows it");
     assert!(listed.contains(&kept_blob));
-    assert!(listed.contains(&trashed_blob), "inside its window, still held");
+    assert!(
+        listed.contains(&trashed_blob),
+        "inside its window, still held"
+    );
     let _ = (kept, trashed);
 
     // A blob a lapsed entity AND a live one name is still held.

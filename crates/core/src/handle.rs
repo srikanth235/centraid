@@ -442,9 +442,8 @@ impl HandleState {
     pub fn tidy_trash(&self) -> Result<usize> {
         let mut purged = 0;
         loop {
-            let batch = self.with_vault(|vault| {
-                Ok(vault.empty_overdue_trash(&self.registry, TRASH_BATCH)?)
-            })?;
+            let batch = self
+                .with_vault(|vault| Ok(vault.empty_overdue_trash(&self.registry, TRASH_BATCH)?))?;
             purged += batch.purged;
             if !batch.more {
                 return Ok(purged);
@@ -466,9 +465,8 @@ impl HandleState {
     pub fn tidy_files(&self) -> Result<usize> {
         let mut removed = 0;
         loop {
-            let batch = self.with_vault(|vault| {
-                Ok(vault.sweep_unclaimed_files(self.launched, FILE_BATCH)?)
-            })?;
+            let batch = self
+                .with_vault(|vault| Ok(vault.sweep_unclaimed_files(self.launched, FILE_BATCH)?))?;
             removed += batch.removed.len();
             if !batch.more {
                 return Ok(removed);
@@ -1826,25 +1824,12 @@ mod tests {
         }
     }
 
-    /// A note in the trash whose window has passed, and the means to say so.
     fn overdue_note(handle: &Handle, id: &str) {
         handle
             .with_vault(|vault| {
-                vault.commit(|tx| {
-                    tx.insert_entity(id, centraid_vault::model::Kind::Note, id, "2020-01-01T00:00:00.000Z")?;
-                    tx.connection().execute(
-                        "INSERT INTO note (id, body) VALUES (?1, 'words')",
-                        [id],
-                    )?;
-                    tx.connection().execute(
-                        "UPDATE entity SET deleted_at = '2020-01-02T00:00:00.000Z',
-                                           purge_at = '2020-02-01T00:00:00.000Z'
-                          WHERE id = ?1",
-                        [id],
-                    )?;
-                    Ok(())
-                })?;
-                Ok(())
+                Ok(centraid_vault::testdoor::add_overdue_trashed_note(
+                    vault, id,
+                )?)
             })
             .expect("a trashed note");
     }
@@ -1852,9 +1837,7 @@ mod tests {
     fn rows(handle: &Handle, id: &str) -> i64 {
         handle
             .with_vault(|vault| {
-                Ok(vault.read(|c| {
-                    Ok(c.query_row("SELECT COUNT(*) FROM entity WHERE id = ?1", [id], |r| r.get(0))?)
-                })?)
+                Ok(vault.read(|c| Ok(centraid_vault::testdoor::entity_rows(c, id)))?)
             })
             .expect("a count")
     }
@@ -1873,11 +1856,19 @@ mod tests {
                 Ok(vault.execute(
                     &handle.registry,
                     &centraid_vault::Principal::owner("phone"),
-                    &centraid_vault::Command::new("entity.restore", serde_json::json!({ "id": "kept" })),
+                    &centraid_vault::Command::new(
+                        "entity.restore",
+                        serde_json::json!({ "id": "kept" }),
+                    ),
                 )?)
             })
             .expect("runs");
-        assert_eq!(restored.status, centraid_vault::CommandStatus::Executed, "{:?}", restored.reason);
+        assert_eq!(
+            restored.status,
+            centraid_vault::CommandStatus::Executed,
+            "{:?}",
+            restored.reason
+        );
         // THE PASS: what is still in the trash and overdue goes; what was restored stays.
         // (The pass started at open may have run already or run now: either way it is done.)
         handle.tidy_trash().expect("the pass runs");
@@ -1916,21 +1907,31 @@ mod tests {
         // The old stray is on disk before the core attaches its store.
         let stray = {
             let bytes = centraid_blobs::ByteStore::open(&store).expect("opens");
-            let stored = bytes.put_bytes(b"left by a crashed command").expect("stored");
+            let stored = bytes
+                .put_bytes(b"left by a crashed command")
+                .expect("stored");
             std::fs::File::options()
                 .write(true)
                 .open(&stored.path)
-                .and_then(|file| file.set_modified(std::time::SystemTime::now() - Duration::from_secs(86_400)))
+                .and_then(|file| {
+                    file.set_modified(std::time::SystemTime::now() - Duration::from_secs(86_400))
+                })
                 .expect("ages it");
             stored.hash.to_hex()
         };
-        scratch.handle.open_own_bytes(&store).expect("opens its bytes");
+        scratch
+            .handle
+            .open_own_bytes(&store)
+            .expect("opens its bytes");
         let door = scratch.handle.bytes().expect("attached");
         // A staging that ended after the open: new, and spared.
         let staged = door.put(b"staged a moment ago").expect("stored");
         scratch.handle.tidy_files().expect("the sweep runs");
         assert!(!door.has(&stray).expect("asks"), "the stray was swept");
-        assert!(door.has(&staged).expect("asks"), "the staged file was spared");
+        assert!(
+            door.has(&staged).expect("asks"),
+            "the staged file was spared"
+        );
     }
 
     /// **HAND-OFF 2, ANSWERED.** A core that opens its own byte store holds
