@@ -126,7 +126,7 @@ fn pairs(connection: &Connection, sql: &str) -> Vec<(String, String)> {
 
 /// EVERY ROW OF THE TABLES `include` NAMES, AS TEXT, one line a row: `table|cell|cell|…`. Blobs are
 /// read as lossy text. The question a test asks to prove a value is in no stored place (a planted
-/// secret in the thread, the journal or the index, #1135): search the answer for it.
+/// secret in the thread, an action key or the index, #1135): search the answer for it.
 ///
 /// # Errors
 /// The connection's.

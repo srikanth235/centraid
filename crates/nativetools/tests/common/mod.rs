@@ -36,6 +36,7 @@ pub fn seeded() -> World {
     let dir = tempfile::tempdir().expect("a temp dir");
     copy_tree(template.dir.path(), dir.path());
     let path = dir.path().join("vault.db");
+    vaultio::watch(&path);
     World {
         dir,
         path,
@@ -61,6 +62,7 @@ pub fn seeded_with(world: &Value) -> World {
     let dir = tempfile::tempdir().expect("a temp dir");
     let path = dir.path().join("vault.db");
     let keys = seed::seed(world, &path).expect("the world seeds");
+    vaultio::watch(&path);
     World { dir, path, keys }
 }
 
@@ -195,22 +197,10 @@ pub fn diff_rows(response: &Value) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-/// The vault's own journal: how many commands it has answered, per command id and status.
+/// The commands the world's vault has been asked to run since it was made, per command id and
+/// status. The vault keeps no record of them; the harness's door counts them for a watched file.
 pub fn journal(world: &World) -> BTreeMap<(String, String), usize> {
-    let handle = vaultio::Handle::open(world.path(), SetClock::at(1_800_000_000_000), "journal")
-        .expect("the journal opens");
-    let rows = handle
-        .table("journal", "seq, command, outcome", "seq", "seq")
-        .expect("the journal reads");
-    let mut counts = BTreeMap::new();
-    for row in &rows {
-        let key = (
-            vaultio::text(row, "command").unwrap_or_default(),
-            vaultio::text(row, "outcome").unwrap_or_default(),
-        );
-        *counts.entry(key).or_insert(0) += 1;
-    }
-    counts
+    vaultio::commands_run(world.path())
 }
 
 impl World {

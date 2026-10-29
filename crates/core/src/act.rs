@@ -7,7 +7,7 @@
 //!
 //! | Rule | Where |
 //! |---|---|
-//! | The same `invoke_key` runs once | the commit records the key in the vault's journal; a second delivery, after a restart too, answers `replayed` and runs nothing |
+//! | The same `invoke_key` runs once | the commit records the key in the vault's `action_key` table; a second delivery, after a restart too, answers `replayed` and runs nothing |
 //! | A frozen (moved) vault writes nothing | [`moved_epoch`], checked before anything runs |
 //! | A refusal names the check that failed | [`wire::ActRefusal`]: `vault_moved`, `input_schema`, or the vault's own predicate |
 //! | An executed act can be taken back | [`inverse`], the action and input that reverse it |
@@ -18,7 +18,7 @@
 //!    `InvalidRequest`, not a refusal: nothing a member did);
 //! 2. a key already run answers `replayed` — before the frozen check, because
 //!    replaying a write that landed is not a write. The vault holds the key
-//!    (`journal.invoke_key`, written in the commit it names), so the memory is as
+//!    (`action_key`, written in the commit it names), so the memory is as
 //!    durable as the write and no second copy of it lives here;
 //! 3. a frozen vault refuses `vault_moved`;
 //! 4. the input is decoded by the manifest's schema and validated against it;
@@ -29,9 +29,9 @@
 //!
 //! Only an executed act is remembered. A refused one may be asked again, because
 //! what refused it may have changed (a Locker that was shut, a vault restored).
-//! The replayed answer names the run (`invocation_id`) and carries no output and no
-//! inverse: the journal keeps evidence, not answers, so a caller that needs more
-//! than "it landed" reads it again.
+//! The replayed answer says `replayed` and carries no output and no inverse: the
+//! vault keeps a digest, not answers, so a caller that needs more than "it
+//! landed" reads it again.
 
 mod inverse;
 
@@ -142,7 +142,7 @@ pub(crate) fn act(ctx: &Ctx<'_>, request: &wire::ActRequest) -> Result<wire::Act
         })?,
         invoke_key: request.invoke_key.clone(),
     };
-    let mark = centraid_vault::journal::KeyMark {
+    let mark = centraid_vault::action_key::KeyMark {
         key: &request.invoke_key,
         asked: &asked,
     };
@@ -194,27 +194,23 @@ pub(crate) fn act(ctx: &Ctx<'_>, request: &wire::ActRequest) -> Result<wire::Act
                         context: format!("a handler's own output is not JSON: {error}"),
                     }
                 })?,
-                invocation_id: outcome.invocation_id,
                 inverse,
                 tables: sorted(outcome.tables),
                 ..wire::ActResponse::default()
             }
         }
-        CommandStatus::Failed => wire::ActResponse {
-            invocation_id: outcome.invocation_id,
-            ..refused(
-                wire::ActRefusal {
-                    // THE FAILING CHECK, not only the sentence: the predicate
-                    // the vault's own gate named.
-                    check: outcome
-                        .predicate
-                        .clone()
-                        .unwrap_or_else(|| "command_refused".to_owned()),
-                    detail: outcome.reason.clone().unwrap_or_default(),
-                },
-                outcome.reason.unwrap_or_default(),
-            )
-        },
+        CommandStatus::Failed => refused(
+            wire::ActRefusal {
+                // THE FAILING CHECK, not only the sentence: the predicate
+                // the vault's own gate named.
+                check: outcome
+                    .predicate
+                    .clone()
+                    .unwrap_or_else(|| "command_refused".to_owned()),
+                detail: outcome.reason.clone().unwrap_or_default(),
+            },
+            outcome.reason.unwrap_or_default(),
+        ),
     };
     Ok(answer)
 }
@@ -238,11 +234,11 @@ fn mint_declared_ids(ctx: &Ctx<'_>, minted: &[String], mut input: Value) -> Valu
     input
 }
 
-/// The answer to a key the vault already holds a run for: the run it named, or
-/// a refusal when the key was used for a different act.
+/// The answer to a key the vault already holds a run for, or a refusal when the
+/// key was used for a different act.
 fn replayed(
     key: &str,
-    earlier: &centraid_vault::journal::Recalled,
+    earlier: &centraid_vault::action_key::Recalled,
     asked: &str,
 ) -> Result<wire::ActResponse> {
     if earlier.asked != asked {
@@ -254,7 +250,6 @@ fn replayed(
     }
     Ok(wire::ActResponse {
         status: wire::ActStatus::Executed as i32,
-        invocation_id: earlier.seq.to_string(),
         replayed: true,
         ..wire::ActResponse::default()
     })
@@ -287,7 +282,7 @@ pub(crate) fn command_keyed(
         })?,
         invoke_key: key.to_owned(),
     };
-    let mark = centraid_vault::journal::KeyMark { key, asked: &asked };
+    let mark = centraid_vault::action_key::KeyMark { key, asked: &asked };
     let outcome = match crate::api::command(
         ctx.vault,
         ctx.locker,
@@ -318,23 +313,19 @@ pub(crate) fn command_keyed(
             output: serde_json::to_vec(&outcome.output).map_err(|error| CoreError::Invariant {
                 context: format!("a handler's own output is not JSON: {error}"),
             })?,
-            invocation_id: outcome.invocation_id,
             tables: sorted(outcome.tables),
             ..wire::ActResponse::default()
         },
-        CommandStatus::Failed => wire::ActResponse {
-            invocation_id: outcome.invocation_id,
-            ..refused(
-                wire::ActRefusal {
-                    check: outcome
-                        .predicate
-                        .clone()
-                        .unwrap_or_else(|| "command_refused".to_owned()),
-                    detail: outcome.reason.clone().unwrap_or_default(),
-                },
-                outcome.reason.unwrap_or_default(),
-            )
-        },
+        CommandStatus::Failed => refused(
+            wire::ActRefusal {
+                check: outcome
+                    .predicate
+                    .clone()
+                    .unwrap_or_else(|| "command_refused".to_owned()),
+                detail: outcome.reason.clone().unwrap_or_default(),
+            },
+            outcome.reason.unwrap_or_default(),
+        ),
     })
 }
 

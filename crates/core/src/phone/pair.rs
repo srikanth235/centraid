@@ -43,13 +43,13 @@
 //! would make the older copy the vault: its next pass sets its snapshot as the
 //! head, and the newer phone's records leave the history. So the claim first
 //! compares the head with the copy. The head's `taken_at_ms` is the cheap gate
-//! — a copy that ran a command after the head was taken is not behind it — and
-//! when the head is later than the copy's last command, the head's manifest
-//! says how many commands (receipts, an append-only count) the vault had run
-//! when it was taken: more than this copy has run, and the head holds
-//! commands this copy never saw, so it is refused `VAULT_MOVED` and the way
-//! back is a restore. A head taken after the copy's last command that holds no
-//! more of them is this phone's own, with nothing written since. The files the
+//! — a copy that wrote after the head was taken is not behind it — and when
+//! the head is later than the copy's last write, the head's manifest says how
+//! many writes (the vault's `writes` counter, which only grows) the vault had
+//! made when it was taken: more than this copy has made, and the head holds
+//! writes this copy never saw, so it is refused `VAULT_MOVED` and the way back
+//! is a restore. A head taken after the copy's last write that holds no more of
+//! them is this phone's own, with nothing written since. The files the
 //! newer phone backed up are kept regardless, as long as a kept snapshot names
 //! them (`retention::collectable`).
 //!
@@ -243,9 +243,9 @@ const fn superseded(current_epoch: u64) -> CoreError {
     }
 }
 
-/// **WHETHER THE HEAD HOLDS COMMANDS THIS COPY NEVER RAN** (the sweep's F4):
-/// the head was taken after this copy's last command, and its manifest counts
-/// more receipts than this copy holds. See the module header. A head that
+/// **WHETHER THE HEAD HOLDS WRITES THIS COPY NEVER MADE** (the sweep's F4):
+/// the head was taken after this copy's last write, and its manifest counts
+/// more writes than this copy holds. See the module header. A head that
 /// will not open cannot be judged — and holds nothing a claim would lose — so
 /// it is not newer.
 fn head_is_ahead(
@@ -256,7 +256,7 @@ fn head_is_ahead(
     runtime: &tokio::runtime::Handle,
 ) -> Result<bool> {
     let taken = u64::try_from(head.taken_at_ms).unwrap_or(0);
-    // A COPY THAT RAN A COMMAND AFTER THE HEAD WAS TAKEN is not behind it.
+    // A COPY THAT WROTE AFTER THE HEAD WAS TAKEN is not behind it.
     if own.last_write_ms.is_some_and(|written| written >= taken) {
         return Ok(false);
     }
@@ -270,7 +270,7 @@ fn head_is_ahead(
         .map_err(|error| error.to_string())
         .and_then(|json| Manifest::from_json(&json).map_err(|error| error.to_string()));
     match opened {
-        Ok(manifest) => Ok(manifest.receipts() > own.receipts),
+        Ok(manifest) => Ok(manifest.writes > own.writes),
         Err(reason) => {
             tracing::warn!(%reason, "the gateway's head would not open; a claim cannot be judged against it");
             Ok(false)
@@ -291,7 +291,7 @@ fn head_is_ahead(
 /// [`CoreError::VaultMoved`] and nothing is claimed.
 ///
 /// `own` is how far this phone's copy has run, when it holds one: a head that
-/// holds commands the copy never ran is refused the same way, claimed by
+/// holds writes the copy never made is refused the same way, claimed by
 /// nobody ([`head_is_ahead`], the sweep's F4).
 pub(crate) fn take_over(
     client: &Client,

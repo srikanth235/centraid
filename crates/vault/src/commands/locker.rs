@@ -20,7 +20,7 @@
 //! reaches this file is `lk1:<base64>` plus the `key_id` it was sealed under;
 //! [`assert_sealed_cell`] refuses anything else **by construction rather than
 //! by policy** — a plaintext password reaching this file would be a secret in
-//! the vault's invocation journal, its WAL, and the backup base and segments
+//! the vault's file, its WAL, and the backup ranges
 //! the laptop's gateway stores, which is the property
 //! `tests/locker_plaintext_gate.rs` searches for. The refusal is
 //! [`crate::error::VaultError::InvalidInput`] naming the cell, and the value
@@ -107,8 +107,8 @@
 //!   trigger unless `recursive_triggers` is on, so an offline phone would keep
 //!   rows whose item is gone. A purge confirms and presents the same for every
 //!   kind (`Risk::Medium`, `confirm`).
-//! - **No entity-wide reader carries a sealed cell**: the journal tokenises the
-//!   five cells (and a duplicate's `fields[].value`), a Locker item has no
+//! - **No entity-wide reader carries a sealed cell**: no command's input is
+//!   stored, and a message scrubs the five cells (and a duplicate's `fields[].value`) out; a Locker item has no
 //!   revision, `text_of` indexes the plain fields only, a page over `entity`
 //!   or `edge` serves the item's plain rows and no sealed column. The chat's
 //!   assistant is the member's principal and meets the same wall: a sealed
@@ -300,7 +300,7 @@ fn invalid(name: &str, detail: impl Into<String>) -> VaultError {
 /// because the one value this refusal is most likely to be handed is a
 /// password. `MemberKeyPlaintext` in the census's vocabulary; the vault's own
 /// error taxonomy calls it invalid input, which is what it is: a command plane
-/// that accepted it would write a secret into the journal and the backup.
+/// that accepted it would write a secret into the file and the backup.
 fn assert_sealed_cell(column: &str, value: Option<&str>) -> Result<()> {
     let Some(value) = value else {
         return Ok(());
@@ -1420,7 +1420,7 @@ fn duplicate_item() -> CommandDefinition {
         },
     );
     // The five cells, and the custom fields the copy re-sealed: a nested
-    // ciphertext is tokenised in the journal like a top-level one.
+    // ciphertext is scrubbed out of a message like a top-level one.
     definition.sealed_input = &[
         "password",
         "otp_seed",

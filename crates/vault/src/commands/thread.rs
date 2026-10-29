@@ -4,13 +4,13 @@
 //! entity of its own kind whose title is what the drawer lists and what search finds, its
 //! `message`s are children that cascade with it, and a message's attachments are children of the
 //! message ([#1135](https://github.com/srikanth235/centraid/issues/1135)). Nothing writes them but
-//! these commands, so a chat is journalled, backed up and indexed exactly as a note is.
+//! these commands, so a chat is backed up and indexed exactly as a note is.
 //!
 //! What the shared verbs already do is not written again: **deleting a chat is `entity.purge`**
 //! (a chat has no trash, R-CHAT-8, so `Kind::has_trash` is false for it and the purge needs no
 //! trashing first), and the thumbnails nothing rents then are collected in the same commit.
 //! `entity.retitle` refuses a thread, because a title is the first thing the member said and so
-//! leaves the journal sealed ([`rename`]); that is the only reason this module has a rename.
+//! is sealed input ([`rename`]); that is the only reason this module has a rename.
 //!
 //! ## A proposal has a life, and the vault keeps its end (#1088)
 //!
@@ -29,11 +29,11 @@
 //! streamed before a stop) in one transaction: a process killed while a turn runs loses that turn
 //! whole and never keeps half of it (R-CHAT-5).
 //!
-//! ## THE JOURNAL MUST NOT KEEP WHAT A DELETE REMOVES
+//! ## A REFUSAL MUST NOT QUOTE WHAT A DELETE REMOVES
 //!
 //! A conversation's text, its cards (titles read out of other apps) and its thumbnails are exactly
 //! what "delete this chat" removes. `turn`, `title` and a settled `text` are therefore SEALED input
-//! keys: the journal keeps a token and never the value, the mechanism Locker uses for a password
+//! keys: a refusal's sentence never quotes the value, the mechanism Locker uses for a password
 //! (R-CHAT-6).
 //!
 //! ## What a card is, and what is never stored
@@ -599,8 +599,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
             ],
             postconditions: &[],
             handler: save_turn,
-            // THE WHOLE TURN IS SEALED: what was said, the cards' titles and the thumbnail leave the
-            // audit journal as a token (R-CHAT-6).
+            // THE WHOLE TURN IS SEALED: what was said, the cards' titles and the thumbnail never
+            // appear in a refusal's sentence (R-CHAT-6).
             sealed_input: &["turn"],
         },
         CommandDefinition {

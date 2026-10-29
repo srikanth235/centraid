@@ -79,7 +79,7 @@ pub struct Vault {
     ///
     /// `core_content_item.content_uri` is `blob:blake3-<hex>` for anything
     /// binary, and the bytes themselves live here — a vault file is rows, and
-    /// a photograph in a row is a photograph in the journal. See
+    /// a photograph in a row is a photograph in the file. See
     /// [`Vault::with_blobs`].
     blobs: Option<Box<dyn crate::bytes::BlobStore + Send + Sync>>,
 }

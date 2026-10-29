@@ -215,7 +215,14 @@ mod tests {
     fn the_baseline_is_a_real_schema_and_not_a_stub() {
         // `include_str!` makes the path a compile-time fact; this holds the CONTENT to being a
         // real schema, so a truncated file is red.
-        for table in ["entity", "edge", "blob", "source", "journal", "locker_item"] {
+        for table in [
+            "entity",
+            "edge",
+            "blob",
+            "source",
+            "action_key",
+            "locker_item",
+        ] {
             assert!(
                 BASELINE_SQL.contains(&format!("CREATE TABLE {table} ")),
                 "`{table}` is missing from the baseline"

@@ -38,7 +38,7 @@
 //!   `<PendingWrite::id>:<step index>`. The key is derived from the pending write and the step's
 //!   place in it, so a confirm that is delivered twice (a retry after a dropped reply, a replayed
 //!   request) finds its steps already RUN and writes nothing more. **The core's `act` records the
-//!   key in the vault's journal, in the commit it names**, so that holds across a restart and the
+//!   key in the vault's `action_key` table, in the commit it names**, so that holds across a restart and the
 //!   door keeps no memory of its own; the session answers the second confirm from memory as
 //!   well. The door must NOT mint a fresh key per call.
 //! * The change feed fires as it does for a screen's write (`ChangeFeed::tables_changed`), once per

@@ -13,6 +13,9 @@
 -- `crates/vault/tests/ladder_ddl.rs` founds a vault and diffs this file
 -- against its live schema on every run.
 
+-- index action_key_by_at on action_key
+CREATE INDEX action_key_by_at ON action_key(at);
+
 -- index activity_by_place on activity
 CREATE INDEX activity_by_place ON activity(place_id) WHERE place_id IS NOT NULL;
 
@@ -75,9 +78,6 @@ CREATE INDEX event_by_place    ON event(place_id) WHERE place_id IS NOT NULL;
 
 -- index event_by_start on event
 CREATE INDEX event_by_start    ON event(starts, id);
-
--- index journal_by_invoke_key on journal
-CREATE UNIQUE INDEX journal_by_invoke_key ON journal(invoke_key) WHERE invoke_key IS NOT NULL;
 
 -- index locker_item_address_item_idx on locker_item_address
 CREATE INDEX locker_item_address_item_idx ON locker_item_address(item_id, position);
@@ -162,6 +162,13 @@ CREATE TABLE account (
   UNIQUE (id, currency),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
+
+-- table action_key on action_key
+CREATE TABLE action_key (
+  key   TEXT PRIMARY KEY,
+  asked TEXT NOT NULL,
+  at    TEXT NOT NULL
+) STRICT, WITHOUT ROWID;
 
 -- table activity on activity
 CREATE TABLE activity (
@@ -329,23 +336,6 @@ CREATE TABLE event (
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   FOREIGN KEY (calendar_id, calendar_kind) REFERENCES entity(id, kind),
   CHECK (timing <> 'zoned' OR (zone IS NOT NULL AND substr(starts, -1) = 'Z'))
-) STRICT;
-
--- table journal on journal
-CREATE TABLE journal (
-  seq     INTEGER PRIMARY KEY,
-  at      TEXT NOT NULL,
-  command TEXT NOT NULL,
-  input   TEXT NOT NULL CHECK (json_valid(input)),
-  outcome TEXT NOT NULL CHECK (outcome IN ('executed','refused','failed')),
-  detail  TEXT,
-  -- The key an `act` carried and a digest of what it asked, written with the commit it names, so a
-  -- delivery the phone repeats after a restart is answered `replayed` and writes nothing (#1135).
-  -- Only an executed command carries one; a retention pass that drops the row drops the memory.
-  invoke_key TEXT,
-  asked      TEXT,
-  CHECK ((invoke_key IS NULL) = (asked IS NULL)),
-  CHECK (invoke_key IS NULL OR outcome = 'executed')
 ) STRICT;
 
 -- table locker_item on locker_item
@@ -706,6 +696,11 @@ CREATE TABLE vault (
   currency   TEXT NOT NULL CHECK (length(currency) = 3 AND currency = upper(currency)),
   zone       TEXT,
   created_at TEXT NOT NULL,
+  -- How many commits changed something a screen reads, and when the last did, on the vault's
+  -- clock: a takeover compares the counter to tell which copy is ahead (#1146). Bumped by the
+  -- commit guard, once per such commit; nothing else writes them.
+  writes     INTEGER NOT NULL DEFAULT 0 CHECK (writes >= 0),
+  written_at TEXT,
   FOREIGN KEY (self_id, self_kind) REFERENCES entity(id, kind) DEFERRABLE INITIALLY DEFERRED
 ) STRICT;
 
@@ -755,10 +750,6 @@ CREATE TRIGGER edge_has_a_shape BEFORE INSERT ON edge
 -- trigger entity_kind_is_fixed on entity
 CREATE TRIGGER entity_kind_is_fixed BEFORE UPDATE OF id, kind ON entity
   BEGIN SELECT RAISE(ABORT, 'an entity''s id and kind never change'); END;
-
--- trigger journal_is_evidence on journal
-CREATE TRIGGER journal_is_evidence BEFORE UPDATE ON journal
-  BEGIN SELECT RAISE(ABORT, 'the journal is evidence'); END;
 
 -- trigger locker_item_field_touch_updated_at on locker_item_field
 CREATE TRIGGER locker_item_field_touch_updated_at

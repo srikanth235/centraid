@@ -40,7 +40,7 @@
 //! is the one way this door writes. A bare [`Door::act`] is refused: nothing legitimate on the
 //! phone issues one, so a path around the card finds a closed door and the vault untouched.
 //!
-//! THE KEY IS THE VAULT'S, NOT THE DOOR'S: `act` records it in the journal row of the commit it
+//! THE KEY IS THE VAULT'S, NOT THE DOOR'S: `act` records it in the `action_key` row of the commit it
 //! names, so a confirm delivered twice writes once, across a restart too. The door keeps no
 //! memory of keys of its own.
 

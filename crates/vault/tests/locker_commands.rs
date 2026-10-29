@@ -286,9 +286,9 @@ fn a_permanent_delete_is_confirmed_the_same_for_every_kind() {
     }
 }
 
-/// The journal records keyed hashes at the sealed paths, never values (#293) —
-/// and after wave 4 the "value" at those paths is ciphertext, which is still
-/// not something a journal should carry a second copy of.
+/// A message scrubs the values at the sealed paths (#293) — and after wave 4
+/// the "value" at those paths is ciphertext, which is still not something a
+/// refusal's sentence should carry a second copy of.
 #[test]
 fn every_sealed_input_path_is_declared() {
     let definitions = centraid_vault::commands::locker::definitions();
@@ -1637,39 +1637,4 @@ fn a_wikilink_resolves_a_locker_item() {
         ),
         1
     );
-}
-
-/// A RE-SEALED CUSTOM FIELD IN A DUPLICATE IS TOKENISED IN THE JOURNAL like a
-/// top-level cell: the nested `fields[].value` path is declared.
-#[test]
-fn a_duplicates_nested_field_ciphertext_never_lands_in_the_journal() {
-    let world = World::new("locker-duplicate-journal", "key-1");
-    world.login("item-1", "key-1");
-    let sealed = ciphertext("copied-field");
-    world.ok(
-        "locker.duplicate_item",
-        serde_json::json!({
-            "item_id": "item-1",
-            "new_item_id": "item-copy",
-            "password": ciphertext("item-copy"),
-            "key_id": "key-1",
-            "fields": [{
-                "field_id": "copied-field",
-                "section": "",
-                "label": "Recovery code",
-                "kind": "sealed",
-                "value": sealed
-            }]
-        }),
-    );
-    let journal: String = world.one(
-        "SELECT input FROM journal WHERE command = 'locker.duplicate_item'",
-        &[],
-    );
-    assert!(
-        !journal.contains(&sealed),
-        "the nested ciphertext is in the journal"
-    );
-    assert!(!journal.contains(&ciphertext("item-copy")), "{journal}");
-    assert!(journal.contains("sealed:blake3:"), "{journal}");
 }

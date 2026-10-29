@@ -2,7 +2,7 @@
 //! the store, and prove it is the vault that was lost (#1080, "Drill").
 //!
 //! 1. Found a vault and write notes through the command plane, so the file is
-//!    many ranges of real rows, receipts and full-text index.
+//!    many ranges of real rows and the full-text index.
 //! 2. Snapshot, ask, spool, move, settle: the head names it.
 //! 3. Back up every content item by name, sealed in one pass, and prove the
 //!    ledger confirms every name its hash implies.

@@ -23,6 +23,7 @@
 #![forbid(unsafe_code)]
 
 pub mod access;
+pub mod action_key;
 pub mod backup;
 pub mod blob;
 pub mod bootstrap;
@@ -35,7 +36,6 @@ pub mod custody;
 pub mod error;
 pub mod file;
 pub mod index;
-pub mod journal;
 pub mod log;
 pub mod migrations;
 pub mod model;

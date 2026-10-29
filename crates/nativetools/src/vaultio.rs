@@ -7,9 +7,10 @@
 //! its test door (the owner's view, which is what an eval harness is), and
 //! writes go through the vault's typed commands.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use centraid_apps_kit::reads::{FanOutBound, read_pages};
 use centraid_apps_kit::row::Row;
@@ -24,6 +25,47 @@ pub use centraid_assist::native::door::{Call, Door, Ran, int, text};
 
 /// The device every command is invoked from.
 pub const DEVICE: &str = "nativetools";
+
+/// Commands run through [`Handle::run`] on a watched vault file, by `(command, outcome)` where the
+/// outcome is `executed`, `refused` or `failed`.
+pub type RunCounts = BTreeMap<(String, String), usize>;
+
+type Watched = BTreeMap<PathBuf, RunCounts>;
+
+fn watched() -> &'static Mutex<Watched> {
+    static WATCHED: OnceLock<Mutex<Watched>> = OnceLock::new();
+    WATCHED.get_or_init(Mutex::default)
+}
+
+/// Start counting the commands run on the vault file at `path`, for a test that asks which
+/// commands a session ran (the vault keeps no record of them). Idempotent; counts from the first
+/// call. Only a watched file is counted, so the harness at large keeps nothing.
+pub fn watch(path: &Path) {
+    if let Ok(mut held) = watched().lock() {
+        held.entry(path.to_path_buf()).or_default();
+    }
+}
+
+/// The commands run on the watched vault file at `path` since [`watch`]; empty for a file nobody
+/// watches.
+#[must_use]
+pub fn commands_run(path: &Path) -> RunCounts {
+    watched()
+        .lock()
+        .ok()
+        .and_then(|held| held.get(path).cloned())
+        .unwrap_or_default()
+}
+
+fn count_run(path: &Path, command: &str, outcome: &str) {
+    if let Ok(mut held) = watched().lock()
+        && let Some(counts) = held.get_mut(path)
+    {
+        *counts
+            .entry((command.to_owned(), outcome.to_owned()))
+            .or_insert(0) += 1;
+    }
+}
 
 /// A clock a caller can set, shared with the vault it was handed to.
 #[derive(Clone, Default)]
@@ -214,7 +256,17 @@ impl Handle {
                 &Principal::owner(DEVICE),
                 &Command::new(name, input),
             )
+            .inspect_err(|_| count_run(&self.path, name, "failed"))
             .map_err(|error| format!("{name}: {error}"))?;
+        count_run(
+            &self.path,
+            name,
+            if outcome.status == CommandStatus::Executed {
+                "executed"
+            } else {
+                "refused"
+            },
+        );
         Ok(Ran {
             ok: outcome.status == CommandStatus::Executed,
             output: outcome.output,

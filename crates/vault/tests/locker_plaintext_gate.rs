@@ -482,14 +482,14 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
                         .unwrap_or_default();
                     assert!(text.contains(plain), "text_of lost `{plain}`: {text}");
                 }
-                // The journal carried no cell (every command above ran), and a
-                // Locker item has no revision to carry one.
-                let journal: String = connection
-                    .prepare("SELECT input || ' ' || COALESCE(detail, '') FROM journal")?
+                // The action keys hold a caller's id and a digest, and a Locker item has no
+                // revision to carry a cell.
+                let keys: String = connection
+                    .prepare("SELECT key || ' ' || asked FROM action_key")?
                     .query_map([], |row| row.get::<_, String>(0))?
                     .collect::<rusqlite::Result<Vec<_>>>()?
                     .join("\n");
-                carries_no_secret("the journal", journal.as_bytes());
+                carries_no_secret("the action keys", keys.as_bytes());
                 let revisions: i64 =
                     connection.query_row("SELECT COUNT(*) FROM revision", [], |row| row.get(0))?;
                 assert_eq!(revisions, 0, "a Locker item left a revision");
@@ -563,7 +563,7 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
     // ---- 5. THE VAULT FILE ITSELF ----------------------------------------
     // Not a door, and the reason it is here anyway: a gate that only checked
     // the doors would pass over a vault that had a plaintext column somebody
-    // forgot to seal, or a journal that kept the value an intent carried.
+    // forgot to seal, or a table that kept the value an intent carried.
     let file = std::fs::read(sealed_vault.scratch.dir().join("vault.db")).expect("the file reads");
     carries_no_secret("the vault file", &file);
     for sidecar in ["vault.db-wal", "vault.db-shm"] {
@@ -589,7 +589,7 @@ fn inflate(bytes: &[u8]) -> Vec<u8> {
 /// The other direction of the same property: the gate above says no secret
 /// gets out, and this says the command plane cannot be talked into taking one
 /// in. Both matter, because a vault that accepted plaintext would hold the
-/// secret in its journal, its WAL and every backup of them regardless of what
+/// secret in its file, its WAL and every backup of them regardless of what
 /// its read doors answer.
 #[test]
 fn the_command_plane_cannot_be_talked_into_storing_a_plaintext_secret() {
@@ -643,7 +643,7 @@ fn the_command_plane_cannot_be_talked_into_storing_a_plaintext_secret() {
         );
     }
 
-    // AND THE FILE HOLDS NONE OF IT — not in a row, not in the journal, not in
+    // AND THE FILE HOLDS NONE OF IT — not in a row, not in a key, not in
     // the WAL.
     let file = std::fs::read(sealed_vault.scratch.dir().join("vault.db")).expect("the file reads");
     carries_no_secret("the vault file after three refused writes", &file);

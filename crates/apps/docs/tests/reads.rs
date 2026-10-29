@@ -5,8 +5,8 @@
 use std::sync::Arc;
 
 use centraid_apps_docs::queries::{
-    DriveInput, ShelfArm, count_shelf_arm, load_document, load_drive, load_history, load_search_term,
-    load_shelf_arm,
+    DriveInput, ShelfArm, count_shelf_arm, load_document, load_drive, load_history,
+    load_search_term, load_shelf_arm,
 };
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_vault::clock::{FixedClock, SeededIds};

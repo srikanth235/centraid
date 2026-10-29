@@ -21,6 +21,11 @@ CREATE TABLE vault (
   currency   TEXT NOT NULL CHECK (length(currency) = 3 AND currency = upper(currency)),
   zone       TEXT,
   created_at TEXT NOT NULL,
+  -- How many commits changed something a screen reads, and when the last did, on the vault's
+  -- clock: a takeover compares the counter to tell which copy is ahead (#1146). Bumped by the
+  -- commit guard, once per such commit; nothing else writes them.
+  writes     INTEGER NOT NULL DEFAULT 0 CHECK (writes >= 0),
+  written_at TEXT,
   FOREIGN KEY (self_id, self_kind) REFERENCES entity(id, kind) DEFERRABLE INITIALLY DEFERRED
 ) STRICT;
 
@@ -193,7 +198,7 @@ CREATE TRIGGER source_tombstone_is_final BEFORE UPDATE OF entity_id ON source
   BEGIN SELECT RAISE(ABORT, 'a purged row''s source never takes a row again'); END;
 
 -- ---------------------------------------------------------------------------------------------
--- History and evidence.
+-- History, and the keys of acts already run.
 -- ---------------------------------------------------------------------------------------------
 
 CREATE TABLE revision (
@@ -210,24 +215,16 @@ CREATE TABLE revision (
 CREATE TRIGGER revision_is_history BEFORE UPDATE ON revision
   BEGIN SELECT RAISE(ABORT, 'a revision is history'); END;
 
-CREATE TABLE journal (
-  seq     INTEGER PRIMARY KEY,
-  at      TEXT NOT NULL,
-  command TEXT NOT NULL,
-  input   TEXT NOT NULL CHECK (json_valid(input)),
-  outcome TEXT NOT NULL CHECK (outcome IN ('executed','refused','failed')),
-  detail  TEXT,
-  -- The key an `act` carried and a digest of what it asked, written with the commit it names, so a
-  -- delivery the phone repeats after a restart is answered `replayed` and writes nothing (#1135).
-  -- Only an executed command carries one; a retention pass that drops the row drops the memory.
-  invoke_key TEXT,
-  asked      TEXT,
-  CHECK ((invoke_key IS NULL) = (asked IS NULL)),
-  CHECK (invoke_key IS NULL OR outcome = 'executed')
-) STRICT;
-CREATE UNIQUE INDEX journal_by_invoke_key ON journal(invoke_key) WHERE invoke_key IS NOT NULL;
-CREATE TRIGGER journal_is_evidence BEFORE UPDATE ON journal
-  BEGIN SELECT RAISE(ABORT, 'the journal is evidence'); END;
+-- An act's key and a digest of what it asked, written in the commit it names, so a delivery the
+-- phone repeats after a restart is answered `replayed` and runs nothing (#1146). Only an executed
+-- act is remembered; the commit that writes a key forgets the keys older than 30 days. Both
+-- columns are opaque (a caller's id and a digest), never what the member typed.
+CREATE TABLE action_key (
+  key   TEXT PRIMARY KEY,
+  asked TEXT NOT NULL,
+  at    TEXT NOT NULL
+) STRICT, WITHOUT ROWID;
+CREATE INDEX action_key_by_at ON action_key(at);
 
 -- ---------------------------------------------------------------------------------------------
 -- Search: one index, kept by the writer. The FTS rowid is entity.n.

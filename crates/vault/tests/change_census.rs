@@ -41,7 +41,7 @@ fn a_commit_that_edits_one_table_reports_that_table_only() {
 
     // `entity` too, and that is CORRECT rather than noise: a person is an entity
     // and its kind row, written in this commit, and a screen reading entities
-    // has to re-read. What must NOT be here is the search index, the journal or a
+    // has to re-read. What must NOT be here is the search index, the write counter or a
     // table this commit never touched.
     assert!(
         outcome.tables.contains(&"person".to_owned()),

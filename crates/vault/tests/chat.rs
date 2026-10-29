@@ -1,5 +1,5 @@
 //! A conversation in the model's own tables (#1135, lane 7): a turn saved in one commit with its
-//! cards and attachments, a proposal settled once, a rename that stays out of the journal, a delete
+//! cards and attachments, a proposal settled once, a refusal that never quotes what was said, a delete
 //! that leaves nothing, and the roster the cards and scopes are held to.
 
 mod common;
@@ -172,29 +172,21 @@ fn a_turn_is_one_commit_with_its_cards_and_attachments() {
 }
 
 #[test]
-fn the_journal_keeps_a_token_never_what_was_said() {
+fn a_refusal_never_quotes_what_was_said() {
     let w = World::new();
     let saved = w.turn(None, "my secret question", answered("a secret answer"));
     let thread = saved["thread_id"].as_str().unwrap();
-    w.ok(
+    // A title past its bound fails the schema, whose message quotes the value that failed.
+    let long = format!("a secret name {}", "x".repeat(300));
+    let sentence = w.refused(
         "thread.rename",
-        json!({ "thread_id": thread, "title": "a secret name" }),
+        json!({ "thread_id": thread, "title": long }),
     );
-    let journal: String = w
-        .scratch
-        .vault
-        .read(|c| {
-            Ok(
-                c.query_row("SELECT group_concat(input, ' ') FROM journal", [], |r| {
-                    r.get(0)
-                })?,
-            )
-        })
-        .unwrap();
-    for said in ["secret question", "secret answer", "secret name"] {
-        assert!(!journal.contains(said), "the journal holds {said:?}");
-    }
-    assert!(journal.contains("sealed"), "{journal}");
+    assert!(!sentence.contains("secret name"), "{sentence}");
+    assert!(sentence.contains("‹sealed›"), "{sentence}");
+    // And nothing outside the thread keeps the words: no action key was written, and the
+    // conversation's text is in the chat's own rows only.
+    assert_eq!(w.count("SELECT count(*) FROM action_key", &[]), 0);
 }
 
 #[test]

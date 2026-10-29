@@ -26,7 +26,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
     (
         "kernel",
         "the kernel",
-        "What every kind shares: the entity, the typed edge between two of them, the vault's own row, the journal of every command, revisions and the one search index.",
+        "What every kind shares: the entity, the typed edge between two of them, the vault's own row, the keys of acts already run, revisions and the one search index.",
     ),
     (
         "words",
@@ -78,12 +78,12 @@ pub const TABLES: [(&str, &str, &str); 41] = [
     (
         "kernel",
         "vault",
-        "The vault's own row: its name, its self person, its currency and its zone. There is exactly one.",
+        "The vault's own row: its name, its self person, its currency and its zone, and the count of commits that changed something with the time of the last. There is exactly one.",
     ),
     (
         "kernel",
-        "journal",
-        "One row for every command the gate was asked to run, in the command's own transaction. Evidence: it cannot be updated and nothing reads it to learn a fact.",
+        "action_key",
+        "The key an act carried and a digest of what it asked, written in the act's own commit, so a delivery repeated after a restart runs nothing. Forgotten after thirty days.",
     ),
     (
         "kernel",

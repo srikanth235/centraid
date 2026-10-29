@@ -3,7 +3,7 @@
 //!
 //! The core's stage door reaches the same functions through
 //! [`crate::Vault::stage_bytes`]; a command is for a caller that wants the
-//! journal.
+//! gate.
 
 use crate::blob;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};

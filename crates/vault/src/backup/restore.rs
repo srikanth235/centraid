@@ -368,17 +368,15 @@ pub struct StructuralReport {
 }
 
 impl StructuralReport {
-    /// Clean means: pages sound and keys hold. (A journal or Locker receipt
-    /// names a row by value, never by foreign key: evidence outlives its row.)
+    /// Clean means: pages sound and keys hold.
     #[must_use]
     pub fn is_clean(&self) -> bool {
         self.integrity == "ok" && self.foreign_key_violations.is_empty()
     }
 }
 
-/// THE STRUCTURAL CHECK over a vault file that is not live: `integrity_check`,
-/// `foreign_key_check`, and the receipts' references, which no foreign key
-/// covers because they cross a band on purpose.
+/// THE STRUCTURAL CHECK over a vault file that is not live: `integrity_check`
+/// and `foreign_key_check`.
 ///
 /// Read-only and lock-free, so it never changes the file it judges. It is the
 /// one definition of "sound" `centraid doctor` reports; [`restore_head`]'s own

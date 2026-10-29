@@ -9,7 +9,7 @@
 //!
 //! Then it searches every place a secret must not be, for the markers and for any `lk1:`
 //! ciphertext: every prompt the model received, every event the plane sank, every row of the thread
-//! tables, the journal and the search index. The secret the member typed is the one value the
+//! tables, the action keys and the search index. The secret the member typed is the one value the
 //! channel may carry, and only on the turn they typed it: it ends sealed in the vault and is absent
 //! from the stored question and from every prompt after the card was parked.
 
@@ -144,7 +144,7 @@ fn plant(sample: &common::chat::Sample) {
     );
 }
 
-/// Every row of the tables a secret must not reach, as text: the thread, the journal and the index.
+/// Every row of the tables a secret must not reach, as text: the thread, the action keys and the index.
 fn stored_text(sample: &common::chat::Sample, tables: &dyn Fn(&str) -> bool) -> String {
     sample
         .handle
@@ -225,7 +225,7 @@ fn reveal(sample: &common::chat::Sample, item: &str, column: &str) -> Option<Str
 }
 
 #[test]
-fn no_sealed_value_reaches_the_model_an_event_the_thread_the_journal_or_the_index() {
+fn no_sealed_value_reaches_the_model_an_event_the_thread_an_action_key_or_the_index() {
     let seed = centraid_identity::RecoveryPhrase::parse(WORDS)
         .expect("the words parse")
         .seed();
@@ -442,8 +442,8 @@ fn no_sealed_value_reaches_the_model_an_event_the_thread_the_journal_or_the_inde
         "the stored question holds the placeholder"
     );
     assert_clean("the thread tables", &thread, &[TYPED_CREATE, TYPED_EDIT]);
-    let journal = stored_text(&sample, &|name| name == "journal");
-    assert_clean("the journal", &journal, &[TYPED_CREATE, TYPED_EDIT]);
+    let keys = stored_text(&sample, &|name| name == "action_key");
+    assert_clean("the action keys", &keys, &[TYPED_CREATE, TYPED_EDIT]);
     let index = stored_text(&sample, &|name| name.starts_with("search_"));
     assert_clean("the index", &index, &[TYPED_CREATE, TYPED_EDIT]);
 }

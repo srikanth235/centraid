@@ -1138,7 +1138,7 @@ fn the_founded_file_holds_the_spec_s_tables_and_nothing_else() {
         "origin",
         "source",
         "revision",
-        "journal",
+        "action_key",
         "search",
         "search_vocab",
         "search_word",
@@ -1487,21 +1487,15 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         Reach::Not("the vault's own name, one per file and not an entity"),
     ),
     ("vault", "zone", Reach::Not("a time zone name, not prose")),
-    ("journal", "command", Reach::Not("a command name")),
     (
-        "journal",
-        "invoke_key",
+        "action_key",
+        "key",
         Reach::Not("an act's correlation key, a token and not prose"),
     ),
     (
-        "journal",
+        "action_key",
         "asked",
         Reach::Not("a digest of what an act asked, not prose"),
-    ),
-    (
-        "journal",
-        "detail",
-        Reach::Not("a refusal's sentence, evidence rather than content"),
     ),
     ("account", "currency", Reach::Not("an ISO code")),
     ("txn", "currency", Reach::Not("an ISO code")),
@@ -1515,7 +1509,7 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("occurrence", "original_start", Reach::Not("an instant")),
     ("occurrence", "starts", Reach::Not("an instant")),
     ("occurrence", "ends", Reach::Not("an instant")),
-    ("journal", "at", Reach::Not("an instant")),
+    ("action_key", "at", Reach::Not("an instant")),
     ("revision", "at", Reach::Not("an instant")),
     // Locker: the plain cells a member sees in the list are found by; every
     // sealed cell is `lk1:` ciphertext and is never text (`SEALED_ITEM_CELLS`).

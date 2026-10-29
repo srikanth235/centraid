@@ -35,7 +35,7 @@ fn text(response: &Value) -> String {
     response["text"].as_str().expect("a text").to_owned()
 }
 
-/// How many times a command has been answered `executed` in the vault's journal.
+/// How many times a command has been answered `executed` on the world's vault.
 fn executed(world: &World, command: &str) -> usize {
     journal(world)
         .get(&(command.to_owned(), "executed".to_owned()))

@@ -1,6 +1,6 @@
 //! HOW AN EXECUTED ACTION IS TAKEN BACK (#1135).
 //!
-//! Undo is a second action, not a rollback: the commit stays in the journal
+//! Undo is a second action, not a rollback: the commit stays in the vault
 //! and a new one reverses it. This table names, per app, the action that
 //! reverses another and where the reversing input comes from. An action with no
 //! row has no inverse — a purge, an import, a merge, an edit whose prior state

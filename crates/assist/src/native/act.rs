@@ -2179,7 +2179,7 @@ impl Session {
                         input_of(action, &id, &[("kind", json!(log))]),
                     )],
                     inverse: Vec::new(),
-                    not_undoable: Some("a logged interaction stays in the journal".to_owned()),
+                    not_undoable: Some("a logged interaction stays in the vault".to_owned()),
                     note: None,
                 }
             }
