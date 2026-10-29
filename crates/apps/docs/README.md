@@ -1,11 +1,11 @@
 # `centraid-apps-docs` — a drive as a projection of the vault
 
-Docs is 4 queries and 18 actions. This crate is the read plane and the action table; the writes are `crates/vault`'s `document.*` commands and the shared verbs (`entity.*`, `flag.*`, `tag.*`, `container.*`), and the bytes ride a door.
+Docs is 3 queries and 18 actions. This crate is the read plane and the action table; the writes are `crates/vault`'s `document.*` commands and the shared verbs (`entity.*`, `flag.*`, `tag.*`, `container.*`), and the bytes ride a door.
 
 | Module | What it is |
 | --- | --- |
 | `manifest` | The app's `manifest.json`, parsed by the kit's parser at load time. Two copies of "which tables does Docs write" is how the two answers drift. |
-| `queries` | `drive`, `search`, `history` and `activity`: the statements, the folder rail, the labels, the size of each blob, the decoded body and the version walk. A screen is a window of `entity` rows and then one bounded read of each table that decorates the ids it returned. |
+| `queries` | `drive`, `search` and `history`: the statements, the folder rail, the labels, the size of each blob, the decoded body and the version walk. A screen is a window of `entity` rows and then one bounded read of each table that decorates the ids it returned. |
 | `phone` | The phone's shelves (#1046): All and a folder cut from the one drive window, Starred, Recent and Trash cut from their own reads once the window is truncated ([`queries::ShelfArm`](src/queries.rs), Q-1047-7), the Type/Modified/label filters, the sort, the rail's counts, and the civil-time readings in the device's zone. Pure; no read of its own. |
 | `kind` | What a document is to a member: its kind, which screen opens it (reader, stage, facts) and which Type pill it passes. Media type first, title second. |
 | `bytes` | The three shell verbs as requests, plus the never-inline rule. No buffer, no filesystem, no socket. |
@@ -31,7 +31,7 @@ Every one is an answer to a way this crate could be wrong.
 
 **A command claims its bytes** ([R-1135-5-9](../../../docs/decisions.md#the-vault-model)): `upload` is `document.add` over a blob the shell staged (`blob.stage {hash, size}`), `create-text` writes words through the byte store, `replace` puts down new bytes and keeps the old as a `revision`, and `edit` rewrites a text document in place. A followed folder sends records (`follow.files`), and a changed file is a replace.
 
-**Activity is the journal** ([R-1135-5-11](../../../docs/decisions.md#docs)): the executed commands that named the document, newest first. The journal records the command and not who acted, so the row says what was done and the day.
+**There is no activity rail** ([R-1146-1B-4](../../../docs/decisions.md#the-journal-is-gone-1146)): the rail read the command journal, which the vault no longer keeps, and what a document's history is for is its versions.
 
 **Nothing is shared and nothing arrives.** The share fold, the origin plane and the Shared shelf left with the sharing plane ([#1029's scope amendment](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795)).
 
@@ -41,7 +41,7 @@ Every one is an answer to a way this crate could be wrong.
 
 ## The phone's app query (#1046)
 
-The phone asks `docs_drive`, `docs_search`, `docs_document` and `docs_activity` through `AppQueryRequest` (`crates/api-proto/proto/centraid/core/v1/docs.proto`), and `crates/core`'s `app_query::docs` runs these loaders over the page door. The shelf, the filters and the sort are the request's; `phone::shelve` cuts All and a folder from the one drive window, so **when the drive says `truncated`, those two shelves say so too** and only the three shelves the window does not define read for themselves.
+The phone asks `docs_drive`, `docs_search` and `docs_document` through `AppQueryRequest` (`crates/api-proto/proto/centraid/core/v1/docs.proto`), and `crates/core`'s `app_query::docs` runs these loaders over the page door. The shelf, the filters and the sort are the request's; `phone::shelve` cuts All and a folder from the one drive window, so **when the drive says `truncated`, those two shelves say so too** and only the three shelves the window does not define read for themselves.
 
 ## What stops this crate doing more
 

@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "docs",
   "name": "Docs",
-  "description": "A drive for your important documents — leases, IDs, warranties, tax forms — as a projection of the vault. A document is an entity over one blob: its title is the entity's, what the bytes are and the folder it is filed in are columns of its row, and two documents may legitimately share identical bytes (the blob plane stores them once). Text documents edit in place and any document's bytes can be replaced, each change a walkable version in its history. Folders are containers, and filing is one column of the document. Starring is a `tagged` edge to the starred flag on the document itself, so Starred here is the set of starred DOCUMENTS and nothing else. A document attached to something (a receipt on a transaction, a file on an event) and filed in no folder shows only where it is attached. Trash sets a purge date about 30 days out and keeps the folder and the star, so a restored document lands right back where it was. Uploading, renaming, moving, editing, replacing, restoring a version, starring, trashing and folder management all run through typed vault commands — the document's own (document.*) and the shared ones every app uses — contract-checked and journalled, with act consent granted per command. No data of its own — revoke the grant and the app goes dark.",
+  "description": "A drive for your important documents — leases, IDs, warranties, tax forms — as a projection of the vault. A document is an entity over one blob: its title is the entity's, what the bytes are and the folder it is filed in are columns of its row, and two documents may legitimately share identical bytes (the blob plane stores them once). Text documents edit in place and any document's bytes can be replaced, each change a walkable version in its history. Folders are containers, and filing is one column of the document. Starring is a `tagged` edge to the starred flag on the document itself, so Starred here is the set of starred DOCUMENTS and nothing else. A document attached to something (a receipt on a transaction, a file on an event) and filed in no folder shows only where it is attached. Trash sets a purge date about 30 days out and keeps the folder and the star, so a restored document lands right back where it was. Uploading, renaming, moving, editing, replacing, restoring a version, starring, trashing and folder management all run through typed vault commands — the document's own (document.*) and the shared ones every app uses — contract-checked, with act consent granted per command. No data of its own — revoke the grant and the app goes dark.",
   "version": "0.5.0",
   "iconKey": "Folder",
   "colorKey": "teal",
@@ -42,11 +42,6 @@
       {
         "schema": "vault",
         "table": "derivative",
-        "verbs": "read"
-      },
-      {
-        "schema": "vault",
-        "table": "journal",
         "verbs": "read"
       },
       {
@@ -1094,34 +1089,6 @@
         "type": "object",
         "properties": {
           "versions": {
-            "type": "array"
-          },
-          "vaultDenied": {
-            "type": "object"
-          }
-        }
-      }
-    },
-    {
-      "name": "activity",
-      "kind": "document",
-      "figures": ["events"],
-      "description": "What was done to a document: the journal's executed commands that name it, newest first (the journal is the vault's evidence of every command). An empty list is honest: nothing has been done to it yet.",
-      "input": {
-        "type": "object",
-        "properties": {
-          "document_id": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["document_id"],
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "events": {
             "type": "array"
           },
           "vaultDenied": {

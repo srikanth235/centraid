@@ -3952,14 +3952,6 @@
         "query": "history"
       },
       {
-        "app": "docs",
-        "figures": [
-          "events"
-        ],
-        "kind": "document",
-        "query": "activity"
-      },
-      {
         "app": "health",
         "figures": [
           "figure",

@@ -424,14 +424,6 @@ fn read(
                 tz,
             },
         )?,
-        ("docs", "activity") => app_query::docs::activity(
-            vault,
-            door,
-            &wire::DocsActivityRequest {
-                document_id: p.text("document_id")?,
-                tz,
-            },
-        )?,
 
         ("notes", "library") => app_query::notes::library(
             vault,

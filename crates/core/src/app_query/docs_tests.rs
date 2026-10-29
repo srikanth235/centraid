@@ -605,51 +605,10 @@ fn filters_compose_and_the_sort_is_the_requests() {
     assert!(nothing.documents.is_empty());
 }
 
-/// The activity rail reads the journal: the commands that named the document,
-/// newest first. The zone rule refuses a name the database does not know, as
-/// every app query does.
+/// Every app query refuses a zone name the database does not know, and a zero search limit.
 #[test]
-fn activity_answers_and_an_unknown_zone_is_refused() {
+fn an_unknown_zone_and_a_zero_limit_are_refused() {
     let scratch = Scratch::founded();
-    // A shell mints the id it files under, so the journal names the document
-    // from its very first command.
-    let lease = "11111111-1111-4111-8111-111111111111";
-    scratch.run(
-        "document.create_text",
-        serde_json::json!({ "id": lease, "title": "Lease", "body_text": "rent" }),
-    );
-    scratch.clock.advance_ms(60_000);
-    scratch.run(
-        "flag.set",
-        serde_json::json!({ "id": lease, "flag": "starred" }),
-    );
-    scratch.clock.advance_ms(60_000);
-    scratch.run(
-        "document.edit",
-        serde_json::json!({ "id": lease, "body_text": "rent due" }),
-    );
-    let other = scratch.add("Elsewhere", "unrelated", None);
-    scratch.run("entity.trash", serde_json::json!({ "id": other }));
-    let wire::app_query_response::Answer::DocsActivity(rail) = scratch
-        .ask(wire::app_query_request::Query::DocsActivity(
-            wire::DocsActivityRequest {
-                document_id: lease.to_owned(),
-                tz: TZ.to_owned(),
-            },
-        ))
-        .expect("activity answers")
-    else {
-        panic!("activity answered as something else");
-    };
-    let said: Vec<&str> = rail
-        .events
-        .iter()
-        .map(|event| event.activity.as_str())
-        .collect();
-    assert_eq!(said, ["document.edit", "flag.set", "document.create_text"]);
-    assert_eq!(rail.events[0].occurred_local, "2099-06-01T22:02");
-    assert_eq!(rail.events[2].occurred_local, "2099-06-01T22:00");
-
     let refused = scratch
         .ask(wire::app_query_request::Query::DocsDrive(
             wire::DocsDriveRequest {

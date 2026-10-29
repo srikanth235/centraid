@@ -104,12 +104,6 @@ message DocsDocumentRequest {
   string tz = 2;
 }
 
-// `docs.activity`: what the journal says was done to one document, newest first.
-message DocsActivityRequest {
-  string document_id = 1;
-  string tz = 2;
-}
-
 enum DocsShelf {
   // Everything not in the trash.
   DOCS_SHELF_UNSPECIFIED = 0;
@@ -275,18 +269,6 @@ message DocsVersion {
   string asserted_local = 7;
 }
 
-// One event on the activity rail.
-message DocsActivityEvent {
-  // The command's name (`document.replace`, `entity.trash`, …) as the journal
-  // recorded it, for a view's label table. EMPTY on a row that recorded none.
-  string activity = 1;
-  // The journal does not record who acted (#1135).
-  reserved 2;
-  reserved "agent_kind";
-  string occurred_at = 3;
-  string occurred_local = 4;
-}
-
 // ---------------------------------------------------------------------------
 // The answers.
 // ---------------------------------------------------------------------------
@@ -368,9 +350,4 @@ message DocsDocument {
   // sheet. EMPTY otherwise, and always for a text document, whose words are
   // `body`.
   string bytes_path = 9;
-}
-
-message DocsActivity {
-  // Newest first. EMPTY is honest: nothing has been recorded yet.
-  repeated DocsActivityEvent events = 1;
 }

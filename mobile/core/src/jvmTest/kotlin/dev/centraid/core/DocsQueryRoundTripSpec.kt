@@ -1,7 +1,6 @@
 package dev.centraid.core
 
 import centraid.core.v1.AppQueryRequest
-import centraid.core.v1.DocsActivityRequest
 import centraid.core.v1.DocsDocument
 import centraid.core.v1.DocsDocumentRequest
 import centraid.core.v1.DocsDrive
@@ -26,15 +25,15 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 /**
  * DOCS' QUERIES, KOTLIN TO RUST AND BACK (#1046).
  *
- * The drive's shelves, filters and sort, a document's versions and text, and
- * its activity are `crates/apps/docs`' folds run in the core; the phone sends
+ * The drive's shelves, filters and sort, and a document's versions and text
+ * are `crates/apps/docs`' folds run in the core; the phone sends
  * a typed `docs_*` arm and Wire decodes a typed answer. Over JNA, against the
  * real `libcentraid_core_ffi` and the vault `spike-fixture` founded — nothing
  * faked. Writes are `act` requests, the one way a screen writes.
  */
 class DocsQueryRoundTripSpec : StringSpec({
 
-    "the drive, a document, search and activity round trip, and the trash is its own shelf" {
+    "the drive, a document and search round trip, and the trash is its own shelf" {
         val core = openRealCore()
         try {
             val folder = core.write(
@@ -129,14 +128,6 @@ class DocsQueryRoundTripSpec : StringSpec({
                 val found = envelope.response?.app_query?.docs_search
                     ?: error("a search answer, got $envelope")
                 found.documents.map { it.document_id } shouldContain lease
-            }
-
-            // --- docs.activity ----------------------------------------------
-            core.appQuery(
-                AppQueryRequest(docs_activity = DocsActivityRequest(document_id = lease, tz = TZ)),
-            ).shouldBeAnsweredWith { envelope ->
-                envelope.response?.app_query?.docs_activity
-                    ?: error("an activity answer, got $envelope")
             }
 
             // --- the zone rule ----------------------------------------------

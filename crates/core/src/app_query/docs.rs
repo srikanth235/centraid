@@ -349,35 +349,6 @@ pub(crate) fn document(
     })
 }
 
-/// `docs.activity`: the audit trail, newest first.
-pub(crate) fn activity(
-    vault: &Vault,
-    door: &VaultDoor<'_>,
-    asked: &wire::DocsActivityRequest,
-) -> Result<Answer> {
-    let zone = zone_of(vault, &asked.tz)?;
-    settle(
-        door,
-        docs::load_activity(door, &asked.document_id),
-        |data| {
-            Answer::DocsActivity(wire::DocsActivity {
-                events: data
-                    .events
-                    .into_iter()
-                    .map(|event| {
-                        let occurred_at = event.occurred_at.unwrap_or_default();
-                        wire::DocsActivityEvent {
-                            activity: event.activity.unwrap_or_default(),
-                            occurred_local: phone::local_minute(&zone, &occurred_at),
-                            occurred_at,
-                        }
-                    })
-                    .collect(),
-            })
-        },
-    )
-}
-
 // ---------------------------------------------------------------------------
 // The conversion. ONE place, so a field that moved is one edit.
 // ---------------------------------------------------------------------------

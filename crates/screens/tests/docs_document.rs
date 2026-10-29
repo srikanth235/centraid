@@ -59,7 +59,7 @@ fn a_documents_back_names_the_page_it_was_pushed_from_else_docs() {
 }
 
 #[test]
-fn the_reader_draws_the_text_with_the_facts_the_path_and_the_activity() {
+fn the_reader_draws_the_text_with_the_facts_and_the_path() {
     let mut d = driver();
     let taxes = folder(&d, "Taxes", None);
     let id = text(&d, "Return", "# Numbers\n\nline");
@@ -100,10 +100,6 @@ fn the_reader_draws_the_text_with_the_facts_the_path_and_the_activity() {
     // Edit is a route the shell pushes.
     let edit = &data.actions[0];
     assert_eq!(edit.route.as_ref().unwrap().screen, docs::EDITOR);
-    assert!(!data.activity.is_empty());
-    let said: Vec<&str> = data.activity.iter().map(|row| row.label.as_str()).collect();
-    assert!(said.contains(&"Moved"), "{said:?}");
-    assert_eq!(data.activity_empty, "");
 }
 
 #[test]

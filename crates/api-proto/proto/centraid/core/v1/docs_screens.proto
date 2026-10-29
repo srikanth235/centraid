@@ -1,7 +1,7 @@
 // DOCS' SCREENS (#1135): the drive (All · Folders · Starred, Recently added from
 // More, and a folder's own page), one document, its version history, its text
-// editor and its trash, over the core's `docs.drive`, `docs.search`,
-// `docs.history` and `docs.activity` (`crates/apps/docs/manifest.json`) and
+// editor and its trash, over the core's `docs.drive`, `docs.search`
+// and `docs.history` (`crates/apps/docs/manifest.json`) and
 // every write the manifest lists. Every word, flag, icon key and empty-state
 // choice a view draws is made in `crates/screens/src/docs`; a view lays these
 // out and forwards events.
@@ -616,7 +616,9 @@ message DocsDocumentChrome {
   string loading = 3;
   string more = 4;
   string versions_heading = 5;
-  string activity_heading = 6;
+  // 6 was the heading of the Activity list (#1146).
+  reserved 6;
+  reserved "activity_heading";
   string facts_heading = 7;
   string rename_placeholder = 8;
   string rename_done = 9;
@@ -640,9 +642,10 @@ message DocsDocumentData {
   // The version history row: "Versions" and how many. Absent for a document
   // with one version.
   optional DocsVersionsLink versions = 8;
-  repeated DocsActivityRow activity = 9;
-  // "Nothing recorded yet." when `activity` is empty; EMPTY otherwise.
-  string activity_empty = 10;
+  // 9 and 10 were the Activity rows and their empty line: the rail read the command journal,
+  // which is gone (#1146).
+  reserved 9, 10;
+  reserved "activity", "activity_empty";
   // The head's actions, in order: edit, star, rename, move, labels, then
   // trash — or restore, on a trashed document.
   repeated DocsAction actions = 11;
@@ -723,13 +726,6 @@ message DocsFactsOnly {
 message DocsFact {
   string label = 1;
   string detail = 2;
-}
-
-message DocsActivityRow {
-  // "Edited", "Renamed", …
-  string label = 1;
-  // "Wed 11 March 09:12".
-  string meta = 2;
 }
 
 message DocsDocumentEvent {

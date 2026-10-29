@@ -126,7 +126,6 @@ pub(crate) fn answer_recording(
         Q::DocsDrive(asked) => docs::drive(vault, &door, &now, asked)?,
         Q::DocsSearch(asked) => docs::search(vault, &door, &now, asked)?,
         Q::DocsDocument(asked) => docs::document(vault, &door, &now, asked)?,
-        Q::DocsActivity(asked) => docs::activity(vault, &door, asked)?,
         Q::PeopleRoster(asked) => people::roster(vault, &door, &now, asked)?,
         Q::PeopleTouch(asked) => people::touch(vault, &door, &now, asked)?,
         Q::PeoplePerson(asked) => people::person(vault, &door, &now, asked)?,

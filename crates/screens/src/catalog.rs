@@ -4741,26 +4741,6 @@ pub mod load {
                 value.request()
             }
         }
-
-        /// What was done to a document: the journal's executed commands that name it, newest first (the journal is the vault's evidence of every command). An empty list is honest: nothing has been done to it yet.
-        #[derive(Clone, Debug, Default)]
-        pub struct Activity {
-            pub document_id: String,
-        }
-        impl Activity {
-            pub const NAME: &str = "activity";
-            pub fn request(self) -> wire::LoadRequest {
-                #[allow(unused_mut)]
-                let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("document_id".to_owned(), text(self.document_id));
-                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
-            }
-        }
-        impl From<Activity> for wire::LoadRequest {
-            fn from(value: Activity) -> Self {
-                value.request()
-            }
-        }
     }
 
     pub mod health {

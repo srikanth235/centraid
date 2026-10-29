@@ -69,6 +69,10 @@ message AppQueryRequest {
   // table (#1146).
   reserved 64;
   reserved "locker_access";
+  // 33 was `docs.activity`, the Docs activity rail, which read the command journal; both are gone
+  // (#1146).
+  reserved 33;
+  reserved "docs_activity";
   oneof query {
     AgendaUpcomingRequest agenda_upcoming = 1;
     AgendaDayContextRequest agenda_day_context = 2;
@@ -88,7 +92,6 @@ message AppQueryRequest {
     DocsDriveRequest docs_drive = 30;
     DocsSearchRequest docs_search = 31;
     DocsDocumentRequest docs_document = 32;
-    DocsActivityRequest docs_activity = 33;
     NotesLibraryRequest notes_library = 40;
     NotesNotebooksRequest notes_notebooks = 41;
     NotesJournalRequest notes_journal = 42;
@@ -168,6 +171,8 @@ message AppQueryResponse {
   // table (#1146).
   reserved 64;
   reserved "locker_access";
+  reserved 33;
+  reserved "docs_activity";
   oneof answer {
     AgendaUpcoming agenda_upcoming = 1;
     AgendaDayContext agenda_day_context = 2;
@@ -183,7 +188,6 @@ message AppQueryResponse {
     DocsDrive docs_drive = 30;
     DocsSearch docs_search = 31;
     DocsDocument docs_document = 32;
-    DocsActivity docs_activity = 33;
     NotesLibrary notes_library = 40;
     NotesNotebooks notes_notebooks = 41;
     NotesJournal notes_journal = 42;

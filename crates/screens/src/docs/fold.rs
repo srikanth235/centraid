@@ -295,13 +295,12 @@ pub fn labels_sheet(
 // One document
 // ---------------------------------------------------------------------------
 
-/// The document screen's data: its surface, facts and activity, with the
+/// The document screen's data: its surface and facts, with the
 /// drive's folders and labels for the move and labels sheets.
 #[must_use]
 pub fn document(
     locale: Locale,
     answer: &wire::DocsDocument,
-    activity: Option<&wire::DocsActivity>,
     drive: Option<&wire::DocsDrive>,
 ) -> wire::DocsDocumentData {
     use wire::docs_document_data::Surface;
@@ -317,7 +316,6 @@ pub fn document(
     // The document's own page is the parent of what it opens (its crumbs and
     // versions): they name it, so its title is the back word.
     let view = row(locale, found, &answer.today, "");
-    let events = activity.map(|a| a.events.as_slice()).unwrap_or_default();
     let surface = match found.surface() {
         wire::DocsSurface::Reading => Surface::Reading(reader(locale, found, answer)),
         wire::DocsSurface::Stage => Surface::Stage(stage(locale, found, answer, &view.title)),
@@ -333,12 +331,6 @@ pub fn document(
         facts: facts(locale, found, answer, &view),
         path: folders::path_crumbs(locale, &answer.path, &view.title),
         versions: versions_link(locale, answer, found, &view.title),
-        activity: events.iter().map(|e| activity_row(locale, e)).collect(),
-        activity_empty: if events.is_empty() {
-            words::activity_empty(locale)
-        } else {
-            String::new()
-        },
         actions: head_actions(locale, found),
         trashed_note: trashed_note(locale, found),
         folders: nodes,
@@ -500,30 +492,6 @@ pub fn version(locale: Locale, version: &wire::DocsVersion, trashed: bool) -> wi
         } else {
             String::new()
         },
-    }
-}
-
-fn activity_row(locale: Locale, event: &wire::DocsActivityEvent) -> wire::DocsActivityRow {
-    let label = match event.activity.as_str() {
-        "document.add" | "document.create_text" => words::activity_added(locale),
-        "document.edit" => words::activity_edited(locale),
-        "entity.retitle" => words::activity_renamed(locale),
-        "document.move" => words::activity_moved(locale),
-        "flag.set" => words::activity_starred(locale),
-        "flag.clear" => words::activity_unstarred(locale),
-        "entity.trash" => words::activity_trashed(locale),
-        "entity.restore" => words::activity_restored(locale),
-        "document.replace" => words::activity_replaced(locale),
-        "document.restore_version" => words::activity_version_restored(locale),
-        "tag.add" => words::activity_labelled(locale),
-        "tag.remove" => words::activity_unlabelled(locale),
-        "entity.empty_trash" => words::activity_trash_emptied(locale),
-        _ => words::activity_other(locale),
-    };
-    wire::DocsActivityRow {
-        label,
-        // THE JOURNAL DOES NOT SAY WHO ACTED (#1135): the line is the day alone.
-        meta: stamp(locale, &event.occurred_local).unwrap_or_default(),
     }
 }
 
