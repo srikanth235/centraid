@@ -755,3 +755,92 @@ Three finished wave branches merged into the umbrella, each as its own `--no-ff`
 
 - **`a_phone_killed_mid_stage_leaves_nothing_and_stages_again`** (`crates/core/tests/backup_edges.rs:1211`) fails deterministically at `48caef67`: `(content_confirmed, content_total)` is `(0, 1)`, expected `(1, 1)`. It passed at `430fb5c5`. Setting `TIDY_IDLE` in `crates/core/src/handle.rs` to 300 s makes it pass, so wave 3's idle-gated launch tidy (`bbd0d6ff`/`38541879`) is the cause. Staging goes through the spool, not the vault, so the tidy sees the vault idle while a library item is mid-stage. Wave 3 owns the fix.
 - **mobile-jvm** needs a rerun when Maven Central stops rate-limiting.
+
+### Wave 8 — Indexes and snappiness
+
+Owner-added to [#1146](https://github.com/srikanth235/centraid/issues/1146) on 2026-10-29 ("make the app snappy"). Worked on `claude/zen-darwin-fuharm-w8` from `191f0e4e`.
+
+#### What changed
+
+- **Every foreign key's first child column leads an index** (commitment 9, `every_foreign_key_column_leads_an_index`). Re-derived on this base from the founded file: `container(cover)`, `person(avatar)`, `revision(blob)` (all three into `blob`) and `rule(category_id, …)` had none. `origin(fills)` already had one on this base, `vault(self_id)` is the one-row exemption, written with its reason. New: `container_by_cover`, `person_by_avatar`, `revision_by_blob` (partial, `WHERE col IS NOT NULL`) and `rule_by_category`.
+- **Four ledger rows left the ledger, their fixes landing.** `agenda.task.board.logbook` is two pages (done tasks newest first, streamed by the new `task_by_done (status, done_at, id)`, then the cancelled ones for what room is left); `crates/vault/src/chat.rs` attachable documents carry `e.kind = 'document'` and order by `(updated_at, id)` so `entity_by_updated` streams; `notes.notebooks.filed` walks `note` in `(notebook_id, id)` order (`note_by_notebook` is now `(notebook_id, id)`) instead of an `IN` over every notebook; the NOCASE title match of contact import (`person.rs`, now `e.kind = 'person'`) and the follow match key (`follow.rs`'s `e.title = ? COLLATE NOCASE ORDER BY e.created_at, e.id`) share `entity_by_title_nocase (kind, title COLLATE NOCASE, created_at, id) WHERE deleted_at IS NULL`. Ledger: pages 9 → 7, statements 7 → 5.
+- **The plan sweep plans writes.** `statements_in_source` now also finds `UPDATE … SET` and `DELETE FROM` literals (prose that starts with the word is not one); `query_plans.rs` plans them the same way. 206 → 320 statements planned; no write above the floor needed a ledger row.
+- **Two write paths from this umbrella were over the call budget and are now bounded** (below): a label's trash or restore (wave 5) and the launch tidy (wave 3).
+  - A commit re-indexes the first `INLINE_DEPENDENTS` (50) of what a touched title feeds; a label with more is left in the new table `search_owed (id, after)` and `Vault::reindex_owed` writes the rest in batches of 50 when the vault is idle (`with_vault` starts the drain when something is owed, `open` starts it for what a closed session left). A rebuild empties the table.
+  - The launch pass reads the trash in chunks (it read all of it per batch), keeps the bytes in its batches (`entity.empty_trash {defer_collect}`) and collects once after the last, in pieces (`blob.collect {limit}`, `more`; `Vault::empty_overdue_trash_step`); the core's batch is 3 purged roots (was 5).
+- `docs/vault-ontology.md` (an Indexes section, commitment 9, the re-indexing and garbage-collection bullets), `docs/glossary.md`.
+
+#### Findings → test → red line
+
+| Finding | Test | Red line seen first |
+| --- | --- | --- |
+| FK child columns with no index | `every_foreign_key_column_leads_an_index` (`crates/vault/tests/commitments.rs`) | `foreign keys whose child column leads no index …: ["container(cover) -> blob(hash)", "person(avatar) -> blob(hash)", "revision(blob) -> blob(hash)", "rule(category_id,category_kind) -> entity(id,kind)"]` |
+| Person/follow title match scanned | `query_plans` with the ledger row removed | after the first index (`(kind, title COLLATE NOCASE)`): `sorts the rows it read from a big table, and is limited: SELECT e.id FROM entity e JOIN person p … plan: SEARCH e USING INDEX entity_by_title_nocase (kind=? AND title=?) ; … USE TEMP B-TREE FOR ORDER BY` — hence `created_at, id` joined the index |
+| Writes are not planned | `plans::tests::an_update_or_a_delete_in_a_string_is_found_and_prose_that_starts_like_one_is_not` | `left: []  right: ["UPDATE entity SET title = ?1 WHERE id = ?2", "DELETE FROM edge WHERE from_id = ?1"]` |
+| Logbook, attachable documents, notebooks filed | `every_read_plans_without_a_table_scan_or_a_sort_unless_the_ledger_says_why` | The ledger rows are the test: with the old statements and the rows removed it names them. Observed for the logbook (falsification below); chat and notes were not run red one by one — their rows were removed with the fix in one change and the sweep is green |
+| A big label held the vault 1.3 s | `trashing_and_restoring_a_label_of_five_thousand_holds_the_vault_inside_the_call_budget` (`crates/core/tests/write_costs.rs`) | `trashing a label of 5000 held the vault 1.281037266s` |
+| A launch batch held it 70–200 ms | `a_launch_batch_of_the_overdue_trash_holds_the_vault_inside_the_call_budget` | `one batch of 5 held the vault 196.7 ms` (p50 70.0 ms, p95 106.3 ms) |
+| Owed rows | `a_label_of_many_members_leaves_the_rest_owed_and_draining_it_equals_a_rebuild` (`index_owed.rs`) | does not compile on the base (`index_owed`, `reindex_owed` are new); red by break below |
+| Pass collects in pieces | `the_pass_collects_what_it_released_after_its_last_batch_in_pieces`, `collecting_with_a_limit_takes_a_piece_and_says_when_more_is_left` (`trash_and_bytes.rs`) | do not compile on the base (`empty_overdue_trash_step`); the measurement above is their red |
+
+#### Rulings
+
+- **R-1146-8-1** — _Finding:_ an FK child column with no index makes every parent delete a scan. _Choice:_ commitment 9 over the founded file, partial indexes where the column is mostly NULL, `vault` the only exemption. _Why:_ `EXPLAIN QUERY PLAN` never shows FK checks.
+- **R-1146-8-2** — _Choice:_ one index serves both the contact import and the follow match key: `(kind, title COLLATE NOCASE, created_at, id) WHERE deleted_at IS NULL`, not a person-only expression index. _Why:_ the follow map matches events and documents by title too, and `kind = ?` is bound there, which a `kind IN (…)` partial index could not be proved to serve.
+- **R-1146-8-3** — _Choice:_ `notes.notebooks.filed` is not a GROUP BY. _Why:_ the paged door serves a keyset page of one table and has no aggregate shape; walking `note` in `(notebook_id, id)` order streams without a sort and the count stays in the app.
+- **R-1146-8-4** — _Choice:_ attachable documents break ties by `id`, not `n`. _Why:_ `entity_by_updated` ends in `id`; the order within one `updated_at` carries no meaning.
+- **R-1146-8-5** — _Choice:_ the plan sweep plans `UPDATE … SET` and `DELETE FROM` literals under the same ledger; dynamic (`format!`) statements stay reached only through the pages. _Why:_ a write's scan costs what a read's does.
+- **R-1146-8-6** — _Finding:_ wave 5's member re-index is unbounded. _Choice:_ a persisted owed queue with a cursor per label (`search_owed`), not a bound that drops members; 50 inline, batches of 50. _Why:_ the index is part of the commit's promise, so the part that cannot fit must be durable; an in-memory queue would lose it with the process.
+- **R-1146-8-7** — _Finding:_ every launch batch walked every blob (`blob::collect`, 20.4 ms on the corpus) and read the whole trash. _Choice:_ chunked trash reads, deferred collect, one collect after the last batch in pieces of 300, batch of 3. _Why:_ the fixed cost was 45 of 70 ms per batch.
+- **R-1146-8-8** — _Choice:_ write costs are held to the call budget's own statistic and ceiling (50 ms): a label's trash by the fastest of three round trips, a launch batch by p95; the worst step is printed, not asserted. _Why:_ the worst step is SQLite's WAL checkpoint (100–195 ms once in several hundred commits), which no batch size bounds; ceilings were not touched.
+
+#### Measurements (year-3 corpus, 46,415 entities, 12,000 photographs, `YEAR3_ROWS`)
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Trash an album of 5,000 photographs (one commit) | 1,281.0 ms | 17.6 ms (fastest of 3; 29.5 ms on one run) |
+| Restore it | 1,296.5 ms | 17.4 ms |
+| Launch batch (corpus holds 3,295 purgeable rows, 2,000 moved by the test): p50 / p95 / worst | batch 5: 70.0 / 106.3 / 196.7 ms; 659 batches, 44.4 s | batch 3: 20.0 / 31.9 / 104.5 ms; 1,096 batches, 22.4 s |
+| One `blob::collect` on the corpus, nothing to collect | 20.4 ms, paid by every batch | once per pass, in pieces of 300 |
+| The three blob-column FK indexes alone (batch 5) | p95 41.8 ms, 17.0 s total (dropped) | p95 ≈ 36 ms, ≈ 15.9 s (kept) — small on this corpus, whose child tables are small |
+| Notebook of 2,000 notes: trash / restore | 1,562.2 / 1,448.2 ms | unchanged — not bounded, see below |
+
+#### Falsification
+
+1. A foreign-key index dropped (`revision_by_blob`, `person_by_avatar`, `container_by_cover`): `every_foreign_key_column_leads_an_index` red — `["container(cover) -> blob(hash)", "person(avatar) -> blob(hash)", "revision(blob) -> blob(hash)"]`. Restored.
+2. Logbook fix reverted to the base file with its ledger row gone: `query_plans` red — `page 'agenda.task.board.logbook' — sorts the rows it read from a big table`. Restored.
+3. Write planning: `DELETE FROM edge WHERE rel = ?2 AND ifnull(label_id, '') = ?4 AND from_id || to_id = ?1` in `commands/edge.rs`: `query_plans` red — `statement 'crates/vault/src/commands/edge.rs' — reads all of 'edge'` (`plan: SCAN edge`). Restored. (A first try that left `to_id` in the predicate stayed green: `edge_to` serves it.)
+4. The inline bound disabled (`if false && piece.len() > INLINE_DEPENDENTS`): `index_owed` red — `the rest of the members are owed`. Restored.
+
+#### Exit list
+
+1. Red-first tests: failing on the base or not compiling, passing now (table above).
+2. See the final message for `cargo test -p centraid-vault -p centraid-core` (with `--test query_plans`, `--test write_costs`), the notes, agenda and search crates, and the gate.
+3. `contracts/schema/vault-ddl.sql` regenerated; `SCHEMA_DIGEST` and the ontology page regenerated; `git diff --exit-code contracts/schema` clean after regeneration. `vault-commands.txt` did not change (it lists names).
+4. `cargo xtask gate --profile pr`: see the final message.
+
+#### Files
+
+Changed: `contracts/ledgers/query-plans.json`, `contracts/migrations/001_baseline.sql`, `contracts/schema/vault-ddl.sql`, `crates/apps/agenda/src/task/queries.rs` (the logbook statement only), `crates/apps/notes/src/shelves.rs`, `crates/core/src/handle.rs`, `crates/vault/src/{blob,chat,format,index,ontology_doc,plans,testdoor,tidy}.rs`, `crates/vault/src/commands/{blob,entity,person}.rs`, `crates/vault/src/log/guard.rs`, `crates/vault/tests/{commitments,trash_and_bytes}.rs`, `docs/glossary.md`, `docs/vault-ontology.md`, `scripts/docs-site/src/content/ontology-body.html` (generated). Added: `crates/core/tests/write_costs.rs`, `crates/vault/tests/index_owed.rs`. Deleted: none.
+
+#### Not done, and owner hand-offs
+
+- **Trashing or restoring a holder whose members go with it** (a notebook of 2,000 notes: 1.56 s / 1.45 s, ≈ 0.75 ms a member) is not bounded: the members' rows must change in the one commit, and the cost is per member in `trash_one`/`restore_one` (not profiled). An owner call whether a holder of thousands is a real shape; a bounded form would trash in rounds with the holder shown as emptying.
+- **Every `blob::collect` caller other than the launch pass** (`thread.save_turn`, `derivative.write`/`drop`, the explicit `blob.collect`, `entity.purge`, and `entity.empty_trash` when the member empties the trash) still walks every blob: 20.4 ms here, growing with the library. Candidate-based collection (collect only the hashes a command let go of) would remove it; not done because it needs a renter-by-entity list per command.
+- The corpus's own 1,295 purgeable rows beyond the 2,000 the test moves are why the pass counts 3,295.
+- Wave 4's new foreign keys are not in this branch; commitment 9 holds them at merge.
+
+#### Changelog line
+
+Emptying a big trash, trashing a very large album or list, and the launch clean-up now work in small pieces in the background, so the app stays responsive while they run; deleting or replacing photos, contacts' pictures and note history no longer scans whole tables to check what still points at them.
+
+#### Decision rows
+
+| **R-1146-8-1** | Every foreign key's first child column leads an index (the primary key counts); only a one-row table is exempt, with a reason; a mostly-NULL column gets a partial index. _Why:_ a parent delete looks up its children once per deleted row, and `EXPLAIN QUERY PLAN` never shows it. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-8-2** | One partial index `entity_by_title_nocase (kind, title COLLATE NOCASE, created_at, id) WHERE deleted_at IS NULL` serves the contact import and the follow match key. _Why:_ both match a title case-insensitively within a kind and order by `created_at, id`. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-8-3** | `notes.notebooks.filed` walks `note` in `(notebook_id, id)` order; the paged door gets no aggregate shape. _Why:_ it streams without a sort and the count stays in the app. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-8-4** | The assistant's attachable documents break ties by `id`, not `n`. _Why:_ `entity_by_updated` ends in `id`, and the order within one `updated_at` carries no meaning. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-8-5** | The plan sweep plans hand-written `UPDATE … SET` and `DELETE FROM` statements under the same ledger. _Why:_ a write scans a table the way a read does. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-8-6** | A commit re-indexes the first 50 members of a trashed or restored label; the rest are owed in `search_owed` and written in batches of 50 when the vault is idle. _Why:_ the label's trash held the vault 1.3 s at 5,000 members, and what cannot fit in the commit must survive the process. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-8-7** | The launch pass reads the trash in chunks, keeps bytes in its batches and collects once after the last, in pieces of 300; its batch is 3 roots. _Why:_ every batch walked every blob and the whole trash. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-8-8** | Write paths are held to the call budget's own statistic and 50 ms ceiling (a label's trash by the fastest of three round trips, a launch batch by p95). _Why:_ the worst step is SQLite's WAL checkpoint, which no batch bounds. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
