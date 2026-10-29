@@ -81,7 +81,6 @@ struct RustScreenView: View {
         case .lockerHome(let state)?: wall = state.hasWall ? state.wall : nil
         case .lockerItem(let state)?: wall = state.hasWall ? state.wall : nil
         case .lockerEditor(let state)?: wall = state.hasWall ? state.wall : nil
-        case .lockerAccess(let state)?: wall = state.hasWall ? state.wall : nil
         case .lockerExport(let state)?: wall = state.hasWall ? state.wall : nil
         case .lockerImport(let state)?: wall = state.hasWall ? state.wall : nil
         case .lockerLock(let state)?: wall = state.hasWall ? state.wall : nil
@@ -233,14 +232,6 @@ struct RustScreenView: View {
                 sendWall: { store.send(instance, .lockerWall($0)) },
                 onWords: words,
                 onClose: pop
-            )
-        case .lockerAccess(let state)?:
-            LockerAccessView(
-                state: state,
-                send: { store.send(instance, .lockerAccess($0)) },
-                sendWall: { store.send(instance, .lockerWall($0)) },
-                onWords: words,
-                onBack: pop
             )
         case .lockerExport(let state)?:
             LockerExportView(

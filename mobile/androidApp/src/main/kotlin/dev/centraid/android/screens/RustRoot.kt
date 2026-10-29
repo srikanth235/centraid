@@ -62,7 +62,6 @@ import dev.centraid.android.screens.health.HealthHomeScreen
 import dev.centraid.android.screens.health.HealthMetricScreen
 import dev.centraid.android.screens.health.HealthRationale
 import dev.centraid.android.screens.health.HealthWorkoutScreen
-import dev.centraid.android.screens.locker.LockerAccessScreen
 import dev.centraid.android.screens.locker.LockerEditorScreen
 import dev.centraid.android.screens.locker.LockerExportScreen
 import dev.centraid.android.screens.locker.LockerHomeScreen
@@ -427,7 +426,6 @@ internal class RustRoot(
         val lockerHome = view.locker_home
         val lockerItem = view.locker_item
         val lockerEditor = view.locker_editor
-        val lockerAccess = view.locker_access
         val lockerExport = view.locker_export
         val lockerImport = view.locker_import
         val lockerLock = view.locker_lock
@@ -559,13 +557,6 @@ internal class RustRoot(
                 sendWall = sendWall,
                 onWords = { wordsRoute(view)?.let(open) },
                 onClose = back,
-            )
-            lockerAccess != null -> LockerAccessScreen(
-                state = lockerAccess,
-                onEvent = { send(ScreenEvent(locker_access = it)) },
-                sendWall = sendWall,
-                onWords = { wordsRoute(view)?.let(open) },
-                onBack = back,
             )
             lockerExport != null -> LockerExportScreen(
                 state = lockerExport,
@@ -848,7 +839,6 @@ private fun wordsRoute(view: centraid.core.v1.ViewState): Route? = listOfNotNull
     view.locker_home?.wall,
     view.locker_item?.wall,
     view.locker_editor?.wall,
-    view.locker_access?.wall,
     view.locker_export?.wall,
     view.locker_import?.wall,
     view.locker_lock?.wall,
