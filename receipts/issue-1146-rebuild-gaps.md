@@ -755,3 +755,84 @@ Three finished wave branches merged into the umbrella, each as its own `--no-ff`
 
 - **`a_phone_killed_mid_stage_leaves_nothing_and_stages_again`** (`crates/core/tests/backup_edges.rs:1211`) fails deterministically at `48caef67`: `(content_confirmed, content_total)` is `(0, 1)`, expected `(1, 1)`. It passed at `430fb5c5`. Setting `TIDY_IDLE` in `crates/core/src/handle.rs` to 300 s makes it pass, so wave 3's idle-gated launch tidy (`bbd0d6ff`/`38541879`) is the cause. Staging goes through the spool, not the vault, so the tidy sees the vault idle while a library item is mid-stage. Wave 3 owns the fix.
 - **mobile-jvm** needs a rerun when Maven Central stops rate-limiting.
+
+### Wave 4 — Agenda
+
+Finding H5 and decisions D6 and D7 of #1146. A moved day of a repeating event now reads under its own timing and may carry its own link and place; a followed phone calendar is a calendar of the vault, with the phone's colour.
+
+#### What changed
+
+- **H5.** `occurrence` gains `timing` (`zoned`/`floating`/`all-day`; NULL is the series') and `zone` (only a zoned day names one, and only when it is zoned unlike its series). `event.edit_occurrence` resolves a day's times over its series (`day_times`): a day that states another timing is stored under it, a day that states its series' own stores NULL, and the series' length is never carried over a day's own start or into another timing (it used to be refused as "must end after it starts"). Agenda's expansion (`occurrence_row`) sets the row's semantics and zone from the day, so `local::place` and `still_running_at` place it by its own timing and a day of another kind borrows no length.
+- **D6.** `occurrence` gains `url` and `place_id REFERENCES place(id)` (NULL is the series'), indexed by the partial `occurrence_by_place`; `event.edit_occurrence` accepts `url` and `place_id` (the place must be a live place); `PURGE_RULES` and `DETACH` name `occurrence.place_id` as `Detach` (the day stays and reads the series' place again; the series is the entity touched). Reads: the row's `conferencing_uri`, `location_place_id` and `location_name` are the day's (`name_places` names a place the days brought). Guests and reminders stay the series'.
+- **The follower (H5 + D6).** A phone's `moved` entry states `timing`, `zone`, `url` and `location`; `derive` reads it under the day's own timing, the day's place is held as its NAME (a phone states words; `place::find_or_found_named` finds the live place of that title without regard to case or founds one when the day is written, so a pass that says the same words changes nothing). The series' `url` is a followed field now.
+- **D7.** `follow.calendar` founds a `calendar` container per phone calendar the first time it is read (`container::follow_calendar`, through the system map's new `founds`), titled as the phone calls it, painted with the colour the origin states (`origin.color`, new), and files the origin's events there instead of `calendar:default`. Each later pass keeps it: the colour follows the phone; the title follows the phone only while it is still what the phone last called it (a name the member gave stands); a calendar the member trashed is left in the trash; an origin that pre-dates the change moves its events still filed under `calendar:default`. The screens send the design wheel's hue nearest the phone's colour (`centraid_design::hue_key_of_hex`, by OKLCH hue angle; a grey sends none) as `var(--c-<hue>)`, which is what Agenda's `party_hue_key` already reads, so the colour follows the theme. `PhoneCalendar.color`, `PhoneCalendarEvent.url` and `.location` are new on the wire (additive; no field was removed).
+- **The shells.** iOS reads `cgColor`, `url` and `location`; Android reads `CALENDAR_COLOR` and `EVENT_LOCATION` (Android has no event URL).
+
+#### Rulings
+
+- **R-1146-4-1** (H5, scope). A change of timing is for one day: `scope: future` with another timing is refused ("A change of timing is for one day, not for every day after"). _Why:_ a `future` override moves later days by the wall-clock delta between the day and where it moved; across timings there is no such delta.
+- **R-1146-4-2** (H5, schema). The day also gets `zone`, which the brief did not name. _Why:_ a zoned day of an unzoned series (or of another zone) must say its zone, and the `event` row's own CHECK ties `zoned` to a zone; `CHECK (zone IS NULL OR timing IS 'zoned')` keeps the pair honest.
+- **R-1146-4-3** (H5, storage). A day that states its series' own timing (and zone) stores NULL, never a copy. _Why:_ one canonical form, so the follower's three-way comparison between what the phone implies and what the vault holds does not see a difference where there is none.
+- **R-1146-4-4** (D6, the place). A phone's location is a place found by title (case-insensitive) or founded, never an address guess; the series' own location is not followed (the screens send a day's `location` only when it differs from its series' on the phone). _Why:_ the series carries no `location` field today (only `place_id`, a member's choice); following it is a separate decision, listed below.
+- **R-1146-4-5** (D7, colour). The vault stores `var(--c-<hue>)`, the wheel's key, not the phone's hex. _Why:_ `party_hue_key` returns none for a stored literal, so a hex would paint with the id's own hue and the phone's colour would be lost silently; the wheel's hue keeps the colour on the theme. The mapping is the nearest of the eight `APP_HUES` by OKLCH angle, and a grey has none.
+- **R-1146-4-6** (D7, a calendar that leaves the phone). The screens send nothing for a calendar the phone no longer lists; its container and events are kept as they are and no guard is exercised for it. A calendar the phone still lists but that lost most of its events goes through wave 2's guard, per calendar now (test below). _Why:_ the shell's read has no way to say "this calendar left"; judging absence is the origin's complete read.
+- **R-1146-4-7** (D7, rename). A calendar's title follows the phone only while it is what the phone last called it. _Why:_ `entity.retitle` is the member's, and a followed name must not undo it; the same three-way rule every followed field has.
+
+#### Red-first
+
+Written before the fix, on base `191f0e4e` (`crates/vault/tests/agenda_days.rs`, `crates/apps/agenda/tests/day_overrides.rs`); lines seen:
+
+| Finding | Test | Red line on the base |
+| --- | --- | --- |
+| H5 timing stored | `an_all_day_series_day_moved_to_a_time_keeps_the_timing_it_was_moved_under` | `no such column: timing` |
+| H5 zoned day made all-day | `a_zoned_series_day_made_all_day_is_a_date_and_is_not_refused` | ``event.edit_occurrence: `ends` is 2026-03-02T08:30:00.000Z; with this timing it is a date, YYYY-MM-DD.`` |
+| H5 canonical NULL | `a_day_that_states_its_series_own_timing_stores_none` | `no such column: timing` |
+| H5 future scope | `a_change_of_timing_is_for_one_day_not_for_every_day_after` | `event.edit_occurrence was not refused left: Executed right: Failed` |
+| H5 placed wrong (read) | `an_all_day_series_day_moved_to_a_time_is_a_timed_row_at_that_time` | `the day reads as a clock left: AllDay right: Floating` |
+| H5 read (zoned→all-day) | `a_zoned_series_day_made_all_day_is_a_date_with_no_borrowed_length` | ``event.edit_occurrence: `ends` is 2099-06-01T07:30:00.000Z; with this timing it is a date`` |
+| D6 command | `one_day_of_a_series_carries_its_own_link_and_place_and_the_rest_stay_the_series` | `Additional properties are not allowed ('place_id', 'url' were unexpected)` |
+| D6 purge | `purging_a_place_a_day_names_leaves_the_day_with_the_series_place` | `Additional properties are not allowed ('place_id' was unexpected)` |
+| D6 read | `one_day_shows_its_own_link_and_place_and_its_neighbours_the_series` | `Additional properties are not allowed ('place_id', 'url' were unexpected)` |
+| D6 follower | `a_phone_s_moved_day_keeps_its_timing_link_and_place_through_the_follower` | `no such column: timing` |
+| D7 | `each_phone_calendar_is_a_calendar_of_the_vault_with_the_phone_s_colour`, `a_followed_phone_calendar_is_listed_by_name_with_the_phone_s_colour` | `follow.calendar: /origin: Additional properties are not allowed ('color' was unexpected)` |
+| D7 rename | `a_calendar_the_member_renamed_keeps_their_name_and_one_they_did_not_follows_the_phone` | no calendar was founded (`fills` is NULL) |
+| D7 purge | `a_purged_phone_calendar_ends_its_follow_and_the_next_pass_makes_it_again` | `'color' was unexpected` |
+
+Passing on the base too, kept as guards: `a_change_of_timing_needs_the_time_it_is_under` (the existing refusal already names `starts`) and `a_calendar_that_lost_most_of_its_events_trashes_none_of_them` (the wave 2 guard, now holding per calendar). The screens tests (`a_moved_day_states_its_own_timing_link_and_place_and_a_series_states_its_link`, `a_calendar_is_painted_with_the_wheel_hue_nearest_its_phone_colour_and_a_grey_has_none`, and `centraid_design`'s `a_phone_colour_is_the_wheel_hue_nearest_its_own_and_a_grey_has_none`) were written with the code; their subject did not exist on the base.
+
+#### Falsification of the two riskiest claims
+
+1. _"A pass that says the same words changes nothing."_ Throwaway: the day's place compared exactly instead of without regard to case. `a_phone_s_moved_day_keeps_its_timing_link_and_place_through_the_follower` failed: `the same word is no change: {…"updated":1}`. Reverted.
+2. _"A name the member gave a followed calendar stands."_ Throwaway: the rename ignored what the phone last called it. `a_calendar_the_member_renamed_keeps_their_name_and_one_they_did_not_follows_the_phone` failed at `the member's name stands left: "iCloud: Home"`. Reverted.
+
+#### Exit list
+
+1. Red-first tests: the lines above, on `191f0e4e` (src, schema and agenda paths checked out from the base with the new test files kept); all green on the branch (`agenda_days` 12, `day_overrides` 4).
+2. `cargo test -p centraid-vault` (every binary green after the digest, census and generated page were updated), and `-p centraid-core -p centraid-screens -p centraid-apps-agenda -p centraid-apps-health -p centraid-apps-money -p centraid-apps-people -p centraid-apps-kit -p centraid-design -p centraid-api-proto -p centraid-nativetools -p centraid-assist`: green. The three manifest copies of `follow.*`'s schema (`health`, `money`, `people`, plus `agenda`) were updated for `origin.color`.
+3. Regenerated `contracts/schema/vault-ddl.sql` (`export-ladder-ddl`), the published ontology page (`export-ontology-page`) and `SCHEMA_DIGEST` (`b585334211ed…`); `vault-commands.txt` is unchanged (`export-commands` equals it). `git diff --exit-code contracts/schema` is clean after regeneration.
+4. `cargo xtask gate --profile pr`: every step **ok** (fmt, clippy, test 988.6 s, restore-drill, rules, doc-links, ledgers, release-build 502.7 s, ts-static, emitters, advisory, lockfile, call-budget, search-budget 275.2 s, fault-door); **SKIP** `buf`, `deny`, `ci-policy` (actionlint), `secrets` (gitleaks), `osv` (not installed). The verdict line reads FAIL on time alone: 1891.5 s against the 1500 s cold budget, on a cold tree (the container's disk had to be cleared of old test binaries once, which forced a rebuild). The budget was not touched. An earlier run of the same gate stopped at `clippy` on this wave's own code (`obfuscated_if_else` in the screens), fixed in `5addb1ac`, and at `fmt` on an unformatted test line; the run above is on that fix.
+5. `cargo xtask gate --profile mobile-jvm`: **not run to a result.** Maven Central answered HTTP 429 on all five attempts (spaced 4 to 6 minutes; the plugin `com.squareup.wire:7.0.1` could not be resolved); no Kotlin or Swift of this wave is compiled by `:core:jvmTest` in any case. The proto change is additive (three new fields), and the Rust side compiles and tests against it.
+6. Pushed after each seam; the pre-push hook passed.
+
+#### Not done, and why
+
+- **The series' own location is not followed** (R-1146-4-4): `event.place_id` is a member's choice and the follower's `fields` are columns; a phone event's location never reached Agenda before this wave and still does not, except as a moved day's. Following it needs a `Child` like `points` (a place found by words, three-way merged) — a separate decision for the owner.
+- **No screen edits a day's link or place** and the assistant's `reschedule` action (`crates/apps/agenda/manifest.json`) was not widened to `url`/`place_id`: the command accepts them, nothing in the product offers them yet.
+- **A phone calendar that leaves the phone** (R-1146-4-6): nothing is sent for it, so its container and events stay; there is no "left the phone" signal to judge.
+- **The native views are not compiled here** (no Android SDK, no Xcode): `mobile/androidApp/.../CalendarImporter.kt` and `mobile/iosApp/Sources/PhoneCalendar.swift` gained the reads of the new fields. Owner hand-off: build both apps, import a calendar that has a colour, a location and (iOS) a link, and look at Agenda's calendar dots and a moved occurrence's place.
+
+#### Files
+
+Changed: `contracts/migrations/001_baseline.sql`, `contracts/schema/vault-ddl.sql`, `crates/api-proto/proto/centraid/core/v1/screens.proto`, `crates/apps/agenda/{README.md,manifest.json}`, `crates/apps/agenda/src/{detail,expansion,queries}.rs`, `crates/apps/{health,money,people}/manifest.json`, `crates/design/src/lib.rs`, `crates/screens/src/agenda/calendar.rs`, `crates/screens/tests/{agenda_calendar,imports_made}.rs`, `crates/vault/src/commands/{container,entity,event,follow,place}.rs`, `crates/vault/src/format.rs` (`SCHEMA_DIGEST`), `crates/vault/tests/commitments.rs` (census rows for `occurrence.zone` and `.url`), `docs/glossary.md`, `docs/vault-ontology.md`, `scripts/docs-site/src/content/ontology-body.html` (generated), `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/agenda/CalendarImporter.kt`, `mobile/iosApp/Sources/PhoneCalendar.swift`, `receipts/issue-1146-rebuild-gaps.md`. Added: `crates/vault/tests/agenda_days.rs`, `crates/apps/agenda/tests/day_overrides.rs`. Deleted: none. `contracts/schema/vault-commands.txt` is unchanged (no command added or removed).
+
+#### Changelog line
+
+A moved day of a repeating event can be a different kind of day from its series (a timed meeting on an all-day day, or the reverse) and can carry its own link and place, and each calendar you follow from your phone is its own calendar in Agenda, in the phone's colour.
+
+#### Decision rows
+
+| **R-1146-4-1** | A change of timing is for one day: an override of the days after is refused when it changes the day's timing. _Why:_ a `future` override moves later days by a wall-clock delta that has no meaning across timings. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-4-3** | A day that states its series' own timing stores none (`occurrence.timing` NULL is the series'). _Why:_ one canonical form, so the follower's three-way comparison sees no difference where there is none. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-4-4** | A day's place is found by its words or founded; the series' own location is not followed. _Why:_ the series has no location field to follow into; a separate decision. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-4-5** | A followed calendar's colour is the design wheel's hue nearest the phone's, stored as `var(--c-<hue>)`. _Why:_ a stored hex reads as no colour to the party-hue rule and would paint the id's own hue. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-4-6** | A calendar that leaves the phone is not judged; one that stays and loses most of its events goes through the follow engine's guard, per calendar. _Why:_ the shell's read has no "left" signal. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
