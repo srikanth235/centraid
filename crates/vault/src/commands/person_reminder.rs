@@ -28,11 +28,7 @@ fn pre_set(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 
 fn set(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let id = ctx.required_str("id")?;
-    let on = ctx
-        .input
-        .get("on")
-        .and_then(Json::as_bool)
-        .unwrap_or(true);
+    let on = ctx.input.get("on").and_then(Json::as_bool).unwrap_or(true);
     let changed = ctx.connection().execute(
         "UPDATE person SET birthday_reminder = ?2 WHERE id = ?1 AND birthday_reminder IS NOT ?2",
         rusqlite::params![id, i64::from(on)],

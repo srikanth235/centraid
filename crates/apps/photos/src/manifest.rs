@@ -44,15 +44,15 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_six_queries_and_twenty_one_actions() {
+    fn it_declares_five_queries_and_twenty_one_actions() {
         let manifest = manifest();
         // v0's eight less `faces`, `face-queue` and `people` (Q-1047-2), and less
         // `storage` and `enrichment-status`, whose producers left with the custody
         // sweep and the enricher (R-1135-5); then the screens' reads: one shelf, one
         // photograph, the collections and the places.
-        assert_eq!(manifest.queries.len(), 6);
+        assert_eq!(manifest.queries.len(), 5);
         assert_eq!(manifest.actions.len(), 21);
-        for name in ["search", "duplicates", "shelf", "photo", "albums", "places"] {
+        for name in ["search", "shelf", "photo", "albums", "places"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
         for name in [
@@ -62,6 +62,7 @@ mod tests {
             "people",
             "storage",
             "enrichment-status",
+            "duplicates",
         ] {
             assert!(
                 manifest.query(name).is_none(),

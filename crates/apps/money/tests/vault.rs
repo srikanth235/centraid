@@ -525,15 +525,27 @@ fn a_rule_that_names_a_payee_reads_back_and_applies_in_the_app_as_in_the_vault()
     let rules = read(&world, |door| load_rules(door).expect("rules")).value;
     let named = rules.iter().find(|rule| rule.rule_id == "r1").unwrap();
     assert_eq!(named.display_name.as_deref(), Some("Whole Foods"));
-    assert_eq!(rules.iter().find(|rule| rule.rule_id == "r2").unwrap().display_name, None);
+    assert_eq!(
+        rules
+            .iter()
+            .find(|rule| rule.rule_id == "r2")
+            .unwrap()
+            .display_name,
+        None
+    );
     let candidate = |description| Candidate {
         description,
         amount_minor: 4_250,
         account_id: "acct-1",
     };
     assert_eq!(
-        rules::apply(&rules, &candidate("WHOLE FOODS MKT 123")).display_name.as_deref(),
+        rules::apply(&rules, &candidate("WHOLE FOODS MKT 123"))
+            .display_name
+            .as_deref(),
         Some("Whole Foods")
     );
-    assert_eq!(rules::apply(&rules, &candidate("BLUE COFFEE CO")).display_name, None);
+    assert_eq!(
+        rules::apply(&rules, &candidate("BLUE COFFEE CO")).display_name,
+        None
+    );
 }

@@ -1,5 +1,5 @@
 //! The collections overview, the places, one photograph's detail, the search's
-//! structured legs and the duplicates' members: each against the same library the
+//! structured legs: each against the same library the
 //! shelves are read from, so a tile and the shelf it opens are asked the same
 //! question and answer the same number.
 
@@ -10,7 +10,7 @@ use centraid_apps_photos::overview::{live_photo_count, load_albums};
 use centraid_apps_photos::places::load_places;
 use centraid_apps_photos::search::{HitKind, Named, assemble, resting, structured_legs, tokens};
 use centraid_apps_photos::shelf::{Shelf, ShelfInput, load_shelf};
-use common::{World, library};
+use common::library;
 use serde_json::json;
 
 const NOW: i64 = 1_767_312_000_000;
@@ -324,56 +324,4 @@ fn the_resting_search_suggests_places_with_photographs_and_labels_on_live_ones()
 #[test]
 fn the_words_of_a_query_are_the_ones_worth_matching() {
     assert_eq!(tokens("The Pier"), ["pier"]);
-}
-
-#[test]
-fn a_duplicate_cluster_carries_its_members_as_cells_and_leaves_out_what_is_put_away() {
-    let w = World::new();
-    let a = w.photo(
-        "a",
-        json!({ "phash": "ffff0000ffff0000", "width": 400, "height": 300 }),
-    );
-    let b = w.photo(
-        "b",
-        json!({ "phash": "ffff0000ffff0001", "width": 800, "height": 600 }),
-    );
-    let c = w.photo("c", json!({ "phash": "ffff0000ffff0003" }));
-    w.ok("flag.set", json!({ "id": c, "flag": "archived" }));
-    w.ok("flag.set", json!({ "id": b, "flag": "starred" }));
-    let album = w.album("Keepers");
-    w.ok(
-        "edge.add",
-        json!({ "from": album, "rel": "contains", "to": a }),
-    );
-    let clusters = w.read(|door| {
-        centraid_apps_photos::duplicates::duplicate_clusters(door, 0, |prints| {
-            let rows: Vec<centraid_media::duplicates::Fingerprint> = prints
-                .iter()
-                .map(|p| centraid_media::duplicates::Fingerprint {
-                    asset_id: p.photo_id.clone(),
-                    phash: p.phash.clone(),
-                    cluster_id: None,
-                })
-                .collect();
-            centraid_media::duplicates::cluster(
-                &rows,
-                centraid_media::duplicates::DUPLICATE_HAMMING_THRESHOLD,
-            )
-        })
-        .expect("reads")
-    });
-    assert_eq!(clusters.len(), 1);
-    let cells = &clusters[0].cells;
-    assert_eq!(cells.len(), 2, "the archived twin is not offered");
-    let by = |id: &str| {
-        cells
-            .iter()
-            .find(|cell| cell.photo_id == id)
-            .expect("a member")
-    };
-    assert_eq!((by(&a).width, by(&a).height), (Some(400), Some(300)));
-    assert!(by(&b).favorite);
-    assert_eq!(by(&a).album_ids, [album]);
-    assert!(by(&b).album_ids.is_empty());
-    assert!(by(&a).byte_size.is_some());
 }

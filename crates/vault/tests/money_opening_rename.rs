@@ -240,10 +240,7 @@ fn a_line_imported_after_the_rule_takes_the_payee_and_a_reimport_keeps_a_later_n
             .as_deref(),
         Some("WHOLE FOODS MKT 123")
     );
-    world.ok(
-        "entity.retitle",
-        json!({ "id": id, "title": "Groceries" }),
-    );
+    world.ok("entity.retitle", json!({ "id": id, "title": "Groceries" }));
     world.import(&account, &lines);
     assert_eq!(title(), "Groceries", "a re-import does not rename");
 }

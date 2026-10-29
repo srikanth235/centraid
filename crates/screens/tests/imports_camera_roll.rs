@@ -853,7 +853,10 @@ fn a_walked_photograph_lands_with_its_pixel_box_and_its_place() {
     asset.longitude = Some(-122.3321);
     let mut library = Library::new().with(asset, &[("G", STILL)]);
     let mut shell = started(&mut library);
-    let before: Vec<String> = cells(&shell).into_iter().map(|cell| cell.photo_id).collect();
+    let before: Vec<String> = cells(&shell)
+        .into_iter()
+        .map(|cell| cell.photo_id)
+        .collect();
     let placed_before = places(&shell).places.len();
     walk(&mut shell, &mut library);
     assert_eq!(phase(&shell), wire::PhotosBackupPhase::Done as i32);

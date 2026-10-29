@@ -816,7 +816,8 @@ mod tests {
     /// Bitwarden with `type = note`; the body is the sealed `content`, not a login's `notes`.
     #[test]
     fn a_secure_note_row_reads_as_a_note_whose_body_is_its_content() {
-        let lastpass = "url,username,password,extra,name,grouping,fav\nhttp://sn,,,body one,Safe code,,0\n";
+        let lastpass =
+            "url,username,password,extra,name,grouping,fav\nhttp://sn,,,body one,Safe code,,0\n";
         let bitwarden = "folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,login_password,login_totp\n,0,note,Door code,body two,,0,,,,\n,0,login,Bank,a note,,0,https://bank.example,ada,pw,\n";
         let entries = read(lastpass.as_bytes()).expect("reads").entries;
         assert_eq!(entries.len(), 1);

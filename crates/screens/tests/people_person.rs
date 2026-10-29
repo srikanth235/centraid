@@ -590,7 +590,11 @@ fn a_relationship_is_on_both_sheets_each_read_from_its_own_side() {
     assert_eq!(
         data.relations
             .iter()
-            .map(|r| (r.name.as_str(), r.meta.as_str(), r.accessibility_label.as_str()))
+            .map(|r| (
+                r.name.as_str(),
+                r.meta.as_str(),
+                r.accessibility_label.as_str()
+            ))
             .collect::<Vec<_>>(),
         [("Beth", "Mum", "Beth, Ada's Mum")],
         "Ada's sheet: Beth is her Mum"
@@ -600,7 +604,11 @@ fn a_relationship_is_on_both_sheets_each_read_from_its_own_side() {
     assert_eq!(
         data.relations
             .iter()
-            .map(|r| (r.name.as_str(), r.meta.as_str(), r.accessibility_label.as_str()))
+            .map(|r| (
+                r.name.as_str(),
+                r.meta.as_str(),
+                r.accessibility_label.as_str()
+            ))
             .collect::<Vec<_>>(),
         [("Ada", "Beth is their Mum", "Ada, Beth is their Mum")],
         "Beth's sheet: she is Ada's Mum"

@@ -10,8 +10,6 @@
 //! | Places | [`PLACES`] | [`places`] |
 //! | One photograph | [`LIGHTBOX`] | [`lightbox`] |
 //! | Crop, rotate, straighten | [`EDITOR`] | [`editor`] |
-//! | Near-duplicate sets | [`DUPLICATES`] | [`duplicates`] |
-//! | One set, and the keep decision | [`DUPLICATE_REVIEW`] | [`duplicate_review`] |
 //!
 //! ## What the screens share
 //!
@@ -37,8 +35,6 @@ use crate::Registry;
 
 pub mod album_choice;
 pub mod cells;
-pub mod duplicate_review;
-pub mod duplicates;
 pub mod editor;
 pub mod fetch;
 pub mod free_up;
@@ -57,8 +53,6 @@ pub const PICKER: &str = "photos.picker";
 pub const PLACES: &str = "photos.places";
 pub const LIGHTBOX: &str = "photos.lightbox";
 pub const EDITOR: &str = "photos.editor";
-pub const DUPLICATES: &str = "photos.duplicates";
-pub const DUPLICATE_REVIEW: &str = "photos.duplicate_review";
 
 /// A copy of the originals `photo_ids` for the platform (`ExportOriginals`),
 /// with the words the shell names it by: the share sheet's title and the stems
@@ -94,8 +88,6 @@ pub fn registry() -> Registry {
         .with(PLACES, places::build)
         .with(LIGHTBOX, lightbox::build)
         .with(EDITOR, editor::build)
-        .with(DUPLICATES, duplicates::build)
-        .with(DUPLICATE_REVIEW, duplicate_review::build)
 }
 
 /// A runtime with Photos' screens and one tab, `photos`, rooted at its home. The
@@ -114,9 +106,7 @@ pub fn runtime() -> crate::Runtime {
 
 /// The routes Photos' own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{
-        DUPLICATE_REVIEW, DUPLICATES, EDITOR, HOME, LIGHTBOX, PICKER, PLACES, SHELF, wire,
-    };
+    use super::{EDITOR, HOME, LIGHTBOX, PICKER, PLACES, SHELF, wire};
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
@@ -206,25 +196,6 @@ pub mod routes {
             EDITOR,
             wire::route::Args::PhotosEditor(wire::PhotosEditorRoute {
                 photo_id: photo_id.to_owned(),
-            }),
-        )
-    }
-
-    #[must_use]
-    pub fn duplicates() -> wire::Route {
-        route(
-            DUPLICATES,
-            wire::route::Args::PhotosDuplicates(wire::PhotosDuplicatesRoute {}),
-        )
-    }
-
-    /// One duplicate set, by the cluster's key.
-    #[must_use]
-    pub fn duplicate_review(cluster_key: &str) -> wire::Route {
-        route(
-            DUPLICATE_REVIEW,
-            wire::route::Args::PhotosDuplicateReview(wire::PhotosDuplicateReviewRoute {
-                cluster_key: cluster_key.to_owned(),
             }),
         )
     }

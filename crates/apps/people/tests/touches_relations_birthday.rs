@@ -87,8 +87,10 @@ impl World {
 fn a_trashed_touch_stops_counting_toward_last_touch_the_log_and_the_dashboard() {
     let w = World::new();
     let ada = w.person("Ada", json!({ "cadence_days": 7 }));
-    let first = w.ok("person.log_interaction", json!({ "id": ada, "kind": "call" }))
-        ["interaction_id"]
+    let first = w.ok(
+        "person.log_interaction",
+        json!({ "id": ada, "kind": "call" }),
+    )["interaction_id"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -121,7 +123,11 @@ fn a_trashed_touch_stops_counting_toward_last_touch_the_log_and_the_dashboard() 
         .person
         .expect("a sheet");
     assert_eq!(
-        sheet.touches.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
+        sheet
+            .touches
+            .iter()
+            .map(|t| t.id.as_str())
+            .collect::<Vec<_>>(),
         [first.as_str()],
         "nor does it sit in the log"
     );
@@ -130,7 +136,11 @@ fn a_trashed_touch_stops_counting_toward_last_touch_the_log_and_the_dashboard() 
     let (dash, _) =
         w.read(|door| load_dashboard(door, CivilDate::new(2026, 1, 14), now).expect("reads"));
     assert_eq!(dash.recent.len(), 1, "nor the dashboard's rail");
-    assert_eq!(dash.days_over.get(&ada), Some(&6), "13 days since the 1st, 7 allowed");
+    assert_eq!(
+        dash.days_over.get(&ada),
+        Some(&6),
+        "13 days since the 1st, 7 allowed"
+    );
     // Restoring brings it back; trashing the last one leaves no touch at all.
     w.ok("entity.restore", json!({ "id": second }));
     assert_eq!(last(&w).as_deref(), Some("2026-01-04T00:00:00.000Z"));
@@ -161,12 +171,20 @@ fn a_relationship_shows_on_both_sheets_each_read_from_its_own_side() {
     };
     assert_eq!(
         relations(&ada),
-        [("Beth".to_owned(), "Mum".to_owned(), RelationDirection::Outgoing)],
+        [(
+            "Beth".to_owned(),
+            "Mum".to_owned(),
+            RelationDirection::Outgoing
+        )],
         "Ada's sheet: Beth is her Mum"
     );
     assert_eq!(
         relations(&beth),
-        [("Ada".to_owned(), "Mum".to_owned(), RelationDirection::Incoming)],
+        [(
+            "Ada".to_owned(),
+            "Mum".to_owned(),
+            RelationDirection::Incoming
+        )],
         "Beth's sheet: she is Ada's Mum"
     );
     // A relative in the trash is not shown, and a pet is shown on its owner's sheet.
@@ -177,7 +195,10 @@ fn a_relationship_shows_on_both_sheets_each_read_from_its_own_side() {
     assert_eq!(relations(&ada).len(), 2);
     w.ok("entity.trash", json!({ "id": beth }));
     assert_eq!(
-        relations(&ada).iter().map(|r| r.0.as_str()).collect::<Vec<_>>(),
+        relations(&ada)
+            .iter()
+            .map(|r| r.0.as_str())
+            .collect::<Vec<_>>(),
         ["Rex"]
     );
 }
@@ -193,21 +214,39 @@ fn a_birthday_reminder_can_be_turned_off_and_back_on() {
             .0
             .person
             .expect("a sheet");
-        let on = sheet.dates.iter().find(|d| d.label == "Birthday").map(|d| d.reminder_on);
-        let rostered = sheet.profile.reminders.iter().any(|r| r.label == "Birthday");
+        let on = sheet
+            .dates
+            .iter()
+            .find(|d| d.label == "Birthday")
+            .map(|d| d.reminder_on);
+        let rostered = sheet
+            .profile
+            .reminders
+            .iter()
+            .any(|r| r.label == "Birthday");
         let now = parse_instant("2026-01-12T00:00:00.000Z").unwrap();
-        let (dash, _) = w
-            .read(|door| load_dashboard(door, CivilDate::new(2026, 1, 12), now).expect("reads"));
+        let (dash, _) =
+            w.read(|door| load_dashboard(door, CivilDate::new(2026, 1, 12), now).expect("reads"));
         (on, rostered, dash.upcoming.len())
     };
-    assert_eq!(reminder(&w), (Some(true), true, 1), "a birthday has its reminder by default");
-    w.ok("person.set_birthday_reminder", json!({ "id": ada, "on": false }));
+    assert_eq!(
+        reminder(&w),
+        (Some(true), true, 1),
+        "a birthday has its reminder by default"
+    );
+    w.ok(
+        "person.set_birthday_reminder",
+        json!({ "id": ada, "on": false }),
+    );
     assert_eq!(
         reminder(&w),
         (Some(false), false, 0),
         "off: the date stays, the reminder and the upcoming rail do not"
     );
-    w.ok("person.set_birthday_reminder", json!({ "id": ada, "on": true }));
+    w.ok(
+        "person.set_birthday_reminder",
+        json!({ "id": ada, "on": true }),
+    );
     assert_eq!(reminder(&w), (Some(true), true, 1));
     // A person with no birthday has no reminder to switch.
     let outcome = w
@@ -215,7 +254,10 @@ fn a_birthday_reminder_can_be_turned_off_and_back_on() {
         .execute(
             &w.registry,
             &Principal::owner("phone"),
-            &Command::new("person.set_birthday_reminder", json!({ "id": bob, "on": false })),
+            &Command::new(
+                "person.set_birthday_reminder",
+                json!({ "id": bob, "on": false }),
+            ),
         )
         .expect("runs");
     assert_eq!(outcome.status, CommandStatus::Failed);

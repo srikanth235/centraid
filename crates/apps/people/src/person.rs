@@ -15,11 +15,11 @@ use centraid_apps_kit::row::{Cell, text_of};
 use centraid_apps_kit::statement::PageBindValue;
 
 use crate::Denial;
+pub use crate::queries::RelationDirection;
 use crate::queries::{
     DateRow, RelationRow, Touch, WIDE, asked, dates, describe, lists, people_among, relations,
     touch_stubs, words_about,
 };
-pub use crate::queries::RelationDirection;
 use crate::roster::{RosterRow, rows_of};
 
 /// One way to reach a person, and who else holds the same value.

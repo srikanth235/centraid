@@ -4,7 +4,7 @@ This directory is the current-state register for the Photos application. Each fi
 
 | Document | Current contract |
 | --- | --- |
-| [Derived ledger](derived-ledger.md) | The derivative table, renditions, the duplicates read, and the Memories and faces deletion |
+| [Derived ledger](derived-ledger.md) | The derivative table, renditions, the retired Duplicates screen, and the Memories and faces deletion |
 | [Places](places.md) | Member-named locations, one shared projection, geometry, and the no-basemap boundary |
 | [Dogfood](dogfood.md) | The real-library discovery ritual, release cadence, and known regression classes |
 | [Switcher walkthrough](switcher-walkthrough.md) | The day-one Google Photos refugee journey and the shipped/partial boundaries it exercises |
@@ -77,8 +77,7 @@ The screens are Rust ([`crates/screens/src/photos`](../../crates/screens/src/pho
 | `PhotoLightbox` | `photos.lightbox` | one asset, not a page: its content is a detail, it owns chrome visibility, and its events are verbs |
 | (the viewer's edit mode) | `photos.editor` | a route pushed over the lightbox, not v0's in-place mode: it owns a screen machine, and the lightbox stays mounted under it so Cancel lands on the same photograph. A save is a **new** photograph that keeps the original's date, place and caption ([R-1029-PH-5](../decisions.md#photos)) |
 | `PlacesView`, `PlacesMap` | `photos.places` | one read, two draws. Cards or map is a `Presentation` parameter, so moving between them is not a push and back does not walk through the presentations a member happened to tap |
-| `DuplicatesShelf` | `photos.duplicates` | listing clusters |
-| `DuplicateReview` | `photos.duplicate_review` | choosing within one. Two screens, because they are two jobs with two writes |
+| `DuplicatesShelf`, `DuplicateReview` | (retired) | Photos has no Duplicates screen ([#1146](https://github.com/srikanth235/centraid/issues/1146) D5); `photos.duplicates` and `photos.duplicate_review` are reserved wire numbers |
 | `PhotoPicker` | `photos.picker` | **not a shelf in selection mode.** The picked set is the picker's own and the album is a route param; a shelf that could be picked from would carry an album id on every surface that shows one |
 | (the Collections band) | `photos.home` | a place of the home screen: a list of shelves, not of assets |
 | (Search, opened from the bar under the title) | `photos.home` | a query, its hits, and a resting state that is neither. A place of the home screen (`PhotosDestination`), never a band tab ([R-CHROME-5](../decisions.md)) |
@@ -90,8 +89,6 @@ The state and event messages are `centraid.core.v1` ([`photos_screens.proto`](..
 ## What these screens cannot answer, and why
 
 The read door has no join and no `COUNT(*)`: `PageQuery` names one table, real columns only, with computed columns (`with_held_thumbnail`, `with_document_size`) appended by the door; `with_held_thumbnail` is refused AT PREPARE over a table with no `blob` column, taking the whole read down rather than answering nulls. So a screen that wants a count, a join or a fold asks an app query, and where one page is all it read, the count is a floor: `cells::count_phrase` says "At least 84" for a page that filled, because a bare number over it would state a total nobody counted. A `needs_attention` badge deliberately has no such flag: a badge means "there is work", and a floor and a total draw the same dot. Each gap below is recorded rather than papered over, because the alternative was to fabricate a number or a boolean that a member would read as a fact.
-
-**Nothing records the duplicate pass's progress.** There is no pass: the clusters are computed when asked (R-1135-5-15), so `photos.duplicates` never says "still looking" or "your library is clean" — neither could be said truthfully.
 
 **How the lightbox reaches the original.** The lightbox asks the content door for the photograph's original once it is held (`Located`: path, `embeddable`, media type) and the stage draws it only when `embeddable`; "Send a copy" and "Download" read the same path. An original this device does not hold is brought back by the core's `fetch_original` ([`fetch.rs`](../../crates/screens/src/photos/fetch.rs)), asked off the runtime's lock by the lightbox's "Load the original" and the grid's download arrow alike; no shell is in the loop.
 

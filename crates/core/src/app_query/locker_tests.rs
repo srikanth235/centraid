@@ -1429,15 +1429,23 @@ fn a_csv_secure_note_imports_as_a_note_with_its_body_sealed() {
             .unwrap_or_else(|| panic!("{title} was not imported"));
         let detail = scratch.item(&item.item_id).expect("the item");
         assert_eq!(detail.r#type, "note", "{title} is a note");
-        assert_eq!(detail.notes, "", "{title}: nothing of the body in plain notes");
-        assert_eq!(detail.url, "", "{title}: the marker address is not an address");
+        assert_eq!(
+            detail.notes, "",
+            "{title}: nothing of the body in plain notes"
+        );
+        assert_eq!(
+            detail.url, "",
+            "{title}: the marker address is not an address"
+        );
         let sealed = scratch
             .handle
             .with_vault(|vault| Ok(vault.locker_sealed_item_cell(&item.item_id, "content")?))
             .expect("the cell reads")
             .and_then(|cell| cell.ciphertext);
         assert!(
-            sealed.as_deref().is_some_and(|stored| stored.starts_with("lk1:")),
+            sealed
+                .as_deref()
+                .is_some_and(|stored| stored.starts_with("lk1:")),
             "{title}: content is sealed"
         );
         assert_eq!(
@@ -1452,9 +1460,17 @@ fn a_csv_secure_note_imports_as_a_note_with_its_body_sealed() {
     note_of("Safe code", "the safe code is 4417");
     note_of("Door code", "gate opens at 9921");
     // A login row of the same file stays a login, its note in plain notes.
-    let forum = scratch.search("Forum").items.into_iter().next().expect("forum");
+    let forum = scratch
+        .search("Forum")
+        .items
+        .into_iter()
+        .next()
+        .expect("forum");
     let forum = scratch.item(&forum.item_id).expect("the forum");
-    assert_eq!((forum.r#type.as_str(), forum.notes.as_str()), ("login", "a login note"));
+    assert_eq!(
+        (forum.r#type.as_str(), forum.notes.as_str()),
+        ("login", "a login note")
+    );
 }
 
 /// CENTRAID'S OWN JSON COMES BACK WHOLE: fields, tags, star and memo.

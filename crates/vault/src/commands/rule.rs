@@ -416,10 +416,10 @@ fn apply(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         if let Some(name) = named
             && (overwrite || title == words)
             && title != name
-            && ctx.connection().execute(
-                "UPDATE entity SET title = ?2 WHERE id = ?1",
-                [&id, name],
-            )? > 0
+            && ctx
+                .connection()
+                .execute("UPDATE entity SET title = ?2 WHERE id = ?1", [&id, name])?
+                > 0
         {
             ctx.touch(&id)?;
             renamed += 1;

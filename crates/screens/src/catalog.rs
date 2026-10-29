@@ -5709,24 +5709,6 @@ pub mod load {
             }
         }
 
-        /// Near-duplicate clusters over the live library: groups the photographs whose perceptual hashes (a derivative of each blob) lie within a few bits of one another, recomputed at read — a true visual-similarity signal, not a coincidence-prone fingerprint, and nothing stored. Each cluster lists its members as cells (pixel box, size, form, capture time, heart, the albums that hold it, held thumbnail path) so a review can show which copy to keep and which are placed in an album or hearted. The archive, the trash and an edited photograph's original are never members.
-        #[derive(Clone, Debug, Default)]
-        pub struct Duplicates {
-        }
-        impl Duplicates {
-            pub const NAME: &str = "duplicates";
-            pub fn request(self) -> wire::LoadRequest {
-                #[allow(unused_mut)]
-                let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
-            }
-        }
-        impl From<Duplicates> for wire::LoadRequest {
-            fn from(value: Duplicates) -> Self {
-                value.request()
-            }
-        }
-
         #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
         pub enum ShelfView {
             #[default]

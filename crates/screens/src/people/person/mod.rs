@@ -320,19 +320,20 @@ impl Person {
         let label = date.label.clone();
         // A birthday is the person's own column, so its switch is the person's; any other date's
         // reminder is its event's.
-        let request: wire::ActRequest = if let Some(person_id) = date_id.strip_prefix(BIRTHDAY_PREFIX) {
-            act::people::SetBirthdayReminder {
-                person_id: person_id.to_owned(),
-                on: turns_on,
-            }
-            .into()
-        } else {
-            act::people::SetReminder {
-                important_date_id: date_id.to_owned(),
-                reminders: turns_on.then(|| "[0]".to_owned()),
-            }
-            .into()
-        };
+        let request: wire::ActRequest =
+            if let Some(person_id) = date_id.strip_prefix(BIRTHDAY_PREFIX) {
+                act::people::SetBirthdayReminder {
+                    person_id: person_id.to_owned(),
+                    on: turns_on,
+                }
+                .into()
+            } else {
+                act::people::SetReminder {
+                    important_date_id: date_id.to_owned(),
+                    reminders: turns_on.then(|| "[0]".to_owned()),
+                }
+                .into()
+            };
         let outcome = fill(
             &if turns_on {
                 words::outcome_reminder_on(locale)

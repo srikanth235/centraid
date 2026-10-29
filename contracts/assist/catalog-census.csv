@@ -139,7 +139,7 @@ photos,flag-photo,star,photo,direct,yes: crates/screens/src/photos/lightbox.rs; 
 photos,unflag-photo,unstar,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
 photos,archive-photo,archive,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
 photos,unarchive-photo,unarchive,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
-photos,delete-photo,delete,photo,direct,yes: crates/screens/src/photos/duplicate_review.rs; crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
+photos,delete-photo,delete,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
 photos,restore-photo,restore,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
 photos,purge-photo,purge,photo,card,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs; crates/screens/src/photos/shelf.rs,no
 photos,create-album,create,album,direct,yes: crates/screens/src/photos/album_choice.rs; crates/screens/src/photos/home/collections.rs,yes

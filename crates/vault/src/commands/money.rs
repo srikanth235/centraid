@@ -179,8 +179,10 @@ fn opening_sentence(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     {
         return Ok(Some("That is not a real date.".to_owned()));
     }
-    Ok((integer(ctx, "opening_minor").unwrap_or(0) != 0 && day.is_none())
-        .then(|| "An opening balance needs the day it was true.".to_owned()))
+    Ok(
+        (integer(ctx, "opening_minor").unwrap_or(0) != 0 && day.is_none())
+            .then(|| "An opening balance needs the day it was true.".to_owned()),
+    )
 }
 
 fn add_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {

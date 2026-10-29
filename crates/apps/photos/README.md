@@ -1,6 +1,6 @@
 # `centraid-apps-photos` — the library as a projection
 
-Photos is 6 queries and 21 actions. This crate is the read plane and the action table; the writes are `crates/vault`'s `photo.*`, `place.*` and `album.set_cover` commands and the shared verbs (`entity.*`, `flag.*`, `tag.*`, `edge.*`, `container.*`), and the bytes are `crates/media`'s.
+Photos is 5 queries and 21 actions. This crate is the read plane and the action table; the writes are `crates/vault`'s `photo.*`, `place.*` and `album.set_cover` commands and the shared verbs (`entity.*`, `flag.*`, `tag.*`, `edge.*`, `container.*`), and the bytes are `crates/media`'s.
 
 | Module | What it is |
 | --- | --- |
@@ -11,7 +11,6 @@ Photos is 6 queries and 21 actions. This crate is the read plane and the action 
 | `overview` | `albums`: every album and standing shelf with its exact count and cover, and the albums in the trash. |
 | `detail` | `photo`: everything one photograph's screens show. |
 | `search` | The structured legs of `search` (places, no location, labels), the counts above the grid, the grid, and the resting suggestions. |
-| `duplicates` | A **read** over the perceptual hashes: it hands the clustering the live photographs' fingerprints and folds the answer into cards. The clustering is `centraid_media::duplicates` ([R-1135-5-15](../../../docs/decisions.md#photos)). |
 | `places` | The Places facet, inside Photos. A location is a phrase before it is a pin. |
 | `commands` | The twenty-one actions as command invocations, `invoke_key` mandatory. An action names one command and takes that command's input verbatim; two actions may share one (`rename-album` and `name-place` are both `entity.retitle`). |
 
@@ -25,7 +24,7 @@ Every one is an answer to a way this crate could be wrong.
 
 **Faces and memories are gone** ([R-1135-5-18](../../../docs/decisions.md#photos), Q-1047-2). Their queries, actions and surfaces left when nothing produced either; so did `storage` and `enrichment-status` and the `request-enrichment` action ([R-1135-5-12](../../../docs/decisions.md#photos)). The model holds no table for them, and `contracts/apps/photos` carries v0's answers as frozen evidence nothing reads.
 
-**Duplicates are read, never stored.** There must be exactly one clustering: a second implementation inside the query would agree with the code until the threshold moved, and then disagree silently at the boundary where a member is deciding what to delete. The core runs `centraid_media::duplicates::cluster` over the live photographs' `phash` derivatives when asked, takes the first 4,000 fingerprints by blob, and drops a cluster left with fewer than two live photographs.
+**There is no Duplicates screen** ([#1146](https://github.com/srikanth235/centraid/issues/1146) D5, retiring [R-1135-5-15](../../../docs/decisions.md#photos)). The member never asked for near-duplicate sets, so nothing clusters the perceptual hashes any more; `photo.add` still accepts a `phash`, and `centraid_media::duplicates` is gone with its only reader.
 
 **One verdict on what is live, in the kit** (`centraid_apps_kit::rules::Standing`). Live is not trashed AND not archived AND not folded under an edit. The archive shelf is archived and not trashed; the trash is every trashed photograph; an album draws every member that is not trashed. Every read here asks it, so a count and the shelf it opens cannot disagree (the favorites tile once counted the archived).
 
@@ -54,5 +53,5 @@ The manifest's `confirmation: "required"` is what the **dispatching surface** as
 
 ## Fixtures
 
-- `tests/reads.rs` runs the library, the albums, the places, the search and the duplicates against a vault the product founds and Photos' own commands fill.
-- `tests/year3.rs` is the `year3-photos` (90,000) and `year3-50k-assets` (50,000) axes, each with 3,000 or 1,500 near-duplicate families of three, a trash shelf wider than its 200-row bound and a duplicates read that stops at its 4,000-fingerprint cap. A shrunken profile in the same shape runs by default. Measured numbers and their provenance are in the receipt and `tests/journeys.json`.
+- `tests/reads.rs` runs the library, the albums, the places, and the search against a vault the product founds and Photos' own commands fill.
+- `tests/year3.rs` is the `year3-photos` (90,000) and `year3-50k-assets` (50,000) axes, each with a trash shelf wider than its 200-row bound. A shrunken profile in the same shape runs by default. Measured numbers and their provenance are in the receipt and `tests/journeys.json`.

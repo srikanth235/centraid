@@ -4356,15 +4356,6 @@
       {
         "app": "photos",
         "figures": [
-          "clusters",
-          "members"
-        ],
-        "kind": "photo",
-        "query": "duplicates"
-      },
-      {
-        "app": "photos",
-        "figures": [
           "cells",
           "total"
         ],
