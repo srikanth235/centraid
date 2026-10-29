@@ -89,6 +89,7 @@ fn nothing_the_model_deleted_is_founded() {
         "core_link",
         "command_definition",
         "access_receipt",
+        "CREATE TABLE receipt",
         "phone_link",
         "social_thread",
         "fts_core_party",

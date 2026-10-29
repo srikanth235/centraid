@@ -118,12 +118,6 @@ CREATE INDEX photo_by_place       ON photo(place_id) WHERE place_id IS NOT NULL;
 -- index photo_by_taken on photo
 CREATE INDEX photo_by_taken       ON photo(taken_at, id);
 
--- index receipt_by_at on receipt
-CREATE INDEX receipt_by_at ON receipt(at, seq);
-
--- index receipt_by_item on receipt
-CREATE INDEX receipt_by_item ON receipt(item_id, at, seq) WHERE item_id IS NOT NULL;
-
 -- index source_entity on source
 CREATE UNIQUE INDEX source_entity ON source(entity_id) WHERE entity_id IS NOT NULL;
 
@@ -382,6 +376,9 @@ CREATE TABLE locker_item (
   password_set_at TEXT,
   memo         TEXT,
   key_id       TEXT,
+  -- When the core last opened one of this item's sealed cells (#1146). A use is not an edit:
+  -- stamping it moves neither the entity's `updated_at` nor its `version`, and makes no revision.
+  last_used_at TEXT,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
 
@@ -435,7 +432,12 @@ CREATE TABLE locker_item_passkey (
 -- table locker_key on locker_key
 CREATE TABLE locker_key (
   key_id     TEXT PRIMARY KEY,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  -- Unlocks the phone refused since the last one it allowed, and when the latest was (#1146).
+  -- The Locker has one key row, so this is the Locker's whole record of them; a successful unlock
+  -- resets the count and leaves the time.
+  failed_unlocks  INTEGER NOT NULL DEFAULT 0 CHECK (failed_unlocks >= 0),
+  failed_unlock_at TEXT
 ) STRICT;
 
 -- table measurement on measurement
@@ -572,15 +574,6 @@ CREATE TABLE place (
   zone     TEXT,
   CHECK ((lat IS NULL) = (lon IS NULL)),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
-) STRICT;
-
--- table receipt on receipt
-CREATE TABLE receipt (
-  seq         INTEGER PRIMARY KEY,
-  at          TEXT NOT NULL,
-  item_id     TEXT,
-  act         TEXT NOT NULL,
-  journal_seq INTEGER NOT NULL
 ) STRICT;
 
 -- table revision on revision
@@ -807,10 +800,6 @@ CREATE TRIGGER message_outcome_settles_once BEFORE UPDATE OF outcome ON message
     SELECT RAISE(ABORT, 'a proposal settles as applied, dismissed, stale or failed')
      WHERE new.outcome NOT IN ('applied','dismissed','stale','failed');
   END;
-
--- trigger receipt_is_evidence on receipt
-CREATE TRIGGER receipt_is_evidence BEFORE UPDATE ON receipt
-  BEGIN SELECT RAISE(ABORT, 'a receipt is evidence'); END;
 
 -- trigger revision_is_history on revision
 CREATE TRIGGER revision_is_history BEFORE UPDATE ON revision

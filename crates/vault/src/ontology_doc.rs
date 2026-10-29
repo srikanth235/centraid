@@ -51,7 +51,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
     (
         "locker",
         "Locker",
-        "An entity kind whose secrets stay in sealed cells nothing entity-wide reads: items, their custom fields, passkeys, aliases and addresses, and Locker's own receipts. Its tags, star and archive are the vault's; a generic page read passes it by, and the assistant reads its plain rows as the owner does, never a sealed value.",
+        "An entity kind whose secrets stay in sealed cells nothing entity-wide reads: items, their custom fields, passkeys, aliases and addresses. Each item remembers when it was last used. Its tags, star and archive are the vault's; a generic page read passes it by, and the assistant reads its plain rows as the owner does, never a sealed value.",
     ),
 ];
 
@@ -59,7 +59,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
 ///
 /// The FTS5 shadow tables of `search` are not here (they are an implementation
 /// of it); every other table must be.
-pub const TABLES: [(&str, &str, &str); 42] = [
+pub const TABLES: [(&str, &str, &str); 41] = [
     (
         "kernel",
         "entity",
@@ -259,12 +259,7 @@ pub const TABLES: [(&str, &str, &str); 42] = [
     (
         "locker",
         "locker_key",
-        "The one key generation Locker's items are sealed under.",
-    ),
-    (
-        "locker",
-        "receipt",
-        "Locker's own evidence of who looked: appended on every reveal, never rewritten.",
+        "The one key generation Locker's items are sealed under, and how many unlocks the phone has refused since the last one it allowed.",
     ),
 ];
 

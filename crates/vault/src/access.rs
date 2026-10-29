@@ -39,7 +39,7 @@
 //! that table with the connector plane and nothing called the door, so it is
 //! deleted (R-1047-D2). A Locker cell is opened only by the core holding `K`
 //! (`crates/core/src/locker`), behind the member's unlock and after
-//! `locker.reveal_receipt`; the access plane has no path to one to refuse.
+//! `locker.mark_used`; the access plane has no path to one to refuse.
 
 use std::collections::BTreeSet;
 

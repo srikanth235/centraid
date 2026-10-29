@@ -1170,7 +1170,6 @@ fn the_founded_file_holds_the_spec_s_tables_and_nothing_else() {
         "locker_item_field",
         "locker_item_passkey",
         "locker_key",
-        "receipt",
     ]
     .into();
     read(&scratch.vault, |connection| {
@@ -1315,11 +1314,16 @@ fn names_a_computable(column: &str, declared: &str) -> bool {
 /// reason. A new computable column fails the test until it is argued for here.
 /// (`derivative` is the spec's other exception: it holds caches of a blob's
 /// content, and no column of it is named like a rollup, so it needs no line.)
-const STATED_NOT_COMPUTED: [(&str, &str, &str); 3] = [
+const STATED_NOT_COMPUTED: [(&str, &str, &str); 4] = [
     (
         "checkpoint",
         "balance_minor",
         "the bank's stated balance on a date: a statement, never recomputed from txn",
+    ),
+    (
+        "locker_item",
+        "last_used_at",
+        "the one record of a use: the Locker keeps no access log to recompute it from (#1146, owner-ruled), and a stamp is a fact the core states, not a rollup",
     ),
     (
         "measurement",
@@ -1641,9 +1645,6 @@ fn column_definition(sql: &str, column: &str) -> String {
 /// tables are NOT exempt: its plain cells are findable and its sealed ones are
 /// argued out by name, in [`CENSUS`].
 fn is_structural(connection: &Connection, table: &str, column: &str) -> bool {
-    if table == "receipt" {
-        return true;
-    }
     if column == "id"
         || column == "kind"
         || column.ends_with("_id")

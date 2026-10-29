@@ -303,12 +303,8 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
             serde_json::json!({ "item_id": "item-1" }),
         ),
         (
-            "locker.reveal_receipt",
-            serde_json::json!({
-                "object_type": "locker.item",
-                "item_id": "item-1",
-                "columns": ["password"]
-            }),
+            "locker.mark_used",
+            serde_json::json!({ "item_id": "item-1" }),
         ),
         (
             "locker.duplicate_item",

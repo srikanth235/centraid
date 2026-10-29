@@ -12,9 +12,10 @@
 //!    stores one refuses a plaintext value with a typed refusal, refuses a
 //!    write under a key generation that is not the vault's one, and refuses a
 //!    caller-minted id that is taken.
-//! 3. **The reveal is receipted even though the command plane cannot perform
-//!    it.** `locker.reveal_receipt` writes the row the access history reads,
-//!    and it refuses to name a column that is not sealed.
+//! 3. **A use is stamped even though the command plane cannot perform it.**
+//!    `locker.mark_used` stamps the item's `last_used_at` and edits nothing
+//!    else; an unlock's two outcomes are counted on the Locker's key row
+//!    (#1146). The Locker keeps no access log.
 //!
 //! **One `Vault::open` per test**, like `media_commands.rs`, for lane X3's
 //! reason: `SeededIds` restarts on reopen and the first write after a reopen
@@ -157,7 +158,7 @@ impl World {
 /// weak/reused scoring (Q-1047-16), and `locker.rotate_key` with the
 /// multi-seat custody plane (#1047 slice D1).
 #[test]
-fn the_catalogue_is_what_involves_a_secret_plus_the_reveal_receipt() {
+fn the_catalogue_is_what_involves_a_secret_plus_the_three_stamps() {
     use centraid_vault::commands::Idempotency;
 
     let definitions = centraid_vault::commands::locker::definitions();
@@ -165,7 +166,7 @@ fn the_catalogue_is_what_involves_a_secret_plus_the_reveal_receipt() {
         .iter()
         .map(|definition| definition.name)
         .collect();
-    assert_eq!(names.len(), 13);
+    assert_eq!(names.len(), 15);
     assert!(!names.contains(&"locker.watchtower"));
 
     let kept = [
@@ -197,9 +198,16 @@ fn the_catalogue_is_what_involves_a_secret_plus_the_reveal_receipt() {
     ] {
         assert!(!names.contains(&gone), "{gone} duplicates a shared verb");
     }
-    // The one add, and only that one.
+    // The three adds, and only those: the stamps the core's session writes.
     let added: Vec<&&str> = names.iter().filter(|name| !kept.contains(name)).collect();
-    assert_eq!(added, [&"locker.reveal_receipt"]);
+    assert_eq!(
+        added,
+        [
+            &"locker.mark_used",
+            &"locker.mark_unlocked",
+            &"locker.mark_unlock_failed"
+        ]
+    );
 
     let class_of = |name: &str| {
         definitions
@@ -223,8 +231,14 @@ fn the_catalogue_is_what_involves_a_secret_plus_the_reveal_receipt() {
         (7, 2, 3),
         "the locker schema's idempotency split moved"
     );
-    // The add writes once: a receipt per reveal.
-    assert_eq!(class_of("locker.reveal_receipt"), Idempotency::Once);
+    // Each stamp writes once: a use, an unlock, a refusal.
+    for stamp in [
+        "locker.mark_used",
+        "locker.mark_unlocked",
+        "locker.mark_unlock_failed",
+    ] {
+        assert_eq!(class_of(stamp), Idempotency::Once, "{stamp}");
+    }
 }
 
 /// THE TWO CONFIRMATION GATES, KEPT DISTINCT (census §A0).
@@ -903,13 +917,8 @@ fn a_purge_deletes_every_sidecar_in_the_same_transaction() {
         }),
     );
     world.ok(
-        "locker.reveal_receipt",
-        serde_json::json!({
-            "object_type": "locker.item",
-            "item_id": "item-1",
-            "columns": ["password"],
-            "kind": "reveal"
-        }),
+        "locker.mark_used",
+        serde_json::json!({ "item_id": "item-1" }),
     );
 
     // Not from the live shelf: the trash comes first, as for every kind.
@@ -935,15 +944,8 @@ fn a_purge_deletes_every_sidecar_in_the_same_transaction() {
             "{table} kept a row whose item is gone"
         );
     }
-    // The receipts stay: they are evidence, and name the item by value.
-    assert_eq!(
-        world.one::<i64>(
-            "SELECT COUNT(*) FROM receipt WHERE item_id = ?1",
-            &["item-1"]
-        ),
-        1,
-        "a purge erased the evidence of a reveal"
-    );
+    // The stamp lived on the item's row, so it left with it: the Locker keeps
+    // nothing about an item a purge erased.
 }
 
 /// A STAR IS A FLAG AND A LABEL IS A VAULT TAG (#1135, the Locker lane): a
@@ -1218,95 +1220,180 @@ fn a_new_sealed_field_must_carry_the_id_it_was_sealed_against() {
 }
 
 // ---------------------------------------------------------------------------
-// The derivations, the receipt, and the rotation.
+// The derivations, the stamps, and the rotation.
 // ---------------------------------------------------------------------------
 
-/// THE RECEIPT A REVEAL IN THE CORE OWES (D-1020-L3), and the refusals that
-/// keep it honest.
+/// A USE STAMPS THE ITEM AND EDITS NOTHING (#1146, R-1146-1A-1). The core runs
+/// `locker.mark_used` before it opens a cell; the stamp is the item's
+/// `last_used_at`. A use is not an edit: the entity keeps its `updated_at` and
+/// `version`, no revision is made, and the entity's row is not among the tables
+/// the commit changed (so nothing re-indexes).
 #[test]
-fn a_reveal_receipt_names_a_sealed_column_and_lands_where_the_history_reads() {
-    let world = World::new("locker-reveal", "key-1");
+fn a_use_stamps_last_used_at_without_editing_the_item() {
+    let world = World::new("locker-use", "key-1");
     world.login("item-1", "key-1");
-
-    world.ok(
-        "locker.reveal_receipt",
-        serde_json::json!({
-            "object_type": "locker.item",
-            "item_id": "item-1",
-            "columns": ["password"],
-            "kind": "reveal"
-        }),
-    );
-    let (item, act, journal): (String, String, String) = world
+    let before: (String, i64) = world
         .scratch
         .vault
         .read(|connection| {
             Ok(connection.query_row(
-                "SELECT r.item_id, r.act, j.command
-                   FROM receipt r JOIN journal j ON j.seq = r.journal_seq
-                  ORDER BY r.seq DESC LIMIT 1",
+                "SELECT updated_at, version FROM entity WHERE id = 'item-1'",
                 [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )?)
         })
-        .expect("the receipt is there");
-    assert_eq!(item, "item-1");
-    assert_eq!(act, "reveal password", "the verb, then the cells it opened");
-    assert_eq!(
-        journal, "locker.reveal_receipt",
-        "the receipt names the journal row that explains it"
-    );
-
-    // A RECEIPT THAT NAMES A PLAIN COLUMN IS A LIE about what was revealed.
-    let reason = world.refused(
-        "locker.reveal_receipt",
-        serde_json::json!({
-            "object_type": "locker.item",
-            "item_id": "item-1",
-            "columns": ["title"]
-        }),
-    );
-    assert!(reason.contains("is not a sealed Locker cell"), "{reason}");
-
-    // There is no fill (R-1047-D3): the kind is not representable.
-    let reason = world.refused(
-        "locker.reveal_receipt",
-        serde_json::json!({
-            "object_type": "locker.item",
-            "item_id": "item-1",
-            "columns": ["password"],
-            "kind": "fill"
-        }),
-    );
-    assert!(!reason.is_empty(), "a fill receipt was accepted");
-
-    // An unlock is about the vault, not about one item.
-    let reason = world.refused(
-        "locker.reveal_receipt",
-        serde_json::json!({
-            "object_type": "locker.auth",
-            "item_id": "item-1",
-            "columns": ["password"]
-        }),
-    );
-    assert!(reason.contains("about the vault"), "{reason}");
-
-    // And an unlock receipt itself lands, naming no item.
-    world.ok(
-        "locker.reveal_receipt",
-        serde_json::json!({
-            "object_type": "locker.auth",
-            "columns": ["session"],
-            "kind": "auth"
-        }),
-    );
-    assert_eq!(
+        .expect("the entity reads");
+    let revisions = |world: &World| {
         world.one::<i64>(
-            "SELECT COUNT(*) FROM receipt WHERE act = 'unlock' AND item_id IS NULL",
-            &[]
+            "SELECT COUNT(*) FROM revision WHERE entity_id = ?1",
+            &["item-1"],
+        )
+    };
+    let revisions_before = revisions(&world);
+    assert_eq!(
+        world.one::<Option<String>>(
+            "SELECT last_used_at FROM locker_item WHERE id = ?1",
+            &["item-1"]
         ),
-        1
+        None,
+        "an item nobody has opened has never been used"
     );
+
+    let outcome = world.run(
+        "locker.mark_used",
+        serde_json::json!({ "item_id": "item-1" }),
+    );
+    assert_eq!(
+        outcome.status,
+        CommandStatus::Executed,
+        "{:?}",
+        outcome.reason
+    );
+    assert!(outcome.output.get("receipt_id").is_none());
+    for table in ["entity", "revision"] {
+        assert!(
+            !outcome.tables.contains(&table.to_owned()),
+            "a use changed `{table}`: {:?}",
+            outcome.tables
+        );
+    }
+    let stamped: Option<String> = world.one(
+        "SELECT last_used_at FROM locker_item WHERE id = ?1",
+        &["item-1"],
+    );
+    assert!(
+        stamped.is_some_and(|at| at.ends_with('Z')),
+        "an ISO instant"
+    );
+    let after: (String, i64) = world
+        .scratch
+        .vault
+        .read(|connection| {
+            Ok(connection.query_row(
+                "SELECT updated_at, version FROM entity WHERE id = 'item-1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?)
+        })
+        .expect("the entity reads");
+    assert_eq!(before, after, "a use is not an edit");
+    assert_eq!(revisions_before, revisions(&world));
+
+    // A trashed item is not used, and an unknown one is not either.
+    world.ok("entity.trash", serde_json::json!({ "id": "item-1" }));
+    let reason = world.refused(
+        "locker.mark_used",
+        serde_json::json!({ "item_id": "item-1" }),
+    );
+    assert!(reason.contains("not in your locker"), "{reason}");
+    let reason = world.refused("locker.mark_used", serde_json::json!({ "item_id": "nope" }));
+    assert!(reason.contains("not in your locker"), "{reason}");
+}
+
+/// A CODE IS A USE, AND AN EXPORT IS NOT ONE (R-1146-1A-1): `locker.totp_code`
+/// stamps the item it derives from; the plaintext export stamps no item.
+#[test]
+fn a_code_stamps_the_item_and_an_export_stamps_none() {
+    let world = World::new("locker-code-use", "key-1");
+    world.login("item-1", "key-1");
+    world.ok(
+        "locker.edit_item",
+        serde_json::json!({
+            "item_id": "item-1",
+            "otp_seed": ciphertext("seed"),
+            "key_id": "key-1"
+        }),
+    );
+    let used = |world: &World| -> Option<String> {
+        world.one(
+            "SELECT last_used_at FROM locker_item WHERE id = ?1",
+            &["item-1"],
+        )
+    };
+    world.ok("locker.export", serde_json::json!({ "confirm": true }));
+    assert_eq!(used(&world), None, "an export is not a use of any one item");
+    let output = world.ok(
+        "locker.totp_code",
+        serde_json::json!({ "item_id": "item-1" }),
+    );
+    assert!(output.get("receipt_id").is_none());
+    assert!(used(&world).is_some(), "a derived code is a use");
+}
+
+/// A FAILED UNLOCK IS COUNTED, SURVIVES, AND A SUCCESSFUL UNLOCK RESETS THE
+/// COUNT (R-1146-1A-2). The figures sit on the Locker's one key row; the
+/// failure is written by its own command, so it persists although the unlock
+/// it describes was refused by the phone.
+#[test]
+fn a_failed_unlock_is_counted_and_a_successful_unlock_resets_it() {
+    let world = World::new("locker-unlock-count", "key-1");
+    let figures = |world: &World| -> (i64, Option<String>) {
+        world
+            .scratch
+            .vault
+            .read(|connection| {
+                Ok(connection.query_row(
+                    "SELECT failed_unlocks, failed_unlock_at FROM locker_key",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )?)
+            })
+            .expect("the key row reads")
+    };
+    assert_eq!(figures(&world), (0, None));
+
+    let first = world.ok("locker.mark_unlock_failed", serde_json::json!({}));
+    assert_eq!(first["failed_unlocks"], serde_json::json!(1));
+    let second = world.ok("locker.mark_unlock_failed", serde_json::json!({}));
+    assert_eq!(second["failed_unlocks"], serde_json::json!(2));
+    let (count, last) = figures(&world);
+    assert_eq!(count, 2, "two failures since the last unlock");
+    let last = last.expect("the last failure is dated");
+
+    // The success answers what it is about to clear, then clears it; the
+    // time of the last failure stays.
+    let opened = world.ok("locker.mark_unlocked", serde_json::json!({}));
+    assert_eq!(opened["failed_unlocks"], serde_json::json!(2));
+    assert_eq!(opened["failed_unlock_at"], serde_json::json!(last));
+    assert_eq!(figures(&world), (0, Some(last)));
+
+    // And a vault that never named its Locker generation has no row to count on.
+    let bare = World::new("locker-unlock-bare", "");
+    let reason = bare.refused("locker.mark_unlock_failed", serde_json::json!({}));
+    assert!(reason.contains("Locker"), "{reason}");
+}
+
+/// THE LOCKER KEEPS NO ACCESS LOG (#1146, R-1146-1A-1): a founded vault has no
+/// `receipt` table, and what replaced it is a stamp on the item and a count on
+/// the key.
+#[test]
+fn a_founded_vault_has_no_receipt_table() {
+    let world = World::new("locker-no-receipt", "key-1");
+    let found: i64 = world.one(
+        "SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'receipt%'",
+        &[],
+    );
+    assert_eq!(found, 0, "a receipt table, index or trigger was founded");
 }
 
 /// THE COUNTS THE FOOT LINE READS, counted inside the vault.
@@ -1341,7 +1428,7 @@ fn the_counts_are_exact_and_partitioned() {
 /// EXPORT KEEPS ITS CONFIRM AND ITS RISK, and answers the plain half plus the
 /// ciphertext's addresses (D-1020-L7).
 #[test]
-fn an_export_is_confirmed_receipted_and_carries_no_plaintext() {
+fn an_export_is_confirmed_and_carries_no_plaintext() {
     let world = World::new("locker-export", "key-1");
     world.login("item-1", "key-1");
 
@@ -1372,18 +1459,13 @@ fn an_export_is_confirmed_receipted_and_carries_no_plaintext() {
     );
     assert!(output.get("unseals_on").is_none());
 
-    // And the one receipt a mass reveal owes.
-    let act: String = world.one(
-        "SELECT act FROM receipt WHERE item_id IS NULL ORDER BY seq DESC LIMIT 1",
-        &[],
-    );
-    assert_eq!(act, "export");
+    assert!(output.get("receipt_id").is_none());
 }
 
-/// THE TOTP DOOR IS A RECEIPT DOOR NOW, and its precondition is a PRESENCE
+/// THE TOTP DOOR IS A STAMP DOOR NOW, and its precondition is a PRESENCE
 /// check — a column read that reads no value.
 #[test]
-fn the_totp_door_receipts_and_refuses_an_item_with_no_seed() {
+fn the_totp_door_stamps_and_refuses_an_item_with_no_seed() {
     let world = World::new("locker-totp", "key-1");
     world.login("item-1", "key-1");
     let reason = world.refused(
@@ -1408,71 +1490,6 @@ fn the_totp_door_receipts_and_refuses_an_item_with_no_seed() {
     assert!(output.get("derived_on").is_none());
     // The digits are NOT here: the command plane cannot compute them.
     assert!(output.get("code").is_none());
-}
-
-/// A CUSTOM FIELD'S REVEAL IS RECEIPTED AGAINST ITS ITEM AND NAMES THE FIELD
-/// (#1047 T2): the field's id and `value_sealed` — never its label or value —
-/// and whether the value was shown or copied.
-#[test]
-fn a_field_reveal_receipt_names_the_field_and_what_the_value_was_for() {
-    let world = World::new("locker-field-receipt", "key-1");
-    world.login("item-1", "key-1");
-
-    world.ok(
-        "locker.reveal_receipt",
-        serde_json::json!({
-            "object_type": "locker.item",
-            "item_id": "item-1",
-            "columns": ["value_sealed"],
-            "field_id": "field-1",
-            "use": "copy",
-            "kind": "reveal"
-        }),
-    );
-    let act: String = world.one("SELECT act FROM receipt ORDER BY seq DESC LIMIT 1", &[]);
-    assert_eq!(
-        act, "copy value_sealed field-1",
-        "a copy, of the field's one sealed cell"
-    );
-
-    // A FIELD RECEIPT THAT NAMES AN ITEM CELL is a lie about what opened.
-    let reason = world.refused(
-        "locker.reveal_receipt",
-        serde_json::json!({
-            "object_type": "locker.item",
-            "item_id": "item-1",
-            "columns": ["password"],
-            "field_id": "field-1"
-        }),
-    );
-    assert!(reason.contains("value_sealed"), "{reason}");
-    // And a use that is neither shown nor copied is not representable.
-    let outcome = world.run(
-        "locker.reveal_receipt",
-        serde_json::json!({
-            "object_type": "locker.item",
-            "item_id": "item-1",
-            "columns": ["password"],
-            "use": "fill"
-        }),
-    );
-    assert_eq!(outcome.status, CommandStatus::Failed);
-
-    // A CODE'S RECEIPT SAYS WHETHER IT WAS SHOWN OR COPIED, too.
-    world.ok(
-        "locker.edit_item",
-        serde_json::json!({
-            "item_id": "item-1",
-            "otp_seed": ciphertext("seed"),
-            "key_id": "key-1"
-        }),
-    );
-    world.ok(
-        "locker.totp_code",
-        serde_json::json!({ "item_id": "item-1", "use": "copy" }),
-    );
-    let act: String = world.one("SELECT act FROM receipt ORDER BY seq DESC LIMIT 1", &[]);
-    assert_eq!(act, "code_copy otp_seed");
 }
 
 /// THE SEALED-FIELD DOOR (#1047 T2): a live item's sealed field, with the

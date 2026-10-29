@@ -47,8 +47,10 @@ locker.counts
 locker.duplicate_item
 locker.edit_item
 locker.export
+locker.mark_unlock_failed
+locker.mark_unlocked
+locker.mark_used
 locker.remove_field
-locker.reveal_receipt
 locker.set_addresses
 locker.set_field
 locker.set_memo

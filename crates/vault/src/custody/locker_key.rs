@@ -532,7 +532,11 @@ mod tests {
             live_locker_key_id(&fixture.connection).unwrap(),
         );
         assert_eq!(objects, ["locker_key", "locker_key_one_generation"]);
-        assert_eq!(columns, ["key_id", "created_at"], "no `retired_at`");
+        assert_eq!(
+            columns,
+            ["key_id", "created_at", "failed_unlocks", "failed_unlock_at"],
+            "no `retired_at`"
+        );
         assert_eq!(live.as_deref(), Some("k-1"));
     }
 

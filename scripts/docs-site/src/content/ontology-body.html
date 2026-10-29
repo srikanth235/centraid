@@ -30,7 +30,7 @@
     <div class="hero-kv">
       <div><b data-count="kinds">26</b>kinds</div>
       <div><b data-count="relations">8</b>edge relations</div>
-      <div><b data-count="tables">42</b>tables</div>
+      <div><b data-count="tables">41</b>tables</div>
       <div><b>1</b>file, on the phone</div>
       <div><b>0</b>silos</div>
     </div>
@@ -471,7 +471,7 @@
 <div class="colrow"><span class="cn">stated</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">seen_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<div class="schemahdr" data-group="locker"><span class="sid">locker</span><h3>Locker</h3><p class="sdesc">An entity kind whose secrets stay in sealed cells nothing entity-wide reads: items, their custom fields, passkeys, aliases and addresses, and Locker's own receipts. Its tags, star and archive are the vault's; a generic page read passes it by, and the assistant reads its plain rows as the owner does, never a sealed value.</p></div>
+<div class="schemahdr" data-group="locker"><span class="sid">locker</span><h3>Locker</h3><p class="sdesc">An entity kind whose secrets stay in sealed cells nothing entity-wide reads: items, their custom fields, passkeys, aliases and addresses. Each item remembers when it was last used. Its tags, star and archive are the vault's; a generic page read passes it by, and the assistant reads its plain rows as the owner does, never a sealed value.</p></div>
 <div class="tbl rv in" data-group="locker" data-table="locker_item"><header><h4>locker_item</h4><p class="tp">A sealed item: a login, card, note, wifi network or other type. Its title, stamps and trash are its entity's; its secrets are sealed cells.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
@@ -497,6 +497,7 @@
 <div class="colrow"><span class="cn">password_set_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">memo</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">key_id</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">last_used_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="tbl rv in" data-group="locker" data-table="locker_item_field"><header><h4>locker_item_field</h4><p class="tp">A custom field of an item, sealed when it is secret.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
@@ -541,20 +542,14 @@
 <div class="colrow"><span class="cn">row_version</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 1</span></div>
 <div class="colrow"><span class="cn">key_id</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<div class="tbl rv in" data-group="locker" data-table="locker_key"><header><h4>locker_key</h4><p class="tp">The one key generation Locker's items are sealed under.</p></header>
+<div class="tbl rv in" data-group="locker" data-table="locker_key"><header><h4>locker_key</h4><p class="tp">The one key generation Locker's items are sealed under, and how many unlocks the phone has refused since the last one it allowed.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">key_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">created_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">failed_unlocks</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
+<div class="colrow"><span class="cn">failed_unlock_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<div class="tbl rv in" data-group="locker" data-table="receipt"><header><h4>receipt</h4><p class="tp">Locker's own evidence of who looked: appended on every reveal, never rewritten.</p></header>
-<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">seq</span><span class="ct">integer</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">item_id</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">act</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">journal_seq</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
-</div></div>
-<p class="note" data-tables="42" data-columns="310">42 tables and 310 columns, read off a vault this build founded.</p>
+<p class="note" data-tables="41" data-columns="308">41 tables and 308 columns, read off a vault this build founded.</p>
 <!-- schema:end -->
     </div>
     <div class="physcard rv">

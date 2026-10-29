@@ -129,10 +129,6 @@ pub struct CommandCtx<'tx, 'conn> {
     pub input: serde_json::Value,
     pub principal: Principal,
     pub now: String,
-    /// The `journal.seq` this invocation's row will take, reserved before the
-    /// handler runs so evidence a handler writes can name the row that
-    /// explains it.
-    pub journal_seq: i64,
     ids: &'tx dyn Ids,
     /// The vault's local content store, when it has one. See [`CommandCtx::blobs`].
     blobs: Option<&'tx (dyn crate::bytes::BlobStore + Send + Sync)>,
@@ -189,18 +185,6 @@ impl<'conn> CommandCtx<'_, 'conn> {
     /// shell may re-offer, keyed by an id the phone minted).
     pub fn insert_entity_as(&self, id: &str, kind: Kind, title: &str) -> Result<()> {
         self.tx.insert_entity(id, kind, title, &self.now)
-    }
-
-    /// Append Locker's access evidence: that an item (or, with `None`, the
-    /// locker itself) was opened, revealed or exported. The row names the
-    /// journal row that explains it; it is evidence a member can read, and
-    /// `receipt_is_evidence` refuses to rewrite it.
-    pub fn write_receipt(&self, item_id: Option<&str>, act: &str) -> Result<i64> {
-        self.connection().execute(
-            "INSERT INTO receipt (at, item_id, act, journal_seq) VALUES (?1, ?2, ?3, ?4)",
-            rusqlite::params![self.now, item_id, act, self.journal_seq],
-        )?;
-        Ok(self.connection().last_insert_rowid())
     }
 
     /// A required string input.
@@ -572,7 +556,6 @@ impl Vault {
                 input: command.input.clone(),
                 principal: principal.clone(),
                 now: at.clone(),
-                journal_seq: seq,
                 ids: self.ids(),
                 blobs: self.blobs(),
             };

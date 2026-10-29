@@ -1,5 +1,6 @@
 //! The `locker.*` commands — what involves a secret or Locker's own structure,
-//! plus the reveal receipt (#1020, D-1020-L1…L7; #1047).
+//! plus the three stamps the core's session writes (#1020, D-1020-L1…L7; #1047;
+//! #1146).
 //!
 //! ## The one sentence this whole file follows from
 //!
@@ -51,26 +52,34 @@
 //!   so the vault keeps the property that matters (no id collision, no id reuse
 //!   across kinds: the id is an `entity` id, and `entity.id` is unique).
 //!
-//! ### 3. A derivation over secrets leaves the command plane; its RECEIPT does not
+//! ### 3. A derivation over secrets leaves the command plane; its STAMP does not
 //!
-//! `locker.totp_code` unsealed the seed inside v0's server. Here it writes the
-//! receipt that says a code was derived, and answers the item and the period;
-//! the digits are `crates/core::locker::phone`'s, over a seed only a core
-//! holding `K` can open, computed after this receipt lands (D-1020-L6,
-//! Q-1047-16). v0's `locker.watchtower`, which unsealed every password to
+//! `locker.totp_code` unsealed the seed inside v0's server. Here it stamps the
+//! item as used and answers the item and the period; the digits are
+//! `crates/core::locker::phone`'s, over a seed only a core holding `K` can
+//! open, computed after this stamp lands (D-1020-L6, Q-1047-16). v0's `locker.watchtower`, which unsealed every password to
 //! score weak and reused, is deleted rather than moved (Q-1047-16): nothing
 //! on the phone scores them.
 //!
 //! `locker.export` moves the same way and for the same reason — and keeps
 //! `confirm: true` and `risk: high`, because what it authorises is still the
-//! mass unseal of everything the locker holds.
+//! mass unseal of everything the locker holds. It stamps no item: a file is not
+//! a use of any one of them.
 //!
-//! ### 4. One command is new, because the reveal is the core's
+//! ### 4. Three commands are the core's, because the reveal and the unlock are
 //!
-//! - [`reveal_receipt`]: a reveal in the core still owes an `access.receipt`
-//!   row, and the core's own door cannot write one. This is the door that
-//!   does, under `object_type = 'locker.item'` so the app's access history sees
-//!   it (D-1020-L3).
+//! The Locker keeps no access log (#1146): what remains of one is a stamp on
+//! the item and a count on the key, each written by a command the core runs
+//! BEFORE it opens a cell or loads `K`, so a stamp that did not land is an
+//! error and no plaintext exists (D-1020-L3).
+//!
+//! - [`mark_used`]: a reveal in the core stamps `locker_item.last_used_at`.
+//!   A use is not an edit — the entity's `updated_at` and `version` stay,
+//!   no revision is made, and nothing re-indexes.
+//! - [`mark_unlocked`] and [`mark_unlock_failed`]: the unlock's two outcomes,
+//!   on `locker_key`. A failure is its own command because the unlock it
+//!   describes was refused, and a refusal writes nothing; a success resets the
+//!   count and answers what it cleared.
 //!
 //! #1020's second add, `locker.rotate_key` (rotation's step 2 across seats,
 //! D-1020-L4), is deleted (#1047 slice D1): `K` is the seed's single leaf, so
@@ -86,7 +95,7 @@
 //! tags (`tag.*`, `tagged` edges). This file keeps only what involves a secret
 //! or Locker's own structure: the item's fields, sealed fields, passkeys,
 //! aliases, addresses, one-time codes, import, export, duplicate, counts and
-//! the reveal receipt.
+//! the three stamps.
 //!
 //! What follows from that, and is worth saying:
 //!
@@ -112,11 +121,6 @@ use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempoten
 use crate::custody::locker_key::{assert_live_locker_key_id, is_locker_ciphertext};
 use crate::error::{Result, VaultError};
 use crate::model::Kind;
-
-/// What a reveal receipt's input names its subject as: a locker item, or the
-/// unlock itself. The words the core sends; they decide which `act` is written.
-const ITEM_OBJECT: &str = "locker.item";
-const AUTH_OBJECT: &str = "locker.auth";
 
 /// The five `locker_item` cells that hold ciphertext under `K`.
 pub const SEALED_ITEM_CELLS: [&str; 5] = ["password", "otp_seed", "card_number", "cvv", "content"];
@@ -775,70 +779,6 @@ const PASSKEY_IS_SEALED: CommandCondition = CommandCondition {
     },
 };
 
-/// A reveal receipt names a sealed column and matches its subject to its
-/// object type.
-const RECEIPT_IS_WELL_FORMED: CommandCondition = CommandCondition {
-    predicate: "receipt_is_well_formed",
-    check: |ctx| {
-        let object_type = ctx.required_str("object_type")?;
-        let item_id = ctx.optional_str("item_id");
-        if object_type == ITEM_OBJECT && item_id.is_none() {
-            return Ok(Some(
-                "a reveal of a locker item names the item it opened".to_owned(),
-            ));
-        }
-        if object_type == AUTH_OBJECT && item_id.is_some() {
-            return Ok(Some(
-                "an unlock is about the vault, not about one item".to_owned(),
-            ));
-        }
-        if let Some(refusal) = field_receipt_refusal(ctx, object_type) {
-            return Ok(Some(refusal));
-        }
-        // A REVEAL RECEIPT THAT NAMES A PLAIN COLUMN IS A LIE about what was
-        // revealed, so the column set is checked against the sealed registry —
-        // except for an unlock, which reveals no column at all.
-        if object_type == ITEM_OBJECT {
-            let columns = ctx
-                .input
-                .get("columns")
-                .and_then(serde_json::Value::as_array)
-                .cloned()
-                .unwrap_or_default();
-            for column in &columns {
-                let column = column.as_str().unwrap_or_default();
-                if !SEALED_ITEM_CELLS.contains(&column)
-                    && column != "value_sealed"
-                    && column != "private_key"
-                {
-                    return Ok(Some(format!(
-                        "`{column}` is not a sealed Locker cell; a reveal receipt names what \
-                         was unsealed"
-                    )));
-                }
-            }
-        }
-        Ok(None)
-    },
-};
-
-/// A receipt that names a custom field names `value_sealed` and nothing else,
-/// on an item — the one sealed column a field has (#1047 T2).
-fn field_receipt_refusal(ctx: &CommandCtx<'_, '_>, object_type: &str) -> Option<String> {
-    ctx.optional_str("field_id")?;
-    let columns = ctx
-        .input
-        .get("columns")
-        .and_then(serde_json::Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let only_the_value = columns.len() == 1 && columns[0].as_str() == Some("value_sealed");
-    (object_type != ITEM_OBJECT || !only_the_value).then(|| {
-        "a custom field's reveal names the item and `value_sealed`, the field's one sealed column"
-            .to_owned()
-    })
-}
-
 /// The member-facing half of a refusal, for a precondition's sentence.
 fn sentence_of(error: VaultError) -> String {
     match error {
@@ -874,14 +814,12 @@ static SET_FIELD_PRE: &[CommandCondition] = &[ITEM_LIVE_CHECK, FIELD_VALUE_IS_SE
 
 static SET_PASSKEY_PRE: &[CommandCondition] = &[ITEM_LIVE_CHECK, PASSKEY_IS_SEALED];
 
-static REVEAL_RECEIPT_PRE: &[CommandCondition] = &[RECEIPT_IS_WELL_FORMED];
-
 // ---------------------------------------------------------------------------
 // The catalogue.
 // ---------------------------------------------------------------------------
 
 /// Every `locker.*` command this build carries: what involves a secret or
-/// Locker's own structure, plus the reveal receipt the core's reveal writes.
+/// Locker's own structure, plus the three stamps the core's session writes.
 /// Trash, restore, purge, star, archive and tags are the vault's shared verbs
 /// (`entity.*`, `flag.*`, `tag.*`).
 #[must_use]
@@ -899,8 +837,10 @@ pub fn definitions() -> Vec<CommandDefinition> {
         clear_passkey(),
         counts(),
         export(),
-        // The one the core's reveal needs.
-        reveal_receipt(),
+        // The three the core's session needs (#1146).
+        mark_used(),
+        mark_unlocked(),
+        mark_unlock_failed(),
     ]
 }
 
@@ -1836,8 +1776,28 @@ fn counts() -> CommandDefinition {
 }
 
 // ---------------------------------------------------------------------------
-// The two derivations that left the command plane, and their receipts.
+// The two derivations that left the command plane, and what they stamp.
 // ---------------------------------------------------------------------------
+
+/// Stamp an item as used: the instant the core opened one of its sealed cells.
+///
+/// **A use is not an edit.** This writes `locker_item.last_used_at` and nothing
+/// else — not `ctx.touch`, so the entity's `updated_at` and `version` stay and
+/// the item does not float to the top of the newest-updated shelf; not a
+/// revision; and not `mark_for_index`, because no searchable text changed.
+fn stamp_use(ctx: &CommandCtx<'_, '_>, item_id: &str) -> Result<()> {
+    let stamped = ctx.connection().execute(
+        "UPDATE locker_item SET last_used_at = ?1 WHERE id = ?2",
+        rusqlite::params![ctx.now, item_id],
+    )?;
+    if stamped == 1 {
+        Ok(())
+    } else {
+        Err(VaultError::Invariant {
+            context: format!("`{item_id}` is not a Locker item to stamp"),
+        })
+    }
+}
 
 fn totp_code() -> CommandDefinition {
     static PRE: &[CommandCondition] = &[CommandCondition {
@@ -1864,8 +1824,7 @@ fn totp_code() -> CommandDefinition {
           "required": ["item_id"],
           "additionalProperties": false,
           "properties": {
-            "item_id": { "type": "string", "minLength": 1 },
-            "use": { "type": "string", "enum": ["show", "copy"] }
+            "item_id": { "type": "string", "minLength": 1 }
           }
         }"#,
         Idempotency::RetrySafe,
@@ -1877,24 +1836,14 @@ fn totp_code() -> CommandDefinition {
             //
             // v0 unsealed the seed here and returned six digits. The command
             // plane cannot unseal, so what it does is the half that is still
-            // its own: it RECEIPTS the reveal, in the command gate's append-only
-            // band. A member's access history must record that a one-time code
-            // was derived from a seed, and a deriver writing its own receipts
-            // would be a deriver auditing itself.
-            //
-            // The digits are computed by `crates/core::locker::phone` after
-            // this receipt lands, over the `otp_seed` cell it opens under `K`,
-            // with `crates/apps/locker::totp`'s RFC 6238 fold.
-            let act = if ctx.optional_str("use") == Some("copy") {
-                "code_copy otp_seed"
-            } else {
-                "code otp_seed"
-            };
-            let receipt_id = ctx.write_receipt(Some(&item_id), act)?.to_string();
+            // its own: it STAMPS the item as used (#1146). The digits are
+            // computed by `crates/core::locker::phone` after this stamp lands,
+            // over the `otp_seed` cell it opens under `K`, with
+            // `crates/apps/locker::totp`'s RFC 6238 fold.
+            stamp_use(ctx, &item_id)?;
             Ok(serde_json::json!({
                 "item_id": item_id,
-                "period": 30,
-                "receipt_id": receipt_id
+                "period": 30
             }))
         },
     )
@@ -1950,14 +1899,15 @@ fn export() -> CommandDefinition {
                 .unwrap_or(false);
 
             // A MASS UNSEAL IS A COMMAND AND NOT A QUERY, twice over, and both
-            // reasons survive the custody change: a query handler is read-only
-            // by directive so it cannot write the receipt a mass reveal owes,
-            // and a replica read returns sealed columns as placeholders.
+            // reasons survive the custody change: it is confirmed and run
+            // before any cell opens, so a core that opened them first would
+            // have skipped the member's consent, and a replica read returns
+            // sealed columns as placeholders.
             //
             // WHAT CHANGED (D-1020-L7): v0 unsealed every cell here and
             // returned the plaintext. The command plane cannot, so the command
-            // answers the PLAIN half plus the ciphertext's addresses, writes
-            // the one receipt, and a core holding `K` produces the file. The confirm and
+            // answers the PLAIN half plus the ciphertext's addresses, and a
+            // core holding `K` produces the file. The confirm and
             // the `high` risk stay exactly where they were, because what is
             // being authorised is unchanged: every secret the locker holds,
             // in the clear, in a file.
@@ -2011,18 +1961,17 @@ fn export() -> CommandDefinition {
                 })?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
 
-            // An export names no item: it is about the whole locker.
-            let receipt_id = ctx.write_receipt(None, "export")?.to_string();
+            // AN EXPORT STAMPS NO ITEM (#1146): a file is not a use of any
+            // one of them, and the Locker keeps no log of the file.
             Ok(serde_json::json!({
                 "exported_at": ctx.now,
                 "item_count": items.len(),
                 "items": items,
                 // A REVISION'S SNAPSHOT IS THE ONE THING ONLY AN EXPORT
                 // UNSEALS, and it stays that way: the unsealing is outside
-                // the command plane, in the phone core holding `K`, under the
-                // receipt this command wrote. There is no field saying where:
-                // one device, one side that can unseal (Q-1047-13).
-                "receipt_id": receipt_id
+                // the command plane, in the phone core holding `K`, after
+                // this command ran. There is no field saying where: one
+                // device, one side that can unseal (Q-1047-13).
             }))
         },
     );
@@ -2031,128 +1980,96 @@ fn export() -> CommandDefinition {
     definition
 }
 
-fn reveal_receipt() -> CommandDefinition {
+/// The stamp a reveal in the core owes (D-1020-L3, #1146): run BEFORE the
+/// core opens the cell, so a stamp that did not land is an error and no
+/// plaintext exists. The input names the item and nothing of what was opened —
+/// a stamp holds a time, not a column and not a value.
+fn mark_used() -> CommandDefinition {
     definition(
-        "locker.reveal_receipt",
+        "locker.mark_used",
         r#"{
           "type": "object",
-          "required": ["object_type", "columns"],
+          "required": ["item_id"],
           "additionalProperties": false,
           "properties": {
-            "object_type": { "type": "string",
-              "enum": ["locker.item", "locker.auth"] },
-            "item_id": { "type": "string", "minLength": 1 },
-            "columns": { "type": "array", "minItems": 1,
-              "items": { "type": "string", "minLength": 1 } },
-            "kind": { "type": "string", "enum": ["reveal", "auth"] },
-            "field_id": { "type": "string", "minLength": 1 },
-            "use": { "type": "string", "enum": ["show", "copy"] },
-            "allowed": { "type": "boolean" },
-            "failing": { "type": "string" }
+            "item_id": { "type": "string", "minLength": 1 }
           }
         }"#,
         Idempotency::Once,
-        REVEAL_RECEIPT_PRE,
+        ITEM_LIVE,
         NONE,
         |ctx| {
-            // THE RECEIPT A REVEAL IN THE CORE OWES (D-1020-L3).
-            //
-            // The command plane no longer produces the plaintext, and that is
-            // exactly why this door has to exist: the record of *who looked* is
-            // the one thing that must stay readable now that the command plane
-            // cannot decrypt, and a revealer that wrote its own receipts outside
-            // the gate would be a revealer auditing itself. Locker's `receipt` is append-only by trigger
-            // (`receipt_is_evidence`) and ordered by `seq`, so this is a receipt a
-            // member can read and nobody can quietly remove.
-            //
-            // It carries COLUMN NAMES, never values — `columns: ["password"]`
-            // is what the access history shows.
-            let object_type = ctx.required_str("object_type")?.to_owned();
-            let item_id = ctx.optional_str("item_id").map(str::to_owned);
-            if object_type == ITEM_OBJECT && item_id.is_none() {
-                return Err(invalid(
-                    "item_id",
-                    "a reveal of a locker item names the item it opened",
-                ));
-            }
-            if object_type == AUTH_OBJECT && item_id.is_some() {
-                return Err(invalid(
-                    "item_id",
-                    "an unlock is about the vault, not about one item",
-                ));
-            }
-            let columns: Vec<String> = ctx
-                .input
-                .get("columns")
-                .and_then(serde_json::Value::as_array)
-                .map(|columns| {
-                    columns
-                        .iter()
-                        .filter_map(|column| column.as_str().map(str::to_owned))
-                        .collect()
-                })
-                .unwrap_or_default();
-            if let Some(refusal) = field_receipt_refusal(ctx, &object_type) {
-                return Err(invalid("field_id", refusal));
-            }
-            // A REVEAL RECEIPT THAT NAMES A PLAIN COLUMN IS A LIE about what
-            // was revealed, so the column set is checked against the sealed
-            // registry — except for an unlock, which reveals no column at all
-            // and names the vault.
-            if object_type == ITEM_OBJECT {
-                for column in &columns {
-                    if !SEALED_ITEM_CELLS.contains(&column.as_str())
-                        && column != "value_sealed"
-                        && column != "private_key"
-                    {
-                        return Err(invalid(
-                            "columns",
-                            format!(
-                                "`{column}` is not a sealed Locker cell; a reveal receipt names \
-                                 what was unsealed"
-                            ),
-                        ));
-                    }
-                }
-            }
-            let kind = ctx
-                .optional_str("kind")
-                .unwrap_or(if object_type == AUTH_OBJECT {
-                    "auth"
-                } else {
-                    "reveal"
-                });
-            let allowed = ctx
-                .input
-                .get("allowed")
-                .and_then(serde_json::Value::as_bool)
-                .unwrap_or(true);
-            // THE ACT IS THE RECEIPT'S WHOLE SENTENCE: the verb, then the
-            // columns that were unsealed, then the custom field when one was
-            // opened — names, never values. The journal row this receipt names
-            // holds the rest of the input.
-            let verb = match (object_type.as_str(), ctx.optional_str("use"), allowed) {
-                (AUTH_OBJECT, _, true) => "unlock",
-                (AUTH_OBJECT, _, false) => "unlock_refused",
-                (_, _, false) => "reveal_refused",
-                (_, Some("copy"), true) => "copy",
-                _ => "reveal",
-            };
-            let mut act = verb.to_owned();
-            if object_type == ITEM_OBJECT {
-                act.push(' ');
-                act.push_str(&columns.join(","));
-                if let Some(field_id) = ctx.optional_str("field_id") {
-                    act.push(' ');
-                    act.push_str(field_id);
-                }
-            }
-            let receipt_id = ctx.write_receipt(item_id.as_deref(), &act)?.to_string();
-            Ok(serde_json::json!({
-                "receipt_id": receipt_id,
-                "object_type": object_type,
-                "kind": kind
-            }))
+            let item_id = ctx.required_str("item_id")?.to_owned();
+            stamp_use(ctx, &item_id)?;
+            Ok(serde_json::json!({ "item_id": item_id, "last_used_at": ctx.now }))
+        },
+    )
+}
+
+/// The Locker's one key row is the home of its failed-unlock figures. A vault
+/// that never named its generation has none, and refuses in the member's words.
+const KEY_ROW_EXISTS: CommandCondition = CommandCondition {
+    predicate: "locker_key_exists",
+    check: |ctx| {
+        let found = count(ctx, "SELECT COUNT(*) FROM locker_key", &[])?;
+        Ok((found != 1)
+            .then(|| "the Locker has no key yet, so there is no unlock to record".to_owned()))
+    },
+};
+
+static KEY_ROW: &[CommandCondition] = &[KEY_ROW_EXISTS];
+
+/// The phone allowed an unlock: reset the count of refused ones, keep the time
+/// of the last, and answer what was cleared so the member can be told.
+fn mark_unlocked() -> CommandDefinition {
+    definition(
+        "locker.mark_unlocked",
+        r#"{
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }"#,
+        Idempotency::Once,
+        KEY_ROW,
+        NONE,
+        |ctx| {
+            let (failed, at): (i64, Option<String>) = ctx.connection().query_row(
+                "SELECT failed_unlocks, failed_unlock_at FROM locker_key",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            ctx.connection()
+                .execute("UPDATE locker_key SET failed_unlocks = 0", [])?;
+            Ok(serde_json::json!({ "failed_unlocks": failed, "failed_unlock_at": at }))
+        },
+    )
+}
+
+/// The phone refused an unlock: count it and date it. Its own command, because
+/// the unlock it describes never reached the core and a refused command writes
+/// nothing the next one can read.
+fn mark_unlock_failed() -> CommandDefinition {
+    definition(
+        "locker.mark_unlock_failed",
+        r#"{
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }"#,
+        Idempotency::Once,
+        KEY_ROW,
+        NONE,
+        |ctx| {
+            ctx.connection().execute(
+                "UPDATE locker_key SET failed_unlocks = failed_unlocks + 1, failed_unlock_at = ?1",
+                [&ctx.now],
+            )?;
+            let failed: i64 =
+                ctx.connection()
+                    .query_row("SELECT failed_unlocks FROM locker_key", [], |row| {
+                        row.get(0)
+                    })?;
+            Ok(serde_json::json!({ "failed_unlocks": failed, "failed_unlock_at": ctx.now }))
         },
     )
 }

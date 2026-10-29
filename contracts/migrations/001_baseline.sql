@@ -626,6 +626,9 @@ CREATE TABLE locker_item (
   password_set_at TEXT,
   memo         TEXT,
   key_id       TEXT,
+  -- When the core last opened one of this item's sealed cells (#1146). A use is not an edit:
+  -- stamping it moves neither the entity's `updated_at` nor its `version`, and makes no revision.
+  last_used_at TEXT,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX locker_item_type_idx ON locker_item(type);
@@ -701,22 +704,14 @@ END;
 
 CREATE TABLE locker_key (
   key_id     TEXT PRIMARY KEY,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  -- Unlocks the phone refused since the last one it allowed, and when the latest was (#1146).
+  -- The Locker has one key row, so this is the Locker's whole record of them; a successful unlock
+  -- resets the count and leaves the time.
+  failed_unlocks  INTEGER NOT NULL DEFAULT 0 CHECK (failed_unlocks >= 0),
+  failed_unlock_at TEXT
 ) STRICT;
 CREATE UNIQUE INDEX locker_key_one_generation ON locker_key((1));
-
-CREATE TABLE receipt (
-  seq         INTEGER PRIMARY KEY,
-  at          TEXT NOT NULL,
-  item_id     TEXT,
-  act         TEXT NOT NULL,
-  journal_seq INTEGER NOT NULL
-) STRICT;
-CREATE INDEX receipt_by_item ON receipt(item_id, at, seq) WHERE item_id IS NOT NULL;
--- The whole Locker's access history, newest first, streams from here (#1135).
-CREATE INDEX receipt_by_at ON receipt(at, seq);
-CREATE TRIGGER receipt_is_evidence BEFORE UPDATE ON receipt
-  BEGIN SELECT RAISE(ABORT, 'a receipt is evidence'); END;
 
 -- ---------------------------------------------------------------------------------------------
 -- Seeds: the rows founding writes, under fixed ids `<kind>:<key>`.
