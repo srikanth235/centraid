@@ -94,29 +94,6 @@ impl Scratch {
         outcome.output
     }
 
-    /// A command the vault is expected to refuse: its status and its sentence.
-    fn refused(
-        &self,
-        name: &str,
-        input: serde_json::Value,
-    ) -> (centraid_vault::CommandStatus, String) {
-        self.writes.set(self.writes.get() + 1);
-        let outcome = self
-            .handle
-            .command(
-                name,
-                &input,
-                &format!("docs-query-test-{}", self.writes.get()),
-            )
-            .unwrap_or_else(|error| panic!("{name} errored rather than refusing: {error}"));
-        assert_ne!(
-            outcome.status,
-            centraid_vault::CommandStatus::Executed,
-            "{name} was expected to be refused"
-        );
-        (outcome.status, outcome.reason.unwrap_or_default())
-    }
-
     /// A text document written from words, as the Add sheet's Text writes one.
     fn add(&self, title: &str, body: &str, folder_id: Option<&str>) -> String {
         let mut input = serde_json::json!({ "title": title, "body_text": body });
