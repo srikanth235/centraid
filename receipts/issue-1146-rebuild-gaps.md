@@ -718,3 +718,40 @@ A trashed item stays restorable until Centraid next opens; then items past their
 | **R-1146-3-3** | Every command that can drop the last reference to a blob collects and answers `released`; the gate deletes those files after the commit, never for a replayed answer. _Why:_ `thread.save_turn` answered a count and leaked files. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
 | **R-1146-3-4** | The launch sweep deletes only store files with no row and older than the core's launch. _Why:_ the stage door stores bytes before any command names them. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
 | **R-1146-3-5** | The backup lists no blob that only entities past `purge_at` rent. _Why:_ the next launch deletes them. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+
+### Integration — waves 6, 2 and 3
+
+Three finished wave branches merged into the umbrella, each as its own `--no-ff` commit, in order.
+
+| Merge | Commit | Conflicts |
+|---|---|---|
+| Wave 6 (apps; base `aa1c47d9`, before lane 1B) | `139a14b0` | `ontology-body.html` (inside the generated schema section), then the semantic fallout below |
+| Wave 2 (phone follow) | `2072acb0` | `crates/vault/src/format.rs` (`SCHEMA_DIGEST`: both sides changed the baseline), `ontology-body.html` (generated) |
+| Wave 3 (trash and bytes) | `430fb5c5` | `docs/vault-ontology.md` (Trash, Garbage collection and Follow bullets) |
+| Wave 3, two later commits (bounded launch sweep, idle-gated tidy) | `48caef67` | none |
+
+#### Resolutions
+
+- **Generated files are never hand-merged.** The conflicts in `ontology-body.html` and `SCHEMA_DIGEST` were resolved by taking the umbrella's side and regenerating: `contracts/schema/vault-ddl.sql` (`export-ladder-ddl`), `contracts/schema/vault-commands.txt` (`export-commands`), the ontology page (`export-ontology-page`), `crates/screens/src/catalog.rs` (`cargo xtask screens-catalog`) and `contracts/assist/export` (`nativetools export`). `SCHEMA_DIGEST` took the value its own test printed after each merge (`c99d0f4e…` after wave 6, `bd78a0aa…` after wave 2; wave 3 left it). `git diff --exit-code contracts/schema` is clean after each regeneration.
+- **Wave 6 onto the 1B model.** No wave 6 code used the journal, `journal_seq`, `invocation_id`, `entity.version`, a note's `row_version`, Docs Activity or `thread.rename`; the merge compiled and its tests passed without porting. The one semantic fallout was `crates/core/tests/query_plans.rs`: the wire now has 58 queries (wave 6 removed the photos duplicates query, 1B removed Docs activity), so the count and its comment went from 59 to 58 (R-1146-I-1).
+- **`docs/vault-ontology.md`.** Wave 3's Trash and Garbage collection text stands (a trashed row stays restorable until the pass empties it, R-1146-3-2); wave 2's Follow text stands (`gone_at`, tombstones, the four guards, the statement origin). The Trash bullet therefore no longer cites R-1135-5-7, which wave 3 supersedes; `docs/decisions.md` still lists R-1135-5-7 without a supersession marker (R-1146-I-2).
+- **Receipt order:** lanes, owner rulings, then waves 5, 6, 2, 3.
+
+#### Rulings
+
+- **R-1146-I-1.** The wire-query count in `query_plans.rs` is 58. _Why:_ it is the number of `oneof query` fields in `app_query.proto`; the test exists to keep the two equal.
+- **R-1146-I-2.** The Trash bullet follows wave 3 (R-1146-3-2). `docs/decisions.md` row R-1135-5-7 needs a "superseded by R-1146-3-2" marker; wave 3's doc pass owns it, and it was not added here.
+- **R-1146-I-3.** Wave 3's two later commits are merged as they stand. Their `search-budget` result is green (notes 2 letters p95 22.3 ms against the 80 ms ceiling; before the fix it was 254.6 ms on this tree). They also turn one test red; see Open.
+
+#### Exit list
+
+1. `cargo test --workspace`: green at `2072acb0` and at `430fb5c5` (two failures fixed on the way: the `query_plans` count above, and a stale `libcentraid_core_ffi.so` that `cargo build -p centraid-core-ffi` refreshed). **Red at `48caef67`**, see Open.
+2. `git diff --exit-code contracts/schema` after regenerating: clean.
+3. `cargo xtask gate --profile pr`. At `430fb5c5`: every step ok except `search-budget` (notes 2 letters `ch` p95 254.57 ms against 80 ms), wall 1506 s on a cold tree. At `48caef67` (after wave 3's fix): `search-budget` ok (190.6 s), `test` FAIL, every other step ok or SKIP (buf, deny, ci-policy, secrets, osv: tools missing), wall 696 s.
+4. `cargo xtask gate --profile mobile-jvm`: **not run to a result.** Maven Central answered HTTP 429 on every attempt (nine attempts, 9 Too Many Requests, spaced 1 to 4 minutes); no failure of any other kind.
+5. Pushed after each merge; the pre-push hook passed.
+
+#### Open
+
+- **`a_phone_killed_mid_stage_leaves_nothing_and_stages_again`** (`crates/core/tests/backup_edges.rs:1211`) fails deterministically at `48caef67`: `(content_confirmed, content_total)` is `(0, 1)`, expected `(1, 1)`. It passed at `430fb5c5`. Setting `TIDY_IDLE` in `crates/core/src/handle.rs` to 300 s makes it pass, so wave 3's idle-gated launch tidy (`bbd0d6ff`/`38541879`) is the cause. Staging goes through the spool, not the vault, so the tidy sees the vault idle while a library item is mid-stage. Wave 3 owns the fix.
+- **mobile-jvm** needs a rerun when Maven Central stops rate-limiting.
