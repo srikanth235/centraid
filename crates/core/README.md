@@ -33,7 +33,7 @@ A stall that happens with the queue full of change events is **reported late**, 
 
 `api.rs` holds eight verbs and the honest state of each. A stub is a **typed refusal**, never an empty answer: an empty page reads as "no data" and the truth is "this build cannot answer yet".
 
-`page` `invoke` `describe` `parked` are live. `search`, `resolve` and `content` are typed `NotYetAvailable` refusals in this module (content addresses are minted by `content_urls` instead). There is no `reveal` verb: a Locker reveal, and a one-time code, run in `locker::phone` behind the unlock, each after `locker.reveal_receipt` or `locker.totp_code` has written its receipt.
+`page` `invoke` `describe` `parked` are live. `search`, `resolve` and `content` are typed `NotYetAvailable` refusals in this module (content addresses are minted by `content_urls` instead). There is no `reveal` verb: a Locker reveal, and a one-time code, run in `locker::phone` behind the unlock, each after `locker.mark_used` or `locker.totp_code` has stamped the item as used.
 
 ## App queries
 

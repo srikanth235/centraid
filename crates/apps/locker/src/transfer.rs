@@ -2,7 +2,7 @@
 //!
 //! The handoff's `locker/import` and `locker/export`, on the phone. Nothing
 //! here opens a cell or writes a row: `crates/core::locker::transfer` opens
-//! the secrets under `K` (behind the unlock and one receipt) and runs the
+//! the secrets under `K` (behind the unlock, after the confirmed export command) and runs the
 //! commands; this module is the file on either side of that.
 //!
 //! **Export** writes one of two formats. **CSV** is 1Password's dialect — the

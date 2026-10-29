@@ -117,7 +117,7 @@ Each is a product judgement a lane declined to make on the owner's behalf. Each 
 
 | # | Question | Options | Recommendation |
 | --- | --- | --- | --- |
-| L1 | **The audit band as a catalog entity — CLOSED as moot** (2026-10-15). The phone's page door (`Vault::keyset_page`) has no entity catalog and evaluates no grant, so `access_receipt` is already readable; the statement's `object_type` predicate is the wall. | — | — |
+| L1 | **The audit band as a catalog entity — CLOSED as moot** (2026-10-15), then gone: the Locker keeps no access log or table to put in a catalog ([R-1146-1A-1](../decisions.md#locker)). | — | — |
 | ~~L2~~ | ~~Should `autofill-candidates` report **TOTP presence**?~~ | — | **Moot** ([R-1047-D3](../decisions.md#locker)): the query is deleted with the fill plane. |
 | L3 | Should the port **decorate all four shelves** with the connector alias? | Keep v0's asymmetry; decorate all four; drop it from the live shelf too. | **Decorate all four.** A handle that depends on which screen found the row is not a handle. |
 | L4 | **`edit_item` replaces — SAID, 2026-10-15.** The input schema, the manifest, the editor's proto comment and the Locker README say it replaces; tests pin tags, the empty-list clear and the compromised flag. | A patch is a new command and its own proposal. | Done. |
