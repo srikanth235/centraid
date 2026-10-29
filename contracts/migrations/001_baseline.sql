@@ -345,10 +345,20 @@ CREATE TABLE occurrence (
   cancelled      INTEGER NOT NULL DEFAULT 0 CHECK (cancelled IN (0,1)),
   starts         TEXT,
   ends           TEXT,
+  -- How `starts`/`ends` of THIS day read, when they are not the series' own way (an all-day
+  -- series' day moved to 15:00, a zoned series' day made all-day); NULL is the series' timing.
+  -- A zoned day of another timing names its zone; one that is zoned like its series keeps the
+  -- series' (#1146).
+  timing         TEXT CHECK (timing IS NULL OR timing IN ('zoned','floating','all-day')),
+  zone           TEXT CHECK (zone IS NULL OR timing IS 'zoned'),
   title          TEXT,
   description    TEXT,
+  -- This day's own link and place; NULL is the series'. Guests and reminders stay the series' (#1146).
+  url            TEXT,
+  place_id       TEXT REFERENCES place(id),
   PRIMARY KEY (series_id, original_start, scope)
 ) STRICT, WITHOUT ROWID;
+CREATE INDEX occurrence_by_place ON occurrence(place_id) WHERE place_id IS NOT NULL;
 
 CREATE TABLE task (
   id                TEXT PRIMARY KEY,

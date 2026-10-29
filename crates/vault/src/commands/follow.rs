@@ -55,7 +55,7 @@ use serde_json::{Map, Value as Json};
 use crate::blob;
 use crate::commands::entity::{self, trash_stamp};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
-use crate::commands::{contact_point, document, event, workout};
+use crate::commands::{contact_point, container, document, event, workout};
 use crate::error::{Result, VaultError};
 use crate::model::{DEFAULT_CALENDAR_ID, Kind};
 
@@ -71,6 +71,21 @@ pub struct OriginRow {
 /// What a new row needs that no record states, given its origin.
 pub type Defaults =
     fn(&Connection, &OriginRow) -> Result<Vec<(&'static str, rusqlite::types::Value)>>;
+
+/// What an origin is told about the thing it fills, each pass.
+pub struct Home<'a> {
+    pub origin: &'a str,
+    /// What the origin fills now; none for a new origin.
+    pub fills: Option<&'a str>,
+    /// The origin's label before this pass, when it had one.
+    pub was: Option<&'a str>,
+    pub label: &'a str,
+    /// The colour the phone paints the store with, as the wheel names it.
+    pub color: Option<&'a str>,
+}
+
+/// Found or keep the thing an origin fills (a followed calendar), and answer its id.
+pub type Founds = fn(&CommandCtx<'_, '_>, &Home<'_>) -> Result<String>;
 
 /// A field that is not a column but rows that hang off the one it fills (a
 /// contact's points), kept by the module that owns them. A record states it as
@@ -174,6 +189,9 @@ pub struct SystemMap {
     /// before it.
     pub window: Option<&'static str>,
     pub defaults: Defaults,
+    /// How an origin that fills nothing gets the thing it fills, and keeps it (one calendar of
+    /// the vault per phone calendar, with the phone's colour); none when the member names it.
+    pub founds: Option<Founds>,
     /// Read what a record states into the form the vault holds it (a wall clock
     /// and its zone become the instant, a store's word for a workout becomes a
     /// kind), so the statement and the row compare equal. A record it refuses is
@@ -364,6 +382,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         gone: Gone::Trash,
         window: None,
         defaults: no_defaults,
+        founds: None,
         shape: as_stated,
         settle: nothing_to_settle,
         replaced: nothing_replaced,
@@ -378,6 +397,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         claims: None,
         fields: &[
             "description",
+            "url",
             "starts",
             "ends",
             "timing",
@@ -396,6 +416,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         gone: Gone::Trash,
         window: None,
         defaults: calendar_defaults,
+        founds: Some(container::follow_calendar),
         shape: event_shape,
         settle: event::settle,
         replaced: nothing_replaced,
@@ -415,6 +436,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         gone: Gone::Trash,
         window: None,
         defaults: folder_defaults,
+        founds: None,
         shape: as_stated,
         settle: nothing_to_settle,
         replaced: document::keep_replaced_by_write,
@@ -438,6 +460,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         gone: Gone::Forget,
         window: Some("starts"),
         defaults: no_defaults,
+        founds: None,
         shape: workout::shape,
         settle: workout::settle,
         replaced: nothing_replaced,
@@ -460,6 +483,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         gone: Gone::Keep,
         window: None,
         defaults: statement_defaults,
+        founds: None,
         shape: as_stated,
         settle: nothing_to_settle,
         replaced: nothing_replaced,
@@ -607,6 +631,14 @@ fn upsert_origin(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<OriginRow>
             )
             .optional()?
     };
+    let label_was: Option<String> = match &known {
+        Some(id) => connection
+            .query_row("SELECT label FROM origin WHERE id = ?1", [id], |row| {
+                row.get(0)
+            })
+            .optional()?,
+        None => None,
+    };
     let id = if let Some(id) = known {
         if account_origin {
             // The account names its origin (its bank number, its name): an
@@ -635,16 +667,39 @@ fn upsert_origin(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<OriginRow>
         )?;
         id
     };
-    let (fills, device) = connection.query_row(
-        "SELECT fills, device_id FROM origin WHERE id = ?1",
-        [&id],
-        |row| {
-            Ok((
-                row.get::<_, Option<String>>(0)?,
-                row.get::<_, Option<String>>(1)?,
-            ))
-        },
-    )?;
+    let read = || {
+        connection.query_row(
+            "SELECT fills, device_id FROM origin WHERE id = ?1",
+            [&id],
+            |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            },
+        )
+    };
+    let (mut fills, device) = read()?;
+    if let Some(founds) = map.founds {
+        let color = origin
+            .get("color")
+            .and_then(Json::as_str)
+            .filter(|color| !color.trim().is_empty());
+        let made = founds(
+            ctx,
+            &Home {
+                origin: &id,
+                fills: fills.as_deref(),
+                was: label_was.as_deref(),
+                label: &label,
+                color,
+            },
+        )?;
+        if fills.as_deref() != Some(made.as_str()) {
+            connection.execute("UPDATE origin SET fills = ?2 WHERE id = ?1", [&id, &made])?;
+            fills = Some(made);
+        }
+    }
     Ok(OriginRow { id, fills, device })
 }
 
@@ -1413,6 +1468,8 @@ const SCHEMA: &str = r#"{
         "label": { "type": "string" },
         "device_id": { "type": ["string", "null"] },
         "fills": { "type": ["string", "null"] },
+        "color": { "type": ["string", "null"], "maxLength": 64,
+          "description": "The colour the phone paints the store with, as the design wheel names it." },
         "config": { "type": ["object", "null"] }
       }
     },

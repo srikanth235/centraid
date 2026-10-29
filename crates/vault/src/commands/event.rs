@@ -298,6 +298,53 @@ fn times(ctx: &CommandCtx<'_, '_>, base: Option<&Times>) -> std::result::Result<
     )
 }
 
+/// What one day of a series states of its own times, over the series': only what was said
+/// (the rest is the series'), and how the day reads when that is not the way its series does.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct DayTimes {
+    starts: Option<String>,
+    ends: Option<String>,
+    /// The day's own timing and, for a zoned one, its zone; `None` while it reads as its series
+    /// does ([#1146](https://github.com/srikanth235/centraid/issues/1146)).
+    own: Option<(Semantics, Option<String>)>,
+}
+
+/// The times a day states over its `series`: `Err` is the sentence a member reads.
+///
+/// The series' end is a LENGTH a day borrows (it is not stored on the day), so it is never
+/// carried over a day's own start, nor into another timing where it would not read.
+fn day_times(
+    stated: &serde_json::Map<String, Json>,
+    series: &Times,
+) -> std::result::Result<DayTimes, String> {
+    let said = |key: &str| stated.get(key).and_then(Json::as_str).is_some();
+    let other_timing = stated
+        .get("timing")
+        .and_then(Json::as_str)
+        .and_then(parse_timing)
+        .is_some_and(|timing| timing != series.timing);
+    let base = Times {
+        ends: (!said("starts") && !other_timing)
+            .then(|| series.ends.clone())
+            .flatten(),
+        ..series.clone()
+    };
+    let at = resolve_times(stated, Some(&base))?;
+    let own = (at.timing != series.timing
+        || (at.timing == Semantics::Zoned && at.zone != series.zone))
+        .then(|| {
+            (
+                at.timing,
+                at.zone.clone().filter(|_| at.timing == Semantics::Zoned),
+            )
+        });
+    Ok(DayTimes {
+        starts: said("starts").then_some(at.starts),
+        ends: stated.contains_key("ends").then_some(at.ends).flatten(),
+        own,
+    })
+}
+
 /// What a followed calendar states of an event, in the form the vault holds it:
 /// a wall clock and its zone become the instant, so the statement a source makes
 /// and the row it leaves compare equal.
@@ -633,10 +680,23 @@ fn pre_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if occurrence_at(&row.times, rule, ctx.required_str("original_start")?).is_none() {
         return Ok(Some("That day is not one the event lands on.".to_owned()));
     }
-    if action == "override"
-        && let Err(sentence) = times(ctx, Some(&row.times))
-    {
-        return Ok(Some(sentence));
+    if action != "override" {
+        return Ok(None);
+    }
+    let day = match day_times(
+        ctx.input.as_object().unwrap_or(&serde_json::Map::new()),
+        &row.times,
+    ) {
+        Ok(day) => day,
+        Err(sentence) => return Ok(Some(sentence)),
+    };
+    if scope == "future" && day.own.is_some() {
+        return Ok(Some(
+            "A change of timing is for one day, not for every day after.".to_owned(),
+        ));
+    }
+    if let Some(place) = ctx.optional_str("place_id") {
+        return points_at(ctx, place, Kind::Place);
     }
     Ok(None)
 }
@@ -836,41 +896,43 @@ fn edit_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         )?;
     } else {
         let skipped = action == "skip";
-        let (mut starts, mut ends) = (None, None);
+        let mut day = DayTimes::default();
         if !skipped {
             let row = row_of(connection, id)?;
-            let at = times(ctx, Some(&row.times)).map_err(|s| invalid("starts", s))?;
             // Only what was stated is the day's own; the rest is the series'.
-            if ctx.optional_str("starts").is_some() {
-                starts = Some(at.starts);
-            }
-            if ctx.optional_str("ends").is_some() {
-                ends = at.ends;
-            }
+            day = day_times(
+                ctx.input.as_object().unwrap_or(&serde_json::Map::new()),
+                &row.times,
+            )
+            .map_err(|s| invalid("starts", s))?;
         }
+        let said = |name: &str| {
+            if skipped {
+                None
+            } else {
+                ctx.optional_str(name)
+            }
+        };
         connection.execute(
             "INSERT INTO occurrence (series_id, original_start, scope, cancelled, starts, ends,
-                                     title, description)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                                     timing, zone, title, description, url, place_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
              ON CONFLICT (series_id, original_start, scope)
-             DO UPDATE SET cancelled = ?4, starts = ?5, ends = ?6, title = ?7, description = ?8",
+             DO UPDATE SET cancelled = ?4, starts = ?5, ends = ?6, timing = ?7, zone = ?8,
+                           title = ?9, description = ?10, url = ?11, place_id = ?12",
             rusqlite::params![
                 id,
                 key,
                 scope,
                 skipped,
-                starts,
-                ends,
-                if skipped {
-                    None
-                } else {
-                    ctx.optional_str("title")
-                },
-                if skipped {
-                    None
-                } else {
-                    ctx.optional_str("description")
-                },
+                day.starts,
+                day.ends,
+                day.own.as_ref().map(|(timing, _)| timing.as_str()),
+                day.own.as_ref().and_then(|(_, zone)| zone.as_deref()),
+                said("title"),
+                said("description"),
+                said("url"),
+                said("place_id"),
             ],
         )?;
     }
@@ -902,14 +964,44 @@ pub(crate) fn settle(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<()> {
 }
 
 /// What happened to one day of a series, as the row holds it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 struct Day {
     cancelled: bool,
     starts: Option<String>,
     ends: Option<String>,
+    /// How the day reads when it is not as its series does, and the zone of a zoned one.
+    timing: Option<String>,
+    zone: Option<String>,
     title: Option<String>,
     description: Option<String>,
+    url: Option<String>,
+    /// The NAME of the day's own place: a phone states a place by its words, and the vault finds
+    /// or founds the place only when it writes the day.
+    place: Option<String>,
 }
+
+impl PartialEq for Day {
+    fn eq(&self, other: &Self) -> bool {
+        let place = |day: &Self| day.place.as_deref().map(|name| name.trim().to_lowercase());
+        (
+            self.cancelled,
+            &self.starts,
+            &self.ends,
+            &self.timing,
+            &self.zone,
+        ) == (
+            other.cancelled,
+            &other.starts,
+            &other.ends,
+            &other.timing,
+            &other.zone,
+        ) && (&self.title, &self.description, &self.url)
+            == (&other.title, &other.description, &other.url)
+            && place(self) == place(other)
+    }
+}
+
+impl Eq for Day {}
 
 /// What a source's `overrides` field says: over the window `from`..`to` (UTC
 /// instants) it showed these days of the series as the rule has them (`shown`,
@@ -946,14 +1038,21 @@ struct Derived {
 }
 
 fn derive(connection: &Connection, id: &str, said: &Observed) -> Result<Derived> {
-    let (times, rule, title, description): (Times, Option<String>, String, Option<String>) = {
+    let (times, rule, title, description, url): (
+        Times,
+        Option<String>,
+        String,
+        Option<String>,
+        Option<String>,
+    ) = {
         let row = row_of(connection, id)?;
-        let (title, description) = connection.query_row(
-            "SELECT e.title, v.description FROM event v JOIN entity e ON e.id = v.id WHERE v.id = ?1",
+        let (title, description, url) = connection.query_row(
+            "SELECT e.title, v.description, v.url FROM event v JOIN entity e ON e.id = v.id
+              WHERE v.id = ?1",
             [id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )?;
-        (row.times, row.rule, title, description)
+        (row.times, row.rule, title, description, url)
     };
     let mut derived = Derived {
         window: BTreeSet::new(),
@@ -961,13 +1060,6 @@ fn derive(connection: &Connection, id: &str, said: &Observed) -> Result<Derived>
     };
     let Some(rule) = rule.filter(|rule| rrule::inspect(rule).is_ok()) else {
         return Ok(derived);
-    };
-    let zone = times
-        .zone
-        .as_deref()
-        .and_then(|name| FireZone::named(name).ok());
-    let at = |value: Option<&str>| {
-        value.and_then(|value| resolve_one("starts", value, times.timing, zone.as_ref()).ok())
     };
     let moved: std::collections::BTreeMap<&str, &Json> = said
         .moved
@@ -986,13 +1078,36 @@ fn derive(connection: &Connection, id: &str, said: &Observed) -> Result<Derived>
                 said.filter(|said| Some(*said) != own).map(str::to_owned)
             };
             let text_of = |name: &str| day.get(name).and_then(Json::as_str);
-            let starts = at(text_of("starts")).filter(|starts| *starts != occurrence.start);
+            // The day's own timing, when the phone says one that is not its series'.
+            let timing = text_of("timing")
+                .and_then(parse_timing)
+                .unwrap_or(times.timing);
+            let day_zone = if timing == Semantics::Zoned {
+                text_of("zone")
+                    .map(str::to_owned)
+                    .or_else(|| times.zone.clone())
+            } else {
+                None
+            };
+            let own =
+                timing != times.timing || (timing == Semantics::Zoned && day_zone != times.zone);
+            let zone = day_zone
+                .as_deref()
+                .and_then(|name| FireZone::named(name).ok());
+            let at = |value: Option<&str>| {
+                value.and_then(|value| resolve_one("starts", value, timing, zone.as_ref()).ok())
+            };
+            let starts = at(text_of("starts")).filter(|starts| own || *starts != occurrence.start);
             Day {
                 cancelled: false,
                 ends: starts.as_ref().and_then(|_| at(text_of("ends"))),
                 starts,
+                timing: own.then(|| timing.as_str().to_owned()),
+                zone: day_zone.filter(|_| own && timing == Semantics::Zoned),
                 title: text("title", Some(&title)),
                 description: text("description", description.as_deref()),
+                url: text("url", url.as_deref()),
+                place: text("location", None),
             }
         } else if said.shown.contains(&key) {
             continue;
@@ -1001,12 +1116,21 @@ fn derive(connection: &Connection, id: &str, said: &Observed) -> Result<Derived>
                 cancelled: true,
                 starts: None,
                 ends: None,
+                timing: None,
+                zone: None,
                 title: None,
                 description: None,
+                url: None,
+                place: None,
             }
         };
         // A day the phone calls moved and says nothing different of is the series' own.
-        if day.starts.is_some() || day.cancelled || day.title.is_some() || day.description.is_some()
+        if day.starts.is_some()
+            || day.cancelled
+            || day.title.is_some()
+            || day.description.is_some()
+            || day.url.is_some()
+            || day.place.is_some()
         {
             derived.rows.insert(key, day);
         }
@@ -1018,8 +1142,10 @@ fn derive(connection: &Connection, id: &str, said: &Observed) -> Result<Derived>
 fn held(connection: &Connection, id: &str) -> Result<std::collections::BTreeMap<String, Day>> {
     connection
         .prepare(
-            "SELECT original_start, cancelled, starts, ends, title, description FROM occurrence
-              WHERE series_id = ?1 AND scope = 'occurrence'",
+            "SELECT o.original_start, o.cancelled, o.starts, o.ends, o.timing, o.zone, o.title,
+                    o.description, o.url, p.title
+               FROM occurrence o LEFT JOIN entity p ON p.id = o.place_id
+              WHERE o.series_id = ?1 AND o.scope = 'occurrence'",
         )?
         .query_map([id], |row| {
             Ok((
@@ -1028,8 +1154,12 @@ fn held(connection: &Connection, id: &str) -> Result<std::collections::BTreeMap<
                     cancelled: row.get(1)?,
                     starts: row.get(2)?,
                     ends: row.get(3)?,
-                    title: row.get(4)?,
-                    description: row.get(5)?,
+                    timing: row.get(4)?,
+                    zone: row.get(5)?,
+                    title: row.get(6)?,
+                    description: row.get(7)?,
+                    url: row.get(8)?,
+                    place: row.get(9)?,
                 },
             ))
         })?
@@ -1067,7 +1197,7 @@ pub(crate) fn overrides_read(connection: &Connection, id: &str) -> Result<Json> 
     Ok(if inside(&derived.rows) == inside(&rows) {
         said
     } else {
-        json!({ "held": inside(&rows).iter().map(|(key, day)| json!([key, day.cancelled, day.starts, day.title])).collect::<Vec<_>>() })
+        json!({ "held": inside(&rows).iter().map(|(key, day)| json!([key, day.cancelled, day.starts, day.title, day.timing, day.url, day.place])).collect::<Vec<_>>() })
     })
 }
 
@@ -1119,13 +1249,31 @@ pub(crate) fn overrides_merge(
                 )?;
             }
             Some(day) => {
+                let place = day
+                    .place
+                    .as_deref()
+                    .map(|name| crate::commands::place::find_or_found_named(ctx, name))
+                    .transpose()?;
                 connection.execute(
                     "INSERT INTO occurrence (series_id, original_start, scope, cancelled, starts,
-                                             ends, title, description)
-                     VALUES (?1, ?2, 'occurrence', ?3, ?4, ?5, ?6, ?7)
+                                             ends, timing, zone, title, description, url, place_id)
+                     VALUES (?1, ?2, 'occurrence', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                      ON CONFLICT (series_id, original_start, scope)
-                     DO UPDATE SET cancelled = ?3, starts = ?4, ends = ?5, title = ?6, description = ?7",
-                    rusqlite::params![id, key, day.cancelled, day.starts, day.ends, day.title, day.description],
+                     DO UPDATE SET cancelled = ?3, starts = ?4, ends = ?5, timing = ?6, zone = ?7,
+                                   title = ?8, description = ?9, url = ?10, place_id = ?11",
+                    rusqlite::params![
+                        id,
+                        key,
+                        day.cancelled,
+                        day.starts,
+                        day.ends,
+                        day.timing,
+                        day.zone,
+                        day.title,
+                        day.description,
+                        day.url,
+                        place
+                    ],
                 )?;
             }
         }
@@ -1195,8 +1343,11 @@ const OCCURRENCE_SCHEMA: &str = r#"{
     "description": { "type": "string" },
     "starts": { "type": "string", "minLength": 1 },
     "ends": { "type": ["string", "null"] },
-    "timing": { "type": "string", "enum": ["zoned", "floating", "all-day"] },
-    "zone": { "type": ["string", "null"] }
+    "timing": { "type": "string", "enum": ["zoned", "floating", "all-day"],
+      "description": "How this one day reads, when not as its series does." },
+    "zone": { "type": ["string", "null"] },
+    "url": { "type": ["string", "null"], "description": "This day's own link; the series' when none." },
+    "place_id": { "type": ["string", "null"], "description": "This day's own place; the series' when none." }
   }
 }"#;
 

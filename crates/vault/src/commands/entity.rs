@@ -175,6 +175,7 @@ const DETACH: &[(Kind, &str, &str, &str)] = &[
     (Kind::Category, "txn", "category_id = NULL", "category_id"),
     (Kind::Category, "concept", "parent_id = NULL", "parent_id"),
     (Kind::Place, "event", "place_id = NULL", "place_id"),
+    (Kind::Place, "occurrence", "place_id = NULL", "place_id"),
     (Kind::Place, "activity", "place_id = NULL", "place_id"),
     (Kind::Place, "photo", "place_id = NULL", "place_id"),
     (Kind::Task, "task", "parent_id = NULL", "parent_id"),
@@ -215,6 +216,7 @@ pub const PURGE_RULES: &[(&str, &str, PurgeRule)] = &[
     ("event", "calendar_id,calendar_kind", PurgeRule::Refuse),
     ("event", "place_id", PurgeRule::Detach),
     ("note", "notebook_id,notebook_kind", PurgeRule::Detach),
+    ("occurrence", "place_id", PurgeRule::Detach),
     ("origin", "fills", PurgeRule::Forget),
     ("photo", "place_id", PurgeRule::Detach),
     ("photo", "edited_from", PurgeRule::Detach),
@@ -345,9 +347,15 @@ pub(crate) fn purge_one(
         if *holder != found.kind {
             continue;
         }
+        // A day of a series is named by its series, which is what is touched.
+        let named = if *table == "occurrence" {
+            "series_id"
+        } else {
+            "id"
+        };
         let referrers = ids(
             connection,
-            &format!("SELECT id FROM {table} WHERE {column} = ?1"),
+            &format!("SELECT {named} FROM {table} WHERE {column} = ?1"),
             id,
         )?;
         connection.execute(

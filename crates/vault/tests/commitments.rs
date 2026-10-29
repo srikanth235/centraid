@@ -1474,6 +1474,12 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("event", "zone", Reach::Not("a time zone name, not prose")),
     ("event", "rule", Reach::Not("an RFC 5545 rule")),
     ("event", "url", Reach::Not("a link, not prose")),
+    (
+        "occurrence",
+        "zone",
+        Reach::Not("a time zone name, not prose"),
+    ),
+    ("occurrence", "url", Reach::Not("a link, not prose")),
     ("occurrence", "title", Reach::Own),
     ("occurrence", "description", Reach::Own),
     ("task", "description", Reach::Own),
