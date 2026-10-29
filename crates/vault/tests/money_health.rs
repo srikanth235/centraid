@@ -85,8 +85,10 @@ impl World {
             .expect("a row")
     }
 
-    fn version(&self, id: &str) -> i64 {
-        self.count("SELECT version FROM entity WHERE id = ?1", &[id])
+    /// The entity's `updated_at`, which a touch moves.
+    fn stamp(&self, id: &str) -> String {
+        self.text("SELECT updated_at FROM entity WHERE id = ?1", &[id])
+            .expect("a stamp")
     }
 
     fn account(&self, title: &str) -> String {
@@ -228,7 +230,7 @@ fn a_statement_is_followed_line_by_line_and_a_reimport_writes_nothing() {
     let first = world.import(&account, &[GROCER, PAY, COFFEE]);
     assert_eq!(first["added"], 3);
     let grocer = world.line(GROCER.0);
-    let before = world.version(&grocer);
+    let before = world.stamp(&grocer);
     // The line is the account's, in its currency, with the bank's own words kept.
     assert_eq!(
         world
@@ -248,17 +250,14 @@ fn a_statement_is_followed_line_by_line_and_a_reimport_writes_nothing() {
             .as_deref(),
         Some("m")
     );
+    world.scratch.clock.advance_ms(60_000);
     let again = world.import(&account, &[GROCER, PAY, COFFEE]);
     assert_eq!(
         (again["added"].as_i64(), again["updated"].as_i64()),
         (Some(0), Some(0))
     );
     assert_eq!(again["unchanged"], 3);
-    assert_eq!(
-        world.version(&grocer),
-        before,
-        "a re-import touches nothing"
-    );
+    assert_eq!(world.stamp(&grocer), before, "a re-import touches nothing");
     assert_eq!(world.count("SELECT COUNT(*) FROM txn", &[]), 3);
 }
 
@@ -831,12 +830,17 @@ fn a_workout_is_an_activity_of_a_workout_kind_with_what_the_store_measured() {
         world.count("SELECT COUNT(*) FROM activity", &[])
     );
     // Seen again, unchanged: nothing is written. Changed: only the figure moves.
-    let version = world.version(&id);
+    let stamped = world.stamp(&id);
+    world.scratch.clock.advance_ms(60_000);
     assert_eq!(
         follow_health(&world, "phone-a", &[run], false)["unchanged"],
         1
     );
-    assert_eq!(world.version(&id), version);
+    assert_eq!(
+        world.stamp(&id),
+        stamped,
+        "an unchanged record touches nothing"
+    );
     let longer = workout("local:1", "run", "2026-03-04T07:00:00Z", 5_300.0);
     assert_eq!(
         follow_health(&world, "phone-a", &[longer], false)["updated"],

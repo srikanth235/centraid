@@ -308,7 +308,6 @@ CREATE TABLE entity (
   title      TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  version    INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
   deleted_at TEXT,
   purge_at   TEXT,
   CHECK ((deleted_at IS NULL) = (purge_at IS NULL)),
@@ -367,7 +366,7 @@ CREATE TABLE locker_item (
   memo         TEXT,
   key_id       TEXT,
   -- When the core last opened one of this item's sealed cells (#1146). A use is not an edit:
-  -- stamping it moves neither the entity's `updated_at` nor its `version`, and makes no revision.
+  -- stamping it does not move the entity's `updated_at`, and makes no revision.
   last_used_at TEXT,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;

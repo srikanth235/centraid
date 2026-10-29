@@ -76,8 +76,8 @@ pub struct CommitTx<'conn> {
 pub struct Pending {
     /// Every id to re-index at commit.
     reindex: BTreeSet<String>,
-    /// The ids already stamped in this commit, so a second touch does not bump
-    /// `version` a second time: a commit is one change.
+    /// The ids already stamped in this commit, so a second touch does not stamp
+    /// `updated_at` a second time: a commit is one change.
     stamped: BTreeSet<String>,
 }
 
@@ -95,7 +95,7 @@ impl<'conn> CommitTx<'conn> {
         *self.producer.borrow_mut() = producer.into();
     }
 
-    /// Stamp an entity as changed: `updated_at`, `version`, and a place on the
+    /// Stamp an entity as changed: `updated_at`, and a place on the
     /// list the search index is rebuilt from at commit. Once per commit per
     /// entity; a second call only keeps it on the list.
     ///
@@ -105,7 +105,7 @@ impl<'conn> CommitTx<'conn> {
         let first = self.pending.borrow_mut().stamped.insert(id.to_owned());
         if first {
             let changed = self.connection.execute(
-                "UPDATE entity SET updated_at = ?2, version = version + 1 WHERE id = ?1",
+                "UPDATE entity SET updated_at = ?2 WHERE id = ?1",
                 rusqlite::params![id, now],
             )?;
             if changed != 1 {
@@ -119,8 +119,8 @@ impl<'conn> CommitTx<'conn> {
         Ok(())
     }
 
-    /// An entity this commit inserted: it is already at its first version, so
-    /// it is only owed an index row.
+    /// An entity this commit inserted: it is already stamped, so it is only
+    /// owed an index row.
     pub fn born(&self, id: &str) {
         self.pending.borrow_mut().stamped.insert(id.to_owned());
         self.mark_for_index(id);

@@ -159,7 +159,7 @@ impl<'conn> CommandCtx<'_, 'conn> {
         self.ids.next()
     }
 
-    /// Stamp an entity as changed: `updated_at`, `version`, and a place on the
+    /// Stamp an entity as changed: `updated_at`, and a place on the
     /// list the search index is rebuilt from at commit.
     ///
     /// **Every command that changes an entity's row, its kind row or its child

@@ -1,12 +1,9 @@
-//! THE EDITOR'S NOTE: one note, whole, with the base its autosave compares
-//! against (#1015 D3 — autosave everywhere).
+//! THE EDITOR'S NOTE: one note, whole (#1015 D3 — autosave everywhere).
 //!
 //! [`crate::queries::load_note`] answers only `{note_id, body, format}`. An editor
 //! that autosaves needs more than the text: the title and pin it shows, whether
-//! the note is in the trash (`note.edit` refuses a trashed note), the notebook
-//! it is filed in, and **`row_version`**, which every write to the note bumps
-//! and which says whether somebody else wrote since it opened. The command
-//! itself takes no base and does no compare; the check is the editor's.
+//! the note is in the trash (`note.edit` refuses a trashed note) and the notebook
+//! it is filed in. A save names no base: the last write wins (#1146).
 //!
 //! Like `load_note`, this does NO memo read (D-1020-N3): a People-journal entry
 //! opens by id.
@@ -30,7 +27,6 @@ pub struct EditorNote {
     pub format: String,
     pub pinned: bool,
     pub body: String,
-    pub row_version: i64,
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,
@@ -109,7 +105,6 @@ fn editor_body(door: &dyn PageDoor, note_id: &str) -> KitResult<Option<EditorNot
         format: note.format,
         pinned,
         body: note.body,
-        row_version: note.version,
         created_at: note.created_at,
         updated_at: note.updated_at,
         deleted_at: note.deleted_at,

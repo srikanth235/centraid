@@ -20,7 +20,6 @@ import dev.centraid.core.AbiRoundTripSpec.Companion.shouldBeAnsweredWith
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldNotContain
-import io.kotest.matchers.longs.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import java.time.LocalDate
@@ -59,8 +58,7 @@ class NotesQueryRoundTripSpec : StringSpec({
             opened.title shouldBe "Round trip"
             opened.body shouldBe "kotlin to rust and back"
 
-            // A TITLE EDIT ADDS NO VERSION and moves `row_version`: the editor's
-            // base is the version of the note, not of its words.
+            // A TITLE EDIT ADDS NO VERSION: a version is the words, and the last write wins.
             core.write(
                 "edit-note",
                 """{"id":"$noteId","title":"Round trip, renamed"}""",
@@ -68,14 +66,12 @@ class NotesQueryRoundTripSpec : StringSpec({
             )
             val renamed = core.note(noteId)
             renamed.title shouldBe "Round trip, renamed"
-            renamed.row_version shouldBeGreaterThan opened.row_version
 
             core.write(
                 "edit-note",
                 """{"id":"$noteId","body":"second draft"}""",
                 key = "notes-round-trip-body",
             )
-            core.note(noteId).row_version shouldBeGreaterThan renamed.row_version
             var bodies = emptyList<String>()
             core.appQuery(AppQueryRequest(notes_history = NotesHistoryRequest(note_id = noteId, tz = TZ)))
                 .shouldBeAnsweredWith { envelope ->

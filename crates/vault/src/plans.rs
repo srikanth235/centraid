@@ -476,24 +476,24 @@ mod tests {
         let (dir, vault) = founded();
         let big: BTreeSet<String> = ["entity".to_owned(), "note".to_owned()].into();
         let scan = vault
-            .explain_query_plan("SELECT id FROM entity WHERE version = ?1", &[])
+            .explain_query_plan("SELECT id FROM note WHERE body = ?1", &[])
             .expect("it plans");
         assert_eq!(
-            full_scans(&scan, "SELECT id FROM entity WHERE version = ?1", &big),
-            ["entity"],
+            full_scans(&scan, "SELECT id FROM note WHERE body = ?1", &big),
+            ["note"],
             "{scan:?}"
         );
         // An alias is the table's name in the plan or after it; the table is what counts.
         let aliased = vault
-            .explain_query_plan("SELECT e.id FROM entity AS e WHERE e.version = ?1", &[])
+            .explain_query_plan("SELECT n.id FROM note AS n WHERE n.body = ?1", &[])
             .expect("it plans");
         assert_eq!(
             full_scans(
                 &aliased,
-                "SELECT e.id FROM entity AS e WHERE e.version = ?1",
+                "SELECT n.id FROM note AS n WHERE n.body = ?1",
                 &big
             ),
-            ["entity"],
+            ["note"],
             "{aliased:?}"
         );
         let seek = vault

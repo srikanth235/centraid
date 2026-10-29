@@ -43,7 +43,7 @@
 //!
 //! [`shelves`], [`editor`] and [`local`] are what `crates/core` answers the
 //! phone's `notes_*` app queries with (#1046): the library's sort and filters,
-//! the trash shelf and notebook spine, the editor's note with its base version,
+//! the trash shelf and notebook spine, the editor's note,
 //! and the Journal by the member's local day.
 
 pub mod cards;

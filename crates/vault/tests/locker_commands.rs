@@ -1225,21 +1225,21 @@ fn a_new_sealed_field_must_carry_the_id_it_was_sealed_against() {
 
 /// A USE STAMPS THE ITEM AND EDITS NOTHING (#1146, R-1146-1A-1). The core runs
 /// `locker.mark_used` before it opens a cell; the stamp is the item's
-/// `last_used_at`. A use is not an edit: the entity keeps its `updated_at` and
-/// `version`, no revision is made, and the entity's row is not among the tables
+/// `last_used_at`. A use is not an edit: the entity keeps its `updated_at`, no
+/// revision is made, and the entity's row is not among the tables
 /// the commit changed (so nothing re-indexes).
 #[test]
 fn a_use_stamps_last_used_at_without_editing_the_item() {
     let world = World::new("locker-use", "key-1");
     world.login("item-1", "key-1");
-    let before: (String, i64) = world
+    let before: String = world
         .scratch
         .vault
         .read(|connection| {
             Ok(connection.query_row(
-                "SELECT updated_at, version FROM entity WHERE id = 'item-1'",
+                "SELECT updated_at FROM entity WHERE id = 'item-1'",
                 [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
+                |row| row.get(0),
             )?)
         })
         .expect("the entity reads");
@@ -1290,14 +1290,14 @@ fn a_use_stamps_last_used_at_without_editing_the_item() {
         stamped.is_some_and(|at| at.ends_with('Z')),
         "an ISO instant"
     );
-    let after: (String, i64) = world
+    let after: String = world
         .scratch
         .vault
         .read(|connection| {
             Ok(connection.query_row(
-                "SELECT updated_at, version FROM entity WHERE id = 'item-1'",
+                "SELECT updated_at FROM entity WHERE id = 'item-1'",
                 [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
+                |row| row.get(0),
             )?)
         })
         .expect("the entity reads");

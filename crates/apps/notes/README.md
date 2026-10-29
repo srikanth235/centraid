@@ -11,7 +11,7 @@ Notes is 6 queries and 17 actions over the vault's one model ([#1135](https://gi
 | `cards` | The far end of a link, as the shelf draws it: one read of `entity`, plus one of the kind's own table for the few kinds that add a subtitle or a thumbnail. |
 | `commands` | The seventeen actions as invocations, `invoke_key` mandatory. |
 | `shelves` | The phone's shelves over the library fold: sort and filters (pinned, notebook, unfiled, tags), the trash shelf on its own, and the notebook spine with live-note counts. |
-| `editor` | The editor's note: the whole body, the pin, the notebook and `row_version` — the base an autosave compares against. |
+| `editor` | The editor's note: the whole body, the pin and the notebook. |
 | `local` | The Journal grouped by the local day of `created_at`, in the zone the request states, through `centraid_vault::time`'s one zone engine. |
 
 ## What is Notes' and what is shared
@@ -50,7 +50,7 @@ Every one is an answer to a way this crate could be wrong, and every one has a t
 - **The spine counts "Unfiled" too** (#1047): live, non-memo notes filed in no notebook, over the library's default window plus every pinned note, with `unfiled_truncated` when the window filled.
 - **A notebook holds notes by one column** (`note.notebook_id`). A notebook's delete is `entity.trash`, which takes the notes filed in it to the trash with it and brings them back with it on restore.
 - **A new journal entry is a note, and Notes owns no command for it** (Q-1047-8). The Journal's "New entry for today" sheet saves People's `people.add_journal_entry`, which founds a note and adds its `about` edge; the entry is drawn under the day it was written in the device's zone, kept off the library and reachable by id.
-- **`note.edit` takes no base.** The conflict check is the editor's, against `note`'s `row_version`, which every commit that changes the note bumps. `title` may be empty on an edit and not on a create; `body` may be empty on both (a note may be cleared).
+- **`note.edit` takes no base, and the last write wins** (the `row_version` the editor once compared was dropped with `entity.version`, [R-1146-1B-5](../../../docs/decisions.md#the-journal-is-gone-1146)). `title` may be empty on an edit and not on a create; `body` may be empty on both (a note may be cleared).
 
 ```sh
 cargo test -p centraid-apps-notes

@@ -112,6 +112,8 @@ fn a_note_is_born_with_its_words_and_is_found_by_them() {
 fn an_edit_keeps_the_words_it_replaced_and_a_no_op_keeps_nothing() {
     let w = World::new();
     let id = w.note("Plan", "first");
+    let born = w.query::<String>("SELECT updated_at FROM entity WHERE id = ?1", &[&id]);
+    w.scratch.clock.advance_ms(60_000);
     w.ok("note.edit", json!({ "id": id, "body": "second" }));
     w.ok("note.edit", json!({ "id": id, "body": "second" }));
     w.ok(
@@ -143,7 +145,11 @@ fn an_edit_keeps_the_words_it_replaced_and_a_no_op_keeps_nothing() {
         w.query::<String>("SELECT body FROM note WHERE id = ?1", &[&id]),
         "third"
     );
-    assert!(w.query::<i64>("SELECT version FROM entity WHERE id = ?1", &[&id]) > 1);
+    assert_ne!(
+        w.query::<String>("SELECT updated_at FROM entity WHERE id = ?1", &[&id]),
+        born,
+        "an edit touches the note"
+    );
 }
 
 #[test]

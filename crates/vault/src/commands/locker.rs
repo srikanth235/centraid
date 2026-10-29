@@ -74,7 +74,7 @@
 //! error and no plaintext exists (D-1020-L3).
 //!
 //! - [`mark_used`]: a reveal in the core stamps `locker_item.last_used_at`.
-//!   A use is not an edit — the entity's `updated_at` and `version` stay,
+//!   A use is not an edit — the entity's `updated_at` stays,
 //!   no revision is made, and nothing re-indexes.
 //! - [`mark_unlocked`] and [`mark_unlock_failed`]: the unlock's two outcomes,
 //!   on `locker_key`. A failure is its own command because the unlock it
@@ -1782,7 +1782,7 @@ fn counts() -> CommandDefinition {
 /// Stamp an item as used: the instant the core opened one of its sealed cells.
 ///
 /// **A use is not an edit.** This writes `locker_item.last_used_at` and nothing
-/// else — not `ctx.touch`, so the entity's `updated_at` and `version` stay and
+/// else — not `ctx.touch`, so the entity's `updated_at` stays and
 /// the item does not float to the top of the newest-updated shelf; not a
 /// revision; and not `mark_for_index`, because no searchable text changed.
 fn stamp_use(ctx: &CommandCtx<'_, '_>, item_id: &str) -> Result<()> {

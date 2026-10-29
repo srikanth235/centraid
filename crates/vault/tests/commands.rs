@@ -373,10 +373,10 @@ fn definition(
     )
 }
 
-/// `ctx.touch` stamps `updated_at`, bumps `version` once per commit however
-/// often it is called, and puts the entity on the list the index is rebuilt from.
+/// `ctx.touch` stamps `updated_at` however often it is called in a commit, and puts the entity on
+/// the list the index is rebuilt from.
 #[test]
-fn touch_stamps_once_per_commit_and_an_unknown_entity_is_an_error() {
+fn touch_stamps_the_entity_and_an_unknown_entity_is_an_error() {
     let scratch = common::Scratch::founded("touch").expect("a vault");
     let mut registry = Registry::new();
     registry
@@ -386,20 +386,19 @@ fn touch_stamps_once_per_commit_and_an_unknown_entity_is_an_error() {
         .register(definition("probe.touch_nothing", touch_nothing))
         .expect("registers");
     let note = common::insert_note(&scratch.vault, "Holiday").expect("a note");
-    let read = |scratch: &common::Scratch| -> (i64, String) {
+    let stamp = |scratch: &common::Scratch| -> String {
         scratch
             .vault
             .read(|connection| {
                 Ok(connection.query_row(
-                    "SELECT version, updated_at FROM entity WHERE id = ?1",
+                    "SELECT updated_at FROM entity WHERE id = ?1",
                     [&note],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
+                    |row| row.get(0),
                 )?)
             })
             .expect("reads")
     };
-    let (before, _) = read(&scratch);
-    assert_eq!(before, 1);
+    let born = stamp(&scratch);
     scratch.clock.advance_ms(60_000);
     run(
         &scratch.vault,
@@ -407,16 +406,21 @@ fn touch_stamps_once_per_commit_and_an_unknown_entity_is_an_error() {
         "probe.touch_twice",
         serde_json::json!({"id": note}),
     );
-    let (after, stamped) = read(&scratch);
-    assert_eq!(after, 2, "two touches in one commit are one change");
-    assert_eq!(stamped, scratch.vault.clock().now_text());
+    let touched = stamp(&scratch);
+    assert_ne!(touched, born);
+    assert_eq!(touched, scratch.vault.clock().now_text());
+    scratch.clock.advance_ms(60_000);
     run(
         &scratch.vault,
         &registry,
         "probe.touch_twice",
         serde_json::json!({"id": note}),
     );
-    assert_eq!(read(&scratch).0, 3, "the next commit is the next change");
+    assert_ne!(
+        stamp(&scratch),
+        touched,
+        "the next commit is the next change"
+    );
 
     let error = scratch
         .vault

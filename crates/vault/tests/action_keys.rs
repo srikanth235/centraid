@@ -66,6 +66,47 @@ fn a_founded_vault_has_no_journal_and_holds_action_keys_instead() {
 }
 
 #[test]
+fn an_entity_has_no_version_and_a_touch_stamps_its_time_only() {
+    let scratch = common::Scratch::founded("no-version").expect("a vault");
+    let entity = columns(&scratch.vault, "entity");
+    assert!(!entity.contains(&"version".to_owned()), "{entity:?}");
+    // Last write wins: a rewrite names no base, and a second one lands on top of the first.
+    let registry = registry();
+    let made = scratch
+        .vault
+        .execute(&registry, &owner(), &create("First"))
+        .expect("creates");
+    let id = made.output["id"].as_str().expect("an id").to_owned();
+    for title in ["Second", "Third"] {
+        scratch.clock.advance_ms(1_000);
+        let retitled = scratch
+            .vault
+            .execute(
+                &registry,
+                &owner(),
+                &Command::new(
+                    "entity.retitle",
+                    serde_json::json!({"id": id, "title": title}),
+                ),
+            )
+            .expect("retitles");
+        assert_eq!(
+            retitled.status,
+            CommandStatus::Executed,
+            "{:?}",
+            retitled.reason
+        );
+    }
+    assert_eq!(
+        count(
+            &scratch.vault,
+            &format!("SELECT count(*) FROM entity WHERE id = '{id}' AND title = 'Third'")
+        ),
+        1
+    );
+}
+
+#[test]
 fn a_keyed_act_is_answered_replayed_after_a_restart_and_runs_once() {
     let dir = centraid_ontology::scratch::scratch_dir();
     std::fs::create_dir_all(&dir).expect("a directory");
