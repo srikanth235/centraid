@@ -7,7 +7,7 @@ mod common;
 use std::collections::BTreeSet;
 
 use centraid_vault::commands::Registry;
-use centraid_vault::index::{self, INLINE_DEPENDENTS};
+use centraid_vault::index;
 use centraid_vault::{Command, CommandStatus, Principal, Vault};
 use serde_json::json;
 

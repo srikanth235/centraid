@@ -85,9 +85,9 @@ pub fn reindex(connection: &Connection, touched: &BTreeSet<String>) -> Result<()
     Ok(())
 }
 
-/// How many entities a label's title feeds that one commit re-indexes itself: about 30 ms of the
+/// How many entities a label's title feeds that one commit re-indexes itself: about 20 ms of the
 /// vault, inside the call budget (`crates/core/tests/write_costs.rs` measures it).
-pub const INLINE_DEPENDENTS: usize = 100;
+pub const INLINE_DEPENDENTS: usize = 50;
 
 /// How many an owed label's batch re-indexes.
 pub const OWED_BATCH: usize = INLINE_DEPENDENTS;

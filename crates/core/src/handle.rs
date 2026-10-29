@@ -427,7 +427,7 @@ impl Core {
 
 /// How many trashed roots one batch of the launch pass purges. A batch holds the
 /// vault, so it is small: the first screen's reads wait behind at most one.
-const TRASH_BATCH: usize = 5;
+const TRASH_BATCH: usize = 3;
 
 /// What the trash pass's `after` says once it has purged everything and is collecting the bytes.
 const COLLECTING: &str = "collecting";
