@@ -59,7 +59,7 @@ pub fn match_expression(query: &str) -> Result<String, SearchError> {
             query: query.to_owned(),
         });
     }
-    Ok(tokens
+    let expression = tokens
         .iter()
         .map(|token| {
             // A one-character word beside longer ones is a WHOLE word: `a*` has no
@@ -71,7 +71,30 @@ pub fn match_expression(query: &str) -> Result<String, SearchError> {
             }
         })
         .collect::<Vec<String>>()
-        .join(" "))
+        .join(" ");
+    // A telephone number typed with its punctuation or its spaces is also the
+    // one word of its digits, the form the index holds ([`phone_digits`]).
+    Ok(match phone_digits(query) {
+        Some(digits) => format!("({expression}) OR \"{digits}\"*"),
+        None => expression,
+    })
+}
+
+/// The digits of a query that reads as a telephone number: only digits and the
+/// punctuation a number is written with, at least two groups of digits (one
+/// group is already one word) and [`centraid_vault::index::MIN_PHONE_DIGITS`]
+/// digits in all, so a date or a pair of small numbers is not read as one.
+fn phone_digits(query: &str) -> Option<String> {
+    let written_as_a_number = query
+        .chars()
+        .all(|letter| letter.is_ascii_digit() || " -().+".contains(letter));
+    let digits: String = query.chars().filter(char::is_ascii_digit).collect();
+    let groups = query
+        .split(|letter: char| !letter.is_ascii_digit())
+        .filter(|group| !group.is_empty())
+        .count();
+    (written_as_a_number && groups >= 2 && digits.len() >= centraid_vault::index::MIN_PHONE_DIGITS)
+        .then_some(digits)
 }
 
 /// The same words, required to be in the TITLE: FTS5's column filter over the
@@ -123,6 +146,22 @@ mod tests {
         assert_eq!(match_expression("ca").unwrap(), "\"ca\"*");
         assert_eq!(match_expression("a bc").unwrap(), "\"a\" \"bc\"*");
         assert_eq!(match_expression("bc d").unwrap(), "\"bc\"* \"d\"");
+    }
+
+    #[test]
+    fn a_number_typed_with_its_punctuation_is_also_its_digits() {
+        assert_eq!(
+            match_expression("555 1234").unwrap(),
+            "(\"555\"* \"1234\"*) OR \"5551234\"*"
+        );
+        assert_eq!(
+            match_expression("+1 (555) 123-4567").unwrap(),
+            "(\"+1\"* \"(555)\"* \"123-4567\"*) OR \"15551234567\"*"
+        );
+        // One group is one word already; a date or small numbers are not numbers.
+        assert_eq!(match_expression("5551234").unwrap(), "\"5551234\"*");
+        assert_eq!(match_expression("12 03").unwrap(), "\"12\"* \"03\"*");
+        assert_eq!(match_expression("555 abc").unwrap(), "\"555\"* \"abc\"*");
     }
 
     #[test]

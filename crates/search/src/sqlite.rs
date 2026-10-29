@@ -11,6 +11,9 @@
 //!   UNION ALL
 //!   -- tier 1: everything else that matches, the NEWEST 500 by rowid. The filters
 //!   -- are inside the cap, so a one-kind search is not starved by other kinds.
+//!   -- (`query` reads these as STAGES, one statement each: stage 0 is tier 0,
+//!   -- stage k the k-th slab of 500, `LIMIT 500 OFFSET 500*(k-1)`, read only when
+//!   -- the stage before it did not fill the window; `query_each` reads slab 1.)
 //!   SELECT * FROM (
 //!     SELECT search.rowid, 1, search.rank FROM search JOIN entity e ON e.n = search.rowid
 //!      WHERE search MATCH '(expr) NOT ({title} : (expr))' AND search.rank MATCH ... AND <filters>
@@ -22,7 +25,7 @@
 //!  ORDER BY hits.tier, hits.rank, e.id LIMIT ?
 //! ```
 //!
-//! `<filters>` is `e.deleted_at IS NULL AND e.title <> '' AND e.kind IN (...)`
+//! `<filters>` is `e.deleted_at IS NULL AND (e.title <> '' OR e.kind = 'photo') AND e.kind IN (...)`
 //! and `e.id NOT IN (...)` when the caller excludes ids.
 //!
 //! Five things in it are load-bearing and none is decoration:
@@ -30,7 +33,7 @@
 //! * **The tiers are what makes a prefix search affordable.** A two-letter prefix
 //!   in a vault of years matches tens of thousands of entities; ranking all of
 //!   them is what made a keystroke cost seconds. The tail is capped at the
-//!   newest [`TAIL_ROWS`] matches and streams from the index in rowid order (see
+//!   newest [`TAIL_ROWS`] matches (a page that reaches its end reads the next slab) and streams from the index in rowid order (see
 //!   "The plan" below), so a keystroke reads those and stops. A title match is
 //!   always answered, whatever its age, and ahead of every other match.
 //! * **The tiers cannot overlap.** Tier 1 asks FTS5 for the words anywhere
@@ -178,6 +181,75 @@ impl Binds {
     }
 }
 
+/// The predicates every leg carries: not in the trash, labelled, of the kinds
+/// asked, and not excluded. A row with no label is not a target, and an excluded
+/// id is the caller's own contract. **Both are predicates, not a post-filter**:
+/// the kit's page is the window plus one probe row, and dropping rows after that
+/// row was counted makes `next` claim a continuation the caller cannot use, or
+/// withhold one it is owed. A photograph with no title is labelled by the day it
+/// was taken ([`centraid_vault::index::untitled_label`]).
+fn filters_of(kinds: &[Kind], excluded_ids: &[String], binds: &mut Binds) -> String {
+    let kind_marks: Vec<String> = kinds.iter().map(|kind| binds.text(kind.as_str())).collect();
+    let mut filters = format!(
+        "e.deleted_at IS NULL AND (e.title <> '' OR e.kind = 'photo') AND e.kind IN ({})",
+        kind_marks.join(", ")
+    );
+    if !excluded_ids.is_empty() {
+        let marks: Vec<String> = excluded_ids
+            .iter()
+            .map(|id| binds.text(id.clone()))
+            .collect();
+        filters.push_str(&format!(" AND e.id NOT IN ({})", marks.join(", ")));
+    }
+    filters
+}
+
+/// One STAGE of the walk behind [`Search::query`], as a CTE named
+/// `hits(n, tier, rank)`: stage 0 is the title matches; stage `k >= 1` is the
+/// `k`-th slab of [`TAIL_ROWS`] other matches, newest first by rowid, skipping the
+/// `k - 1` slabs before it. The stage number is the `tier` of its rows, so the
+/// cursor (`tier:rank`) says which slab a page stopped in. The first page reads
+/// stage 0 and slab 1 and no further, which is the cost the cap was for; a slab
+/// past it costs the matches it skips, once per page that reaches it.
+fn stage_cte(
+    stage: i64,
+    query: &str,
+    kinds: &[Kind],
+    excluded_ids: &[String],
+    binds: &mut Binds,
+) -> Result<String, SearchError> {
+    let rank = binds.text(RANK_FUNCTION);
+    let expression = if stage == 0 {
+        binds.text(title_expression(query)?)
+    } else {
+        binds.text(tail_expression(query)?)
+    };
+    let filters = filters_of(kinds, excluded_ids, binds);
+    if stage == 0 {
+        return Ok(format!(
+            "hits(n, tier, rank) AS (
+               SELECT search.rowid, 0, search.rank
+                 FROM search JOIN entity e ON e.n = search.rowid
+                WHERE search MATCH {expression} AND search.rank MATCH {rank} AND {filters})"
+        ));
+    }
+    let cap = binds.push(Value::Integer(i64::try_from(TAIL_ROWS).unwrap_or(i64::MAX)));
+    let skip = binds.push(Value::Integer(
+        i64::try_from(TAIL_ROWS)
+            .unwrap_or(i64::MAX)
+            .saturating_mul(stage - 1),
+    ));
+    Ok(format!(
+        "hits(n, tier, rank) AS (
+           SELECT * FROM (
+             SELECT search.rowid, {stage}, search.rank
+               FROM search JOIN entity e ON e.n = search.rowid
+              WHERE search MATCH {expression} AND search.rank MATCH {rank} AND {filters}
+              ORDER BY search.rowid DESC
+              LIMIT {cap} OFFSET {skip}))"
+    ))
+}
+
 /// The two-tier match set of a query, as a CTE named `hits(n, tier, rank)`
 /// ([module docs](self)); its parameters are added to `binds`.
 fn hits_cte(
@@ -193,23 +265,7 @@ fn hits_cte(
         binds.text(RANK_FUNCTION),
     );
     let cap = binds.push(Value::Integer(i64::try_from(TAIL_ROWS).unwrap_or(i64::MAX)));
-    let kind_marks: Vec<String> = kinds.iter().map(|kind| binds.text(kind.as_str())).collect();
-    let mut filters = format!(
-        // A row with no label is not a target, and an excluded id is the caller's
-        // own contract. **Both are predicates, not a post-filter**: the kit's
-        // page is the window plus one probe row, and dropping rows after that
-        // row was counted makes `next` claim a continuation the caller cannot
-        // use, or withhold one it is owed.
-        "e.deleted_at IS NULL AND e.title <> '' AND e.kind IN ({})",
-        kind_marks.join(", ")
-    );
-    if !excluded_ids.is_empty() {
-        let marks: Vec<String> = excluded_ids
-            .iter()
-            .map(|id| binds.text(id.clone()))
-            .collect();
-        filters.push_str(&format!(" AND e.id NOT IN ({})", marks.join(", ")));
-    }
+    let filters = filters_of(kinds, excluded_ids, binds);
     // **THE PLAN OF THE TAIL LEG** (`EXPLAIN QUERY PLAN`, held by
     // `the_tail_leg_streams_the_index_and_does_not_sort_its_matches`): the index
     // is walked by FTS5 itself in rowid descending order, `entity` is probed by
@@ -291,6 +347,60 @@ impl SqliteDoor<'_> {
             .map_err(|error| SearchError::Sqlite(error.to_string()))
     }
 
+    /// The rows of one window and its probe: the title matches, then the slabs of
+    /// the tail in turn ([`stage_cte`]), each ordered by `(rank, id)` and each
+    /// read only when the stage before it did not fill the window. A cursor
+    /// resumes in its own stage, past its own `(rank, id)`.
+    ///
+    /// A slab that is not full ends the walk with the next stage's empty answer,
+    /// a read of the few matches it holds; no slab is read twice.
+    fn walk(
+        &self,
+        request: &SearchRequest,
+        kinds: &[Kind],
+        after: Option<(i64, f64, &String)>,
+        probe_rows: usize,
+    ) -> Result<Vec<Hit>, SearchError> {
+        let mut hits: Vec<Hit> = Vec::new();
+        let resumed = after.map_or(0, |(tier, _, _)| tier);
+        let mut stage = resumed;
+        while hits.len() < probe_rows {
+            let mut binds = Binds::default();
+            let cte = stage_cte(
+                stage,
+                &request.query,
+                kinds,
+                &request.excluded_ids,
+                &mut binds,
+            )?;
+            let mut keyset = String::new();
+            if let Some((_, rank, id)) = after.filter(|_| stage == resumed) {
+                let (rank, id) = (binds.push(Value::Real(rank)), binds.text(id.clone()));
+                keyset = format!("WHERE (hits.rank, e.id) > ({rank}, {id})");
+            }
+            let limit = binds.push(Value::Integer(
+                i64::try_from(probe_rows - hits.len()).unwrap_or(i64::MAX),
+            ));
+            let sql = format!(
+                "WITH {cte}
+                 SELECT e.id, e.kind, e.title, hits.tier, hits.rank
+                   FROM hits JOIN entity e ON e.n = hits.n
+                   {keyset}
+                  ORDER BY hits.rank, e.id
+                  LIMIT {limit}"
+            );
+            let rows = self.hits(&sql, binds)?;
+            // A slab read whole and found empty is the end of the tail; one read
+            // past a cursor may only be the end of that slab.
+            if stage > 0 && rows.is_empty() && stage > resumed {
+                break;
+            }
+            hits.extend(rows);
+            stage += 1;
+        }
+        Ok(hits)
+    }
+
     fn target(
         &self,
         hit: &Hit,
@@ -298,11 +408,20 @@ impl SqliteDoor<'_> {
         with_snippet: bool,
     ) -> Result<Target, SearchError> {
         let (id, kind, title, _, _) = hit;
+        // A photograph with no title is answered under the day it was taken.
+        let title = match Kind::parse(kind) {
+            Some(parsed) if title.is_empty() => {
+                centraid_vault::index::untitled_label(self.connection, id, parsed)
+                    .map_err(|error| SearchError::Sqlite(error.to_string()))?
+                    .unwrap_or_else(|| title.clone())
+            }
+            _ => title.clone(),
+        };
         Ok(Target {
             subtitle: kind.replace('_', " "),
             entity: kind.clone(),
             id: id.clone(),
-            title: title.clone(),
+            title,
             snippet: if with_snippet {
                 self.snippet(id, kind, tokens)?
             } else {
@@ -457,30 +576,14 @@ impl Search for SqliteDoor<'_> {
         };
         let probe_rows = probe_limit(&clamped)?;
 
-        let mut binds = Binds::default();
-        let cte = hits_cte(&request.query, &kinds, &request.excluded_ids, &mut binds)?;
-        let mut keyset = String::new();
-        if let Some(after) = clamped.after.as_ref() {
-            let (tier, rank) = parse_cursor_key(&after.sort_key)?;
-            let (tier, rank, id) = (
-                binds.push(Value::Integer(tier)),
-                binds.push(Value::Real(rank)),
-                binds.text(after.pk.clone()),
-            );
-            keyset = format!("WHERE (hits.tier, hits.rank, e.id) > ({tier}, {rank}, {id})");
-        }
-        let limit = binds.push(Value::Integer(
-            i64::try_from(probe_rows).unwrap_or(i64::MAX),
-        ));
-        let sql = format!(
-            "WITH {cte}
-             SELECT e.id, e.kind, e.title, hits.tier, hits.rank
-               FROM hits JOIN entity e ON e.n = hits.n
-               {keyset}
-              ORDER BY hits.tier, hits.rank, e.id
-              LIMIT {limit}"
-        );
-        let hits = self.hits(&sql, binds)?;
+        let after = clamped
+            .after
+            .as_ref()
+            .map(|after| {
+                parse_cursor_key(&after.sort_key).map(|(tier, rank)| (tier, rank, &after.pk))
+            })
+            .transpose()?;
+        let hits = self.walk(request, &kinds, after, probe_rows)?;
 
         // The snippet is excerpted from the text the entity was indexed from;
         // only the window's own rows are read, never the probe's.
