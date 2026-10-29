@@ -162,6 +162,63 @@ fn the_launch_pass_is_bounded_and_says_when_more_is_overdue() {
     assert_eq!((third.purged, third.more), (1, false));
 }
 
+/// The pass lets go of the bytes once, at its end, and in pieces: a batch that collected paid a
+/// walk of every blob in the library for a handful of rows, and one collect at the end held the
+/// vault for every byte released at once (#1146, wave 8).
+#[test]
+fn the_pass_collects_what_it_released_after_its_last_batch_in_pieces() {
+    let w = World::new();
+    let mut blobs = Vec::new();
+    for n in 0..3 {
+        let (id, blob) = w.document(&format!("Doc {n}"), &format!("doc {n}"));
+        w.ok("entity.trash", json!({ "id": id }));
+        blobs.push(blob);
+    }
+    w.scratch.clock.advance_ms(31 * DAY_MS);
+    let vault = &w.scratch.vault;
+    // Batches of two purge and keep the bytes (the third is still to come) ...
+    let first = vault
+        .empty_overdue_trash_step(&w.registry, 2, false)
+        .unwrap();
+    assert_eq!(
+        (first.purged, first.more, first.collecting),
+        (2, true, false)
+    );
+    assert!(
+        blobs.iter().all(|blob| w.on_disk(blob)),
+        "a batch that is not the last holds the bytes for the end"
+    );
+    // ... the last purges its own and turns to collecting, a piece at a time.
+    let last = vault
+        .empty_overdue_trash_step(&w.registry, 2, false)
+        .unwrap();
+    assert_eq!(last.purged, 1);
+    assert!(!last.more && !last.collecting, "{last:?}");
+    assert!(
+        blobs.iter().all(|blob| !w.on_disk(blob)),
+        "the pass's bytes went with its end"
+    );
+}
+
+#[test]
+fn collecting_with_a_limit_takes_a_piece_and_says_when_more_is_left() {
+    let w = World::new();
+    for n in 0..5 {
+        w.ok(
+            "blob.stage",
+            json!({ "hash": format!("{n:0>64}"), "size": 1 }),
+        );
+    }
+    let piece = w.ok("blob.collect", json!({ "limit": 2 }));
+    assert_eq!(World::hashes(&piece["released"]).len(), 2);
+    assert_eq!(piece["more"], json!(true));
+    let piece = w.ok("blob.collect", json!({ "limit": 2 }));
+    assert_eq!(World::hashes(&piece["released"]).len(), 2);
+    let last = w.ok("blob.collect", json!({ "limit": 2 }));
+    assert_eq!(World::hashes(&last["released"]).len(), 1);
+    assert_eq!(last["more"], json!(false));
+}
+
 #[test]
 fn a_row_still_inside_its_window_is_not_taken_by_the_pass() {
     let w = World::new();

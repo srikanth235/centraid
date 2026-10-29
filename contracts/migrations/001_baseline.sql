@@ -270,6 +270,16 @@ CREATE TABLE search_word (
   word TEXT NOT NULL UNIQUE
 ) STRICT;
 
+-- The labels whose members are owed a search row. A label's trash or restore re-indexes what its
+-- title is part of the text of, and a label of thousands would hold the vault for seconds, so a
+-- commit writes the first piece itself and leaves the label here with the last member done (`after`,
+-- in id order); the phone writes the rest a batch at a time when it is idle (`index::reindex_owed`,
+-- #1146). A rebuild empties it.
+CREATE TABLE search_owed (
+  id    TEXT PRIMARY KEY,
+  after TEXT NOT NULL
+) STRICT;
+
 -- ---------------------------------------------------------------------------------------------
 -- The kinds. Every kind row is its entity's own: kind is a generated constant, and the
 -- composite foreign key is what keeps a person row from naming a note.

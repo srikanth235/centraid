@@ -186,6 +186,11 @@
 <div class="colrow"><span class="cn">n</span><span class="ct">integer</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">word</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
+<div class="tbl rv in" data-group="kernel" data-table="search_owed"><header><h4>search_owed</h4><p class="tp">The labels whose members a commit left owed a search row, because the label it trashed or restored has too many to write in one commit.</p></header>
+<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
+<div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">after</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
+</div></div>
 <div class="schemahdr" data-group="words"><span class="sid">words</span><h3>words and holders</h3><p class="sdesc">Concepts are the words a member names (tags, categories, relations); containers are the things that hold things (notebooks, folders, albums, projects, calendars).</p></div>
 <div class="tbl rv in" data-group="words" data-table="concept"><header><h4>concept</h4><p class="tp">A word the member names: a tag, a flag, a category, a workout kind, an activity kind or a relation.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
@@ -549,7 +554,7 @@
 <div class="colrow"><span class="cn">failed_unlocks</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">failed_unlock_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<p class="note" data-tables="41" data-columns="308">41 tables and 308 columns, read off a vault this build founded.</p>
+<p class="note" data-tables="42" data-columns="310">42 tables and 310 columns, read off a vault this build founded.</p>
 <!-- schema:end -->
     </div>
     <div class="physcard rv">

@@ -1266,6 +1266,7 @@ fn the_founded_file_holds_the_spec_s_tables_and_nothing_else() {
         "search",
         "search_vocab",
         "search_word",
+        "search_owed",
         // the kinds' own rows and their children
         "person",
         "contact_point",
@@ -1521,6 +1522,11 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         "search_word",
         "word",
         Reach::Not("the index's own vocabulary, kept as a list"),
+    ),
+    (
+        "search_owed",
+        "after",
+        Reach::Not("a cursor in id order over what a label feeds, not prose"),
     ),
     ("person", "nickname", Reach::Own),
     ("person", "role", Reach::Own),

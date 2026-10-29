@@ -101,7 +101,7 @@ The model is rebuilt whole and carries no compatibility with the one before it; 
 | **write counter** | `vault.writes` and `vault.written_at`: how many commits changed something a screen reads, and when the last did, bumped once per such commit by the commit guard so every write path counts. The snapshot manifest carries both, and a takeover compares `writes` to tell which copy of the vault is ahead. | `vault.writes`; [`crates/vault/src/log/guard.rs`](../crates/vault/src/log/guard.rs) |
 | **schema digest** | BLAKE3 over a vault file's `sqlite_schema`, held as `SCHEMA_DIGEST` and checked, with the `application_id`, when a file is opened and when a restored copy is laid down. A file of the model before [#1135](https://github.com/srikanth235/centraid/issues/1135), or with other tables, is refused with a sentence (R-FP-10). | [`crates/vault/src/format.rs`](../crates/vault/src/format.rs) |
 | **touch** | `ctx.touch(id)`: the one helper that changes an entity. It stamps `updated_at`, bumps `version` once per commit and marks the entity for re-indexing. | `CommitTx::touch` |
-| **search** | The one contentless FTS5 table, keyed by `entity.n`, kept by the writer inside the commit. A trashed entity is not in it. | `search`, `search_vocab`, `search_word`; [`crates/search`](../crates/search/README.md) |
+| **search** | The one contentless FTS5 table, keyed by `entity.n`, kept by the writer inside the commit. A trashed entity is not in it. | `search`, `search_vocab`, `search_word`, `search_owed`; [`crates/search`](../crates/search/README.md) |
 
 ## Hosts and clients
 

@@ -646,6 +646,12 @@ CREATE TABLE 'search_docsize'(id INTEGER PRIMARY KEY, sz BLOB, origin INTEGER);
 -- table search_idx on search_idx
 CREATE TABLE 'search_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
 
+-- table search_owed on search_owed
+CREATE TABLE search_owed (
+  id    TEXT PRIMARY KEY,
+  after TEXT NOT NULL
+) STRICT;
+
 -- table search_vocab on search_vocab
 CREATE VIRTUAL TABLE search_vocab USING fts5vocab(search, row);
 

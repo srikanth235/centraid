@@ -49,7 +49,18 @@ fn stage(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
 }
 
 fn collect(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    Ok(serde_json::json!({ "released": blob::collect(ctx.connection())? }))
+    let limit = ctx
+        .input
+        .get("limit")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|limit| usize::try_from(limit).ok());
+    let released = match limit {
+        Some(limit) => blob::collect_up_to(ctx.connection(), limit)?,
+        None => blob::collect(ctx.connection())?,
+    };
+    // With a `limit`, a full piece says there may be more.
+    let more = limit.is_some_and(|limit| released.len() >= limit);
+    Ok(serde_json::json!({ "released": released, "more": more }))
 }
 
 fn pre_variant(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -174,7 +185,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
         CommandDefinition::plain(
             "blob.collect",
             "blob",
-            r#"{ "type": "object", "additionalProperties": false, "properties": {} }"#,
+            r#"{ "type": "object", "additionalProperties": false, "properties": {
+              "limit": { "type": "integer", "minimum": 1 } } }"#,
             Idempotency::RetrySafe,
             &[],
             collect,

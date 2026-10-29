@@ -30,7 +30,13 @@ pub struct Emptied {
     pub purged: usize,
     /// More is overdue than this pass took: run another.
     pub more: bool,
+    /// The next step collects released bytes (pass it back to
+    /// [`Vault::empty_overdue_trash_step`]) and purges nothing.
+    pub collecting: bool,
 }
+
+/// How many blobs one step of the pass collects: about the call budget's order of size.
+const COLLECT_PIECE: usize = 300;
 
 /// What one bounded sweep of the byte store did.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,51 +56,138 @@ impl Vault {
     /// # Errors
     /// The command's own refusal or failure.
     pub fn empty_overdue_trash(&self, registry: &Registry, limit: usize) -> Result<Emptied> {
-        // THE COMMON LAUNCH FINDS NOTHING OVERDUE, and then writes nothing: one
-        // indexed read (`entity_purge`) instead of a commit.
-        let now = self.clock().now_text();
-        let due: bool = self.read(|connection| {
-            Ok(connection.query_row(
-                "SELECT EXISTS (SELECT 1 FROM entity WHERE purge_at <= ?1)",
-                [&now],
-                |row| row.get(0),
-            )?)
-        })?;
-        if !due {
-            return Ok(Emptied {
-                purged: 0,
-                more: false,
-            });
-        }
-        let outcome = self.execute(
-            registry,
-            &crate::access::Principal::owner("launch"),
-            &Command::new(
-                "entity.empty_trash",
-                serde_json::json!({ "due_only": true, "limit": limit.max(1) }),
-            ),
-        )?;
-        if outcome.status != CommandStatus::Executed {
-            return Err(VaultError::Invariant {
-                context: format!(
-                    "the launch pass of the trash was refused: {}",
-                    outcome.reason.unwrap_or_default()
+        self.empty_overdue_trash_step(registry, limit, false)
+    }
+
+    /// One step of the pass: [`Self::empty_overdue_trash`] when `collecting` is false, and once
+    /// the entities are all purged, the collecting of the bytes they let go of, a piece of
+    /// `COLLECT_PIECE` blobs per step. The caller passes `collecting` back as the last step
+    /// answered it, until `more` is false.
+    ///
+    /// **Why the pass collects at its end and not in each batch.** Collecting is one walk of
+    /// every blob in the library; a batch of five that did it held the vault for the whole
+    /// library each time, and one big collect at the end held it for every byte released at
+    /// once. Two thousand overdue photographs measured both (`tests/write_costs.rs`).
+    ///
+    /// # Errors
+    /// The command's own refusal or failure.
+    pub fn empty_overdue_trash_step(
+        &self,
+        registry: &Registry,
+        limit: usize,
+        collecting: bool,
+    ) -> Result<Emptied> {
+        let owner = crate::access::Principal::owner("launch");
+        let mut purged = 0usize;
+        if !collecting {
+            // THE COMMON LAUNCH FINDS NOTHING OVERDUE, and then writes nothing: one
+            // indexed read (`entity_purge`) instead of a commit.
+            let now = self.clock().now_text();
+            let due: bool = self.read(|connection| {
+                Ok(connection.query_row(
+                    "SELECT EXISTS (SELECT 1 FROM entity WHERE purge_at <= ?1)",
+                    [&now],
+                    |row| row.get(0),
+                )?)
+            })?;
+            if !due {
+                return Ok(Emptied {
+                    purged: 0,
+                    more: false,
+                    collecting: false,
+                });
+            }
+            let outcome = self.execute(
+                registry,
+                &owner,
+                &Command::new(
+                    "entity.empty_trash",
+                    serde_json::json!({
+                        "due_only": true,
+                        "limit": limit.max(1),
+                        "defer_collect": true
+                    }),
                 ),
-            });
-        }
-        Ok(Emptied {
-            purged: outcome
+            )?;
+            Self::executed(&outcome, "the launch pass of the trash was refused")?;
+            purged = outcome
                 .output
                 .get("purged")
                 .and_then(serde_json::Value::as_u64)
                 .and_then(|n| usize::try_from(n).ok())
-                .unwrap_or(0),
-            more: outcome
+                .unwrap_or(0);
+            let more = outcome
                 .output
                 .get("more")
                 .and_then(serde_json::Value::as_bool)
-                .unwrap_or(false),
+                .unwrap_or(false);
+            if more || purged == 0 {
+                return Ok(Emptied {
+                    purged,
+                    more,
+                    collecting: false,
+                });
+            }
+        }
+        let outcome = self.execute(
+            registry,
+            &owner,
+            &Command::new(
+                "blob.collect",
+                serde_json::json!({ "limit": COLLECT_PIECE }),
+            ),
+        )?;
+        Self::executed(
+            &outcome,
+            "the launch pass could not collect the bytes it released",
+        )?;
+        let more = outcome
+            .output
+            .get("more")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        Ok(Emptied {
+            purged,
+            more,
+            collecting: more,
         })
+    }
+
+    fn executed(outcome: &crate::commands::CommandOutcome, what: &str) -> Result<()> {
+        if outcome.status == CommandStatus::Executed {
+            return Ok(());
+        }
+        Err(VaultError::Invariant {
+            context: format!("{what}: {}", outcome.reason.clone().unwrap_or_default()),
+        })
+    }
+
+    /// Write the next batch of the search rows a commit left owed (a label of thousands, trashed
+    /// or restored), in a commit of its own; returns how many are still owed.
+    ///
+    /// A batch is about the call budget long, so the caller holds the vault for it and no more.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn reindex_owed(&self) -> Result<usize> {
+        let owed: bool = self.read(|connection| Ok(crate::index::owed(connection)? > 0))?;
+        if !owed {
+            return Ok(0);
+        }
+        Ok(self
+            .commit(|tx| {
+                tx.set_producer("index.owed");
+                crate::index::reindex_owed(tx.connection(), crate::index::OWED_BATCH)
+            })?
+            .value)
+    }
+
+    /// Whether any search row is owed.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn index_owed(&self) -> Result<bool> {
+        self.read(|connection| Ok(crate::index::owed(connection)? > 0))
     }
 
     /// Look at the next `limit` files of the byte store after `after` (in hash

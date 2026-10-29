@@ -572,11 +572,16 @@ fn pre_empty(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     })
 }
 
+/// How many trashed rows one read of the pass takes.
+const DOOMED_CHUNK: i64 = 64;
+
 /// Purge what is in the trash: one kind's, or every kind's; all of it, or only
 /// what has waited out its window; and, with a `limit`, at most that many
 /// roots (what went with them is not counted against it), saying `more` when
 /// something else is due. What cannot be purged as it stands (a calendar with
-/// events, the self person) stays in the trash, and does not stop the rest.
+/// events, the self person) stays in the trash, and does not stop the rest. With
+/// `defer_collect` the bytes nothing names any more are not collected here: the caller of a
+/// pass in batches collects once at its end.
 fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let due_only = ctx
         .input
@@ -588,40 +593,69 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         .get("limit")
         .and_then(serde_json::Value::as_u64)
         .and_then(|limit| usize::try_from(limit).ok());
+    let defer_collect = ctx
+        .input
+        .get("defer_collect")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
     let kind = ctx.optional_str("kind");
-    let doomed: Vec<String> = ctx
-        .connection()
-        .prepare(
-            "SELECT id FROM entity
-              WHERE deleted_at IS NOT NULL
-                AND (?1 IS NULL OR kind = ?1)
-                AND (?2 = 0 OR purge_at <= ?3)
-              ORDER BY deleted_at, n",
-        )?
-        .query_map(
-            rusqlite::params![kind, i64::from(due_only), ctx.now],
-            |row| row.get::<_, String>(0),
-        )?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut purged = Vec::new();
     let mut roots = 0usize;
     let mut more = false;
-    for id in &doomed {
-        // Gone already: it went with a holder purged earlier in this pass.
-        let Some(found) = find(ctx.connection(), id)? else {
-            continue;
-        };
-        if purge_refusal(ctx.connection(), &found)?.is_some() {
-            continue;
-        }
-        if limit.is_some_and(|limit| roots >= limit) {
-            more = true;
+    // The doomed are read in chunks, in the order they went to the trash, so a pass of a few
+    // roots reads a few chunks and not the whole trash (a batch of the launch tidy pays for
+    // what it purges, not for what is left).
+    let mut after: Option<(String, i64)> = None;
+    'pass: loop {
+        let chunk: Vec<(String, String, i64)> = ctx
+            .connection()
+            .prepare(
+                "SELECT id, deleted_at, n FROM entity
+                  WHERE deleted_at IS NOT NULL
+                    AND (?1 IS NULL OR kind = ?1)
+                    AND (?2 = 0 OR purge_at <= ?3)
+                    AND (?4 IS NULL OR (deleted_at, n) > (?4, ?5))
+                  ORDER BY deleted_at, n LIMIT ?6",
+            )?
+            .query_map(
+                rusqlite::params![
+                    kind,
+                    i64::from(due_only),
+                    ctx.now,
+                    after.as_ref().map(|(at, _)| at),
+                    after.as_ref().map_or(0, |(_, n)| *n),
+                    DOOMED_CHUNK
+                ],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )?
+            .collect::<rusqlite::Result<_>>()?;
+        let Some((_, last_at, last_n)) = chunk.last().cloned() else {
             break;
+        };
+        for (id, _, _) in &chunk {
+            // Gone already: it went with a holder purged earlier in this pass.
+            let Some(found) = find(ctx.connection(), id)? else {
+                continue;
+            };
+            if purge_refusal(ctx.connection(), &found)?.is_some() {
+                continue;
+            }
+            if limit.is_some_and(|limit| roots >= limit) {
+                more = true;
+                break 'pass;
+            }
+            purge_one(ctx, id, &mut purged)?;
+            roots += 1;
         }
-        purge_one(ctx, id, &mut purged)?;
-        roots += 1;
+        after = Some((last_at, last_n));
     }
-    let released = crate::blob::collect(ctx.connection())?;
+    // A pass in batches collects once at its end (`defer_collect`): collecting is one walk of
+    // every blob, and a batch that paid it each time paid the whole library for a handful of rows.
+    let released = if defer_collect {
+        Vec::new()
+    } else {
+        crate::blob::collect(ctx.connection())?
+    };
     Ok(serde_json::json!({ "purged": purged.len(), "released": released, "more": more }))
 }
 
@@ -689,7 +723,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "properties": {
                 "kind": { "type": "string", "minLength": 1 },
                 "due_only": { "type": "boolean" },
-                "limit": { "type": "integer", "minimum": 1 }
+                "limit": { "type": "integer", "minimum": 1 },
+                "defer_collect": { "type": "boolean" }
               }
             }"#,
             Idempotency::Idempotent,

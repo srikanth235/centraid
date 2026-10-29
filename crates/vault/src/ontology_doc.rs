@@ -59,7 +59,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
 ///
 /// The FTS5 shadow tables of `search` are not here (they are an implementation
 /// of it); every other table must be.
-pub const TABLES: [(&str, &str, &str); 41] = [
+pub const TABLES: [(&str, &str, &str); 42] = [
     (
         "kernel",
         "entity",
@@ -104,6 +104,11 @@ pub const TABLES: [(&str, &str, &str); 41] = [
         "kernel",
         "search_word",
         "The words the index holds, numbered in the order they arrived: the list a correction reads whole.",
+    ),
+    (
+        "kernel",
+        "search_owed",
+        "The labels whose members a commit left owed a search row, because the label it trashed or restored has too many to write in one commit.",
     ),
     (
         "words",
