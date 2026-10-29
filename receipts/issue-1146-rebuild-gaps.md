@@ -815,9 +815,10 @@ Owner-added to [#1146](https://github.com/srikanth235/centraid/issues/1146) on 2
 #### Exit list
 
 1. Red-first tests: failing on the base or not compiling, passing now (table above).
-2. See the final message for `cargo test -p centraid-vault -p centraid-core` (with `--test query_plans`, `--test write_costs`), the notes, agenda and search crates, and the gate.
-3. `contracts/schema/vault-ddl.sql` regenerated; `SCHEMA_DIGEST` and the ontology page regenerated; `git diff --exit-code contracts/schema` clean after regeneration. `vault-commands.txt` did not change (it lists names).
-4. `cargo xtask gate --profile pr`: see the final message.
+2. `cargo test --workspace` (the gate's `test` step, which runs `query_plans` and `write_costs` and every touched crate): green, 984.3 s. Earlier runs of the step found two things, both fixed: `ontology_page` (the page's hand-written table count, 41 → 42) and `write_costs` red under the workspace's parallel load (label trash 126.9 ms against a quiet 39 ms), hence the fastest-of-three, the inline bound of 50 and the batch of 3.
+3. Regenerated `contracts/schema/*`; `git diff --exit-code contracts/schema` clean after the regeneration.
+4. `cargo xtask gate --profile pr` at `78c56338`: fmt 6.2 s ok · clippy 25.4 s ok · test 984.3 s ok · restore-drill 36.5 s ok · rules ok · doc-links ok · ledgers ok · buf, deny, ci-policy, secrets, osv **SKIP** (tools missing) · release-build ok (235.3 s in the earlier run) · ts-static, emitters, advisory, lockfile ok · call-budget ok (p50 0.51 ms · p95 0.66 ms · p99 0.82 ms, ceiling 50 ms) · fault-door ok · **search-budget FAIL**: `home in-word fragment obro` p95 81.12 ms against 80 ms (notes in-word fragment 60.8 ms). It is red on the base as well: three runs of `search_budget` at `191f0e4e` gave home / notes in-word fragment p95 50.0 / 74.3 (green), 63.8 / 93.4 and 82.6 / 81.7 (both red); on this branch 81.0 / 86.0, 81.2 / 86.0, 78.0 / 85.0 (the `with_vault` owed check disabled, to rule it out) and 81.1 / 60.8. The fragment query's p50 is 47–54 ms on both and its p95 swings 50–95 ms between runs of the same tree on this machine. Not touched by this wave; the ceiling and the ledger were left alone. Wall: about 1,300 s on a warm tree.
+5. Pushed after each seam; the pre-push hook passed.
 
 #### Files
 
