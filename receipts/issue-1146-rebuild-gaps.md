@@ -327,3 +327,74 @@ Added:
 - `crates/vault/tests/action_keys.rs`
 - `crates/vault/tests/format_identity.rs`
 - `crates/vault/tests/revision_kept.rs`
+
+### Wave 3 — Trash and bytes
+
+Decision T and findings M8, M10, M11, M14.
+
+#### What changed
+
+- **T.** `entity.restore` no longer refuses a row past `purge_at`. `Vault::empty_overdue_trash` (`crates/vault/src/tidy.rs`) runs `entity.empty_trash {due_only, limit}` in bounded batches and does nothing (one indexed read) when nothing is overdue; `Core::open` starts it on a thread of its own. `entity.empty_trash` takes an optional `limit` and answers `more`, and skips a row a purge would refuse (a calendar with events) instead of failing the command.
+- **`origin.fills`.** A purge ends the follow of any origin that fills the purged entity, for every kind. `PURGE_RULES` (`entity.rs`) names a rule for all 19 `NO ACTION` pointers into an entity or a kind's table; `commitments.rs` derives the same set from `PRAGMA foreign_key_list` and requires equality.
+- **Section move.** `container.move` of a section sets `project_id` of every task in it (trashed ones too).
+- **`released`.** `derivative.write`, `derivative.drop`, `thread.clear` and `blob.collect` collect and answer `released`; `thread.save_turn` answered a count, so its thumbnail files were never deleted, and now answers the hashes. A replayed answer deletes no file.
+- **File sweep.** `Vault::sweep_unclaimed_files(before, limit)` deletes store files with no `blob` row older than the core's launch; `ByteStore` refreshes an old file's time when the same bytes are staged again. The core starts it once, when the first store is attached.
+- **Backup.** `backup::files::content_files` omits a blob only lapsed entities rent (`RENTERS`, held to the schema by a commitment test); a derivative follows its original.
+
+#### Rulings
+
+- **R-1146-3-1** (M8, `origin.fills`): a purge forgets the origin's sources and retires the origin, as `follow.stop` does, for every kind. _Why:_ the rows stay the member's own; detaching `fills` would leave a statement or calendar origin with no target.
+- **R-1146-3-2** (T): Restore stays offered and accepted for a lapsed row; the docs screens say "emptied when Centraid next opens". _Why:_ the pass, not the date, is what ends restorability.
+- **R-1146-3-3** (M11): `derivative.write` collects every unreferenced blob, as purge does. _Why:_ one collector, one meaning of `released`; a row that is claimed and not yet named exists only through `blob.stage`.
+- **R-1146-3-4** (M10): the sweep spares by file time, not by name: a file written since launch is a staging's. _Why:_ the core cannot see between the stage door's `end` and the naming command.
+- **R-1146-3-5** (M14): a lapsed renter is judged by `purge_at <= now`, a blob nothing rents yet is listed.
+
+#### Red-first
+
+| Finding | Test | Red line on the wave-1 base (stub API where needed) |
+| --- | --- | --- |
+| T | `an_overdue_row_is_restorable_until_the_pass_runs_and_gone_after_it` | `entity.restore: “Old lease” has been in the trash past its grace window and can no longer be restored` |
+| T | `the_launch_pass_is_bounded_and_says_when_more_is_overdue` | `left: (0, false) right: (2, true)` |
+| origin.fills | `purging_a_calendar_or_a_folder_an_origin_fills_clears_the_origin` | `entity.purge: FOREIGN KEY constraint failed` (re-seen under falsification) |
+| purge rules | `every_pointer_into_an_entity_that_deletes_nothing_has_a_purge_rule` | no `PURGE_RULES` before the fix (compile failure) |
+| section move | `moving_a_section_to_another_project_takes_its_tasks_with_it` | `t1 follows its section` (task still in the old project) |
+| released | `derivative_drop_and_write_release_the_bytes_they_stop_naming`, `thread_clear_...`, `blob_collect_...` | `` `released` is a list of hashes, not null `` |
+| released | `a_regenerated_turn_releases_the_thumbnail_it_replaced_as_hashes` | `` `released` is a list of hashes, not 1 `` |
+| sweep | `a_file_with_no_row_is_swept_and_a_file_with_one_is_not`, `the_file_sweep_is_bounded_and_resumes` | `left: [] right: ["e30bbe3c…"]`; `left: 0 right: 2` |
+| sweep | `staging_the_same_bytes_again_refreshes_the_files_time` (blobs) | `the time moved up to now` |
+| backup | `the_backup_lists_no_blob_only_a_lapsed_entity_names` | `past its purge date` |
+| core | `the_launch_pass_purges_what_is_overdue_...`, `open_starts_the_pass_without_a_request`, `the_launch_sweep_takes_stray_files_...` | written with the implementation; falsified below |
+
+#### Falsification
+
+- Listing lapsed blobs switched off: `the_backup_lists_no_blob_only_a_lapsed_entity_names` fails (`past its purge date`). Reverted.
+- Origin forgetting limited to accounts again: `purging_a_calendar_or_a_folder_...` fails (`FOREIGN KEY constraint failed`). Reverted.
+
+#### Verification
+
+- Inherited failure: none seen. One policy gate failed on my first sweep (`query_plans`: a full read of `blob`); fixed in code (one primary-key lookup per old file), ledger untouched, `query_plans` now passes.
+- Existing tests changed because their subject is decided: the restore-past-window refusals in `docs_photos.rs`, `locker_commands.rs`, `docs_tests.rs`, `park.rs`; `blob.collect` answers `released` (was `collected`); the backup unit test uses a future `purge_at` for "still held".
+- Gate results: see the final message.
+
+#### Not done, and why
+
+- A race remains between a purge's file removal and a stage door re-staging identical bytes before a command names them (pre-existing).
+- Photos' countdown strings (wave 6's files) still read `purge_in_days`; only Docs was edited.
+
+#### Files
+
+Changed: `crates/blobs/src/store.rs`, `crates/core/src/app_query/docs_tests.rs`, `crates/core/src/handle.rs`, `crates/core-ffi/CONTRACT.md`, `crates/api-proto/proto/centraid/core/v1/docs.proto`, `crates/api-proto/proto/centraid/core/v1/docs_screens.proto`, `crates/assist/src/native/park.rs`, `crates/screens/src/docs/fold.rs`, `crates/screens/src/strings/docs.rs`, `crates/vault/src/backup/files.rs`, `crates/vault/src/commands/{blob,container,entity,mod,thread}.rs`, `crates/vault/src/lib.rs`, `crates/vault/tests/{commitments,docs_photos,locker_commands,shared_verbs}.rs`, `docs/vault-ontology.md`.
+Added: `crates/vault/src/tidy.rs`, `crates/vault/tests/trash_and_bytes.rs`.
+Deleted: none. Native files: none (the proto change is comments and a string the screens render).
+
+#### Changelog line
+
+A trashed item stays restorable until Centraid next opens; then items past their 30 days are emptied in the background, and the files of anything deleted are always freed, including leftovers from interrupted saves.
+
+#### Decision rows
+
+| **R-1146-3-1** | A purge ends the follow of any origin that fills the purged entity, for every kind, as `follow.stop` does. _Why:_ the rows stay the member's; `origin.fills` has no delete action. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-3-2** | `purge_at` says when the launch pass may empty a row, not when it stops being restorable. _Why:_ nothing swept the phone, and a refused restore of a row still present lost data for no reason. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-3-3** | Every command that can drop the last reference to a blob collects and answers `released`; the gate deletes those files after the commit, never for a replayed answer. _Why:_ `thread.save_turn` answered a count and leaked files. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-3-4** | The launch sweep deletes only store files with no row and older than the core's launch. _Why:_ the stage door stores bytes before any command names them. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-3-5** | The backup lists no blob that only entities past `purge_at` rent. _Why:_ the next launch deletes them. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
