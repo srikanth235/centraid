@@ -218,6 +218,10 @@ pub struct HandleState {
     /// file written since, because a staging in flight owns it until a command
     /// names it ([`HandleState::tidy_files`]).
     launched: std::time::SystemTime,
+    /// WHEN A REQUEST LAST TOOK THE VAULT, in milliseconds since `launched`. The
+    /// launch tidy runs a batch only after the vault has been idle for
+    /// [`TIDY_IDLE`], so it never competes with a screen's reads.
+    last_used: AtomicU64,
     /// The launch sweep of files has been started, so a store attached again
     /// (a restore re-attaches) does not start it twice.
     files_tidied: AtomicBool,
@@ -346,6 +350,7 @@ impl Core {
             shelf_config,
             vaults: std::sync::OnceLock::new(),
             launched,
+            last_used: AtomicU64::new(0),
             files_tidied: AtomicBool::new(false),
         });
         handle.start_trash_tidy();
@@ -418,13 +423,18 @@ impl Core {
 
 /// How many trashed roots one batch of the launch pass purges. A batch holds the
 /// vault, so it is small: the first screen's reads wait behind at most one.
-const TRASH_BATCH: usize = 25;
+const TRASH_BATCH: usize = 5;
 
 /// How many files one batch of the launch sweep looks at (deleting or not).
 const FILE_BATCH: usize = 100;
 
 /// How long the launch tidy lets the vault go between two batches.
 const TIDY_PAUSE: Duration = Duration::from_millis(5);
+
+/// How long the vault must have gone unused before the launch tidy takes it for
+/// a batch: a first screen's reads are back to back, and a tidy that ran between
+/// them cost the search budget its p95 (#1146).
+const TIDY_IDLE: Duration = Duration::from_millis(300);
 
 impl HandleState {
     /// **PURGE WHAT HAS WAITED OUT ITS WINDOW, OFF THE REQUEST PATH** (#1146,
@@ -440,14 +450,70 @@ impl HandleState {
     /// A closed or poisoned core, or the pass's own failure; what earlier
     /// batches purged stays purged.
     pub fn tidy_trash(&self) -> Result<usize> {
-        let mut purged = 0;
+        self.tidy_batch_loop(|vault, _after| {
+            let batch = vault.empty_overdue_trash(&self.registry, TRASH_BATCH)?;
+            Ok((batch.purged, batch.more.then(String::new)))
+        })
+    }
+
+    fn mark_used(&self) {
+        let ms = u64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(self.launched)
+                .unwrap_or_default()
+                .as_millis(),
+        )
+        .unwrap_or(u64::MAX);
+        self.last_used.store(ms, Ordering::Relaxed);
+    }
+
+    /// Wait until the vault has been idle for [`TIDY_IDLE`]; an error when the
+    /// core closes while waiting.
+    fn wait_for_idle(&self) -> Result<()> {
         loop {
-            let batch = self
-                .with_vault(|vault| Ok(vault.empty_overdue_trash(&self.registry, TRASH_BATCH)?))?;
-            purged += batch.purged;
-            if !batch.more {
-                return Ok(purged);
+            self.check_open()?;
+            let now = u64::try_from(
+                std::time::SystemTime::now()
+                    .duration_since(self.launched)
+                    .unwrap_or_default()
+                    .as_millis(),
+            )
+            .unwrap_or(u64::MAX);
+            let idle = now.saturating_sub(self.last_used.load(Ordering::Relaxed));
+            if idle >= u64::try_from(TIDY_IDLE.as_millis()).unwrap_or(0) {
+                return Ok(());
             }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    /// Run `step` over the vault in batches, each only after the vault has been
+    /// idle, until it says there is no more. `step` answers how many it did and
+    /// where the next batch resumes.
+    fn tidy_batch_loop(
+        &self,
+        step: impl Fn(&Vault, &str) -> Result<(usize, Option<String>)>,
+    ) -> Result<usize> {
+        let mut total = 0;
+        let mut after = String::new();
+        loop {
+            self.wait_for_idle()?;
+            // Taken without marking: the tidy's own hold is not a request.
+            let (done, next) = {
+                let held = self
+                    .vault
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let Some(vault) = held.as_ref() else {
+                    return Err(CoreError::Unpaired);
+                };
+                step(vault, &after)?
+            };
+            total += done;
+            let Some(next) = next else {
+                return Ok(total);
+            };
+            after = next;
             std::thread::sleep(TIDY_PAUSE);
         }
     }
@@ -463,19 +529,10 @@ impl HandleState {
     /// # Errors
     /// A closed or poisoned core, or the store's refusal.
     pub fn tidy_files(&self) -> Result<usize> {
-        let mut removed = 0;
-        let mut after = String::new();
-        loop {
-            let batch = self.with_vault(|vault| {
-                Ok(vault.sweep_unclaimed_files(self.launched, &after, FILE_BATCH)?)
-            })?;
-            removed += batch.removed.len();
-            let Some(next) = batch.next else {
-                return Ok(removed);
-            };
-            after = next;
-            std::thread::sleep(TIDY_PAUSE);
-        }
+        self.tidy_batch_loop(|vault, after| {
+            let batch = vault.sweep_unclaimed_files(self.launched, after, FILE_BATCH)?;
+            Ok((batch.removed.len(), batch.next))
+        })
     }
 
     /// Run `body` against this state on a thread of its own. It ends when its
@@ -1028,6 +1085,7 @@ impl HandleState {
     /// phone's replica to be placed by a shell script.
     pub fn with_vault<T>(&self, body: impl FnOnce(&Vault) -> Result<T>) -> Result<T> {
         self.check_open()?;
+        self.mark_used();
         let held = self
             .vault
             .lock()
@@ -1046,6 +1104,7 @@ impl HandleState {
         body: impl FnOnce(Option<&Vault>) -> Result<T>,
     ) -> Result<T> {
         self.check_open()?;
+        self.mark_used();
         let held = self
             .vault
             .lock()
@@ -1876,7 +1935,7 @@ mod tests {
                 std::time::Instant::now() < deadline,
                 "the launch pass never ran"
             );
-            std::thread::sleep(Duration::from_millis(20));
+            std::thread::sleep(Duration::from_millis(500));
         }
     }
 
