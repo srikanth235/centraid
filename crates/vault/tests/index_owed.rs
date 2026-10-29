@@ -71,7 +71,7 @@ fn a_label_of_many_members_leaves_the_rest_owed_and_draining_it_equals_a_rebuild
     let scratch = common::Scratch::founded("owed").expect("a vault");
     let vault = &scratch.vault;
     let registry = Registry::with_system_commands().expect("a registry");
-    let members = INLINE_DEPENDENTS * 2 + 30;
+    let members = 230;
     go(
         vault,
         &registry,
