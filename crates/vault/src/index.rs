@@ -34,7 +34,7 @@ use crate::model::Kind;
 
 mod text;
 
-pub use text::{SEARCHABLE, text_of};
+pub use text::{MIN_PHONE_DIGITS, SEARCHABLE, text_of, untitled_label};
 
 /// Re-index the touched ids, and whatever their text feeds.
 ///

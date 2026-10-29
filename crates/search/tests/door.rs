@@ -408,7 +408,7 @@ fn a_title_match_is_answered_before_a_body_match_whatever_the_score_and_the_age(
 }
 
 #[test]
-fn the_tail_is_the_newest_five_hundred_and_a_title_match_is_never_cut() {
+fn the_tail_pages_newest_first_in_slabs_of_five_hundred_after_the_title_matches() {
     let world = World::new();
     world.note("old-title", "Garden", "");
     world.notes(
@@ -418,12 +418,22 @@ fn the_tail_is_the_newest_five_hundred_and_a_title_match_is_never_cut() {
         "garden garden",
     );
     let found = world.walk(request(&["note"], "garden", 200));
-    // The title match first, then exactly the cap: the 20 oldest body matches
-    // are the ones left out.
-    assert_eq!(found.len(), 1 + centraid_search::TAIL_ROWS);
+    // The title match first, then every body match: the first slab is the newest
+    // 500, and the 20 oldest follow it on a later page.
+    assert_eq!(found.len(), 1 + centraid_search::TAIL_ROWS + 20);
     assert_eq!(found[0].1, "old-title");
-    assert!(!found.iter().any(|(_, id)| id == "n0000" || id == "n0019"));
-    assert!(found.iter().any(|(_, id)| id == "n0020"));
+    let position = |id: &str| found.iter().position(|(_, held)| held == id).expect(id);
+    assert!(position("n0019") > position("n0020"));
+    assert!(position("n0000") > centraid_search::TAIL_ROWS);
+    // The first page alone reads only the first slab.
+    let first = world.answer(&request(&["note"], "garden", 200));
+    assert!(
+        first
+            .targets()
+            .expect("data")
+            .iter()
+            .all(|t| t.id != "n0000")
+    );
 }
 
 #[test]
@@ -865,4 +875,132 @@ fn a_locker_word_is_a_word_of_the_one_list_and_leaves_it_with_its_item() {
             .expect("reads"),
         None
     );
+}
+
+impl World {
+    /// A photograph with no title, taken at `taken_at` (the way the phone's
+    /// importer writes one: a title only when the member gave it one).
+    fn photo(&self, id: &str, title: &str, taken_at: &str) {
+        let now = self.vault.clock().now_text();
+        let hash = format!(
+            "{:0>64}",
+            id.bytes().map(|b| format!("{b:x}")).collect::<String>()
+        );
+        self.vault
+            .commit(|tx| {
+                tx.connection()
+                    .execute("INSERT INTO blob (hash, size) VALUES (?1, 1)", [&hash])?;
+                tx.insert_entity(id, Kind::Photo, title, &now)?;
+                tx.connection().execute(
+                    "INSERT INTO photo (id, blob, media_type, form, taken_at)
+                     VALUES (?1, ?2, 'image/jpeg', 'photo', ?3)",
+                    [id, hash.as_str(), taken_at],
+                )?;
+                Ok(())
+            })
+            .expect("the photo lands");
+    }
+
+    fn titles(&self, kinds: &[&str], query: &str) -> Vec<String> {
+        self.answer(&request(kinds, query, 50))
+            .targets()
+            .expect("data")
+            .iter()
+            .map(|target| target.title.clone())
+            .collect()
+    }
+}
+
+#[test]
+fn an_untitled_photo_is_found_by_its_date_and_answered_under_a_date_label() {
+    let world = World::new();
+    world.photo("p1", "", "2026-03-12T10:30:00.000Z");
+    world.photo("p2", "Sunset", "2025-07-01T09:00:00.000Z");
+    assert_eq!(ids(&world.ask(&["photo"], "march 2026")), ["p1"]);
+    assert_eq!(world.titles(&["photo"], "march"), ["Photo · 12 Mar 2026"]);
+    // A titled photo keeps its own title and is not answered under a date.
+    assert_eq!(world.titles(&["photo"], "sunset"), ["Sunset"]);
+    // The per-kind door answers the same label.
+    let each = world
+        .vault
+        .read(|connection| {
+            Ok(SqliteDoor::open(connection, world.vault.words())
+                .and_then(|door| door.query_each(&Principal::Owner, &each(&["photo"], "march", 5)))
+                .expect("answers"))
+        })
+        .expect("reads");
+    assert_eq!(each[0].title, "Photo · 12 Mar 2026");
+}
+
+#[test]
+fn a_match_older_than_the_newest_five_hundred_is_reached_by_paging() {
+    let world = World::new();
+    world.notes(
+        "n",
+        centraid_search::TAIL_ROWS + 20,
+        "Plain",
+        "garden garden",
+    );
+    let found = world.walk(request(&["note"], "garden", 200));
+    assert_eq!(found.len(), centraid_search::TAIL_ROWS + 20, "every match");
+    let mut unique = ids(&found);
+    unique.sort_unstable();
+    unique.dedup();
+    assert_eq!(unique.len(), found.len(), "no row repeats");
+    assert!(found.iter().any(|(_, id)| id == "n0000"));
+}
+
+#[test]
+fn a_trashed_label_stops_finding_its_members_and_a_restored_one_finds_them_again() {
+    let world = World::new();
+    world.photo("ph", "Sunset", "2026-03-12T10:30:00.000Z");
+    let now = world.vault.clock().now_text();
+    world
+        .vault
+        .commit(|tx| {
+            tx.insert_entity("al", Kind::Album, "Zebrafish", &now)?;
+            tx.connection().execute(
+                "INSERT INTO container (id, kind) VALUES ('al', 'album')",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("the album lands");
+    world.run(
+        "edge.add",
+        serde_json::json!({"from": "al", "rel": "contains", "to": "ph"}),
+    );
+    assert_eq!(ids(&world.ask(&["photo"], "zebrafish")), ["ph"]);
+    world.run("entity.trash", serde_json::json!({"id": "al"}));
+    assert!(world.ask(&["photo"], "zebrafish").is_empty());
+    world.run("entity.restore", serde_json::json!({"id": "al"}));
+    assert_eq!(ids(&world.ask(&["photo"], "zebrafish")), ["ph"]);
+}
+
+#[test]
+fn a_phone_number_is_found_without_its_punctuation() {
+    let world = World::new();
+    world.person("p1", "Margaret", None);
+    world
+        .vault
+        .commit(|tx| {
+            tx.connection().execute(
+                "INSERT INTO contact_point (id, person_id, kind, value, normalized, position)
+                 VALUES ('c1', 'p1', 'phone', '+1 (555) 123-4567', '+15551234567', 1)",
+                [],
+            )?;
+            tx.touch("p1", "2026-01-02T00:00:00.000Z")?;
+            Ok(())
+        })
+        .expect("the contact point lands");
+    for query in [
+        "5551234",
+        "555 1234",
+        "555-1234",
+        "15551234567",
+        "(555) 123",
+    ] {
+        assert_eq!(ids(&world.ask(&["person"], query)), ["p1"], "{query}");
+    }
+    assert!(world.ask(&["person"], "5559999").is_empty());
 }
