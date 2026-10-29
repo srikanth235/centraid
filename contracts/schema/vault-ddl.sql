@@ -399,6 +399,9 @@ CREATE TABLE locker_item_field (
   position     INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  -- `row_version` is the recursion guard of this table's `touch_updated_at` trigger (it fires only
+  -- while the version is unchanged, and its own UPDATE moves it). Nothing compares it; it is not an
+  -- entity version (#1146, R-1146-0-2).
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1), key_id TEXT,
   CHECK (kind = 'sealed' OR value_sealed IS NULL),
   CHECK (kind <> 'sealed' OR value_text IS NULL)
@@ -415,6 +418,9 @@ CREATE TABLE locker_item_passkey (
   private_key   TEXT,
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  -- `row_version` is the recursion guard of this table's `touch_updated_at` trigger (it fires only
+  -- while the version is unchanged, and its own UPDATE moves it). Nothing compares it; it is not an
+  -- entity version (#1146, R-1146-0-2).
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1), key_id TEXT
 ) STRICT;
 

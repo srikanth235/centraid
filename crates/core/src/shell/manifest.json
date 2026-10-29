@@ -145,19 +145,19 @@
       "verb": "edit",
       "kind": "chat_thread",
       "inverse": null,
-      "sealed": ["title"],
-      "command": "thread.rename",
+      "sealed": [],
+      "command": "entity.retitle",
       "phrasings": [
         "rename this chat",
         "call this chat something else",
         "change the title of this chat"
       ],
-      "description": "Rename a stored chat through thread.rename.",
+      "description": "Rename a stored chat through entity.retitle.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "thread_id": {
+          "id": {
             "type": "string",
             "minLength": 1
           },
@@ -166,7 +166,7 @@
             "minLength": 1
           }
         },
-        "required": ["thread_id", "title"],
+        "required": ["id", "title"],
         "additionalProperties": false
       }
     },

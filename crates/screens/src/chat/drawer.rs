@@ -269,7 +269,7 @@ impl Chat {
         }
         self.write(
             act::shell::RenameChat {
-                thread_id: id.to_owned(),
+                chat_thread_id: id.to_owned(),
                 title: named,
             },
             ctx,

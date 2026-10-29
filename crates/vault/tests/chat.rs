@@ -176,11 +176,11 @@ fn a_refusal_never_quotes_what_was_said() {
     let w = World::new();
     let saved = w.turn(None, "my secret question", answered("a secret answer"));
     let thread = saved["thread_id"].as_str().unwrap();
-    // A title past its bound fails the schema, whose message quotes the value that failed.
-    let long = format!("a secret name {}", "x".repeat(300));
+    // A settled line past its bound fails the schema, whose message quotes the value that failed.
+    let long = format!("a secret name {}", "x".repeat(20_100));
     let sentence = w.refused(
-        "thread.rename",
-        json!({ "thread_id": thread, "title": long }),
+        "thread.settle_proposal",
+        json!({ "thread_id": thread, "outcome": "applied", "text": long }),
     );
     assert!(!sentence.contains("secret name"), "{sentence}");
     assert!(sentence.contains("‹sealed›"), "{sentence}");
@@ -203,8 +203,8 @@ fn search_finds_a_thread_by_its_title_and_the_members_words_never_the_assistants
     w.turn(Some(thread), "and the electrician", answered("ok"));
     assert!(w.finds("electrician", thread));
     w.ok(
-        "thread.rename",
-        json!({ "thread_id": thread, "title": "  Home   repairs " }),
+        "entity.retitle",
+        json!({ "id": thread, "title": "  Home repairs " }),
     );
     assert!(w.finds("repairs", thread));
     assert_eq!(
@@ -332,9 +332,19 @@ fn a_chat_is_renamed_and_deleted_by_its_own_door_and_leaves_nothing() {
                 "answer": answered("kept") } }),
     );
     let thread = saved["thread_id"].as_str().unwrap();
+    // A chat is retitled like any entity (R-1146-0-3): the one verb, no door of its own.
+    w.ok(
+        "entity.retitle",
+        json!({ "id": thread, "title": "  Kept for later " }),
+    );
+    assert_eq!(
+        w.text("SELECT title FROM entity WHERE id = ?1", &[thread])
+            .as_deref(),
+        Some("Kept for later")
+    );
     assert!(
-        w.refused("entity.retitle", json!({ "id": thread, "title": "x" }))
-            .contains("thread.rename")
+        w.refused("entity.retitle", json!({ "id": thread, "title": "  " }))
+            .contains("needs a name")
     );
     assert!(
         w.refused("entity.trash", json!({ "id": thread }))

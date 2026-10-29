@@ -109,7 +109,6 @@ fn the_registry_carries_the_shared_verbs_and_lockers_and_nothing_else() {
         "measurement.record",
         "thread.save_turn",
         "thread.settle_proposal",
-        "thread.rename",
         "thread.clear",
         "vault.rename",
     ] {

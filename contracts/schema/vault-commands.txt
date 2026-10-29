@@ -92,7 +92,6 @@ task.edit
 task.organize
 task.reopen
 thread.clear
-thread.rename
 thread.save_turn
 thread.settle_proposal
 txn.categorize

@@ -4298,10 +4298,10 @@ pub mod act {
         use super::*;
         pub const APP: &str = "shell";
 
-        /// Rename a stored chat through thread.rename.
+        /// Rename a stored chat through entity.retitle.
         #[derive(Clone, Debug, Default)]
         pub struct RenameChat {
-            pub thread_id: String,
+            pub chat_thread_id: String,
             pub title: String,
         }
         impl RenameChat {
@@ -4309,7 +4309,7 @@ pub mod act {
             pub fn request(self) -> wire::ActRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("thread_id".to_owned(), text(self.thread_id));
+                map.insert("id".to_owned(), text(self.chat_thread_id));
                 map.insert("title".to_owned(), text(self.title));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }

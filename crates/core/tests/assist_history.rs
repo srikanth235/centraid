@@ -601,8 +601,8 @@ fn a_deleted_chat_is_gone_and_cannot_be_reopened() {
 
     let renamed = command(
         &sample,
-        "thread.rename",
-        serde_json::json!({ "thread_id": sent.thread_id, "title": "Due today" }),
+        "entity.retitle",
+        serde_json::json!({ "id": sent.thread_id, "title": "Due today" }),
         "rename-1",
     );
     assert_eq!(renamed.status, centraid_vault::CommandStatus::Executed);

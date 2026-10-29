@@ -9,8 +9,7 @@
 //! What the shared verbs already do is not written again: **deleting a chat is `entity.purge`**
 //! (a chat has no trash, R-CHAT-8, so `Kind::has_trash` is false for it and the purge needs no
 //! trashing first), and the thumbnails nothing rents then are collected in the same commit.
-//! `entity.retitle` refuses a thread, because a title is the first thing the member said and so
-//! is sealed input ([`rename`]); that is the only reason this module has a rename.
+//! A chat is retitled by `entity.retitle` like any entity (R-1146-0-3): this module has no rename.
 //!
 //! ## A proposal has a life, and the vault keeps its end (#1088)
 //!
@@ -163,16 +162,6 @@ const SETTLE_SCHEMA: &str = r#"{
     "thread_id": { "type": "string", "minLength": 1 },
     "outcome": { "enum": ["applied", "dismissed", "stale", "failed"] },
     "text": { "type": "string", "minLength": 1, "maxLength": 20000 }
-  }
-}"#;
-
-const RENAME_SCHEMA: &str = r#"{
-  "type": "object",
-  "required": ["thread_id", "title"],
-  "additionalProperties": false,
-  "properties": {
-    "thread_id": { "type": "string", "minLength": 1 },
-    "title": { "type": "string", "minLength": 1, "maxLength": 200 }
   }
 }"#;
 
@@ -485,7 +474,7 @@ fn save_turn(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
 }
 
 // ---------------------------------------------------------------------------
-// thread.settle_proposal, thread.rename, thread.clear
+// thread.settle_proposal, thread.clear
 // ---------------------------------------------------------------------------
 
 fn pre_settle(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -527,26 +516,6 @@ fn settle_proposal(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
     )?;
     ctx.touch(thread_id)?;
     Ok(json!({ "thread_id": thread_id, "assistant_ordinal": ordinal, "settled": true }))
-}
-
-fn pre_rename(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    if !is_thread(ctx, ctx.required_str("thread_id")?)? {
-        return Ok(gone());
-    }
-    Ok(title_of(ctx.required_str("title")?)
-        .is_empty()
-        .then(|| "A chat needs a name.".to_owned()))
-}
-
-fn rename(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
-    let thread_id = ctx.required_str("thread_id")?;
-    let title = title_of(ctx.required_str("title")?);
-    ctx.connection().execute(
-        "UPDATE entity SET title = ?2 WHERE id = ?1",
-        [thread_id, title.as_str()],
-    )?;
-    ctx.touch(thread_id)?;
-    Ok(json!({ "thread_id": thread_id, "title": title }))
 }
 
 fn clear(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
@@ -618,21 +587,6 @@ pub fn definitions() -> Vec<CommandDefinition> {
             handler: settle_proposal,
             // The settled line is what was said, like the turn it replaces.
             sealed_input: &["text"],
-        },
-        CommandDefinition {
-            name: "thread.rename",
-            owner_schema: "thread",
-            input_schema: RENAME_SCHEMA,
-            idempotency: Idempotency::Idempotent,
-            risk: Risk::Low,
-            confirm: false,
-            preconditions: &[CommandCondition {
-                predicate: "thread_exists_and_title_has_words",
-                check: pre_rename,
-            }],
-            postconditions: &[],
-            handler: rename,
-            sealed_input: &["title"],
         },
         // Permanent, and the member asked for it: every chat, with its messages and thumbnails.
         CommandDefinition {
