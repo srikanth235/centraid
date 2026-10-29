@@ -465,7 +465,8 @@ impl Vault {
             let mut statement = connection.prepare(
                 "SELECT e.id, e.title, d.media_type, e.updated_at
                    FROM document d JOIN entity e ON e.id = d.id
-                  WHERE e.deleted_at IS NULL ORDER BY e.updated_at DESC, e.n DESC LIMIT 500",
+                  WHERE e.kind = 'document' AND e.deleted_at IS NULL
+                  ORDER BY e.updated_at DESC, e.id DESC LIMIT 500",
             )?;
             let rows = statement
                 .query_map([], |row| {

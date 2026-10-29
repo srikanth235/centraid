@@ -31,6 +31,9 @@ CREATE INDEX concept_by_parent ON concept(parent_id) WHERE parent_id IS NOT NULL
 -- index contact_point_preferred on contact_point
 CREATE UNIQUE INDEX contact_point_preferred ON contact_point(person_id, kind) WHERE preferred = 1;
 
+-- index container_by_cover on container
+CREATE INDEX container_by_cover  ON container(cover) WHERE cover IS NOT NULL;
+
 -- index container_by_parent on container
 CREATE INDEX container_by_parent ON container(parent_id) WHERE parent_id IS NOT NULL;
 
@@ -60,6 +63,9 @@ CREATE INDEX entity_by_created ON entity(kind, created_at, id);
 
 -- index entity_by_title on entity
 CREATE INDEX entity_by_title   ON entity(kind, deleted_at, title, id);
+
+-- index entity_by_title_nocase on entity
+CREATE INDEX entity_by_title_nocase ON entity(kind, title COLLATE NOCASE) WHERE deleted_at IS NULL;
 
 -- index entity_by_updated on entity
 CREATE INDEX entity_by_updated ON entity(kind, deleted_at, updated_at, id);
@@ -104,10 +110,13 @@ CREATE INDEX message_attachment_by_entity ON message_attachment(entity_id) WHERE
 CREATE INDEX message_attachment_by_thumb  ON message_attachment(thumb) WHERE thumb IS NOT NULL;
 
 -- index note_by_notebook on note
-CREATE INDEX note_by_notebook ON note(notebook_id) WHERE notebook_id IS NOT NULL;
+CREATE INDEX note_by_notebook ON note(notebook_id, id) WHERE notebook_id IS NOT NULL;
 
 -- index origin_one_statement_per_account on origin
 CREATE UNIQUE INDEX origin_one_statement_per_account ON origin(fills) WHERE system = 'statement';
+
+-- index person_by_avatar on person
+CREATE INDEX person_by_avatar ON person(avatar) WHERE avatar IS NOT NULL;
 
 -- index photo_by_burst on photo
 CREATE INDEX photo_by_burst       ON photo(burst) WHERE burst IS NOT NULL;
@@ -121,11 +130,20 @@ CREATE INDEX photo_by_place       ON photo(place_id) WHERE place_id IS NOT NULL;
 -- index photo_by_taken on photo
 CREATE INDEX photo_by_taken       ON photo(taken_at, id);
 
+-- index revision_by_blob on revision
+CREATE INDEX revision_by_blob ON revision(blob) WHERE blob IS NOT NULL;
+
+-- index rule_by_category on rule
+CREATE INDEX rule_by_category ON rule(category_id);
+
 -- index source_entity on source
 CREATE UNIQUE INDEX source_entity ON source(entity_id) WHERE entity_id IS NOT NULL;
 
 -- index source_key on source
 CREATE UNIQUE INDEX source_key    ON source(origin_id, external_id, ifnull(device_id, ''));
+
+-- index task_by_done on task
+CREATE INDEX task_by_done    ON task(status, done_at, id);
 
 -- index task_by_due on task
 CREATE INDEX task_by_due     ON task(status, due, id);

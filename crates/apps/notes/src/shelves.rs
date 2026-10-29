@@ -24,9 +24,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::{KitError, KitResult};
-use centraid_apps_kit::reads::{PageDoor, read_window};
+use centraid_apps_kit::reads::{JOIN_FAN_OUT, PageDoor, read_pages, read_window};
 use centraid_apps_kit::row::text_of;
-use centraid_apps_kit::statement::PageBindValue;
+use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
 use crate::Denial;
 use crate::journal::read_memo_ids;
@@ -169,16 +169,19 @@ pub fn load_notebooks(door: &dyn PageDoor) -> KitResult<(NotebooksData, Option<D
 fn notebooks_body(door: &dyn PageDoor) -> KitResult<NotebooksData> {
     let books = notebooks(door)?;
     let memos: BTreeSet<String> = read_memo_ids(door)?.into_iter().collect();
-    let book_ids: Vec<String> = books.iter().map(|book| book.notebook_id.clone()).collect();
-    // Which notes name a notebook, then which of those are live shelf notes.
-    let filed = Read {
-        name: "notes.notebooks.filed",
-        table: "note",
-        select: "id, notebook_id",
-        order: ("id", "id"),
-        column: "notebook_id",
-    }
-    .of(door, &book_ids, None)?;
+    // Which notes name a notebook, then which of those are live shelf notes. The walk is the
+    // notebook index in its own order, so it streams: an `IN` over the notebooks would sort.
+    let filed = read_pages(
+        door,
+        &PageQuery::new(
+            "notes.notebooks.filed",
+            "id, notebook_id",
+            "note",
+            PageOrder::asc("notebook_id", "id"),
+        )
+        .filter("notebook_id IS NOT NULL", Vec::new()),
+        JOIN_FAN_OUT,
+    )?;
     let live: BTreeSet<String> = Read {
         name: "notes.notebooks.live",
         table: "entity",

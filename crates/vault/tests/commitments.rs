@@ -131,6 +131,76 @@ fn foreign_keys(connection: &Connection) -> Vec<Fk> {
     all
 }
 
+/// The leading column of every index of `table`, the primary key included: a
+/// lookup of `column = ?` on the child is served by an index only when the column
+/// leads it.
+fn leading_columns(connection: &Connection, table: &str) -> BTreeSet<String> {
+    let mut leads = BTreeSet::new();
+    let indexes: Vec<String> = connection
+        .prepare("SELECT name FROM pragma_index_list(?1)")
+        .and_then(|mut statement| {
+            statement
+                .query_map([table], |row| row.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()
+        })
+        .expect("lists indexes");
+    for index in indexes {
+        let lead: Option<String> = connection
+            .query_row(
+                "SELECT name FROM pragma_index_info(?1) WHERE seqno = 0",
+                [&index],
+                |row| row.get(0),
+            )
+            .ok();
+        leads.extend(lead);
+    }
+    // A rowid-alias primary key has no index of its own.
+    let key: Option<String> = connection
+        .query_row(
+            "SELECT name FROM pragma_table_info(?1) WHERE pk = 1",
+            [table],
+            |row| row.get(0),
+        )
+        .ok();
+    leads.extend(key);
+    leads
+}
+
+/// Tables of one row, where a child-side scan costs nothing.
+const ONE_ROW_TABLES: [(&str, &str); 1] = [(
+    "vault",
+    "the one-row identity record: `self_id` is checked against a table of one row",
+)];
+
+#[test]
+fn every_foreign_key_column_leads_an_index() {
+    // Deleting a parent row (a blob's collection, a purge, emptying the trash)
+    // makes SQLite look up the children that name it, once per deleted row; with
+    // no index leading on the child column each lookup reads the whole child
+    // table. `EXPLAIN QUERY PLAN` never shows that lookup, so the plan sweep in
+    // `crates/core/tests/query_plans.rs` cannot see its absence.
+    let scratch = founded("c4-fk-index");
+    let unindexed: Vec<String> = read(&scratch.vault, |connection| {
+        Ok(foreign_keys(connection)
+            .into_iter()
+            .filter(|fk| !ONE_ROW_TABLES.iter().any(|(table, _)| *table == fk.table))
+            .filter(|fk| {
+                let lead = fk.from.split(',').next().unwrap_or_default().to_owned();
+                !leading_columns(connection, &fk.table).contains(&lead)
+            })
+            .map(|fk| format!("{}({}) -> {}({})", fk.table, fk.from, fk.to_table, fk.to))
+            .collect())
+    });
+    assert!(
+        unindexed.is_empty(),
+        "foreign keys whose child column leads no index (add one to the baseline, \
+         partial `WHERE col IS NOT NULL` when it is mostly NULL): {unindexed:?}"
+    );
+    for (table, reason) in ONE_ROW_TABLES {
+        assert!(!reason.is_empty(), "{table} is exempt without a reason");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // 1. One host per kind
 // ---------------------------------------------------------------------------

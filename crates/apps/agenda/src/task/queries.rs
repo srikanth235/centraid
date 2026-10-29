@@ -382,27 +382,39 @@ fn open_window(door: &dyn PageDoor, window: usize) -> KitResult<(Vec<TaskRow>, b
 
 /// `agenda.task.board.logbook`: the most recently closed, live.
 ///
-/// **`done_at` IS NULLABLE**: a cancelled task has none, so the read is ONE page
-/// and is never continued, and a cancelled task sorts after every done one.
+/// **`done_at` IS NULLABLE**: a cancelled task has none, so a cancelled task sorts
+/// after every done one. That order is read as two pages, never continued: the done
+/// tasks newest first, streamed by `task_by_done (status, done_at, id)`, then the
+/// cancelled ones to fill what the window has left. One statement over both
+/// statuses reads every closed task and sorts them.
 fn logbook(door: &dyn PageDoor) -> KitResult<Vec<TaskRow>> {
-    let closed = door.page(
-        &PageQuery::new(
-            "agenda.task.board.logbook",
-            TASK_COLUMNS,
-            "task",
-            PageOrder::desc("done_at", "id"),
-        )
-        .filter("status IN (?, ?)", CLOSED_STATUSES.map(text).to_vec()),
-        &PageRequest::first(LOGBOOK_ROWS),
-    )?;
+    let mut closed = Vec::new();
+    for status in CLOSED_STATUSES {
+        let room = LOGBOOK_ROWS - closed.len();
+        if room == 0 {
+            break;
+        }
+        closed.extend(
+            door.page(
+                &PageQuery::new(
+                    "agenda.task.board.logbook",
+                    TASK_COLUMNS,
+                    "task",
+                    PageOrder::desc("done_at", "id"),
+                )
+                .filter("status = ?", vec![text(status)]),
+                &PageRequest::first(room),
+            )?
+            .rows,
+        );
+    }
     let entities = live_entities(
         door,
         "agenda.task.board.logbook.entities",
-        &ids_of(&closed.rows, "id"),
+        &ids_of(&closed, "id"),
     )?;
     let by_id = by_text(&entities, "id");
     Ok(closed
-        .rows
         .iter()
         .filter_map(|row| Some(task_of(by_id.get(&text_of(row, "id")?)?, row)))
         .collect())
