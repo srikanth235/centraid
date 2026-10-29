@@ -2,13 +2,12 @@
 //!
 //! The two session steps that move many secrets at once. Both need an open
 //! session — `K` is in it — and both keep the order every reveal keeps: **the
-//! receipt before the value exists**.
+//! command before the value exists**.
 //!
 //! - **Export** is the handoff's plaintext file: "every title, username,
 //!   address, note and password … Anything that reads the file reads your
-//!   secrets." `locker.export` writes the one receipt a mass reveal owes (an
-//!   unseal of every sealed cell, `derivation: export`) BEFORE any cell is
-//!   opened; then every live and archived item's sealed cells and sealed
+//!   secrets." `locker.export` runs the confirmed mass reveal (an unseal of
+//!   every sealed cell) BEFORE any cell is opened, and stamps no item (#1146); then every live and archived item's sealed cells and sealed
 //!   custom fields are opened under `K` and the file is rendered by
 //!   `centraid_apps_locker::transfer` — 1Password's CSV or Centraid's JSON.
 //!   The bytes are answered once, to the shell, which hands them to the OS
@@ -55,8 +54,8 @@ fn loaded<T>(result: centraid_apps_kit::error::KitResult<T>) -> Result<T> {
 /// Every secret, in a file.
 ///
 /// # Errors
-/// A read that failed, or a receipt that did not land — in which case no
-/// cell was opened.
+/// A read that failed, or an export the command plane did not run — in which
+/// case no cell was opened.
 pub(super) fn export(
     vault: &Vault,
     registry: &Registry,
@@ -76,10 +75,11 @@ pub(super) fn export(
         .unwrap_or_default();
     let door = VaultDoor::new(vault);
     let mut sources = loaded(loaders::load_export(&door))?;
-    // THE RECEIPT FIRST (D-1020-L3, L-export): one mass reveal, confirmed and
-    // receipted by the command plane, before any cell is opened. A receipt
-    // that did not land is an error and nothing is opened.
-    let receipt = run(
+    // THE COMMAND FIRST (D-1020-L3, L-export): one mass reveal, confirmed by the
+    // command plane, before any cell is opened. It stamps no item (#1146): a
+    // file is not a use of any one of them. A command that did not run is an
+    // error and nothing is opened.
+    run(
         vault,
         registry,
         owner,
@@ -133,10 +133,6 @@ pub(super) fn export(
         file_name,
         media_type: media_type.to_owned(),
         item_count: u32::try_from(entries.len()).unwrap_or(u32::MAX),
-        receipt_id: receipt["receipt_id"]
-            .as_str()
-            .unwrap_or_default()
-            .to_owned(),
         unopened,
     }));
     Ok(answer)

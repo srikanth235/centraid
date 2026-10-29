@@ -478,7 +478,9 @@ pub(crate) fn apply(
         "edge.add" | "edge.remove" => edge_entity(world, input, command == "edge.add"),
         "locker.add_item" => locker_add(world, cx, input),
         "locker.edit_item" => locker_edit(world, cx, input),
-        "locker.reveal_receipt" => Ok(ok(json!({"receipt_id": cx.id("receipt_id")}))),
+        "locker.mark_used" => Ok(ok(
+            json!({"item_id": text(input, "item_id").unwrap_or_default()}),
+        )),
         "account.add" => account_add(world, cx, input),
         "category.add" => category_add(world, cx, input),
         "account.edit" => account_edit(world, cx, input),

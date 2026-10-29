@@ -388,7 +388,7 @@ fn the_demo_locker_reveals_under_the_demo_words_and_no_others() {
     );
     locker_step(
         &phone,
-        wire::locker_session_request::Step::Unlock(wire::LockerUnlock {}),
+        wire::locker_session_request::Step::Unlock(wire::LockerUnlock::default()),
     );
     for (item, column, typed) in [
         ("demo-locker-bank", "password", "Granite-Lake-47-Pine"),
@@ -431,7 +431,7 @@ fn the_demo_locker_reveals_under_the_demo_words_and_no_others() {
     );
     locker_step(
         &stranger,
-        wire::locker_session_request::Step::Unlock(wire::LockerUnlock {}),
+        wire::locker_session_request::Step::Unlock(wire::LockerUnlock::default()),
     );
     let refused = reveal(&stranger, "demo-locker-bank", "password");
     assert!(refused.revealed.is_none());

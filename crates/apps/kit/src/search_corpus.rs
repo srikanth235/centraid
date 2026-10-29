@@ -324,8 +324,8 @@ pub struct SearchCorpusShape {
     pub occurrences_per_series: usize,
     /// Revisions of notes (older bodies), spread over the notes.
     pub revisions: usize,
-    /// Locker access receipts.
-    pub receipts: usize,
+    /// Locker items carrying a `last_used_at` stamp.
+    pub used: usize,
     /// Days of health measurements, six metrics each, from the first day.
     pub measurement_days: usize,
     /// Containers that title what they hold.
@@ -343,7 +343,7 @@ pub struct SearchCorpusShape {
 /// minute: about 47,000 entities, about two million words of text, and the
 /// year-3 rows of the tables search does not read (workouts, health
 /// measurements, repeating-event exceptions, note revisions, chat messages and
-/// Locker receipts), so a plan taken on it is a plan over every table a screen reads.
+/// Locker use stamps), so a plan taken on it is a plan over every table a screen reads.
 ///
 /// The ratios are a third-year phone's (photographs and transactions are the
 /// most numerous things, documents are the largest); the absolute counts are
@@ -371,7 +371,7 @@ pub const YEAR3_SEARCH: SearchCorpusShape = SearchCorpusShape {
     recurring_events: 60,
     occurrences_per_series: 5,
     revisions: 3_000,
-    receipts: 1_500,
+    used: 400,
     measurement_days: 1_095,
     notebooks: 30,
     folders: 60,
@@ -412,7 +412,7 @@ pub struct SearchCorpusCounts {
     pub messages: usize,
     pub occurrences: usize,
     pub revisions: usize,
-    pub receipts: usize,
+    pub used: usize,
     pub measurements: usize,
     /// Words of text written in notes, documents and captions.
     pub words_written: usize,
@@ -552,7 +552,7 @@ pub fn year3_search_corpus(
         messages: 0,
         occurrences: 0,
         revisions: 0,
-        receipts: 0,
+        used: 0,
         measurements: 0,
         words_written: 0,
         distinct_words: 0,
@@ -1079,7 +1079,7 @@ pub fn year3_search_corpus(
     }
 
     // The tables nothing searches: health's days, a note's older bodies, and
-    // Locker's receipts. Written after the timeline, with the time they were made.
+    // Locker's use stamps. Written after the timeline, with the time they were made.
     let me: String = connection
         .query_row("SELECT self_id FROM vault", [], |row| row.get(0))
         .map_err(door)?;
@@ -1129,19 +1129,14 @@ pub fn year3_search_corpus(
             .map_err(door)?;
         counts.revisions += 1;
     }
-    for index in 0..shape.receipts {
+    for index in 0..shape.used.min(shape.locker_items) {
         connection
             .execute(
-                "INSERT INTO receipt (at, item_id, act, journal_seq) VALUES (?1, ?2, ?3, ?4)",
-                params![
-                    instant(index, shape.receipts),
-                    id("locker", writer.random.upto(shape.locker_items.max(1))),
-                    ["reveal", "unlock", "copy"][index % 3],
-                    index as i64
-                ],
+                "UPDATE locker_item SET last_used_at = ?1 WHERE id = ?2",
+                params![instant(index, shape.used), id("locker", index)],
             )
             .map_err(door)?;
-        counts.receipts += 1;
+        counts.used += 1;
     }
 
     counts.entities = connection

@@ -132,7 +132,7 @@ impl Scratch {
     }
 
     fn unlock(&self) -> wire::LockerSessionResponse {
-        self.session(Step::Unlock(wire::LockerUnlock {}))
+        self.session(Step::Unlock(wire::LockerUnlock::default()))
     }
 
     fn relock(&self) -> wire::LockerSessionResponse {
@@ -570,7 +570,9 @@ fn review_names_what_metadata_can_show() {
 fn a_secret_is_sealed_only_while_the_session_is_open() {
     let scratch = Scratch::founded();
     assert_eq!(
-        scratch.session(Step::State(wire::LockerStateAsk {})).state,
+        scratch
+            .session(Step::State(wire::LockerStateAsk::default()))
+            .state,
         wire::LockerSessionState::Locked as i32,
         "a phone's Locker boots locked"
     );
@@ -590,7 +592,7 @@ fn a_secret_is_sealed_only_while_the_session_is_open() {
     let unlocked = scratch.unlock();
     assert_eq!(unlocked.state, wire::LockerSessionState::Unlocked as i32);
     assert!(unlocked.remaining_ms > 0);
-    assert!(!unlocked.receipt_id.is_empty(), "the unlock is receipted");
+    assert_eq!(unlocked.failed_unlocks, 0, "nothing was refused before it");
     scratch.run(
         "locker.add_item",
         json!({ "item_id": "item-1", "type": "login", "title": "Bank", "password": PASSWORD }),
@@ -654,7 +656,7 @@ fn a_core_without_the_seed_cannot_open_locker() {
     let scratch = Scratch::founded_with(None);
     let refused = scratch.handle.call(&wire::Request {
         kind: Some(wire::request::Kind::Locker(wire::LockerSessionRequest {
-            step: Some(Step::Unlock(wire::LockerUnlock {})),
+            step: Some(Step::Unlock(wire::LockerUnlock::default())),
         })),
     });
     assert!(
@@ -707,7 +709,7 @@ fn a_restore_from_the_same_words_reopens_sealed_secrets() {
 }
 
 #[test]
-fn a_reveal_is_receipted_opens_the_cell_and_is_refused_once_relocked() {
+fn a_reveal_stamps_the_item_opens_the_cell_and_is_refused_once_relocked() {
     let scratch = stocked();
     let locked = scratch.reveal("item-bank", "password");
     assert_eq!(
@@ -717,10 +719,16 @@ fn a_reveal_is_receipted_opens_the_cell_and_is_refused_once_relocked() {
     );
     assert!(locked.revealed.is_none());
     scratch.unlock();
+    let before = scratch.item("item-bank").expect("bank");
+    assert_eq!(before.last_used_local_day, "", "nobody has opened it yet");
     let answer = scratch.reveal("item-bank", "password");
     let revealed = answer.revealed.expect("it revealed");
     assert_eq!(revealed.value, PASSWORD);
-    assert!(!revealed.receipt_id.is_empty());
+    // THE STAMP LANDED BEFORE THE PLAINTEXT (D-1020-L3), and a use is not an
+    // edit: the item's own changed day stays where it was (#1146).
+    let after = scratch.item("item-bank").expect("bank");
+    assert_eq!(after.last_used_local_day, "2099-06-30");
+    assert_eq!(after.updated_local_day, before.updated_local_day);
     assert_eq!(revealed.expires_in_ms, 30_000);
     let card = scratch
         .reveal("item-card", "card_number")
@@ -867,11 +875,11 @@ fn a_flagged_item_is_listed_for_review_until_its_password_changes() {
 
 /// A ONE-TIME CODE ON THE PHONE (Q-1047-16): the seed a member pasted — an
 /// `otpauth://` link here — is read once and sealed as base32; a code is
-/// refused while locked, receipted through `locker.totp_code` before it
+/// refused while locked, stamped through `locker.totp_code` before it
 /// exists, and is the RFC 6238 code for the vault clock's instant; the seed
 /// itself never comes back, not even to a reveal that names its cell.
 #[test]
-fn a_one_time_code_is_receipted_first_and_is_rfc_6238s_code_for_now() {
+fn a_one_time_code_stamps_first_and_is_rfc_6238s_code_for_now() {
     let scratch = Scratch::founded();
     scratch.unlock();
     // The RFC 6238 Appendix B seed, as the QR code a site shows would carry it.
@@ -909,13 +917,16 @@ fn a_one_time_code_is_receipted_first_and_is_rfc_6238s_code_for_now() {
     assert_eq!(code.period_seconds, 30);
     // 02:00:00Z is the first second of a step.
     assert_eq!(code.remaining_seconds, 30);
-    assert!(!code.receipt_id.is_empty(), "the code is receipted");
+    assert_eq!(
+        scratch
+            .item("item-otp")
+            .expect("the item")
+            .last_used_local_day,
+        "2099-06-30",
+        "a code is a use of the item it came from"
+    );
     let again = scratch.totp("item-otp").totp.expect("a code again");
     assert_eq!(again.code, code.code, "the same step, the same code");
-    assert_ne!(
-        again.receipt_id, code.receipt_id,
-        "every code shown is its own receipt"
-    );
     // THE SEED IS NEVER ANSWERED — not in a code, and not by a reveal.
     assert!(!contains(&bytes, "GEZDGNBV"));
     let asked = scratch.reveal("item-otp", "otp_seed");
@@ -940,9 +951,9 @@ fn a_one_time_code_is_receipted_first_and_is_rfc_6238s_code_for_now() {
     let locked = scratch.totp("item-otp");
     assert_eq!(locked.refusal, wire::LockerRevealRefusal::Locked as i32);
     assert!(locked.totp.is_none());
-    // BEFORE THE SESSION AND BEFORE ANY RECEIPT: a locked session and an item
+    // BEFORE THE SESSION AND BEFORE ANY STAMP: a locked session and an item
     // that does not exist answer the same refusal, so the ask never reached
-    // the session (which a receipt needs) or the cell.
+    // the session (which a stamp needs) or the cell.
     assert_eq!(
         scratch.reveal("item-otp", "otp_seed").refusal,
         wire::LockerRevealRefusal::SeedNotShown as i32
@@ -954,23 +965,12 @@ fn a_one_time_code_is_receipted_first_and_is_rfc_6238s_code_for_now() {
 }
 
 // ---------------------------------------------------------------------------
-// #1047 T2: custom sealed fields, passkeys, access history, import, export.
+// #1047 T2: custom sealed fields, passkeys, import, export. #1146: use and refusals.
 // ---------------------------------------------------------------------------
 
 impl Scratch {
     fn step_reveal(&self, reveal: wire::LockerReveal) -> wire::LockerSessionResponse {
         self.session(Step::Reveal(reveal))
-    }
-
-    fn access(&self, item_id: &str) -> wire::LockerAccess {
-        match self.ask(Q::LockerAccess(wire::LockerAccessRequest {
-            item_id: item_id.to_owned(),
-            limit: 0,
-            tz: TZ.to_owned(),
-        })) {
-            Answer::LockerAccess(access) => access,
-            other => panic!("access answered as {other:?}"),
-        }
     }
 
     fn export(&self, format: wire::LockerExportFormat) -> wire::LockerSessionResponse {
@@ -987,10 +987,12 @@ impl Scratch {
         }))
     }
 
-    /// The receipts this item's access history holds — the query's own
-    /// answer, so a test counts what a member would see.
-    fn receipts(&self, item_id: &str) -> usize {
-        self.access(item_id).entries.len()
+    /// The day this item was last used, as a member would read it ("" when
+    /// never) — the query's own answer.
+    fn last_used(&self, item_id: &str) -> String {
+        self.item(item_id)
+            .map(|item| item.last_used_local_day)
+            .unwrap_or_default()
     }
 
     /// A passkey whose key material is real ciphertext under this vault's
@@ -1026,8 +1028,8 @@ impl Scratch {
 }
 
 /// A CUSTOM SEALED FIELD IS SEALED BY THE CORE AGAINST ITS OWN ID, REVEALED
-/// THROUGH THE ITEM'S DOOR, AND RECEIPTED AS THE FIELD — never as its label or
-/// value (#1047 T2).
+/// THROUGH THE ITEM'S DOOR, AND STAMPED AS THE ITEM'S USE — the stamp names no
+/// field, label or value (#1047 T2, #1146).
 #[test]
 fn a_custom_sealed_field_is_sealed_here_and_reveals_through_the_items_door() {
     let scratch = stocked();
@@ -1138,7 +1140,7 @@ fn a_custom_sealed_field_is_sealed_here_and_reveals_through_the_items_door() {
 }
 
 /// A PASSKEY'S METADATA IS ON THE ITEM AND ITS KEY IS NEVER REVEALED — not
-/// while locked, not while open, and with no receipt (#1047 T2, L-passkey).
+/// while locked, not while open, and with no stamp (#1047 T2, L-passkey).
 #[test]
 fn a_passkeys_metadata_reads_and_its_key_is_never_revealed() {
     let scratch = stocked();
@@ -1156,7 +1158,7 @@ fn a_passkeys_metadata_reads_and_its_key_is_never_revealed() {
     assert_eq!(passkey.created_local_day, "2099-06-30");
     assert!(passkey.has_private_key);
 
-    let before = scratch.receipts("item-bank");
+    let before = scratch.last_used("item-bank");
     let refused = scratch.reveal("item-bank", "private_key");
     assert_eq!(
         refused.refusal,
@@ -1170,9 +1172,9 @@ fn a_passkeys_metadata_reads_and_its_key_is_never_revealed() {
         "refused before the session is consulted"
     );
     assert_eq!(
-        scratch.receipts("item-bank"),
+        scratch.last_used("item-bank"),
         before,
-        "a refused key reveal wrote a receipt"
+        "a refused key reveal stamped the item"
     );
 
     // RENAMED AND REMOVED: the placeholder keeps the key.
@@ -1193,246 +1195,75 @@ fn a_passkeys_metadata_reads_and_its_key_is_never_revealed() {
     assert!(scratch.item("item-bank").expect("bank").passkey.is_none());
 }
 
-/// ONE ITEM'S ACCESS HISTORY IS THE RECEIPTS ALREADY WRITTEN (#1047 T2):
-/// reveals, copies and codes, newest first, metadata only, this item only.
+/// A REFUSED UNLOCK IS COUNTED BY THE CORE, THOUGH IT NEVER SAW THE PROMPT
+/// (#1146, R-1146-1A-2). The shell reports the refusal; every session answer
+/// then carries the count and the wall-clock time of the latest, an unlock
+/// answers the figures it just cleared, and nothing is left to say after it.
 #[test]
-fn an_items_access_history_is_its_receipts_as_metadata() {
-    let scratch = stocked();
-    scratch.unlock();
-    scratch.run(
-        "locker.edit_item",
-        json!({ "item_id": "item-bank", "username": "maya@example.com", "password": "«sealed»",
-                "url": "https://bank.example.com", "otp_seed": "JBSWY3DPEHPK3PXP" }),
-    );
-    scratch.reveal("item-bank", "password");
-    scratch.step_reveal(wire::LockerReveal {
-        item_id: "item-bank".to_owned(),
-        column: "password".to_owned(),
-        copy: true,
-        ..wire::LockerReveal::default()
-    });
-    scratch.session(Step::Totp(wire::LockerTotpAsk {
-        item_id: "item-bank".to_owned(),
-        copy: false,
-    }));
-    scratch.reveal("item-card", "card_number");
+fn a_refused_unlock_is_counted_told_by_every_answer_and_cleared_by_the_next_unlock() {
+    let scratch = Scratch::founded();
+    let state = || scratch.session(Step::State(wire::LockerStateAsk { tz: TZ.to_owned() }));
+    let refuse = || {
+        scratch.session(Step::UnlockFailed(wire::LockerUnlockFailed {
+            tz: TZ.to_owned(),
+        }))
+    };
+    assert_eq!(state().failed_unlocks, 0);
 
-    let access = scratch.access("item-bank");
+    let first = refuse();
+    assert_eq!(first.failed_unlocks, 1);
     assert_eq!(
-        access.entries.len(),
-        3,
-        "the bank's three, not the card's or the unlock"
+        first.state,
+        wire::LockerSessionState::Locked as i32,
+        "a refusal opens nothing"
     );
-    let kinds: Vec<(i32, bool)> = access
-        .entries
-        .iter()
-        .map(|entry| (entry.kind, entry.copied))
-        .collect();
-    assert!(kinds.contains(&(wire::LockerAccessKind::Code as i32, false)));
-    assert!(kinds.contains(&(wire::LockerAccessKind::Reveal as i32, true)));
-    assert!(kinds.contains(&(wire::LockerAccessKind::Reveal as i32, false)));
-    for entry in &access.entries {
-        assert!(entry.allowed);
-        assert_eq!(entry.local_day, "2099-06-30");
-        assert_eq!(entry.local_time, "22:00");
-    }
-    assert!(!access.truncated);
-    let bytes = scratch.ask_bytes(Q::LockerAccess(wire::LockerAccessRequest {
-        item_id: "item-bank".to_owned(),
-        limit: 0,
-        tz: TZ.to_owned(),
-    }));
-    assert!(!contains(&bytes, PASSWORD), "a receipt carried the value");
+    let second = refuse();
+    assert_eq!(second.failed_unlocks, 2);
+    // 02:00Z on the 1st is the evening of the 30th in New York, and the answer
+    // is the asked zone's wall clock, never a raw instant.
+    assert_eq!(second.failed_unlock_local_day, "2099-06-30");
+    assert_eq!(second.failed_unlock_local_time, "22:00");
+
+    // Any later answer says it too, so a locked wall can.
+    let asked = state();
+    assert_eq!(
+        (asked.failed_unlocks, asked.failed_unlock_local_day.as_str()),
+        (2, "2099-06-30")
+    );
+    scratch.reveal("item-nobody", "password");
+    assert_eq!(state().failed_unlocks, 2);
+
+    // THE UNLOCK THE PHONE ALLOWS answers what it cleared, then clears it.
+    let opened = scratch.session(Step::Unlock(wire::LockerUnlock { tz: TZ.to_owned() }));
+    assert_eq!(opened.state, wire::LockerSessionState::Unlocked as i32);
+    assert_eq!(opened.failed_unlocks, 2);
+    assert_eq!(opened.failed_unlock_local_time, "22:00");
+    let after = state();
+    assert_eq!(after.failed_unlocks, 0);
+    assert_eq!(after.failed_unlock_local_day, "");
 }
 
-/// THE WHOLE LOCKER'S ACCESS HISTORY (#1047, Q-1047-21): the same arm with no
-/// item. Every item's reveals, copies and codes, and the two receipts no item
-/// page shows — an unlock and an export — each item and custom field named by
-/// what it is called now, a trashed item by its title and a purged one by
-/// nothing, and not one value anywhere in the bytes.
-///
-/// It is also the answer to L1 (v1-handoffs): the phone's page door has no
-/// entity catalog to widen, so Locker's `receipt` is readable here today, and
-/// what keeps another surface's receipts out is the statement's own
-/// `object_type` wall, which this test counts exactly.
+/// A PLAINTEXT EXPORT STAMPS NO ITEM and leaves no log (#1146): it is not a use
+/// of any one of them, and nothing is written for the file beyond the command.
 #[test]
-fn the_whole_lockers_access_history_names_every_receipt_and_carries_no_value() {
+fn an_export_stamps_no_item() {
     let scratch = stocked();
     scratch.unlock();
-    scratch.run(
-        "locker.edit_item",
-        json!({ "item_id": "item-bank", "username": "maya@example.com", "password": "«sealed»",
-                "url": "https://bank.example.com", "otp_seed": "JBSWY3DPEHPK3PXP" }),
-    );
-    scratch.run(
-        "locker.set_field",
-        json!({ "item_id": "item-bank", "field_id": "field-rc", "section": "Recovery",
-                "label": "Recovery code", "kind": "sealed", "value": "rc-4411" }),
-    );
-    // Items that go: one is trashed (its title is still its title), one is
-    // purged (a purge takes the row and leaves the receipt).
-    for (id, title) in [("item-bin", "In the bin"), ("item-temp", "Temporary")] {
-        scratch.run(
-            "locker.add_item",
-            json!({ "item_id": id, "type": "password", "title": title, "password": PASSWORD }),
-        );
-    }
-
-    scratch.reveal("item-bank", "password");
-    scratch.step_reveal(wire::LockerReveal {
-        item_id: "item-bank".to_owned(),
-        column: "password".to_owned(),
-        copy: true,
-        ..wire::LockerReveal::default()
-    });
-    scratch.step_reveal(wire::LockerReveal {
-        item_id: "item-bank".to_owned(),
-        column: "value_sealed".to_owned(),
-        field_id: "field-rc".to_owned(),
-        copy: true,
-    });
-    scratch.totp("item-bank");
-    scratch.reveal("item-card", "card_number");
-    scratch.reveal("item-bin", "password");
-    scratch.reveal("item-temp", "password");
-    scratch.run("entity.trash", json!({ "id": "item-bin" }));
-    scratch.run("entity.trash", json!({ "id": "item-temp" }));
-    scratch.run("entity.purge", json!({ "id": "item-temp" }));
-    assert!(
-        scratch
-            .export(wire::LockerExportFormat::Csv)
-            .exported
-            .is_some(),
-        "the export ran"
-    );
-
-    let access = scratch.access("");
-    let count = |kind: wire::LockerAccessKind| {
-        access
-            .entries
-            .iter()
-            .filter(|entry| entry.kind == kind as i32)
-            .count()
-    };
-    // THE STOCKING'S UNLOCK AND THIS TEST'S; the export; the code; and six
-    // reveals — the bank's password shown and copied, its field copied, the
-    // card's number and the two items that went. Nothing else is in it, and
-    // every command the test ran wrote receipts of its own that are not.
-    assert_eq!(count(wire::LockerAccessKind::Unlock), 2);
-    assert_eq!(count(wire::LockerAccessKind::Export), 1);
-    assert_eq!(count(wire::LockerAccessKind::Code), 1);
-    assert_eq!(count(wire::LockerAccessKind::Reveal), 6);
-    assert_eq!(access.entries.len(), 10, "{:#?}", access.entries);
-    assert!(!access.truncated);
-    assert!(access.entries.iter().all(|entry| entry.allowed));
-    for entry in &access.entries {
-        assert_eq!(entry.local_day, "2099-06-30");
-        assert_eq!(entry.local_time, "22:00");
-    }
-
-    // AN UNLOCK AND AN EXPORT NAME NO ITEM.
-    for entry in access.entries.iter().filter(|entry| {
-        entry.kind == wire::LockerAccessKind::Unlock as i32
-            || entry.kind == wire::LockerAccessKind::Export as i32
-    }) {
-        assert!(entry.item_id.is_empty(), "{entry:?}");
-        assert!(entry.item_title.is_empty(), "{entry:?}");
-    }
-
-    // EVERY OTHER RECEIPT NAMES ITS ITEM BY WHAT IT IS CALLED NOW.
-    let titled = |item_id: &str| -> Vec<&wire::LockerAccessEntry> {
-        access
-            .entries
-            .iter()
-            .filter(|entry| entry.item_id == item_id)
-            .collect()
-    };
-    let bank = titled("item-bank");
-    assert_eq!(bank.len(), 4, "the password twice, the field, the code");
-    assert!(bank.iter().all(|entry| entry.item_title == "Bank"));
-    assert_eq!(titled("item-card")[0].item_title, "Visa");
-    // A TRASHED ITEM KEEPS ITS TITLE; A PURGED ONE HAS NONE, and its receipt
-    // stays (a purge takes the row, not the record of who opened it).
-    assert_eq!(titled("item-bin")[0].item_title, "In the bin");
-    let purged = titled("item-temp");
-    assert_eq!(purged.len(), 1);
-    assert!(purged[0].item_title.is_empty());
-    // A CUSTOM FIELD IS NAMED BY ITS LABEL, and only the field's own receipt
-    // carries one; its copy is a copy.
-    let field: Vec<_> = bank
-        .iter()
-        .filter(|entry| !entry.field_id.is_empty())
-        .collect();
-    assert_eq!(field.len(), 1);
-    assert_eq!(field[0].field_id, "field-rc");
-    assert_eq!(field[0].field_label, "Recovery code");
-    assert!(field[0].copied);
-    assert!(
-        access
-            .entries
-            .iter()
-            .filter(|entry| entry.field_id.is_empty())
-            .all(|entry| entry.field_label.is_empty())
-    );
-
-    // THE ITEM PAGE'S READ IS UNCHANGED: this item's four, no unlock and no
-    // export, each carrying the item's id and — as before — no title, which
-    // the page already holds.
-    let page = scratch.access("item-bank");
-    assert_eq!(page.entries.len(), 4);
-    assert!(
-        page.entries
-            .iter()
-            .all(|entry| entry.item_id == "item-bank")
-    );
-    assert!(page.entries.iter().all(|entry| entry.item_title.is_empty()));
-
-    // METADATA ONLY: not a password, a code seed, a card number, a field's
-    // value or the file's rows is in the whole-Locker answer.
-    let bytes = scratch.ask_bytes(Q::LockerAccess(wire::LockerAccessRequest {
-        item_id: String::new(),
-        limit: 0,
-        tz: TZ.to_owned(),
-    }));
-    for secret in [PASSWORD, "JBSWY3DPEHPK3PXP", "4111111111111111", "rc-4411"] {
-        assert!(!contains(&bytes, secret), "a receipt carried {secret}");
+    let file = scratch
+        .export(wire::LockerExportFormat::Csv)
+        .exported
+        .expect("a file");
+    assert!(file.item_count > 0);
+    for item in ["item-bank", "item-card", "item-wifi"] {
+        assert_eq!(scratch.last_used(item), "", "{item} was stamped by a file");
     }
 }
 
-/// THE WHOLE-LOCKER WINDOW IS THE REQUEST'S, CLAMPED, AND SAYS WHEN IT FILLED:
-/// 20 at the least, so a caller that asks for fewer still gets a history.
-#[test]
-fn the_whole_lockers_access_window_is_clamped_and_says_when_it_filled() {
-    let scratch = stocked();
-    scratch.unlock();
-    for _ in 0..25 {
-        scratch.reveal("item-bank", "password");
-    }
-    let ask = |limit: u32| match scratch.ask(Q::LockerAccess(wire::LockerAccessRequest {
-        item_id: String::new(),
-        limit,
-        tz: TZ.to_owned(),
-    })) {
-        Answer::LockerAccess(access) => access,
-        other => panic!("access answered as {other:?}"),
-    };
-    // Five asked, twenty given: the floor.
-    let small = ask(5);
-    assert_eq!(small.window, 20);
-    assert_eq!(small.entries.len(), 20);
-    assert!(small.truncated, "27 receipts do not fit a window of 20");
-    // Wider, nothing is cut: 25 reveals and the two unlocks.
-    let wide = ask(200);
-    assert_eq!(wide.window, 200);
-    assert_eq!(wide.entries.len(), 27);
-    assert!(!wide.truncated);
-}
-
-/// EXPORT: the receipt first, then every live and archived secret in the
+/// EXPORT: every live and archived secret in the
 /// clear, in 1Password's CSV or Centraid's JSON — never a passkey's key and
 /// never the trash; refused while locked (#1047 T2).
 #[test]
-fn an_export_is_receipted_first_and_carries_every_secret_but_a_passkeys_key() {
+fn an_export_carries_every_secret_but_a_passkeys_key() {
     let scratch = stocked();
     assert_eq!(
         scratch.export(wire::LockerExportFormat::Csv).refusal,
@@ -1449,8 +1280,6 @@ fn an_export_is_receipted_first_and_carries_every_secret_but_a_passkeys_key() {
         .export(wire::LockerExportFormat::Csv)
         .exported
         .expect("a file");
-    // THE ONE MASS-REVEAL RECEIPT, written before any cell opened.
-    assert!(!csv.receipt_id.is_empty(), "the export was not receipted");
     assert_eq!(csv.file_name, "locker-2099-06-30.csv");
     assert_eq!(csv.media_type, "text/csv");
     assert_eq!(csv.item_count, 6, "live and archived, not the trash");

@@ -1653,7 +1653,7 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // MONEY'S PLAN IS BOUNDED: one file of at most 8 MiB and 20,000
             // rows read once, and the same declared fan-outs an app query has.
             | K::Money(_)
-            // A LOCKER STEP IS BOUNDED: one key load, one receipt, one cell.
+            // A LOCKER STEP IS BOUNDED: one key load, one stamp, one cell.
             | K::Locker(_)
             // A PHRASE STEP IS 24 WORDS AND ONE PBKDF2 (#1047 E1).
             | K::Phrase(_)

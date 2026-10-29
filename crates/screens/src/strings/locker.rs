@@ -2,22 +2,6 @@
 //! A sentence with a hole (`{field}`, `{n}`) is filled with `strings::fill`.
 
 catalog! {
-    plain access_all_lede = ("Every unlock, reveal, copy and export, newest first.", "Every unlock, reveal, copy and export, newest first.");
-    plain access_all_none = ("Nothing opened yet.", "Nothing opened yet.");
-    plain access_code_copied = ("Code copied", "Code copied");
-    plain access_code_shown = ("Code shown", "Code shown");
-    plain access_copied = ("{field} copied", "{field} copied");
-    plain access_exported = ("Every item exported", "Every item exported");
-    plain access_field_gone = ("A removed field", "A removed field");
-    plain access_head = ("Access history", "Access history");
-    plain access_item_gone = ("A removed item", "A removed item");
-    plain access_none = ("Nothing revealed yet.", "Nothing revealed yet.");
-    plain access_note = ("Each reveal and copy is logged, never the value.", "Each reveal and copy is logged, never the value.");
-    plain access_of_item = ("{act} · {item}", "{act} · {item}");
-    plain access_refused = ("Refused", "Refused");
-    plain access_revealed = ("{field} revealed", "{field} revealed");
-    plain access_unlocked = ("Locker unlocked", "Locker unlocked");
-    plain access_window = ("Latest {n} shown.", "Latest {n} shown.");
     plain address = ("Address", "Address");
     plain addresses_head = ("Addresses", "Addresses");
     plain add_item = ("New item", "New item");
@@ -192,8 +176,8 @@ catalog! {
     plain keeps_backup_detail = ("Stored encrypted on your backup device.", "Stored encrypted on your backup device.");
     plain keeps_list = ("The list", "The list");
     plain keeps_list_detail = ("Titles, usernames, addresses and tags. Searchable.", "Titles, usernames, addresses and tags. Searchable.");
-    plain keeps_receipts = ("Access log", "Access log");
-    plain keeps_receipts_detail = ("Each unlock and reveal, with the time", "Each unlock and reveal, with the time");
+    plain keeps_use = ("Use", "Use");
+    plain keeps_use_detail = ("When each item was last opened, and the unlocks that failed. Nothing else is logged.", "When each item was last opened, and the unlocks that failed. Nothing else is logged.");
     plain keeps_secret = ("Secrets", "Secrets");
     plain keeps_secret_detail = ("Encrypted. Never searched.", "Encrypted. Never searched.");
     plain kept_sealed = ("Stored. Type to replace it.", "Stored. Type to replace it.");
@@ -202,6 +186,9 @@ catalog! {
     plain kind_pin = ("PIN", "PIN");
     plain length = ("Length · {n}", "Length · {n}");
     plain locked_sentence = ("Locker is locked.", "Locker is locked.");
+    plain last_used = ("Last used", "Last used");
+    plain last_used_never = ("Never", "Never");
+    counted lock_failed_unlocks = ("{n} failed unlock · last {when}", "{n} failed unlocks · last {when}");
     plain lock_body_lead = ("Items stay hidden until you unlock with", "Items stay hidden until you unlock with");
     plain lock_body_tail = (".", ".");
     plain lock_did_not_open = ("Locker did not open on this phone.", "Locker did not open on this phone.");
@@ -230,8 +217,6 @@ catalog! {
     plain method_fingerprint = ("your fingerprint", "your fingerprint");
     plain method_optic = ("your eyes", "your eyes");
     plain method_passcode = ("your passcode", "your passcode");
-    plain more_access = ("Access history", "Access history");
-    plain more_access_meta = ("Every unlock, reveal and copy", "Every unlock, reveal and copy");
     plain more_export = ("Export", "Export");
     plain more_export_meta = ("Unencrypted file", "Unencrypted file");
     plain more_facts = ("What Locker keeps", "What Locker keeps");

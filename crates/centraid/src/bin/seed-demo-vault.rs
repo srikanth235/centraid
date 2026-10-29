@@ -596,7 +596,7 @@ fn seed_locker(handle: &centraid_core::Handle) -> Vec<String> {
         })
     };
     let mut refused = Vec::new();
-    if let Err(error) = session(Step::Unlock(wire::LockerUnlock {})) {
+    if let Err(error) = session(Step::Unlock(wire::LockerUnlock::default())) {
         eprintln!("seed-demo-vault: locker unlock refused: {error}");
         refused.push(format!("locker.unlock: {error}"));
         return refused;

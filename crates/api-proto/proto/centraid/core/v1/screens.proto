@@ -208,6 +208,9 @@ message InstanceEvent {
 }
 
 message ScreenEvent {
+  // 404 was `locker.access`'s event, gone with the Locker's access history (#1146).
+  reserved 404;
+  reserved "locker_access";
   oneof kind {
     // The screen came into view. The first one loads.
     Appeared appeared = 1;
@@ -264,7 +267,6 @@ message ScreenEvent {
     LockerHomeEvent locker_home = 401;
     LockerItemEvent locker_item = 402;
     LockerEditorEvent locker_editor = 403;
-    LockerAccessEvent locker_access = 404;
     LockerExportEvent locker_export = 405;
     LockerImportEvent locker_import = 406;
     // ---- money (500-599) ----
@@ -357,6 +359,9 @@ message DataChanged {
 message ViewState {
   uint64 instance = 1;
   uint64 revision = 2;
+  // 403 was `locker.access`'s state, gone with the Locker's access history (#1146).
+  reserved 403;
+  reserved "locker_access";
   oneof kind {
     CounterView counter = 10;
     // ---- words (1300-1399, lane H2) ----
@@ -384,7 +389,6 @@ message ViewState {
     LockerHomeState locker_home = 400;
     LockerItemState locker_item = 401;
     LockerEditorState locker_editor = 402;
-    LockerAccessState locker_access = 403;
     LockerExportState locker_export = 404;
     LockerImportState locker_import = 405;
     LockerLockState locker_lock = 406;

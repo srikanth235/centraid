@@ -86,7 +86,6 @@ fn covers(query: &Q) -> &'static str {
         Q::LockerItem(_) => "locker.item",
         Q::LockerSearch(_) => "locker.search",
         Q::LockerReview(_) => "locker.review",
-        Q::LockerAccess(_) => "locker.access",
         Q::ChatThreads(_) => "chat.threads",
         Q::ChatThread(_) => "chat.thread",
         Q::ChatCard(_) => "chat.card",
@@ -223,16 +222,6 @@ fn requests(word: &str) -> Vec<Q> {
             tz: tz(),
         }),
         Q::LockerReview(wire::LockerReviewRequest { tz: tz() }),
-        Q::LockerAccess(wire::LockerAccessRequest {
-            item_id: some("locker"),
-            limit: 50,
-            tz: tz(),
-        }),
-        Q::LockerAccess(wire::LockerAccessRequest {
-            limit: 50,
-            tz: tz(),
-            ..Default::default()
-        }),
         Q::ChatThreads(wire::ChatThreadsRequest {
             limit: 50,
             term: String::new(),
@@ -854,11 +843,11 @@ fn ask(handle: &centraid_core::Handle, query: Q) -> Result<(), String> {
 }
 
 /// Every wire query has an entry in [`requests`]: the names it asks are the names
-/// [`covers`] knows. The wire has 61 queries (`app_query.proto`'s `oneof query`);
+/// [`covers`] knows. The wire has 60 queries (`app_query.proto`'s `oneof query`);
 /// a new one is a compile error in [`covers`], and this count says it was also
 /// asked.
 #[test]
 fn the_sweep_asks_every_query_the_wire_has() {
     let asked: BTreeSet<&str> = requests("word").iter().map(covers).collect();
-    assert_eq!(asked.len(), 61, "{asked:?}");
+    assert_eq!(asked.len(), 60, "{asked:?}");
 }

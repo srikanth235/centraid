@@ -93,7 +93,7 @@ impl Laptop {
         // every session answer; no vault at all is a refusal.
         match ctx.locker(&wire::LockerSessionRequest {
             step: Some(wire::locker_session_request::Step::State(
-                wire::LockerStateAsk {},
+                wire::LockerStateAsk::default(),
             )),
         }) {
             Ok(answer) if answer.keyed => Readiness::Ready,

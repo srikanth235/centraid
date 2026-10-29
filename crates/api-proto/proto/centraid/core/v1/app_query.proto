@@ -65,6 +65,10 @@ message AppQueryRequest {
   reserved 10 to 14, 16;
   reserved "tasks_board", "tasks_task", "tasks_projects", "tasks_search",
            "tasks_catch_up", "tasks_trash";
+  // 64 was `locker.access`, the Locker's access history, gone with its receipt
+  // table (#1146).
+  reserved 64;
+  reserved "locker_access";
   oneof query {
     AgendaUpcomingRequest agenda_upcoming = 1;
     AgendaDayContextRequest agenda_day_context = 2;
@@ -105,7 +109,6 @@ message AppQueryRequest {
     LockerItemRequest locker_item = 61;
     LockerSearchRequest locker_search = 62;
     LockerReviewRequest locker_review = 63;
-    LockerAccessRequest locker_access = 64;
     // Chat history (R-CHAT-1): 70-79. Reads only; the writes are `chat.*` commands.
     ChatThreadsRequest chat_threads = 70;
     ChatThreadRequest chat_thread = 71;
@@ -161,6 +164,10 @@ message AppQueryResponse {
   reserved 10 to 14, 16;
   reserved "tasks_board", "tasks_task", "tasks_projects", "tasks_search",
            "tasks_catch_up", "tasks_trash";
+  // 64 was `locker.access`, the Locker's access history, gone with its receipt
+  // table (#1146).
+  reserved 64;
+  reserved "locker_access";
   oneof answer {
     AgendaUpcoming agenda_upcoming = 1;
     AgendaDayContext agenda_day_context = 2;
@@ -195,7 +202,6 @@ message AppQueryResponse {
     LockerItemDetail locker_item = 61;
     LockerSearch locker_search = 62;
     LockerReview locker_review = 63;
-    LockerAccess locker_access = 64;
     ChatThreads chat_threads = 70;
     ChatThread chat_thread = 71;
     ChatCardLive chat_card = 72;

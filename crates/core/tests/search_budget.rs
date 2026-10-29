@@ -286,7 +286,7 @@ fn the_p95_of_every_search_is_inside_the_budget() {
         .call(&wire::Request {
             kind: Some(wire::request::Kind::Locker(wire::LockerSessionRequest {
                 step: Some(wire::locker_session_request::Step::Unlock(
-                    wire::LockerUnlock {},
+                    wire::LockerUnlock::default(),
                 )),
             })),
         })

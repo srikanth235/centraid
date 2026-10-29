@@ -473,12 +473,17 @@ impl Chat {
         let Some(id) = self.unlocking.take() else {
             return Vec::new();
         };
-        let passed = checked.outcome == wire::owner_checked::Outcome::Succeeded as i32;
+        let outcome = wire::owner_checked::Outcome::try_from(checked.outcome).unwrap_or_default();
+        let passed = outcome == wire::owner_checked::Outcome::Succeeded;
+        // THE PHONE REFUSED THE MEMBER (#1146): the core counts it, as it does on the wall.
+        if crate::locker::wall::is_refusal(outcome) {
+            let _ = crate::locker::wall::report_refusal(ctx);
+        }
         let opened = passed
             && ctx
                 .locker(&wire::LockerSessionRequest {
                     step: Some(wire::locker_session_request::Step::Unlock(
-                        wire::LockerUnlock {},
+                        wire::LockerUnlock::default(),
                     )),
                 })
                 .is_ok_and(|answer| answer.state == wire::LockerSessionState::Unlocked as i32);

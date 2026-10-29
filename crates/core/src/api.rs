@@ -83,7 +83,7 @@ pub const MAX_CONTENT_URLS: usize = 100;
 
 /// **THE TABLES THE WIRE'S PAGE DOOR READS (2026-10-16).** `Request::Page` names
 /// a table in `from`, and a door that reads any table by name is wider than any
-/// screen needs: it would page the receipts, the provenance log, the Locker's
+/// screen needs: it would page the journal, the provenance log, the Locker's
 /// fields and passkeys, the money ledger and every revision snapshot for a
 /// shell that asked. So it reads these thirteen and refuses the rest as an
 /// invalid request, before the vault is asked.
@@ -115,7 +115,7 @@ pub const MAX_CONTENT_URLS: usize = 100;
 ///
 /// NOT HERE, ON PURPOSE: every Locker table (`locker_item`,
 /// `locker_item_field`, `locker_item_passkey`, `locker_item_address`,
-/// `locker_item_alias`), the journal and Locker's receipts, the `revision` snapshots, the money
+/// `locker_item_alias`, `locker_key`), the journal, the `revision` snapshots, the money
 /// tables (`txn`, `budget`, `checkpoint`, `rule`) and Health's (`measurement`,
 /// `activity`, `workout`). The apps that read
 /// those do it in the core (`Request.app_query`, `Request.money`), through
@@ -523,7 +523,7 @@ pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
 // premise: a Locker key must never be on a host the member does not hold.
 // There is one host (#1029 §6), so the question has one answer and nothing
 // ever called this function: a Locker reveal runs in `crate::locker::phone`,
-// behind the unlock, after `locker.reveal_receipt` writes its receipt, and
+// behind the unlock, after `locker.mark_used` stamps the item, and
 // the SEALED-COLUMN arm served connector tokens, which leave with the
 // connectors. The access plane's reveal judgement went with that arm
 // (R-1047-D2): `centraid_vault::Verb` is `read` and `act`, so no access path
@@ -822,7 +822,7 @@ mod tests {
     /// A table named in `from` that no screen pages is refused as an invalid
     /// request BEFORE the vault is asked: the door used to read any table by
     /// name, which is wider than any screen needs. The refused set names what a
-    /// shell must never be able to walk through a page: the receipts, the
+    /// shell must never be able to walk through a page: the journal, the
     /// provenance log, the Locker's fields, passkeys and addresses, the money
     /// ledger and the revision snapshots. The paired half is that every table
     /// a screen does page still answers.
@@ -853,7 +853,7 @@ mod tests {
         vault.found("T", "O").expect("founded");
         for (table, pk) in [
             ("journal", "seq"),
-            ("receipt", "seq"),
+            ("locker_key", "key_id"),
             ("locker_item", "id"),
             ("locker_item_field", "field_id"),
             ("locker_item_passkey", "item_id"),

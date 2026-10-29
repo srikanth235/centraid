@@ -98,7 +98,7 @@ message Request {
     // why a query that joins and expands cannot be a page read a shell writes.
     AppQueryRequest app_query = 20;
     // THE LOCKER SESSION (#1047, D-5): unlock after the OS prompt, relock,
-    // the state, and one receipted reveal. See `locker.proto` for why the
+    // the state, and one reveal. See `locker.proto` for why the
     // prompt is the shell's and the key is the core's.
     LockerSessionRequest locker = 21;
     // THE 24 WORDS (#1047 E1): minted, judged and turned into a seed in Rust,

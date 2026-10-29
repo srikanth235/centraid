@@ -3,8 +3,8 @@
 //!
 //! **Export asks three times, in order, before a byte exists**: the confirm,
 //! which names the consequence; the phone's owner check, raised AFRESH whether
-//! or not Locker is already open; then the core, which writes the one
-//! mass-reveal receipt before it opens a cell. The file the core answers goes
+//! or not Locker is already open; then the core, which runs the one
+//! confirmed mass reveal before it opens a cell. The file the core answers goes
 //! to the OS save sheet (`SaveFile`) and nowhere else — this screen keeps no
 //! copy, and any answer ends the sheet.
 //!

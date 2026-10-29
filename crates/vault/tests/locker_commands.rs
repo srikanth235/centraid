@@ -1269,7 +1269,12 @@ fn a_use_stamps_last_used_at_without_editing_the_item() {
         "{:?}",
         outcome.reason
     );
-    assert!(outcome.output.get("receipt_id").is_none());
+    assert_eq!(
+        outcome.output.as_object().map(|keys| keys.len()),
+        Some(2),
+        "a stamp answers the item and the instant, and no log id: {:?}",
+        outcome.output
+    );
     for table in ["entity", "revision"] {
         assert!(
             !outcome.tables.contains(&table.to_owned()),
@@ -1336,7 +1341,11 @@ fn a_code_stamps_the_item_and_an_export_stamps_none() {
         "locker.totp_code",
         serde_json::json!({ "item_id": "item-1" }),
     );
-    assert!(output.get("receipt_id").is_none());
+    assert_eq!(
+        output.as_object().map(|keys| keys.len()),
+        Some(2),
+        "{output}"
+    );
     assert!(used(&world).is_some(), "a derived code is a use");
 }
 
@@ -1458,8 +1467,6 @@ fn an_export_is_confirmed_and_carries_no_plaintext() {
         "the export answer carried ciphertext"
     );
     assert!(output.get("unseals_on").is_none());
-
-    assert!(output.get("receipt_id").is_none());
 }
 
 /// THE TOTP DOOR IS A STAMP DOOR NOW, and its precondition is a PRESENCE

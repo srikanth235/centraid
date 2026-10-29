@@ -1,9 +1,7 @@
-//! Export, import, the access history, the trash and the wall page: ports of
-//! `LockerTransferSpec` and the access and trash cases of `LockerSpec`.
+//! Export, import, the trash and the wall page: ports of
+//! `LockerTransferSpec` and the trash cases of `LockerSpec`.
 
 mod locker_support;
-
-use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::locker::{self, routes};
@@ -76,7 +74,7 @@ fn export_asks_three_times_and_the_file_goes_only_to_the_save_sheet() {
         export_state(&d, id).phase,
         wire::locker_export_state::Phase::Checking as i32
     );
-    // 3. the core writes the receipt and the file, which goes to the save sheet.
+    // 3. the core runs the export and the file goes to the save sheet.
     d.answer_effect(passed(wire::Biometry::Face));
     let saved: Vec<_> = effects_of(&d, 0);
     let file = saved
@@ -119,7 +117,6 @@ fn a_cancelled_owner_check_writes_nothing_and_a_dismissed_save_sheet_says_so() {
     let state = export_state(&d, id);
     assert_eq!(state.phase, wire::locker_export_state::Phase::Idle as i32);
     assert!(!state.status.unwrap().sentence.is_empty());
-    // The access history shows no export.
     export_event(
         &mut d,
         id,
@@ -215,33 +212,6 @@ fn a_file_that_is_not_a_password_manager_export_is_refused_in_words() {
     let state = import_state(&d, id);
     assert_eq!(state.phase, wire::locker_import_state::Phase::Idle as i32);
     assert!(state.status.unwrap().refused);
-}
-
-#[test]
-fn the_access_history_lists_every_receipt_and_never_a_value() {
-    let mut d = ready();
-    let item = push_item(&mut d, "i1");
-    verb(&mut d, item, "password", "reveal");
-    let id = d.push(locker::TAB, routes::access());
-    d.pump(Duration::from_millis(200));
-    let state = match &d.view(id).kind {
-        Some(wire::view_state::Kind::LockerAccess(a)) => a.clone(),
-        other => panic!("{other:?}"),
-    };
-    let data = match state.content {
-        Some(wire::locker_access_state::Content::Data(data)) => data,
-        other => panic!("{other:?}"),
-    };
-    let rows = data.history.unwrap().rows;
-    assert!(rows.iter().any(|r| r.label == "Locker unlocked"));
-    assert!(
-        rows.iter()
-            .any(|r| r.label.contains("Password revealed") && r.label.contains("Bank"))
-    );
-    assert!(
-        rows.iter()
-            .all(|r| !format!("{r:?}").contains("correct horse"))
-    );
 }
 
 #[test]

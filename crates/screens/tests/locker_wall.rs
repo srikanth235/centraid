@@ -97,6 +97,56 @@ fn a_failed_check_names_the_way_back_and_a_lockout_says_so() {
     assert!(wall_of(&d, id).unwrap().notice.contains("Too many tries"));
 }
 
+/// THE PHONE'S REFUSALS ARE COUNTED AND SAID (#1146, R-1146-1A-2). The core never
+/// sees the OS prompt, so the wall reports a refusal; the locked wall says how
+/// many, a dismissal is not one, and the unlock that follows tells the home once
+/// what it cleared.
+#[test]
+fn a_refused_check_is_counted_said_on_the_wall_and_told_once_after_the_unlock() {
+    let mut d = driver();
+    d.start();
+    let id = home_instance(&d);
+    let tap_unlock = |d: &mut Driver| {
+        d.send(
+            id,
+            E::LockerWall(wire::LockerWallEvent {
+                kind: Some(wire::locker_wall_event::Kind::Unlock(
+                    wire::locker_wall_event::UnlockTapped {},
+                )),
+            }),
+        );
+    };
+    // A dismissal is not a failure.
+    d.answer_effect(checked(wire::owner_checked::Outcome::Cancelled));
+    assert!(!wall_of(&d, id).unwrap().notice.contains("failed unlock"));
+
+    tap_unlock(&mut d);
+    d.answer_effect(checked(wire::owner_checked::Outcome::Failed));
+    let notice = wall_of(&d, id).unwrap().notice;
+    assert!(notice.contains("1 failed unlock · last "), "{notice}");
+
+    tap_unlock(&mut d);
+    d.answer_effect(checked(wire::owner_checked::Outcome::LockedOut));
+    let notice = wall_of(&d, id).unwrap().notice;
+    assert!(notice.contains("Too many tries"), "{notice}");
+    assert!(notice.contains("2 failed unlocks · last "), "{notice}");
+
+    // The unlock the phone allows opens, and says what it cleared.
+    tap_unlock(&mut d);
+    d.answer_effect(passed(wire::Biometry::Face));
+    let status = home_data(&d, id).status_line;
+    assert!(status.contains("2 failed unlocks · last "), "{status}");
+
+    // Relock and open again: nothing is left to say.
+    d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
+        foreground: false,
+    }));
+    tap_unlock(&mut d);
+    d.answer_effect(passed(wire::Biometry::Face));
+    let status = home_data(&d, id).status_line;
+    assert!(!status.contains("failed unlock"), "{status}");
+}
+
 #[test]
 fn leaving_the_foreground_relocks_at_once_and_returning_does_not_prompt() {
     let mut d = driver();
@@ -117,7 +167,7 @@ fn leaving_the_foreground_relocks_at_once_and_returning_does_not_prompt() {
     // The core itself is locked, whether or not a screen heard.
     let state = session(
         &d,
-        wire::locker_session_request::Step::State(wire::LockerStateAsk {}),
+        wire::locker_session_request::Step::State(wire::LockerStateAsk::default()),
     );
     assert_eq!(state.state, wire::LockerSessionState::Locked as i32);
 }

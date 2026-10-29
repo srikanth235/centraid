@@ -607,15 +607,6 @@ fn read(
         ("locker", "review") => {
             app_query::locker::review(vault, door, now, &wire::LockerReviewRequest { tz })?
         }
-        ("locker", "access") => app_query::locker::access(
-            vault,
-            door,
-            &wire::LockerAccessRequest {
-                item_id: p.text("item_id")?,
-                limit: p.limit(0),
-                tz,
-            },
-        )?,
 
         ("photos", "search") => app_query::photos::search(
             vault,

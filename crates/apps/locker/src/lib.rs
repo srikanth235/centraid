@@ -1,6 +1,6 @@
 //! # Locker — the password manager, and the one app with sealed cells
 //!
-//! 6 queries, 20 actions, **29 scopes including the only three `reveal` verbs
+//! 5 queries, 20 actions, **28 scopes including the only three `reveal` verbs
 //! in the product** (#1020, wave 4 census §A8, §F; #1135). A Locker item is an
 //! entity of kind `locker_item`: its trash, star, archive and tags are the
 //! vault's shared verbs, and this crate folds an item from its entity row, its
@@ -23,18 +23,16 @@
 //!   (`<cell> IS NOT NULL`), never as the cell — the item's cells, a sealed
 //!   custom field and a passkey's key alike ([`phone`]).
 //! - **The plaintext is not in this crate at all.** Revealing one cell is
-//!   `crates/core::locker::phone`'s, behind the unlock and a receipt written
-//!   first; this crate has no reveal type and no key.
-//! - **`access` has two walls.** The declared `rowFilter` on `object_type` is
-//!   the outer wall and [`queries::access_statement`]'s own predicate is the inner one,
-//!   so the page is filtered **before** the window rather than after — without
-//!   it a busy vault's newest 200 receipts could be entirely someone else's
-//!   and the clamp would hand the screen an empty history (census §A8).
+//!   `crates/core::locker::phone`'s, behind the unlock and an item stamped as
+//!   used first; this crate has no reveal type and no key.
+//! - **The Locker keeps no access log** (#1146). What a member can read of
+//!   use is `last_used_at` on the item ([`queries::ItemRow`]) and, on the
+//!   session's answers, the unlocks the phone refused; both are the vault's.
 //! - **A one-time code is a fold over a seed only the core opens**
 //!   (D-1020-L6, Q-1047-16). [`totp`] is pure — base32, the counter, the
 //!   dynamic truncation, the `otpauth://` reading — and the HMAC is injected by
 //!   `crates/core::locker::phone`, which holds `K` and SHA-1; the vault's
-//!   `locker.totp_code` command only writes the receipt, first. Weak and reused
+//!   `locker.totp_code` command only stamps the item, first. Weak and reused
 //!   are not scored anywhere (Q-1047-16): scoring them means unsealing every
 //!   password at once, and the Watchtower fold that did is deleted.
 //!

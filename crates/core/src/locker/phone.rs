@@ -20,16 +20,22 @@
 //!   no generation commits one `locker_key` row (ids only,
 //!   `Vault::locker_generation`).
 //! - **A reveal and a secret-bearing write need an open session** and are
-//!   refused without one ([`reveal`], [`seal_command`]). The receipt of a
-//!   reveal is written BEFORE the plaintext exists (D-1020-L3).
+//!   refused without one ([`reveal`], [`seal_command`]). The item is stamped
+//!   as used (`locker.mark_used`) BEFORE the plaintext exists (D-1020-L3,
+//!   #1146).
+//! - **The Locker keeps no access log** (#1146). An unlock the OS allowed
+//!   clears the count of refused ones (`locker.mark_unlocked`), and one it
+//!   refused is counted and dated on the Locker's key row
+//!   (`locker.mark_unlock_failed`, [`unlock_failed`]): the core never sees the
+//!   OS prompt, so the shell's report is the only way it learns of a failure.
 //! - **A one-time code is a reveal of what the seed makes, never of the seed**
-//!   ([`totp`], Q-1047-16): `locker.totp_code` writes its receipt first, the
+//!   ([`totp`], Q-1047-16): `locker.totp_code` stamps the item first, the
 //!   `otp_seed` cell is opened under `K`, and RFC 6238's HMAC-SHA-1 is computed
 //!   here — the one SHA-1 in the workspace, because every authenticator agrees
 //!   on it — with `centraid_apps_locker::totp`'s fold. The six digits and their
 //!   seconds are answered; the seed is not, and neither is logged. A
 //!   [`reveal`] naming `otp_seed` is refused `SEED_NOT_SHOWN` before the
-//!   session is consulted and before any receipt: the seed never leaves.
+//!   session is consulted and before any stamp: the seed never leaves.
 //! - **Idle ends a session** ([`crate::locker::SESSION_TIMEOUT_MS`], checked
 //!   on every ask, never scheduled), and a relock zeroes the key.
 //!
@@ -69,7 +75,7 @@ pub type Cell = Mutex<Option<Session>>;
 ///
 /// # Errors
 /// A vault that is not founded, a core opened without the seed (no `K` to
-/// hold), or a receipt that could not be written — in which case nothing was
+/// hold), or a stamp that could not be written — in which case nothing was
 /// revealed.
 pub fn answer(
     vault: &Vault,
@@ -84,6 +90,17 @@ pub fn answer(
     // WHETHER AN UNLOCK CAN SUCCEED rides every answer, so a wall never raises
     // the OS prompt for a core that would refuse it.
     answered.keyed = keys.is_some();
+    // THE REFUSED UNLOCKS ride every answer too (#1146), so a locked wall can
+    // say them. The two steps that change them answered their own figures.
+    use wire::locker_session_request::Step;
+    if !matches!(request.step, Some(Step::Unlock(_) | Step::UnlockFailed(_))) {
+        let tz = match &request.step {
+            Some(Step::State(ask)) => ask.tz.as_str(),
+            _ => "",
+        };
+        let (failed, at) = vault.locker_failed_unlocks()?;
+        answered = with_failures(vault, answered, failed, at.as_deref(), tz);
+    }
     Ok(answered)
 }
 
@@ -104,7 +121,12 @@ fn step(
             relock(cell);
             Ok(state_of(cell, now))
         }
-        Some(Step::Unlock(_)) => unlock(vault, registry, owner, keys, cell, now, changes),
+        Some(Step::Unlock(asked)) => {
+            unlock(vault, registry, owner, keys, cell, now, &asked.tz, changes)
+        }
+        Some(Step::UnlockFailed(asked)) => {
+            unlock_failed(vault, registry, owner, cell, now, &asked.tz, changes)
+        }
         Some(Step::Reveal(asked)) => reveal(vault, registry, owner, cell, now, asked, changes),
         Some(Step::Totp(asked)) => totp(vault, registry, owner, cell, now, asked, changes),
         Some(Step::Export(asked)) => {
@@ -182,6 +204,7 @@ fn unlock(
     keys: Option<&crate::phone::Keyring>,
     cell: &Cell,
     now_ms: i64,
+    tz: &str,
     changes: &crate::events::ChangeFeed,
 ) -> Result<wire::LockerSessionResponse> {
     let vault_id = vault.self_id()?.ok_or_else(|| CoreError::InvalidRequest {
@@ -198,30 +221,100 @@ fn unlock(
     let key_id = vault
         .locker_generation()
         .map_err(|error| generation_failure(&error))?;
-    // THE UNLOCK IS RECEIPTED, as `locker.auth` — it reveals no column and
-    // names the vault, so the access history shows when this phone opened.
-    let receipt = run(
+    // THE PHONE ALLOWED IT, so the refused ones are cleared — and the figures
+    // the command answers are what it cleared, which the member is told once.
+    let cleared = run(
         vault,
         registry,
         owner,
-        "locker.reveal_receipt",
-        serde_json::json!({
-            "object_type": "locker.auth",
-            "columns": ["session"],
-            "kind": "auth",
-        }),
+        "locker.mark_unlocked",
+        serde_json::json!({}),
         changes,
     )?;
     let mut held = lock_cell(cell);
     let session = held.get_or_insert_with(|| Session::locked(&vault_id));
     session.open(&key_id, keys.vault.locker.as_bytes().to_vec(), now_ms);
     drop(held);
-    let mut answer = state_of(cell, now_ms);
-    answer.receipt_id = receipt["receipt_id"]
-        .as_str()
-        .unwrap_or_default()
-        .to_owned();
-    Ok(answer)
+    Ok(failures_of(vault, state_of(cell, now_ms), &cleared, tz))
+}
+
+/// The shell's report that the OS refused the prompt (not recognised, or locked
+/// out; a dismissal is no failure): count it and date it, and open nothing
+/// (#1146). The generation is named first so a phone whose very first unlock
+/// failed has the key row the count lives on.
+fn unlock_failed(
+    vault: &Vault,
+    registry: &Registry,
+    owner: &Principal,
+    cell: &Cell,
+    now_ms: i64,
+    tz: &str,
+    changes: &crate::events::ChangeFeed,
+) -> Result<wire::LockerSessionResponse> {
+    vault.self_id()?.ok_or_else(|| CoreError::InvalidRequest {
+        detail: "this file is not a founded vault, so it has no Locker".to_owned(),
+    })?;
+    vault
+        .locker_generation()
+        .map_err(|error| generation_failure(&error))?;
+    let counted = run(
+        vault,
+        registry,
+        owner,
+        "locker.mark_unlock_failed",
+        serde_json::json!({}),
+        changes,
+    )?;
+    Ok(failures_of(vault, state_of(cell, now_ms), &counted, tz))
+}
+
+/// A stamp command's `failed_unlocks` / `failed_unlock_at` answer, on the wire.
+fn failures_of(
+    vault: &Vault,
+    answer: wire::LockerSessionResponse,
+    output: &serde_json::Value,
+    tz: &str,
+) -> wire::LockerSessionResponse {
+    let failed = output["failed_unlocks"]
+        .as_u64()
+        .and_then(|count| u32::try_from(count).ok())
+        .unwrap_or_default();
+    with_failures(
+        vault,
+        answer,
+        failed,
+        output["failed_unlock_at"].as_str(),
+        tz,
+    )
+}
+
+/// Put the refused-unlock figures on an answer, the time as the vault's own wall
+/// clock (an instant is never answered raw). Nothing is said when none were
+/// refused: the time of an old failure stays on the key row, not on the wall.
+fn with_failures(
+    vault: &Vault,
+    mut answer: wire::LockerSessionResponse,
+    failed: u32,
+    at: Option<&str>,
+    tz: &str,
+) -> wire::LockerSessionResponse {
+    answer.failed_unlocks = failed;
+    if failed == 0 {
+        return answer;
+    }
+    // The ask's zone, else the vault's own, else UTC: a wall that says "3 failed
+    // unlocks" does not refuse for want of a zone.
+    let zone = crate::app_query::zone_of(vault, tz)
+        .or_else(|_| crate::app_query::zone_of(vault, "UTC"))
+        .ok();
+    let wall = at
+        .zip(zone)
+        .and_then(|(at, zone)| centraid_apps_agenda::local::now_local(&zone, at));
+    if let Some((day, time)) = wall.as_deref().and_then(|wall| wall.split_once('T')) {
+        answer.failed_unlock_local_day = day.to_owned();
+        answer.failed_unlock_local_time = time.to_owned();
+    }
+    answer
 }
 
 /// A copy of `K` held for one reveal, code or seal, **zeroed when it drops**
@@ -274,7 +367,7 @@ fn reveal(
     // phone that can show it can be read into another authenticator, and the
     // phone only ever needs the code [`totp`] makes. Refused first — before
     // the session is consulted (so the ask does not slide it) and before any
-    // receipt — because no state of the vault makes the answer different.
+    // stamp — because no state of the vault makes the answer different.
     if asked.column == "otp_seed" {
         return Ok(refused(wire::LockerRevealRefusal::SeedNotShown));
     }
@@ -291,8 +384,8 @@ fn reveal(
     };
     // A CUSTOM FIELD'S VALUE (#1047 T2) reveals through the item's own
     // door: the field must be a sealed field of a live item, its ciphertext
-    // is bound to the FIELD's id, and the receipt names the item and the
-    // field — never its label, never its value.
+    // is bound to the FIELD's id, and the stamp is the item's — it names no
+    // field, no label and no value.
     let field = !asked.field_id.is_empty();
     let (sealed, bound_to) = if field {
         if asked.column != "value_sealed" {
@@ -314,25 +407,15 @@ fn reveal(
     let Some(ciphertext) = sealed.ciphertext else {
         return Ok(refused(wire::LockerRevealRefusal::Empty));
     };
-    // THE RECEIPT FIRST (D-1020-L3). A reveal that happened and was not
-    // recorded is what the audit plane exists to make impossible, so a receipt
-    // that did not land is an error here and no plaintext is produced.
-    let mut receipt_input = serde_json::json!({
-        "object_type": "locker.item",
-        "item_id": asked.item_id,
-        "columns": [asked.column],
-        "kind": "reveal",
-        "use": if asked.copy { "copy" } else { "show" },
-    });
-    if field {
-        receipt_input["field_id"] = serde_json::Value::String(asked.field_id.clone());
-    }
-    let receipt = run(
+    // THE STAMP FIRST (D-1020-L3, #1146). A reveal that happened and left the
+    // item looking unused is a lie the member would act on, so a stamp that
+    // did not land is an error here and no plaintext is produced.
+    run(
         vault,
         registry,
         owner,
-        "locker.reveal_receipt",
-        receipt_input,
+        "locker.mark_used",
+        serde_json::json!({ "item_id": asked.item_id }),
         changes,
     )?;
     // ONE `K` PER VAULT ON THE PHONE: the seed's leaf. A cell naming another
@@ -349,10 +432,6 @@ fn reveal(
         column: asked.column.clone(),
         field_id: asked.field_id.clone(),
         value,
-        receipt_id: receipt["receipt_id"]
-            .as_str()
-            .unwrap_or_default()
-            .to_owned(),
         expires_in_ms: u64::try_from(REVEAL_WINDOW_MS).unwrap_or(30_000),
     });
     Ok(answer)
@@ -376,12 +455,12 @@ fn hmac_sha1(key: &[u8], message: &[u8]) -> Vec<u8> {
     mac.finalize().into_bytes().to_vec()
 }
 
-/// The code an item's seed makes at `now_ms`, receipted first.
+/// The code an item's seed makes at `now_ms`, the item stamped first.
 ///
 /// The order is the reveal's (D-1020-L3): locked is a typed refusal; a seed
-/// that is not there is `NOT_SEALED` or `EMPTY` before any receipt; then
-/// `locker.totp_code` writes the receipt, and only then is the seed opened.
-/// A receipt that did not land is an error and no code exists.
+/// that is not there is `NOT_SEALED` or `EMPTY` before any stamp; then
+/// `locker.totp_code` stamps the item, and only then is the seed opened.
+/// A stamp that did not land is an error and no code exists.
 fn totp(
     vault: &Vault,
     registry: &Registry,
@@ -406,12 +485,12 @@ fn totp(
     let Some(ciphertext) = sealed.ciphertext else {
         return Ok(refused(wire::LockerRevealRefusal::Empty));
     };
-    let receipt = run(
+    run(
         vault,
         registry,
         owner,
         "locker.totp_code",
-        serde_json::json!({ "item_id": item_id, "use": if asked.copy { "copy" } else { "show" } }),
+        serde_json::json!({ "item_id": item_id }),
         changes,
     )?;
     let generation = sealed.key_id.unwrap_or(live_id);
@@ -427,10 +506,6 @@ fn totp(
         code: code.code,
         period_seconds: u32::try_from(code.period).unwrap_or(30),
         remaining_seconds: u32::try_from(code.remaining).unwrap_or(30),
-        receipt_id: receipt["receipt_id"]
-            .as_str()
-            .unwrap_or_default()
-            .to_owned(),
     });
     Ok(answer)
 }

@@ -192,7 +192,7 @@ fn unlock(sample: &common::chat::Sample) {
         .call(&wire::Request {
             kind: Some(wire::request::Kind::Locker(wire::LockerSessionRequest {
                 step: Some(wire::locker_session_request::Step::Unlock(
-                    wire::LockerUnlock {},
+                    wire::LockerUnlock::default(),
                 )),
             })),
         })

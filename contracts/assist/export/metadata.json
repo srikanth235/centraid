@@ -520,12 +520,10 @@
     {
       "action": "reveal",
       "app": "locker",
-      "command": "locker.reveal_receipt",
+      "command": "locker.mark_used",
       "id_param": "item_id",
       "kind": "locker item",
-      "names": [
-        "field"
-      ],
+      "names": [],
       "qualifier": null,
       "verb": "reveal"
     },
@@ -2250,7 +2248,7 @@
         "app": "locker",
         "bulk": false,
         "chat": "direct",
-        "command": "locker.reveal_receipt",
+        "command": "locker.mark_used",
         "inverse": "reveal",
         "kind": "locker_item",
         "phrasings": [
@@ -4078,14 +4076,6 @@
         "query": "trash"
       },
       {
-        "app": "locker",
-        "figures": [
-          "entries"
-        ],
-        "kind": "locker_item",
-        "query": "access"
-      },
-      {
         "app": "money",
         "figures": [
           "new",
@@ -5863,7 +5853,7 @@
     "flag.set",
     "locker.add_item",
     "locker.edit_item",
-    "locker.reveal_receipt",
+    "locker.mark_used",
     "note.create",
     "note.edit",
     "note.move",
@@ -6341,7 +6331,7 @@
       "commands": [
         [
           "locker_item",
-          "locker.reveal_receipt"
+          "locker.mark_used"
         ]
       ],
       "done": "revealed",

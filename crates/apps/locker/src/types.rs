@@ -42,10 +42,6 @@ pub const DEGRADED_TYPE: &str = "note";
 /// The entity type a Locker item is, in the revision and tag planes.
 pub const ITEM_ENTITY_TYPE: &str = "locker.item";
 
-/// The receipt object type an *unlock* is recorded under, beside
-/// `locker.item`. Both are named by the `access` query's two walls.
-pub const AUTH_ENTITY_TYPE: &str = "locker.auth";
-
 #[must_use]
 pub fn is_known_type(item_type: &str) -> bool {
     ITEM_TYPES.contains(&item_type)

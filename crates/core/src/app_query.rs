@@ -151,7 +151,6 @@ pub(crate) fn answer_recording(
         Q::LockerItem(asked) => locker::item(vault, &door, &now, asked)?,
         Q::LockerSearch(asked) => locker::search(vault, &door, asked)?,
         Q::LockerReview(asked) => locker::review(vault, &door, &now, asked)?,
-        Q::LockerAccess(asked) => locker::access(vault, &door, asked)?,
         Q::ChatThreads(asked) => chat::threads(vault, &door, asked)?,
         Q::ChatThread(asked) => chat::thread(vault, asked)?,
         Q::ChatCard(asked) => chat::card(vault, asked)?,

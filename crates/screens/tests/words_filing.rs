@@ -54,7 +54,7 @@ fn the_pending_key_is_filed_as_a_note_when_locker_unlocks_and_then_cleared() {
         .handle
         .locker_session(&wire::LockerSessionRequest {
             step: Some(wire::locker_session_request::Step::State(
-                wire::LockerStateAsk {},
+                wire::LockerStateAsk::default(),
             )),
         })
         .expect("the session answers");

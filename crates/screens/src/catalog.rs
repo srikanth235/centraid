@@ -1947,7 +1947,7 @@ pub mod act {
             }
         }
 
-        /// Receipt the mass reveal an export is, through locker.export, before the phone core opens every live and archived secret and renders the file (1Password CSV or Locker JSON). It is confirmed, the phone asks its owner check afresh, and the file goes only to the system's save sheet. Anything that reads the file reads your secrets. A passkey's key and previous passwords are never in it.
+        /// Run the mass reveal an export is, through locker.export, before the phone core opens every live and archived secret and renders the file (1Password CSV or Locker JSON). It is confirmed, the phone asks its owner check afresh, and the file goes only to the system's save sheet. Anything that reads the file reads your secrets. A passkey's key and previous passwords are never in it.
         #[derive(Clone, Debug, Default)]
         pub struct Export {
             pub confirm: bool,
@@ -1971,42 +1971,17 @@ pub mod act {
             }
         }
 
-        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-        pub enum RevealUse {
-            #[default]
-            Show,
-            Copy,
-        }
-        impl RevealUse {
-            fn wire(self) -> &'static str {
-                match self {
-                    Self::Show => "show",
-                    Self::Copy => "copy",
-                }
-            }
-        }
-
-        /// Receipt the reveal of ONE sealed field through locker.reveal_receipt, the record of who looked. It returns a receipt id and never the secret: the phone core opens the field behind the unlock and hands the plaintext only to the card or screen that asked, never to the model. Running it again only writes another receipt, so it is its own inverse.
+        /// Stamp the item as used, through locker.mark_used, before the phone core reveals ONE sealed field of it. It never carries the secret: the phone core opens the field behind the unlock and hands the plaintext only to the card or screen that asked, never to the model. Running it again only moves the stamp, so it is its own inverse.
         #[derive(Clone, Debug, Default)]
         pub struct Reveal {
-            pub columns: String,
             pub item_id: String,
-            pub kind: String,
-            pub object_type: String,
-            pub field_id: Option<String>,
-            pub r#use: Option<RevealUse>,
         }
         impl Reveal {
             pub const NAME: &str = "reveal";
             pub fn request(self) -> wire::ActRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("columns".to_owned(), text(self.columns));
                 map.insert("item_id".to_owned(), text(self.item_id));
-                map.insert("kind".to_owned(), text(self.kind));
-                map.insert("object_type".to_owned(), text(self.object_type));
-                if let Some(it) = self.field_id { map.insert("field_id".to_owned(), text(it)); }
-                if let Some(it) = self.r#use { map.insert("use".to_owned(), text(it.wire())); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
@@ -4995,7 +4970,7 @@ pub mod load {
             }
         }
 
-        /// One item's browsable fields for the detail pane, trashed or not: its connector alias, memo, owner-defined sections and fields, additional addresses and passkey metadata. Every sealed value — the type's own cells, a sealed custom field, a passkey's key — is reported only as PRESENT; its plaintext is the phone core's reveal, behind the unlock and a receipt. A type this build does not know reads as a note that still carries its fields.
+        /// One item's browsable fields for the detail pane, trashed or not: its connector alias, memo, owner-defined sections and fields, additional addresses and passkey metadata. Every sealed value — the type's own cells, a sealed custom field, a passkey's key — is reported only as PRESENT; its plaintext is the phone core's reveal, behind the unlock. A type this build does not know reads as a note that still carries its fields.
         #[derive(Clone, Debug, Default)]
         pub struct Item {
             pub item_id: String,
@@ -5067,27 +5042,6 @@ pub mod load {
         }
         impl From<Trash> for wire::LoadRequest {
             fn from(value: Trash) -> Self {
-                value.request()
-            }
-        }
-
-        /// Locker's access history: the receipts the vault already wrote — unlocks, reveals, copies and one-time codes, refusals included — newest first and windowed, and on the phone one item's at a time. Read from the vault's append-only receipts under a grant pinned to Locker's own objects. No receipt has ever carried a secret value, and this adds none.
-        #[derive(Clone, Debug, Default)]
-        pub struct Access {
-            pub item_id: Option<String>,
-            pub limit: u32,
-        }
-        impl Access {
-            pub const NAME: &str = "access";
-            pub fn request(self) -> wire::LoadRequest {
-                #[allow(unused_mut)]
-                let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                if let Some(it) = self.item_id { map.insert("item_id".to_owned(), text(it)); }
-                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
-            }
-        }
-        impl From<Access> for wire::LoadRequest {
-            fn from(value: Access) -> Self {
                 value.request()
             }
         }

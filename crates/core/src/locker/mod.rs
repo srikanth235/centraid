@@ -7,7 +7,7 @@
 //! shell raises the OS prompt and reports it, and only then does the core put
 //! `K` in the session — the seed's `locker'` leaf, derived at open and never
 //! written down (D-6, Q-1047-11) — seal what a member typed and reveal one
-//! cell, receipt first. The session's clock ([`Session`]) is what [`phone`]
+//! cell, the item stamped first. The session's clock ([`Session`]) is what [`phone`]
 //! holds.
 //!
 //! What the rule PROTECTS is the half worth stating: `K` becomes plaintext
