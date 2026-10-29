@@ -113,6 +113,7 @@ fn work() -> wire::PhoneCalendar {
         key: "work".to_owned(),
         source_title: "Google".to_owned(),
         title: "Work".to_owned(),
+        color: "#007AFF".to_owned(),
     }
 }
 
@@ -169,7 +170,8 @@ fn an_event_is_a_record_keyed_by_its_own_id_with_the_wall_clock_and_the_zone_the
         batch.origins,
         [calendar::OriginRef {
             id: "calendar:work".to_owned(),
-            label: "Google: Work".to_owned()
+            label: "Google: Work".to_owned(),
+            color: Some("var(--c-slate)".to_owned()),
         }]
     );
     let first = &batch.records[0].fields;
@@ -297,6 +299,102 @@ fn an_event_with_no_valid_id_or_no_title_is_skipped_and_one_id_is_one_record() {
 }
 
 #[test]
+fn a_moved_day_states_its_own_timing_link_and_place_and_a_series_states_its_link() {
+    // An all-day series ("Trash day"); the phone moved one day to 15:00 with a link and a place.
+    let day = |start: &str, end: &str, all_day: bool, moved: bool| wire::PhoneCalendarEvent {
+        title: "Trash day".to_owned(),
+        all_day,
+        start: start.to_owned(),
+        end: end.to_owned(),
+        tz: if all_day {
+            String::new()
+        } else {
+            "UTC".to_owned()
+        },
+        url: "https://example.org/series".to_owned(),
+        location: "Kerbside".to_owned(),
+        series: Some(wire::PhoneCalendarSeries {
+            id: "uid:trash@google".to_owned(),
+            rrule: "FREQ=WEEKLY".to_owned(),
+            start: "2026-10-05".to_owned(),
+            end: "2026-10-05".to_owned(),
+        }),
+        original_start: if moved {
+            "2026-10-19".to_owned()
+        } else {
+            String::new()
+        },
+        moved,
+        phone_id: format!("local:ek-{start}"),
+        calendar_key: "work".to_owned(),
+        ..wire::PhoneCalendarEvent::default()
+    };
+    let mut moved = day("2026-10-19T15:00:00", "2026-10-19T16:00:00", false, true);
+    moved.url = "https://example.org/day".to_owned();
+    moved.location = "The depot".to_owned();
+    let batch = calendar::batch(
+        Locale::En,
+        &snapshot(vec![
+            day("2026-10-12", "2026-10-12", true, false),
+            moved,
+            day("2026-10-26", "2026-10-26", true, false),
+        ]),
+    );
+    let series = &batch.records[0].fields;
+    assert_eq!(series["timing"], "all-day");
+    assert_eq!(series["url"], "https://example.org/series");
+    let moved = &series["overrides"]["moved"][0];
+    assert_eq!(
+        moved["timing"], "zoned",
+        "the day's timing, not its series'"
+    );
+    assert_eq!(moved["zone"], "UTC");
+    assert_eq!(
+        moved["starts"], "2026-10-19T15:00:00",
+        "a time, not the day"
+    );
+    assert_eq!(moved["ends"], "2026-10-19T16:00:00");
+    assert_eq!(moved["url"], "https://example.org/day");
+    assert_eq!(moved["location"], "The depot");
+    // A day at the series' own place says none of it.
+    let mut same = day("2026-10-19", "2026-10-19", true, true);
+    same.url = String::new();
+    let batch = calendar::batch(
+        Locale::En,
+        &snapshot(vec![day("2026-10-12", "2026-10-12", true, false), same]),
+    );
+    let moved = &batch.records[0].fields["overrides"]["moved"][0];
+    assert_eq!(
+        moved["location"], "",
+        "the series' own place is not the day's"
+    );
+    assert_eq!(moved["timing"], "all-day");
+}
+
+#[test]
+fn a_calendar_is_painted_with_the_wheel_hue_nearest_its_phone_colour_and_a_grey_has_none() {
+    let painted = |color: &str| {
+        calendar::origin_of(
+            Locale::En,
+            &wire::PhoneCalendar {
+                key: "k".to_owned(),
+                source_title: String::new(),
+                title: "Home".to_owned(),
+                color: color.to_owned(),
+            },
+        )
+        .color
+    };
+    assert_eq!(painted("#34C759").as_deref(), Some("var(--c-forest)"));
+    assert_eq!(painted("#808080"), None);
+    assert_eq!(painted(""), None);
+    let batch = calendar::batch(Locale::En, &snapshot(Vec::new()));
+    let request = calendar::follow_request(&batch.origins[0], &[], true, "device-a");
+    let origin: serde_json::Value = serde_json::from_str(&request.origin).expect("json");
+    assert_eq!(origin["color"], "var(--c-slate)");
+}
+
+#[test]
 fn a_calendar_names_itself_by_its_source_and_title() {
     let name = |source: &str, title: &str| {
         calendar::origin_of(
@@ -305,6 +403,7 @@ fn a_calendar_names_itself_by_its_source_and_title() {
                 key: "k".to_owned(),
                 source_title: source.to_owned(),
                 title: title.to_owned(),
+                color: String::new(),
             },
         )
         .label

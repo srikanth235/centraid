@@ -20,7 +20,9 @@ use centraid_apps_kit::reads::PageDoor;
 use centraid_vault::time::occurrence::{SEARCH_WINDOW_DAYS, search_window};
 
 use crate::expansion::expand_recurring_events;
-use crate::queries::{CalendarRow, EventRow, events_among, read_calendars, read_exceptions};
+use crate::queries::{
+    CalendarRow, EventRow, events_among, name_places, read_calendars, read_exceptions,
+};
 use crate::{Denial, denial_of};
 
 /// What `event` answers.
@@ -80,8 +82,9 @@ pub fn load_event(
                 return Ok((EventDetailData::default(), None));
             };
             let exceptions = read_exceptions(door, std::slice::from_ref(&event))?;
-            expand_recurring_events(vec![event], &from, &to, &exceptions)?
-                .into_iter()
+            let mut days = expand_recurring_events(vec![event], &from, &to, &exceptions)?;
+            name_places(door, &mut days)?;
+            days.into_iter()
                 .find(|row| row.original_start_local.as_deref() == Some(key))
         }
         // A one-off, or the series itself: the row, keyed as `search` keys it.

@@ -100,6 +100,7 @@ fn calendar(titles: &[&str]) -> O {
             key: "work".to_owned(),
             source_title: "Google".to_owned(),
             title: "Work".to_owned(),
+            color: "#34C759".to_owned(),
         }],
         events: titles
             .iter()

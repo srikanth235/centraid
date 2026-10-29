@@ -454,6 +454,11 @@
           "origin": {
             "additionalProperties": false,
             "properties": {
+              "color": {
+                "description": "The colour the phone paints the store with, as the design wheel names it.",
+                "maxLength": 64,
+                "type": ["string", "null"]
+              },
               "config": {
                 "type": ["object", "null"]
               },

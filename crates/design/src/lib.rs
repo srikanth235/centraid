@@ -140,6 +140,60 @@ pub fn party_color(party_id: &str) -> String {
     party_hue_value(identity_hue_key(party_id))
 }
 
+/// The OKLCH hue angle of each wheel key (`packages/design/src/palette.ts`, `APP_HUES`).
+const WHEEL_HUES: [(&str, f64); 8] = [
+    ("rose", 0.0),
+    ("amber", 28.0),
+    ("ochre", 70.0),
+    ("forest", 150.0),
+    ("teal", 210.0),
+    ("slate", 255.0),
+    ("indigo", 290.0),
+    ("violet", 320.0),
+];
+
+/// Below this OKLab chroma a colour is a grey: it has no hue to name.
+const GREY_CHROMA: f64 = 0.03;
+
+/// The wheel hue closest to a phone's colour (`#RRGGBB`), by OKLCH hue angle: a phone paints its
+/// calendars with any colour, and the vault stores the wheel's key, so the colour follows the
+/// theme like every party's does. `None` for a grey, a black or white, and a spelling that is not
+/// a hex colour: such a calendar takes its id's own hue.
+#[must_use]
+pub fn hue_key_of_hex(hex: &str) -> Option<&'static str> {
+    let digits = hex.trim().strip_prefix('#')?;
+    if digits.len() != 6 || !digits.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    let channel = |at: usize| -> Option<f64> {
+        let value = f64::from(u8::from_str_radix(digits.get(at..at + 2)?, 16).ok()?) / 255.0;
+        // sRGB to linear light.
+        Some(if value <= 0.04045 {
+            value / 12.92
+        } else {
+            ((value + 0.055) / 1.055).powf(2.4)
+        })
+    };
+    let (r, g, b) = (channel(0)?, channel(2)?, channel(4)?);
+    let l = (0.412_221_470_8 * r + 0.536_332_536_3 * g + 0.051_445_992_9 * b).cbrt();
+    let m = (0.211_903_498_2 * r + 0.680_699_545_1 * g + 0.107_396_956_6 * b).cbrt();
+    let s = (0.088_302_461_9 * r + 0.281_718_837_6 * g + 0.629_978_700_5 * b).cbrt();
+    let a = 1.977_998_495_1 * l - 2.428_592_205_0 * m + 0.450_593_709_9 * s;
+    let c = 0.025_904_037_1 * l + 0.782_771_766_2 * m - 0.808_675_766_0 * s;
+    if a.hypot(c) < GREY_CHROMA {
+        return None;
+    }
+    let hue = c.atan2(a).to_degrees().rem_euclid(360.0);
+    let apart = |wheel: f64| {
+        let gap = (hue - wheel).abs();
+        gap.min(360.0 - gap)
+    };
+    WHEEL_HUES
+        .iter()
+        .min_by(|left, right| apart(left.1).total_cmp(&apart(right.1)))
+        .map(|(key, _)| *key)
+}
+
 /// `identityInitials`, in UTF-16 code units (`identity.ts:22-28`).
 ///
 /// The units, not a `String`, because v0's `slice(0, 1)` can cut a surrogate
@@ -400,6 +454,51 @@ mod tests {
         let own = identity_hue_key("whoever");
         for stored in [None, Some(""), Some("   "), Some("\t")] {
             assert_eq!(party_hue_key("whoever", stored), Some(own));
+        }
+    }
+
+    #[test]
+    fn a_phone_colour_is_the_wheel_hue_nearest_its_own_and_a_grey_has_none() {
+        // The OKLCH hue of each wheel key lands on itself.
+        for (key, angle) in WHEEL_HUES {
+            let l = 0.5_f64;
+            let (a, b) = (
+                0.09 * angle.to_radians().cos(),
+                0.09 * angle.to_radians().sin(),
+            );
+            let (l_, m_, s_) = (
+                (l + 0.396_337_777_4 * a + 0.215_803_757_3 * b).powi(3),
+                (l - 0.105_561_345_8 * a - 0.063_854_172_8 * b).powi(3),
+                (l - 0.089_484_177_5 * a - 1.291_485_548_0 * b).powi(3),
+            );
+            let linear = [
+                4.076_741_662_1 * l_ - 3.307_711_591_3 * m_ + 0.230_969_929_2 * s_,
+                -1.268_438_004_6 * l_ + 2.609_757_401_1 * m_ - 0.341_319_396_5 * s_,
+                -0.004_196_086_3 * l_ - 0.703_418_614_7 * m_ + 1.707_614_701_0 * s_,
+            ];
+            let hex: String = linear
+                .iter()
+                .map(|v| {
+                    let v = v.clamp(0.0, 1.0);
+                    let v = if v <= 0.003_130_8 {
+                        12.92 * v
+                    } else {
+                        1.055 * v.powf(1.0 / 2.4) - 0.055
+                    };
+                    format!("{:02x}", (v * 255.0).round() as u8)
+                })
+                .collect();
+            assert_eq!(hue_key_of_hex(&format!("#{hex}")), Some(key), "#{hex}");
+        }
+        // The phones' own reds, blues and greens.
+        assert_eq!(hue_key_of_hex("#FF3B30"), Some("amber"));
+        assert_eq!(hue_key_of_hex("#007AFF"), Some("slate"));
+        assert_eq!(hue_key_of_hex("#34C759"), Some("forest"));
+        for grey in ["#000000", "#ffffff", "#808080", "#7f7f80"] {
+            assert_eq!(hue_key_of_hex(grey), None, "{grey}");
+        }
+        for bad in ["", "red", "#12", "#ggg111", "123456"] {
+            assert_eq!(hue_key_of_hex(bad), None, "{bad}");
         }
     }
 
