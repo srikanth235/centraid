@@ -124,21 +124,26 @@ pub fn entity_rows(connection: &Connection, id: &str) -> i64 {
         .unwrap_or(0)
 }
 
-/// A note in the trash whose window ran out long ago, for a test of the launch
-/// pass that must not hand-write SQL.
+/// A note in the trash whose window ran out long ago (`overdue`), or one whose
+/// window ends in the year 9999, for a test of the launch pass that must not
+/// hand-write SQL.
 ///
 /// # Errors
 /// The commit's own.
-pub fn add_overdue_trashed_note(vault: &crate::Vault, id: &str) -> crate::Result<()> {
+pub fn add_trashed_note(vault: &crate::Vault, id: &str, overdue: bool) -> crate::Result<()> {
+    let purge_at = if overdue {
+        "2020-02-01T00:00:00.000Z"
+    } else {
+        "9999-12-31T00:00:00.000Z"
+    };
     vault.commit(|tx| {
         tx.insert_entity(id, crate::model::Kind::Note, id, "2020-01-01T00:00:00.000Z")?;
         tx.connection()
             .execute("INSERT INTO note (id, body) VALUES (?1, 'words')", [id])?;
         tx.connection().execute(
-            "UPDATE entity SET deleted_at = '2020-01-02T00:00:00.000Z',
-                               purge_at = '2020-02-01T00:00:00.000Z'
+            "UPDATE entity SET deleted_at = '2020-01-02T00:00:00.000Z', purge_at = ?2
               WHERE id = ?1",
-            [id],
+            [id, purge_at],
         )?;
         Ok(())
     })?;

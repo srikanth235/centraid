@@ -1824,11 +1824,11 @@ mod tests {
         }
     }
 
-    fn overdue_note(handle: &Handle, id: &str) {
+    fn trashed_note(handle: &Handle, id: &str, overdue: bool) {
         handle
             .with_vault(|vault| {
-                Ok(centraid_vault::testdoor::add_overdue_trashed_note(
-                    vault, id,
+                Ok(centraid_vault::testdoor::add_trashed_note(
+                    vault, id, overdue,
                 )?)
             })
             .expect("a trashed note");
@@ -1842,38 +1842,19 @@ mod tests {
             .expect("a count")
     }
 
-    /// DECISION T (#1146): an overdue row is restorable until the pass runs, and
-    /// the pass takes it, in bounded batches, without being asked by a request.
+    /// DECISION T (#1146): the pass takes what is overdue, in bounded batches, and
+    /// leaves a row still inside its window. (That an overdue row restores until
+    /// the pass runs is `trash_and_bytes.rs`'s: the pass `open` starts races a
+    /// test that would restore here.)
     #[test]
-    fn the_launch_pass_purges_what_is_overdue_and_a_restore_before_it_still_works() {
+    fn the_launch_pass_purges_what_is_overdue_and_spares_the_rest() {
         let scratch = Scratch::founded();
         let handle = &scratch.handle;
-        overdue_note(handle, "kept");
-        overdue_note(handle, "doomed");
-        // BEFORE THE PASS: past its date and still a row a restore accepts.
-        let restored = handle
-            .with_vault(|vault| {
-                Ok(vault.execute(
-                    &handle.registry,
-                    &centraid_vault::Principal::owner("phone"),
-                    &centraid_vault::Command::new(
-                        "entity.restore",
-                        serde_json::json!({ "id": "kept" }),
-                    ),
-                )?)
-            })
-            .expect("runs");
-        assert_eq!(
-            restored.status,
-            centraid_vault::CommandStatus::Executed,
-            "{:?}",
-            restored.reason
-        );
-        // THE PASS: what is still in the trash and overdue goes; what was restored stays.
-        // (The pass started at open may have run already or run now: either way it is done.)
+        trashed_note(handle, "kept", false);
+        trashed_note(handle, "doomed", true);
         handle.tidy_trash().expect("the pass runs");
         assert_eq!(rows(handle, "doomed"), 0, "the overdue note was purged");
-        assert_eq!(rows(handle, "kept"), 1, "the restored note was not");
+        assert_eq!(rows(handle, "kept"), 1, "the one inside its window was not");
     }
 
     /// The pass is started by `open` itself, on a thread of its own: a vault
@@ -1881,7 +1862,7 @@ mod tests {
     #[test]
     fn open_starts_the_pass_without_a_request() {
         let scratch = Scratch::founded();
-        overdue_note(&scratch.handle, "doomed");
+        trashed_note(&scratch.handle, "doomed", true);
         let path = scratch.handle.path().to_path_buf();
         scratch.handle.close();
         drop(scratch.handle.clone());
