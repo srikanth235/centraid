@@ -291,6 +291,9 @@ impl Wall {
                     self.phase = Phase::Locked;
                 }
                 self.notice.clear();
+                if was_open {
+                    self.failed = Failed::default();
+                }
                 Step::change(if was_open {
                     Change::Closed
                 } else {
@@ -443,6 +446,10 @@ impl Wall {
         if self.phase != Phase::Unavailable {
             self.phase = Phase::Locked;
         }
+        if was_open {
+            // What the last unlock cleared was told; the core now says none.
+            self.failed = Failed::default();
+        }
         Step::change(if was_open {
             Change::Closed
         } else {
@@ -462,6 +469,7 @@ impl Wall {
     fn lock(&mut self, notice: String) -> Step {
         self.asking = false;
         self.phase = Phase::Locked;
+        self.failed = Failed::default();
         self.notice = notice;
         Step::change(Change::Closed)
     }

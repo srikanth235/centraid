@@ -141,6 +141,8 @@ fn a_refused_check_is_counted_said_on_the_wall_and_told_once_after_the_unlock() 
     d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
         foreground: false,
     }));
+    let notice = wall_of(&d, id).unwrap().notice;
+    assert!(!notice.contains("failed unlock"), "{notice}");
     tap_unlock(&mut d);
     d.answer_effect(passed(wire::Biometry::Face));
     let status = home_data(&d, id).status_line;
