@@ -14,7 +14,7 @@ cargo run -p centraid-vault --bin export-ontology-page   # the published page's 
 | Module | What it owns |
 | --- | --- |
 | `file` | `Vault::create` / `open`, the one writable connection, `read` under `query_only`, the pragma set, `finish`. |
-| `migrations` | The ladder (one rung, `001_baseline.sql`, hand-written), `application_id`. |
+| `migrations`, `format` | The ladder (one rung, `001_baseline.sql`, hand-written); the file's `application_id` and schema digest. |
 | `log` | The commit guard — `BEGIN IMMEDIATE`, the body, `COMMIT`, with an `update_hook` reporting which tables a commit touched — and SQL identifier quoting. |
 | `value`, `canonical`, `clock`, `time`, `error` | A SQLite value and its JSON; the one canonical JSON spelling; time and ids as injected facts; civil time and recurrence; `VaultError`, with `DiskFull` typed. |
 | `access` | `Principal`, `Verb`, `evaluate_access` — a deny is a value. |
@@ -48,7 +48,7 @@ There is **no backup index in the vault**: the tables the #1029 plane founded fo
 
 Each with its reason in the module, and each recorded as a decision.
 
-- **`application_id = CEN1` and a `user_version` counting this ladder's own migrations** (D-1020-D1-2).
+- **`application_id = CEN2`, a schema digest and a `user_version` counting this ladder's own migrations** (D-1020-D1-2, [R-1146-1B-6](../../docs/decisions.md#the-journal-is-gone-1146)). `format.rs` holds `SCHEMA_DIGEST`, and open and restore refuse a file of the model before #1135 (`CEN1`) or with other tables, with a sentence.
 - **The commit pair is the only writable connection** (D-1020-D1-5). `Vault::read` sets `PRAGMA query_only`, so a write through a read is refused by SQLite rather than by a reviewer.
 - **The pragmas are stated, not inherited**: `journal_mode = WAL`, `synchronous = FULL`, `journal_size_limit`, no `secure_delete`, a 4 KiB page and no auto-vacuum; checkpoints are SQLite's own since #1080 ([R-1080-C33](../../docs/decisions.md#backup-and-the-gateway)), so a last close folds the WAL into the file.
 - **`VaultError::DiskFull` is a typed answer** (D-1020-D1-8), classified on SQLite's primary code and on `ErrorKind::StorageFull`, so a handler's own `?` carries it.

@@ -44,8 +44,8 @@
 //! **THROUGH THE REAL COMMAND PLANE, never SQL.** `sql-confinement` refuses SQL
 //! outside `crates/{ontology,vault,seat,search}` and `crates/apps/kit`, and the
 //! refusal is what makes this fixture worth anything: rows written by
-//! `Vault::execute` carry the `entity` row, the `version` and the
-//! journal entry a real write produces, so a tile reading them reads the shape
+//! `Vault::execute` carry the `entity` row and the stamps a real write
+//! produces, so a tile reading them reads the shape
 //! the product actually stores.
 //!
 //! **It is a DEV binary and it is not the product.** v0 kept the same
