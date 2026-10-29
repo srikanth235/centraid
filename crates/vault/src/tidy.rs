@@ -37,8 +37,9 @@ pub struct Emptied {
 pub struct Swept {
     /// The hashes whose files were deleted.
     pub removed: Vec<String>,
-    /// More files are unclaimed than this sweep took: run another.
-    pub more: bool,
+    /// Where the next sweep resumes (pass it as `after`), or `None` when the
+    /// store has been looked through to its end.
+    pub next: Option<String>,
 }
 
 impl Vault {
@@ -96,23 +97,46 @@ impl Vault {
         })
     }
 
-    /// Delete at most `limit` files from the byte store that no `blob` row
-    /// claims and that were written before `before`.
+    /// Look at the next `limit` files of the byte store after `after` (in hash
+    /// order; `""` starts) and delete those that no `blob` row claims and that
+    /// were written before `before`.
+    ///
+    /// **`limit` bounds the files looked at, not the files deleted**: a store of
+    /// thousands of claimed files costs one batch each hundreds, and a caller
+    /// holding the vault per batch never holds it for the whole store.
     ///
     /// # Errors
     /// The vault's read, or the store refusing to list or delete.
-    pub fn sweep_unclaimed_files(&self, before: SystemTime, limit: usize) -> Result<Swept> {
+    pub fn sweep_unclaimed_files(
+        &self,
+        before: SystemTime,
+        after: &str,
+        limit: usize,
+    ) -> Result<Swept> {
         let Some(store) = self.blobs() else {
             return Ok(Swept {
                 removed: Vec::new(),
-                more: false,
+                next: None,
             });
         };
         let invariant = |what: &str, error: &dyn std::fmt::Display| VaultError::Invariant {
             context: format!("the byte store could not {what}: {error}"),
         };
         let mut removed = Vec::new();
+        let mut looked = 0usize;
+        let mut last = String::new();
         for id in store.ids().map_err(|e| invariant("list its files", &e))? {
+            if id.as_str() <= after {
+                continue;
+            }
+            if looked >= limit {
+                return Ok(Swept {
+                    removed,
+                    next: Some(last),
+                });
+            }
+            looked += 1;
+            last.clone_from(&id);
             let Ok(Some(path)) = store.path_of(&id) else {
                 continue;
             };
@@ -130,25 +154,17 @@ impl Vault {
                     |row| row.get(0),
                 )?)
             })?;
-            if claimed {
-                continue;
-            }
-            if removed.len() >= limit {
-                return Ok(Swept {
-                    removed,
-                    more: true,
-                });
-            }
-            if store
-                .remove(&id)
-                .map_err(|e| invariant("delete a file", &e))?
+            if !claimed
+                && store
+                    .remove(&id)
+                    .map_err(|e| invariant("delete a file", &e))?
             {
                 removed.push(id);
             }
         }
         Ok(Swept {
             removed,
-            more: false,
+            next: None,
         })
     }
 }

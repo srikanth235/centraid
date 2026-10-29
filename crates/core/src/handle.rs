@@ -420,11 +420,11 @@ impl Core {
 /// vault, so it is small: the first screen's reads wait behind at most one.
 const TRASH_BATCH: usize = 25;
 
-/// How many stray files one batch of the launch sweep deletes.
-const FILE_BATCH: usize = 200;
+/// How many files one batch of the launch sweep looks at (deleting or not).
+const FILE_BATCH: usize = 100;
 
 /// How long the launch tidy lets the vault go between two batches.
-const TIDY_PAUSE: Duration = Duration::from_millis(2);
+const TIDY_PAUSE: Duration = Duration::from_millis(5);
 
 impl HandleState {
     /// **PURGE WHAT HAS WAITED OUT ITS WINDOW, OFF THE REQUEST PATH** (#1146,
@@ -464,13 +464,16 @@ impl HandleState {
     /// A closed or poisoned core, or the store's refusal.
     pub fn tidy_files(&self) -> Result<usize> {
         let mut removed = 0;
+        let mut after = String::new();
         loop {
-            let batch = self
-                .with_vault(|vault| Ok(vault.sweep_unclaimed_files(self.launched, FILE_BATCH)?))?;
+            let batch = self.with_vault(|vault| {
+                Ok(vault.sweep_unclaimed_files(self.launched, &after, FILE_BATCH)?)
+            })?;
             removed += batch.removed.len();
-            if !batch.more {
+            let Some(next) = batch.next else {
                 return Ok(removed);
-            }
+            };
+            after = next;
             std::thread::sleep(TIDY_PAUSE);
         }
     }

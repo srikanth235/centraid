@@ -360,7 +360,7 @@ Decision T and findings M8, M10, M11, M14.
 | section move | `moving_a_section_to_another_project_takes_its_tasks_with_it` | `t1 follows its section` (task still in the old project) |
 | released | `derivative_drop_and_write_release_the_bytes_they_stop_naming`, `thread_clear_...`, `blob_collect_...` | `` `released` is a list of hashes, not null `` |
 | released | `a_regenerated_turn_releases_the_thumbnail_it_replaced_as_hashes` | `` `released` is a list of hashes, not 1 `` |
-| sweep | `a_file_with_no_row_is_swept_and_a_file_with_one_is_not`, `the_file_sweep_is_bounded_and_resumes` | `left: [] right: ["e30bbe3c…"]`; `left: 0 right: 2` |
+| sweep | `a_file_with_no_row_is_swept_and_a_file_with_one_is_not`, `the_file_sweep_looks_at_a_bounded_batch_and_resumes` | `left: [] right: ["e30bbe3c…"]`; `left: 0 right: 2` |
 | sweep | `staging_the_same_bytes_again_refreshes_the_files_time` (blobs) | `the time moved up to now` |
 | backup | `the_backup_lists_no_blob_only_a_lapsed_entity_names` | `past its purge date` |
 | core | `the_launch_pass_purges_what_is_overdue_...`, `open_starts_the_pass_without_a_request`, `the_launch_sweep_takes_stray_files_...` | written with the implementation; falsified below |
