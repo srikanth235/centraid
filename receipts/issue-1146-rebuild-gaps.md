@@ -152,3 +152,40 @@ Deleted:
 Added:
 
 - `receipts/issue-1146-rebuild-gaps.md`
+
+### Wave 5 — Search
+
+Four search gaps, each red-first in `crates/search/tests/door.rs` (and `matching.rs`).
+
+**What changed.** (1) An untitled photo is indexed (its text holds `Photo · 12 Mar 2026` and the full month name, from `taken_at`) and the door answers it under that label in `query` and `query_each`; the door's filter is `(e.title <> '' OR e.kind = 'photo')`. (2) `query` walks STAGES: stage 0 is the title matches, stage k the k-th slab of `TAIL_ROWS` other matches (`LIMIT 500 OFFSET 500·(k-1)`); a later stage is read only when the one before did not fill the window; the cursor's tier is the stage, so `tier:rank` is unchanged. `query_each` still reads slab 1. (3) `text_of` joins every label's title with `deleted_at IS NULL` (lists, albums, tags, notebooks, folders, projects, sections, calendars, categories, accounts, places, relations); a trash or restore touches the label and `reindex` already re-indexes its members through `DEPENDENTS`, in the same commit. (4) `text_of` appends the digit-only forms of each phone (person contact points, Locker `phone`); a query written as a number (≥ 2 digit groups, ≥ 5 digits, only digits and ` -().+`) also asks for its joined digits.
+
+**Findings → test → red line.**
+
+- Untitled photos → `an_untitled_photo_is_found_by_its_date_and_answered_under_a_date_label` → `assertion left == right failed  left: []  right: ["p1"]` (door.rs:910).
+- Past the newest 500 → `a_match_older_than_the_newest_five_hundred_is_reached_by_paging` → `left: 500  right: 520` ("every match"); the old `the_tail_is_the_newest_five_hundred_and_a_title_match_is_never_cut` asserted the cap itself and is replaced by `the_tail_pages_newest_first_in_slabs_of_five_hundred_after_the_title_matches` (`left: 501  right: 521`) — its subject was decided away by the issue.
+- Trashed label → `a_trashed_label_stops_finding_its_members_and_a_restored_one_finds_them_again` → `assertion failed: world.ask(&["photo"], "zebrafish").is_empty()` (seen by reverting the album join's liveness predicate; see falsification).
+- Phone digits → `a_phone_number_is_found_without_its_punctuation` → `assertion left == right failed: 5551234  left: []  right: ["p1"]`; `matching::tests::a_number_typed_with_its_punctuation_is_also_its_digits` covers the compiled expression.
+
+**Rulings.**
+
+- **R-1146-5-1** Untitled photos: index them and label them by date rather than dropping the filter for everything. The label is built in the door (`centraid_vault::index::untitled_label`), so every reader of a `Target` (Home's search included) gets a readable row; the Photos app reads ids from its own legs and is unchanged. Other kinds with an empty title stay non-targets.
+- **R-1146-5-2** Paging: slabs by `OFFSET`, cursor tier = stage, not a rowid keyset. Rank order within a slab is kept (the first page is exactly what it was); an old slab costs the matches it skips, paid only by a page that reaches it.
+- **R-1146-5-3** Trashed labels: liveness join in `text_of` plus the re-index the trash/restore already causes (the label is touched, `DEPENDENTS` brings its members), not a new member-touching step. Cost is that of renaming the label, already accepted; a label with very many members pays it in the trash command's commit.
+- **R-1146-5-4** Phones: digits-only form, plus the national part after a `+` country code of 1–3 digits (the index matches word starts, so `5551234` must start a word of its own). Numbers under 5 digits get no form. Digit queries are OR-ed only when they have ≥ 2 groups and ≥ 5 digits, so dates and small numbers are not read as phones. Locker keeps its search as is (its `phone` gets the same forms; nothing else added). A snippet for such a hit may show the digit line.
+
+**Falsification.** (a) Reverted the `h.deleted_at IS NULL` predicate on the list/album join: the trashed-label test failed with the line above; restored. (b) The paging claim: the old test (cap of 500) fails on the new walk and the new one fails on the old code (`left: 500 right: 520`), the two sides of the same break.
+
+**Exit list.** Red-first tests: failing on the base (quoted above), passing now. `cargo test -p centraid-search -p centraid-vault -p centraid-core` green. No schema change: `contracts/schema` untouched. `cargo xtask gate --profile pr`: fmt, clippy, test, restore-drill, rules, doc-links, ledgers, release-build, ts-static, emitters, advisory, lockfile, call-budget, search-budget, fault-door ok; buf, deny, ci-policy, secrets, osv SKIP (tools absent); the run took 1689.5 s against its 1500 s budget on this cold tree, every step green — a time overrun of the environment, not a step failure. `search-budget`: worst p95 50.5 ms (notes, in-word fragment) and 49.8 ms (home), ceiling 80 ms, ledger untouched; no base measurement taken (the base was not rebuilt in release), so no before/after delta is claimed. `mobile-jvm` not run: no `mobile/` change. The pre-push hook passed after `git fetch origin main` (its `origin/main` ref was missing).
+
+**Changed files.** `crates/search/src/sqlite.rs`, `crates/search/src/matching.rs`, `crates/search/tests/door.rs`, `crates/search/README.md`, `crates/vault/src/index.rs`, `crates/vault/src/index/text.rs`, `docs/vault-ontology.md`, `receipts/issue-1146-rebuild-gaps.md`. Deleted: none. Owner hand-offs: none.
+
+#### Changelog line
+
+Search now finds photos that have no title (shown by the day they were taken), reaches older matches by scrolling past the first 500, stops finding things through a label you moved to the trash, and finds phone numbers typed without punctuation.
+
+#### Decision rows
+
+| **R-1146-5-1** | An untitled photo is indexed with a date label (`Photo · 12 Mar 2026`, from `taken_at`) that the door also answers it under; other kinds with no title stay non-targets. _Why:_ the row needs words to show, and the label is built once in the door so every reader gets it. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-5-2** | The search tail pages in slabs of 500 (`OFFSET`), the cursor's tier being the slab; the first page reads slab 1 only. _Why:_ a match older than the newest 500 was unreachable, and the first-page cost is the budget's. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-5-3** | A trashed label lends no words to its members; trash and restore re-index the members in their own commit. _Why:_ the label is already touched and `DEPENDENTS` already re-indexes members, so a liveness join costs nothing more than a rename. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
+| **R-1146-5-4** | A phone number is also indexed as its digits (and the national part after a `+` country code), and a number-shaped query also asks for its joined digits. _Why:_ the index matches word starts, so punctuation hid the number; Locker search is otherwise unchanged. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
