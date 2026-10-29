@@ -436,6 +436,13 @@ const TIDY_PAUSE: Duration = Duration::from_millis(5);
 /// them cost the search budget its p95 (#1146).
 const TIDY_IDLE: Duration = Duration::from_millis(300);
 
+/// Which launch pass a batch belongs to.
+#[derive(Clone, Copy)]
+enum Tidy {
+    Trash,
+    Files,
+}
+
 impl HandleState {
     /// **PURGE WHAT HAS WAITED OUT ITS WINDOW, OFF THE REQUEST PATH** (#1146,
     /// decision T). Started by [`Core::open`] on a thread of its own; the open
@@ -450,10 +457,7 @@ impl HandleState {
     /// A closed or poisoned core, or the pass's own failure; what earlier
     /// batches purged stays purged.
     pub fn tidy_trash(&self) -> Result<usize> {
-        self.tidy_batch_loop(|vault, _after| {
-            let batch = vault.empty_overdue_trash(&self.registry, TRASH_BATCH)?;
-            Ok((batch.purged, batch.more.then(String::new)))
-        })
+        self.tidy_all(Tidy::Trash)
     }
 
     fn mark_used(&self) {
@@ -467,54 +471,63 @@ impl HandleState {
         self.last_used.store(ms, Ordering::Relaxed);
     }
 
-    /// Wait until the vault has been idle for [`TIDY_IDLE`]; an error when the
-    /// core closes while waiting.
-    fn wait_for_idle(&self) -> Result<()> {
-        loop {
-            self.check_open()?;
-            let now = u64::try_from(
-                std::time::SystemTime::now()
-                    .duration_since(self.launched)
-                    .unwrap_or_default()
-                    .as_millis(),
-            )
-            .unwrap_or(u64::MAX);
-            let idle = now.saturating_sub(self.last_used.load(Ordering::Relaxed));
-            if idle >= u64::try_from(TIDY_IDLE.as_millis()).unwrap_or(0) {
-                return Ok(());
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
+    /// Whether the vault has gone unused for [`TIDY_IDLE`].
+    fn idle(&self) -> bool {
+        let now = u64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(self.launched)
+                .unwrap_or_default()
+                .as_millis(),
+        )
+        .unwrap_or(u64::MAX);
+        now.saturating_sub(self.last_used.load(Ordering::Relaxed))
+            >= u64::try_from(TIDY_IDLE.as_millis()).unwrap_or(0)
     }
 
-    /// Run `step` over the vault in batches, each only after the vault has been
-    /// idle, until it says there is no more. `step` answers how many it did and
-    /// where the next batch resumes.
-    fn tidy_batch_loop(
-        &self,
-        step: impl Fn(&Vault, &str) -> Result<(usize, Option<String>)>,
-    ) -> Result<usize> {
+    /// One batch of a tidy pass, if the vault is idle: how many it did and
+    /// where the next batch resumes (`None` once the pass is done). `Ok(None)`
+    /// means the vault was busy and nothing ran.
+    fn tidy_step(&self, which: Tidy, after: &str) -> Result<Option<(usize, Option<String>)>> {
+        self.check_open()?;
+        if !self.idle() {
+            return Ok(None);
+        }
+        // Taken without marking: the tidy's own hold is not a request.
+        let held = self
+            .vault
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(vault) = held.as_ref() else {
+            return Err(CoreError::Unpaired);
+        };
+        Ok(Some(match which {
+            Tidy::Trash => {
+                let batch = vault.empty_overdue_trash(&self.registry, TRASH_BATCH)?;
+                (batch.purged, batch.more.then(String::new))
+            }
+            Tidy::Files => {
+                let batch = vault.sweep_unclaimed_files(self.launched, after, FILE_BATCH)?;
+                (batch.removed.len(), batch.next)
+            }
+        }))
+    }
+
+    /// Run a pass to its end on this thread, a batch at a time.
+    fn tidy_all(&self, which: Tidy) -> Result<usize> {
         let mut total = 0;
         let mut after = String::new();
         loop {
-            self.wait_for_idle()?;
-            // Taken without marking: the tidy's own hold is not a request.
-            let (done, next) = {
-                let held = self
-                    .vault
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                let Some(vault) = held.as_ref() else {
-                    return Err(CoreError::Unpaired);
-                };
-                step(vault, &after)?
-            };
-            total += done;
-            let Some(next) = next else {
-                return Ok(total);
-            };
-            after = next;
-            std::thread::sleep(TIDY_PAUSE);
+            match self.tidy_step(which, &after)? {
+                None => std::thread::sleep(Duration::from_millis(50)),
+                Some((done, next)) => {
+                    total += done;
+                    let Some(next) = next else {
+                        return Ok(total);
+                    };
+                    after = next;
+                    std::thread::sleep(TIDY_PAUSE);
+                }
+            }
         }
     }
 
@@ -529,24 +542,44 @@ impl HandleState {
     /// # Errors
     /// A closed or poisoned core, or the store's refusal.
     pub fn tidy_files(&self) -> Result<usize> {
-        self.tidy_batch_loop(|vault, after| {
-            let batch = vault.sweep_unclaimed_files(self.launched, after, FILE_BATCH)?;
-            Ok((batch.removed.len(), batch.next))
-        })
+        self.tidy_all(Tidy::Files)
     }
 
-    /// Run `body` against this state on a thread of its own. It ends when its
-    /// passes do, or at the next batch after the core is closed.
-    fn tidy_in_background(&self, name: &str, body: fn(&HandleState) -> Result<usize>) {
+    /// Run a pass on a thread of its own. **The thread holds the core only for
+    /// the length of a batch**: a handle dropped between two batches really is
+    /// dropped (its files released, its spool free) and the thread ends with it.
+    fn tidy_in_background(&self, name: &str, which: Tidy) {
         let weak = self.me.clone();
         let spawned = std::thread::Builder::new()
             .name(name.to_owned())
             .spawn(move || {
-                let Some(state) = weak.upgrade() else { return };
-                match body(&state) {
-                    Ok(0) | Err(CoreError::Unpaired | CoreError::Closed) => {}
-                    Ok(count) => tracing::info!(count, "the launch tidy finished"),
-                    Err(error) => tracing::warn!("the launch tidy stopped: {error}"),
+                let mut after = String::new();
+                let mut total = 0usize;
+                loop {
+                    let Some(state) = weak.upgrade() else { return };
+                    match state.tidy_step(which, &after) {
+                        Ok(None) => {
+                            drop(state);
+                            std::thread::sleep(Duration::from_millis(50));
+                        }
+                        Ok(Some((done, next))) => {
+                            total += done;
+                            drop(state);
+                            let Some(next) = next else {
+                                if total > 0 {
+                                    tracing::info!(total, "the launch tidy finished");
+                                }
+                                return;
+                            };
+                            after = next;
+                            std::thread::sleep(TIDY_PAUSE);
+                        }
+                        Err(CoreError::Unpaired | CoreError::Closed) => return,
+                        Err(error) => {
+                            tracing::warn!("the launch tidy stopped: {error}");
+                            return;
+                        }
+                    }
                 }
             });
         if let Err(error) = spawned {
@@ -555,7 +588,7 @@ impl HandleState {
     }
 
     fn start_trash_tidy(&self) {
-        self.tidy_in_background("centraid-tidy-trash", HandleState::tidy_trash);
+        self.tidy_in_background("centraid-tidy-trash", Tidy::Trash);
     }
 
     /// The event queue, so a producer (sync, the applier) can push to it.
@@ -696,7 +729,7 @@ impl HandleState {
         // THE FIRST STORE THIS CORE HOLDS IS SWEPT ONCE (#1146): the files no row
         // claims go, off this thread.
         if !self.files_tidied.swap(true, Ordering::SeqCst) {
-            self.tidy_in_background("centraid-tidy-files", HandleState::tidy_files);
+            self.tidy_in_background("centraid-tidy-files", Tidy::Files);
         }
     }
 
