@@ -374,6 +374,8 @@ Decision T and findings M8, M10, M11, M14.
 
 - Inherited failure: none seen. One policy gate failed on my first sweep (`query_plans`: a full read of `blob`); fixed in code (one primary-key lookup per old file), ledger untouched, `query_plans` now passes.
 - Existing tests changed because their subject is decided: the restore-past-window refusals in `docs_photos.rs`, `locker_commands.rs`, `docs_tests.rs`, `park.rs`; `blob.collect` answers `released` (was `collected`); the backup unit test uses a future `purge_at` for "still held".
+- The assistant's tests that asserted the vault's "past the restore window" decline had that decline as their whole subject, which decision T deletes. In `crates/nativetools/tests`: `a_restore_past_the_window_ends_in_a_decline_for_every_kind` became `a_restore_past_the_window_still_restores_every_kind`; `a_restore_that_lands_in_part_stays_an_error_with_its_diff`, `a_decline_is_not_paged_by_more_and_does_not_repeat` and `a_restore_of_rows_that_are_all_past_the_window_is_still_the_decline` were deleted; `issue_11_...`, `a_restore_over_several_rows_...`, `the_flags_still_switch_the_block_off` and `a_write_on_a_trashed_row_...` now assert the restore. The error family `act.restore_name_it_is_in_the` has a `why_none`, and `contracts/assist/export/errors.json` was regenerated.
+- Outside the wave: `crates/assist/src/native/act.rs` still carries the code path that words a vault refusal as "past the vault's restore window"; nothing reaches it now.
 - Gate results: see the final message.
 
 #### Not done, and why
