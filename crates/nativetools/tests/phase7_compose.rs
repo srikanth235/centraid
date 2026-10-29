@@ -545,23 +545,19 @@ fn a_write_on_a_trashed_row_declines_and_a_restore_finds_it() {
     );
     assert_eq!(tool_of(&restored), "act", "{restored}");
     assert_eq!(restored["effect"]["diff"]["rows"][0]["change"], "restored");
-    // a restore that gives a word start (tier 3) goes to the one trashed row it fits; the vault
-    // refuses that one, past its window, and the refusal is the runtime's decline
+    // a restore that gives a word start (tier 3) goes to the one trashed row it fits, and the
+    // vault restores it though its window ran out (#1146)
     session.user("restore old contact");
     let near = call(
         &mut session,
         "act",
         json!({"verb": "restore", "kind": "person", "name": "Old Contac"}),
     );
-    assert_declined(&near, "not_found");
-    assert_eq!(near["effect"]["refusal"]["id"], world.id("old"), "{near}");
+    assert_eq!(tool_of(&near), "act", "{near}");
     assert_eq!(
-        near["effect"]["refusal"]["predicate"],
-        "entity_is_in_the_trash"
+        near["effect"]["diff"]["rows"][0]["change"], "restored",
+        "{near}"
     );
-    // the refusal keeps its own marker, and says no write ran
-    assert_eq!(family(&near), fix("refused_write", "decline"));
-    assert!(!text(&near).contains("applied to"), "{near}");
 }
 
 #[test]

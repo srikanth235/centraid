@@ -479,7 +479,7 @@ fn the_cap_ask_has_no_options_and_leaves_no_asked_focus() {
 }
 
 // ---------------------------------------------------------------------------
-// Refusals of the vault: a decline when nothing can lift them
+// A restore past the window, and the vault's other refusals
 // ---------------------------------------------------------------------------
 
 /// The fixture with a trashed row of each kind that has a trash, a long time ago.
@@ -522,8 +522,10 @@ fn long_gone() -> Value {
     world
 }
 
+/// DECISION T (#1146): the vault no longer refuses a restore past the window; the launch
+/// pass empties an overdue row, and until it runs every kind comes back.
 #[test]
-fn a_restore_past_the_window_ends_in_a_decline_for_every_kind() {
+fn a_restore_past_the_window_still_restores_every_kind() {
     let world = seeded_with(&long_gone());
     for (kind, name) in [
         ("person", "Craig Nolan"),
@@ -536,58 +538,18 @@ fn a_restore_past_the_window_ends_in_a_decline_for_every_kind() {
     ] {
         let mut session = world.session();
         session.user("bring it back");
-        let declined = call(
+        let restored = call(
             &mut session,
             "act",
             json!({"verb": "restore", "kind": kind, "name": name, "trashed": true}),
         );
-        assert_eq!(declined["ends_turn"], true, "{kind}: {declined}");
-        assert_eq!(tool_of(&declined), "decline", "{kind}: {declined}");
-        assert_eq!(declined["effect"]["decline"]["reason"], "not_found");
-        assert!(diff_rows(&declined).is_empty(), "{kind}: {declined}");
-        assert!(
-            declined["effect"].get("error").is_none(),
-            "{kind}: {declined}"
-        );
-        let refusal = &declined["effect"]["refusal"];
-        assert_eq!(refusal["verb"], "restore");
-        assert_eq!(refusal["kind"], kind);
-        assert_eq!(refusal["outcome"], "decline");
-        // the reply says what the vault refused and which of the two the runtime did
-        let lines: Vec<&str> = reply(&declined).lines().collect();
-        assert_eq!(lines.len(), 2, "{kind}: {declined}");
-        assert!(
-            lines[0].starts_with("refused: restore #")
-                && lines[0].contains(&format!("{kind} \"{name}\": it is in the trash but past the vault's restore window, so it cannot come back (vault: ")),
-            "{kind}: {}",
-            lines[0]
-        );
+        assert_eq!(tool_of(&restored), "act", "{kind}: {restored}");
         assert_eq!(
-            lines[1],
-            "declined: not_found · the runtime ended the turn: a row past its restore window cannot be brought back",
-            "{kind}"
+            diff_rows(&restored)[0]["change"],
+            "restored",
+            "{kind}: {restored}"
         );
     }
-}
-
-#[test]
-fn a_decline_is_not_paged_by_more_and_does_not_repeat() {
-    let world = seeded_with(&long_gone());
-    let mut session = world.session();
-    session.user("bring craig back");
-    let declined = call(
-        &mut session,
-        "act",
-        json!({"verb": "restore", "kind": "person", "name": "Craig Nolan", "trashed": true, "more": true}),
-    );
-    assert_eq!(declined["ends_turn"], true, "{declined}");
-    assert_eq!(tool_of(&declined), "decline");
-    // the turn is over: the next call belongs to a new message
-    let after = call(&mut session, "find", json!({"kind": "person"}));
-    assert!(
-        reply(&after).starts_with("error: the turn has ended"),
-        "{after}"
-    );
 }
 
 #[test]
@@ -607,64 +569,6 @@ fn a_restore_inside_the_window_is_unchanged() {
     assert_eq!(tool_of(&restored), "act", "{restored}");
     assert_eq!(restored["ends_turn"], true);
     assert_eq!(diff_rows(&restored)[0]["change"], "restored", "{restored}");
-}
-
-#[test]
-fn a_restore_that_lands_in_part_stays_an_error_with_its_diff() {
-    // the first row restores, the second is past its window: a write that
-    // landed is never hidden behind an ask or a decline
-    let mut world = fixture();
-    world["documents"].as_array_mut().unwrap().extend([
-        json!({"key": "recent", "name": "Recent scan", "text": "x", "trashed": "2026-09-20T09:00"}),
-        json!({"key": "ancient", "name": "Ancient scan", "text": "x", "trashed": "2026-03-01T09:00"}),
-    ]);
-    let seeded = seeded_with(&world);
-    let mut session = seeded.session();
-    session.user("bring both scans back");
-    let found = call(
-        &mut session,
-        "find",
-        json!({"kind": "document", "name": "scan", "trashed": true, "order": "name asc"}),
-    );
-    // by name: Ancient scan comes first, so list the recent one first by hand
-    let numbers: Vec<String> = found["effect"]["rows"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|row| format!("#{}", row["n"]))
-        .collect();
-    assert_eq!(numbers.len(), 2, "{found}");
-    let ids: Vec<&str> = found["effect"]["rows"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|row| row["id"].as_str().unwrap())
-        .collect();
-    let recent = if ids[0] == seeded.id("recent") {
-        &numbers[0]
-    } else {
-        &numbers[1]
-    };
-    let ancient = if ids[0] == seeded.id("recent") {
-        &numbers[1]
-    } else {
-        &numbers[0]
-    };
-    let both = format!("{recent}, {ancient}");
-    let partial = call(
-        &mut session,
-        "act",
-        json!({"verb": "restore", "rows": both}),
-    );
-    // a write that landed ends the turn as any write does; the refusal is named in its text
-    assert_eq!(partial["ends_turn"], true, "{partial}");
-    assert_eq!(tool_of(&partial), "act", "{partial}");
-    assert_eq!(diff_rows(&partial).len(), 1, "{partial}");
-    assert!(
-        reply(&partial).contains("error: restore #") && reply(&partial).contains("was refused"),
-        "{partial}"
-    );
-    assert!(partial["effect"]["error"].is_string());
 }
 
 // ---------------------------------------------------------------------------
@@ -1157,11 +1061,11 @@ fn the_flags_still_switch_the_block_off() {
     );
     let user = session.user("star neha");
     assert!(user["block"].is_null(), "{user}");
-    // and a write over a trashed name still goes the way of its refusal
-    let refused = text(
+    // and a restore over a trashed name still goes the way of a write
+    let restored = text(
         &mut session,
         "act",
         json!({"verb": "restore", "kind": "person", "name": "Old Contact", "trashed": true}),
     );
-    assert!(refused.contains("declined: not_found"), "{refused}");
+    assert!(restored.contains("restored:"), "{restored}");
 }

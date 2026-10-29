@@ -469,7 +469,7 @@ fn save_turn(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
         "created": created,
         "user_ordinal": user_ordinal,
         "assistant_ordinal": assistant_ordinal,
-        "released": released.len(),
+        "released": released,
     }))
 }
 
@@ -528,8 +528,8 @@ fn clear(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
     for id in &ids {
         purge_one(ctx, id, &mut purged)?;
     }
-    crate::blob::collect(ctx.connection())?;
-    Ok(json!({ "deleted": purged.len() }))
+    let released = crate::blob::collect(ctx.connection())?;
+    Ok(json!({ "deleted": purged.len(), "released": released }))
 }
 
 #[must_use]

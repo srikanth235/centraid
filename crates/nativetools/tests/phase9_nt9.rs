@@ -29,7 +29,7 @@ fn push(world: &mut Value, section: &str, row: Value) {
 // ---------------------------------------------------------------------------------------------
 // Rule 6: a restore over several rows is the same whatever order the rows come in
 
-/// Three trashed photos; "Old garage door" went to the trash past the vault's window.
+/// Three trashed photos; "Old garage door" went to the trash past its window.
 fn trashed_photos() -> World {
     world_with(|world| {
         for (key, name, when) in [
@@ -86,7 +86,7 @@ fn restore_in_order(order: [&str; 3]) -> (Value, Vec<String>) {
 }
 
 #[test]
-fn a_restore_over_several_rows_restores_the_two_that_can_come_back_whatever_the_order() {
+fn a_restore_over_several_rows_restores_all_of_them_whatever_the_order() {
     let mut seen = Vec::new();
     for order in [
         ["Old garage", "Selfie", "Cafe"],
@@ -94,54 +94,16 @@ fn a_restore_over_several_rows_restores_the_two_that_can_come_back_whatever_the_
         ["Selfie", "Old garage", "Cafe"],
     ] {
         let (reply, restored) = restore_in_order(order);
-        assert_eq!(restored.len(), 2, "{order:?}: {reply}");
+        // "Old garage door" is past its window and comes back too (#1146)
+        assert_eq!(restored.len(), 3, "{order:?}: {reply}");
         assert_ne!(tool_of(&reply), "decline", "{order:?}: {reply}");
-        let said = text(&reply);
-        assert!(said.contains("restored:"), "{order:?}: {said}");
-        assert!(
-            said.contains("Old garage door")
-                && said.contains("past the vault's restore window, so it cannot come back"),
-            "{order:?}: the refused row is reported: {said}"
-        );
+        assert!(text(&reply).contains("restored:"), "{order:?}: {reply}");
         seen.push(restored);
     }
     assert!(
         seen.windows(2).all(|pair| pair[0] == pair[1]),
-        "the same two rows come back in every order: {seen:?}"
+        "the same rows come back in every order: {seen:?}"
     );
-}
-
-#[test]
-fn a_restore_of_rows_that_are_all_past_the_window_is_still_the_decline() {
-    let world = world_with(|world| {
-        for (key, name) in [("one", "Old one"), ("two", "Old two")] {
-            push(
-                world,
-                "photos",
-                json!({"key": key, "name": name, "taken": "2026-02-01T12:00", "trashed": "2026-08-01T09:00"}),
-            );
-        }
-    });
-    let mut session = world.session();
-    session.user("restore both");
-    let found = call(
-        &mut session,
-        "find",
-        json!({"kind": "photo", "trashed": true}),
-    );
-    let rows: Vec<String> = found["effect"]["rows"]
-        .as_array()
-        .expect("rows")
-        .iter()
-        .map(|row| format!("#{}", row["n"]))
-        .collect();
-    let reply = call(
-        &mut session,
-        "act",
-        json!({"verb": "restore", "rows": rows.join(", ")}),
-    );
-    assert_eq!(tool_of(&reply), "decline", "{reply}");
-    assert_eq!(reply["effect"]["decline"]["reason"], "not_found", "{reply}");
 }
 
 // ---------------------------------------------------------------------------------------------

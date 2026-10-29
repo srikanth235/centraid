@@ -437,6 +437,60 @@ fn delete_rules_cascade_only_where_a_row_cannot_outlive_its_parent() {
     });
 }
 
+#[test]
+fn every_pointer_into_an_entity_that_deletes_nothing_has_a_purge_rule() {
+    use centraid_vault::commands::entity::PURGE_RULES;
+    let scratch = founded("c4b");
+    read(&scratch.vault, |connection| {
+        let hosts: BTreeSet<String> = Kind::ALL
+            .iter()
+            .map(|kind| kind.host().to_owned())
+            .collect();
+        // The pointers the engine would refuse to delete out from under: no
+        // action on delete, into an entity or into a kind's own table.
+        let derived: BTreeSet<(String, String)> = foreign_keys(connection)
+            .into_iter()
+            .filter(|fk| {
+                fk.on_delete == "NO ACTION"
+                    && (fk.to_table == "entity" || hosts.contains(&fk.to_table))
+            })
+            .map(|fk| (fk.table, fk.from))
+            .collect();
+        let named: BTreeSet<(String, String)> = PURGE_RULES
+            .iter()
+            .map(|(table, from, _)| ((*table).to_owned(), (*from).to_owned()))
+            .collect();
+        assert_eq!(
+            derived, named,
+            "left: the file's pointers; right: the purge rules. A pointer with no rule \
+             fails a member's purge, or strands what points at it"
+        );
+        Ok(())
+    });
+}
+
+#[test]
+fn every_column_that_rents_a_blob_says_whose_the_bytes_are() {
+    use centraid_vault::backup::files::RENTERS;
+    let scratch = founded("c4c");
+    read(&scratch.vault, |connection| {
+        let rented: BTreeSet<(String, String)> = centraid_vault::blob::references(connection)?
+            .into_iter()
+            // A cascading reference (a derivative of a blob) keeps nothing alive;
+            // `derivative.out` is a plain one and follows its original.
+            .filter(|reference| reference.keeps_alive)
+            .map(|reference| (reference.table, reference.column))
+            .filter(|(table, column)| !(table == "derivative" && column == "out"))
+            .collect();
+        let named: BTreeSet<(String, String)> = RENTERS
+            .iter()
+            .map(|(table, column, _)| ((*table).to_owned(), (*column).to_owned()))
+            .collect();
+        assert_eq!(rented, named);
+        Ok(())
+    });
+}
+
 // ---------------------------------------------------------------------------
 // 5. Edges join only the kinds edge_shape names
 // ---------------------------------------------------------------------------

@@ -16,7 +16,8 @@
 //! not a blob: it is the vault file's own and travels in every snapshot of it.
 //! A purged document's blob row was collected with it, so its bytes are the
 //! store's to reclaim and are listed nowhere; a trashed one's are listed until
-//! its purge, because trash keeps its reference alive.
+//! its purge date, because trash keeps its reference alive, and not after it
+//! ([`content_files`]).
 
 use super::naming::PlaintextHash;
 use super::{Result, invariant};
@@ -47,7 +48,15 @@ impl ContentFile {
     }
 }
 
-/// Every blob, each hash once, newest first.
+/// Every blob with a renter that is not past its purge date, each hash once,
+/// newest first.
+///
+/// **A blob only lapsed entities name is not listed**: its renter's `purge_at`
+/// has passed, so the next launch purges it and it is no longer the member's to
+/// keep safe. Uploading it would spend the link on bytes about to be deleted,
+/// and counting it would say "backed up" of something that is going. A blob a
+/// live entity also names is listed; a blob nothing names yet (claimed, not
+/// yet named) is listed; a derivative follows its original.
 ///
 /// # Errors
 /// [`super::PlaneError`] when the vault will not read, or a row holds a hash
@@ -83,8 +92,12 @@ pub fn content_files(vault: &Vault) -> Result<Vec<ContentFile>> {
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     })?;
+    let lapsed = lapsed_blobs(vault)?;
     let mut out = Vec::with_capacity(rows.len());
     for (hash, size, variant, media_type, created_at) in rows {
+        if lapsed.contains(&hash) {
+            continue;
+        }
         let h = PlaintextHash::from_hex(&hash)
             .map_err(|_| invariant(format!("a blob's hash `{hash}` cannot be named")))?;
         let len = u64::try_from(size)
@@ -103,6 +116,79 @@ pub fn content_files(vault: &Vault) -> Result<Vec<ContentFile>> {
     Ok(out)
 }
 
+/// Every column that rents a blob, as `(table, column, the SQL that names the
+/// renting row's entity)`: [`lapsed_blobs`] asks each of them whose the bytes are.
+/// `derivative.out` is not here: a derivative's file is its original's.
+///
+/// A commitment test requires this to be exactly the vault's plain references
+/// into `blob`, so a column that rents bytes cannot be added without saying
+/// whose they are.
+pub const RENTERS: &[(&str, &str, &str)] = &[
+    ("container", "cover", "id"),
+    ("document", "blob", "id"),
+    ("message_attachment", "thumb", "thread_id"),
+    ("person", "avatar", "id"),
+    ("photo", "blob", "id"),
+    ("revision", "blob", "entity_id"),
+];
+
+/// The hashes only lapsed entities rent: every renter of each is an entity
+/// whose `purge_at` is at or before now, or a derivative of such a blob.
+fn lapsed_blobs(vault: &Vault) -> Result<std::collections::HashSet<String>> {
+    use std::collections::{HashMap, HashSet};
+    let now = vault.clock().now_text();
+    vault
+        .read(|connection| {
+            // hash -> whether some renter is live
+            let mut live: HashMap<String, bool> = HashMap::new();
+            for (table, column, owner) in RENTERS {
+                let mut statement = connection.prepare(&format!(
+                    "SELECT t.{column}, e.purge_at IS NOT NULL AND e.purge_at <= ?1
+                       FROM {table} t JOIN entity e ON e.id = t.{owner}
+                      WHERE t.{column} IS NOT NULL"
+                ))?;
+                let rows = statement.query_map([&now], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, bool>(1)?))
+                })?;
+                for row in rows {
+                    let (hash, lapsed) = row?;
+                    let entry = live.entry(hash).or_insert(false);
+                    *entry = *entry || !lapsed;
+                }
+            }
+            // A derivative's file is its original's: live while the original is.
+            let derived: Vec<(String, String)> = connection
+                .prepare("SELECT blob, out FROM derivative WHERE out IS NOT NULL")?
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .collect::<rusqlite::Result<_>>()?;
+            loop {
+                let mut changed = false;
+                for (original, out) in &derived {
+                    // An original nothing rents is not lapsed (claimed, not yet named).
+                    let original_live = live.get(original).copied().unwrap_or(true);
+                    let entry = live.entry(out.clone()).or_insert(false);
+                    if original_live && !*entry {
+                        *entry = true;
+                        changed = true;
+                    }
+                }
+                if !changed {
+                    break;
+                }
+            }
+            Ok(live
+                .into_iter()
+                .filter(|(_, live)| !live)
+                .map(|(hash, _)| hash)
+                .collect::<HashSet<_>>())
+        })
+        .map_err(|error| {
+            invariant(format!(
+                "the vault would not say which blobs have lapsed: {error}"
+            ))
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,7 +205,8 @@ mod tests {
     }
 
     /// A photograph in the trash is still a file to send, because trash keeps
-    /// its reference alive; once purged it is collected and so is its thumbnail.
+    /// its reference alive, until its purge date passes; once purged it is
+    /// collected and so is its thumbnail.
     #[test]
     fn a_trashed_original_is_a_file_and_a_collected_one_is_not() {
         let (_dir, vault) = founded();
@@ -144,13 +231,26 @@ mod tests {
                     None,
                 )?;
                 c.execute(
-                    "UPDATE entity SET deleted_at = ?2, purge_at = ?2 WHERE id = ?1",
+                    "UPDATE entity SET deleted_at = ?2, purge_at = '9999-12-31T00:00:00.000Z'
+                      WHERE id = ?1",
                     rusqlite::params![id, now],
                 )?;
                 Ok(())
             })
             .expect("commits");
         assert_eq!(content_files(&vault).expect("reads").len(), 2);
+        // Past its purge date the launch pass takes it, so it is no longer a
+        // file to keep safe: neither it nor its thumbnail is listed.
+        vault
+            .commit(|tx| {
+                tx.connection().execute(
+                    "UPDATE entity SET purge_at = '2000-01-01T00:00:00.000Z' WHERE id = ?1",
+                    [&id],
+                )?;
+                Ok(())
+            })
+            .expect("lapses");
+        assert!(content_files(&vault).expect("reads").is_empty());
         vault
             .commit(|tx| {
                 tx.connection()

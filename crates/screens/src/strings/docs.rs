@@ -85,7 +85,7 @@ catalog! {
     plain ingest_no_vault = ("No vault is open on this phone.", "No vault is open on this phone.");
     plain ingest_scan_title = ("Scanned document", "Scanned document");
     plain ingest_text_title = ("Untitled document", "Untitled document");
-    plain in_trash_lapsed = ("In trash · can no longer be restored", "In trash · can no longer be restored");
+    plain in_trash_lapsed = ("In trash · emptied when Centraid next opens", "In trash · emptied when Centraid next opens");
     plain in_trash_until = ("In trash · restorable until", "In trash · restorable until");
     plain labels_title = ("Labels", "Labels");
     plain label_add = ("Add", "Add");
