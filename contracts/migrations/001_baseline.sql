@@ -49,8 +49,8 @@ CREATE TABLE entity (
 CREATE INDEX entity_by_title   ON entity(kind, deleted_at, title, id);
 CREATE INDEX entity_by_updated ON entity(kind, deleted_at, updated_at, id);
 -- The case-insensitive title match a contact import and a followed record's match key make, once
--- per record: `e.kind = ? AND e.deleted_at IS NULL AND e.title = ? COLLATE NOCASE`.
-CREATE INDEX entity_by_title_nocase ON entity(kind, title COLLATE NOCASE) WHERE deleted_at IS NULL;
+-- per record: `e.kind = ? AND e.deleted_at IS NULL AND e.title = ? COLLATE NOCASE ORDER BY e.created_at, e.id`.
+CREATE INDEX entity_by_title_nocase ON entity(kind, title COLLATE NOCASE, created_at, id) WHERE deleted_at IS NULL;
 -- A window of one kind, newest made first (the People roster, the Docs drive and
 -- its recent shelf, the Tasks board): `kind = ? [AND deleted_at IS NULL] ORDER BY
 -- created_at DESC, id DESC` streams from here and stops at its limit, where the

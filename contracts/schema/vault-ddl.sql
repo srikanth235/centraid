@@ -65,7 +65,7 @@ CREATE INDEX entity_by_created ON entity(kind, created_at, id);
 CREATE INDEX entity_by_title   ON entity(kind, deleted_at, title, id);
 
 -- index entity_by_title_nocase on entity
-CREATE INDEX entity_by_title_nocase ON entity(kind, title COLLATE NOCASE) WHERE deleted_at IS NULL;
+CREATE INDEX entity_by_title_nocase ON entity(kind, title COLLATE NOCASE, created_at, id) WHERE deleted_at IS NULL;
 
 -- index entity_by_updated on entity
 CREATE INDEX entity_by_updated ON entity(kind, deleted_at, updated_at, id);
