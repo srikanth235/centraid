@@ -17,7 +17,6 @@
 //! started: anything staged since is newer, and staging an identical file
 //! again refreshes the older file's time (`centraid_blobs::ByteStore`).
 
-use std::collections::HashSet;
 use std::time::SystemTime;
 
 use crate::commands::{Command, CommandStatus, Registry};
@@ -112,17 +111,8 @@ impl Vault {
         let invariant = |what: &str, error: &dyn std::fmt::Display| VaultError::Invariant {
             context: format!("the byte store could not {what}: {error}"),
         };
-        let claimed: HashSet<String> = self.read(|connection| {
-            Ok(connection
-                .prepare("SELECT hash FROM blob")?
-                .query_map([], |row| row.get::<_, String>(0))?
-                .collect::<rusqlite::Result<_>>()?)
-        })?;
         let mut removed = Vec::new();
         for id in store.ids().map_err(|e| invariant("list its files", &e))? {
-            if claimed.contains(&id) {
-                continue;
-            }
             let Ok(Some(path)) = store.path_of(&id) else {
                 continue;
             };
@@ -132,21 +122,24 @@ impl Vault {
             if written >= before {
                 continue;
             }
-            if removed.len() >= limit {
-                return Ok(Swept {
-                    removed,
-                    more: true,
-                });
-            }
-            // Asked again, because a command may have claimed it since the list.
-            let claimed_now: bool = self.read(|connection| {
+            // One primary-key lookup per old file, not a read of the whole table.
+            let claimed: bool = self.read(|connection| {
                 Ok(connection.query_row(
                     "SELECT EXISTS (SELECT 1 FROM blob WHERE hash = ?1)",
                     [&id],
                     |row| row.get(0),
                 )?)
             })?;
-            if !claimed_now && store.remove(&id).map_err(|e| invariant("delete a file", &e))? {
+            if claimed {
+                continue;
+            }
+            if removed.len() >= limit {
+                return Ok(Swept {
+                    removed,
+                    more: true,
+                });
+            }
+            if store.remove(&id).map_err(|e| invariant("delete a file", &e))? {
                 removed.push(id);
             }
         }
