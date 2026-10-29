@@ -4382,28 +4382,6 @@ pub mod act {
             }
         }
 
-        /// (imports, lane I) Name bytes the stage door stored through blob.stage, at the size the core counted, so no stored bytes sit in the vault that nothing names.
-        #[derive(Clone, Debug, Default)]
-        pub struct ClaimBytes {
-            pub hash: String,
-            pub size: i64,
-        }
-        impl ClaimBytes {
-            pub const NAME: &str = "claim-bytes";
-            pub fn request(self) -> wire::ActRequest {
-                #[allow(unused_mut)]
-                let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("hash".to_owned(), text(self.hash));
-                map.insert("size".to_owned(), whole(self.size));
-                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
-            }
-        }
-        impl From<ClaimBytes> for wire::ActRequest {
-            fn from(value: ClaimBytes) -> Self {
-                value.request()
-            }
-        }
-
         /// (imports, lane I) Stop following a folder through follow.stop: its sources are forgotten and the origin retired; every document stays.
         #[derive(Clone, Debug, Default)]
         pub struct StopFollowingFiles {
