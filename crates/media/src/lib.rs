@@ -9,7 +9,7 @@
 //! | [`format`] | the BLAKE3 content hash and the canonical JSON spelling |
 //! | [`models`] | the media model lock's verify-then-fetch |
 //! | [`renditions`] | JPEG derivatives |
-//! | [`phash`] · [`duplicates`] | the perceptual hash and the near-duplicate clustering |
+//! | [`phash`] | the perceptual hash's Hamming distance (the Duplicates screen that read it is retired, #1146 D5) |
 //!
 //! ## ONE FORMAT
 //!
@@ -20,7 +20,6 @@
 //! either, so nothing has to keep opening one. `centraid-sealed/2`'s vectors
 //! live in `contracts/crypto/sealed-vectors.json`.
 
-pub mod duplicates;
 pub mod format;
 pub mod models;
 pub mod phash;

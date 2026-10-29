@@ -144,6 +144,9 @@ pub struct SystemMap {
     /// bytes, as a revision), run on a row that exists before its fields are
     /// written.
     pub replaced: Replaced,
+    /// What a row the source has just ADDED is called, run once after its fields are written
+    /// (a statement line takes the payee a rule names; a re-import never renames).
+    pub named: Settle,
 }
 
 /// See [`SystemMap::shape`].
@@ -320,6 +323,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         shape: as_stated,
         settle: nothing_to_settle,
         replaced: nothing_replaced,
+        named: nothing_to_settle,
     },
     SystemMap {
         system: "calendar",
@@ -349,6 +353,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         shape: event_shape,
         settle: event::settle,
         replaced: nothing_replaced,
+        named: nothing_to_settle,
     },
     SystemMap {
         system: "files",
@@ -365,6 +370,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         shape: as_stated,
         settle: nothing_to_settle,
         replaced: document::keep_replaced_by_write,
+        named: nothing_to_settle,
     },
     // A workout: an activity of a workout kind, its span, and what the store
     // measured. A record states the store's word for the kind and the vault
@@ -385,6 +391,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         shape: workout::shape,
         settle: workout::settle,
         replaced: nothing_replaced,
+        named: nothing_to_settle,
     },
     // A line of a statement: its title is the bank's words until the member
     // renames it, its day and amount are the bank's and never edited, and the
@@ -404,6 +411,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         shape: as_stated,
         settle: nothing_to_settle,
         replaced: nothing_replaced,
+        named: super::rule::name_new_line,
     },
 ];
 
@@ -735,6 +743,7 @@ fn add(
     )?;
     (map.settle)(ctx, &id)?;
     merge_children(ctx, map, &id, None, &record.fields)?;
+    (map.named)(ctx, &id)?;
     Ok(id)
 }
 

@@ -70,6 +70,8 @@ pub struct Rule {
     /// `None` is any account.
     pub account_id: Option<String>,
     pub category_concept_id: Option<String>,
+    /// The name a matched line shows instead of the bank's words, when the rule has one.
+    pub display_name: Option<String>,
     pub position: i64,
 }
 
@@ -160,6 +162,8 @@ pub fn specificity(rule: &Rule) -> u32 {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Applied {
     pub category_concept_id: Option<String>,
+    /// The payee the last matching rule with a name gives the line.
+    pub display_name: Option<String>,
     /// The matching rules in application order (least specific first).
     pub rule_ids: Vec<String>,
 }
@@ -179,6 +183,9 @@ pub fn apply(rules: &[Rule], candidate: &Candidate<'_>) -> Applied {
         if let Some(category) = &rule.category_concept_id {
             applied.category_concept_id = Some(category.clone());
         }
+        if let Some(name) = &rule.display_name {
+            applied.display_name = Some(name.clone());
+        }
         applied.rule_ids.push(rule.rule_id.clone());
     }
     applied
@@ -195,6 +202,7 @@ pub fn apply_to_row(rules: &[Rule], account_id: &str, row: &mut ImportRow) {
         },
     );
     row.category_concept_id = applied.category_concept_id;
+    row.display_name = applied.display_name;
 }
 
 // ---------------------------------------------------------------------------
@@ -345,6 +353,7 @@ mod tests {
             amount_max_minor: None,
             account_id: None,
             category_concept_id: Some(format!("cat-{id}")),
+            display_name: None,
             position: 0,
         }
     }

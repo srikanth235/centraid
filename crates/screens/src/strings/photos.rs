@@ -80,16 +80,6 @@ catalog! {
     plain photos_done = ("Done", "Done");
     plain photos_download = ("Download", "Download");
     plain photos_download_original = ("Download original", "Download original");
-    plain photos_duplicates = ("Duplicates", "Duplicates");
-    plain photos_duplicates_copy_many = ("near-identical copies", "near-identical copies");
-    plain photos_duplicates_copy_one = ("copy", "copy");
-    plain photos_duplicates_looking = ("Still looking for near-identical photos.", "Still looking for near-identical photos.");
-    plain photos_duplicates_looking_caption = ("Nothing is ruled out yet.", "Nothing is ruled out yet.");
-    plain photos_duplicates_none_caption = ("Centraid has looked through everything on this phone.", "Centraid has looked through everything on this phone.");
-    plain photos_duplicates_pick_one = ("Pick the one to keep.", "Pick the one to keep.");
-    plain photos_duplicates_set_many = ("{count} sets of near-identical photos.", "{count} sets of near-identical photos.");
-    plain photos_duplicates_set_one = ("1 set of near-identical photos.", "1 set of near-identical photos.");
-    plain photos_duplicates_still_looking = ("Centraid is still looking; more sets may appear.", "Centraid is still looking; more sets may appear.");
     plain photos_edit = ("Edit", "Edit");
     plain photos_editor_title = ("Crop and rotate", "Crop and rotate");
     plain photos_edit_cannot_draw = ("Centraid could not draw the edit.", "Centraid could not draw the edit.");
@@ -111,7 +101,6 @@ catalog! {
     plain photos_edit_rotate = ("Rotate 90°", "Rotate 90°");
     plain photos_edit_saving = ("Saving new photo", "Saving new photo");
     plain photos_edit_still_loading = ("The original is still loading.", "The original is still loading.");
-    plain photos_empty_duplicates = ("No near-identical photos in your library.", "No near-identical photos in your library.");
     plain photos_empty_favorites = ("No favorites yet — tap the heart on any photo.", "No favorites yet — tap the heart on any photo.");
     plain photos_empty_trash = ("Empty trash", "Empty trash");
     plain photos_empty_trash_body = ("Every photo in the trash is deleted, with its captions and tags. This cannot be undone.", "Every photo in the trash is deleted, with its captions and tags. This cannot be undone.");
@@ -332,7 +321,6 @@ catalog! {
     counted trash_question = ("Move 1 photo to the trash?", "Move {n} photos to the trash?");
     counted delete_forever_question = ("Delete 1 photo forever?", "Delete {n} photos forever?");
     counted delete_forever_label = ("Delete {n} forever", "Delete {n} forever");
-    counted duplicate_sets = ("1 set of near-identical photos.", "{n} sets of near-identical photos.");
     counted places_unpinned = ("1 place has no location, so it is not on the map.", "{n} places have no location, so they are not on the map.");
     counted review_trash_others = ("Trash the other {n} copies", "Trash the other {n} copies");
 }

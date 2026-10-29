@@ -466,6 +466,17 @@ fn sheet_to_wire(person: people::person::Person, clock: &Clock) -> wire::PeopleS
                 created_at: note.created_at,
             })
             .collect(),
+        relations: person
+            .relations
+            .into_iter()
+            .map(|relation| wire::PeopleRelation {
+                party_id: relation.person_id,
+                name: relation.name,
+                label: relation.label,
+                incoming: relation.direction
+                    == centraid_apps_people::person::RelationDirection::Incoming,
+            })
+            .collect(),
         touches: person
             .touches
             .into_iter()

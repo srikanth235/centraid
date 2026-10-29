@@ -477,6 +477,17 @@ message PeoplePersonData {
   PeopleSectionHead touches_head = 19;
   repeated PeopleTouchRow touches = 20;
   string touches_empty = 21;
+  // The relationships, both directions; the section draws only when there are some (#1146 D8).
+  PeopleSectionHead relations_head = 22;
+  repeated PeopleRelationRow relations = 23;
+}
+
+message PeopleRelationRow {
+  string party_id = 1;
+  string name = 2;
+  // "Mum" (they are the sheet person's Mum), or "Beth is their Mum" (the sheet person is theirs).
+  string meta = 3;
+  string accessibility_label = 4;
 }
 
 // A pick among fixed choices: a touch kind, a channel kind.

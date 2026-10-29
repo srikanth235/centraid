@@ -274,6 +274,9 @@ CREATE TABLE person (
                  OR (length(birthday) = 10 AND date(birthday) = birthday)),
   avatar       TEXT REFERENCES blob(hash),
   cadence_days INTEGER CHECK (cadence_days IS NULL OR cadence_days > 0),
+  -- The member's switch for this person's birthday reminder: the birthday is this row's column,
+  -- not an event, so it has no `reminders` of its own.
+  birthday_reminder INTEGER NOT NULL DEFAULT 1 CHECK (birthday_reminder IN (0,1)),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
 
@@ -475,7 +478,12 @@ CREATE TABLE account (
   kind          TEXT GENERATED ALWAYS AS ('account') VIRTUAL,
   type          TEXT NOT NULL CHECK (type IN ('checking','savings','credit_card','cash')),
   currency      TEXT NOT NULL CHECK (length(currency) = 3 AND currency = upper(currency)),
+  -- Where the account stood on `opening_on`, SIGNED (a card owes: negative). The balance on any
+  -- day is this plus the posted lines AFTER `opening_on`, derived at read time; an account with no
+  -- opening day counts every line. A day, so a statement imported from before it does not count
+  -- twice.
   opening_minor INTEGER NOT NULL DEFAULT 0,
+  opening_on    TEXT CHECK (opening_on IS NULL OR date(opening_on) = opening_on),
   on_budget     INTEGER NOT NULL DEFAULT 1 CHECK (on_budget IN (0,1)),
   UNIQUE (id, currency),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
@@ -528,6 +536,9 @@ CREATE TABLE checkpoint (
 CREATE TABLE rule (
   id            TEXT PRIMARY KEY,
   pattern       TEXT NOT NULL CHECK (json_valid(pattern)),
+  -- The name the line shows once the rule has run: the payee, not the bank's words (which stay in
+  -- `source.stated`). NULL leaves the line's name alone.
+  display_name  TEXT CHECK (display_name IS NULL OR length(trim(display_name)) > 0),
   category_id   TEXT NOT NULL,
   category_kind TEXT GENERATED ALWAYS AS ('category') VIRTUAL,
   position      REAL NOT NULL,

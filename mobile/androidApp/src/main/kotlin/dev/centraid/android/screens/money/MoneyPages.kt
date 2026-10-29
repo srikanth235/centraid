@@ -434,6 +434,13 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
                     onEdit = { onEvent(MoneyRulesEvent(pattern = MoneyRulesEvent.PatternEdited(text = it))) },
                 )
                 MoneyNote(editor.pattern_note)
+                EditableFieldRow(
+                    key = editor.rename_label,
+                    value = editor.rename_text,
+                    reload = reload,
+                    testTag = "money-rule-rename",
+                    onEdit = { onEvent(MoneyRulesEvent(rename = MoneyRulesEvent.RenameEdited(text = it))) },
+                )
                 ChoiceFieldRow(
                     key = editor.category_row_label,
                     value = editor.category_label.ifEmpty { editor.clear_category_label },

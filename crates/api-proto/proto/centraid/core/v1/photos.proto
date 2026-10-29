@@ -1,5 +1,5 @@
 // PHOTOS' READS, ASKED OF THE CORE (#1097, R-1097-25..27, #1135): one shelf, one
-// photograph, the collections, the places, the search and the duplicates.
+// photograph, the collections, the places, the search.
 //
 // Photos' search used to be Kotlin legs of `LIKE`. Its TEXT leg and its ALBUM leg
 // are the full-text door's: the photograph (`photo`: its caption, its place's name
@@ -13,9 +13,8 @@
 // trashed; the trash is every trashed photograph; an album draws every member that
 // is not trashed.
 //
-// Duplicates are a projection of the perceptual hashes (a `phash` derivative of
-// each blob), clustered by the core when asked: nothing is stored, so a trashed
-// photograph or a new hash is in the next answer.
+// Photos has no Duplicates screen: it was retired (#1146 D5), and its read (`photos.duplicates`,
+// number 91) is reserved.
 //
 // They ride `app_query.proto` at numbers 90 to 96, Photos' own: 80 is Home's,
 // and the apps' blocks are below it.
@@ -101,27 +100,6 @@ message PhotosTopHit {
     KIND_UNPLACED = 2;
     KIND_ALBUM = 3;
   }
-}
-
-// `photos.duplicates`: the near-duplicate clusters of the live library.
-message PhotosDuplicatesRequest {}
-
-// One cluster: photographs whose perceptual hashes lie within a few bits of one
-// another (the vault's one clustering, `crates/media`).
-message PhotosDuplicateCluster {
-  // The cluster's id: its lowest photograph id. Stable for the same members.
-  string key = 1;
-  // The members, live photographs only, in id order; at least two.
-  repeated string photo_ids = 2;
-  // The same members as cells, in id order: pixel box, size, form, capture time,
-  // heart, the albums that hold each, and what this device holds of it, so a
-  // review can show which copy to keep and which are placed.
-  repeated PhotosCell members = 3;
-}
-
-message PhotosDuplicates {
-  // Biggest cluster first, ties by key.
-  repeated PhotosDuplicateCluster clusters = 1;
 }
 
 message PhotosTag {
@@ -319,8 +297,9 @@ message PhotosAlbums {
   uint32 places = 8;
   // Live photographs in no place.
   uint32 unplaced = 9;
-  // Clusters of look-alikes the duplicates read finds.
-  uint32 duplicate_clusters = 10;
+  // Retired with the Duplicates screen (#1146 D5).
+  reserved 10;
+  reserved "duplicate_clusters";
 }
 
 message PhotosShelfTile {

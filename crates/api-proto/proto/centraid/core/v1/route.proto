@@ -24,6 +24,9 @@ message Route {
   // table (#1146).
   reserved 403;
   reserved "locker_access";
+  // 806 and 807 were Photos' Duplicates and its review, retired (#1146 D5).
+  reserved 806, 807;
+  reserved "photos_duplicates", "photos_duplicate_review";
   oneof args {
     CounterRoute counter = 10;
     // ---- words (1300-1399, lane H2) ----
@@ -45,8 +48,6 @@ message Route {
     PhotosPlacesRoute photos_places = 803;
     PhotosLightboxRoute photos_lightbox = 804;
     PhotosEditorRoute photos_editor = 805;
-    PhotosDuplicatesRoute photos_duplicates = 806;
-    PhotosDuplicateReviewRoute photos_duplicate_review = 807;
     // ---- locker (400-499) ----
     LockerHomeRoute locker_home = 400;
     LockerItemRoute locker_item = 401;
@@ -297,15 +298,6 @@ message PhotosLightboxRoute {
 // `photos.editor`: crop, rotate and straighten one photograph.
 message PhotosEditorRoute {
   string photo_id = 1;
-}
-
-// `photos.duplicates`: the near-duplicate sets.
-message PhotosDuplicatesRoute {}
-
-// `photos.duplicate_review`: one set, and the decision about its copies.
-message PhotosDuplicateReviewRoute {
-  // The cluster's key (`PhotosDuplicateCluster.key`).
-  string cluster_key = 1;
 }
 
 // ---------------------------------------------------------------------------

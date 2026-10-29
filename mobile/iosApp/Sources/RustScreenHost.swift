@@ -452,27 +452,6 @@ struct RustScreenView: View {
                     shell.open(route)
                 }
             )
-        case .photosDuplicates(let state)?:
-            PhotosDuplicatesView(
-                state: state,
-                send: { kind in
-                    var event = Centraid_Core_V1_PhotosDuplicatesEvent()
-                    event.kind = kind
-                    store.send(instance, .photosDuplicates(event))
-                },
-                open: open,
-                onBack: pop
-            )
-        case .photosDuplicateReview(let state)?:
-            PhotosDuplicateReviewView(
-                state: state,
-                send: { kind in
-                    var event = Centraid_Core_V1_PhotosDuplicateReviewEvent()
-                    event.kind = kind
-                    store.send(instance, .photosDuplicateReview(event))
-                },
-                onBack: pop
-            )
         // THE CHAT as a page (#1135, lane I): a search's Ask (`chat.ask`) or a found conversation
         // (`chat.thread`). The tab's root draws the same state through `HomeView`.
         case .chat?:

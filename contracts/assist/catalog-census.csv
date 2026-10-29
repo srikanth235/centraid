@@ -121,6 +121,7 @@ people,complete-task,complete,task,card,yes: crates/screens/src/agenda/todo/ops.
 people,reopen-task,reopen,task,card,yes: crates/screens/src/agenda/todo/ops.rs,yes
 people,add-important-date,create,important_date,card,yes: crates/screens/src/people/person/mod.rs,no
 people,set-reminder,edit,important_date,card,yes: crates/screens/src/people/person/mod.rs,no
+people,set-birthday-reminder,edit,person,card,yes: crates/screens/src/people/person/mod.rs,no
 people,add-relationship,link,person,card,no,no
 people,add-gift,create,gift,card,no,no
 people,create-list,create,people_list,card,no,no
@@ -138,7 +139,7 @@ photos,flag-photo,star,photo,direct,yes: crates/screens/src/photos/lightbox.rs; 
 photos,unflag-photo,unstar,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
 photos,archive-photo,archive,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
 photos,unarchive-photo,unarchive,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
-photos,delete-photo,delete,photo,direct,yes: crates/screens/src/photos/duplicate_review.rs; crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
+photos,delete-photo,delete,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
 photos,restore-photo,restore,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
 photos,purge-photo,purge,photo,card,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs; crates/screens/src/photos/shelf.rs,no
 photos,create-album,create,album,direct,yes: crates/screens/src/photos/album_choice.rs; crates/screens/src/photos/home/collections.rs,yes

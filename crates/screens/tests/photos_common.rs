@@ -888,11 +888,6 @@ fn every_photos_screen_opens_from_its_route_and_draws_its_own_view_state() {
             "lightbox",
         ),
         (photos::routes::editor("p"), "editor"),
-        (photos::routes::duplicates(), "duplicates"),
-        (
-            photos::routes::duplicate_review("cluster"),
-            "duplicate_review",
-        ),
     ];
     for (route, name) in cases {
         let instance = d.push(photos::TAB, route);
@@ -902,8 +897,6 @@ fn every_photos_screen_opens_from_its_route_and_draws_its_own_view_state() {
             Some(V::PhotosPlaces(_)) => "places",
             Some(V::PhotosLightbox(_)) => "lightbox",
             Some(V::PhotosEditor(_)) => "editor",
-            Some(V::PhotosDuplicates(_)) => "duplicates",
-            Some(V::PhotosDuplicateReview(_)) => "duplicate_review",
             ref other => panic!("{name} drew {other:?}"),
         };
         assert_eq!(drawn, name);

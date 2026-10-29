@@ -18,6 +18,9 @@
 //!
 //! ## What is decided here
 //!
+//! * **What the library knows rides with the photograph** (#1146 D5): the pixel box, a movie's
+//!   length and the coordinates it was taken at, each only when the asset carries them
+//!   ([`add_request`]).
 //! * **The grant** and its four sentences (never the member's fault); LIMITED is a library.
 //! * **The cursor**: per vault (`camera-roll.cursor.<vault>`, in the keychain through
 //!   `KeychainOp`), advanced after each asset so a pass the OS kills resumes where it was; the
@@ -170,7 +173,22 @@ pub fn add_request(
                 request.taken_at = Field::Is(asset.captured_at.clone());
             }
             request.offset_min = Field::Is(i64::from(asset.captured_utc_offset_minutes));
+            // WHERE IT WAS TAKEN: the library's coordinates, a pair or nothing. The core finds
+            // or founds the place; an edit inherits its original's (above).
+            if let (Some(lat), Some(lon)) = (asset.latitude, asset.longitude) {
+                request.lat = Field::Is(lat);
+                request.lon = Field::Is(lon);
+            }
         }
+    }
+    // THE LIBRARY'S OWN FACTS, when it has them (0 is unknown, never a size): the pixel box and a
+    // movie's length. An edit's render is its own pixel box, so these ride with an edit too.
+    if asset.width > 0 && asset.height > 0 {
+        request.width = Field::Is(i64::from(asset.width));
+        request.height = Field::Is(i64::from(asset.height));
+    }
+    if asset.duration_s > 0.0 {
+        request.duration_s = Field::Is(asset.duration_s);
     }
     if !asset.capture_group.is_empty() {
         request.burst = Field::Is(asset.capture_group.clone());

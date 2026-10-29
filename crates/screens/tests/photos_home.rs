@@ -1452,7 +1452,7 @@ fn collections_are_pinned_albums_and_utilities_with_the_rows_the_system_sorts() 
     };
     // PLACES AFTER THE SECOND STANDING SHELF, where the system puts Map.
     assert_eq!(titles("pinned"), ["Favorites", "Videos", "Places"]);
-    assert_eq!(titles("utilities"), ["Duplicates", "Archive", "Trash"]);
+    assert_eq!(titles("utilities"), ["Archive", "Trash"]);
     let album = r
         .section("albums")
         .cards
@@ -1475,13 +1475,6 @@ fn collections_are_pinned_albums_and_utilities_with_the_rows_the_system_sorts() 
         .find(|c| c.kind == wire::photos_collection_card::Kind::Places as i32)
         .unwrap();
     assert_eq!(places.route.as_ref().unwrap().screen, photos::PLACES);
-    let dup = r
-        .section("utilities")
-        .cards
-        .iter()
-        .find(|c| c.kind == wire::photos_collection_card::Kind::Duplicates as i32)
-        .unwrap();
-    assert_eq!(dup.route.as_ref().unwrap().screen, photos::DUPLICATES);
 }
 
 #[test]

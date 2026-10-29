@@ -63,7 +63,7 @@ The crate has two halves: the import (`import`, `rules`) and the reads and folds
 
 The key is `external_id`, compared for equality only. A CSV row has none from the bank, so it is `csv:` and a BLAKE3 hash (the repo's one hash; `sha2` is confined to two other crates by the workspace manifest) of the printed day, the signed minor amount, the raw description and the **ordinal within that triple in the file**: the same weekly $9.99 on different days is distinct, and an identical pair on one day stays two rows. CRLF and LF exports of one statement hash alike.
 
-The fuzzy pass is a proposal, never a write, and it is narrow on purpose: same direction and amount (exact), within three days, a description at least `SIMILARITY_THRESHOLD` alike, against an existing row nothing else has claimed, and never between two rows that both carry a bank's own, different `FITID`. There is no "dropped by a rule" verdict: rules set a category and a display name and nothing else.
+The fuzzy pass is a proposal, never a write, and it is narrow on purpose: same direction and amount (exact), within three days, a description at least `SIMILARITY_THRESHOLD` alike, against an existing row nothing else has claimed, and never between two rows that both carry a bank's own, different `FITID`. There is no "dropped by a rule" verdict: rules set a category and a display name (the payee a line shows, never the bank's words) and nothing else.
 
 ## Date order
 
@@ -71,7 +71,7 @@ A column of slash dates that never has a day over 12 in either slot cannot be re
 
 ## Derived, never stored
 
-Every figure is derived at read time and keyed by currency; the definitions the screens print are in `engine`'s module doc (spending, in/out/net, savings rate, balance, planned) and `recurring`'s (qualification, status precedence). A balance is the account's opening balance plus the signed `posted` rows after its opening date; a checkpoint is evidence it is compared with. Recurring charges are RRULE strings checked by `assert_supported` and expanded by the vault's one engine; the vault's subset has no positional `BYDAY`, so an "nth weekday of the month" series is not offered.
+Every figure is derived at read time and keyed by currency; the definitions the screens print are in `engine`'s module doc (spending, in/out/net, savings rate, balance, planned) and `recurring`'s (qualification, status precedence). A balance is the account's opening balance (as of `opening_on`, #1146) plus the signed `posted` rows after that day, so a statement imported from before it does not count twice; a checkpoint is evidence it is compared with. Recurring charges are RRULE strings checked by `assert_supported` and expanded by the vault's one engine; the vault's subset has no positional `BYDAY`, so an "nth weekday of the month" series is not offered.
 
 ## Tests
 

@@ -143,6 +143,9 @@ catalog! {
     counted people_count = ("{n} person", "{n} people");
     plain preferred = ("preferred", "preferred");
     plain recent_a11y = ("{kind} with {name}, {when}", "{kind} with {name}, {when}");
+    plain relation_in = ("{person} is their {label}", "{person} is their {label}");
+    plain relation_in_a11y = ("{name}, {person} is their {label}", "{name}, {person} is their {label}");
+    plain relation_out_a11y = ("{name}, {person}'s {label}", "{name}, {person}'s {label}");
     plain reminder_off = ("Reminder off", "Reminder off");
     plain reminder_on = ("Reminder on", "Reminder on");
     plain reminder_turn_off = (
@@ -168,6 +171,7 @@ catalog! {
     plain search_placeholder = ("Search names", "Search names");
     plain section_channels = ("Channels", "Channels");
     plain section_dates = ("Dates", "Dates");
+    plain section_relations = ("Related", "Related");
     plain section_notes = ("Notes", "Notes");
     plain section_recent = ("Recent", "Recent");
     plain section_reconnect = ("Reconnect", "Reconnect");

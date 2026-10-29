@@ -13,9 +13,8 @@
 //! - **an edit folds its original, a crop folds nothing**
 //!   ([`centraid_apps_kit::rules::Standing`], the one verdict on what is live): the
 //!   library draws the newest live photograph of a burst;
-//! - **duplicates are a projection of the perceptual hashes**, clustered at read by
-//!   the one clustering `crates/media` owns ([`duplicates`], D-1020-P3); nothing is
-//!   stored and no sweep has to run;
+//! - **there is no Duplicates screen** (retired, #1146 D5): nothing clusters the perceptual
+//!   hashes and no read hands a member a set of look-alikes to decide on;
 //! - **the Places facet stays inside Photos.** There is no `crates/apps/places`: a
 //!   `place` entity joins in the library and search reads, and the phrase logic
 //!   that keeps a location a *phrase* rather than a coordinate lives in [`places`]
@@ -44,7 +43,6 @@
 pub mod cells;
 pub mod commands;
 pub mod detail;
-pub mod duplicates;
 pub mod manifest;
 pub mod overview;
 pub mod places;
@@ -53,7 +51,6 @@ pub mod search;
 pub mod shelf;
 
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
-pub use duplicates::{DuplicateCluster, Fingerprint, duplicate_cluster_count, duplicate_clusters};
 pub use manifest::{APP_ID, manifest};
 pub use places::{PlacePhrase, PlacePhraseSource, PlaceRow, place_phrase};
 pub use queries::{SearchData, load_search_term};

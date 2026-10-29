@@ -312,20 +312,28 @@ impl Person {
         let Some((sheet, _)) = self.loaded() else {
             return;
         };
-        // A birthday is the person's own column and always has its reminder; any other date's is its event's.
-        if date_id.starts_with(BIRTHDAY_PREFIX) {
-            return;
-        }
         let Some(date) = sheet.dates.iter().find(|date| date.date_id == date_id) else {
             return;
         };
         let locale = ctx.locale();
         let turns_on = !date.reminder_on;
         let label = date.label.clone();
-        let request = act::people::SetReminder {
-            important_date_id: date_id.to_owned(),
-            reminders: turns_on.then(|| "[0]".to_owned()),
-        };
+        // A birthday is the person's own column, so its switch is the person's; any other date's
+        // reminder is its event's.
+        let request: wire::ActRequest =
+            if let Some(person_id) = date_id.strip_prefix(BIRTHDAY_PREFIX) {
+                act::people::SetBirthdayReminder {
+                    person_id: person_id.to_owned(),
+                    on: turns_on,
+                }
+                .into()
+            } else {
+                act::people::SetReminder {
+                    important_date_id: date_id.to_owned(),
+                    reminders: turns_on.then(|| "[0]".to_owned()),
+                }
+                .into()
+            };
         let outcome = fill(
             &if turns_on {
                 words::outcome_reminder_on(locale)
@@ -334,7 +342,7 @@ impl Person {
             },
             &[("label", &label)],
         );
-        self.write(ctx, request.into(), date_id, outcome);
+        self.write(ctx, request, date_id, outcome);
     }
 
     fn ask_remove_channel(&mut self, channel_id: &str) {

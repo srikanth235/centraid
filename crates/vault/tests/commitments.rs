@@ -1498,6 +1498,13 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         Reach::Not("a digest of what an act asked, not prose"),
     ),
     ("account", "currency", Reach::Not("an ISO code")),
+    (
+        "rule",
+        "display_name",
+        Reach::Not(
+            "a rule is not an entity; the name it gives lands on the line's title, which is indexed",
+        ),
+    ),
     ("txn", "currency", Reach::Not("an ISO code")),
     ("budget", "currency", Reach::Not("an ISO code")),
     ("budget", "month", Reach::Not("a month")),

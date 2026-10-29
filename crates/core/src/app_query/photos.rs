@@ -1,6 +1,6 @@
 //! PHOTOS' ARM OF THE APP QUERY (#1097, R-1097-25..27, #1135): the screens' reads
 //! (`photos.shelf`, `photos.photo`, `photos.albums`, `photos.places`), Photos' own
-//! search and `photos.duplicates`.
+//! search.
 //!
 //! **WHAT MOVED HERE.** Photos' search was Kotlin `LIKE` over the caption. Its text
 //! leg is now the photograph (`photo`: its caption, its place's name and
@@ -15,10 +15,6 @@
 //! one). Home's search keeps the archived ones because it opens a photograph and
 //! does not draw a grid; the difference is R-1097-25's and is held by
 //! `centraid_apps_photos::queries::load_search_term`.
-//!
-//! **DUPLICATES ARE CLUSTERED HERE, AT READ.** The app reads the perceptual
-//! hashes; the one clustering is `centraid_media::duplicates::cluster`, handed to
-//! it, so there is exactly one and nothing is stored.
 //!
 //! **THE CORRECTION IS ASKED FOR, AND ONE ANSWER DECIDES IT.** A typo is corrected
 //! only when EVERY leg is empty: the text, the albums, the places, no location and
@@ -362,32 +358,11 @@ fn tile(tile: &photos::overview::ShelfTile) -> wire::PhotosShelfTile {
     }
 }
 
-/// The one clustering, `centraid_media::duplicates::cluster`, over the fingerprints
-/// Photos hands it.
-fn clustering(prints: &[photos::Fingerprint]) -> std::collections::BTreeMap<String, String> {
-    use centraid_media::duplicates::{DUPLICATE_HAMMING_THRESHOLD, Fingerprint, cluster};
-
-    let rows: Vec<Fingerprint> = prints
-        .iter()
-        .map(|print| Fingerprint {
-            asset_id: print.photo_id.clone(),
-            phash: print.phash.clone(),
-            cluster_id: None,
-        })
-        .collect();
-    cluster(&rows, DUPLICATE_HAMMING_THRESHOLD)
-}
-
 /// `photos.albums`: the collections overview.
 pub(crate) fn albums(door: &VaultDoor<'_>, now: &str) -> Result<Answer> {
     let now_ms = now_ms(now)?;
-    let loaded = photos::overview::load_albums(door, now_ms)
-        .and_then(|data| {
-            let duplicates = photos::duplicate_cluster_count(door, clustering)?;
-            Ok((data, duplicates))
-        })
-        .map(|data| (data, None));
-    settle(door, loaded, |(data, duplicates)| {
+    let loaded = photos::overview::load_albums(door, now_ms).map(|data| (data, None));
+    settle(door, loaded, |data| {
         Answer::PhotosAlbums(Box::new(wire::PhotosAlbums {
             albums: data
                 .albums
@@ -417,7 +392,6 @@ pub(crate) fn albums(door: &VaultDoor<'_>, now: &str) -> Result<Answer> {
             trash: Some(tile(&data.trash)),
             places: count(data.places),
             unplaced: count(data.unplaced),
-            duplicate_clusters: count(duplicates),
         }))
     })
 }
@@ -545,30 +519,4 @@ fn run(
     let (albums, denial) = named::of_app(search, APP, term, limit.min(named::CONTAINER_ROWS));
     let structured = photos::search::structured_legs(door, standing, term)?;
     Ok(((data, albums, structured), denial))
-}
-
-/// `photos.duplicates`: the live library's near-duplicate clusters.
-pub(crate) fn duplicates(door: &VaultDoor<'_>, now: &str) -> Result<Answer> {
-    let loaded =
-        photos::duplicate_clusters(door, now_ms(now)?, clustering).map(|clusters| (clusters, None));
-    settle(door, loaded, |clusters| {
-        Answer::PhotosDuplicates(wire::PhotosDuplicates {
-            clusters: clusters
-                .into_iter()
-                .map(|cluster| wire::PhotosDuplicateCluster {
-                    key: cluster.key,
-                    photo_ids: {
-                        let mut ids: Vec<String> = cluster
-                            .photos
-                            .into_iter()
-                            .map(|photo| photo.photo_id)
-                            .collect();
-                        ids.sort_unstable();
-                        ids
-                    },
-                    members: cluster.cells.iter().map(cell).collect(),
-                })
-                .collect(),
-        })
-    })
 }
