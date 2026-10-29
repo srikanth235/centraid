@@ -403,6 +403,15 @@ impl ByteStore {
             // is these bytes by construction, so the copy is dropped rather
             // than renamed over it.
             fs::remove_file(incoming).map_err(io_at(incoming))?;
+            // STAGED AGAIN IS STAGED NOW. The launch sweep of files no row
+            // claims spares whatever was written since the process started, and
+            // an older file that a staging has just asked for again is one a
+            // command is about to name (#1146). Best effort: a file that will
+            // not take a new time is simply as old as it was.
+            let _ = fs::File::options()
+                .write(true)
+                .open(&path)
+                .and_then(|file| file.set_modified(SystemTime::now()));
             return Ok(Stored {
                 hash,
                 bytes,
@@ -625,6 +634,28 @@ mod tests {
         let dir = tempfile::tempdir().expect("a directory");
         let store = ByteStore::open(dir.path().join("vault.bytes")).expect("the store opens");
         (dir, store)
+    }
+
+    /// A file staged again is written again as far as the launch sweep can tell.
+    #[test]
+    fn staging_the_same_bytes_again_refreshes_the_files_time() {
+        let (_dir, store) = store();
+        let stored = store.put_bytes(b"an old orphan").expect("stored");
+        let long_ago = SystemTime::now() - Duration::from_secs(86_400);
+        fs::File::options()
+            .write(true)
+            .open(&stored.path)
+            .and_then(|file| file.set_modified(long_ago))
+            .expect("ages the file");
+        let again = store.put_bytes(b"an old orphan").expect("stored again");
+        assert!(again.already_held);
+        let written = fs::metadata(&stored.path)
+            .and_then(|m| m.modified())
+            .expect("a time");
+        assert!(
+            written > long_ago + Duration::from_secs(3_600),
+            "the time moved up to now"
+        );
     }
 
     /// A WRITE IS WHOLE: the file appears at its name only when the last byte

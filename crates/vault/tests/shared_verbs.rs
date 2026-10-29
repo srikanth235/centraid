@@ -783,21 +783,23 @@ fn garbage_collection_takes_what_no_foreign_key_names_and_what_only_a_collected_
     let w = World::new();
     let kept = w.document("d1", "Kept", b"kept", None);
     let orphan = centraid_vault::blob::content_digest(b"orphan");
-    w.ok("blob.stage", json!({"hash": &orphan, "size": 6}));
     // A derivative of the orphan has bytes of its own; the orphan's collection
-    // takes the derivative, and its bytes then have no claim either.
+    // takes the derivative, and its bytes then have no claim either. Written
+    // through the library, not the command: `derivative.write` collects, and
+    // would take the orphan before this test asks.
     let thumb = centraid_vault::blob::content_digest(b"orphan thumb");
-    w.ok(
-        "derivative.write",
-        json!({"blob": &orphan, "variant": "thumb", "out": &thumb, "out_size": 12, "media_type": "image/jpeg"}),
-    );
-    // A derivative of the kept document keeps its own bytes alive only while it exists.
-    let kept_thumb = centraid_vault::blob::content_digest(b"kept thumb");
-    w.ok(
-        "derivative.write",
-        json!({"blob": &kept, "variant": "preview", "out": &kept_thumb, "out_size": 10, "media_type": "image/jpeg"}),
-    );
-    let collected = w.ok("blob.collect", json!({}))["collected"]
+    w.commit(|tx| {
+        centraid_vault::blob::stage(tx.connection(), &orphan, 6)?;
+        centraid_vault::blob::write_derivative(
+            tx.connection(),
+            AT,
+            &orphan,
+            "thumb",
+            Some((&thumb, 12, "image/jpeg")),
+            None,
+        )
+    });
+    let collected = w.ok("blob.collect", json!({}))["released"]
         .as_array()
         .expect("hashes")
         .clone();
@@ -809,6 +811,13 @@ fn garbage_collection_takes_what_no_foreign_key_names_and_what_only_a_collected_
     let mut expected = vec![orphan.clone(), thumb.clone()];
     expected.sort();
     assert_eq!(collected, expected);
+    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM blob", &[]), 1);
+    // A derivative of the kept document keeps its own bytes alive only while it exists.
+    let kept_thumb = centraid_vault::blob::content_digest(b"kept thumb");
+    w.ok(
+        "derivative.write",
+        json!({"blob": &kept, "variant": "preview", "out": &kept_thumb, "out_size": 10, "media_type": "image/jpeg"}),
+    );
     assert_eq!(
         w.one::<i64>("SELECT COUNT(*) FROM blob", &[]),
         2,
@@ -819,7 +828,7 @@ fn garbage_collection_takes_what_no_foreign_key_names_and_what_only_a_collected_
     // Trash keeps the reference alive; a purge releases it.
     w.ok("entity.trash", json!({"id": "d1"}));
     assert!(
-        w.ok("blob.collect", json!({}))["collected"]
+        w.ok("blob.collect", json!({}))["released"]
             .as_array()
             .expect("hashes")
             .is_empty()
@@ -828,7 +837,7 @@ fn garbage_collection_takes_what_no_foreign_key_names_and_what_only_a_collected_
     let purged = w.ok("entity.purge", json!({"id": "d1"}));
     assert_eq!(purged["released"].as_array().expect("hashes").len(), 2);
     assert!(
-        w.ok("blob.collect", json!({}))["collected"]
+        w.ok("blob.collect", json!({}))["released"]
             .as_array()
             .expect("hashes")
             .is_empty(),

@@ -144,6 +144,25 @@ fn move_container(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         rusqlite::params![id, parent, position, kind],
     )?;
     ctx.touch(id)?;
+    // A SECTION TAKES ITS TASKS WITH IT. A task names its project and its
+    // section, and the baseline's trigger refuses a task whose section is in
+    // another project; it fires on a write to the task, so moving the section
+    // alone would leave its tasks (trashed ones too) pointing at the old
+    // project, a state no task command could then edit.
+    if kind.as_deref() == Some("section") {
+        let tasks: Vec<String> = ctx
+            .connection()
+            .prepare("SELECT id FROM task WHERE section_id = ?1 AND project_id IS NOT ?2")?
+            .query_map(rusqlite::params![id, parent], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        for task in tasks {
+            ctx.connection().execute(
+                "UPDATE task SET project_id = ?2 WHERE id = ?1",
+                rusqlite::params![task, parent],
+            )?;
+            ctx.touch(&task)?;
+        }
+    }
     Ok(serde_json::json!({ "id": id }))
 }
 

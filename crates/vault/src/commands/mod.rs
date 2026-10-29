@@ -588,7 +588,10 @@ impl Vault {
         // commit; with the commit made, their files go from this device's store.
         // A file that will not delete is left for a later sweep: the rows are
         // already gone, so nothing refers to it.
+        // A replayed run is answered from the key and ran nothing now: the hashes
+        // it names may have been claimed again since, so none of them is touched.
         if status == CommandStatus::Executed
+            && !replayed
             && let (Some(store), Some(released)) = (
                 self.blobs(),
                 output.get("released").and_then(serde_json::Value::as_array),

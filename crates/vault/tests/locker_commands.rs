@@ -801,7 +801,7 @@ fn the_member_flags_a_compromised_item_and_a_rotation_clears_it() {
 }
 
 #[test]
-fn trash_is_reversible_and_a_lapsed_window_is_not() {
+fn trash_is_reversible_and_a_lapsed_window_waits_for_the_launch_pass() {
     let world = World::new("locker-trash", "key-1");
     world.login("item-1", "key-1");
 
@@ -818,12 +818,24 @@ fn trash_is_reversible_and_a_lapsed_window_is_not() {
         1
     );
 
-    // A RESTORE PAST THE WINDOW RESURRECTS WHAT THE MEMBER WAS TOLD HAD BEEN
-    // DELETED (#916, review 1.5).
+    // PAST THE WINDOW AN ITEM IS STILL RESTORABLE UNTIL THE LAUNCH PASS EMPTIES
+    // IT (decision T, #1146): the window says when the pass may take it, not
+    // when the vault stops being able to give it back.
     world.ok("entity.trash", serde_json::json!({ "id": "item-1" }));
     world.scratch.clock.advance_ms(31 * 86_400_000);
-    let reason = world.refused("entity.restore", serde_json::json!({ "id": "item-1" }));
-    assert!(reason.contains("past its grace window"), "{reason}");
+    world.ok("entity.restore", serde_json::json!({ "id": "item-1" }));
+    world.ok("entity.trash", serde_json::json!({ "id": "item-1" }));
+    world.scratch.clock.advance_ms(31 * 86_400_000);
+    let emptied = world
+        .scratch
+        .vault
+        .empty_overdue_trash(&world.registry, 100)
+        .expect("the pass runs");
+    assert_eq!(emptied.purged, 1);
+    assert_eq!(
+        world.one::<i64>("SELECT COUNT(*) FROM entity WHERE id = ?1", &["item-1"]),
+        0
+    );
 }
 
 /// ARCHIVE IS A FLAG, NOT A TRASH, AND TRASH WINS OVER IT — as for every kind

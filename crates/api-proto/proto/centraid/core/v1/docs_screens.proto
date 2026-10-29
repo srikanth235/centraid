@@ -650,7 +650,7 @@ message DocsDocumentData {
   // trash — or restore, on a trashed document.
   repeated DocsAction actions = 11;
   // A trashed document's line: "In trash · restorable until 3 April" or
-  // "In trash · can no longer be restored". EMPTY on a live one.
+  // "In trash · emptied when Centraid next opens". EMPTY on a live one.
   string trashed_note = 12;
   // The drive's folders and labels, for the move and labels sheets.
   repeated DocsFolderNode folders = 13;

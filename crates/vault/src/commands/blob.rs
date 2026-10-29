@@ -49,7 +49,7 @@ fn stage(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
 }
 
 fn collect(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    Ok(serde_json::json!({ "collected": blob::collect(ctx.connection())? }))
+    Ok(serde_json::json!({ "released": blob::collect(ctx.connection())? }))
 }
 
 fn pre_variant(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -107,7 +107,9 @@ fn write(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     for owner in blob::owners_of_blob(ctx.connection(), hash)? {
         ctx.mark_for_index(&owner);
     }
-    Ok(serde_json::json!({ "blob": hash }))
+    // A variant holds one file: the one it replaced is named by nothing now.
+    let released = blob::collect(ctx.connection())?;
+    Ok(serde_json::json!({ "blob": hash, "released": released }))
 }
 
 fn drop_derivative(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
@@ -119,7 +121,9 @@ fn drop_derivative(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     for owner in blob::owners_of_blob(ctx.connection(), hash)? {
         ctx.mark_for_index(&owner);
     }
-    Ok(serde_json::json!({ "removed": removed > 0 }))
+    // The file the dropped variant held is named by nothing now.
+    let released = blob::collect(ctx.connection())?;
+    Ok(serde_json::json!({ "removed": removed > 0, "released": released }))
 }
 
 const WRITE_SCHEMA: &str = r#"{

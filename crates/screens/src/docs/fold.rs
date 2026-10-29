@@ -236,11 +236,10 @@ pub fn menu(locale: Locale, starred: bool) -> Vec<wire::DocsAction> {
 pub fn head_actions(locale: Locale, row: &wire::DocsDocumentRow) -> Vec<wire::DocsAction> {
     if row.trashed {
         return vec![
-            wire::DocsAction {
-                // A lapsed grace window cannot be restored: the vault refuses.
-                enabled: row.purge_in_days > 0,
-                ..action(KEY_RESTORE, words::action_restore(locale), "restore")
-            },
+            // RESTORE IS ALWAYS OFFERED: a window that has run out is when the
+            // launch pass may empty the row, not when the vault stops giving it
+            // back (#1146, decision T).
+            action(KEY_RESTORE, words::action_restore(locale), "restore"),
             // DOCS DESTROYS (D-1 of 2026-09-25): one trashed document, behind a confirm.
             wire::DocsAction {
                 destructive: true,
@@ -495,8 +494,8 @@ pub fn version(locale: Locale, version: &wire::DocsVersion, trashed: bool) -> wi
     }
 }
 
-/// The grace window's end is when a restore stops being possible, never a
-/// promise that the document is deleted then.
+/// The grace window's end is when the next launch may empty the trash, never a
+/// promise that the document is deleted then: until that pass runs it restores.
 fn trashed_note(locale: Locale, row: &wire::DocsDocumentRow) -> String {
     if !row.trashed {
         return String::new();

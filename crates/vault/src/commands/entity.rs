@@ -24,6 +24,8 @@
 //! - **A person is a holder of what is written about them alone**: a note, a
 //!   touch or a yearly date about that person and no one else goes to the trash
 //!   with them and comes back with them. A task about them stays.
+//! - **A row past its `purge_at` is emptied by the launch pass**
+//!   (`Vault::empty_overdue_trash`) and restores until then.
 //! - **A purge refuses with a sentence** when something would lose its meaning:
 //!   a calendar with events, an activity kind in use, the self person, a flag.
 
@@ -179,6 +181,51 @@ const DETACH: &[(Kind, &str, &str, &str)] = &[
     (Kind::Photo, "photo", "edited_from = NULL", "edited_from"),
 ];
 
+/// What a purge does with a pointer the engine would refuse to delete out from
+/// under.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PurgeRule {
+    /// The referrer moves to the top level ([`DETACH`]), or goes with the
+    /// holder when it went to the trash with it or cannot outlive it.
+    Detach,
+    /// The referrer is purged with its target: it cannot outlive it.
+    Purge,
+    /// The purge refuses with a sentence while the referrer exists
+    /// ([`purge_refusal`]).
+    Refuse,
+    /// The origin's follow ends with its target.
+    Forget,
+}
+
+/// Every foreign key into an entity (or a kind's table) that deletes nothing
+/// itself (`ON DELETE NO ACTION`), and what a purge does about it:
+/// `(table, the key's columns as PRAGMA foreign_key_list states them, rule)`.
+///
+/// A commitment test (`commitments.rs`) derives the same list from the founded
+/// file and requires it equal, so a pointer added to the schema without a
+/// purge rule fails there and not in a member's vault.
+pub const PURGE_RULES: &[(&str, &str, PurgeRule)] = &[
+    ("activity", "type_id,type_kind", PurgeRule::Refuse),
+    ("activity", "place_id", PurgeRule::Detach),
+    ("concept", "parent_id", PurgeRule::Detach),
+    ("container", "parent_id", PurgeRule::Detach),
+    ("document", "folder_id,folder_kind", PurgeRule::Detach),
+    ("event", "calendar_id,calendar_kind", PurgeRule::Refuse),
+    ("event", "place_id", PurgeRule::Detach),
+    ("note", "notebook_id,notebook_kind", PurgeRule::Detach),
+    ("origin", "fills", PurgeRule::Forget),
+    ("photo", "place_id", PurgeRule::Detach),
+    ("photo", "edited_from", PurgeRule::Detach),
+    ("task", "section_id,section_kind", PurgeRule::Detach),
+    ("task", "project_id,project_kind", PurgeRule::Detach),
+    ("task", "parent_id", PurgeRule::Detach),
+    ("task", "series_id", PurgeRule::Detach),
+    ("txn", "category_id,category_kind", PurgeRule::Detach),
+    ("txn", "account_id,currency", PurgeRule::Purge),
+    ("txn", "transfer_id", PurgeRule::Detach),
+    ("vault", "self_id,self_kind", PurgeRule::Refuse),
+];
+
 /// A sentence when this kind of entity cannot be purged as it stands.
 fn purge_refusal(connection: &Connection, found: &Found) -> Result<Option<String>> {
     if is_self(connection, &found.id)? {
@@ -316,15 +363,16 @@ pub(crate) fn purge_one(
             ctx.touch(&album)?;
         }
     }
-    // An account's statement origin goes with it, and the lines it followed
-    // (their rows are gone, so what is left of them is only their tombstones).
-    if found.kind == Kind::Account {
-        connection.execute(
-            "DELETE FROM source WHERE origin_id IN (SELECT id FROM origin WHERE fills = ?1)",
-            [id],
-        )?;
-        connection.execute("DELETE FROM origin WHERE fills = ?1", [id])?;
-    }
+    // WHAT AN ORIGIN FILLS IS THE TARGET OF ITS FOLLOW, for whatever kind it
+    // is (an account, a calendar, a folder): the follow stops with it, as
+    // `follow.stop` stops one. The sources it kept are forgotten (the rows they
+    // named stay the member's own, or are already gone with the target and
+    // leave only their tombstones), and the origin is retired.
+    connection.execute(
+        "DELETE FROM source WHERE origin_id IN (SELECT id FROM origin WHERE fills = ?1)",
+        [id],
+    )?;
+    connection.execute("DELETE FROM origin WHERE fills = ?1", [id])?;
     // The people and things a note was about lose its words from their search
     // text; they are not touched, only re-indexed.
     for target in ids(
@@ -433,22 +481,10 @@ fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if found.deleted_at.is_none() {
         return Ok(Some(format!("“{}” is not in the trash", found.title)));
     }
-    // The grace window is an instant: once it has passed the vault will not bring
-    // the thing back, and the phone's countdown (`purge_in_days`) is positive
-    // exactly while it will. Nothing sweeps on the phone, so it waits in the
-    // trash for "Delete forever" or "Empty trash".
-    let lapsed: bool = ctx.connection().query_row(
-        "SELECT purge_at <= ?2 FROM entity WHERE id = ?1",
-        [ctx.required_str("id")?, ctx.now.as_str()],
-        |row| row.get(0),
-    )?;
-    Ok(lapsed.then(|| {
-        format!(
-            "“{}” has been in the trash past its grace window and can no longer be restored; \
-             delete it forever",
-            found.title
-        )
-    }))
+    // THE GRACE WINDOW REFUSES NOTHING. An overdue row is emptied by the pass
+    // at launch (`Vault::empty_overdue_trash`); until that pass runs it is a
+    // trashed row like any other, and a member who got there first gets it back.
+    Ok(None)
 }
 
 /// Everything that went to the trash together with `holder`, however deep.
@@ -521,13 +557,21 @@ fn pre_empty(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 }
 
 /// Purge what is in the trash: one kind's, or every kind's; all of it, or only
-/// what has waited out its window.
+/// what has waited out its window; and, with a `limit`, at most that many
+/// roots (what went with them is not counted against it), saying `more` when
+/// something else is due. What cannot be purged as it stands (a calendar with
+/// events, the self person) stays in the trash, and does not stop the rest.
 fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let due_only = ctx
         .input
         .get("due_only")
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
+    let limit = ctx
+        .input
+        .get("limit")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|limit| usize::try_from(limit).ok());
     let kind = ctx.optional_str("kind");
     let doomed: Vec<String> = ctx
         .connection()
@@ -544,14 +588,25 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         )?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut purged = Vec::new();
+    let mut roots = 0usize;
+    let mut more = false;
     for id in &doomed {
-        if is_self(ctx.connection(), id)? {
+        // Gone already: it went with a holder purged earlier in this pass.
+        let Some(found) = find(ctx.connection(), id)? else {
+            continue;
+        };
+        if purge_refusal(ctx.connection(), &found)?.is_some() {
             continue;
         }
+        if limit.is_some_and(|limit| roots >= limit) {
+            more = true;
+            break;
+        }
         purge_one(ctx, id, &mut purged)?;
+        roots += 1;
     }
     let released = crate::blob::collect(ctx.connection())?;
-    Ok(serde_json::json!({ "purged": purged.len(), "released": released }))
+    Ok(serde_json::json!({ "purged": purged.len(), "released": released, "more": more }))
 }
 
 #[must_use]
@@ -617,7 +672,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "additionalProperties": false,
               "properties": {
                 "kind": { "type": "string", "minLength": 1 },
-                "due_only": { "type": "boolean" }
+                "due_only": { "type": "boolean" },
+                "limit": { "type": "integer", "minimum": 1 }
               }
             }"#,
             Idempotency::Idempotent,
@@ -638,4 +694,25 @@ fn permanent(mut definition: CommandDefinition) -> CommandDefinition {
     definition.risk = Risk::Medium;
     definition.confirm = true;
     definition
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every pointer a purge detaches is one `DETACH` performs, and the other way
+    /// round: the two tables cannot drift apart.
+    #[test]
+    fn the_detach_table_and_the_purge_rules_name_the_same_pointers() {
+        let named: std::collections::BTreeSet<(&str, &str)> = PURGE_RULES
+            .iter()
+            .filter(|(_, _, rule)| *rule == PurgeRule::Detach)
+            .map(|(table, columns, _)| (*table, columns.split(',').next().unwrap_or("")))
+            .collect();
+        let performed: std::collections::BTreeSet<(&str, &str)> = DETACH
+            .iter()
+            .map(|(_, table, _, column)| (*table, *column))
+            .collect();
+        assert_eq!(named, performed);
+    }
 }
