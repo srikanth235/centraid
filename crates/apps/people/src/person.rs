@@ -16,8 +16,10 @@ use centraid_apps_kit::statement::PageBindValue;
 
 use crate::Denial;
 use crate::queries::{
-    DateRow, Touch, WIDE, asked, dates, describe, lists, people_among, touch_stubs, words_about,
+    DateRow, RelationRow, Touch, WIDE, asked, dates, describe, lists, people_among, relations,
+    touch_stubs, words_about,
 };
+pub use crate::queries::RelationDirection;
 use crate::roster::{RosterRow, rows_of};
 
 /// One way to reach a person, and who else holds the same value.
@@ -55,6 +57,8 @@ pub struct Person {
     pub notes: Vec<NoteEntry>,
     /// Newest first.
     pub touches: Vec<Touch>,
+    /// Who they are related to, both directions, by name.
+    pub relations: Vec<RelationRow>,
 }
 
 /// What `person` answers.
@@ -161,6 +165,7 @@ pub fn load_person(
         .collect();
     let stubs = asked!(touch_stubs(door, &[id.to_owned()]), empty());
     let touches = asked!(describe(door, &stubs), empty());
+    let relations = asked!(relations(door, id), empty());
     Ok((
         PersonData {
             person: Some(Person {
@@ -171,6 +176,7 @@ pub fn load_person(
                 dates,
                 notes,
                 touches,
+                relations,
             }),
         },
         None,

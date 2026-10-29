@@ -24,9 +24,9 @@ People is five queries, twenty-five actions and thirty-three scopes. It stores n
 | last contacted | **computed at read** from the activities `with` the person |
 | a note, a journal entry | a `note` `about` the person; an entry is about the owner, titled by its mood |
 | a follow-up, a gift idea | a `task` `about` the person; a gift also carries the `gift` tag |
-| the birthday | the person's `birthday` column (`MM-DD`, or `YYYY-MM-DD`); its reminder is always on |
+| the birthday | the person's `birthday` column (`MM-DD`, or `YYYY-MM-DD`); its reminder is on unless the member turned it off (`person.birthday_reminder`, per person; `set-birthday-reminder`) |
 | any other important date | a yearly all-day `event` `about` the person (R-FP-2) |
-| a relationship | a `related` edge labelled by a `relation` concept |
+| a relationship | a `related` edge labelled by a `relation` concept; it shows on both people's sheets, each read from its own side (the label names what the edge's target is to its source) |
 | how to reach them | `contact_point` rows (one preferred per kind) |
 
 **The circle is the people you keep**: every live person but the owner and a pet. The roster, the dashboard, the sheet, the search and Home's person hits answer for that one set.
@@ -47,7 +47,7 @@ R-1135-3-1 to R-1135-3-14 are in [docs/decisions.md](../../../docs/decisions.md#
 
 ## The five queries
 
-`people` is the roster: a window of the circle, newest-added first, with the star, the list, the reminders that are on and when each person was last touched. `person` is one sheet: the roster's row, nickname, how you met, contact points (with who else holds the same value), dates, notes and the touch log. `dashboard` folds Reconnect (most overdue first, ties by id), Upcoming (nearest first across the year boundary) and the newest 30 touches over the whole window. `search` is the vault's one index over `person` (name, nickname, role, how you met, contact points and the notes about them and about their touches), ranked, with a snippet. `trash` is the reversible shelf, most recently trashed first.
+`people` is the roster: a window of the circle, newest-added first, with the star, the list, the reminders that are on and when each person was last touched. `person` is one sheet: the roster's row, nickname, how you met, contact points (with who else holds the same value), dates, notes and the touch log and their relationships. A touch in the trash is no touch: it leaves the log, last contacted and the cadence. `dashboard` folds Reconnect (most overdue first, ties by id), Upcoming (nearest first across the year boundary) and the newest 30 touches over the whole window. `search` is the vault's one index over `person` (name, nickname, role, how you met, contact points and the notes about them and about their touches), ranked, with a snippet. `trash` is the reversible shelf, most recently trashed first.
 
 ## On the phone
 

@@ -74,6 +74,7 @@ person.merge
 person.move
 person.remove_contact_point
 person.save_contact_point
+person.set_birthday_reminder
 photo.add
 photo.edit
 photo.set_place

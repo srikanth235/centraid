@@ -3273,6 +3273,24 @@
         "verb": "edit"
       },
       {
+        "action": "set-birthday-reminder",
+        "also": [],
+        "app": "people",
+        "bulk": false,
+        "chat": "card",
+        "command": "person.set_birthday_reminder",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "stop reminding me of Maria's birthday",
+          "turn off the birthday reminder for Sam",
+          "remind me of Priya's birthday again"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
         "action": "add-relationship",
         "also": [],
         "app": "people",

@@ -260,6 +260,18 @@ message PeopleSheet {
   reserved "touches_known", "channels_known";
   // The touch log, newest first.
   repeated PeopleTouchEntry touches = 8;
+  // Who this person is related to, both directions, by name (#1146 D8).
+  repeated PeopleRelation relations = 10;
+}
+
+// One `related` edge, read from the sheet's person. The edge is labelled by what its target is
+// to its source: OUTGOING, the sheet's person listed `party_id` as `label`; INCOMING,
+// `party_id` listed the sheet's person as `label`.
+message PeopleRelation {
+  string party_id = 1;
+  string name = 2;
+  string label = 3;
+  bool incoming = 4;
 }
 
 message PeoplePerson {

@@ -546,6 +546,9 @@ CREATE TABLE person (
                  OR (length(birthday) = 10 AND date(birthday) = birthday)),
   avatar       TEXT REFERENCES blob(hash),
   cadence_days INTEGER CHECK (cadence_days IS NULL OR cadence_days > 0),
+  -- The member's switch for this person's birthday reminder: the birthday is this row's column,
+  -- not an event, so it has no `reminders` of its own.
+  birthday_reminder INTEGER NOT NULL DEFAULT 1 CHECK (birthday_reminder IN (0,1)),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
 

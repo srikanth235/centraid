@@ -121,6 +121,7 @@ people,complete-task,complete,task,card,yes: crates/screens/src/agenda/todo/ops.
 people,reopen-task,reopen,task,card,yes: crates/screens/src/agenda/todo/ops.rs,yes
 people,add-important-date,create,important_date,card,yes: crates/screens/src/people/person/mod.rs,no
 people,set-reminder,edit,important_date,card,yes: crates/screens/src/people/person/mod.rs,no
+people,set-birthday-reminder,edit,person,card,yes: crates/screens/src/people/person/mod.rs,no
 people,add-relationship,link,person,card,no,no
 people,add-gift,create,gift,card,no,no
 people,create-list,create,people_list,card,no,no

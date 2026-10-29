@@ -3528,6 +3528,28 @@ pub mod act {
             }
         }
 
+        /// Turn a person's birthday reminder on or off through person.set_birthday_reminder: the birthday is the person's own column, so the switch is theirs and event.edit does not reach it. The date stays on their sheet.
+        #[derive(Clone, Debug, Default)]
+        pub struct SetBirthdayReminder {
+            pub person_id: String,
+            pub on: bool,
+        }
+        impl SetBirthdayReminder {
+            pub const NAME: &str = "set-birthday-reminder";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.person_id));
+                map.insert("on".to_owned(), flag(self.on));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<SetBirthdayReminder> for wire::ActRequest {
+            fn from(value: SetBirthdayReminder) -> Self {
+                value.request()
+            }
+        }
+
         /// Record a related edge to another person through person.add_relationship, labelled by how they are related; related_id reuses a person, else one of that name is reused or founded (a pet is a person of form pet whose role is its species).
         #[derive(Clone, Debug, Default)]
         pub struct AddRelationship {

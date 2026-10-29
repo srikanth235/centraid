@@ -568,3 +568,79 @@ fn a_channel_tap_asks_the_os_to_call_mail_map_or_copy() {
         }))
     );
 }
+
+#[test]
+fn a_relationship_is_on_both_sheets_each_read_from_its_own_side() {
+    let mut d = clean();
+    let ada = person(&d, "Ada");
+    let beth = person(&d, "Beth");
+    arrange(
+        &d,
+        act::people::AddRelationship {
+            person_id: ada.clone(),
+            kind: "Mum".to_owned(),
+            name: "Beth".to_owned(),
+            related_id: Some(beth.clone()),
+            ..Default::default()
+        },
+    );
+    let i = open_person(&mut d, &ada, "Ada");
+    let data = person_data(d.view(i));
+    assert_eq!(data.relations_head.as_ref().unwrap().count, 1);
+    assert_eq!(
+        data.relations
+            .iter()
+            .map(|r| (r.name.as_str(), r.meta.as_str(), r.accessibility_label.as_str()))
+            .collect::<Vec<_>>(),
+        [("Beth", "Mum", "Beth, Ada's Mum")],
+        "Ada's sheet: Beth is her Mum"
+    );
+    let j = open_person(&mut d, &beth, "Beth");
+    let data = person_data(d.view(j));
+    assert_eq!(
+        data.relations
+            .iter()
+            .map(|r| (r.name.as_str(), r.meta.as_str(), r.accessibility_label.as_str()))
+            .collect::<Vec<_>>(),
+        [("Ada", "Beth is their Mum", "Ada, Beth is their Mum")],
+        "Beth's sheet: she is Ada's Mum"
+    );
+}
+
+#[test]
+fn a_birthday_reminder_is_turned_off_from_the_sheet_and_the_date_stays() {
+    let mut d = clean();
+    let id = id_of(&arrange(
+        &d,
+        act::people::AddPerson {
+            title: "Cy".to_owned(),
+            birthday: Some("03-04".to_owned()),
+            ..Default::default()
+        },
+    ));
+    let i = open_person(&mut d, &id, "Cy");
+    let birthday = |d: &Driver, i| {
+        person_data(d.view(i))
+            .dates
+            .iter()
+            .find(|date| date.label == "Birthday")
+            .expect("the birthday stays on the sheet")
+            .clone()
+    };
+    let before = birthday(&d, i);
+    assert!(before.reminder_on && before.toggleable, "{before:?}");
+    send_person(
+        &mut d,
+        i,
+        P::Reminder(ev::ReminderToggled {
+            date_id: before.date_id.clone(),
+        }),
+    );
+    let after = birthday(&d, i);
+    assert!(!after.reminder_on, "{after:?}");
+    assert_eq!(after.reminder_label, "Reminder off");
+    assert_eq!(
+        person_state(d.view(i)).status.as_ref().unwrap().sentence,
+        "Reminder off · Birthday"
+    );
+}
