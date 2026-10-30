@@ -7,6 +7,16 @@ fn nested(key: &str) -> Option<(&str, &str)> {
     key.split_once("[].")
 }
 
+/// Every non-empty string at or under `value`.
+fn strings_of<'a>(value: &'a serde_json::Value, found: &mut Vec<&'a str>) {
+    match value {
+        serde_json::Value::String(text) if !text.is_empty() => found.push(text),
+        serde_json::Value::Array(items) => items.iter().for_each(|item| strings_of(item, found)),
+        serde_json::Value::Object(map) => map.values().for_each(|item| strings_of(item, found)),
+        _ => {}
+    }
+}
+
 /// Scrub sealed values out of a message before it reaches a response. A validation error quotes
 /// the value that failed, which for a sealed field is the secret itself.
 #[must_use]
@@ -15,11 +25,16 @@ pub fn scrub_sealed(message: &str, sealed_keys: &[&str], input: &serde_json::Val
     let Some(map) = input.as_object() else {
         return out;
     };
+    // A sealed key covers every string at or under it: a refusal names a nested path
+    // (`/turn/question/text`) and quotes the value found there.
     let mut scrub = |value: Option<&serde_json::Value>| {
-        if let Some(serde_json::Value::String(secret)) = value
-            && !secret.is_empty()
-        {
-            out = out.replace(secret.as_str(), "‹sealed›");
+        let mut secrets = Vec::new();
+        if let Some(value) = value {
+            strings_of(value, &mut secrets);
+        }
+        secrets.sort_by_key(|secret| std::cmp::Reverse(secret.len()));
+        for secret in secrets {
+            out = out.replace(secret, "‹sealed›");
         }
     };
     for key in sealed_keys {
@@ -54,5 +69,24 @@ mod tests {
         let input = serde_json::json!({"fields": [{"value": "s3cret"}, {"value": ""}]});
         let scrubbed = scrub_sealed("bad value s3cret", &["fields[].value"], &input);
         assert_eq!(scrubbed, "bad value ‹sealed›");
+    }
+
+    #[test]
+    fn a_sealed_key_covers_every_string_nested_under_it() {
+        let question = "q".repeat(8001);
+        let input = serde_json::json!({
+            "turn": {"question": {"text": question}, "cards": [{"title": "Rent"}]}
+        });
+        let message = format!("/turn/question/text: \"{question}\" is longer than 8000 characters");
+        let scrubbed = scrub_sealed(&message, &["turn"], &input);
+        assert!(
+            !scrubbed.contains("qqqq"),
+            "the question was quoted: {scrubbed}"
+        );
+        let scrubbed = scrub_sealed("/turn/cards/0/title: \"Rent\" is bad", &["turn"], &input);
+        assert!(
+            !scrubbed.contains("Rent"),
+            "a card title was quoted: {scrubbed}"
+        );
     }
 }
