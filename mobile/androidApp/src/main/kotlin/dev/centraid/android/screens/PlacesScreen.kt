@@ -23,6 +23,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,6 +71,9 @@ public fun PlacesScreen(
     onOpen: (Route) -> Unit = {},
 ) {
     val map = state.presentation == PhotosPlacesState.Presentation.PRESENTATION_MAP
+    // THE RENAME FIELD STARTS FROM THE TAPPED CARD: Rust's `current_name` on the row, held from the
+    // tap until the sheet is shown, as iOS's `typedName` is seeded in `onName`.
+    var seed by remember { mutableStateOf("") }
     Column(modifier = Modifier.padding(16.dp)) {
         KitSegmented(
             options = listOf(PRESENT_CARDS to state.cards_label, PRESENT_MAP to state.map_label),
@@ -110,6 +117,7 @@ public fun PlacesScreen(
                         modifier = Modifier.weight(1f),
                         onOpen = onOpen,
                         onName = { row ->
+                            seed = row.current_name
                             onEvent(
                                 PhotosPlacesEvent(
                                     name_requested = PhotosPlacesEvent.NameRequested(place_id = row.place_id),
@@ -129,7 +137,7 @@ public fun PlacesScreen(
         RenameSheet(
             title = sheet.title,
             fieldLabel = sheet.field_label,
-            current = sheet.current,
+            current = seed,
             onDismiss = { onEvent(PhotosPlacesEvent(name_dismissed = PhotosPlacesEvent.NameDismissed())) },
             primaryLabel = sheet.save_label,
         ) { name ->

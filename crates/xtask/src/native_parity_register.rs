@@ -158,7 +158,6 @@ pub const REGISTER: &[Entry] = &[
         "PhotosLightboxPhoto.original_media_type",
         gap("F", Missing::Android),
     ),
-    ("PhotosPlaceRow.current_name", gap("F", Missing::Android)),
     // ShellFact.expired: iOS reports a BGTask's expiry; WorkManager's stop is its twin and Android reports none
     ("ShellFact.expired", gap("F", Missing::Android)),
     // ShellVault.originals_withheld: the vault header's count of originals the phone is holding back
