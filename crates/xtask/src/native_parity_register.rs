@@ -41,15 +41,6 @@ pub const REGISTER: &[Entry] = &[
         gap("C", Missing::Ios),
     ),
     ("WordsShowState.check_now", gap("C", Missing::Ios)),
-    // Lane D: the gateway browse, performed by iOS and not yet by Android (Android missing).
-    ("BrowseGateways.repeat_ms", gap("D", Missing::Android)),
-    ("BrowseGateways.window_ms", gap("D", Missing::Android)),
-    ("Effect.browse_gateways", gap("D", Missing::Android)),
-    ("EffectResult.gateways_sighted", gap("D", Missing::Android)),
-    ("GatewaySighting.addresses", gap("D", Missing::Android)),
-    ("GatewaySighting.service_name", gap("D", Missing::Android)),
-    ("GatewaySighting.txt", gap("D", Missing::Android)),
-    ("GatewaysSighted.sightings", gap("D", Missing::Android)),
     // Platform, Android only: iOS has no such thing.
     (
         "AgendaEditorData.dirty",
@@ -201,8 +192,6 @@ pub const REGISTER: &[Entry] = &[
     ("ImportsCameraRollEvent.requested", gap("F", Missing::Ios)),
     // ImportsFilesEvent.requested: `HealthRationale.requested` is a Kotlin flag
     ("ImportsFilesEvent.requested", gap("F", Missing::Ios)),
-    // LockerWallEvent.lock: an `NSLock`
-    ("LockerWallEvent.lock", gap("F", Missing::Android)),
     // PeopleChannelRow.intent: `CGColorSpace` conversion's `intent:`
     ("PeopleChannelRow.intent", gap("F", Missing::Android)),
     // PeoplePersonEvent.SheetOpened.which: Compose passes it positionally (`SheetOpened(which)`), so the name never appears
