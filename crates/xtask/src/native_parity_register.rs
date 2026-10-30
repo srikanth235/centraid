@@ -152,10 +152,6 @@ pub const REGISTER: &[Entry] = &[
     ("LockerSearchField.answered_term", gap("F", Missing::Ios)),
     // NavEvent.pop_to_root: a second tap on the selected tab; Compose sends it, SwiftUI never does
     ("NavEvent.pop_to_root", gap("F", Missing::Ios)),
-    (
-        "PhotosLightboxPhoto.original_media_type",
-        gap("F", Missing::Android),
-    ),
     // ShellFact.expired: iOS reports a BGTask's expiry; WorkManager's stop is its twin and Android reports none
     ("ShellFact.expired", gap("F", Missing::Android)),
     // Lane F, one-sided by NAME COLLISION: the census matches field names, and the hit is another symbol. Neither shell reads the field; consume it or delete it.

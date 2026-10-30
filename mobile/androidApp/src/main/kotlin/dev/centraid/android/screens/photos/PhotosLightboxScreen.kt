@@ -95,7 +95,7 @@ public fun PhotosLightboxScreen(
     val videoPath = photo?.takeIf {
         it.tile?.kind == PhotoTile.Kind.KIND_VIDEO && it.original_embeddable
     }?.original_path?.takeIf { it.isNotEmpty() }
-    val player = rememberLightboxPlayer(videoPath, once = false)
+    val player = rememberLightboxPlayer(videoPath, once = false, mediaType = photo?.original_media_type.orEmpty())
     val live = rememberLightboxPlayer(photo?.live_path?.takeIf { it.isNotEmpty() }, once = true)
 
     // A SCREEN READER PINS THE CHROME OPEN: a control reachable only by an

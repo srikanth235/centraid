@@ -434,14 +434,21 @@ internal class LightboxPlayer(val exo: ExoPlayer, private val once: Boolean) {
     }
 }
 
-/** A player for [path], or null when there is nothing to play. */
+/**
+ * A player for [path], or null when there is nothing to play. [mediaType] is Rust's
+ * `original_media_type`: the vault keeps an original under its hash with no extension to sniff, so
+ * the player is told what the bytes are, as iOS's `AVURLAssetOverrideMIMETypeKey` does. Blank leaves
+ * the player to find out (a Live Photo's movie, which Rust sends no type for).
+ */
 @Composable
-internal fun rememberLightboxPlayer(path: String?, once: Boolean): LightboxPlayer? {
+internal fun rememberLightboxPlayer(path: String?, once: Boolean, mediaType: String = ""): LightboxPlayer? {
     val context = LocalContext.current
-    val player = remember(path) {
+    val player = remember(path, mediaType) {
         path?.let {
             val exo = ExoPlayer.Builder(context).build().apply {
-                setMediaItem(MediaItem.fromUri(Uri.fromFile(File(it))))
+                val item = MediaItem.Builder().setUri(Uri.fromFile(File(it)))
+                if (mediaType.isNotEmpty()) item.setMimeType(mediaType)
+                setMediaItem(item.build())
                 prepare()
             }
             LightboxPlayer(exo, once)
