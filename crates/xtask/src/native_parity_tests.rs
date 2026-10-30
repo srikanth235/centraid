@@ -194,6 +194,132 @@ fn a_gap_whose_missing_side_moved_is_caught() {
     );
 }
 
+// ---- the two statuses that owe no shell a read ----
+
+#[test]
+fn a_rust_only_or_runtime_entry_holds_while_no_shell_spells_the_field() {
+    let kotlin = KOTLIN_ALL
+        .replace("  card.title\n", "")
+        .replace("  card.open_url\n", "");
+    let swift = SWIFT_ALL
+        .replace("  card.title\n", "")
+        .replace("  card.openURL\n", "");
+    let root = tree("parity-rust-only", &kotlin, &swift);
+    let register = [
+        (
+            "Card.title",
+            rust_only("Rust reads it back, no shell is owed it"),
+        ),
+        (
+            "Card.open_url",
+            runtime("the runtime originates it, no shell sends it"),
+        ),
+    ];
+    let report = run(&root, &register);
+    assert!(report.findings.is_empty(), "{}", findings(&report));
+}
+
+#[test]
+fn a_rust_only_or_runtime_entry_goes_stale_the_moment_a_shell_spells_the_field() {
+    // Compose now reads `title` and SwiftUI now reads `open_url`; both rows were "neither".
+    let kotlin = KOTLIN_ALL.replace("  card.open_url\n", "");
+    let swift = SWIFT_ALL.replace("  card.title\n", "");
+    let root = tree("parity-rust-only-stale", &kotlin, &swift);
+    let register = [
+        (
+            "Card.title",
+            rust_only("Rust reads it back, no shell is owed it"),
+        ),
+        (
+            "Card.open_url",
+            runtime("the runtime originates it, no shell sends it"),
+        ),
+    ];
+    let text = findings(&run(&root, &register));
+    assert_eq!(text.lines().count(), 2, "{text}");
+    assert!(
+        text.contains("Card.title: registered as Rust-only (neither shell reads it), but only Compose reads it"),
+        "{text}"
+    );
+    assert!(
+        text.contains("Card.open_url: registered as runtime-originated (neither shell reads it), but only SwiftUI reads it"),
+        "{text}"
+    );
+    assert!(
+        text.contains("a shell reads it, so it is a shell's field now"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_named_rust_only_entry_follows_the_collision_and_goes_stale_when_it_ends() {
+    // Compose spells `open_url` for another symbol only: the by-name census sees Compose.
+    let swift = SWIFT_ALL.replace("  card.openURL\n", "");
+    let root = tree("parity-named", KOTLIN_ALL, &swift);
+    let named = [(
+        "Card.open_url",
+        rust_only_named(
+            "a Kotlin flag of the same name is another symbol",
+            Missing::Ios,
+        ),
+    )];
+    assert!(run(&root, &named).findings.is_empty());
+    let named_runtime = [(
+        "Card.open_url",
+        runtime_named(
+            "a Kotlin flag of the same name is another symbol",
+            Missing::Ios,
+        ),
+    )];
+    assert!(run(&root, &named_runtime).findings.is_empty());
+    // The same row against a tree where Compose no longer spells it: the collision is gone.
+    let kotlin = KOTLIN_ALL.replace("  card.open_url\n", "");
+    let gone = tree("parity-named-gone", &kotlin, &swift);
+    let text = findings(&run(&gone, &named));
+    assert_eq!(text.lines().count(), 1, "{text}");
+    assert!(
+        text.contains("the name collision it was registered with is gone; register it without one"),
+        "{text}"
+    );
+    // A plain row against the colliding tree is the opposite finding.
+    let plain = [(
+        "Card.open_url",
+        rust_only("Rust reads it back, no shell is owed it"),
+    )];
+    let text = findings(&run(&root, &plain));
+    assert!(
+        text.contains(
+            "registered as Rust-only (neither shell reads it), but only Compose reads it"
+        ),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_rust_only_entry_both_shells_read_must_leave_the_register() {
+    let root = tree("parity-rust-only-read", KOTLIN_ALL, SWIFT_ALL);
+    let register = [
+        (
+            "Card.title",
+            rust_only("Rust reads it back, no shell is owed it"),
+        ),
+        (
+            "Card.photo_id",
+            runtime("the runtime originates it, no shell sends it"),
+        ),
+    ];
+    let text = findings(&run(&root, &register));
+    assert_eq!(text.lines().count(), 2, "{text}");
+    for key in ["Card.title", "Card.photo_id"] {
+        assert!(
+            text.contains(&format!(
+                "{key}: both shells read it now; delete its register entry"
+            )),
+            "{text}"
+        );
+    }
+}
+
 // ---- (d) an entry for nothing ----
 
 #[test]
@@ -492,6 +618,10 @@ fn the_register_is_well_formed() {
                 matches!(*lane, "A" | "B" | "C" | "D" | "F"),
                 "{key}: lane {lane}"
             ),
+            Status::RustOnly { why, .. } | Status::Runtime { why, .. } => assert!(
+                why.len() > 20,
+                "{key}: a Rust-only or runtime row says why no shell is owed a read"
+            ),
         }
     }
     let keys: Vec<&str> = REGISTER.iter().map(|(key, _)| *key).collect();
@@ -499,6 +629,12 @@ fn the_register_is_well_formed() {
         REGISTER
             .iter()
             .any(|(_, status)| matches!(status, Status::Platform { .. }))
+            && REGISTER
+                .iter()
+                .any(|(_, status)| matches!(status, Status::RustOnly { .. }))
+            && REGISTER
+                .iter()
+                .any(|(_, status)| matches!(status, Status::Runtime { .. }))
             && keys.len() > 100,
         "the register stopped being read"
     );

@@ -31,11 +31,21 @@
 //! says so beside each entry that is a collision rather than a real read.
 //!
 //! The rule's verdict is the register's ratchet: [`REGISTER`] names every item
-//! that is not read by both shells, as a [`Status::Platform`] (the platform has
-//! no such thing, with the reason) or a [`Status::Gap`] (a lane owes the other
-//! shell a read, or the field is read by neither and waits for a decision to
-//! consume or delete it). A closed gap must LEAVE the register, so the register
-//! only shrinks once it is written.
+//! that is not read by both shells, as one of four statuses:
+//!
+//! - [`Status::Platform`]: the other platform has no such thing (with the reason).
+//! - [`Status::Gap`]: a lane owes the other shell a read, or the field is read by
+//!   neither and waits for a decision to consume or delete it.
+//! - [`Status::RustOnly`]: Rust writes it and Rust reads it back, or hands it from
+//!   one screen or service to another; it round-trips through a shell untouched
+//!   or never reaches a shell at all, and no shell is owed a read.
+//! - [`Status::Runtime`]: the runtime itself originates or consumes it (a timer, a
+//!   change notice, a service report); it is no shell's to send or draw.
+//!
+//! A [`Status::RustOnly`] or [`Status::Runtime`] row holds only while no shell
+//! spells the field: the moment one does, the field is a shell's and the row is
+//! stale (the rule says so). A closed gap must LEAVE the register, so the
+//! register only shrinks once it is written.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -74,6 +84,22 @@ pub enum Status {
         lane: &'static str,
         missing_on: Missing,
     },
+    /// Rust writes it and Rust reads it back, or hands it from one screen or
+    /// service to another (`Ctx::post`, a stored wire message): no shell is owed
+    /// a read. `missing_on` is what the by-name census sees, which is
+    /// [`Missing::Both`] unless a shell spells the NAME for an unrelated symbol
+    /// (a collision, said in `why`); it must keep matching.
+    RustOnly {
+        why: &'static str,
+        missing_on: Missing,
+    },
+    /// The runtime originates or consumes it (a timer, a change notice, a
+    /// service report): it is no shell's to send or draw. `missing_on` as for
+    /// [`Status::RustOnly`].
+    Runtime {
+        why: &'static str,
+        missing_on: Missing,
+    },
 }
 
 /// One register row: `"Message.field"` (nested messages as `Outer.Inner`).
@@ -87,6 +113,34 @@ pub const fn platform(only: Shell, why: &'static str) -> Status {
 /// `Status::Gap`, as a row's right-hand side.
 pub const fn gap(lane: &'static str, missing_on: Missing) -> Status {
     Status::Gap { lane, missing_on }
+}
+
+/// `Status::RustOnly`, as a row's right-hand side: no shell spells the field.
+pub const fn rust_only(why: &'static str) -> Status {
+    Status::RustOnly {
+        why,
+        missing_on: Missing::Both,
+    }
+}
+
+/// `Status::RustOnly` for a field whose NAME one shell spells for an unrelated
+/// symbol, so the by-name census sees `missing_on` (the collision is in `why`).
+pub const fn rust_only_named(why: &'static str, missing_on: Missing) -> Status {
+    Status::RustOnly { why, missing_on }
+}
+
+/// `Status::Runtime`, as a row's right-hand side: no shell spells the field.
+pub const fn runtime(why: &'static str) -> Status {
+    Status::Runtime {
+        why,
+        missing_on: Missing::Both,
+    }
+}
+
+/// `Status::Runtime` for a field whose NAME one shell spells for an unrelated
+/// symbol, so the by-name census sees `missing_on` (the collision is in `why`).
+pub const fn runtime_named(why: &'static str, missing_on: Missing) -> Status {
+    Status::Runtime { why, missing_on }
 }
 
 /// How much the census must see before it may pass: a check over a handful of
@@ -623,6 +677,28 @@ pub(crate) fn check(root: &Path, register: &[Entry], floors: Floors) -> RuleRepo
                     findings.push(format!(
                         "{}: registered as a lane {lane} gap missing on {missing_on:?}, but {} ({spelling}); update the entry",
                         item.key,
+                        describe(missing)
+                    ));
+                }
+            }
+            Some(
+                status @ (Status::RustOnly { missing_on, .. } | Status::Runtime { missing_on, .. }),
+            ) => {
+                if *missing_on != missing {
+                    let kind = if matches!(status, Status::RustOnly { .. }) {
+                        "Rust-only"
+                    } else {
+                        "runtime-originated"
+                    };
+                    let advice = if missing == Missing::Both {
+                        "the name collision it was registered with is gone; register it without one"
+                    } else {
+                        "a shell reads it, so it is a shell's field now: read it in the other shell, or make the row a gap"
+                    };
+                    findings.push(format!(
+                        "{}: registered as {kind} ({}), but {} ({spelling}); {advice}",
+                        item.key,
+                        describe(*missing_on),
                         describe(missing)
                     ));
                 }
