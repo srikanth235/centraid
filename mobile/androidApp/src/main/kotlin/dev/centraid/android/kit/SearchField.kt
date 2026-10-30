@@ -127,7 +127,9 @@ public fun CentraidSearchField(
         }
         if (field.corrected.isNotEmpty()) {
             Text(
-                KitWords.searchCorrected(field.corrected),
+                // RUST'S SENTENCE WHERE THE STATE CARRIES IT (Chat's drawer, Docs); the other screens'
+                // states carry the bare term (a Rust gap), so the generated words compose it for them.
+                field.corrected_label.ifEmpty { KitWords.searchCorrected(field.corrected) },
                 style = centraidType("small"),
                 color = centraidColor("textSoft"),
                 maxLines = 2,
