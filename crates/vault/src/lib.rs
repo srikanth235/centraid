@@ -47,6 +47,7 @@ pub mod plans;
 pub mod roster;
 pub mod snapshot;
 pub mod testdoor;
+pub mod tidy;
 pub mod time;
 pub mod value;
 pub mod words;

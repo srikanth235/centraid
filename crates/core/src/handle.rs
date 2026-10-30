@@ -214,6 +214,17 @@ pub struct HandleState {
     /// THE SHELF, once the screen runtime built one: the vaults a shell's calls
     /// are routed to.
     vaults: std::sync::OnceLock<Arc<dyn crate::vaults::Vaults>>,
+    /// WHEN THIS CORE OPENED. The launch sweep of files no row claims spares any
+    /// file written since, because a staging in flight owns it until a command
+    /// names it ([`HandleState::tidy_files`]).
+    launched: std::time::SystemTime,
+    /// WHEN A REQUEST LAST TOOK THE VAULT, in milliseconds since `launched`. The
+    /// launch tidy runs a batch only after the vault has been idle for
+    /// [`TIDY_IDLE`], so it never competes with a screen's reads.
+    last_used: AtomicU64,
+    /// The launch sweep of files has been started, so a store attached again
+    /// (a restore re-attaches) does not start it twice.
+    files_tidied: AtomicBool,
 }
 
 /// THE CLOCK AND ID SOURCE A CORE WAS OPENED WITH, kept for the life of the
@@ -311,7 +322,8 @@ impl Core {
             Some((seed, index)) => Some(crate::phone::Keyring::derive(&seed, index)?),
         };
         let registry = Arc::new(Registry::with_system_commands()?);
-        Ok(Handle::new(|me| HandleState {
+        let launched = std::time::SystemTime::now();
+        let handle = Handle::new(|me| HandleState {
             me,
             plane: crate::phone::Plane::of(&path).with_ceiling(spool_ceiling),
             path,
@@ -337,7 +349,12 @@ impl Core {
             screens: std::sync::OnceLock::new(),
             shelf_config,
             vaults: std::sync::OnceLock::new(),
-        }))
+            launched,
+            last_used: AtomicU64::new(0),
+            files_tidied: AtomicBool::new(false),
+        });
+        handle.start_trash_tidy();
+        Ok(handle)
     }
 
     /// Open (or create) the file and put the content store beside it.
@@ -404,7 +421,176 @@ impl Core {
     }
 }
 
+/// How many trashed roots one batch of the launch pass purges. A batch holds the
+/// vault, so it is small: the first screen's reads wait behind at most one.
+const TRASH_BATCH: usize = 5;
+
+/// How many files one batch of the launch sweep looks at (deleting or not).
+const FILE_BATCH: usize = 100;
+
+/// How long the launch tidy lets the vault go between two batches.
+const TIDY_PAUSE: Duration = Duration::from_millis(5);
+
+/// How long the vault must have gone unused before the launch tidy takes it for
+/// a batch: a first screen's reads are back to back, and a tidy that ran between
+/// them cost the search budget its p95 (#1146).
+const TIDY_IDLE: Duration = Duration::from_millis(300);
+
+/// Which launch pass a batch belongs to.
+#[derive(Clone, Copy)]
+enum Tidy {
+    Trash,
+    Files,
+}
+
 impl HandleState {
+    /// **PURGE WHAT HAS WAITED OUT ITS WINDOW, OFF THE REQUEST PATH** (#1146,
+    /// decision T). Started by [`Core::open`] on a thread of its own; the open
+    /// has returned by the time it runs, so no first screen waits for it, and
+    /// each batch takes the vault for a moment and lets it go. Until a row's
+    /// batch has run it is a trashed row like any other and `entity.restore`
+    /// still brings it back.
+    ///
+    /// Returns how many entities the pass purged.
+    ///
+    /// # Errors
+    /// A closed or poisoned core, or the pass's own failure; what earlier
+    /// batches purged stays purged.
+    pub fn tidy_trash(&self) -> Result<usize> {
+        self.tidy_all(Tidy::Trash)
+    }
+
+    fn mark_used(&self) {
+        let ms = u64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(self.launched)
+                .unwrap_or_default()
+                .as_millis(),
+        )
+        .unwrap_or(u64::MAX);
+        self.last_used.store(ms, Ordering::Relaxed);
+    }
+
+    /// Whether the vault has gone unused for [`TIDY_IDLE`].
+    fn idle(&self) -> bool {
+        let now = u64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(self.launched)
+                .unwrap_or_default()
+                .as_millis(),
+        )
+        .unwrap_or(u64::MAX);
+        now.saturating_sub(self.last_used.load(Ordering::Relaxed))
+            >= u64::try_from(TIDY_IDLE.as_millis()).unwrap_or(0)
+    }
+
+    /// One batch of a tidy pass, if the vault is idle: how many it did and
+    /// where the next batch resumes (`None` once the pass is done). `Ok(None)`
+    /// means the vault was busy and nothing ran.
+    fn tidy_step(&self, which: Tidy, after: &str) -> Result<Option<(usize, Option<String>)>> {
+        self.check_open()?;
+        if !self.idle() {
+            return Ok(None);
+        }
+        // Taken without marking: the tidy's own hold is not a request.
+        let held = self
+            .vault
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(vault) = held.as_ref() else {
+            return Err(CoreError::Unpaired);
+        };
+        Ok(Some(match which {
+            Tidy::Trash => {
+                let batch = vault.empty_overdue_trash(&self.registry, TRASH_BATCH)?;
+                (batch.purged, batch.more.then(String::new))
+            }
+            Tidy::Files => {
+                let batch = vault.sweep_unclaimed_files(self.launched, after, FILE_BATCH)?;
+                (batch.removed.len(), batch.next)
+            }
+        }))
+    }
+
+    /// Run a pass to its end on this thread, a batch at a time.
+    fn tidy_all(&self, which: Tidy) -> Result<usize> {
+        let mut total = 0;
+        let mut after = String::new();
+        loop {
+            match self.tidy_step(which, &after)? {
+                None => std::thread::sleep(Duration::from_millis(50)),
+                Some((done, next)) => {
+                    total += done;
+                    let Some(next) = next else {
+                        return Ok(total);
+                    };
+                    after = next;
+                    std::thread::sleep(TIDY_PAUSE);
+                }
+            }
+        }
+    }
+
+    /// **DELETE THE FILES NO ROW CLAIMS** (#1146): the bytes of a command that
+    /// failed after the stage door kept them, or of a purge whose file would not
+    /// delete. Only files written before this core opened are taken: a staging
+    /// in flight owns its file until a command names it, and one that ended
+    /// after the open wrote its file after it.
+    ///
+    /// Returns how many files were deleted.
+    ///
+    /// # Errors
+    /// A closed or poisoned core, or the store's refusal.
+    pub fn tidy_files(&self) -> Result<usize> {
+        self.tidy_all(Tidy::Files)
+    }
+
+    /// Run a pass on a thread of its own. **The thread holds the core only for
+    /// the length of a batch**: a handle dropped between two batches really is
+    /// dropped (its files released, its spool free) and the thread ends with it.
+    fn tidy_in_background(&self, name: &str, which: Tidy) {
+        let weak = self.me.clone();
+        let spawned = std::thread::Builder::new()
+            .name(name.to_owned())
+            .spawn(move || {
+                let mut after = String::new();
+                let mut total = 0usize;
+                loop {
+                    let Some(state) = weak.upgrade() else { return };
+                    match state.tidy_step(which, &after) {
+                        Ok(None) => {
+                            drop(state);
+                            std::thread::sleep(Duration::from_millis(50));
+                        }
+                        Ok(Some((done, next))) => {
+                            total += done;
+                            drop(state);
+                            let Some(next) = next else {
+                                if total > 0 {
+                                    tracing::info!(total, "the launch tidy finished");
+                                }
+                                return;
+                            };
+                            after = next;
+                            std::thread::sleep(TIDY_PAUSE);
+                        }
+                        Err(CoreError::Unpaired | CoreError::Closed) => return,
+                        Err(error) => {
+                            tracing::warn!("the launch tidy stopped: {error}");
+                            return;
+                        }
+                    }
+                }
+            });
+        if let Err(error) = spawned {
+            tracing::warn!("the launch tidy could not start: {error}");
+        }
+    }
+
+    fn start_trash_tidy(&self) {
+        self.tidy_in_background("centraid-tidy-trash", Tidy::Trash);
+    }
+
     /// The event queue, so a producer (sync, the applier) can push to it.
     #[must_use]
     pub fn events(&self) -> Arc<EventQueue> {
@@ -539,6 +725,11 @@ impl HandleState {
             && let Some(open) = vault.take()
         {
             *vault = Some(open.with_blobs(Box::new(bytes)));
+        }
+        // THE FIRST STORE THIS CORE HOLDS IS SWEPT ONCE (#1146): the files no row
+        // claims go, off this thread.
+        if !self.files_tidied.swap(true, Ordering::SeqCst) {
+            self.tidy_in_background("centraid-tidy-files", Tidy::Files);
         }
     }
 
@@ -927,6 +1118,7 @@ impl HandleState {
     /// phone's replica to be placed by a shell script.
     pub fn with_vault<T>(&self, body: impl FnOnce(&Vault) -> Result<T>) -> Result<T> {
         self.check_open()?;
+        self.mark_used();
         let held = self
             .vault
             .lock()
@@ -945,6 +1137,7 @@ impl HandleState {
         body: impl FnOnce(Option<&Vault>) -> Result<T>,
     ) -> Result<T> {
         self.check_open()?;
+        self.mark_used();
         let held = self
             .vault
             .lock()
@@ -1724,6 +1917,97 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.dir);
         }
+    }
+
+    fn trashed_note(handle: &Handle, id: &str, overdue: bool) {
+        handle
+            .with_vault(|vault| {
+                Ok(centraid_vault::testdoor::add_trashed_note(
+                    vault, id, overdue,
+                )?)
+            })
+            .expect("a trashed note");
+    }
+
+    fn rows(handle: &Handle, id: &str) -> i64 {
+        handle
+            .with_vault(|vault| {
+                Ok(vault.read(|c| Ok(centraid_vault::testdoor::entity_rows(c, id)))?)
+            })
+            .expect("a count")
+    }
+
+    /// DECISION T (#1146): the pass takes what is overdue, in bounded batches, and
+    /// leaves a row still inside its window. (That an overdue row restores until
+    /// the pass runs is `trash_and_bytes.rs`'s: the pass `open` starts races a
+    /// test that would restore here.)
+    #[test]
+    fn the_launch_pass_purges_what_is_overdue_and_spares_the_rest() {
+        let scratch = Scratch::founded();
+        let handle = &scratch.handle;
+        trashed_note(handle, "kept", false);
+        trashed_note(handle, "doomed", true);
+        handle.tidy_trash().expect("the pass runs");
+        assert_eq!(rows(handle, "doomed"), 0, "the overdue note was purged");
+        assert_eq!(rows(handle, "kept"), 1, "the one inside its window was not");
+    }
+
+    /// The pass is started by `open` itself, on a thread of its own: a vault
+    /// reopened with an overdue row empties it with nobody asking.
+    #[test]
+    fn open_starts_the_pass_without_a_request() {
+        let scratch = Scratch::founded();
+        trashed_note(&scratch.handle, "doomed", true);
+        let path = scratch.handle.path().to_path_buf();
+        scratch.handle.close();
+        drop(scratch.handle.clone());
+        let reopened = Core::open(CoreConfig::new(&path)).expect("reopens");
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while rows(&reopened, "doomed") != 0 {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the launch pass never ran"
+            );
+            std::thread::sleep(Duration::from_millis(500));
+        }
+    }
+
+    /// A file no row claims is swept at launch, and a file written since the
+    /// core opened is left for the command that is about to name it.
+    #[test]
+    fn the_launch_sweep_takes_stray_files_and_spares_what_a_staging_owns() {
+        use centraid_vault::bytes::BlobStore as _;
+
+        let scratch = Scratch::founded();
+        let store = scratch.dir.join("vault.bytes");
+        // The old stray is on disk before the core attaches its store.
+        let stray = {
+            let bytes = centraid_blobs::ByteStore::open(&store).expect("opens");
+            let stored = bytes
+                .put_bytes(b"left by a crashed command")
+                .expect("stored");
+            std::fs::File::options()
+                .write(true)
+                .open(&stored.path)
+                .and_then(|file| {
+                    file.set_modified(std::time::SystemTime::now() - Duration::from_secs(86_400))
+                })
+                .expect("ages it");
+            stored.hash.to_hex()
+        };
+        scratch
+            .handle
+            .open_own_bytes(&store)
+            .expect("opens its bytes");
+        let door = scratch.handle.bytes().expect("attached");
+        // A staging that ended after the open: new, and spared.
+        let staged = door.put(b"staged a moment ago").expect("stored");
+        scratch.handle.tidy_files().expect("the sweep runs");
+        assert!(!door.has(&stray).expect("asks"), "the stray was swept");
+        assert!(
+            door.has(&staged).expect("asks"),
+            "the staged file was spared"
+        );
     }
 
     /// **HAND-OFF 2, ANSWERED.** A core that opens its own byte store holds

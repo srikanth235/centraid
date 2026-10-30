@@ -196,7 +196,7 @@ fn replacing_keeps_the_old_bytes_as_a_version_and_a_restore_keeps_what_it_replac
             .contains("trash")
     );
     assert!(
-        w.ok("blob.collect", json!({}))["collected"]
+        w.ok("blob.collect", json!({}))["released"]
             .as_array()
             .expect("a list")
             .is_empty()
@@ -227,17 +227,15 @@ fn the_words_a_phone_read_out_of_a_file_are_what_it_is_found_by() {
 }
 
 #[test]
-fn a_lapsed_grace_window_is_not_restorable() {
+fn a_lapsed_grace_window_is_restorable_until_the_pass_empties_it() {
     let w = World::new();
     let id = w.document("Old lease", "old", None);
     w.ok("entity.trash", json!({ "id": id }));
-    w.scratch.clock.advance_ms(30 * 86_400_000 - 1);
+    w.scratch.clock.advance_ms(45 * 86_400_000);
     w.ok("entity.restore", json!({ "id": id }));
+    // "Delete forever" has no window either.
     w.ok("entity.trash", json!({ "id": id }));
-    w.scratch.clock.advance_ms(30 * 86_400_000);
-    let sentence = w.refused("entity.restore", json!({ "id": id }));
-    assert!(sentence.contains("grace window"), "{sentence}");
-    // It waits for "delete forever", which has no window.
+    w.scratch.clock.advance_ms(45 * 86_400_000);
     w.ok("entity.purge", json!({ "id": id }));
 }
 

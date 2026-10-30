@@ -31,16 +31,16 @@
 // formatter Home's Docs tile already reads through `with_document_size` — and
 // EMPTY when the document's bytes have no row, never "0 bytes".
 //
-// WHAT "TRASH" MEANS ON THIS PHONE. Trashing stamps `purge_at` thirty days out
-// and `entity.restore` brings a document back until then.
+// WHAT "TRASH" MEANS ON THIS PHONE. Trashing stamps `purge_at` thirty days out.
 // `entity.purge` destroys one trashed document at once — the path Photos'
 // purge takes: the row, its star, labels and versions go, and its bytes are
 // released when nothing else holds them — and `entity.empty_trash` does that to
 // every trashed document
-// (the 2026-09-25 ruling D-1 in `docs/decisions.md`). No sweep runs on the
-// phone, so a document whose window ran out and that nobody purged stays in
-// Trash, unrestorable, until "Delete forever" or "Empty trash";
-// `purge_in_days` can therefore be zero or negative.
+// (the 2026-09-25 ruling D-1 in `docs/decisions.md`). A document whose window
+// ran out is emptied by the pass the core runs when it opens (#1146); until
+// that pass runs it is a trashed document like any other and
+// `entity.restore` brings it back, so `purge_in_days` can be zero or negative
+// on a row a restore still accepts.
 
 syntax = "proto3";
 
@@ -237,7 +237,8 @@ message DocsDocumentRow {
   string updated_at = 15;
   string updated_local = 16;
   // Trash only (EMPTY on a live row): when it was trashed, and the day its
-  // grace window ends. See the file header: nothing destroys it on that day.
+  // grace window ends. See the file header: nothing destroys it on that day;
+  // the next launch may.
   string trashed_at = 17;
   string trashed_local = 18;
   string purge_at = 19;
@@ -247,8 +248,9 @@ message DocsDocumentRow {
   // 24 hours). ELAPSED days, as the vault counts the window — 30 for the first
   // 24 hours after trashing, whatever a daylight-saving change did to the
   // calendar since, so it can differ from the civil days to `purge_local_day`
-  // by one. Positive exactly while the vault will restore; zero or negative
-  // from `purge_at` on, when a restore is refused (#1090).
+  // by one. Positive while the window is open; zero or negative from `purge_at`
+  // on, when the next launch may empty the row. A restore is accepted either way
+  // until it does (#1146).
   int32 purge_in_days = 21;
   // `search` only: the index's highlight, `⟦`/`⟧` around the matched words.
   // EMPTY on a hit with none.

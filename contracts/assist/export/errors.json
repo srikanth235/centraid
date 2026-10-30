@@ -1173,25 +1173,13 @@
     },
     {
       "argument": "verb",
-      "example": [
-        {
-          "args": {
-            "kind": "person",
-            "name": "Old Contact",
-            "trashed": true,
-            "verb": "restore"
-          },
-          "think": null,
-          "tool": "act",
-          "user": null
-        }
-      ],
+      "example": null,
       "family": "vault",
       "id": "act.restore_name_it_is_in_the",
       "source": "act.rs",
       "template": "refused: restore {name}: it is in the trash but past the vault's restore window, so it cannot come back (vault: {said}).",
       "tool": "act",
-      "why_no_example": ""
+      "why_no_example": "the vault no longer refuses a restore past the window: the launch pass empties an overdue row, and until it runs the row restores (#1146); no fixture row reaches this line"
     },
     {
       "argument": "",
