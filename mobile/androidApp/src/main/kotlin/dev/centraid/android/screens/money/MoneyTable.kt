@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.MoneyCategoryLine
 import centraid.core.v1.MoneyFigure
+import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.toneInk
 import dev.centraid.android.theme.LocalCentraidTokens
@@ -206,6 +207,43 @@ internal fun MoneyCategoryRow(line: MoneyCategoryLine, accessibility: String, te
     }
 }
 
+/**
+ * "NEEDS A CATEGORY · 4" AND WHAT IT COMES TO, ONE ROW. The seam ink says it is
+ * owed attention; a tap sends the category filter that lists exactly these rows,
+ * and the key it sends is the state's own `needs_key`: none is spelled here.
+ */
+@Composable
+internal fun MoneyNeedsRow(label: String, figures: List<MoneyFigure>, onTap: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = KitGeometry.ROW_MIN)
+            .clickable(onClick = onTap)
+            .padding(horizontal = KitGeometry.GUTTER)
+            .testTag("money-needs-category")
+            .clearAndSetSemantics {
+                contentDescription = spoken(label, figures.firstOrNull()?.amount)
+                role = Role.Button
+            },
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            style = centraidType("annotLabelOn"),
+            color = centraidColor("seam"),
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            MoneyGeometry.needsAmounts(figures.map { money(it.amount) }),
+            style = centraidType("annotLabel").copy(fontFeatureSettings = TABULAR),
+            color = centraidColor("textSoft"),
+            maxLines = 1,
+        )
+        CentraidIcon("ChevronRight", tint = centraidColor("textGhost"), size = NEEDS_CHEVRON)
+    }
+}
+
 /** One right-aligned figure in a fixed column. */
 @Composable
 internal fun MoneyColumnFigure(text: String, ink: String, strong: Boolean = false) {
@@ -222,6 +260,7 @@ internal fun MoneyColumnFigure(text: String, ink: String, strong: Boolean = fals
 
 private val CARD_INSET: Dp = 16.dp
 private val CATEGORY_ROW_MIN: Dp = 46.dp
+private val NEEDS_CHEVRON: Dp = 15.dp
 private const val FIGURE_MIN_SCALE: Float = 0.8f
 private const val COLUMN_MIN_SCALE: Float = 0.75f
 private const val TABULAR: String = "tnum"

@@ -248,8 +248,10 @@ private fun LazyListScope.activity(
     }
     if (activity.needs_label.isNotEmpty()) {
         item(key = "needs") {
-            MoneyNote(activity.needs_label)
-            activity.needs_category.forEach { MoneyFigureRow(it) }
+            // THE FILTER THAT LISTS THESE ROWS is the state's own `needs_key`.
+            MoneyNeedsRow(label = activity.needs_label, figures = activity.needs_category) {
+                onEvent(MoneyHomeEvent(category_picked = MoneyHomeEvent.CategoryPicked(key = activity.needs_key)))
+            }
         }
     }
     activity.sections.forEach { section ->
