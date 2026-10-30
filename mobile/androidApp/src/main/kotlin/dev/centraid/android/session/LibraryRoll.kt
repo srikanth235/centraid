@@ -20,6 +20,7 @@ import centraid.core.v1.Request
 import centraid.core.v1.RollAsset
 import centraid.core.v1.RollPaged
 import centraid.core.v1.RollResource
+import dev.centraid.android.backup.LibraryRefs
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
 import java.io.ByteArrayOutputStream
@@ -131,7 +132,7 @@ internal object LibraryRoll {
         val video = cursor.getInt(1) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
         // DATE_TAKEN is the camera's; an item that never had one falls back to when it was added.
         val taken = cursor.getLong(3).takeIf { it > 0L } ?: (cursor.getLong(4) * 1_000L)
-        val ref = (if (video) VIDEO_REF else IMAGE_REF) + id
+        val ref = LibraryRefs.of(video, id)
         val location = if (video) null else locationOf(context, id)
         return RollAsset(
             after = after,
@@ -333,10 +334,9 @@ internal object LibraryRoll {
 
     /** The content uri a ref names; a bare `_ID` (an early build's ref) was always an image. */
     fun uriOf(ref: String): Uri? {
-        val video = ref.startsWith(VIDEO_REF)
-        val id = ref.removePrefix(VIDEO_REF).removePrefix(IMAGE_REF).toLongOrNull() ?: return null
-        val base = if (video) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-        return ContentUris.withAppendedId(base, id)
+        val row = LibraryRefs.row(ref) ?: return null
+        val base = if (row.video) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        return ContentUris.withAppendedId(base, row.id)
     }
 
     /** Whether the member let Centraid read where a photograph was taken (then the GPS tags are kept). */
@@ -379,8 +379,6 @@ internal object LibraryRoll {
     )
     private val TYPED = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN " +
         "(${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE}, ${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO})"
-    private const val IMAGE_REF = "image:"
-    private const val VIDEO_REF = "video:"
     private const val VERSIONED = "v"
     private const val OCTET_STREAM = "application/octet-stream"
     private const val JPEG = "image/jpeg"
