@@ -154,12 +154,6 @@ pub const REGISTER: &[Entry] = &[
     ("LockerSearchField.answered_term", gap("F", Missing::Ios)),
     // NavEvent.pop_to_root: a second tap on the selected tab; Compose sends it, SwiftUI never does
     ("NavEvent.pop_to_root", gap("F", Missing::Ios)),
-    // PeoplePersonChrome.add_channel: iOS's verb strip names them; Compose opens the same sheets from the section headers and never draws these labels
-    ("PeoplePersonChrome.add_channel", gap("F", Missing::Android)),
-    // PeoplePersonChrome.add_date: iOS's verb strip names them; Compose opens the same sheets from the section headers and never draws these labels
-    ("PeoplePersonChrome.add_date", gap("F", Missing::Android)),
-    // PeoplePersonChrome.add_note: iOS's verb strip names them; Compose opens the same sheets from the section headers and never draws these labels
-    ("PeoplePersonChrome.add_note", gap("F", Missing::Android)),
     (
         "PhotosLightboxPhoto.original_media_type",
         gap("F", Missing::Android),
