@@ -393,9 +393,9 @@
             cipher: tampering is detected, not just hidden. Each ciphertext binds its AAD to
             <code>table.column:rowid</code>, so a cell copied into another row simply fails to
             decrypt. Reads show the placeholder <code>«sealed»</code> by default; seeing the real
-            value is its own consent verb, <b>reveal</b>, and every reveal is receipted. Sealed
-            cells are structurally invisible to full-text search, and the audit journal stores
-            keyed hashes of them, never plaintext.
+            value is its own consent verb, <b>reveal</b>, and each item remembers when it was last used. Sealed
+            cells are structurally invisible to full-text search, and no command's input is
+            stored anywhere, so plaintext is never kept.
           </p>
           <p>
             The sealing key itself (the DEK) lives in a <code>keys/</code> directory deliberately

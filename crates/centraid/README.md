@@ -8,7 +8,7 @@ Everything this crate used to hold — `gateway` as a serving role, `seat`, `pai
 
 | Verb | What it does |
 | --- | --- |
-| `centraid doctor --data-dir <dir> [--json]` | Checks a vault file: pages, foreign keys, receipt pointers (`centraid_vault::backup::restore::restore_check`). **Read-only and lock-free**, so it never changes the file it judges. The vault lives on the phone, so what it checks is a copy or a drill's restore. |
+| `centraid doctor --data-dir <dir> [--json]` | Checks a vault file: pages and foreign keys (`centraid_vault::backup::restore::restore_check`). **Read-only and lock-free**, so it never changes the file it judges. The vault lives on the phone, so what it checks is a copy or a drill's restore. |
 
 `centraid --version --json` prints the **artifact identity** (D-1020-G2): the version, the git sha, the artifact digest, the vault schema version, and whether this is a development build. It is intercepted before clap rather than modelled as a subcommand, because clap owns `--version` and `centraid version --json` would be a second spelling for everyone outside this file.
 

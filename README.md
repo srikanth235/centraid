@@ -31,7 +31,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
    phone (SwiftUI/Compose)
    core via core-ffi
  ┌───────────────────────── the vault, and its only writer ─────────────────────┐
- │  vault: vault.db, the one writable connection, typed commands, receipts,     │
+ │  vault: vault.db, the one writable connection, typed commands,            │
  │         custody, and the backup plane — snapshot, ranges, ledger, spool      │
  │  apps: photos · notes · docs · people · locker · agenda · tasks · money ·    │
  │        health                                                                │

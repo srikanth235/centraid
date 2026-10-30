@@ -104,6 +104,8 @@ An app is a crate under [`crates/apps`](crates/apps): a read plane (queries as p
 
 A `call` has a budget: the `pr` profile's `call-budget` step fails the gate on a bounded read over its ceiling, its `search-budget` step does the same for every search query on every surface over a year-3 vault, `crates/core/tests/query_plans.rs` fails on a read that plans as a scan or a sort over one, and the down-only ledgers in [`contracts/ledgers`](contracts/ledgers) hold the compile-time and library-size ceilings. Bytes never ride inside a row: [`crates/blobs`](crates/blobs) is the content store, files named by their BLAKE3, and [`crates/media`](crates/media/README.md) owns the sealed part format. A file is hashed and sealed in the same stream, so the phone reads a camera-roll original once, and a snapshot costs hashing the file plus sealing the ranges that changed — off the request path, never under a commit.
 
+A write is held to the same budget: `crates/core/tests/write_costs.rs` times the trash of a very large label and a launch batch, every foreign key's first child column leads an index (commitment 9, so a parent's delete never scans its children), and a label's members are re-indexed 50 at a time with the rest owed in `search_owed` and written when the vault is idle ([#1146](https://github.com/srikanth235/centraid/issues/1146)). **The launch tidy** runs on its own thread after the core opens the vault: it empties the trash whose `purge_at` has passed in bounded batches, collects bytes once at its end and deletes the store files no row claims, so a trashed row stays restorable until its batch runs ([R-1146-3-2](docs/decisions.md#the-journal-is-gone-1146)).
+
 ## Repository layout
 
 ```

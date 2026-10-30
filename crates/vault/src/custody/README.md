@@ -29,7 +29,7 @@ The phone's two doors are `Vault::locker_generation` (names the generation, writ
 
 Only secret **values** are encrypted. Title, url and username stay plaintext, so a locked Locker can list and search — which is the whole reason Locker is usable on a phone in airplane mode. A Locker item is an entity of kind `locker_item`, so its title is its entity's; no entity-wide reader serves it or any cell (no command's input is stored and a refusal's sentence scrubs the five cells and a duplicate's `fields[].value`, a Locker item has no revision, `text_of` indexes its plain fields only, a page over `entity` or `edge` serves one only to a read `page::reaches_locker` names (Locker's own, and the assistant's, which `page::withholds_sealed_value` holds to the plain columns), and the assistant's principal is refused any command that reveals or sets a sealed value).
 
-**The reveal door is absent from the access plane**, not refused: `crates/vault::access::Verb` is `read` and `act`, and there is no reveal judgement at all. A Locker write that carries plaintext is a receipted refusal (`assert_sealed_cell` in `commands/locker.rs`).
+**The reveal door is absent from the access plane**, not refused: `crates/vault::access::Verb` is `read` and `act`, and there is no reveal judgement at all. A Locker write that carries plaintext is a refusal (`assert_sealed_cell` in `commands/locker.rs`).
 
 ## What these modules no longer hold
 

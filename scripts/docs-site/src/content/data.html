@@ -207,11 +207,11 @@
           <div class="step">
             <span class="dot">04</span>
             <div>
-              <h3>Receipts, ranked by salience</h3>
+              <h3>Every write is a command</h3>
               <p>
-                Every allow and every deny lands in the journal with who, what, why, and a risk
-                marker. The review feed ranks by salience — denials above allows, risk-weighted — so
-                the interesting ten of ten thousand receipts surface themselves.
+                Every write goes through one gate that checks who may do what, and a refusal writes
+                nothing. The vault keeps no log of what you asked for, so nothing you typed outlives
+                the delete.
               </p>
             </div>
           </div>
@@ -277,14 +277,13 @@
             Passwords, TOTP seeds, card numbers, OAuth tokens: columns declared <b>sealed</b> are
             AES-256-GCM ciphertext at rest, sealed inside the same write transaction that creates
             them. Ordinary reads get a placeholder. Getting plaintext requires the explicit
-            <code>reveal</code> verb — a distinct scope apps must declare, receipted per item, so
-            "the app looked at this password, at this time" is a fact in your journal.
+            <code>reveal</code> verb — a distinct scope apps must declare, and each item
+            remembers when it was last used.
           </p>
           <p>
             The discipline is structural, not polite: sealed columns are barred from the search
-            index by construction, journal entries carry keyed hash tokens instead of values, and
-            error paths are scrubbed. The sealing key lives beside — not inside — the vault
-            directory, with export, restore and rotation as receipted shell ceremonies.
+            index by construction, and error paths are scrubbed. The sealing key lives beside — not inside — the vault
+            directory, with export, restore and rotation as shell ceremonies.
           </p>
           <p class="aside">
             Locker is the showcase: items seal their secrets, computes TOTP client-side, and its
@@ -397,8 +396,8 @@
         </div>
         <div class="prose r" style="--d: 0.3s">
           <p>
-            Every fire runs as an enrolled agent identity — its invocations, pre/post checks and
-            evidence land in the journal, and the run reads back as a conversation, not a log file.
+            Every fire runs as an enrolled agent identity — its invocations and pre/post checks run through the same
+            gate, and the run reads back as a conversation, not a log file.
             When you wonder why it did what it did, you read the transcript.
           </p>
         </div>
