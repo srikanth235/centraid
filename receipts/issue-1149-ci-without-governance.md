@@ -74,4 +74,14 @@ cargo run -p xtask -- doc-links                 # see the gate run below
 bash .githooks/commit-msg <subject>             # accepts "ci: …(#1149)", "feat(vault)!: …(#12)", merges; rejects no type, no (#N), (#0)
 ```
 
-The full `cargo xtask gate --profile pr` run is recorded below.
+`cargo xtask gate --profile pr` on a cold tree in this container, at commit `11e2c35d` plus the working tree:
+
+- **Every step green except `fmt`**, which caught one unwrapped line in `crates/xtask/tests/repo_root.rs`. It was fixed before the commit, and `cargo fmt --all --check` is now clean.
+- `deny` SKIPped: cargo-deny was not installed locally. CI installs it, and there the step fails rather than skips.
+- `ts-static` (`bun run check`): 19.9 s.
+- `ci-policy`: every action SHA-pinned, actionlint clean.
+- `osv` and `secrets`: green.
+- `emitters`: no drift.
+- `release-build`: 395.2 s of its 1,400 s ceiling.
+- `test`: 781.3 s.
+- **TOTAL 1,827.7 s against the 1,500 s cold budget.** This change adds about 10 s of vitest to `ts-static`, and it shared the container with a parallel docs agent. The cold-budget overrun therefore reads as this host's, and needs a CI cold run to confirm. With the Cargo cache now actually saved after the build, CI's `gate` job should run warm (575.8 s was the last warm measurement).
