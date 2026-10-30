@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "people",
   "name": "People",
-  "description": "Your circle, remembered — a personal CRM projected from the vault's own rows. A person is an entity with its columns (role, nickname, how you met, birthday, cadence); a touch is an activity with the person; a note, a journal entry and a gift idea or follow-up are a note or a task with an about edge; an important date other than the birthday is a yearly event about them; a relationship is a related edge; a list holds people with contains edges; the star is the shared flag. Last-contacted is computed from the touches. Every write runs through a typed command — the person's own (person.*) and the shared ones (entity.*, flag.*, container.*) — contract-checked and journalled.",
+  "description": "Your circle, remembered — a personal CRM projected from the vault's own rows. A person is an entity with its columns (role, nickname, how you met, birthday, cadence); a touch is an activity with the person; a note, a journal entry and a gift idea or follow-up are a note or a task with an about edge; an important date other than the birthday is a yearly event about them; a relationship is a related edge; a list holds people with contains edges; the star is the shared flag. Last-contacted is computed from the touches. Every write runs through a typed command — the person's own (person.*) and the shared ones (entity.*, flag.*, container.*) — contract-checked.",
   "version": "0.2.0",
   "iconKey": "Users",
   "colorKey": "violet",
