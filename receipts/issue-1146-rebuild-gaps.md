@@ -8,7 +8,13 @@ No verdict is recorded here. An independent reviewer, who did not write the lane
 
 ## Verification
 
-Each lane records its own commands and outcomes in its section below. The umbrella's closing run is the close lane's.
+Each lane records its own commands and outcomes in its section below. The umbrella's closing run is the close lane's:
+
+- `cargo test --workspace --no-fail-fast` — pass (279 result lines, no failure) on the final code.
+- `bun run lint:ledgers` — pass (`ok — 19 sections across 5 ledgers`).
+- `cargo xtask doc-links` — pass (0 findings).
+- `cargo deny --all-features --config deny.toml check` — pass.
+- `cargo xtask gate --profile pr --lane search-budget` ×3 — pass, pass, pass.
 
 ## What changed
 
@@ -858,3 +864,86 @@ Changed: `contracts/ledgers/query-plans.json`, `contracts/migrations/001_baselin
 - Wave 4's new foreign keys are not in this branch; commitment 9 holds them at merge.
 
 R-1146-I-3 is closed: wave 3's later commits fixed `search-budget` (notes 2 letters p95 22.3 ms) and the staging test.
+
+### Integration 2 and the close pass
+
+Worked by the close worker on the umbrella branch after waves 3, 4 and 8 landed. Owner rulings of 2026-10-29 and 2026-10-30 are in `docs/decisions.md` (R-1146-0-4, R-1146-0-5).
+
+#### Integration 2
+
+Merged in order, each `--no-ff`: wave 3's last docs commit (`d3f8d71e`), wave 4 (Agenda), wave 8 (indexes). Waves 3 and 4 merged with no conflict; wave 8 conflicted in `crates/vault/src/format.rs`, `docs/vault-ontology.md` and `scripts/docs-site/src/content/ontology-body.html`.
+
+- **R-1146-I2-1.** Generated files were regenerated, never merged: `contracts/schema/vault-ddl.sql` (`export-ladder-ddl`), `contracts/schema/vault-commands.txt` (`export-commands`, unchanged), the ontology page (`export-ontology-page`), `crates/screens/src/catalog.rs` (`cargo xtask screens-catalog`, unchanged) and `contracts/assist/export` (`nativetools export`). `SCHEMA_DIGEST` took the value its test printed: `4f8377f0737eb66d4498691c6c21fbdb57b2e08d6897a400b2d22ef5b4b27ad1`. `git diff --exit-code contracts/schema` is clean after regeneration. A first regeneration of the DDL swallowed rustup's stderr into the fixture (the test caught it); it was redone with stdout only.
+- **R-1146-I2-2.** `docs/vault-ontology.md` keeps wave 8's Garbage collection text (the launch pass collects once, in pieces) and wave 4's Follow text (a calendar per phone calendar; a moved day states its own `timing`, `url` and `location`). The page's hand-written table count (`data-count="tables"`) is 42 with wave 8's `search_owed`; `ontology_page` caught the 41.
+- **R-1146-I2-3.** Wave 8's commitment 9 (every foreign key's first child column leads an index) holds over wave 4's new foreign keys with no new index: `cargo test -p centraid-vault --test commitments` is green (21 tests).
+- **R-1146-I2-4.** `cargo deny` reported six RustSec advisories, none on `reqwest` (0.12.28 stays): RUSTSEC-2026-0385 (`ctutils` → 0.4.7), -0386 (`tokio` → 1.54.1), -0391, -0398 and -0403 (`zstd` 0.13 → 0.14.3, `zstd-safe` 7.3 → 8.2.0; a manifest bump, `Cargo.toml` `zstd = "0.14"`) and -0410 (`zstd-sys` → 2.1.2). `deny.toml` keeps `ignore = []`. cargo-deny 0.20.2 was installed here; `cargo deny --all-features --config deny.toml check` is `advisories ok, bans ok, licenses ok, sources ok`, and the gate's `deny` step ran ok (not SKIP).
+- **R-1146-I2-5.** The container's quota filled twice (test binaries with debug info, 22 GB). The gate runs after the first fill used `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0` and a cleared `target/`; the repo's profile is untouched.
+
+#### The close pass
+
+- **Registry.** Every wave's `#### Changelog line` is one paragraph in `CHANGELOG.md`'s #1146 entry, and every `#### Decision rows` block is in `docs/decisions.md` under "The journal is gone (#1146)", now the one section for #1146, with rows for J, D1–D9, T, R-FP-10, R-1146-0-4 and R-1146-0-5 (the two owner rulings). Superseded: R-1135-5-7 by R-1146-3-2; R-1135-5-15 and R-1135-5-12 (its `duplicates` query) by R-1146-6-3; R-1135-5-11 by R-1146-1B-4 and R-1135-1-2 by R-1146-1A-1 (already marked by the lanes); R-1146-1B-11 by R-1146-0-3. A grep of this receipt for "supersed" finds no other.
+- **Docs.** `grep -rnw journal`, `receipt`, `entity.version`, `row_version`, `thread.rename`, `Duplicates`, `Docs Activity`, `invocation_id`, `locker.access` over `*.md` found the stale lines fixed in this pass: the glossary's access-plane row (a refusal is no longer "a sentence in the journal") and three new rows (doubted read, launch tidy, last used), `ARCHITECTURE.md` (the write budget, the launch tidy), the root README diagram, `crates/centraid/README.md` (doctor checks pages and foreign keys), `crates/vault/src/custody/README.md`, `crates/assist/README.md`, `crates/media/README.md`, the ontology page's hand-written map and P4 card, and the public `data.html` and `learn.html` sentences about a journal and receipts. What remains is Notes' and People's journal feature, SQLite's `journal_mode`, and receipts of other issues. `cargo xtask doc-links` is green. **Not done:** `scripts/docs-site/src/content/*.html` still describe the pre-#1135 product broadly (an audit band, receipts on every access, a desktop gateway); it is the open `QUALITY.md` item for the docs site, not a #1146 line.
+- **lint:ledgers** (R-1146-0-5). The three expired rows `tests/quarantine.json#lanes.device-rung-android|ios|gateway-pi` are deleted in their own law+registry commit. No job in any workflow reads those ids (`grep -rn device-rung .github` finds only the runner label comment in `actionlint.yaml`), so no job or matrix entry went with them; the `device-rung-*` claims in `tests/claims.json` and two budgets in `tests/budgets.json` are left alone, and `scripts/ci/device-farm-lease.sh` still names `tests/quarantine.json#lanes.device-rung-ios` in an error message (a comment for the owner when a device farm returns). `bun run lint:ledgers` → `ok — 19 sections across 5 ledgers`.
+- **Small fixes.** (a) A sealed key now covers every string under it; red first: `a_sealed_key_covers_every_string_nested_under_it` (`crates/vault/src/commands/sealed.rs`) failed with the 8001-character question quoted in `/turn/question/text`. (b) `crates/assist/src/native/act.rs` no longer carries the restore-window wording: the lapsed-restore decline, the set-aside rows of a several-row restore, `refusal`'s `before` argument and two error templates are gone (`act.restore_name_was_refused_it_is`, `act.restore_name_it_is_in_the` leave `contracts/assist/export/errors.json` and `phase5_runtime`'s family list); a refused restore now reads like any refusal. (c) `QUALITY.md` has the purge-versus-stage-door race row.
+- **Dead code.** `centraid_media::phash` (no caller since the Duplicates screen went) is deleted with its README lines; the snapshot trigger test names `locker_item_field`, a table the model has, not `core_party`. **Kept, for the owner:** the `phash` derivative variant on `blob.rs`/`photo.rs` and `photo.add`'s `phash` input, `catalog.rs`'s generated `phash` field, `centraid_apps_kit::fixtures`' near-duplicate families — they are writers or fixtures, not the reader the ruling retired.
+- **Follow-ups filed as `QUALITY.md` rows:** the 2,000-note notebook trash (~1.5 s, unbounded) and the all-blob walk of every `blob::collect` caller but the launch tidy (~20 ms, `thread.save_turn` per chat turn included).
+
+#### Acceptance, reconciled
+
+| Box | Verdict | Proof |
+| --- | --- | --- |
+| No `journal` table; no command writes or reads one; Docs Activity gone, wire fields reserved | **met** | `a_founded_vault_has_no_journal_and_holds_action_keys_instead` (`crates/vault/tests/action_keys.rs`); `grep -rnw journal crates mobile contracts` as lane 1B recorded; `reserved` blocks in `docs.proto`, `docs_screens.proto`, `app_query.proto` |
+| No `receipt` table; Locker shows last used and failed unlocks | **met** | `a_founded_vault_has_no_receipt_table`, `a_use_stamps_last_used_at_without_editing_the_item`, `a_failed_unlock_is_counted_and_a_successful_unlock_resets_it` (`locker_commands.rs`); core and screens tests for the wall and the item's "Last used" |
+| No `entity.version` | **met** | the founded column list in `action_keys.rs`; `grep -n version contracts/migrations/001_baseline.sql` |
+| Old application id or mismatched digest refused at open and restore with a message | **met** | `a_file_of_the_earlier_model_is_refused_with_a_sentence`, `a_file_whose_schema_is_not_this_versions_is_refused_with_a_sentence` (`format_identity.rs`), `a_restore_refuses_a_file_of_an_earlier_model_or_another_schema_and_leaves_nothing` (`backup_snapshot.rs`), the core-ffi contract test |
+| H2, H3, M9, M12, M13, M15, M16 (wave 2) each a test that failed before its fix | **met** | `crates/vault/tests/follow_gaps.rs`: H2 `a_contact_named_like_the_owner_is_added_beside_the_owner_never_matched_to_it`, `a_source_the_owner_somehow_holds_is_forgotten_and_the_owner_is_not_trashed`; H3/M9 `a_read_that_lost_most_of_what_the_vault_follows_trashes_nothing_for_every_system`; M12 `another_phone_re_finds_a_purged_row_s_tombstone_and_never_revives_it`, `a_tombstone_whose_record_is_gone_from_a_complete_read_is_forgotten`; M13 `a_merge_is_confirmed_like_every_destructive_command`, `a_merge_carries_the_phone_link_to_the_survivor`, `a_merge_re_points_every_foreign_key_into_an_entity_not_a_hand_list`; M15 `a_series_that_moves_in_the_day_takes_its_overrides_with_it`, `a_series_that_no_longer_lands_on_an_override_s_day_drops_it`; M16 `an_account_has_one_statement_origin_whatever_ref_an_import_names`, `a_statement_line_names_no_device_and_a_statement_is_never_stopped`, `the_banks_words_stay_in_the_statement_whatever_the_line_is_called_now` |
+| M8, M10, M11, M14 (wave 3) | **met** | `crates/vault/tests/trash_and_bytes.rs`: `purging_a_calendar_or_a_folder_an_origin_fills_clears_the_origin`, `every_pointer_into_an_entity_that_deletes_nothing_has_a_purge_rule`, `moving_a_section_to_another_project_takes_its_tasks_with_it`, `derivative_drop_and_write_release_the_bytes_they_stop_naming`, `a_file_with_no_row_is_swept_and_a_file_with_one_is_not`, `the_backup_lists_no_blob_only_a_lapsed_entity_names` |
+| H5 (wave 4) | **met** | `crates/vault/tests/agenda_days.rs`: `an_all_day_series_day_moved_to_a_time_keeps_the_timing_it_was_moved_under`, `a_zoned_series_day_made_all_day_is_a_date_and_is_not_refused`, `a_change_of_timing_is_for_one_day_not_for_every_day_after`, `an_all_day_series_day_moved_to_a_time_is_a_timed_row_at_that_time` |
+| M17 (wave 5) | **met** | `crates/search/tests/door.rs`: `an_untitled_photo_is_found_by_its_date_and_answered_under_a_date_label`, `a_match_older_than_the_newest_five_hundred_is_reached_by_paging`, `a_trashed_label_stops_finding_its_members_and_a_restored_one_finds_them_again`, `a_phone_number_is_found_without_its_punctuation` |
+| M20 (metadata), M21 (wave 6) | **met** | `the_librarys_pixel_box_duration_and_location_ride_with_the_write_when_it_has_them`, `a_walked_photograph_lands_with_its_pixel_box_and_its_place` (`imports_camera_roll.rs`); `a_trashed_touch_stops_counting_toward_last_touch_the_log_and_the_dashboard` (`touches_relations_birthday.rs`) |
+| Overdue trash emptied at launch; restore works until then | **met** | `an_overdue_row_is_restorable_until_the_pass_runs_and_gone_after_it`, `the_launch_pass_is_bounded_and_says_when_more_is_overdue`, core's `open_starts_the_pass_without_a_request` |
+| D5–D9 and D2c as decided; LastPass `http://sn` and Bitwarden `type=note` import as `note` with sealed content | **met** | wave 6 and 4 tests above and `money_opening_rename.rs`, `agenda_days.rs`, `touches_relations_birthday.rs`; `a_csv_secure_note_imports_as_a_note_with_its_body_sealed` and `a_secure_note_row_reads_as_a_note_whose_body_is_its_content` (the two spellings are rows of one fold). **Not compiled on a device.** |
+| `cargo xtask gate --profile pr` green | **not demonstrated** (see exit list 4) | see the exit list |
+| Docs describe the result; `docs/decisions.md` records J, D1–D9, T and R-FP-10 | **met** | the section "The journal is gone (#1146)"; `cargo xtask doc-links` green |
+
+#### Inherited red (not this umbrella's)
+
+| Item | State on main | State here |
+| --- | --- | --- |
+| `lint:ledgers`: three expired device-rung quarantine rows | red | green (R-1146-0-5) |
+| `cargo deny`: advisories | red (six RustSec advisories, not the one the issue named) | green (R-1146-I2-4) |
+| `buf`, `ci-policy` (actionlint), `secrets` (gitleaks), `osv` | not run here (tools absent) | SKIP in the gate; CI runs them |
+| `search-budget` in-word fragments near the ceiling | green on the base at times, 50–93 ms by run | three gate runs green, worst p95 46.3 ms (home `obro`) — see below |
+
+#### Corrections to the plan
+
+- Waves 5 and 6 started before lane 1B closed; their files do not overlap 1B's, and both merged with the digests regenerated.
+- Wave 8 (indexes and snappiness) was added by the owner on 2026-10-29; it is not in the issue's seven-wave table.
+- Three integration sessions (waves 6, 2, 3; then 4, 8) merged the waves; the issue's "wave 7 close" is this section.
+- The issue named `reqwest` for the `cargo-deny` failure; the database now lists six other advisories (R-1146-I2-4).
+
+#### search-budget
+
+`cargo xtask gate --profile pr --lane search-budget` was run three times on the final code with nothing else running: **ok, ok, ok** (82.6 s, 82.3 s, 81.4 s). A fourth run with output (`cargo test --release --workspace --test search_budget -- --nocapture --include-ignored`) printed the worst p95 as 46.27 ms (home in-word fragment `obro`), then 41.51 ms (notes in-word fragment `aigo`), against the 80 ms ceiling; no run was over, so the in-word path was not profiled and the ledger and ceiling are untouched.
+
+#### Owner hand-offs
+
+1. **Device builds on iOS and Android after waves 2, 4 and 6** (the issue asks for one device run). Native files changed by the umbrella, none compiled here: Android — `screens/RustRoot.kt`, `screens/agenda/CalendarImporter.kt`, `screens/docs/DocsScreens.kt`, `screens/locker/LockerTransferScreens.kt`, `screens/money/MoneyPages.kt`, `screens/people/PeoplePersonScreen.kt`, `session/LibraryRoll.kt`, deleted `screens/photos/PhotosDuplicatesScreens.kt`; iOS — `Docs/DocsDocumentView.swift`, `Money/MoneyManageViews.swift`, `People/PeoplePersonView.swift`, `PhoneCalendar.swift`, `PhoneLibrary.swift`, `PhotosCollectionsView.swift`, `RustScreenHost.swift`, deleted `Locker/LockerAccessView.swift` and `PhotosDuplicatesViews.swift`; `mobile/maestro/flows/selectors.md`. Open: Locker (an item's "Last used", the wall after a refused prompt, a LastPass and a Bitwarden import holding a note), a Docs document, Money rules and a statement import, Photos Collections and a camera-roll import, People relationships and the birthday bell, and Agenda after importing a coloured calendar.
+2. **The assistant refreeze/retrain.** `contracts/assist/export` changed in lane 1A (`reveal`'s command and names in `metadata.json`), lane 1B (the Docs `activity` query), wave 6 (Money rules, Photos' `duplicates` query, People, Locker import; regenerated in `4b492a81`) and this pass (`errors.json` lost two restore-window templates); no prompt or tool file moved in any of them. Whether to refreeze the training data is the owner's.
+3. **The `phash` plumbing.** The reader is gone; the `phash` derivative variant, `photo.add`'s input and the fixtures that feed it remain. Remove them (recommended) or keep the hash for a similarity feature.
+4. **The relationship sheet is read-only** (wave 6): editing a relationship from the other person's sheet is not built.
+5. **GitHub-hosted simulator CI** for iOS and Android is the follow-up that would replace the manual device run.
+6. **Public docs site** pages predate #1135 (see the close pass above); `QUALITY.md` carries the item.
+7. **A followed series' own location** (R-1146-4-4) and a screen to edit a day's link or place are not built.
+
+#### Exit list
+
+Stopped by the owner's instruction ("don't worry about CI"), so these are the results as they stand:
+
+1. `cargo test --workspace` → **green** (`--no-fail-fast`, final code: no failing binary). One earlier gate run failed `centraid-design --test corpus` because `design/identity-corpus.json` was read empty (the disk had just filled); it passes alone and in the rerun.
+2. `git diff --exit-code contracts/schema` after regeneration → clean (`ladder_ddl`, `ontology_page`, `commitments` green).
+3. `bun run lint:ledgers` → green; `cargo xtask doc-links` → green.
+4. `cargo xtask gate --profile pr` → one full run on the final code (cold, debug info off): fmt, clippy, restore-drill, rules, doc-links, ledgers, deny, release-build (380.5 s), ts-static, emitters, advisory, lockfile, call-budget, search-budget (198.3 s), fault-door **ok**; `buf`, `ci-policy`, `secrets`, `osv` **SKIP** (tools absent); `test` **FAIL** on the corpus read above (400.9 s); 1329.2 s of 1500 s. The test step was not re-run through the gate (the rerun hit a timeout); the same command run directly passed. **The `pr` gate has not been seen fully green here.**
+5. `cargo xtask gate --profile mobile-jvm` → **did not pass**: four attempts stopped at Gradle resolving plugins (`Received status code 429` from Maven Central); no Kotlin failure. Wave 4's mobile-jvm therefore never ran either.
+6. `node .governance/law/run.mjs` (window door) → see the front page: `estate-separation` (the umbrella edits the law file `tests/quarantine.json` and the territory in one range; the law change is its own commit, as the hook requires, but the aggregate is the owner's ruling R-1146-0-5) and `receipt-per-issue` (`## Audit` carries no verdict, by instruction).
+7. Pushed; hooks passed.
