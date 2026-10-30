@@ -71,7 +71,7 @@ internal interface UiHost {
  *
  * Every effect of the one runtime comes here: what needs only a context is performed here (the
  * secret stores, the keychain, the pass service's windows and long run, the phone imports' library,
- * folders and link, the stage door, the phone stores' reads and watches, the clipboard, a link
+ * folders and link, the stage door, the phone stores' reads and watches, the LAN browse for a gateway, the clipboard, a link
  * opened), and what needs the activity goes to [ui]. Each is answered under its `effect_id`.
  *
  * **IN THE ORDER ASKED, PER SCREEN.** A service tells its effects apart by what they answer (the
@@ -93,9 +93,18 @@ internal class ShellEffects(
 
     val watchers = PhoneWatchers(context)
 
+    /** The LAN browse for a moved gateway (`BrowseGateways`): one per screen instance that asked. */
+    private val browsing = GatewayBrowsing(this.context, scope)
+
     private val queues = ConcurrentHashMap<Long, Channel<EffectRequest>>()
 
     fun start() {
+        // A BROWSE LASTS AS LONG AS THE SCREEN THAT ASKED FOR IT: `Screens` drops an instance Rust
+        // closed from its views, and the browse of one that is gone ends. Read against the views as
+        // they are now, so a browse just begun for a screen the emission predates is not ended.
+        scope.launch {
+            screens.views.collect { browsing.retain(screens.views.value.keys) }
+        }
         scope.launch {
             screens.effects.collect { request ->
                 if (request.effect?.model_download != null) {
@@ -209,6 +218,15 @@ internal class ShellEffects(
                     }
                 }
             }
+            // ---- the local network ---------------------------------------------------------------
+            effect.browse_gateways != null ->
+                // ANSWERED EACH WINDOW, under this one effect id, until `on: false` or the screen closes.
+                // An instance no longer in the views was closed while this waited its turn: no browse.
+                if (request.instance !in screens.views.value) {
+                    done
+                } else {
+                    browsing.perform(request.instance, effect.browse_gateways!!, answer)
+                }
             // ---- photos' device doors ------------------------------------------------------------
             effect.read_camera != null -> {
                 val camera = withContext(Dispatchers.IO) { PhotoHandOff.cameraOf(effect.read_camera!!.path) }

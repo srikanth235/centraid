@@ -86,6 +86,12 @@
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- FINDING A GATEWAY THAT MOVED (#1080 Q-1080-D3, #1152; `session/NsdBrowse.kt`).
+         A normal permission, so nothing is asked of the member. Many handsets drop
+         the replies to an mDNS question unless an app holds a multicast lock, so
+         the browse holds one for exactly the seconds a window runs. The phone only
+         asks and reads: it registers no service and opens no listening socket. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <!-- "BACK UP NOW" AND A BACKLOG (#1080, the shells; `backup/BackupNow.kt`).
          API 34 and up: a user-initiated data transfer job, which needs
          RUN_USER_INITIATED_JOBS. Below 34: a `dataSync` foreground service,
