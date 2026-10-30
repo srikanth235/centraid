@@ -132,6 +132,7 @@ internal fun PhotosCollectionsScreen(
             fieldLabel = collections.new_album_placeholder,
             name = collections.new_album_name,
             onName = { onEvent(PhotosHomeEvent(new_album_name = it)) },
+            canSubmit = collections.new_album_can_submit,
             primaryLabel = collections.create_label,
             status = state.status?.sentence.orEmpty(),
             onDismiss = {
