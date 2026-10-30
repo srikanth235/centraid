@@ -322,7 +322,7 @@ private fun VaultSheet(sheet: HomeVaultSheet, onEvent: (HomeEvent) -> Unit) {
                     .height(CentraidGeometry.HAIRLINE.dp)
                     .background(centraidColor("line")),
             )
-            SwitcherAction(sheet.make_label, "Plus", "vault-found-button") {
+            SwitcherAction(sheet.make_label, "Plus", "vault-found-button", spoken = sheet.make_spoken) {
                 onEvent(HomeEvent(make = HomeEvent.MakePressed()))
             }
             SwitcherAction(sheet.restore_label, "Refresh", "vault-restore-button") {
@@ -407,13 +407,18 @@ private fun RenameSheet(rename: HomeVaultAsk.Rename, onEvent: (HomeEvent) -> Uni
 @Composable
 private fun controlShape() = RoundedCornerShape((LocalCentraidTokens.current.radii["md"] ?: 0).dp)
 
-/** One of the switcher's two acts: a mark and a label, a full-width row. */
+/**
+ * One of the switcher's two acts: a mark and a label, a full-width row. [spoken]
+ * is what TalkBack reads in place of [label] when Rust carries a longer one
+ * (`HomeVaultSheet.make_spoken`); empty, the label is read.
+ */
 @Composable
-private fun SwitcherAction(label: String, iconKey: String, testTag: String, onPress: () -> Unit) {
+private fun SwitcherAction(label: String, iconKey: String, testTag: String, spoken: String = "", onPress: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onPress)
+            .semantics { if (spoken.isNotEmpty()) contentDescription = spoken }
             .heightIn(min = 48.dp)
             .padding(horizontal = PAGE_MARGIN)
             .testTag(testTag),
