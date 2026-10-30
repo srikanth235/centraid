@@ -161,10 +161,6 @@ fn following_a_folder_makes_its_docs_folder_then_the_origin_that_fills_it() {
     assert_eq!(held.folders.len(), 1);
     assert_eq!(held.folders[0].origin_ref, "folder:abc");
     assert_eq!(held.folders[0].label, "Taxes");
-    let followed = state(&shell).followed;
-    assert_eq!(followed.len(), 1);
-    assert_eq!(followed[0].origin_id, "folder:abc");
-    assert_eq!(followed[0].name, "Taxes");
 }
 
 #[test]
@@ -409,7 +405,6 @@ fn stopping_a_folder_is_the_vaults_follow_stop_and_every_document_stays() {
         }),
     );
     assert!(held(&shell).folders.is_empty(), "the origin is retired");
-    assert!(state(&shell).followed.is_empty());
     // A trigger now reads nothing: no folder is followed.
     send(&mut shell, files::Kind::Requested(files::Requested {}));
     settle(&mut shell);
@@ -421,18 +416,14 @@ fn the_followed_list_is_the_vaults_origins_with_the_documents_each_holds_by_name
     let mut shell = shell();
     follow(&mut shell, "folder:b", "zebra");
     follow(&mut shell, "folder:a", "Alpha");
-    let names: Vec<String> = state(&shell)
-        .followed
+    let held = held(&shell);
+    let names: Vec<&str> = held
+        .folders
         .iter()
-        .map(|folder| folder.name.clone())
+        .map(|folder| folder.label.as_str())
         .collect();
     assert_eq!(names, vec!["Alpha", "zebra"]);
-    assert!(
-        state(&shell)
-            .followed
-            .iter()
-            .all(|folder| folder.documents == 0)
-    );
+    assert!(held.folders.iter().all(|folder| folder.documents == 0));
 }
 
 /// The documents in Docs' trash, read the way the drive reads its Trash shelf.

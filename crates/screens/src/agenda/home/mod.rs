@@ -545,7 +545,6 @@ impl Screen for Home {
                         add_label: task::add_task(locale),
                         drawn,
                     }),
-                    filing_task_id: self.filing_task_id.clone(),
                     file_choices: if self.sheet == Sheet::File {
                         place::file_choices(locale, &self.held, &self.filing_task_id)
                     } else {

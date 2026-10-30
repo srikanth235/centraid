@@ -191,7 +191,6 @@ fn photos_tile(locale: Locale, shelf: &wire::PhotosShelf) -> Made {
         .into_iter()
         .take(PHOTO_CELLS)
         .map(|cell| wire::home_tile_body::photos::Cell {
-            asset_id: cell.photo_id.clone(),
             thumbnail_path: cell.thumbnail_path.clone().filter(|path| !path.is_empty()),
         })
         .collect();
@@ -892,7 +891,6 @@ fn locker_tile(locale: Locale, items: &wire::LockerItems, open: bool) -> Made {
         one,
         many,
         Body::Locker(wire::home_tile_body::Locker {
-            locked: !open,
             state_label: if open {
                 locker::tile_open(locale)
             } else {
@@ -1555,9 +1553,9 @@ mod tests {
         assert_eq!(
             body.cells
                 .iter()
-                .map(|c| c.asset_id.as_str())
+                .map(|c| c.thumbnail_path.as_deref())
                 .collect::<Vec<_>>(),
-            ["a", "b", "c", "d"]
+            [Some("/s/a"), Some("/s/b"), Some("/s/c"), Some("/s/d")]
         );
     }
 
@@ -1577,13 +1575,7 @@ mod tests {
         let Some(Body::Photos(body)) = &made.body else {
             panic!("not photos")
         };
-        assert_eq!(
-            body.cells
-                .iter()
-                .map(|c| c.asset_id.as_str())
-                .collect::<Vec<_>>(),
-            ["p1", "p2", "p3", "p4"]
-        );
+        assert_eq!(body.cells.len(), 4);
         assert!(body.cells.iter().all(|c| c.thumbnail_path.is_none()));
         assert_eq!(body.absent_line, "These photos aren't on this phone yet.");
     }
@@ -1775,7 +1767,6 @@ mod tests {
         let Some(Body::Locker(body)) = &locked.body else {
             panic!("not locker")
         };
-        assert!(body.locked);
         assert_eq!(
             (body.state_label.as_str(), body.line.as_str()),
             ("Locked", "Unlock to see your items")
@@ -1784,7 +1775,6 @@ mod tests {
         let Some(Body::Locker(body)) = &open.body else {
             panic!("not locker")
         };
-        assert!(!body.locked);
         assert_eq!(body.state_label, "Open");
         // An empty Locker is an empty tile with a stated zero, open or not.
         let none = locker_tile(

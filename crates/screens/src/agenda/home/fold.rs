@@ -238,7 +238,6 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
                 1 => Some(names[0].clone()),
                 n => Some(format!("{n} {}", words::ribbon_birthdays(locale))),
             },
-            ribbon_names: names,
             items: items(
                 locale,
                 day,
@@ -280,19 +279,6 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
         })
         .collect();
     let event_count = drawn.len();
-    let waiting_count = upcoming
-        .events
-        .iter()
-        .filter(|event| shown(event))
-        .filter(|event| {
-            waits_on_you(event)
-                && days_of(event)
-                    .iter()
-                    .any(|d| in_window.contains(d.as_str()))
-        })
-        .map(|event| event.instance_key.as_str())
-        .collect::<HashSet<_>>()
-        .len();
     let landing = sections_out
         .iter()
         .find(|section| section.is_today)
@@ -359,7 +345,6 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
 
     Some(wire::AgendaHomeData {
         today: today.to_owned(),
-        now_local: now.to_owned(),
         days: sections_out,
         empty: empty as i32,
         empty_title,
@@ -407,8 +392,6 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
         notice,
         task_hits: task_hits.into_iter().collect(),
         containers,
-        waiting_count: u32::try_from(waiting_count).unwrap_or(u32::MAX),
-        event_count: u32::try_from(event_count).unwrap_or(u32::MAX),
         event_count_label: sentences::event_count(locale, event_count as u64),
         landing: Some(landing),
         catch_up: Some(routes::catch_up()),
@@ -637,9 +620,7 @@ fn event_row(
         .collect::<Vec<_>>()
         .join(", ");
     wire::AgendaEventRow {
-        event_id: event.event_id.clone(),
         instance_key: event.instance_key.clone(),
-        original_start_local: event.original_start_local.clone(),
         row_key: format!("{day}|{}", event.instance_key),
         title,
         time_label,
@@ -918,28 +899,27 @@ mod tests {
         let data = fold_of(&held_of(events), Dest::Schedule, &[]);
         let status: Vec<(&str, &str)> = rows_of(&data)
             .iter()
-            .map(|row| (row.event_id.as_str(), row.status_label.as_str()))
+            .map(|row| (row.title.as_str(), row.status_label.as_str()))
             .collect();
         assert_eq!(
             status,
             [
-                ("empty", "needs a reply"),
-                ("action", "needs a reply"),
-                ("said", ""),
-                ("theirs", ""),
-                ("held", ""),
-                ("cancel", ""),
+                ("Asked, no reply", "needs a reply"),
+                ("Needs action", "needs a reply"),
+                ("Accepted", ""),
+                ("Theirs", ""),
+                ("Held", ""),
+                ("Cancelled ask", ""),
             ]
         );
-        assert_eq!(data.waiting_count, 2);
         // Waiting keeps the two, and only them.
         let waiting = fold_of(&held_of(data_events()), Dest::Waiting, &[]);
         assert_eq!(
             rows_of(&waiting)
                 .iter()
-                .map(|row| row.event_id.as_str())
+                .map(|row| row.title.as_str())
                 .collect::<Vec<_>>(),
-            ["empty", "action"]
+            ["Asked, no reply", "Needs action"]
         );
     }
 
@@ -963,7 +943,6 @@ mod tests {
         let day = |d: &str| data.days.iter().find(|section| section.day == d).unwrap();
         assert_eq!(day("2026-06-16").ribbon.as_deref(), Some("Dana"));
         assert_eq!(day("2026-06-18").ribbon.as_deref(), Some("3 birthdays"));
-        assert_eq!(day("2026-06-18").ribbon_names, ["Ada", "Bo", "Cy"]);
         assert!(day("2026-06-18").items.is_empty());
         assert!(day("2026-06-15").ribbon.is_none());
         // A BIRTHDAY DOES NOT MAKE A WAITING DAY.
@@ -1073,10 +1052,6 @@ mod tests {
         let row = rows_of(&data)[0].clone();
         assert_eq!(data.days[0].day, "2026-06-16");
         assert_eq!(row.instance_key, "series:2026-06-16T08:15");
-        assert_eq!(
-            row.original_start_local.as_deref(),
-            Some("2026-06-16T08:15")
-        );
         assert_eq!(row.time_label, "08:15 – 09:45");
         assert_eq!(
             row.route,

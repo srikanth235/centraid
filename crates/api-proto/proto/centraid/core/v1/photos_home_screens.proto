@@ -164,8 +164,9 @@ message PhotosLibraryData {
   optional EmptyState empty = 7;
   // "Photos with no capture date appear only in All." Drawn under Years/Months.
   string undated_note = 8;
-  // Another page is being asked for.
-  bool loading_more = 9;
+  // 9 was `loading_more`: nothing read it (#1152).
+  reserved 9;
+  reserved "loading_more";
   string loading_more_label = 10;
   // The scrub rail's labels.
   string scrub_label = 11;
@@ -245,7 +246,9 @@ message PhotosCollections {
   bool new_album_can_submit = 6;
   // The album a delete confirm is asking about.
   optional Confirm delete_confirm = 7;
-  string delete_album_id = 8;
+  // 8 was `delete_album_id`: nothing read it (#1152).
+  reserved 8;
+  reserved "delete_album_id";
   // The New album sheet's field and verb.
   string new_album_placeholder = 9;
   string create_label = 10;
@@ -291,8 +294,9 @@ message PhotosCollectionCard {
   optional PhotoTile cover = 6;
   // WHERE A TAP GOES. Unset on a deleted album, whose verb is Restore.
   optional Route route = 7;
-  // An album can be deleted; a standing shelf cannot.
-  bool member_owned = 8;
+  // 8 was `member_owned`: nothing read it (#1152).
+  reserved 8;
+  reserved "member_owned";
   string icon_key = 9;
   // A door with decisions owed draws urgent.
   bool urgent = 10;
@@ -343,7 +347,9 @@ message PhotosSearchHits {
   // Labels the words name: a tap searches for that label.
   repeated PhotosSearchWord labels = 6;
   string labels_title = 7;
-  string truncated_label = 8;
+  // 8 was `truncated_label`: nothing read it (#1152).
+  reserved 8;
+  reserved "truncated_label";
   // `Matched Lisbon, beach`: why these were found, in the vault's own words.
   string matched_label = 9;
 }
@@ -400,7 +406,9 @@ message PhotosFreeUpRow {
   string reason = 3;
   string action_label = 4;
   bool enabled = 5;
-  bool freeing = 6;
+  // 6 was `freeing`: nothing read it (#1152).
+  reserved 6;
+  reserved "freeing";
   string notice = 7;
   // What a photo deleted for good costs the backup device.
   string retention = 8;

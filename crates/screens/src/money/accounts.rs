@@ -296,7 +296,6 @@ impl Accounts {
             currency: editor.currency.clone(),
             on_budget: editor.on_budget,
             external_ref: editor.external_ref.clone(),
-            has_external_ref: editor.has_external_ref,
             closed: editor.closed,
             can_save: issue.is_empty(),
             // an untouched blank name is not yet an error

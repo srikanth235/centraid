@@ -80,7 +80,6 @@ fn an_unpaired_vault_offers_pairing_not_a_status_and_no_dead_primary() {
     driver.serve(&mut shell);
     let data = data(&driver, instance);
     let line = data.line.expect("the line");
-    assert!(line.unpaired);
     assert_eq!(line.sentence, "Not backed up. Pair a backup device.");
     assert!(data.destinations.is_empty());
     assert_eq!(data.devices_heading, "");

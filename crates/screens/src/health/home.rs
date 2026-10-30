@@ -329,7 +329,7 @@ impl Home {
                 let metric = Metric::of_wire(trend.metric)?;
                 let average = trend.average?;
                 let (number, unit) = figures::figure(locale, metric, average, units);
-                let (delta, sign) =
+                let (delta, _) =
                     figures::delta(locale, metric, trend.change, trend.change_pct, units);
                 let values: Vec<f64> = trend.buckets.iter().filter_map(|b| b.value).collect();
                 let lo = values.iter().copied().reduce(f64::min).unwrap_or(average);
@@ -341,15 +341,6 @@ impl Home {
                     metric: metric.key().to_owned(),
                     value: number,
                     unit: per_unit(locale, metric, &unit),
-                    direction: (if delta.is_empty() {
-                        wire::health_trend_row::Direction::Unspecified
-                    } else if sign > 0 {
-                        wire::health_trend_row::Direction::Up
-                    } else if sign < 0 {
-                        wire::health_trend_row::Direction::Down
-                    } else {
-                        wire::health_trend_row::Direction::Flat
-                    }) as i32,
                     points_bp: trend
                         .buckets
                         .iter()
@@ -822,7 +813,6 @@ impl Screen for Home {
                         stop_cancel: words::stop_cancel(locale),
                         show_more: words::show_more(locale),
                     }),
-                    trend_range: self.trend_range as i32,
                     kind_concept_id: self.kind_concept_id.clone(),
                     chips: if drawing
                         && connected

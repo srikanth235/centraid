@@ -353,8 +353,6 @@ fn no_verb_is_enabled_without_being_able_to_run_and_none_is_disabled_without_a_r
     let edit = verb(&state, V::Edit);
     assert!(edit.enabled);
     assert_eq!(edit.route, Some(routes::editor(&id)));
-    assert_eq!(photo_of(&state).write_refusal, "");
-    assert_eq!(photo_of(&state).edit_refusal, "");
 }
 
 #[test]

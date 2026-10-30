@@ -553,7 +553,6 @@ impl Import {
                 action_label: words::add_account(locale),
                 ..Default::default()
             }),
-            add_account_label: words::add_account(locale),
             accounts_route: Some(super::routes::accounts(&words::import_title(locale))),
         }
     }

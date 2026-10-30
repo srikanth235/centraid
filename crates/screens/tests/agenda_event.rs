@@ -263,7 +263,13 @@ fn rsvp_writes_as_the_owner_and_the_chip_follows_the_vault() {
     );
     let page = world.open_event(&id, &id, None, "2099-06-15");
     // The owner's row is theirs, whatever order the guests were invited in.
-    assert!(world.event_data(page).guests.iter().any(|g| g.is_you));
+    assert!(
+        world
+            .event_data(page)
+            .guests
+            .iter()
+            .any(|g| g.name.ends_with(" · you"))
+    );
     world.send_event(page, rsvp("accepted"));
     let data = world.event_data(page);
     let choices = &data.rsvp.as_ref().expect("rsvp").choices;
@@ -278,7 +284,7 @@ fn rsvp_writes_as_the_owner_and_the_chip_follows_the_vault() {
     assert_eq!(
         data.guests
             .iter()
-            .find(|g| g.is_you)
+            .find(|g| g.name.ends_with(" · you"))
             .expect("you")
             .reply_label,
         "Going"

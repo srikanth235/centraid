@@ -849,16 +849,6 @@ fn cashflow(locale: Locale, answer: &wire::MoneyCashflow) -> wire::MoneyCashflow
                         net_tone: fold::sign_tone(month.net.as_ref()) as i32,
                         in_bp: bp(side(&month.incoming)),
                         out_bp: bp(side(&month.outgoing)),
-                        rate_label: month
-                            .savings_rate_bp
-                            .filter(|rate| *rate >= 0)
-                            .map(|rate| {
-                                fill(
-                                    &words::rate_kept(locale),
-                                    &[("percent", &(rate / BP_PERCENT).to_string())],
-                                )
-                            })
-                            .unwrap_or_default(),
                         partial: month.partial,
                         meta: [
                             rate_label_of(locale, month.savings_rate_bp),
@@ -936,7 +926,6 @@ impl Screen for Home {
                 chrome: Some(Self::chrome(locale)),
                 month: self.month.clone(),
                 account_id: self.account_id.clone(),
-                category_filter: self.category_filter.clone(),
                 chips: if drawing && self.destination == Destination::Activity {
                     self.chips(locale)
                 } else {

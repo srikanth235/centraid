@@ -291,10 +291,7 @@ pub fn tile(cell: &wire::PhotosCell, link: Link, locale: Locale) -> wire::PhotoT
             .map(|at| capture_day(at, cell.offset_min.unwrap_or(0)))
             .unwrap_or_default(),
         live: cell.live,
-        live_movie_id: cell.live_movie_id.clone().unwrap_or_default(),
-        fetch_percent: 0,
         title: cell.title.clone(),
-        purge_in_days: positive(cell.purge_in_days),
         live_label: if cell.live {
             words::photos_cell_live_mark(locale)
         } else {

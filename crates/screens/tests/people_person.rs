@@ -99,13 +99,13 @@ fn the_sheet_folds_the_header_facts_channels_dates_notes_and_the_touch_log() {
             .collect::<Vec<_>>(),
         [("Nickname", "Dee")]
     );
-    let channels: Vec<(&str, i32, &str)> = data
+    let channels: Vec<(&str, &str)> = data
         .channels
         .iter()
-        .map(|c| (c.kind_label.as_str(), c.intent, c.action_label.as_str()))
+        .map(|c| (c.kind_label.as_str(), c.action_label.as_str()))
         .collect();
-    assert!(channels.contains(&("Phone", wire::PeopleChannelIntent::Call as i32, "Call")));
-    assert!(channels.contains(&("Email", wire::PeopleChannelIntent::Mail as i32, "Email")));
+    assert!(channels.contains(&("Phone", "Call")));
+    assert!(channels.contains(&("Email", "Email")));
     let phone = data
         .channels
         .iter()

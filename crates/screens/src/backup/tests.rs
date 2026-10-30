@@ -307,7 +307,6 @@ fn nothing_acknowledged_is_never_backed_up_whatever_else_the_reading_says() {
     );
     assert_eq!(line.sentence, words::backup_line_never(EN));
     assert!(!line.sentence.starts_with("Backed up"));
-    assert_eq!(line.records_as_of_ms, 0);
     assert_eq!(line.tone, Tone::Attention as i32);
 }
 
@@ -430,7 +429,6 @@ fn every_gateway_refusing_this_phones_token_reads_pair_again_never_all_backed_up
     let mut refused = steady();
     refused.destinations[0].pair_again = true;
     let line = lined(&refused, false);
-    assert!(line.pair_again);
     assert_eq!(line.sentence, words::backup_line_pair_again(EN));
     assert_eq!(line.status, words::backup_status_pair_again(EN));
     assert!(!line.sentence.starts_with("Backed up"));
@@ -444,12 +442,14 @@ fn every_gateway_refusing_this_phones_token_reads_pair_again_never_all_backed_up
     half.destinations
         .push(gateway("gw-2", "NAS", None, NOW - MINUTE, NOW - MINUTE));
     let line = lined(&half, false);
-    assert!(!line.pair_again);
     assert_eq!(line.sentence, "Backed up 2 minutes ago.");
     assert_eq!(line.tone, Tone::Attention as i32);
 
     // A MOVED VAULT STILL SAYS SO ABOVE EVERYTHING.
-    assert!(lined(&refused, true).frozen);
+    assert_eq!(
+        lined(&refused, true).sentence,
+        words::backup_line_frozen(EN)
+    );
 }
 
 #[test]
@@ -457,8 +457,7 @@ fn everything_acknowledged_is_backed_up_quietly_at_the_gateways_time() {
     let line = lined(&steady(), false);
     assert_eq!(line.sentence, "Backed up 2 minutes ago.");
     assert_eq!(line.detail, "All 1,240 photos and files");
-    assert_eq!(line.records_as_of_ms, NOW - 2 * MINUTE);
-    assert_eq!((line.confirmed, line.total), (1_240, 1_240));
+    assert_eq!(line.confirmed, 1_240);
     assert_eq!(line.tone, Tone::Quiet as i32);
 }
 
@@ -471,7 +470,6 @@ fn no_gateway_paired_is_an_offer_to_pair_not_a_status() {
         },
         false,
     );
-    assert!(line.unpaired);
     assert_eq!(line.sentence, words::backup_line_unpaired(EN));
     assert_eq!(line.tone, Tone::Attention as i32);
 }
@@ -479,7 +477,6 @@ fn no_gateway_paired_is_an_offer_to_pair_not_a_status() {
 #[test]
 fn a_moved_vault_says_so_above_everything_else() {
     let line = lined(&steady(), true);
-    assert!(line.frozen);
     assert_eq!(line.sentence, words::backup_line_frozen(EN));
     assert_eq!(line.tone, Tone::Urgent as i32);
 }
@@ -834,12 +831,10 @@ fn a_gateway_that_refused_this_phones_token_says_to_pair_it_again_where_it_says_
     refused.pair_again = true;
     let page = Page::open(status(vec![refused.clone(), nas()]));
     let data = page.data();
-    assert_eq!(
-        data.destinations
-            .iter()
-            .map(|row| row.pair_again)
-            .collect::<Vec<_>>(),
-        vec![true, false]
+    assert!(
+        !data.destinations[1]
+            .detail
+            .contains(&words::backup_dest_pair_again(EN))
     );
     assert_eq!(
         data.destinations[0].detail,
@@ -850,10 +845,12 @@ fn a_gateway_that_refused_this_phones_token_says_to_pair_it_again_where_it_says_
     );
     // ONE REFUSING OF TWO leaves the line the ordinary one; every gateway
     // refusing says pair again.
-    assert!(!data.line.as_ref().expect("line").pair_again);
+    assert_ne!(
+        data.line.as_ref().expect("line").sentence,
+        words::backup_line_pair_again(EN)
+    );
     let all = Page::open(status(vec![refused])).data();
     let all_line = all.line.expect("line");
-    assert!(all_line.pair_again);
     assert_eq!(all_line.sentence, words::backup_line_pair_again(EN));
 }
 
@@ -983,7 +980,7 @@ fn back_up_now_needs_a_gateway_a_vault_that_has_not_moved_and_no_run_already_goi
     // ONE PASS ASKED FOR, under its own tag, off the runtime's lock.
     assert_eq!(running.jobs, vec![doors::PASS.to_owned()]);
     let data = running.data();
-    assert!(data.backing_up_now && !data.back_up_now_enabled);
+    assert!(!data.back_up_now_enabled);
     // BYTES TO GO, while bytes are to move (#1144).
     assert_eq!(data.progress, "Backing up — 380 MB to go");
     // A SECOND PRESS STARTS NOTHING HERE: the run is already going.
@@ -1013,7 +1010,6 @@ fn a_run_that_ends_is_re_read_because_what_it_moved_is_the_lines_to_say() {
     page.answer_job(None);
     assert_eq!(page.reads(), reads + 1);
     let data = page.data();
-    assert!(!data.backing_up_now);
     assert_eq!(data.progress, "");
     assert_eq!(data.line.expect("line").detail, "All 10 photos and files");
     assert!(

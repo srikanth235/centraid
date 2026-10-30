@@ -17,7 +17,6 @@ catalog! {
     plain attach_library_photo = ("Photo library", "Photo library");
     plain attach_no_documents = ("No text documents yet.", "No text documents yet.");
     plain attach_pick_document = ("Choose a document", "Choose a document");
-    plain attach_pick_photo = ("Choose a photo", "Choose a photo");
     plain attach_vault_photo = ("Photo from vault", "Photo from vault");
     plain cancel = ("Cancel", "Cancel");
     plain card_gone = ("This item is gone.", "This item is gone.");

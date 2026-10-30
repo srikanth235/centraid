@@ -468,7 +468,6 @@ impl Home {
         wire::HomeData {
             springboard: springboard as i32,
             grid_rows: policy::rows(&tiles),
-            every_tile_unreadable: policy::every_tile_unreadable(&tiles),
             day_one_title: words::home_day_one_title(locale),
             day_one_body: words::home_day_one_body(locale),
             tiles,
@@ -529,8 +528,6 @@ impl Home {
             } else {
                 words::appearance_to_dark(locale)
             },
-            switch_spoken: words::vault_switch_spoken(locale),
-            backup_open_spoken: words::backup_status_open(locale),
         }
     }
 

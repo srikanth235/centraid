@@ -64,18 +64,21 @@ message BackupWaitingRow {
 }
 
 message BackupLine {
-  // When a gateway last acknowledged this vault's records (the snapshot's
-  // head), on the GATEWAY's clock. Zero: never.
-  int64 records_as_of_ms = 1;
-  // Photos, videos, documents and their derivatives a gateway acknowledged,
-  // and how many the vault knows.
+  // 1 was `records_as_of_ms`: nothing read it (#1152).
+  reserved 1;
+  reserved "records_as_of_ms";
+  // Photos, videos, documents and their derivatives a gateway acknowledged.
   uint64 confirmed = 2;
-  uint64 total = 3;
+  // 3 was `total`: nothing read it (#1152).
+  reserved 3;
+  reserved "total";
   repeated BackupWaitingRow waiting = 4;
-  // The vault moved to another phone; this one is read-only.
-  bool frozen = 5;
-  // No gateway is paired: the line offers pairing instead of a status.
-  bool unpaired = 6;
+  // 5 was `frozen`: nothing read it (#1152).
+  reserved 5;
+  reserved "frozen";
+  // 6 was `unpaired`: nothing read it (#1152).
+  reserved 6;
+  reserved "unpaired";
   // The line, finished: "Backed up 2 minutes ago." Empty draws no line.
   string sentence = 7;
   // Its second clause, or empty: "1,203 of 1,240 photos and files".
@@ -86,9 +89,9 @@ message BackupLine {
   // draws it: "Backed up 2 minutes ago", "Not backed up". `sentence` is the
   // Backup screen's.
   string status = 11;
-  // EVERY GATEWAY THIS PHONE IS PAIRED WITH REFUSED ITS TOKEN: `sentence` and
-  // `status` say to pair again.
-  bool pair_again = 12;
+  // 12 was `pair_again`: nothing read it (#1152).
+  reserved 12;
+  reserved "pair_again";
 
   enum Tone {
     TONE_UNSPECIFIED = 0;
@@ -114,8 +117,9 @@ message BackupDestinationRow {
   // "192.168.1.20:7443 · Reached 2 minutes ago".
   string detail = 3;
   string accessibility_label = 4;
-  // This gateway refused the phone's token: `detail` says to pair it again.
-  bool pair_again = 5;
+  // 5 was `pair_again`: nothing read it (#1152).
+  reserved 5;
+  reserved "pair_again";
   // What it holds, finished: "Holds 5.1 GB". Empty when it holds nothing
   // this phone recorded (#1144).
   string held = 6;
@@ -194,8 +198,9 @@ message BackupHomeData {
   // device" put the one useful act second).
   string back_up_now_label = 12;
   bool back_up_now_enabled = 13;
-  // A "Back up now" run is in progress; `progress` says so in words.
-  bool backing_up_now = 14;
+  // 14 was `backing_up_now`: nothing read it (#1152).
+  reserved 14;
+  reserved "backing_up_now";
   string progress = 15;
   // Why battery saving can hold backups back, and the label of the control that
   // lets Centraid run. Empty until a backlog has stood for a day; a shell draws

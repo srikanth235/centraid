@@ -213,7 +213,6 @@ fn the_needs_a_category_filter_lists_only_uncategorised_lines() {
         })),
     );
     let state = home_state(d.view(i));
-    assert_eq!(state.category_filter, "uncategorised");
     let chip = state.chips.iter().find(|c| c.key == "category").unwrap();
     assert_eq!(chip.label, "Needs a category");
     let activity = home_data(d.view(i)).activity.as_ref().unwrap();

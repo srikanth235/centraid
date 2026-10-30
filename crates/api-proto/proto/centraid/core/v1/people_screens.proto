@@ -172,7 +172,9 @@ message PeopleRow {
   // "Overdue" (net) and the next reminder within a month ("Birthday · in 3
   // days"), in draw order.
   repeated StatusChip chips = 6;
-  bool due = 7;
+  // 7 was `due`: nothing read it (#1152).
+  reserved 7;
+  reserved "due";
   bool starred = 8;
   // The star control's accessibility label: "Star Dana" / "Remove star from Dana".
   string star_label = 9;
@@ -410,8 +412,9 @@ message PeopleChannelRow {
   string preferred_label = 5;
   // "Also on Sam's card", or empty.
   string duplicate_note = 6;
-  // What a tap does, for the glyph: the effect itself is Rust's.
-  PeopleChannelIntent intent = 7;
+  // 7 was `intent`: nothing read it (#1152).
+  reserved 7;
+  reserved "intent";
   // "Call" / "Email" / "Open map" / "Copy".
   string action_label = 8;
   // The remove control's accessibility label: "Remove this phone".
@@ -678,8 +681,9 @@ message PeopleProfileDraft {
   string role = 2;
   string nickname = 3;
   string met = 4;
-  // 0 is no cadence.
-  int64 cadence_days = 5;
+  // 5 was `cadence_days`: nothing read it (#1152).
+  reserved 5;
+  reserved "cadence_days";
 }
 
 message PeopleCadenceChoice {

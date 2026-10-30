@@ -281,7 +281,6 @@ impl Screen for CatchUp {
                     }),
                     status: self.ops.status.clone(),
                     confirm: self.confirm(locale),
-                    asking_pile: self.asking.clone().unwrap_or_default(),
                 },
             )),
             ..wire::ViewState::default()

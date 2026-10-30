@@ -435,10 +435,6 @@ fn re_keying_done_says_the_words_are_back_and_nothing_to_key_offers_the_restore_
     assert!(none.enter().primary_enabled);
     primary(&mut none);
     assert_eq!(none.enter().phase, Phase::Working as i32);
-    assert_eq!(
-        none.enter().purpose,
-        wire::WordsEnterPurpose::Restore as i32
-    );
 }
 
 #[test]
@@ -502,17 +498,13 @@ fn held_phone(route: wire::Route) -> Phone {
 fn a_restore_opened_while_the_keychain_holds_a_seed_opens_without_the_grid() {
     let phone = held_phone(routes::restore());
     let state = phone.enter();
-    assert_eq!(state.purpose, wire::WordsEnterPurpose::RestoreHeld as i32);
     assert!(state.cells.is_empty() && !state.secure);
     assert_eq!(state.title, "Restore your vaults");
     assert!(state.endpoint_label.starts_with("Paste the pairing code"));
     // NO CODE, NO RESTORE (#1080 A23).
     assert!(!state.primary_enabled);
     // With none held, it opens the grid.
-    assert_eq!(
-        open(routes::restore()).enter().purpose,
-        wire::WordsEnterPurpose::Restore as i32
-    );
+    assert_eq!(open(routes::restore()).enter().cells.len(), 24);
 }
 
 #[test]
@@ -559,7 +551,6 @@ fn a_held_seed_restore_offers_the_grid_instead_keeping_the_pasted_code() {
     assert_eq!(phone.enter().words_label, "Type recovery key");
     phone.send_enter(K::UseWords(wire::WordsUseWords {}));
     let state = phone.enter();
-    assert_eq!(state.purpose, wire::WordsEnterPurpose::Restore as i32);
     assert_eq!(state.cells.len(), 24);
     assert!(state.secure);
     assert_eq!(state.endpoint, CODE);
@@ -567,8 +558,9 @@ fn a_held_seed_restore_offers_the_grid_instead_keeping_the_pasted_code() {
     assert!(!state.primary_enabled);
     // Only a held restore has a grid to go to.
     let mut rekey = open(routes::rekey_for_locker());
+    let before = rekey.enter().clone();
     rekey.send_enter(K::UseWords(wire::WordsUseWords {}));
-    assert_eq!(rekey.enter().purpose, wire::WordsEnterPurpose::Rekey as i32);
+    assert_eq!(*rekey.enter(), before);
 }
 
 #[test]

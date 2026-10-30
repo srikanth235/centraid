@@ -244,8 +244,6 @@ impl<D: Draft> Autosave<D> {
                 remedy: String::new(),
             }),
             remote_changed: self.remote_changed,
-            saving_seq: self.saving_seq,
-            invoke_key: String::new(),
             label: self.label(locale),
             refused: self.phase == Phase::Refused,
         }

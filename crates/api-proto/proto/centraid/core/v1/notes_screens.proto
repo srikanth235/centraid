@@ -430,7 +430,9 @@ message NotesHomeEvent {
 
 message NotesEditorState {
   string note_id = 1;
-  bool is_new = 2;
+  // 2 was `is_new`: nothing read it (#1152).
+  reserved 2;
+  reserved "is_new";
   oneof content {
     Loading loading = 3;
     Failure failure = 4;

@@ -656,7 +656,6 @@ impl Enter {
         if self.loading {
             return wire::WordsEnterState {
                 phase: Phase::Working as i32,
-                purpose: self.purpose as i32,
                 ..wire::WordsEnterState::default()
             };
         }
@@ -752,7 +751,6 @@ impl Enter {
         };
         wire::WordsEnterState {
             phase: phase as i32,
-            purpose: self.purpose as i32,
             origin: if rekey {
                 self.origin as i32
             } else {

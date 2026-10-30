@@ -99,7 +99,9 @@ message ChatState {
   Route attach_photo_route = 51;
   // The vault's text documents, listed while the document sheet is open.
   ChatDocumentSheet document_sheet = 52;
-  string attach_pick_photo_title = 53;
+  // 53 was `attach_pick_photo_title`: nothing read it (#1152).
+  reserved 53;
+  reserved "attach_pick_photo_title";
   string close_label = 54;
   // "Copied", said beside a message after Copy.
   string copied_label = 55;
@@ -174,7 +176,9 @@ message ChatMessage {
   string text = 3;
   repeated ChatCard cards = 4;
   bool streaming = 5;
-  bool stopped = 6;
+  // 6 was `stopped`: nothing read it (#1152).
+  reserved 6;
+  reserved "stopped";
   string accessibility_label = 7;
   repeated ChatAttachment attachments = 8;
   string note = 9;

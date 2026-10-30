@@ -133,7 +133,9 @@ message WordsNameTyped {
 
 message WordsEnterState {
   Phase phase = 1;
-  WordsEnterPurpose purpose = 2;
+  // 2 was `purpose`: nothing read it (#1152).
+  reserved 2;
+  reserved "purpose";
   // SHIELD THE SCREEN (duty 1). Set while any word is on it.
   bool secure = 3;
   string title = 4;

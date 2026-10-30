@@ -134,8 +134,7 @@ fn the_fields_are_computed_and_repeats_is_the_cores_sentence() {
     let repeats = field(v, "repeats");
     assert_ne!(repeats.value, "Never");
     assert!(!repeats.value.is_empty());
-    // The stored rule rides for the picker and selects its preset.
-    assert_eq!(repeats.raw, "FREQ=MONTHLY");
+    // The stored rule selects its preset.
     assert_eq!(selected(repeats), "monthly");
     assert_eq!(selected(field(v, "anchor")), "completion");
     assert_eq!(field(v, "priority").value, "None");
@@ -171,7 +170,6 @@ fn a_one_off_repeats_never_and_a_date_only_reminder_is_on_the_day() {
     assert_eq!(field(v, "repeats").value, "Never");
     assert_eq!(field(v, "reminder").value, "On the day");
     assert!(detail_data(v).fields.iter().all(|f| f.key != "anchor"));
-    assert_eq!(field(v, "repeats").raw, "");
 }
 
 #[test]
@@ -868,7 +866,6 @@ fn subtasks_count_what_is_done_are_added_as_a_write_and_stay_one_level() {
     let data = detail_data(d.view(child));
     assert!(!data.can_add_subtask);
     assert_eq!(data.subtask_note, "Subtasks can't have subtasks.");
-    assert_eq!(data.parent_task_id, parent);
     assert_eq!(data.parent_title, "Move house");
     assert_eq!(data.parent_route, Some(routes::task(&parent)));
     send_detail(
@@ -901,7 +898,6 @@ fn delete_asks_in_full_sentences_then_trashes_and_ends_the_screen() {
     let confirm = state.confirm.as_ref().expect("a confirm");
     assert_eq!(confirm.title, "Delete this task?");
     assert!(confirm.destructive);
-    assert_eq!(state.asking, wire::todo_detail_state::Asking::Delete as i32);
     // Dismissed, nothing is written.
     send_detail(&mut d, i, de::Kind::Dismissed(de::Dismissed {}));
     assert!(detail(d.view(i)).confirm.is_none());
@@ -952,10 +948,6 @@ fn release_destroys_nothing_and_goes_to_the_logbook_as_wont_do() {
     let confirm = state.confirm.as_ref().unwrap();
     assert_eq!(confirm.title, "Release this task?");
     assert!(!confirm.destructive);
-    assert_eq!(
-        state.asking,
-        wire::todo_detail_state::Asking::Release as i32
-    );
     assert!(detail_data(d.view(i)).can_release);
     send_detail(&mut d, i, de::Kind::Confirmed(de::Confirmed {}));
     let v = d.view(i);

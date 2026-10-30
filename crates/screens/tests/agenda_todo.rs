@@ -521,7 +521,6 @@ fn the_quick_add_lands_in_the_project_and_in_the_section_pointed_at() {
         state.quick_add.as_ref().unwrap().lands_label,
         "Add to Garden · Beds"
     );
-    assert_eq!(state.target_section_id, beds);
     send_project(
         &mut d,
         i,
@@ -851,7 +850,6 @@ fn complete_all_asks_then_completes_the_pile_and_says_its_count() {
     assert_eq!(confirm.title, "Complete every task in this pile?");
     assert_eq!(confirm.confirm_label, "Complete all");
     assert!(!confirm.destructive);
-    assert_eq!(state.asking_pile, "dated");
     // Nothing is written until it is confirmed.
     assert_eq!(task_of(&d, &first).status, "open");
 
@@ -870,7 +868,7 @@ fn complete_all_asks_then_completes_the_pile_and_says_its_count() {
     assert_eq!(task_of(&d, &first).status, "done");
     assert_eq!(task_of(&d, &second).status, "done");
     let state = catch_up(d.view(i));
-    assert!(state.confirm.is_none() && state.asking_pile.is_empty());
+    assert!(state.confirm.is_none());
     let status = state.status.as_ref().unwrap();
     assert_eq!(
         (status.sentence.as_str(), status.action_label.as_str()),

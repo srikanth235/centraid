@@ -6,8 +6,11 @@
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_screens::catalog::load;
+use centraid_screens::kit::read;
 use centraid_screens::testing::Driver;
 use centraid_screens::{docs, photos};
+use wire::app_query_response::Answer;
 use wire::screen_event::Kind as E;
 
 fn standard() -> Driver {
@@ -174,15 +177,25 @@ fn a_made_vault_asks_the_photo_prompt_itself_and_a_grant_starts_the_rolls_walk()
     )));
 }
 
-fn files_followed(d: &Driver, files: u64) -> Vec<String> {
-    match &d.view(files).kind {
-        Some(wire::view_state::Kind::ImportsFiles(state)) => state
-            .followed
-            .iter()
-            .map(|folder| folder.origin_id.clone())
-            .collect(),
-        other => panic!("not the follower: {other:?}"),
-    }
+/// The folders the vault holds as followed (`shell.files-followed`), by the phone's origin.
+fn files_followed(d: &Driver) -> Vec<String> {
+    d.with_ctx(|ctx| {
+        match read::read(
+            ctx,
+            load::shell::FilesFollowed::default(),
+            |answer| match answer {
+                Answer::ImportsFilesHeld(held) => Some(held),
+                _ => None,
+            },
+        ) {
+            read::Reading::Data(held) => held
+                .folders
+                .into_iter()
+                .map(|folder| folder.origin_ref)
+                .collect(),
+            _ => panic!("the followed folders read"),
+        }
+    })
 }
 
 #[test]
@@ -207,7 +220,7 @@ fn the_drive_hands_a_followed_folder_to_the_follower_which_follows_again_when_th
         }),
     );
     d.pump(Duration::from_millis(200));
-    assert_eq!(files_followed(&d, files), ["folder:7f1c"]);
+    assert_eq!(files_followed(&d), ["folder:7f1c"]);
     // THE APP CAME FORWARD: the follower reads the folder again once it settles.
     d.effects.clear();
     d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {

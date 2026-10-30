@@ -483,7 +483,6 @@ impl Selection {
             actions,
             cancel_label: words::photos_cancel(locale),
             confirm: self.confirming.map(|verb| confirm(locale, verb, count)),
-            confirming: self.confirming.unwrap_or(Verb::Unspecified) as i32,
         }
     }
 }

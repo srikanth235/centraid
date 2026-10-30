@@ -147,8 +147,9 @@ message HealthHomeState {
   // Four tabs in order; EMPTY while denied.
   repeated HealthBandTab band = 7;
   HealthHomeChrome chrome = 8;
-  // Trends' range.
-  TrendRange trend_range = 9;
+  // 9 was `trend_range`: nothing read it (#1152).
+  reserved 9;
+  reserved "trend_range";
   // Workouts' kind filter: EMPTY is every kind.
   string kind_concept_id = 10;
   // The chip row (Workouts: All, then each kind with a workout); EMPTY elsewhere.
@@ -237,7 +238,9 @@ message HealthTrendRow {
   string unit = 4;
   // "+4%", "−12 min"; EMPTY when there is no period before to compare.
   string delta = 5;
-  Direction direction = 6;
+  // 6 was `direction`: nothing read it (#1152).
+  reserved 6;
+  reserved "direction";
   // The sparkline, oldest first: each bucket's height in basis points of the
   // row's own span, or -1 for a bucket with no value (a gap, never a zero).
   repeated int32 points_bp = 7;
@@ -246,13 +249,6 @@ message HealthTrendRow {
   string accessibility_label = 9;
   // The metric's page.
   Route route = 10;
-
-  enum Direction {
-    DIRECTION_UNSPECIFIED = 0;
-    DIRECTION_UP = 1;
-    DIRECTION_DOWN = 2;
-    DIRECTION_FLAT = 3;
-  }
 }
 
 message HealthWorkoutsData {

@@ -175,7 +175,8 @@ message NavEvent {
     // drops the instance and everything above it.
     NavPopped popped = 2;
     NavSelectTab select_tab = 3;
-    // Pop to the root of a tab (a second tap on the selected tab).
+    // Pop to the root of a tab: the apps' Home control sends it (`RustRoot.popToRoot`
+    // on Android, `ShellModel.popToRoot()` on iOS), not a second tap on the tab.
     NavPopToRoot pop_to_root = 4;
   }
 }
@@ -458,12 +459,9 @@ message Effect {
     Haptic haptic = 3;
     Share share = 4;
     OpenUrl open_url = 5;
-    PickPhotos pick_photos = 6;
-    CapturePhoto capture_photo = 7;
     HealthRead health_read = 8;
     KeychainOp keychain = 9;
     ScreenshotShield screenshot_shield = 10;
-    ScheduleNotification schedule_notification = 11;
     CalendarRead calendar_read = 12;
     PhoneWatch phone_watch = 13;
     // The phone's own owner check: biometric, device passcode as fallback.
@@ -528,6 +526,10 @@ message Effect {
   // `LibraryDelete`. `StreamFromLibrary`: the camera roll serves the bytes a
   // pass asks for again.
   reserved 21, 24, 1374;
+  // 6, 7 and 11 were `pick_photos`, `capture_photo` and `schedule_notification`:
+  // no screen asked for them and neither shell performed them (#1152).
+  reserved 6, 7, 11;
+  reserved "pick_photos", "capture_photo", "schedule_notification";
 }
 
 message ClipboardSet {
@@ -570,12 +572,6 @@ message OpenUrl {
   string url = 1;
 }
 
-message PickPhotos {
-  uint32 max_count = 1;
-}
-
-message CapturePhoto {}
-
 // READ THE PHONE'S HEALTH STORE (HealthKit on iOS, Health Connect on Android) over
 // the window Rust placed, for the types the member chose, and answer a
 // `HealthSnapshot`. Read only: nothing is ever written to the store (R-1129-7).
@@ -610,15 +606,6 @@ message KeychainOp {
 
 message ScreenshotShield {
   bool on = 1;
-}
-
-message ScheduleNotification {
-  string id = 1;
-  // Already localized: the notification is shown by the OS.
-  string title = 2;
-  string body = 3;
-  // Epoch milliseconds. A cancel is an empty `title` and `body`.
-  int64 at_ms = 4;
 }
 
 // Read the phone's calendars over a window around the shell's clock. A shell
@@ -871,7 +858,6 @@ message EffectResult {
   oneof outcome {
     EffectDone done = 2;
     EffectFailed failed = 3;
-    PhotosPicked photos = 4;
     HealthSnapshot health = 5;
     KeychainValue keychain = 6;
     CalendarSnapshot calendar = 7;
@@ -914,6 +900,9 @@ message EffectResult {
   // `OriginalFetched` and `FreeUpFacts`: the fetch and the count are Rust's.
   // `LibraryStreamed`: the camera roll reports to the pass service itself.
   reserved 11, 13, 1372;
+  // 4 was `photos` (`PhotosPicked`): no effect asked for it and no shell sent it (#1152).
+  reserved 4;
+  reserved "photos";
 }
 
 message EffectDone {}
@@ -925,12 +914,6 @@ message EffectFailed {
   bool denied = 2;
   // The member dismissed it (a save sheet): not a failure.
   bool cancelled = 3;
-}
-
-message PhotosPicked {
-  // Ids of bytes the shell streamed through the stage door; the screen hands
-  // them to `act`.
-  repeated string stage_ids = 1;
 }
 
 // WHAT THE SHELL READ OF THE HEALTH STORE. Nothing here is a decision: Rust diffs

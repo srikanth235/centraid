@@ -160,13 +160,14 @@ fn removing_a_bank_number_is_offered_only_when_there_is_one_and_asks_first() {
     );
     let editor = acc(d.view(i)).editor.clone().unwrap();
     event(&mut d, i, aev(ae::Kind::RemoveNumber(ae::RemoveNumber {})));
-    if editor.has_external_ref {
+    if editor.can_remove_number {
+        assert!(!editor.remove_number_label.is_empty());
         assert_eq!(
             acc(d.view(i)).confirm.as_ref().unwrap().title,
             "Remove the bank number?"
         );
     } else {
-        assert!(editor.remove_number_label.is_empty() && !editor.can_remove_number);
+        assert!(editor.remove_number_label.is_empty());
         assert!(acc(d.view(i)).confirm.is_none());
     }
 }

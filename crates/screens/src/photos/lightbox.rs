@@ -821,9 +821,6 @@ impl Lightbox {
             } else {
                 cell.title.trim().to_owned()
             },
-            write_refusal: self.refusal(locale).unwrap_or_default(),
-            edit_refusal: editor::edit_refusal(locale, Some(cell), self.fetching)
-                .unwrap_or_default(),
             tile: Some(tile),
         }
     }
@@ -850,12 +847,10 @@ impl Lightbox {
             copy_location: words::photos_copy_exact_location(locale),
             share_title: words::photos_send_place_title(locale),
             place_picker_title: words::photos_adjust_location(locale),
-            no_place: words::photos_place_none(locale),
             no_place_detail: words::photos_clear_place_detail(locale),
             place_here: words::photos_place_here(locale),
             no_places: words::photos_no_places(locale),
             info_title: words::photos_info(locale),
-            this_photo: words::photos_this_photo(locale),
             filmstrip: words::photos_filmstrip(locale),
             play: words::photos_player_play(locale),
             pause: words::photos_player_pause(locale),

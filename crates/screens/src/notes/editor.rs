@@ -611,7 +611,6 @@ impl Screen for Editor {
         let agenda_words = title.clone();
         let mut state = wire::NotesEditorState {
             note_id: self.note_id.clone().unwrap_or_default(),
-            is_new: !exists,
             content: Some(content),
             chrome: Some(wire::NotesEditorChrome {
                 // "Cancel" only before the first keystroke of this visit; after

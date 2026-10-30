@@ -113,7 +113,9 @@ message MoneyHomeState {
   // Activity's filters. Empty account is every account; `category_filter` is
   // empty (any), `uncategorised`, or a category id.
   string account_id = 11;
-  string category_filter = 12;
+  // 12 was `category_filter`: nothing read it (#1152).
+  reserved 12;
+  reserved "category_filter";
   // The chip row under the search bar (Activity only); empty elsewhere.
   repeated MoneyChip chips = 14;
 
@@ -302,8 +304,9 @@ message MoneyCashflowMonth {
   // The bars: this month's side as basis points of the series' largest side.
   uint32 in_bp = 7;
   uint32 out_bp = 8;
-  // "12% kept"; empty when nothing came in.
-  string rate_label = 9;
+  // 9 was `rate_label`: nothing read it (#1152).
+  reserved 9;
+  reserved "rate_label";
   // The month is not over: outlined, never compared as if whole.
   bool partial = 10;
   string accessibility_label = 11;
@@ -416,8 +419,9 @@ message MoneyTransactionData {
   string save_label = 15;
   string clear_label = 16;
   string accessibility_label = 17;
-  // True when this line is half of an accepted transfer.
-  bool is_transfer = 18;
+  // 18 was `is_transfer`: nothing read it (#1152).
+  reserved 18;
+  reserved "is_transfer";
 }
 
 // An offer the app PROPOSES and never applies on its own.
@@ -708,7 +712,9 @@ message MoneyAccountEditor {
   bool on_budget = 6;
   // Typed only; the bank's number is never sent back to the phone's view.
   string external_ref = 7;
-  bool has_external_ref = 8;
+  // 8 was `has_external_ref`: nothing read it (#1152).
+  reserved 8;
+  reserved "has_external_ref";
   bool closed = 9;
   bool can_save = 10;
   string issue = 11;
@@ -1132,7 +1138,9 @@ message MoneyImportData {
   string discard_label = 15;
   string done_label = 16;
   optional EmptyState empty = 17;
-  string add_account_label = 18;
+  // 18 was `add_account_label`: nothing read it (#1152).
+  reserved 18;
+  reserved "add_account_label";
   // Where "Add an account" goes.
   Route accounts_route = 19;
 }

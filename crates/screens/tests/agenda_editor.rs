@@ -12,7 +12,7 @@ use centraid_screens::catalog::act;
 use centraid_screens::field::Field;
 use centraid_screens::kit::civil;
 use wire::agenda_editor_event::Kind as K;
-use wire::agenda_editor_state::{Asking, Sheet};
+use wire::agenda_editor_state::Sheet;
 use wire::{AgendaEditorKind as Kind, AgendaScope as Scope};
 
 fn ev<T>(make: impl FnOnce(T) -> K, body: T) -> K {
@@ -563,7 +563,6 @@ fn leaving_with_changes_asks_and_only_discard_leaves() {
     world.send_editor(page, leave());
     let state = world.editor_state(page);
     assert!(!state.dismissed);
-    assert_eq!(state.asking, Asking::Discard as i32);
     let confirm = state.confirm.clone().expect("a question");
     assert_eq!(confirm.title, "Discard this event?");
     assert_eq!(confirm.body, "Nothing has been saved.");
@@ -765,7 +764,6 @@ fn skip_asks_then_skips_the_occurrence_and_a_one_off_has_no_skip() {
     let page = world.open_edit(&series, &key, Some("2099-06-16T10:00:00"), "2099-06-16");
     world.send_editor(page, skip());
     let state = world.editor_state(page);
-    assert_eq!(state.asking, Asking::Skip as i32);
     assert_eq!(
         state.confirm.as_ref().expect("question").title,
         "Skip this occurrence?"

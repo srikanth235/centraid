@@ -74,7 +74,6 @@ pub fn person(locale: Locale, sheet: &wire::PeopleSheet, today: &str) -> wire::P
                         &[("names", &channel.duplicate_names.join(", "))],
                     )
                 },
-                intent: intent as i32,
                 action_label: fold::channel_action(locale, intent),
                 remove_label: fill(
                     &words::remove_channel(locale),

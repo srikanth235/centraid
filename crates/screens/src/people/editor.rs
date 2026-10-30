@@ -356,7 +356,6 @@ impl Screen for Editor {
                 role: draft.role.clone(),
                 nickname: draft.nickname.clone(),
                 met: draft.met.clone(),
-                cadence_days: self.cadence_shown(),
             }),
             _ => C::Loading(wire::Loading { first_load: true }),
         };

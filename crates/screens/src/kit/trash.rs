@@ -359,7 +359,6 @@ impl Screen for Trash {
                 content: Some(content),
                 confirm: self.confirm(locale),
                 status: self.status.clone(),
-                purge_window_days: self.spec.purge_window_days,
             })),
             ..wire::ViewState::default()
         }

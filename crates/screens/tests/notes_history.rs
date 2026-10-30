@@ -155,7 +155,6 @@ fn the_trash_lists_trashed_notes_with_their_day_restore_only() {
     assert_eq!(view.app_id, "notes");
     assert_eq!(view.title, "Trash");
     assert_eq!(view.back_label, "Notes");
-    assert_eq!(view.purge_window_days, 30);
     let Some(wire::trash_view::Content::Data(data)) = &view.content else {
         panic!("no data");
     };

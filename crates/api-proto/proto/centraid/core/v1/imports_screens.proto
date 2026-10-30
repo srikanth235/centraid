@@ -116,20 +116,16 @@ message ImportsFilesEvent {
   }
 }
 
-// What the Docs drive's followed sheet lists: the shell sends it to the drive as
-// `FollowedChanged` whenever this changes.
+// The followed-folders service's view. No shell draws it (the drive's followed
+// sheet is `DocsFollowed`, #1152).
 message ImportsFilesState {
-  repeated ImportsFollowedFolder followed = 1;
+  // 1 was `followed` (and `ImportsFollowedFolder`, its only use): nothing read it (#1152).
+  reserved 1;
+  reserved "followed";
   // A refused pick's sentence, empty when there is none.
   string refusal = 2;
   // A pass is running.
   bool running = 3;
-}
-
-message ImportsFollowedFolder {
-  string origin_id = 1;
-  string name = 2;
-  uint32 documents = 3;
 }
 
 // What the vault holds of followed folders: the shell query `files-followed`.

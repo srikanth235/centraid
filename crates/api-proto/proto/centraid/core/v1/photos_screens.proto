@@ -66,18 +66,20 @@ message PhotoTile {
   string day = 13;
   // A LIVE PHOTO: its movie is folded into this cell.
   bool live = 14;
-  // The folded movie's id, empty unless `live`.
-  string live_movie_id = 15;
+  // 15 was `live_movie_id`: nothing read it (#1152).
+  reserved 15;
+  reserved "live_movie_id";
   // What a screen reader says: "Photo", "Video", "Live photo", with "preview
   // not downloaded" when no thumbnail is here.
   string accessibility_label = 16;
-  // HOW FAR A `HELD_FETCHING` CELL HAS GOT, 0-100, and 0 when nobody can say.
-  uint32 fetch_percent = 17;
+  // 17 was `fetch_percent`: nothing read it (#1152).
+  reserved 17;
+  reserved "fetch_percent";
   // The caption; empty when there is none.
   string title = 18;
-  // The trash's countdown: whole days left, 0 when the photograph is not in
-  // the trash or has no date to count from.
-  uint32 purge_in_days = 19;
+  // 19 was `purge_in_days`: nothing read it (#1152).
+  reserved 19;
+  reserved "purge_in_days";
   // "live": the mark a Live Photo's cell carries; empty unless `live`.
   string live_label = 20;
   // The words of the held mark: "downloading" over a `HELD_FETCHING` cell and
@@ -134,7 +136,9 @@ message PhotosSelection {
   // The confirm on screen, over the verb that asked (`confirming`): the trash
   // and delete-forever ask first, in full sentences.
   optional Confirm confirm = 7;
-  PhotosBatchAction.Kind confirming = 8;
+  // 8 was `confirming`: nothing read it (#1152).
+  reserved 8;
+  reserved "confirming";
 }
 
 message PhotosBatchAction {

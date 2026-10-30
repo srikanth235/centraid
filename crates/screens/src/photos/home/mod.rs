@@ -742,7 +742,6 @@ impl Home {
             } else {
                 String::new()
             },
-            loading_more: false,
             loading_more_label: words::photos_library_loading_more(locale),
             scrub_label: words::photos_scrub(locale),
             scrub_next_label: words::photos_scrub_next(locale),
@@ -796,7 +795,6 @@ impl Home {
                 reason: self.free_up.reason.clone(),
                 action_label: self.free_up.action_label.clone(),
                 enabled: self.free_up.enabled && !self.free_up.freeing,
-                freeing: self.free_up.freeing,
                 notice: self.free_up.notice.clone(),
                 retention: super::keep_originals::retention_body(locale),
             }),

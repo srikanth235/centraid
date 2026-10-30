@@ -10,7 +10,7 @@ use std::time::Duration;
 use centraid_api_proto::core_v1 as wire;
 use health_support::*;
 use wire::health_home_event as he;
-use wire::health_home_state::{Sheet, TrendRange};
+use wire::health_home_state::Sheet;
 
 /// Thirty days before today, steps climbing from 6,100 to 9,000, plus today.
 fn month_of_steps(d: &centraid_screens::testing::Driver, today: &str) {
@@ -329,10 +329,6 @@ fn trends_are_per_metric_deltas_against_the_period_before_a_sparkline_with_gaps_
     assert_eq!(steps.label, "Steps");
     assert_eq!(steps.unit, "a day");
     assert_eq!(steps.delta, "+17%");
-    assert_eq!(
-        steps.direction,
-        wire::health_trend_row::Direction::Up as i32
-    );
     assert!(!steps.points_bp.is_empty());
     let sleep = trends
         .rows
@@ -356,8 +352,6 @@ fn trends_are_per_metric_deltas_against_the_period_before_a_sparkline_with_gaps_
             key: "year".to_owned(),
         }),
     );
-    let moved = home_state(d.view(i));
-    assert_eq!(moved.trend_range, TrendRange::Year as i32);
     assert_eq!(
         home_data(d.view(i)).trends.as_ref().unwrap().compare_line,
         "Last 12 months, against the year before"

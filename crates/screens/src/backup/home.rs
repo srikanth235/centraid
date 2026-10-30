@@ -509,7 +509,6 @@ impl Backup {
             accessibility_label,
             label,
             detail,
-            pair_again: destination.pair_again,
             held,
         }
     }
@@ -635,7 +634,6 @@ impl Backup {
             include_videos_label: words::backup_include_videos(locale),
             back_up_now_label,
             back_up_now_enabled: self.can_back_up_now(),
-            backing_up_now: self.backing_up_now,
             progress: self.progress(locale),
             battery_sentence: if stood {
                 words::backup_battery(locale)

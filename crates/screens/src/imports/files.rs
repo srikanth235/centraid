@@ -135,7 +135,6 @@ pub struct Outcome {
 struct Held {
     phone_origin: String,
     label: String,
-    documents: u32,
     stats: Vec<(String, String)>,
 }
 
@@ -185,7 +184,6 @@ fn read_held(ctx: &Ctx) -> Reading<Vec<Held>> {
                 .map(|folder| Held {
                     phone_origin: folder.origin_ref,
                     label: folder.label,
-                    documents: folder.documents,
                     stats: folder
                         .files
                         .into_iter()
@@ -556,20 +554,9 @@ impl Screen for Files {
     }
 
     fn view(&self, _ctx: &Ctx) -> wire::ViewState {
-        let mut followed: Vec<wire::ImportsFollowedFolder> = self
-            .held
-            .iter()
-            .map(|held| wire::ImportsFollowedFolder {
-                origin_id: held.phone_origin.clone(),
-                name: held.label.clone(),
-                documents: held.documents,
-            })
-            .collect();
-        followed.sort_by_key(|folder| folder.name.to_lowercase());
         wire::ViewState {
             kind: Some(wire::view_state::Kind::ImportsFiles(
                 wire::ImportsFilesState {
-                    followed,
                     refusal: self.refusal.clone(),
                     running: self.pass.is_some(),
                 },
