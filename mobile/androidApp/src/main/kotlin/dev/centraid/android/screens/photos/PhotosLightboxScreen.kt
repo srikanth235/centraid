@@ -110,12 +110,17 @@ public fun PhotosLightboxScreen(
     ) {
         when {
             // BEFORE THE READ LANDS THE STAGE STILL DRAWS what it has — the
-            // strip frame of the photograph a member swiped to — and a ring
-            // only over a stage with nothing at all.
+            // strip frame of the photograph a member swiped to — and the
+            // opening words only over a stage with nothing at all (never a ring).
             loading != null -> {
                 LightboxStage(state, reduceMotion, player, live, onEvent, onClose)
                 if (state.film.none { it.photo_id == state.photo_id && it.tile != null }) {
-                    StageSpinner(modifier = Modifier.align(Alignment.Center))
+                    Text(
+                        text = words.opening,
+                        color = centraidColor("onStageSoft"),
+                        style = centraidType("small"),
+                        modifier = Modifier.align(Alignment.Center),
+                    )
                 }
             }
 
