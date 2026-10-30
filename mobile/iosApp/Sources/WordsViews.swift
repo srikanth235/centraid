@@ -487,7 +487,17 @@ struct WordsShowView: View {
 
     @Environment(\.colorScheme) private var scheme
 
+    /// THE OWNER CHECK IS UP: nothing is drawn, only the page's own colour, until it answers
+    /// (every label is empty while `check_now` is set).
     var body: some View {
+        if state.checkNow {
+            BarePaper()
+        } else {
+            shown
+        }
+    }
+
+    private var shown: some View {
         WordsShield(secure: state.secure) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {

@@ -229,6 +229,15 @@ final class ShellModel: ObservableObject {
         rustInstances[entry.token] = instance
     }
 
+    /// THE APPS' HOME CONTROL: every page above Home's root goes. The path empties (SwiftUI's own
+    /// stack, which `rustPopped` reports as `NavPopped` for the lowest entry) and Rust is told the
+    /// move itself, as Compose tells it: `NavPopToRoot` closes whatever is left above the root.
+    func popToRoot() {
+        guard !path.isEmpty else { return }
+        path.removeAll()
+        screens?.popToRoot(tab: RustScreens.homeTab)
+    }
+
     /// A Rust entry left `path` (a back control, a swipe, Home): Rust drops its
     /// instance and everything above it. The lowest one removed is enough.
     private func rustPopped(from old: [Route]) {

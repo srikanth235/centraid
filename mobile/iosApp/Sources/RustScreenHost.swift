@@ -90,7 +90,14 @@ struct RustScreenView: View {
         return wall.wordsRoute
     }
 
+    /// THE SCREEN, SHIELDED while Rust holds a `ScreenshotShield` for it: always wrapped, so the
+    /// view keeps its identity (and its state) as the shield goes on and off.
     var body: some View {
+        WordsShield(secure: store.shielded.contains(instance)) { screen }
+    }
+
+    @ViewBuilder
+    private var screen: some View {
         let open: (Centraid_Core_V1_Route) -> Void = { shell.open($0) }
         let words: () -> Void = { if let route = wordsRoute { shell.open(route) } }
         switch store.views[instance]?.kind {
@@ -131,7 +138,7 @@ struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .agendaHome($0)) },
                 open: open,
-                onHome: { shell.path.removeAll() }
+                onHome: { shell.popToRoot() }
             )
         case .agendaEvent(let state)?:
             AgendaEventView(
@@ -186,7 +193,7 @@ struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .photosHome($0)) },
                 open: open,
-                onHome: { shell.path.removeAll() }
+                onHome: { shell.popToRoot() }
             )
         case .photosShelf(let state)?:
             PhotoShelfView(
@@ -214,7 +221,7 @@ struct RustScreenView: View {
                 sendWall: { store.send(instance, .lockerWall($0)) },
                 open: open,
                 onWords: words,
-                onHome: { shell.path.removeAll() }
+                onHome: { shell.popToRoot() }
             )
         case .lockerItem(let state)?:
             LockerItemView(
@@ -261,7 +268,7 @@ struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .moneyHome($0)) },
                 open: open,
-                onHome: { shell.path.removeAll() }
+                onHome: { shell.popToRoot() }
             )
         case .moneyTransaction(let state)?:
             MoneyTransactionView(
@@ -325,7 +332,7 @@ struct RustScreenView: View {
                 send: { store.send(instance, .docsDrive($0)) },
                 open: open,
                 onBack: pop,
-                onHome: { shell.path.removeAll() }
+                onHome: { shell.popToRoot() }
             )
         case .docsDocument(let state)?:
             DocsDocumentView(
@@ -351,7 +358,7 @@ struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .healthHome($0)) },
                 open: open,
-                onHome: { shell.path.removeAll() }
+                onHome: { shell.popToRoot() }
             )
         case .healthMetric(let state)?:
             HealthMetricView(
@@ -376,7 +383,7 @@ struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .notesHome($0)) },
                 open: open,
-                onHome: { shell.path.removeAll() }
+                onHome: { shell.popToRoot() }
             )
         case .notesEditor(let state)?:
             NotesEditorView(
@@ -396,7 +403,7 @@ struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .peopleHome($0)) },
                 open: open,
-                onHome: { shell.path.removeAll() }
+                onHome: { shell.popToRoot() }
             )
         case .peoplePerson(let state)?:
             PeoplePersonView(

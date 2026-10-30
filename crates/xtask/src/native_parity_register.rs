@@ -32,15 +32,6 @@ const REMINDERS: &str = "iOS reads the phone's Reminders (EventKit); Android has
 const OS_UPLOADS: &str = "the OS-owned background uploads are iOS's `URLSession`; Android's mover runs inside its WorkManager pass";
 
 pub const REGISTER: &[Entry] = &[
-    // Lane C: reads SwiftUI does not make yet (iOS missing).
-    ("AgendaHomeData.event_count_label", gap("C", Missing::Ios)),
-    ("Effect.screenshot_shield", gap("C", Missing::Ios)),
-    ("PhotosLibraryData.scrub_next_label", gap("C", Missing::Ios)),
-    (
-        "PhotosLibraryData.scrub_previous_label",
-        gap("C", Missing::Ios),
-    ),
-    ("WordsShowState.check_now", gap("C", Missing::Ios)),
     // Platform, Android only: iOS has no such thing.
     (
         "AgendaEditorData.dirty",
@@ -150,8 +141,6 @@ pub const REGISTER: &[Entry] = &[
     // Lane F, one shell reads it and nobody owns the other half yet.
     // LockerSearchField.answered_term: Compose copies it into a kit holder and nothing draws it
     ("LockerSearchField.answered_term", gap("F", Missing::Ios)),
-    // NavEvent.pop_to_root: a second tap on the selected tab; Compose sends it, SwiftUI never does
-    ("NavEvent.pop_to_root", gap("F", Missing::Ios)),
     // Lane F, one-sided by NAME COLLISION: the census matches field names, and the hit is another symbol. Neither shell reads the field; consume it or delete it.
     // ChatAttachment.asset_id: `found.asset_id` in LibraryRoll.kt is another message
     ("ChatAttachment.asset_id", gap("F", Missing::Ios)),
