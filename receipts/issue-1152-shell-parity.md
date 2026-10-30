@@ -52,3 +52,35 @@
 
 1. Claim: the bar arithmetic and the newest-first order are pinned by the test, not merely written. Check: temporarily removed the `coerceIn(0, BASIS)` clamp and made `newestFirst` return its input unchanged, ran `MoneyGeometryTest`. Result: red as it should be — `aBarOutsideTheScaleIsClampedAndNeverVanishes` and `theMonthTableRunsNewestFirstAndTheChartIsLeftAlone` failed (2 of 6); change reverted with `git checkout`, tree clean.
 2. Claim: the shell scales the chart by Rust's basis points and sends Rust's key, deciding nothing. Check: `grep -n "maxOf\|.max()\|maxBy" MoneyChart.kt MoneyTable.kt` → no hits (the only `maxOf` is the 2dp stub floor in `MoneyGeometry`); the only `category_picked` built from the Needs row takes `activity.needs_key`, no literal. Result: holds.
+
+## Lane R — the `native-shell-parity` rule
+
+**What changed**
+
+- `crates/xtask/src/native_parity.rs` (new) — the rule: a hand-rolled `.proto` parser over `*_screens.proto` + `screens.proto` (every field, oneof arms in, enum values / `reserved` / `option` out, nested messages as `Outer.Inner.field`), a comment cutter for Kotlin and Swift (line, block and nested block comments, KDoc; string and char literals kept whole so `"*/*"` and `'"'` open nothing and `"\(x.label)"` stays code), the Kotlin readers (`.name`, `name =`, Wire's `name_`; `val name =` is a local) and the Swift readers (`recv.camel`, `camel:` but not `let camel:`, SwiftProtobuf's `_p`, `ID`/`URL`, a bare `.camel` only for a oneof arm), and the ratchet's four verdicts.
+- `crates/xtask/src/native_parity_register.rs` (new) — the register, 211 rows over 4531 items, generated from the census and classified by reading the shell code.
+- `crates/xtask/src/native_parity_tests.rs` (new) — 20 fixtures.
+- `crates/xtask/src/native_rules.rs`, `crates/xtask/src/main.rs` — `native_shell_parity` joins `native_rules::all`; the two modules are declared.
+- `crates/xtask/README.md` — a row in the rules table. `mobile/README.md` — the paragraph under "The shells, and what they hold".
+
+**The register at close** (the umbrella branch with lanes A and B merged in): 211 rows. Gap C 5 · Gap D 8 · Platform Android 18 · Platform iOS 11 · Gap F 169 (141 read by neither, 17 only SwiftUI reads, 11 only Compose reads). Lane F is: 13 runtime-originated (`ScreenEvent.timer_fired` …, `RollReported.*`), 128 read by neither, 17 + 11 one-sided and unowned or name collisions (each with a comment saying which).
+
+**The ratchet, as it ran.** The register was first seeded from the census at the base, with lane A's five and lane B's six rows in it; after merging `claude/zealous-dijkstra-dgi6qr` (lanes A and B) the rule said, for each of the eleven: `both shells read it now; delete its register entry (a closed gap leaves the register)` (`MoneyCategoryTable.planned_label`, `.left_label`, `MoneyActivityData.needs_key`, `MoneyCashflowSeries.partial_label`, `MoneyCashflowMonth.in_bp`, `.out_bp`, `PhotosCollections.new_album_can_submit`, `PhotosLightboxWords.opening`, `HomeVaultSheet.make_spoken`, `HomeFirstLaunch.slides`, `.next_label`) and they were deleted. Reproduced at the end by adding the eleven rows back as a throwaway: `FAIL native-shell-parity — 11 finding(s) in 247 file(s) scanned (4531 item(s) in 23 proto file(s), 222 in the register)`.
+
+**Verification**
+
+- `cargo test -p xtask` → 154 passed + 2 passed, 0 failed (20 are the new fixtures).
+- `cargo xtask rules` → 16 rules, all `ok`, including `ok native-shell-parity — 247 file(s) scanned, clean (4531 item(s) in 23 proto file(s), 211 in the register)`.
+- `cargo clippy -p xtask --all-targets -- -D warnings` → clean. `cargo fmt --all -- --check` → clean.
+- Red-first, throwaway (not committed): in `MoneyScreens.kt` renamed the two Android reads `spending.in_out_net` to `spending.in_out_nets`; `cargo xtask rules` →
+  `FAIL native-shell-parity — 1 finding(s) in 247 file(s) scanned (4531 item(s) in 23 proto file(s), 211 in the register)` / `MoneySpendingData.in_out_net: only SwiftUI reads it (Kotlin `in_out_net`, Swift `inOutNet`); read it in the other shell, or register it in native_parity_register.rs`. Reverted; the rule is `ok` again.
+- Cross-check: an independent Python census of the same 4531 items (written for the classification, not committed) agreed with the rule on all but one row (`BackupLine.total`, where Python counted an unrelated Swift `total`); the register was made to the rule's verdict.
+
+**Unverified**: no Swift edited, none compiled; SwiftProtobuf's naming is mirrored from the corpus (`photoID`, `openURL`, `effectID`, `hasValue_p`) not from the generator, which is absent here (`Sources/Generated/` is gitignored). The Kotlin side is by Wire's snake_case as the Android code spells it. The classification of each row is by reading, not by running a shell.
+
+**Limits the rule has, stated in its docs**: the match is by FIELD NAME, not message, so a hit can be another symbol (`landed =` in a photo grid, `NSSortDescriptor(ascending:)`, an `NSLock`'s `.lock`) and a Kotlin call that passes a field positionally (`SheetOpened(which)`) never spells it. Each such row is in lane F with a comment naming the collision; they leave the register when the field is consumed or deleted.
+
+**Falsification**
+
+1. *Claim: a comment never counts as a read.* Check: `PhotoCells.kt` names `PhotoTile.fetch_percent` in KDoc; if comments counted, the rule would see Android reading it and fail the register's `F / Both` row for it. `cargo xtask rules` is `ok` with that row in; and the fixture `a_name_in_a_comment_is_not_a_read` puts every field in line, block, nested-block and KDoc comments and sees all five unread. Result: holds.
+2. *Claim: a bare Swift `.name` is not a read of a plain field, only of a oneof arm.* Check: `AgendaCalendarChoice.hidden` is hit by SwiftUI's `.scrollContentBackground(.hidden)` and `.toolbar(.hidden, …)` in the corpus; with the receiver requirement it is read by neither (register: `F / Both`) and the rule is green; the first draft of this rule, without the requirement, listed it as read by SwiftUI only, which is the false one-sided row this guards against. Fixture `a_bare_member_reads_a_oneof_arm_and_nothing_else` pins both halves. Result: holds.
