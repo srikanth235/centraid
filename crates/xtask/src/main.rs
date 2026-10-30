@@ -21,6 +21,8 @@ mod doc_links;
 mod gate;
 mod ledger;
 mod measure;
+mod native_parity;
+mod native_parity_register;
 mod native_rules;
 mod rules;
 mod screens_catalog;
