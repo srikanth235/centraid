@@ -1,11 +1,11 @@
 //! What Docs reads, against a vault the product founds and Docs' own commands
-//! fill: the drive, its three own-read shelves, the history, the activity rail
+//! fill: the drive, its three own-read shelves, the history
 //! and the search, each asked through the paged door a phone's core asks through.
 
 use std::sync::Arc;
 
 use centraid_apps_docs::queries::{
-    DriveInput, ShelfArm, count_shelf_arm, load_activity, load_document, load_drive, load_history,
+    DriveInput, ShelfArm, count_shelf_arm, load_document, load_drive, load_history,
     load_search_term, load_shelf_arm,
 };
 use centraid_apps_kit::testdoor::TestDoor;
@@ -274,7 +274,7 @@ fn the_history_numbers_its_versions_by_seq_and_dates_each_when_it_became_current
 }
 
 #[test]
-fn search_is_the_indexs_rank_order_over_documents_and_the_activity_is_the_journals() {
+fn search_is_the_indexs_rank_order_over_documents() {
     let w = World::new();
     let lease = w.ok(
         "document.create_text",
@@ -304,11 +304,4 @@ fn search_is_the_indexs_rank_order_over_documents_and_the_activity_is_the_journa
     assert!(denial.is_none());
     assert_eq!(titles(&found.documents), ["Lease agreement"]);
     assert!(found.documents[0].snippet.is_some());
-    let (rail, _) = w.read(|door| load_activity(door, &lease).expect("reads"));
-    let said: Vec<&str> = rail
-        .events
-        .iter()
-        .filter_map(|e| e.activity.as_deref())
-        .collect();
-    assert_eq!(said, ["flag.set", "document.create_text"]);
 }

@@ -369,8 +369,8 @@ mod tests {
         // triggers, which mint a `row_version` a mirror must not mint.
         assert!(!mentions_fts_table("CREATE TRIGGER t BEGIN SELECT 1; END"));
         assert!(!mentions_fts_table(
-            "CREATE TRIGGER core_party_touch_updated_at AFTER UPDATE ON core_party \
-             WHEN NEW.row_version = OLD.row_version BEGIN UPDATE core_party SET \
+            "CREATE TRIGGER locker_item_field_touch_updated_at AFTER UPDATE ON locker_item_field \
+             WHEN NEW.row_version = OLD.row_version BEGIN UPDATE locker_item_field SET \
              row_version = OLD.row_version + 1; END"
         ));
         // A trigger merely NAMED `fts_…` is KEPT, because the match is over the
@@ -388,11 +388,11 @@ mod tests {
         let private = vec!["locker_key".to_owned()];
         // THE FAILURE THIS PREVENTS: prose in a comment dropping a live index.
         assert!(!names_private_table(
-            "-- unlike locker_key, this one replicates\nCREATE INDEX i ON core_party (party_id)",
+            "-- unlike locker_key, this one replicates\nCREATE INDEX i ON locker_item_field (item_id)",
             &private
         ));
         assert!(!names_private_table(
-            "/* see locker_key */ CREATE INDEX i ON core_party (party_id)",
+            "/* see locker_key */ CREATE INDEX i ON locker_item_field (item_id)",
             &private
         ));
         assert!(names_private_table(

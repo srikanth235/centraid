@@ -6,7 +6,7 @@ use crate::people::fold;
 use crate::strings::{Locale, fill, people as words};
 
 /// The id a birthday carries in the sheet's dates: it is a column of the person,
-/// not a row of its own, and always has its reminder.
+/// not a row of its own; its reminder is the person's own switch.
 pub const BIRTHDAY_PREFIX: &str = "birthday:";
 
 fn head(title: String, count: usize, verb: String) -> wire::PeopleSectionHead {
@@ -117,7 +117,7 @@ pub fn person(locale: Locale, sheet: &wire::PeopleSheet, today: &str) -> wire::P
                     &words::date_a11y(locale),
                     &[("label", &date.label), ("day", &day)],
                 ),
-                toggleable: !date.date_id.starts_with(BIRTHDAY_PREFIX),
+                toggleable: true,
                 day_label: day,
             }
         })
@@ -147,6 +147,45 @@ pub fn person(locale: Locale, sheet: &wire::PeopleSheet, today: &str) -> wire::P
                 kind_label: kind,
                 text: touch.text.clone(),
                 when_label: when,
+            }
+        })
+        .collect();
+    // A RELATIONSHIP READS RIGHT FROM EACH SIDE: Ada's sheet says Beth is her "Mum"; Beth's sheet
+    // says "Beth is their Mum" of Ada, because the edge is labelled by what its target is.
+    let relations: Vec<wire::PeopleRelationRow> = sheet
+        .relations
+        .iter()
+        .map(|relation| {
+            let (meta, spoken) = if relation.incoming {
+                let values = [
+                    ("person", person.name.as_str()),
+                    ("label", relation.label.as_str()),
+                ];
+                (
+                    fill(&words::relation_in(locale), &values),
+                    fill(
+                        &words::relation_in_a11y(locale),
+                        &[("name", relation.name.as_str()), values[0], values[1]],
+                    ),
+                )
+            } else {
+                (
+                    relation.label.clone(),
+                    fill(
+                        &words::relation_out_a11y(locale),
+                        &[
+                            ("name", relation.name.as_str()),
+                            ("person", person.name.as_str()),
+                            ("label", relation.label.as_str()),
+                        ],
+                    ),
+                )
+            };
+            wire::PeopleRelationRow {
+                party_id: relation.party_id.clone(),
+                name: relation.name.clone(),
+                meta,
+                accessibility_label: spoken,
             }
         })
         .collect();
@@ -195,6 +234,12 @@ pub fn person(locale: Locale, sheet: &wire::PeopleSheet, today: &str) -> wire::P
         )),
         touches_empty: empty_if(touches.is_empty(), words::empty_touches(locale)),
         touches,
+        relations_head: Some(head(
+            words::section_relations(locale),
+            relations.len(),
+            String::new(),
+        )),
+        relations,
     }
 }
 

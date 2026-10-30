@@ -1,5 +1,5 @@
 //! LOCKER'S SCREENS (#1135): items, review, the generator, one item, the
-//! editor, the access history, import and export, the trash and the wall. Every
+//! editor, import and export, the trash and the wall. Every
 //! decision a person sees is made here; SwiftUI and Compose draw
 //! [`wire::ViewState`].
 //!
@@ -8,14 +8,13 @@
 //! | Items · Review · Generate, with Search and More | [`HOME`] | [`home`] |
 //! | One item | [`ITEM`] | [`item`] |
 //! | Add or edit an item | [`EDITOR`] | [`editor`] |
-//! | The whole Locker's access history | [`ACCESS`] | [`access`] |
 //! | Every secret, in a file | [`EXPORT`] | [`transfer`] |
 //! | A password-manager file, reviewed and sealed in | [`IMPORT`] | [`transfer`] |
 //! | The trash | [`TRASH`] | [`trash`] |
 //! | The wall as a page (chat opens it) | [`LOCK`] | [`lock`] |
 //!
 //! **The list is metadata; the secret is not.** A sealed value reaches a view
-//! only as a reveal the core receipted, lives in the screen's
+//! only as a reveal the core ran, lives in the screen's
 //! [`crate::kit::secret::Secrets`] for the core's reveal window and is gone on
 //! conceal, on the timer, on a relock and on leave. The wall ([`wall`]) is every
 //! screen's own piece over the one session the core holds.
@@ -27,7 +26,6 @@ use centraid_api_proto::core_v1 as wire;
 
 use crate::Registry;
 
-pub mod access;
 pub mod editor;
 pub mod generator;
 mod handoff;
@@ -43,7 +41,6 @@ pub mod wall;
 pub const HOME: &str = "locker.home";
 pub const ITEM: &str = "locker.item";
 pub const EDITOR: &str = "locker.editor";
-pub const ACCESS: &str = "locker.access";
 pub const EXPORT: &str = "locker.export";
 pub const IMPORT: &str = "locker.import";
 pub const TRASH: &str = "locker.trash";
@@ -59,7 +56,6 @@ pub fn registry() -> Registry {
         .with(HOME, home::build)
         .with(ITEM, item::build)
         .with(EDITOR, editor::build)
-        .with(ACCESS, access::build)
         .with(EXPORT, transfer::build_export)
         .with(IMPORT, transfer::build_import)
         .with(TRASH, trash::build)
@@ -78,7 +74,7 @@ pub fn runtime() -> crate::Runtime {
 
 /// The routes Locker's own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{ACCESS, EDITOR, EXPORT, HOME, IMPORT, ITEM, LOCK, TRASH, wire};
+    use super::{EDITOR, EXPORT, HOME, IMPORT, ITEM, LOCK, TRASH, wire};
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
@@ -137,14 +133,6 @@ pub mod routes {
                 r#type: String::new(),
                 from_generator: false,
             }),
-        )
-    }
-
-    #[must_use]
-    pub fn access() -> wire::Route {
-        route(
-            ACCESS,
-            wire::route::Args::LockerAccess(wire::LockerAccessRoute {}),
         )
     }
 

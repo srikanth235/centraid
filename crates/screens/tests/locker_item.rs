@@ -42,22 +42,29 @@ fn an_item_shows_metadata_plainly_and_a_secret_as_a_sealed_row_with_a_verb() {
 }
 
 #[test]
-fn a_reveal_lives_its_window_is_receipted_and_is_gone_at_the_end() {
+fn a_reveal_lives_its_window_stamps_the_item_and_is_gone_at_the_end() {
     let (mut d, id) = opened_item();
+    // An item nobody has opened says so, in the Details it already has (#1146).
+    assert_eq!(row_of(&item_data(&d, id), "last_used").value, "Never");
     verb(&mut d, id, "password", "reveal");
     let data = item_data(&d, id);
     let password = row_of(&data, "password");
     assert!(password.revealed);
     assert_eq!(password.value, "correct horse");
     assert!(password.note.contains("30"), "{}", password.note);
-    // The receipt is the access history's first row, once the change lands.
+    // The stamp is the item's own "Last used", once the change lands, and the
+    // Locker keeps no history section behind it.
     d.pump(Duration::from_millis(300));
     let data = item_data(&d, id);
-    let history = data.sections.last().unwrap();
+    let used = row_of(&data, "last_used");
+    assert_ne!(used.value, "Never", "{used:?}");
+    assert_eq!(used.label, "Last used");
     assert!(
-        history.rows[0].label.contains("Password revealed"),
+        data.sections
+            .iter()
+            .all(|section| !section.title.to_lowercase().contains("access")),
         "{:?}",
-        history.rows
+        data.sections.iter().map(|s| &s.title).collect::<Vec<_>>()
     );
     verb(&mut d, id, "password", "conceal");
     assert!(row_of(&item_data(&d, id), "password").value.is_empty());

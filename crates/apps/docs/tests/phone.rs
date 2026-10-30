@@ -4,8 +4,8 @@
 
 use centraid_apps_docs::phone::{Modified, RECENT_WINDOW, Shelf, Sort, View, shelve};
 use centraid_apps_docs::queries::{
-    DocumentRow, DriveData, DriveInput, FolderRow, LabelEntry, load_activity, load_document,
-    load_drive, load_history,
+    DocumentRow, DriveData, DriveInput, FolderRow, LabelEntry, load_document, load_drive,
+    load_history,
 };
 use centraid_apps_kit::error::{KitError, KitResult};
 use centraid_apps_kit::page::{Page, PageRequest};
@@ -38,8 +38,6 @@ fn a_denied_door_answers_a_denial_from_every_loader() {
     assert!(denial.is_some());
     let (history, denial) = load_history(&Refusing, "d1").expect("not an error");
     assert!(history.versions.is_empty() && denial.is_some());
-    let (activity, denial) = load_activity(&Refusing, "d1").expect("not an error");
-    assert!(activity.events.is_empty() && denial.is_some());
 }
 
 fn row(id: &str, created: &str, trashed: bool) -> DocumentRow {

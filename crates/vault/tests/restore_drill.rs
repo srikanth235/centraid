@@ -33,6 +33,7 @@ fn back_up_lose_everything_restore_and_prove_it() {
             "db_hash",
             "integrity_check",
             "header",
+            "schema",
             "census"
         ]
     );

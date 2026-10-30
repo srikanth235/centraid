@@ -7,7 +7,7 @@
 //! Four sections, each foldable, with the rows sorted the way the system sorts
 //! them: Pinned holds what a member reaches for (Favorites, Videos, and Places in
 //! the slot the system gives its Map); Albums the member's own; Utilities the
-//! housekeeping (Duplicates, Archive, Trash); Recently deleted the albums in the
+//! housekeeping (Archive, Trash); Recently deleted the albums in the
 //! trash, each with its Restore. A tap on a card is the route in the card.
 
 use centraid_api_proto::core_v1 as wire;
@@ -282,14 +282,6 @@ impl Collections {
             ),
         );
         let utilities = vec![
-            door(
-                Kind::Duplicates,
-                sentences::library_door_duplicates(locale),
-                albums.duplicate_clusters,
-                albums.duplicate_clusters,
-                routes::duplicates(),
-                "dupe",
-            ),
             shelf(
                 wire::PhotosShelfKind::Archive,
                 sentences::library_standing_archive(locale),

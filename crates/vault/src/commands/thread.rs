@@ -4,13 +4,12 @@
 //! entity of its own kind whose title is what the drawer lists and what search finds, its
 //! `message`s are children that cascade with it, and a message's attachments are children of the
 //! message ([#1135](https://github.com/srikanth235/centraid/issues/1135)). Nothing writes them but
-//! these commands, so a chat is journalled, backed up and indexed exactly as a note is.
+//! these commands, so a chat is backed up and indexed exactly as a note is.
 //!
 //! What the shared verbs already do is not written again: **deleting a chat is `entity.purge`**
 //! (a chat has no trash, R-CHAT-8, so `Kind::has_trash` is false for it and the purge needs no
 //! trashing first), and the thumbnails nothing rents then are collected in the same commit.
-//! `entity.retitle` refuses a thread, because a title is the first thing the member said and so
-//! leaves the journal sealed ([`rename`]); that is the only reason this module has a rename.
+//! A chat is retitled by `entity.retitle` like any entity (R-1146-0-3): this module has no rename.
 //!
 //! ## A proposal has a life, and the vault keeps its end (#1088)
 //!
@@ -29,11 +28,11 @@
 //! streamed before a stop) in one transaction: a process killed while a turn runs loses that turn
 //! whole and never keeps half of it (R-CHAT-5).
 //!
-//! ## THE JOURNAL MUST NOT KEEP WHAT A DELETE REMOVES
+//! ## A REFUSAL MUST NOT QUOTE WHAT A DELETE REMOVES
 //!
 //! A conversation's text, its cards (titles read out of other apps) and its thumbnails are exactly
 //! what "delete this chat" removes. `turn`, `title` and a settled `text` are therefore SEALED input
-//! keys: the journal keeps a token and never the value, the mechanism Locker uses for a password
+//! keys: a refusal's sentence never quotes the value, the mechanism Locker uses for a password
 //! (R-CHAT-6).
 //!
 //! ## What a card is, and what is never stored
@@ -163,16 +162,6 @@ const SETTLE_SCHEMA: &str = r#"{
     "thread_id": { "type": "string", "minLength": 1 },
     "outcome": { "enum": ["applied", "dismissed", "stale", "failed"] },
     "text": { "type": "string", "minLength": 1, "maxLength": 20000 }
-  }
-}"#;
-
-const RENAME_SCHEMA: &str = r#"{
-  "type": "object",
-  "required": ["thread_id", "title"],
-  "additionalProperties": false,
-  "properties": {
-    "thread_id": { "type": "string", "minLength": 1 },
-    "title": { "type": "string", "minLength": 1, "maxLength": 200 }
   }
 }"#;
 
@@ -480,12 +469,12 @@ fn save_turn(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
         "created": created,
         "user_ordinal": user_ordinal,
         "assistant_ordinal": assistant_ordinal,
-        "released": released.len(),
+        "released": released,
     }))
 }
 
 // ---------------------------------------------------------------------------
-// thread.settle_proposal, thread.rename, thread.clear
+// thread.settle_proposal, thread.clear
 // ---------------------------------------------------------------------------
 
 fn pre_settle(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -529,26 +518,6 @@ fn settle_proposal(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
     Ok(json!({ "thread_id": thread_id, "assistant_ordinal": ordinal, "settled": true }))
 }
 
-fn pre_rename(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    if !is_thread(ctx, ctx.required_str("thread_id")?)? {
-        return Ok(gone());
-    }
-    Ok(title_of(ctx.required_str("title")?)
-        .is_empty()
-        .then(|| "A chat needs a name.".to_owned()))
-}
-
-fn rename(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
-    let thread_id = ctx.required_str("thread_id")?;
-    let title = title_of(ctx.required_str("title")?);
-    ctx.connection().execute(
-        "UPDATE entity SET title = ?2 WHERE id = ?1",
-        [thread_id, title.as_str()],
-    )?;
-    ctx.touch(thread_id)?;
-    Ok(json!({ "thread_id": thread_id, "title": title }))
-}
-
 fn clear(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
     let ids: Vec<String> = ctx
         .connection()
@@ -559,8 +528,8 @@ fn clear(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
     for id in &ids {
         purge_one(ctx, id, &mut purged)?;
     }
-    crate::blob::collect(ctx.connection())?;
-    Ok(json!({ "deleted": purged.len() }))
+    let released = crate::blob::collect(ctx.connection())?;
+    Ok(json!({ "deleted": purged.len(), "released": released }))
 }
 
 #[must_use]
@@ -599,8 +568,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
             ],
             postconditions: &[],
             handler: save_turn,
-            // THE WHOLE TURN IS SEALED: what was said, the cards' titles and the thumbnail leave the
-            // audit journal as a token (R-CHAT-6).
+            // THE WHOLE TURN IS SEALED: what was said, the cards' titles and the thumbnail never
+            // appear in a refusal's sentence (R-CHAT-6).
             sealed_input: &["turn"],
         },
         CommandDefinition {
@@ -618,21 +587,6 @@ pub fn definitions() -> Vec<CommandDefinition> {
             handler: settle_proposal,
             // The settled line is what was said, like the turn it replaces.
             sealed_input: &["text"],
-        },
-        CommandDefinition {
-            name: "thread.rename",
-            owner_schema: "thread",
-            input_schema: RENAME_SCHEMA,
-            idempotency: Idempotency::Idempotent,
-            risk: Risk::Low,
-            confirm: false,
-            preconditions: &[CommandCondition {
-                predicate: "thread_exists_and_title_has_words",
-                check: pre_rename,
-            }],
-            postconditions: &[],
-            handler: rename,
-            sealed_input: &["title"],
         },
         // Permanent, and the member asked for it: every chat, with its messages and thumbnails.
         CommandDefinition {

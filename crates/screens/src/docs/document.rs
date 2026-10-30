@@ -3,15 +3,15 @@
 //!
 //! The core says which surface opens it — the reader over the decoded text, the
 //! media stage over the bytes (or why they are not on this device), or the facts
-//! for a kind the phone cannot render — and this draws that with the facts and
-//! the activity under it. Its version history is a page of its own
+//! for a kind the phone cannot render — and this draws that with the facts under
+//! it. Its version history is a page of its own
 //! (`docs.versions`), reached by a row. The head's writes are the drive row's
 //! (star, rename inline, move, labels, trash behind a confirm), plus restore and
 //! Delete forever on a trashed document.
 //!
 //! It reads `docs.history` (the document, its path, its versions and its text),
-//! `docs.activity`, and `docs.drive` at its smallest window for the folders and
-//! labels the Move and Labels sheets list. Editing the text is `docs.editor`,
+//! and `docs.drive` at its smallest window for the folders and labels the Move
+//! and Labels sheets list. Editing the text is `docs.editor`,
 //! the Edit action's route.
 
 use centraid_api_proto::core_v1 as wire;
@@ -38,7 +38,6 @@ const RAIL_WINDOW: u32 = 20;
 #[derive(Clone, Debug)]
 struct Answered {
     document: wire::DocsDocument,
-    activity: Option<wire::DocsActivity>,
     drive: Option<wire::DocsDrive>,
 }
 
@@ -99,17 +98,7 @@ impl Document {
             },
         );
         // The secondary reads decorate the page: one that does not land leaves
-        // its part out (an empty activity rail, no folders to move to).
-        let activity = read::read(
-            ctx,
-            load::docs::Activity {
-                document_id: self.document_id.clone(),
-            },
-            |answer| match answer {
-                Answer::DocsActivity(activity) => Some(activity),
-                _ => None,
-            },
-        );
+        // its part out (no folders to move to).
         let drive = read::read(
             ctx,
             load::docs::Drive {
@@ -125,10 +114,6 @@ impl Document {
         self.phase = match document {
             Reading::Data(document) => Phase::Ready(Answered {
                 document,
-                activity: match activity {
-                    Reading::Data(activity) => Some(activity),
-                    _ => None,
-                },
                 drive: match drive {
                     Reading::Data(drive) => Some(drive),
                     _ => None,
@@ -409,7 +394,6 @@ impl Document {
             loading: words::loading(locale),
             more: words::more(locale),
             versions_heading: words::versions_heading(locale),
-            activity_heading: words::activity_heading(locale),
             facts_heading: words::details_heading(locale),
             rename_placeholder: words::rename_placeholder(locale),
             rename_done: words::done(locale),
@@ -448,12 +432,7 @@ impl Screen for Document {
             Phase::Failed => (Content::Failure(read::failure(locale)), None),
             Phase::Denied(denial) => (Content::Denied(denied(locale, denial)), None),
             Phase::Ready(answered) => {
-                let mut data = fold::document(
-                    locale,
-                    &answered.document,
-                    answered.activity.as_ref(),
-                    answered.drive.as_ref(),
-                );
+                let mut data = fold::document(locale, &answered.document, answered.drive.as_ref());
                 // The title being typed is the title drawn.
                 if let (Some(rename), Some(row)) = (self.rename.as_ref(), data.row.as_mut())
                     && rename.document_id() == row.document_id

@@ -1,4 +1,4 @@
-//! # People — a manifest, five queries, twenty-five actions
+//! # People — a manifest, five queries, twenty-seven actions
 //!
 //! Its doctrine, from the manifest's own description (`manifest.json`):
 //!
@@ -14,6 +14,11 @@
 //! - **LAST CONTACTED IS COMPUTED, NEVER STORED.** It is the newest activity
 //!   `with` the person ([`queries::touch_stubs`]); a person with no touch is
 //!   measured from when they were added, and one with no cadence is never due.
+//! - **A TOUCH IN THE TRASH IS NO TOUCH**: the log, last contacted and the cadence count only live
+//!   activities (#1146 M21). **A RELATIONSHIP SHOWS ON BOTH SHEETS**: the `related` edge is read from
+//!   the person it starts at and the person it ends at, each with the label as that side reads it
+//!   ([`person::RelationDirection`]). **A BIRTHDAY'S REMINDER IS THE PERSON'S SWITCH**
+//!   (`person.birthday_reminder`, on by default).
 //! - **THE CIRCLE IS THE PEOPLE YOU KEEP**: every live person but the owner and
 //!   a pet. A relative named in a relationship is a person you have written
 //!   about, so they are in it.

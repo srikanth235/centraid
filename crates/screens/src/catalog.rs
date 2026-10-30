@@ -1797,7 +1797,7 @@ pub mod act {
             }
         }
 
-        /// Create or rewrite ONE owner-defined field on an item through locker.set_field. A field is (section, label, kind, value); a sealed field's value is sealed by the phone core against the field's own id before the vault sees it, so it is ciphertext at rest. Sending «sealed» back leaves the stored secret alone. One field per call so a secret is always a top-level input the journal redaction can reach.
+        /// Create or rewrite ONE owner-defined field on an item through locker.set_field. A field is (section, label, kind, value); a sealed field's value is sealed by the phone core against the field's own id before the vault sees it, so it is ciphertext at rest. Sending «sealed» back leaves the stored secret alone. One field per call so a secret is always a top-level input the sealing can reach.
         #[derive(Clone, Debug, Default)]
         pub struct SetField {
             pub item_id: String,
@@ -1947,7 +1947,7 @@ pub mod act {
             }
         }
 
-        /// Receipt the mass reveal an export is, through locker.export, before the phone core opens every live and archived secret and renders the file (1Password CSV or Locker JSON). It is confirmed, the phone asks its owner check afresh, and the file goes only to the system's save sheet. Anything that reads the file reads your secrets. A passkey's key and previous passwords are never in it.
+        /// Run the mass reveal an export is, through locker.export, before the phone core opens every live and archived secret and renders the file (1Password CSV or Locker JSON). It is confirmed, the phone asks its owner check afresh, and the file goes only to the system's save sheet. Anything that reads the file reads your secrets. A passkey's key and previous passwords are never in it.
         #[derive(Clone, Debug, Default)]
         pub struct Export {
             pub confirm: bool,
@@ -1971,42 +1971,17 @@ pub mod act {
             }
         }
 
-        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-        pub enum RevealUse {
-            #[default]
-            Show,
-            Copy,
-        }
-        impl RevealUse {
-            fn wire(self) -> &'static str {
-                match self {
-                    Self::Show => "show",
-                    Self::Copy => "copy",
-                }
-            }
-        }
-
-        /// Receipt the reveal of ONE sealed field through locker.reveal_receipt, the record of who looked. It returns a receipt id and never the secret: the phone core opens the field behind the unlock and hands the plaintext only to the card or screen that asked, never to the model. Running it again only writes another receipt, so it is its own inverse.
+        /// Stamp the item as used, through locker.mark_used, before the phone core reveals ONE sealed field of it. It never carries the secret: the phone core opens the field behind the unlock and hands the plaintext only to the card or screen that asked, never to the model. Running it again only moves the stamp, so it is its own inverse.
         #[derive(Clone, Debug, Default)]
         pub struct Reveal {
-            pub columns: String,
             pub item_id: String,
-            pub kind: String,
-            pub object_type: String,
-            pub field_id: Option<String>,
-            pub r#use: Option<RevealUse>,
         }
         impl Reveal {
             pub const NAME: &str = "reveal";
             pub fn request(self) -> wire::ActRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("columns".to_owned(), text(self.columns));
                 map.insert("item_id".to_owned(), text(self.item_id));
-                map.insert("kind".to_owned(), text(self.kind));
-                map.insert("object_type".to_owned(), text(self.object_type));
-                if let Some(it) = self.field_id { map.insert("field_id".to_owned(), text(it)); }
-                if let Some(it) = self.r#use { map.insert("use".to_owned(), text(it.wire())); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
@@ -2050,6 +2025,7 @@ pub mod act {
             pub id: Option<String>,
             pub on_budget: Option<bool>,
             pub opening_minor: Option<i64>,
+            pub opening_on: Option<String>,
         }
         impl AddAccount {
             pub const NAME: &str = "add-account";
@@ -2063,6 +2039,7 @@ pub mod act {
                 if let Some(it) = self.id { map.insert("id".to_owned(), text(it)); }
                 if let Some(it) = self.on_budget { map.insert("on_budget".to_owned(), flag(it)); }
                 if let Some(it) = self.opening_minor { map.insert("opening_minor".to_owned(), whole(it)); }
+                if let Some(it) = self.opening_on { map.insert("opening_on".to_owned(), text(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
@@ -2197,11 +2174,12 @@ pub mod act {
             }
         }
 
-        /// State where an account stood before its first line; every balance after it is derived from that.
+        /// State where an account stood on a day (opening_on, required unless the amount is 0); every balance after that day is derived from it, and lines on or before it are already in it.
         #[derive(Clone, Debug, Default)]
         pub struct SetOpeningBalance {
             pub account_id: String,
             pub opening_minor: i64,
+            pub opening_on: Option<String>,
         }
         impl SetOpeningBalance {
             pub const NAME: &str = "set-opening-balance";
@@ -2210,6 +2188,7 @@ pub mod act {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("id".to_owned(), text(self.account_id));
                 map.insert("opening_minor".to_owned(), whole(self.opening_minor));
+                if let Some(it) = self.opening_on { map.insert("opening_on".to_owned(), text(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
@@ -2466,13 +2445,14 @@ pub mod act {
             }
         }
 
-        /// Add a rule: a line whose words match goes in a category.
+        /// Add a rule: a line whose words match goes in a category and, when display_name is sent, shows that name (the payee) instead of the bank's words.
         #[derive(Clone, Debug, Default)]
         pub struct AddRule {
             pub category_id: String,
             pub r#match: AddRuleMatch,
             pub text: String,
             pub account_id: Field<String>,
+            pub display_name: Field<String>,
             pub id: Option<String>,
             pub max: Field<i64>,
             pub min: Field<i64>,
@@ -2487,6 +2467,7 @@ pub mod act {
                 map.insert("match".to_owned(), text(self.r#match.wire()));
                 map.insert("text".to_owned(), text(self.text));
                 put_field(&mut map, "account_id", self.account_id, |it| text(it));
+                put_field(&mut map, "display_name", self.display_name, |it| text(it));
                 if let Some(it) = self.id { map.insert("id".to_owned(), text(it)); }
                 put_field(&mut map, "max", self.max, |it| whole(it));
                 put_field(&mut map, "min", self.min, |it| whole(it));
@@ -2523,6 +2504,7 @@ pub mod act {
             pub rule_id: String,
             pub account_id: Field<String>,
             pub category_id: Option<String>,
+            pub display_name: Field<String>,
             pub r#match: Option<EditRuleMatch>,
             pub max: Field<i64>,
             pub min: Field<i64>,
@@ -2537,6 +2519,7 @@ pub mod act {
                 map.insert("id".to_owned(), text(self.rule_id));
                 put_field(&mut map, "account_id", self.account_id, |it| text(it));
                 if let Some(it) = self.category_id { map.insert("category_id".to_owned(), text(it)); }
+                put_field(&mut map, "display_name", self.display_name, |it| text(it));
                 if let Some(it) = self.r#match { map.insert("match".to_owned(), text(it.wire())); }
                 put_field(&mut map, "max", self.max, |it| whole(it));
                 put_field(&mut map, "min", self.min, |it| whole(it));
@@ -3545,6 +3528,28 @@ pub mod act {
             }
         }
 
+        /// Turn a person's birthday reminder on or off through person.set_birthday_reminder: the birthday is the person's own column, so the switch is theirs and event.edit does not reach it. The date stays on their sheet.
+        #[derive(Clone, Debug, Default)]
+        pub struct SetBirthdayReminder {
+            pub person_id: String,
+            pub on: bool,
+        }
+        impl SetBirthdayReminder {
+            pub const NAME: &str = "set-birthday-reminder";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.person_id));
+                map.insert("on".to_owned(), flag(self.on));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<SetBirthdayReminder> for wire::ActRequest {
+            fn from(value: SetBirthdayReminder) -> Self {
+                value.request()
+            }
+        }
+
         /// Record a related edge to another person through person.add_relationship, labelled by how they are related; related_id reuses a person, else one of that name is reused or founded (a pet is a person of form pet whose role is its species).
         #[derive(Clone, Debug, Default)]
         pub struct AddRelationship {
@@ -4323,10 +4328,10 @@ pub mod act {
         use super::*;
         pub const APP: &str = "shell";
 
-        /// Rename a stored chat through thread.rename.
+        /// Rename a stored chat through entity.retitle.
         #[derive(Clone, Debug, Default)]
         pub struct RenameChat {
-            pub thread_id: String,
+            pub chat_thread_id: String,
             pub title: String,
         }
         impl RenameChat {
@@ -4334,7 +4339,7 @@ pub mod act {
             pub fn request(self) -> wire::ActRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("thread_id".to_owned(), text(self.thread_id));
+                map.insert("id".to_owned(), text(self.chat_thread_id));
                 map.insert("title".to_owned(), text(self.title));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -4403,28 +4408,6 @@ pub mod act {
         }
         impl From<FollowFiles> for wire::ActRequest {
             fn from(value: FollowFiles) -> Self {
-                value.request()
-            }
-        }
-
-        /// (imports, lane I) Name bytes the stage door stored through blob.stage, at the size the core counted, so no stored bytes sit in the vault that nothing names.
-        #[derive(Clone, Debug, Default)]
-        pub struct ClaimBytes {
-            pub hash: String,
-            pub size: i64,
-        }
-        impl ClaimBytes {
-            pub const NAME: &str = "claim-bytes";
-            pub fn request(self) -> wire::ActRequest {
-                #[allow(unused_mut)]
-                let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("hash".to_owned(), text(self.hash));
-                map.insert("size".to_owned(), whole(self.size));
-                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
-            }
-        }
-        impl From<ClaimBytes> for wire::ActRequest {
-            fn from(value: ClaimBytes) -> Self {
                 value.request()
             }
         }
@@ -4766,26 +4749,6 @@ pub mod load {
                 value.request()
             }
         }
-
-        /// What was done to a document: the journal's executed commands that name it, newest first (the journal is the vault's evidence of every command). An empty list is honest: nothing has been done to it yet.
-        #[derive(Clone, Debug, Default)]
-        pub struct Activity {
-            pub document_id: String,
-        }
-        impl Activity {
-            pub const NAME: &str = "activity";
-            pub fn request(self) -> wire::LoadRequest {
-                #[allow(unused_mut)]
-                let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("document_id".to_owned(), text(self.document_id));
-                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
-            }
-        }
-        impl From<Activity> for wire::LoadRequest {
-            fn from(value: Activity) -> Self {
-                value.request()
-            }
-        }
     }
 
     pub mod health {
@@ -4995,7 +4958,7 @@ pub mod load {
             }
         }
 
-        /// One item's browsable fields for the detail pane, trashed or not: its connector alias, memo, owner-defined sections and fields, additional addresses and passkey metadata. Every sealed value — the type's own cells, a sealed custom field, a passkey's key — is reported only as PRESENT; its plaintext is the phone core's reveal, behind the unlock and a receipt. A type this build does not know reads as a note that still carries its fields.
+        /// One item's browsable fields for the detail pane, trashed or not: its connector alias, memo, owner-defined sections and fields, additional addresses and passkey metadata. Every sealed value — the type's own cells, a sealed custom field, a passkey's key — is reported only as PRESENT; its plaintext is the phone core's reveal, behind the unlock. A type this build does not know reads as a note that still carries its fields.
         #[derive(Clone, Debug, Default)]
         pub struct Item {
             pub item_id: String,
@@ -5067,27 +5030,6 @@ pub mod load {
         }
         impl From<Trash> for wire::LoadRequest {
             fn from(value: Trash) -> Self {
-                value.request()
-            }
-        }
-
-        /// Locker's access history: the receipts the vault already wrote — unlocks, reveals, copies and one-time codes, refusals included — newest first and windowed, and on the phone one item's at a time. Read from the vault's append-only receipts under a grant pinned to Locker's own objects. No receipt has ever carried a secret value, and this adds none.
-        #[derive(Clone, Debug, Default)]
-        pub struct Access {
-            pub item_id: Option<String>,
-            pub limit: u32,
-        }
-        impl Access {
-            pub const NAME: &str = "access";
-            pub fn request(self) -> wire::LoadRequest {
-                #[allow(unused_mut)]
-                let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                if let Some(it) = self.item_id { map.insert("item_id".to_owned(), text(it)); }
-                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
-            }
-        }
-        impl From<Access> for wire::LoadRequest {
-            fn from(value: Access) -> Self {
                 value.request()
             }
         }
@@ -5721,24 +5663,6 @@ pub mod load {
         }
         impl From<Search> for wire::LoadRequest {
             fn from(value: Search) -> Self {
-                value.request()
-            }
-        }
-
-        /// Near-duplicate clusters over the live library: groups the photographs whose perceptual hashes (a derivative of each blob) lie within a few bits of one another, recomputed at read — a true visual-similarity signal, not a coincidence-prone fingerprint, and nothing stored. Each cluster lists its members as cells (pixel box, size, form, capture time, heart, the albums that hold it, held thumbnail path) so a review can show which copy to keep and which are placed in an album or hearted. The archive, the trash and an edited photograph's original are never members.
-        #[derive(Clone, Debug, Default)]
-        pub struct Duplicates {
-        }
-        impl Duplicates {
-            pub const NAME: &str = "duplicates";
-            pub fn request(self) -> wire::LoadRequest {
-                #[allow(unused_mut)]
-                let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
-            }
-        }
-        impl From<Duplicates> for wire::LoadRequest {
-            fn from(value: Duplicates) -> Self {
                 value.request()
             }
         }

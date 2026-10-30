@@ -31,7 +31,7 @@
 //! | 64 KiB | the same | about 6 MiB |
 //!
 //! Small commits land in many b-trees at once — the table, its indexes, the
-//! receipts, the full-text index — so their pages are spread across the file,
+//! write counter, the full-text index — so their pages are spread across the file,
 //! and a large range almost always holds one of them. The cost of a small
 //! range is names: a snapshot of that vault is some nine hundred ranges, which
 //! `exists` asks about a thousand at a time and the mover sends in bundles
@@ -87,7 +87,7 @@ const _: fn() = || {
 pub const RANGE_BYTES: u64 = 64 * 1024;
 
 /// The manifest format this build writes and reads.
-pub const MANIFEST_VERSION: u32 = 2;
+pub const MANIFEST_VERSION: u32 = 3;
 
 /// What the manifest's `app` says when the caller has nothing better.
 pub const APP: &str = concat!("centraid-vault/", env!("CARGO_PKG_VERSION"));
@@ -105,6 +105,12 @@ pub struct Manifest {
     /// BLAKE3 of the whole copied file.
     pub db_hash: PlaintextHash,
     pub user_version: i64,
+    /// `vault.writes` in the copy: how many commits had changed something when it was taken. A
+    /// takeover compares it with a phone's own copy to tell which is ahead (#1146).
+    pub writes: u64,
+    /// `vault.written_at` in the copy, as milliseconds on the vault's clock; `None` for a vault
+    /// nothing has been written to.
+    pub written_at_ms: Option<u64>,
     /// The build that took it.
     pub app: String,
     pub ranges: Vec<RangeRef>,
@@ -222,54 +228,44 @@ impl Snapshot {
     }
 }
 
-/// **HOW FAR A VAULT COPY HAS RUN**, from the journal: one row per command the
-/// gate was asked to run, never updated. A snapshot's
-/// census carries the same count, so a phone can tell whether a head holds
-/// commands its own copy never ran (#1080, the sweep's F4) without opening it.
+/// **HOW FAR A VAULT COPY HAS RUN**, from the write counter on its `vault` row: how many commits
+/// changed something a screen reads, and when the last did. A snapshot's manifest carries the same
+/// two figures, so a phone can tell whether a head holds writes its own copy never made (#1080,
+/// the sweep's F4) without opening it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct History {
-    /// Journal rows in the copy.
-    pub receipts: u64,
-    /// When the newest command ran, on the vault's clock; `None` for a vault
-    /// no command has touched.
+    /// `vault.writes`.
+    pub writes: u64,
+    /// `vault.written_at`, on the vault's clock; `None` for a vault nothing has been written to.
     pub last_write_ms: Option<u64>,
 }
 
-/// The table [`History`] counts, and the key a manifest's census holds it
-/// under.
-pub const RECEIPT_TABLE: &str = "journal";
+impl History {
+    /// What `connection`'s `vault` row says; a file with no vault row has run nothing.
+    fn of(connection: &Connection) -> rusqlite::Result<Self> {
+        use rusqlite::OptionalExtension as _;
+        let row: Option<(i64, Option<String>)> = connection
+            .query_row("SELECT writes, written_at FROM vault", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .optional()?;
+        let (writes, at) = row.unwrap_or((0, None));
+        Ok(Self {
+            writes: u64::try_from(writes).unwrap_or(0),
+            last_write_ms: at
+                .as_deref()
+                .and_then(crate::clock::parse_iso_ms)
+                .and_then(|at| u64::try_from(at).ok()),
+        })
+    }
+}
 
 /// [`History`] of `vault`.
 ///
 /// # Errors
 /// SQLite's refusal.
 pub fn history(vault: &Vault) -> Result<History> {
-    let (receipts, newest): (i64, Option<String>) = vault.read(|connection| {
-        Ok(
-            connection.query_row("SELECT count(*), max(at) FROM journal", [], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })?,
-        )
-    })?;
-    Ok(History {
-        receipts: u64::try_from(receipts).unwrap_or(0),
-        last_write_ms: newest
-            .as_deref()
-            .and_then(crate::clock::parse_iso_ms)
-            .and_then(|at| u64::try_from(at).ok()),
-    })
-}
-
-impl Manifest {
-    /// How many receipts the snapshot holds: the commands the vault had run
-    /// when it was taken. A table with no rows is absent from the census.
-    #[must_use]
-    pub fn receipts(&self) -> u64 {
-        self.census
-            .get(RECEIPT_TABLE)
-            .and_then(|count| u64::try_from(*count).ok())
-            .unwrap_or(0)
-    }
+    Ok(vault.read(|connection| Ok(History::of(connection)?))?)
 }
 
 /// The page-identical copy and when it was taken.
@@ -401,11 +397,16 @@ pub(crate) fn census_of(connection: &Connection) -> Result<BTreeMap<String, i64>
 pub fn describe(copied: &Copied, keys: &BackupKeys, vault_id: &str, app: &str) -> Result<Snapshot> {
     PlaintextHash::from_hex(vault_id)
         .map_err(|_| invariant("a vault id is the identity key's 64 lowercase hex"))?;
-    let (census, page_size, user_version) = read_copy(&copied.path, |connection| {
+    let (census, page_size, user_version, written) = read_copy(&copied.path, |connection| {
         let page_size: i64 = connection.query_row("PRAGMA page_size", [], |row| row.get(0))?;
         let user_version: i64 =
             connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-        Ok((census_of(connection)?, page_size, user_version))
+        Ok((
+            census_of(connection)?,
+            page_size,
+            user_version,
+            History::of(connection)?,
+        ))
     })?;
     let page_size = u32::try_from(page_size).map_err(|_| invariant("a negative page size"))?;
 
@@ -440,6 +441,8 @@ pub fn describe(copied: &Copied, keys: &BackupKeys, vault_id: &str, app: &str) -
         db_len,
         db_hash: PlaintextHash::from_bytes(*whole.finalize().as_bytes()),
         user_version,
+        writes: written.writes,
+        written_at_ms: written.last_write_ms,
         app: app.to_owned(),
         ranges: ranges
             .iter()
@@ -874,13 +877,15 @@ mod tests {
     #[test]
     fn a_manifest_this_build_did_not_write_is_refused() {
         let good = Manifest {
-            v: 2,
+            v: MANIFEST_VERSION,
             vault_id: "ab".repeat(32),
             taken_at_ms: 1,
             page_size: 4096,
             db_len: 8192,
             db_hash: PlaintextHash::of(b"x"),
             user_version: 9,
+            writes: 4,
+            written_at_ms: Some(1),
             app: APP.to_owned(),
             ranges: vec![RangeRef {
                 i: 0,
@@ -891,7 +896,7 @@ mod tests {
         };
         assert!(Manifest::from_json(&good.to_json().expect("serialises")).is_ok());
         let mut future = serde_json::to_value(&good).expect("a value");
-        future["v"] = serde_json::json!(3);
+        future["v"] = serde_json::json!(MANIFEST_VERSION + 1);
         assert!(Manifest::from_json(future.to_string().as_bytes()).is_err());
         let mut extra = serde_json::to_value(&good).expect("a value");
         extra["surprise"] = serde_json::json!(true);

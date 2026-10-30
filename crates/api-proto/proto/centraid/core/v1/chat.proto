@@ -4,7 +4,7 @@
 // `chat` schema, rung eleven): a thread, its messages, and each message's cards
 // and attachments. These are the READS. They ride `app_query.proto` at numbers
 // 70-72, the way every app's phone queries do; the WRITES are registered
-// commands (`thread.save_turn`, `thread.rename`, ...) that the core runs itself
+// commands (`thread.save_turn`, `thread.settle_proposal`, ...) that the core runs itself
 // at the end of a turn or that a screen names as an `act`. Nothing here writes.
 //
 // A CARD IS A SNAPSHOT, NOT A REFERENCE (R-CHAT-3). `ChatStoredCard` is what the

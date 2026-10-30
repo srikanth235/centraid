@@ -1,6 +1,6 @@
 //! ONE ITEM (#1047): metadata plainly, and each secret as a sealed row with a
-//! verb. **Reveal** asks the core through the session: the receipt is written
-//! before the value exists, the value lives in this screen's
+//! verb. **Reveal** asks the core through the session: the item is stamped as
+//! used before the value exists, the value lives in this screen's
 //! [`Secrets`] for the core's window with a countdown, and it is gone on
 //! Conceal, on leave and on relock. **Copy** is a reveal whose value goes to the
 //! clipboard — sensitive, with a deadline the shell keeps — and never onto the
@@ -8,18 +8,19 @@
 //!
 //! **A one-time-code seed is never revealed** (Q-1047-16). Its row offers
 //! **Show code** and **Copy code**: the core makes the code the seed makes now,
-//! receipted first, and the row shows it with its seconds and a countdown. A
+//! the item stamped first, and the row shows it with its seconds and a countdown. A
 //! code that rolls while shown is followed once, so a tap made with two seconds
 //! left still leaves a whole code to type; then it conceals.
 //!
-//! **Custom fields, the passkey and the access history (#1047 T2).** A sealed
+//! **Custom fields, the passkey and when it was last used (#1047 T2, #1146).** A sealed
 //! custom field reveals and copies exactly as the item's own secrets do; a
 //! field is added, edited and removed one at a time on the field sheet
 //! (`locker.set_field` is one field per command), and a sealed one's value is
 //! sealed by the core on Save. A passkey shows its metadata, is renamed and
 //! removed, and its key has no verb at all — the core refuses it too
-//! (`KEY_NOT_SHOWN`). The access history is the receipts the vault already wrote
-//! about this item, as metadata.
+//! (`KEY_NOT_SHOWN`). The Details section says when the core last opened one of
+//! the item's secrets, or that it never has; the Locker keeps no history behind
+//! that line.
 
 use std::time::Duration;
 
@@ -28,10 +29,10 @@ use wire::app_query_response::Answer;
 use wire::locker_item_event::Kind as I;
 use wire::screen_event::Kind as E;
 
+use super::routes;
 use super::shared::{self, Opened, Phase, Refused};
 use super::types::{self, SEED};
 use super::wall::{CLIPBOARD_LIFE, Change, Wall};
-use super::{access, routes};
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil;
@@ -42,9 +43,6 @@ use crate::strings::{Locale, fill, locker as words};
 
 /// The product's reveal window, in seconds (`REVEAL_WINDOW_MS`).
 const REVEAL_SECONDS: u32 = 30;
-
-/// The most receipts the item page draws.
-const ACCESS_WINDOW: u32 = 50;
 
 const DOTS: &str = "••••••••••";
 const CODE_MASK: &str = "••• •••";
@@ -64,7 +62,6 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
 
 struct Loaded {
     item: Option<wire::LockerItem>,
-    access: Option<wire::LockerAccess>,
 }
 
 /// Which confirm is up.
@@ -153,22 +150,8 @@ impl Item {
                 _ => None,
             },
         );
-        let access = read::read(
-            ctx,
-            load::locker::Access {
-                item_id: Some(self.route.item_id.clone()),
-                limit: ACCESS_WINDOW,
-            },
-            |answer| match answer {
-                Answer::LockerAccess(access) => Some(access),
-                _ => None,
-            },
-        );
         self.loaded = match item {
-            Reading::Data(item) => Phase::Ready(Loaded {
-                item,
-                access: access.data().cloned(),
-            }),
+            Reading::Data(item) => Phase::Ready(Loaded { item }),
             Reading::Denied(denial) => Phase::Denied(denial),
             Reading::Failed => Phase::Failed,
         };
@@ -292,7 +275,7 @@ impl Item {
                 ctx.cancel_timer(TICK);
                 self.secrets.hide(ctx, key)
             }
-            // A SHOWN CODE COPIES WITHOUT A SECOND RECEIPT, for the reveal's
+            // A SHOWN CODE COPIES WITHOUT A SECOND STAMP, for the reveal's
             // reason, and lives on the clipboard only as long as it is good.
             "copy_code" if stored && self.shown_code(key).is_some() => {
                 let left = self.shown.as_ref().map_or(1, |shown| shown.seconds_left);
@@ -304,8 +287,8 @@ impl Item {
             "code" | "copy_code" if stored && key == SEED => {
                 self.code(ctx, verb == "copy_code", verb == "code")
             }
-            // A REVEALED VALUE COPIES WITHOUT A SECOND RECEIPT: it is already
-            // revealed, and the receipt already says so.
+            // A REVEALED VALUE COPIES WITHOUT A SECOND STAMP: it is already
+            // revealed, and the item already says it was used.
             "copy" if stored && key != SEED && self.secrets.value(key).is_some() => {
                 let value = self.secrets.value(key).unwrap_or_default().to_owned();
                 self.status = shared::status(copied_secret(locale, &item, key));
@@ -316,7 +299,7 @@ impl Item {
             "reveal" | "copy" if stored && key != SEED => {
                 self.reveal(ctx, &item, key, verb == "copy")
             }
-            // A PLAIN VALUE COPIES AS ITSELF — it is metadata, never receipted.
+            // A PLAIN VALUE COPIES AS ITSELF — it is metadata, never stamped.
             "copy" => match plain_value(&item, key) {
                 Some(value) => {
                     self.status = shared::status(fill(
@@ -896,22 +879,6 @@ impl Item {
             rows: details(locale, item),
             note: String::new(),
         });
-        if let Some(history) = &loaded.access {
-            sections.push(access::section(
-                locale,
-                history,
-                words::access_head(locale),
-                words::access_none(locale),
-                |entry| {
-                    let label = item
-                        .fields
-                        .iter()
-                        .find(|field| field.field_id == entry.field_id)
-                        .map_or("", |field| field.label.as_str());
-                    access::row(locale, entry, &access::subject(locale, entry, label), "")
-                },
-            ));
-        }
         sections.retain(|section| !section.rows.is_empty());
         let actions = if item.trashed {
             vec![
@@ -1393,6 +1360,25 @@ fn day_row(locale: Locale, key: &str, label: String, day: &str) -> Option<wire::
     })
 }
 
+/// WHEN THE CORE LAST OPENED ONE OF THE ITEM'S SECRETS (#1146), or that it never
+/// has. Always a row: "never" is an answer a member acts on (an old login nobody
+/// has opened is one to retire), where a missing row reads as a missing fact.
+fn last_used_row(locale: Locale, item: &wire::LockerItem) -> Option<wire::LockerFieldRow> {
+    let label = words::last_used(locale);
+    let value = if item.last_used_local_day.len() >= 10 {
+        civil::day_month(locale, &item.last_used_local_day)
+    } else {
+        words::last_used_never(locale)
+    };
+    Some(wire::LockerFieldRow {
+        key: "last_used".to_owned(),
+        accessibility_label: format!("{label}, {value}"),
+        label,
+        value,
+        ..wire::LockerFieldRow::default()
+    })
+}
+
 fn details(locale: Locale, item: &wire::LockerItem) -> Vec<wire::LockerFieldRow> {
     [
         (!item.alias.is_empty()).then(|| wire::LockerFieldRow {
@@ -1419,6 +1405,7 @@ fn details(locale: Locale, item: &wire::LockerItem) -> Vec<wire::LockerFieldRow>
             words::updated(locale),
             &item.updated_local_day,
         ),
+        last_used_row(locale, item),
     ]
     .into_iter()
     .flatten()

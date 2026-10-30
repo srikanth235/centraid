@@ -344,6 +344,29 @@ impl crate::file::Vault {
         })
     }
 
+    /// The unlocks the phone refused since the last one it allowed, and when
+    /// the latest was (#1146): `(0, None)` on a vault with no key row yet.
+    /// Plain figures on the Locker's one key row — they are the shell's report,
+    /// written by `locker.mark_unlock_failed` and cleared by
+    /// `locker.mark_unlocked`, and they hold nothing a locked Locker hides.
+    ///
+    /// # Errors
+    /// A failed read.
+    pub fn locker_failed_unlocks(&self) -> crate::error::Result<(u32, Option<String>)> {
+        self.read(|connection| {
+            let mut statement =
+                connection.prepare("SELECT failed_unlocks, failed_unlock_at FROM locker_key")?;
+            let mut rows = statement.query([])?;
+            Ok(match rows.next()? {
+                Some(row) => (
+                    u32::try_from(row.get::<_, i64>(0)?).unwrap_or(u32::MAX),
+                    row.get(1)?,
+                ),
+                None => (0, None),
+            })
+        })
+    }
+
     /// One sealed `locker_item` cell of a LIVE item, for a reveal. `None`
     /// when no live item has `item_id` or `column` is
     /// not one of the five sealed item cells.
@@ -532,7 +555,11 @@ mod tests {
             live_locker_key_id(&fixture.connection).unwrap(),
         );
         assert_eq!(objects, ["locker_key", "locker_key_one_generation"]);
-        assert_eq!(columns, ["key_id", "created_at"], "no `retired_at`");
+        assert_eq!(
+            columns,
+            ["key_id", "created_at", "failed_unlocks", "failed_unlock_at"],
+            "no `retired_at`"
+        );
         assert_eq!(live.as_deref(), Some("k-1"));
     }
 

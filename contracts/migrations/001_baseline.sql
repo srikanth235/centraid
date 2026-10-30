@@ -21,6 +21,11 @@ CREATE TABLE vault (
   currency   TEXT NOT NULL CHECK (length(currency) = 3 AND currency = upper(currency)),
   zone       TEXT,
   created_at TEXT NOT NULL,
+  -- How many commits changed something a screen reads, and when the last did, on the vault's
+  -- clock: a takeover compares the counter to tell which copy is ahead (#1146). Bumped by the
+  -- commit guard, once per such commit; nothing else writes them.
+  writes     INTEGER NOT NULL DEFAULT 0 CHECK (writes >= 0),
+  written_at TEXT,
   FOREIGN KEY (self_id, self_kind) REFERENCES entity(id, kind) DEFERRABLE INITIALLY DEFERRED
 ) STRICT;
 
@@ -36,7 +41,6 @@ CREATE TABLE entity (
   title      TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  version    INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
   deleted_at TEXT,
   purge_at   TEXT,
   CHECK ((deleted_at IS NULL) = (purge_at IS NULL)),
@@ -44,6 +48,9 @@ CREATE TABLE entity (
 ) STRICT;
 CREATE INDEX entity_by_title   ON entity(kind, deleted_at, title, id);
 CREATE INDEX entity_by_updated ON entity(kind, deleted_at, updated_at, id);
+-- The case-insensitive title match a contact import and a followed record's match key make, once
+-- per record: `e.kind = ? AND e.deleted_at IS NULL AND e.title = ? COLLATE NOCASE ORDER BY e.created_at, e.id`.
+CREATE INDEX entity_by_title_nocase ON entity(kind, title COLLATE NOCASE, created_at, id) WHERE deleted_at IS NULL;
 -- A window of one kind, newest made first (the People roster, the Docs drive and
 -- its recent shelf, the Tasks board): `kind = ? [AND deleted_at IS NULL] ORDER BY
 -- created_at DESC, id DESC` streams from here and stops at its limit, where the
@@ -115,6 +122,7 @@ CREATE TABLE container (
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX container_by_parent ON container(parent_id) WHERE parent_id IS NOT NULL;
+CREATE INDEX container_by_cover  ON container(cover) WHERE cover IS NOT NULL;
 CREATE TRIGGER container_parent_shape BEFORE INSERT ON container
   WHEN new.parent_id IS NOT NULL AND NOT EXISTS (
     SELECT 1 FROM container p WHERE p.id = new.parent_id AND
@@ -167,8 +175,12 @@ CREATE TABLE origin (
   config     TEXT CHECK (config IS NULL OR json_valid(config)),
   created_at TEXT NOT NULL,
   UNIQUE (system, ref),
-  UNIQUE (id, system)
+  UNIQUE (id, system),
+  -- A statement is an account's, not a phone's store (#1146).
+  CHECK (system <> 'statement' OR device_id IS NULL)
 ) STRICT;
+-- One statement origin per account, whatever ref an import names (#1146).
+CREATE UNIQUE INDEX origin_one_statement_per_account ON origin(fills) WHERE system = 'statement';
 
 CREATE TABLE source (
   id          TEXT PRIMARY KEY,
@@ -180,9 +192,13 @@ CREATE TABLE source (
   entity_kind TEXT,
   stated      TEXT NOT NULL CHECK (json_valid(stated)),
   seen_at     TEXT NOT NULL,
+  -- When the follower trashed the row because its record left a complete read: the trash it may
+  -- undo if the record returns and the member has not touched the row since (#1146).
+  gone_at     TEXT,
   FOREIGN KEY (origin_id, system) REFERENCES origin(id, system),
   FOREIGN KEY (entity_id, entity_kind) REFERENCES entity(id, kind) ON DELETE SET NULL,
   CHECK ((entity_id IS NULL) = (entity_kind IS NULL)),
+  CHECK (system <> 'statement' OR device_id IS NULL),
   CHECK (entity_kind IS NULL OR system || '/' || entity_kind IN
     ('contacts/person','calendar/event','files/document','health/activity','statement/txn'))
 ) STRICT;
@@ -193,7 +209,7 @@ CREATE TRIGGER source_tombstone_is_final BEFORE UPDATE OF entity_id ON source
   BEGIN SELECT RAISE(ABORT, 'a purged row''s source never takes a row again'); END;
 
 -- ---------------------------------------------------------------------------------------------
--- History and evidence.
+-- History, and the keys of acts already run.
 -- ---------------------------------------------------------------------------------------------
 
 CREATE TABLE revision (
@@ -207,27 +223,26 @@ CREATE TABLE revision (
   CHECK ((blob IS NULL) = (media_type IS NULL)),
   PRIMARY KEY (entity_id, seq)
 ) STRICT, WITHOUT ROWID;
+-- Dropping a blob's last holder looks for the revisions that name it; most revisions are text.
+CREATE INDEX revision_by_blob ON revision(blob) WHERE blob IS NOT NULL;
 CREATE TRIGGER revision_is_history BEFORE UPDATE ON revision
   BEGIN SELECT RAISE(ABORT, 'a revision is history'); END;
+-- Nothing deletes a revision by hand: it goes only with its entity (the foreign key's cascade runs
+-- after the entity row is gone, so it finds no entity and is allowed).
+CREATE TRIGGER revision_is_kept BEFORE DELETE ON revision
+  WHEN EXISTS (SELECT 1 FROM entity WHERE id = old.entity_id)
+  BEGIN SELECT RAISE(ABORT, 'a revision is kept while its entity is'); END;
 
-CREATE TABLE journal (
-  seq     INTEGER PRIMARY KEY,
-  at      TEXT NOT NULL,
-  command TEXT NOT NULL,
-  input   TEXT NOT NULL CHECK (json_valid(input)),
-  outcome TEXT NOT NULL CHECK (outcome IN ('executed','refused','failed')),
-  detail  TEXT,
-  -- The key an `act` carried and a digest of what it asked, written with the commit it names, so a
-  -- delivery the phone repeats after a restart is answered `replayed` and writes nothing (#1135).
-  -- Only an executed command carries one; a retention pass that drops the row drops the memory.
-  invoke_key TEXT,
-  asked      TEXT,
-  CHECK ((invoke_key IS NULL) = (asked IS NULL)),
-  CHECK (invoke_key IS NULL OR outcome = 'executed')
-) STRICT;
-CREATE UNIQUE INDEX journal_by_invoke_key ON journal(invoke_key) WHERE invoke_key IS NOT NULL;
-CREATE TRIGGER journal_is_evidence BEFORE UPDATE ON journal
-  BEGIN SELECT RAISE(ABORT, 'the journal is evidence'); END;
+-- An act's key and a digest of what it asked, written in the commit it names, so a delivery the
+-- phone repeats after a restart is answered `replayed` and runs nothing (#1146). Only an executed
+-- act is remembered; the commit that writes a key forgets the keys older than 30 days. Both
+-- columns are opaque (a caller's id and a digest), never what the member typed.
+CREATE TABLE action_key (
+  key   TEXT PRIMARY KEY,
+  asked TEXT NOT NULL,
+  at    TEXT NOT NULL
+) STRICT, WITHOUT ROWID;
+CREATE INDEX action_key_by_at ON action_key(at);
 
 -- ---------------------------------------------------------------------------------------------
 -- Search: one index, kept by the writer. The FTS rowid is entity.n.
@@ -255,6 +270,16 @@ CREATE TABLE search_word (
   word TEXT NOT NULL UNIQUE
 ) STRICT;
 
+-- The labels whose members are owed a search row. A label's trash or restore re-indexes what its
+-- title is part of the text of, and a label of thousands would hold the vault for seconds, so a
+-- commit writes the first piece itself and leaves the label here with the last member done (`after`,
+-- in id order); the phone writes the rest a batch at a time when it is idle (`index::reindex_owed`,
+-- #1146). A rebuild empties it.
+CREATE TABLE search_owed (
+  id    TEXT PRIMARY KEY,
+  after TEXT NOT NULL
+) STRICT;
+
 -- ---------------------------------------------------------------------------------------------
 -- The kinds. Every kind row is its entity's own: kind is a generated constant, and the
 -- composite foreign key is what keeps a person row from naming a note.
@@ -273,8 +298,12 @@ CREATE TABLE person (
                  OR (length(birthday) = 10 AND date(birthday) = birthday)),
   avatar       TEXT REFERENCES blob(hash),
   cadence_days INTEGER CHECK (cadence_days IS NULL OR cadence_days > 0),
+  -- The member's switch for this person's birthday reminder: the birthday is this row's column,
+  -- not an event, so it has no `reminders` of its own.
+  birthday_reminder INTEGER NOT NULL DEFAULT 1 CHECK (birthday_reminder IN (0,1)),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
+CREATE INDEX person_by_avatar ON person(avatar) WHERE avatar IS NOT NULL;
 
 CREATE TABLE contact_point (
   id         TEXT PRIMARY KEY,
@@ -333,10 +362,20 @@ CREATE TABLE occurrence (
   cancelled      INTEGER NOT NULL DEFAULT 0 CHECK (cancelled IN (0,1)),
   starts         TEXT,
   ends           TEXT,
+  -- How `starts`/`ends` of THIS day read, when they are not the series' own way (an all-day
+  -- series' day moved to 15:00, a zoned series' day made all-day); NULL is the series' timing.
+  -- A zoned day of another timing names its zone; one that is zoned like its series keeps the
+  -- series' (#1146).
+  timing         TEXT CHECK (timing IS NULL OR timing IN ('zoned','floating','all-day')),
+  zone           TEXT CHECK (zone IS NULL OR timing IS 'zoned'),
   title          TEXT,
   description    TEXT,
+  -- This day's own link and place; NULL is the series'. Guests and reminders stay the series' (#1146).
+  url            TEXT,
+  place_id       TEXT REFERENCES place(id),
   PRIMARY KEY (series_id, original_start, scope)
 ) STRICT, WITHOUT ROWID;
+CREATE INDEX occurrence_by_place ON occurrence(place_id) WHERE place_id IS NOT NULL;
 
 CREATE TABLE task (
   id                TEXT PRIMARY KEY,
@@ -365,6 +404,7 @@ CREATE TABLE task (
   CHECK (remind_before_min IS NULL OR due IS NOT NULL)
 ) STRICT;
 CREATE INDEX task_by_due     ON task(status, due, id);
+CREATE INDEX task_by_done    ON task(status, done_at, id);
 CREATE INDEX task_by_project ON task(project_id) WHERE project_id IS NOT NULL;
 CREATE INDEX task_by_section ON task(section_id) WHERE section_id IS NOT NULL;
 CREATE INDEX task_by_parent  ON task(parent_id) WHERE parent_id IS NOT NULL;
@@ -432,7 +472,7 @@ CREATE TABLE note (
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   FOREIGN KEY (notebook_id, notebook_kind) REFERENCES entity(id, kind)
 ) STRICT;
-CREATE INDEX note_by_notebook ON note(notebook_id) WHERE notebook_id IS NOT NULL;
+CREATE INDEX note_by_notebook ON note(notebook_id, id) WHERE notebook_id IS NOT NULL;
 
 CREATE TABLE document (
   id          TEXT PRIMARY KEY,
@@ -474,7 +514,12 @@ CREATE TABLE account (
   kind          TEXT GENERATED ALWAYS AS ('account') VIRTUAL,
   type          TEXT NOT NULL CHECK (type IN ('checking','savings','credit_card','cash')),
   currency      TEXT NOT NULL CHECK (length(currency) = 3 AND currency = upper(currency)),
+  -- Where the account stood on `opening_on`, SIGNED (a card owes: negative). The balance on any
+  -- day is this plus the posted lines AFTER `opening_on`, derived at read time; an account with no
+  -- opening day counts every line. A day, so a statement imported from before it does not count
+  -- twice.
   opening_minor INTEGER NOT NULL DEFAULT 0,
+  opening_on    TEXT CHECK (opening_on IS NULL OR date(opening_on) = opening_on),
   on_budget     INTEGER NOT NULL DEFAULT 1 CHECK (on_budget IN (0,1)),
   UNIQUE (id, currency),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
@@ -527,12 +572,16 @@ CREATE TABLE checkpoint (
 CREATE TABLE rule (
   id            TEXT PRIMARY KEY,
   pattern       TEXT NOT NULL CHECK (json_valid(pattern)),
+  -- The name the line shows once the rule has run: the payee, not the bank's words (which stay in
+  -- `source.stated`). NULL leaves the line's name alone.
+  display_name  TEXT CHECK (display_name IS NULL OR length(trim(display_name)) > 0),
   category_id   TEXT NOT NULL,
   category_kind TEXT GENERATED ALWAYS AS ('category') VIRTUAL,
   position      REAL NOT NULL,
   created_at    TEXT NOT NULL,
   FOREIGN KEY (category_id, category_kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
+CREATE INDEX rule_by_category ON rule(category_id);
 
 CREATE TABLE thread (
   id    TEXT PRIMARY KEY,
@@ -626,6 +675,9 @@ CREATE TABLE locker_item (
   password_set_at TEXT,
   memo         TEXT,
   key_id       TEXT,
+  -- When the core last opened one of this item's sealed cells (#1146). A use is not an edit:
+  -- stamping it does not move the entity's `updated_at`, and makes no revision.
+  last_used_at TEXT,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX locker_item_type_idx ON locker_item(type);
@@ -657,6 +709,9 @@ CREATE TABLE locker_item_field (
   position     INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  -- `row_version` is the recursion guard of this table's `touch_updated_at` trigger (it fires only
+  -- while the version is unchanged, and its own UPDATE moves it). Nothing compares it; it is not an
+  -- entity version (#1146, R-1146-0-2).
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1), key_id TEXT,
   CHECK (kind = 'sealed' OR value_sealed IS NULL),
   CHECK (kind <> 'sealed' OR value_text IS NULL)
@@ -684,6 +739,9 @@ CREATE TABLE locker_item_passkey (
   private_key   TEXT,
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  -- `row_version` is the recursion guard of this table's `touch_updated_at` trigger (it fires only
+  -- while the version is unchanged, and its own UPDATE moves it). Nothing compares it; it is not an
+  -- entity version (#1146, R-1146-0-2).
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1), key_id TEXT
 ) STRICT;
 CREATE INDEX locker_item_passkey_rp_idx ON locker_item_passkey(rp_id);
@@ -701,22 +759,14 @@ END;
 
 CREATE TABLE locker_key (
   key_id     TEXT PRIMARY KEY,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  -- Unlocks the phone refused since the last one it allowed, and when the latest was (#1146).
+  -- The Locker has one key row, so this is the Locker's whole record of them; a successful unlock
+  -- resets the count and leaves the time.
+  failed_unlocks  INTEGER NOT NULL DEFAULT 0 CHECK (failed_unlocks >= 0),
+  failed_unlock_at TEXT
 ) STRICT;
 CREATE UNIQUE INDEX locker_key_one_generation ON locker_key((1));
-
-CREATE TABLE receipt (
-  seq         INTEGER PRIMARY KEY,
-  at          TEXT NOT NULL,
-  item_id     TEXT,
-  act         TEXT NOT NULL,
-  journal_seq INTEGER NOT NULL
-) STRICT;
-CREATE INDEX receipt_by_item ON receipt(item_id, at, seq) WHERE item_id IS NOT NULL;
--- The whole Locker's access history, newest first, streams from here (#1135).
-CREATE INDEX receipt_by_at ON receipt(at, seq);
-CREATE TRIGGER receipt_is_evidence BEFORE UPDATE ON receipt
-  BEGIN SELECT RAISE(ABORT, 'a receipt is evidence'); END;
 
 -- ---------------------------------------------------------------------------------------------
 -- Seeds: the rows founding writes, under fixed ids `<kind>:<key>`.

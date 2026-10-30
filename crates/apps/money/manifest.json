@@ -205,6 +205,10 @@
           "opening_minor": {
             "type": "integer"
           },
+          "opening_on": {
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "type": "string"
+          },
           "title": {
             "aliases": ["name"],
             "maxLength": 80,
@@ -391,7 +395,7 @@
         "this account started with 1200 euros",
         "correct the starting balance on savings"
       ],
-      "description": "State where an account stood before its first line; every balance after it is derived from that.",
+      "description": "State where an account stood on a day (opening_on, required unless the amount is 0); every balance after that day is derived from it, and lines on or before it are already in it.",
       "confirmation": "required",
       "input": {
         "additionalProperties": false,
@@ -402,6 +406,10 @@
           },
           "opening_minor": {
             "type": "integer"
+          },
+          "opening_on": {
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "type": "string"
           }
         },
         "required": ["id", "opening_minor"],
@@ -446,6 +454,11 @@
           "origin": {
             "additionalProperties": false,
             "properties": {
+              "color": {
+                "description": "The colour the phone paints the store with, as the design wheel names it.",
+                "maxLength": 64,
+                "type": ["string", "null"]
+              },
               "config": {
                 "type": ["object", "null"]
               },
@@ -477,6 +490,11 @@
                 },
                 "fields": {
                   "type": "object"
+                },
+                "size": {
+                  "description": "How large the bytes a record names are, counted by the phone; the command claims them.",
+                  "minimum": 0,
+                  "type": ["integer", "null"]
                 }
               },
               "required": ["external_id", "fields"],
@@ -993,7 +1011,7 @@
         "put anything with Uber in transport",
         "make a rule for Netflix as subscriptions"
       ],
-      "description": "Add a rule: a line whose words match goes in a category.",
+      "description": "Add a rule: a line whose words match goes in a category and, when display_name is sent, shows that name (the payee) instead of the bank's words.",
       "confirmation": "none",
       "input": {
         "additionalProperties": false,
@@ -1005,6 +1023,10 @@
           "category_id": {
             "minLength": 1,
             "type": "string"
+          },
+          "display_name": {
+            "maxLength": 80,
+            "type": ["string", "null"]
           },
           "id": {
             "minLength": 1,
@@ -1073,6 +1095,10 @@
           "category_id": {
             "minLength": 1,
             "type": "string"
+          },
+          "display_name": {
+            "maxLength": 80,
+            "type": ["string", "null"]
           },
           "id": {
             "minLength": 1,
@@ -1767,6 +1793,11 @@
           "name": "opening",
           "type": "money",
           "source": ["account", "opening_minor"]
+        },
+        {
+          "name": "opening_on",
+          "type": "text",
+          "source": ["account", "opening_on"]
         },
         {
           "name": "on_budget",

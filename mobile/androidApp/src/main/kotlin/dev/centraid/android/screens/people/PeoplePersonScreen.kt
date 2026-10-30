@@ -200,6 +200,18 @@ private fun PersonBody(
             }
         }
 
+        if (person.relations.isNotEmpty()) {
+            person.relations_head?.let { head -> item(key = "relations-head") { SectionHeader(head.toKit()) } }
+            items(person.relations, key = { "r-" + it.party_id + it.meta }) { relation ->
+                CentraidRow(
+                    title = relation.name,
+                    meta = relation.meta,
+                    a11y = relation.accessibility_label,
+                    testTag = "people-relation-${relation.party_id}",
+                )
+            }
+        }
+
         person.notes_head?.let { head -> item(key = "notes-head") { SectionHeader(head.toKit()) { open(Which.WHICH_NOTE) } } }
         if (person.notes.isEmpty() && person.notes_empty.isNotEmpty()) {
             item(key = "notes-empty") { RailEmpty(person.notes_empty) }

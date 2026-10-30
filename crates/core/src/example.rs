@@ -16,9 +16,8 @@
 //! under a vault's keys, and the scenario carries none.
 //!
 //! **THROUGH THE REAL COMMAND PLANE, never SQL.** Every row is a
-//! `Vault::execute` of a registered command, so it carries the `core_entity`
-//! siblings, the `row_version` and the ledger entries a real write produces,
-//! and a tile reading it reads the shape the product actually stores. The one
+//! `Vault::execute` of a registered command, so it carries the
+//! stamps a real write produces, and a tile reading it reads the shape the product actually stores. The one
 //! read — the calendar Agenda files events under — is a page through
 //! [`crate::api::page`], the same door a shell reads through.
 //!

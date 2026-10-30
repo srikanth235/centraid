@@ -119,8 +119,8 @@ fn refusal_of(locale: Locale, answer: &wire::LockerSessionResponse) -> Refused {
 }
 
 /// Reveal one sealed cell (`column`), or a custom field's value (`field_id`
-/// set, the column `value_sealed`). The receipt is written before the value
-/// exists. `copy` is recorded on the receipt; the value is the same.
+/// set, the column `value_sealed`). The core stamps the item as used before the
+/// value exists. `copy` sends the value to the clipboard; the value is the same.
 pub(super) fn reveal(
     ctx: &Ctx,
     item_id: &str,

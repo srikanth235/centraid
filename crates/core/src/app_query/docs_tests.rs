@@ -94,29 +94,6 @@ impl Scratch {
         outcome.output
     }
 
-    /// A command the vault is expected to refuse: its status and its sentence.
-    fn refused(
-        &self,
-        name: &str,
-        input: serde_json::Value,
-    ) -> (centraid_vault::CommandStatus, String) {
-        self.writes.set(self.writes.get() + 1);
-        let outcome = self
-            .handle
-            .command(
-                name,
-                &input,
-                &format!("docs-query-test-{}", self.writes.get()),
-            )
-            .unwrap_or_else(|error| panic!("{name} errored rather than refusing: {error}"));
-        assert_ne!(
-            outcome.status,
-            centraid_vault::CommandStatus::Executed,
-            "{name} was expected to be refused"
-        );
-        (outcome.status, outcome.reason.unwrap_or_default())
-    }
-
     /// A text document written from words, as the Add sheet's Text writes one.
     fn add(&self, title: &str, body: &str, folder_id: Option<&str>) -> String {
         let mut input = serde_json::json!({ "title": title, "body_text": body });
@@ -427,14 +404,14 @@ fn a_fresh_trash_row_counts_thirty_days_whatever_the_calendar_did_in_between() {
     }
 }
 
-/// THE COUNTDOWN IS THE VAULT'S GATE (#1090). `purge_in_days > 0` is what
-/// enables Restore on the phone, and `entity.restore` refuses once
-/// `purge_at <= now` — an instant. A count of civil days said 0 for the last
-/// local day of the window, hours before the vault would refuse, so the phone
-/// called the window lapsed while it was open. Whole days left, rounded up,
-/// is positive exactly while the vault will restore.
+/// THE COUNTDOWN IS THE WINDOW'S, NOT A GATE (#1090, #1146). `purge_in_days > 0`
+/// says the window is open; `purge_at <= now` is an instant, and from then on
+/// the launch pass may empty the row, while `entity.restore` keeps accepting it
+/// until it does. A count of civil days said 0 for the last local day of the
+/// window, hours before it closed. Whole days left, rounded up, is positive
+/// exactly while the window is open.
 #[test]
-fn the_countdown_is_positive_exactly_while_the_vault_will_restore() {
+fn the_countdown_is_positive_exactly_while_the_window_is_open() {
     let trashed_at = "2026-10-08T04:10:00.000Z";
     let scratch = Scratch::founded_at(trashed_at);
     let document = scratch.add("Old lease", "rent", None);
@@ -464,10 +441,10 @@ fn the_countdown_is_positive_exactly_while_the_vault_will_restore() {
     assert_eq!(days_left(&lapsed), 1, "a millisecond before purge_at");
     lapsed.advance_to("2026-11-07T04:10:00.000Z");
     assert_eq!(days_left(&lapsed), 0, "at purge_at the window has run out");
-    let (_, reason) = lapsed.refused("entity.restore", serde_json::json!({ "id": document }));
-    assert!(reason.contains("grace window"), "{reason}");
     lapsed.advance_to("2026-11-08T16:10:00.000Z");
     assert!(days_left(&lapsed) < 0, "a day and a half late is negative");
+    // A LAPSED WINDOW IS STILL RESTORABLE until the launch pass empties the row (#1146).
+    lapsed.run("entity.restore", serde_json::json!({ "id": document }));
 }
 
 /// THE FOLDER TREE: nesting is `parent_id`, a folder directly under the root
@@ -605,51 +582,10 @@ fn filters_compose_and_the_sort_is_the_requests() {
     assert!(nothing.documents.is_empty());
 }
 
-/// The activity rail reads the journal: the commands that named the document,
-/// newest first. The zone rule refuses a name the database does not know, as
-/// every app query does.
+/// Every app query refuses a zone name the database does not know, and a zero search limit.
 #[test]
-fn activity_answers_and_an_unknown_zone_is_refused() {
+fn an_unknown_zone_and_a_zero_limit_are_refused() {
     let scratch = Scratch::founded();
-    // A shell mints the id it files under, so the journal names the document
-    // from its very first command.
-    let lease = "11111111-1111-4111-8111-111111111111";
-    scratch.run(
-        "document.create_text",
-        serde_json::json!({ "id": lease, "title": "Lease", "body_text": "rent" }),
-    );
-    scratch.clock.advance_ms(60_000);
-    scratch.run(
-        "flag.set",
-        serde_json::json!({ "id": lease, "flag": "starred" }),
-    );
-    scratch.clock.advance_ms(60_000);
-    scratch.run(
-        "document.edit",
-        serde_json::json!({ "id": lease, "body_text": "rent due" }),
-    );
-    let other = scratch.add("Elsewhere", "unrelated", None);
-    scratch.run("entity.trash", serde_json::json!({ "id": other }));
-    let wire::app_query_response::Answer::DocsActivity(rail) = scratch
-        .ask(wire::app_query_request::Query::DocsActivity(
-            wire::DocsActivityRequest {
-                document_id: lease.to_owned(),
-                tz: TZ.to_owned(),
-            },
-        ))
-        .expect("activity answers")
-    else {
-        panic!("activity answered as something else");
-    };
-    let said: Vec<&str> = rail
-        .events
-        .iter()
-        .map(|event| event.activity.as_str())
-        .collect();
-    assert_eq!(said, ["document.edit", "flag.set", "document.create_text"]);
-    assert_eq!(rail.events[0].occurred_local, "2099-06-01T22:02");
-    assert_eq!(rail.events[2].occurred_local, "2099-06-01T22:00");
-
     let refused = scratch
         .ask(wire::app_query_request::Query::DocsDrive(
             wire::DocsDriveRequest {

@@ -584,8 +584,8 @@ fn withholds_sealed_value(page: &KeysetPage) -> bool {
         || page.predicate.as_deref().is_some_and(names_sealed)
 }
 
-/// Locker's own tables: the kind row and its sidecars. `receipt` and
-/// `locker_key` hold no secret and are paged by name like any other table.
+/// Locker's own tables: the kind row and its sidecars. `locker_key` holds no
+/// secret and is paged by name like any other table.
 fn is_locker_table(table: &str) -> bool {
     table == "locker_item" || table.starts_with("locker_item_")
 }
@@ -1074,7 +1074,7 @@ mod keyset_tests {
         };
         for predicate in [
             "EXISTS (SELECT 1 FROM locker_item_field)",
-            "id IN (SELECT CAST(seq AS TEXT) FROM receipt)",
+            "id IN (SELECT key_id FROM locker_key)",
             "EXISTS (WITH r AS (SELECT * FROM revision) SELECT 1 FROM r)",
             "EXISTS (SELECT 1 FROM sqlite_master)",
         ] {

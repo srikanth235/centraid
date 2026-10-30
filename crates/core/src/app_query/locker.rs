@@ -4,7 +4,7 @@
 //!
 //! Metadata only. A sealed cell reaches this module as its PRESENCE and leaves
 //! it as `LockerSecret.present`; its value is the session's
-//! (`crate::locker::phone`), behind the unlock and a receipt. Every stored
+//! (`crate::locker::phone`), behind the unlock. Every stored
 //! instant a member reads leaves as a local day in the request's zone
 //! ([`super::zone_of`]'s rule).
 
@@ -12,7 +12,6 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_apps_agenda::local;
 use centraid_apps_kit::error::{KitError, KitResult};
 use centraid_apps_locker::phone::{self, ItemData, Listed};
-use centraid_apps_locker::queries::AccessKind;
 use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
@@ -150,6 +149,7 @@ fn detail(data: ItemData, zone: &FireZone) -> wire::LockerItem {
         created_local_day: day_of(zone, item.created_at.as_deref()),
         updated_local_day: day_of(zone, item.updated_at.as_deref()),
         purge_local_day: day_of(zone, item.purge_at.as_deref()),
+        last_used_local_day: day_of(zone, item.last_used_at.as_deref()),
         trashed: item.deleted_at.is_some(),
         item_id: item.item_id,
         r#type: rendered,
@@ -319,65 +319,6 @@ pub(crate) fn review(
             today: today.clone(),
         })
     })
-}
-
-/// THE ACCESS HISTORY (#1047 T2, Q-1047-21): the receipts the vault already
-/// wrote, as metadata, each at its wall clock in the request's zone. **With an
-/// item it is that item's** (the item page's); **with none it is the whole
-/// Locker's**, unlocks and exports included, each item and custom field named
-/// by what it is called now.
-///
-/// Both ride this one arm, behind the same shell gate as every Locker read: a
-/// shell asks nothing of the core while the Locker is locked, and the core
-/// holds no second gate for any Locker read (the items, the item and the
-/// review are asked the same way).
-pub(crate) fn access(
-    vault: &Vault,
-    door: &VaultDoor<'_>,
-    asked: &wire::LockerAccessRequest,
-) -> Result<Answer> {
-    let zone = zone_of(vault, &asked.tz)?;
-    let limit = (asked.limit > 0).then(|| i64::from(asked.limit));
-    answered(
-        door,
-        phone::load_access(door, super::non_empty(&asked.item_id), limit),
-        |data| {
-            Answer::LockerAccess(wire::LockerAccess {
-                entries: data
-                    .entries
-                    .into_iter()
-                    .map(|entry| {
-                        let wall = entry
-                            .occurred_at
-                            .as_deref()
-                            .and_then(|at| local::now_local(&zone, at))
-                            .unwrap_or_default();
-                        let (local_day, local_time) = wall.split_once('T').unwrap_or(("", ""));
-                        wire::LockerAccessEntry {
-                            kind: match entry.kind {
-                                AccessKind::Auth => wire::LockerAccessKind::Unlock,
-                                AccessKind::Reveal => wire::LockerAccessKind::Reveal,
-                                AccessKind::Code => wire::LockerAccessKind::Code,
-                                AccessKind::Export => wire::LockerAccessKind::Export,
-                            } as i32,
-                            local_day: local_day.to_owned(),
-                            local_time: local_time.to_owned(),
-                            receipt_id: entry.receipt_id,
-                            copied: entry.copied,
-                            allowed: entry.allowed,
-                            columns: entry.columns.unwrap_or_default(),
-                            field_id: entry.field_id.unwrap_or_default(),
-                            item_id: entry.item_id.unwrap_or_default(),
-                            item_title: entry.item_title.unwrap_or_default(),
-                            field_label: entry.field_label.unwrap_or_default(),
-                        }
-                    })
-                    .collect(),
-                truncated: data.truncated,
-                window: count(data.window),
-            })
-        },
-    )
 }
 
 #[cfg(test)]

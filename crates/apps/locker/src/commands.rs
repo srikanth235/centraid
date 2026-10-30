@@ -11,14 +11,14 @@
 //! v0's invocation door (`Invocation`, `Commands`, `Outcome`) had no production
 //! caller and is deleted (#1047 T2).
 //!
-//! `reveal` receipts one reveal and returns a receipt id, never the secret: the
-//! plaintext is the core's (`crates/core::locker::phone`), behind the unlock.
+//! `reveal` stamps the item as used and never carries the secret: the plaintext
+//! is the core's (`crates/core::locker::phone`), behind the unlock.
 //!
 //! ## What `export` means (D-1020-L7)
 //!
 //! The command plane cannot unseal, so `locker.export` answers the plain half
-//! plus each row's `key_id` and writes the one receipt a mass reveal owes;
-//! producing the plaintext file is the core's, where `K` is.
+//! plus each row's `key_id`; producing the plaintext file is the core's, where
+//! `K` is. An export stamps no item.
 //!
 //! ## Two gates, not one
 //!
@@ -56,7 +56,7 @@ pub const ACTIONS: [ActionRow; 20] = [
     act("clear-passkey", "locker.clear_passkey"),
     act("set-memo", "locker.set_memo"),
     confirmed("export", "locker.export"),
-    act("reveal", "locker.reveal_receipt"),
+    act("reveal", "locker.mark_used"),
 ];
 
 /// The row for an action name.

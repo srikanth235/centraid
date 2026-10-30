@@ -849,7 +849,7 @@ fn people_tile(locale: Locale, roster: &wire::PeopleRoster) -> Made {
 fn locker_open(ctx: &Ctx) -> bool {
     ctx.locker(&wire::LockerSessionRequest {
         step: Some(wire::locker_session_request::Step::State(
-            wire::LockerStateAsk {},
+            wire::LockerStateAsk::default(),
         )),
     })
     .is_ok_and(|answer| answer.state == wire::LockerSessionState::Unlocked as i32)

@@ -71,7 +71,8 @@ fn the_ddl_fixture_is_not_vacuous() {
         "CREATE VIRTUAL TABLE search ",
         "entity_kind_is_fixed",
         "edge_has_a_shape",
-        "journal_is_evidence",
+        "revision_is_history",
+        "CREATE TABLE action_key ",
         "locker_key_one_generation",
     ] {
         assert!(fixture.contains(object), "`{object}` is not in the fixture");
@@ -89,6 +90,9 @@ fn nothing_the_model_deleted_is_founded() {
         "core_link",
         "command_definition",
         "access_receipt",
+        "CREATE TABLE receipt",
+        "CREATE TABLE journal",
+        "journal_is_evidence",
         "phone_link",
         "social_thread",
         "fts_core_party",

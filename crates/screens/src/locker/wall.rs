@@ -22,8 +22,9 @@ use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
 
+use crate::kit::civil;
 use crate::screen::Ctx;
-use crate::strings::{Locale, locker as words};
+use crate::strings::{Locale, fill, locker as words};
 
 /// Which phase the wall is in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,6 +85,51 @@ pub struct Wall {
     asking: bool,
     /// A probe (no prompt) is out.
     probing: bool,
+    /// The unlocks the phone refused, as the core last answered them (#1146):
+    /// the locked wall says them, and after an unlock they are what that unlock
+    /// cleared, which the Locker's home says once.
+    failed: Failed,
+}
+
+/// The refused unlocks one session answer carried.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Failed {
+    count: u32,
+    day: String,
+    time: String,
+}
+
+impl Failed {
+    fn of(answer: &wire::LockerSessionResponse) -> Self {
+        Self {
+            count: answer.failed_unlocks,
+            day: answer.failed_unlock_local_day.clone(),
+            time: answer.failed_unlock_local_time.clone(),
+        }
+    }
+}
+
+/// Whether an owner check's outcome is the phone REFUSING the member: not
+/// recognised, or locked out after too many tries. A dismissal is not one, and
+/// neither is a phone with no passcode (#1146).
+#[must_use]
+pub fn is_refusal(outcome: wire::owner_checked::Outcome) -> bool {
+    use wire::owner_checked::Outcome as O;
+    matches!(outcome, O::Failed | O::LockedOut)
+}
+
+/// Tell the core the phone refused an unlock, so it counts and dates it. The
+/// core never sees the OS prompt, so this report is the only way it learns of a
+/// failure. `None` when the core would not take it; the member's wall is no
+/// worse for that.
+pub fn report_refusal(ctx: &Ctx) -> Option<wire::LockerSessionResponse> {
+    Wall::session(
+        ctx,
+        wire::locker_session_request::Step::UnlockFailed(wire::LockerUnlockFailed {
+            tz: ctx.zone().to_owned(),
+        }),
+    )
+    .ok()
 }
 
 impl Default for Wall {
@@ -96,6 +142,7 @@ impl Default for Wall {
             notice: String::new(),
             asking: false,
             probing: false,
+            failed: Failed::default(),
         }
     }
 }
@@ -122,13 +169,47 @@ impl Wall {
     fn state(ctx: &Ctx) -> Option<wire::LockerSessionResponse> {
         Self::session(
             ctx,
-            wire::locker_session_request::Step::State(wire::LockerStateAsk {}),
+            wire::locker_session_request::Step::State(wire::LockerStateAsk {
+                tz: ctx.zone().to_owned(),
+            }),
         )
         .ok()
     }
 
     fn open_state(answer: &wire::LockerSessionResponse) -> bool {
         answer.state == wire::LockerSessionState::Unlocked as i32
+    }
+
+    /// Remember the refused unlocks a LOCKED answer carries. An open answer
+    /// carries none (an unlock cleared them), and what that unlock cleared is
+    /// kept for the home to say.
+    fn see_failures(&mut self, answer: &wire::LockerSessionResponse) {
+        if !Self::open_state(answer) {
+            self.failed = Failed::of(answer);
+        }
+    }
+
+    /// "3 failed unlocks · last 12 Oct 14:05" — what the phone refused since the
+    /// last unlock it allowed, or what the unlock just now cleared; `None` when
+    /// it refused none (#1146).
+    #[must_use]
+    pub fn failures_line(&self, locale: Locale) -> Option<String> {
+        (self.failed.count > 0).then(|| {
+            let day = if self.failed.day.len() >= 10 {
+                civil::day_month(locale, &self.failed.day)
+            } else {
+                String::new()
+            };
+            let when = [day, self.failed.time.clone()]
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ");
+            fill(
+                &words::lock_failed_unlocks(locale, u64::from(self.failed.count)),
+                &[("when", &when)],
+            )
+        })
     }
 
     /// The screen came into view. `enter` is the member opening Locker (its
@@ -140,6 +221,7 @@ impl Wall {
             return Step::ask(Vec::new());
         };
         self.keyed = answer.keyed;
+        self.see_failures(&answer);
         if Self::open_state(&answer) {
             let changed = self.phase != Phase::Open;
             self.phase = Phase::Open;
@@ -169,6 +251,7 @@ impl Wall {
             return Step::ask(Vec::new());
         };
         self.keyed = answer.keyed;
+        self.see_failures(&answer);
         match (self.phase, Self::open_state(&answer)) {
             (Phase::Open, true) | (Phase::Unlocking, _) => Step::default(),
             (Phase::Open, false) => self.lock(words::lock_expired(ctx.locale())),
@@ -208,6 +291,9 @@ impl Wall {
                     self.phase = Phase::Locked;
                 }
                 self.notice.clear();
+                if was_open {
+                    self.failed = Failed::default();
+                }
                 Step::change(if was_open {
                     Change::Closed
                 } else {
@@ -267,6 +353,11 @@ impl Wall {
             return Step::default();
         }
         self.asking = false;
+        if is_refusal(outcome)
+            && let Some(answer) = report_refusal(ctx)
+        {
+            self.failed = Failed::of(&answer);
+        }
         use wire::owner_checked::Outcome as O;
         match outcome {
             O::Succeeded => self.unlock(ctx),
@@ -296,11 +387,15 @@ impl Wall {
     fn unlock(&mut self, ctx: &Ctx) -> Step {
         match Self::session(
             ctx,
-            wire::locker_session_request::Step::Unlock(wire::LockerUnlock {}),
+            wire::locker_session_request::Step::Unlock(wire::LockerUnlock {
+                tz: ctx.zone().to_owned(),
+            }),
         ) {
             Ok(answer) if Self::open_state(&answer) => {
                 self.phase = Phase::Open;
                 self.notice.clear();
+                // WHAT THIS UNLOCK CLEARED (#1146): the refused ones, told once.
+                self.failed = Failed::of(&answer);
                 Step {
                     // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED
                     // (R-ONBOARD-10): the core seals a Locker secret only while
@@ -351,6 +446,10 @@ impl Wall {
         if self.phase != Phase::Unavailable {
             self.phase = Phase::Locked;
         }
+        if was_open {
+            // What the last unlock cleared was told; the core now says none.
+            self.failed = Failed::default();
+        }
         Step::change(if was_open {
             Change::Closed
         } else {
@@ -370,6 +469,7 @@ impl Wall {
     fn lock(&mut self, notice: String) -> Step {
         self.asking = false;
         self.phase = Phase::Locked;
+        self.failed = Failed::default();
         self.notice = notice;
         Step::change(Change::Closed)
     }
@@ -437,7 +537,12 @@ impl Wall {
                 words::lock_no_words_notice(locale)
             }
         } else if matches!(self.phase, Phase::Locked | Phase::Failed) {
-            self.notice.clone()
+            [Some(self.notice.clone()), self.failures_line(locale)]
+                .into_iter()
+                .flatten()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ")
         } else {
             String::new()
         };

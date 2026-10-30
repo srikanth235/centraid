@@ -91,6 +91,7 @@ private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: 
         CalendarContract.Instances.RRULE,
         CalendarContract.Instances.ORIGINAL_ID,
         CalendarContract.Instances.ORIGINAL_INSTANCE_TIME,
+        CalendarContract.Instances.EVENT_LOCATION,
     )
     // ONLY CALENDARS THE MEMBER WRITES TO, never a cancelled instance: a
     // subscribed holiday calendar is nobody's own events, and a contacts'
@@ -115,6 +116,7 @@ private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: 
                 rrule = cursor.getString(8).orEmpty(),
                 originalId = if (cursor.isNull(9)) null else cursor.getLong(9),
                 originalTime = if (cursor.isNull(10)) null else cursor.getLong(10),
+                location = cursor.getString(11).orEmpty(),
             )
         }
     }
@@ -144,6 +146,7 @@ private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: 
                 moved = moved,
                 phone_id = PhoneOrigins.eventId(meta.uid, row.eventId),
                 calendar_key = calendar.key,
+                location = row.location,
             )
         } else {
             // A TIMED INSTANCE IS A WALL CLOCK IN ITS OWN ZONE — the zone the
@@ -163,6 +166,7 @@ private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: 
                 moved = moved,
                 phone_id = PhoneOrigins.eventId(meta.uid, row.eventId),
                 calendar_key = calendar.key,
+                location = row.location,
             )
         }
     }
@@ -180,6 +184,7 @@ private fun readCalendars(resolver: ContentResolver): Map<Long, CalendarRow> {
         CalendarContract.Calendars.ACCOUNT_NAME,
         SYNC_ID,
         CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
+        CalendarContract.Calendars.CALENDAR_COLOR,
     )
     val selection = "${CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL} >= ${CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR} AND " +
         "${CalendarContract.Calendars.VISIBLE} = 1"
@@ -191,7 +196,12 @@ private fun readCalendars(resolver: ContentResolver): Map<Long, CalendarRow> {
             val key = PhoneOrigins.calendarKey(cursor.getString(1), cursor.getString(2), cursor.getString(3), id)
             found[id] = CalendarRow(
                 key,
-                PhoneCalendar(key = key, source_title = cursor.getString(2).orEmpty(), title = cursor.getString(4).orEmpty()),
+                PhoneCalendar(
+                    key = key,
+                    source_title = cursor.getString(2).orEmpty(),
+                    title = cursor.getString(4).orEmpty(),
+                    color = if (cursor.isNull(5)) "" else "#%06X".format(cursor.getInt(5) and 0xFFFFFF),
+                ),
             )
         }
     }
@@ -238,6 +248,7 @@ private class InstanceRow(
     val rrule: String,
     val originalId: Long?,
     val originalTime: Long?,
+    val location: String,
 )
 
 /** A series' master, and the zone its wall clocks are read in. */

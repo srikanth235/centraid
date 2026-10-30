@@ -14,17 +14,22 @@
 //! `flag.set`, `edge.add`, `container.create`), and not wrapped here.
 //!
 //! The merged person's every reference is re-pointed at the person who stays,
-//! by walking what the file says points at a person (the foreign keys into
-//! `person`, read from `PRAGMA foreign_key_list`) and the `edge` table, and
-//! then the merged person is purged. Nothing here lists a renting table: a
-//! table added tomorrow that points at `person` is merged correctly today.
+//! by walking what the file says points at a person or at an entity (every
+//! foreign key into `person` or `entity`, read from `PRAGMA foreign_key_list`,
+//! as the blob plane reads what rents a blob) and the `edge` table, and then the
+//! merged person is purged. Nothing here lists a renting table: a table added
+//! tomorrow that points at `entity` is merged correctly today
+//! ([#1146](https://github.com/srikanth235/centraid/issues/1146)). **A merge is
+//! confirmed**: it ends a person for good, like a purge.
 //!
 //! What a merge keeps when both people say something: the surviving person's
 //! own value wins, and a blank is filled from the merged person; a contact
 //! point both have is kept once; a daily measurement both have is the
-//! surviving person's. The merged person's source, if it was followed, becomes
-//! a tombstone with the purge (`source.entity_id` nulls itself), so the contact
-//! follower never adds the same contact again.
+//! surviving person's. The merged person's source, if it was followed, goes to
+//! the survivor (the phone's record is the survivor's now, so the follower
+//! neither adds it again nor loses the link); when the survivor is followed
+//! already, it becomes a tombstone with the purge (`source.entity_id` nulls
+//! itself), so the follower still never adds the same contact again.
 
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value as Json, json};
@@ -35,7 +40,7 @@ use crate::commands::event::{self, NewEvent};
 use crate::commands::note;
 use crate::commands::tag::{ensure_concept, set_tagged};
 use crate::commands::task::{self, NewTask};
-use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
+use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::{Result, VaultError};
 use crate::model::{Kind, Rel};
 use crate::time::Semantics;
@@ -100,7 +105,7 @@ fn merge(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     // Every foreign key into `person`, wherever it is. A row that would
     // collide with one the survivor has is left behind and goes with the purge.
     let mut repointed = 0usize;
-    for (table, column) in person_references(connection)? {
+    for (table, column) in references_to_a_person(connection)? {
         repointed += connection.execute(
             &format!(
                 "UPDATE OR IGNORE {} SET {} = ?2 WHERE {} = ?1",
@@ -133,12 +138,13 @@ fn merge(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     Ok(serde_json::json!({ "into": winner, "edges": moved, "rows": repointed }))
 }
 
-/// Every `(table, column)` with a foreign key into `person(id)`, but the
-/// person's own kind-row link to its entity.
-fn person_references(connection: &rusqlite::Connection) -> Result<Vec<(String, String)>> {
+/// Every `(table, column)` with a foreign key into `person(id)` or `entity(id)`
+/// that a person can be named by, but the edges (a merge writes those again at
+/// the survivor) and the kind rows' own link to their entity (`id`).
+fn references_to_a_person(connection: &rusqlite::Connection) -> Result<Vec<(String, String)>> {
     let tables: Vec<String> = connection
         .prepare(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name <> 'person'
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT IN ('person', 'edge')
                AND sql NOT LIKE 'CREATE VIRTUAL%' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'
               ORDER BY name",
         )?
@@ -152,13 +158,24 @@ fn person_references(connection: &rusqlite::Connection) -> Result<Vec<(String, S
         ))?;
         let rows = statement
             .query_map([], |row| {
-                Ok((row.get::<_, String>(2)?, row.get::<_, String>(3)?))
+                Ok((
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                ))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
+        // A composite key names the target's `kind` as well as its `id`: only the
+        // column that holds the id is re-pointed, and a kind row's own `id` is
+        // the link to its entity, not a reference to a person.
         found.extend(
             rows.into_iter()
-                .filter(|(target, _)| target == "person")
-                .map(|(_, column)| (table.clone(), column)),
+                .filter(|(target, column, to)| {
+                    (target == "person" || target == "entity")
+                        && to.as_deref().is_none_or(|to| to == "id")
+                        && column != "id"
+                })
+                .map(|(_, column, _)| (table.clone(), column)),
         );
     }
     Ok(found)
@@ -632,7 +649,8 @@ fn relative(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         .connection()
         .query_row(
             "SELECT e.id FROM entity e JOIN person p ON p.id = e.id
-              WHERE e.deleted_at IS NULL AND p.form = ?1 AND e.title = ?2 COLLATE NOCASE
+              WHERE e.kind = 'person' AND e.deleted_at IS NULL AND p.form = ?1
+                AND e.title = ?2 COLLATE NOCASE
               ORDER BY e.created_at, e.id LIMIT 1",
             [form, ctx.required_str("name")?.trim()],
             |row| row.get(0),
@@ -803,6 +821,15 @@ const MERGE: &str = r#"{
   }
 }"#;
 
+/// A merge ends a person for good, so it is presented the way a purge is: medium
+/// risk, and parked for the owner's confirmation on every non-owner-device
+/// invocation (the level `entity.purge` carries).
+fn permanent(mut definition: CommandDefinition) -> CommandDefinition {
+    definition.risk = Risk::Medium;
+    definition.confirm = true;
+    definition
+}
+
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
     vec![
@@ -916,7 +943,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
             }],
             add_relationship,
         ),
-        CommandDefinition::plain(
+        permanent(CommandDefinition::plain(
             "person.merge",
             "person",
             MERGE,
@@ -926,6 +953,6 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 check: pre_merge,
             }],
             merge,
-        ),
+        )),
     ]
 }

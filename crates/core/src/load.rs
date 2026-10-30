@@ -424,14 +424,6 @@ fn read(
                 tz,
             },
         )?,
-        ("docs", "activity") => app_query::docs::activity(
-            vault,
-            door,
-            &wire::DocsActivityRequest {
-                document_id: p.text("document_id")?,
-                tz,
-            },
-        )?,
 
         ("notes", "library") => app_query::notes::library(
             vault,
@@ -607,15 +599,6 @@ fn read(
         ("locker", "review") => {
             app_query::locker::review(vault, door, now, &wire::LockerReviewRequest { tz })?
         }
-        ("locker", "access") => app_query::locker::access(
-            vault,
-            door,
-            &wire::LockerAccessRequest {
-                item_id: p.text("item_id")?,
-                limit: p.limit(0),
-                tz,
-            },
-        )?,
 
         ("photos", "search") => app_query::photos::search(
             vault,
@@ -627,7 +610,6 @@ fn read(
                 correct: p.flag("correct")?,
             },
         )?,
-        ("photos", "duplicates") => app_query::photos::duplicates(door, now)?,
         // The screens' reads: one shelf, one photograph, the collections, the places.
         ("photos", "shelf") => app_query::photos::shelf(
             door,

@@ -5,8 +5,8 @@
 //! (`crypto.subtle`). Both unsealed the seed and emitted six digits; neither
 //! logged the seed or the code.
 //!
-//! The command plane cannot unseal, so `locker.totp_code` only writes the
-//! receipt, and the seed is opened where `K` is — the phone's core
+//! The command plane cannot unseal, so `locker.totp_code` only stamps the
+//! item as used, and the seed is opened where `K` is — the phone's core
 //! (`crates/core::locker::phone`, Q-1047-16), which injects HMAC-SHA-1 and
 //! proves the whole chain against RFC 6238 Appendix B. What stays here is
 //! everything about RFC 6238 **except the HMAC**: base32, the counter, the

@@ -92,7 +92,7 @@ fn tasks_titled(sample: &Sample, title: &str) -> Vec<String> {
 /// THE PIN. The command is `Once` — "must not be run twice for one intent" — and
 /// the same `invoke_key` is sent twice down the core's real command path
 /// (`Handle::command` → `api::invoke` → `Vault::execute`). Both sends EXECUTE: two
-/// invocations, two journal rows, two rows. Nothing answers the second from a
+/// runs, two rows. Nothing answers the second from a
 /// ledger, because there is none.
 #[test]
 fn the_same_key_sent_twice_runs_the_command_twice() {
@@ -130,14 +130,6 @@ fn the_same_key_sent_twice_runs_the_command_twice() {
         "the second send EXECUTES; it is not answered from a ledger: {:?}",
         second.reason
     );
-    assert_ne!(
-        first.invocation_id, second.invocation_id,
-        "two sends are two invocations, so the handler ran twice"
-    );
-    // The journal row is the evidence and `invocation_id` is its position: each send
-    // was journalled on its own, and nothing else is a receipt (#1135): the outcome
-    // carries no receipt id to fill.
-    assert!(!first.invocation_id.is_empty() && !second.invocation_id.is_empty());
     assert_ne!(
         first.output, second.output,
         "and each minted its own task id"

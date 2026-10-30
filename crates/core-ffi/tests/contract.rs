@@ -914,6 +914,61 @@ fn an_open_that_refuses_an_ordinary_file_never_answers_ok() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A FILE OF THE MODEL BEFORE #1135, AND ONE WHOSE TABLES ARE NOT THIS BUILD'S, ARE REFUSED AT
+/// OPEN THE WAY `NotAVault` IS (#1146, D3): a negative code, no handle, and a line that says why
+/// in the member's words.
+#[test]
+fn a_vault_of_the_earlier_model_or_another_schema_is_refused_with_a_line_that_says_so() {
+    let dir = centraid_ontology::scratch::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("the directory is made");
+    type Change = fn(&std::path::Path) -> centraid_vault::rusqlite::Result<()>;
+    let cases: [(&str, Change, &str); 2] = [
+        (
+            "earlier.db",
+            centraid_vault::testdoor::stamp_earlier_model,
+            "made by an earlier version of Centraid that this one cannot open",
+        ),
+        (
+            "other.db",
+            centraid_vault::testdoor::add_stray_table,
+            "does not match this version of Centraid",
+        ),
+    ];
+    for (name, change, said) in cases {
+        let path = dir.join(name);
+        {
+            let handle = centraid_core::Core::open(centraid_core::CoreConfig::new(&path))
+                .expect("a core opens");
+            handle
+                .with_vault(|vault| Ok(vault.found("Old", "Owner")?))
+                .expect("it founds");
+            handle.close();
+        }
+        change(&path).expect("the file changes");
+        let config = format!(
+            r#"{{"path":{:?},"create":false}}"#,
+            path.display().to_string()
+        );
+        let sentinel = 0x1234_usize as *mut centraid_core::Handle;
+        let mut handle = sentinel;
+        let mut code = CENTRAID_OK;
+        let log = capture::from_this_thread(|| {
+            // SAFETY: live config bytes and a live out-pointer.
+            code = unsafe { centraid_open(config.as_ptr(), config.len(), &raw mut handle) };
+        });
+        assert_eq!(code, CENTRAID_BAD_ARGUMENT, "{name}");
+        assert!(
+            std::ptr::eq(handle, sentinel),
+            "{name}: a handle was written"
+        );
+        assert!(
+            log.contains(said),
+            "{name}: the line does not say why: {log}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // ------------------------------------------- #1029 W15: the phone's flows ----
 
 /// Decode an answer envelope, or fail loudly with what came back instead.

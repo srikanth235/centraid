@@ -30,7 +30,14 @@ impl World {
         &self.scratch.vault
     }
 
+    /// An entity's `updated_at`: the clock moves a second before every command, so it changes
+    /// exactly when a command touched the entity.
+    fn stamp(&self, id: &str) -> String {
+        self.one::<String>("SELECT updated_at FROM entity WHERE id = ?1", &[id])
+    }
+
     fn run(&self, name: &str, input: serde_json::Value) -> centraid_vault::CommandOutcome {
+        self.scratch.clock.advance_ms(1_000);
         self.vault()
             .execute(
                 &self.registry,
@@ -188,10 +195,7 @@ fn retitle_changes_the_title_once_and_refuses_what_it_does_not_serve() {
         w.one::<String>("SELECT title FROM entity WHERE id = 'p1'", &[]),
         "Ada L."
     );
-    assert_eq!(
-        w.one::<i64>("SELECT version FROM entity WHERE id = 'p1'", &[]),
-        2
-    );
+    assert_ne!(w.stamp("p1"), AT, "a retitle is a change");
     // A flag keeps its name; a name cannot be blank; the trash is not edited.
     assert!(
         w.refused(
@@ -246,6 +250,8 @@ fn a_holder_takes_its_members_to_the_trash_and_a_restore_brings_back_only_those(
         w.one::<String>("SELECT deleted_at FROM entity WHERE id = ?1", &[&book])
     );
     assert_ne!(went_with, early_at);
+    let trashed_stamp = w.stamp("n-with");
+    assert_ne!(trashed_stamp, AT, "a trash is a change");
 
     w.ok("entity.restore", json!({"id": &book}));
     assert!(!w.trashed(&book) && !w.trashed("n-with"));
@@ -253,9 +259,9 @@ fn a_holder_takes_its_members_to_the_trash_and_a_restore_brings_back_only_those(
         w.trashed("n-early"),
         "the note that was already in the trash stays there"
     );
-    assert_eq!(
-        w.one::<i64>("SELECT version FROM entity WHERE id = 'n-with'", &[]),
-        3,
+    assert_ne!(
+        w.stamp("n-with"),
+        trashed_stamp,
         "trash and restore are two changes"
     );
 }
@@ -356,17 +362,14 @@ fn a_category_a_place_and_a_task_release_what_points_at_them() {
         1
     );
     w.ok("entity.restore", json!({"id": "child"}));
+    let restored_stamp = w.stamp("child");
     w.ok("entity.purge", json!({"id": "parent"}));
     assert_eq!(
         w.one::<Option<String>>("SELECT parent_id FROM task WHERE id = 'child'", &[]),
         None
     );
-    // A release is a change to what was released: it is touched (created, trashed,
-    // restored, released).
-    assert_eq!(
-        w.one::<i64>("SELECT version FROM entity WHERE id = 'child'", &[]),
-        4
-    );
+    // A release is a change to what was released: it is touched.
+    assert_ne!(w.stamp("child"), restored_stamp);
 }
 
 #[test]
@@ -461,11 +464,7 @@ fn a_tag_is_minted_by_its_folded_label_and_a_tagging_changes_nothing_on_the_enti
         w.one::<String>("SELECT title FROM entity WHERE id = 'tag:road trip'", &[]),
         "Road Trip"
     );
-    assert_eq!(
-        w.one::<i64>("SELECT version FROM entity WHERE id = 'n1'", &[]),
-        1,
-        "a tag is not a change to the note"
-    );
+    assert_eq!(w.stamp("n1"), AT, "a tag is not a change to the note");
     assert_eq!(
         w.ok("tag.remove", json!({"id": "n1", "label": "ROAD TRIP"}))["removed"],
         true
@@ -662,11 +661,7 @@ fn an_invitees_answer_is_updated_in_place() {
         w.one::<i64>("SELECT COUNT(*) FROM edge WHERE rel = 'attendee'", &[]),
         1
     );
-    assert_eq!(
-        w.one::<i64>("SELECT version FROM entity WHERE id = 'e1'", &[]),
-        1,
-        "an attendee is not a touch"
-    );
+    assert_eq!(w.stamp("e1"), AT, "an attendee is not a touch");
 }
 
 #[test]
@@ -679,23 +674,15 @@ fn an_about_or_links_edge_touches_the_note_at_its_start_and_no_other_edge_does()
         "edge.add",
         json!({"from": "n1", "rel": "about", "to": "mum"}),
     );
-    assert_eq!(
-        w.one::<i64>("SELECT version FROM entity WHERE id = 'n1'", &[]),
-        2
-    );
-    assert_eq!(
-        w.one::<i64>("SELECT version FROM entity WHERE id = 'mum'", &[]),
-        1,
-        "the person is re-indexed, not touched"
-    );
+    let about = w.stamp("n1");
+    assert_ne!(about, AT, "an about edge touches the note at its start");
+    assert_eq!(w.stamp("mum"), AT, "the person is re-indexed, not touched");
     w.ok(
         "edge.add",
         json!({"from": "n1", "rel": "links", "to": "n2", "anchor": {"from": 3, "to": 9}}),
     );
-    assert_eq!(
-        w.one::<i64>("SELECT version FROM entity WHERE id = 'n1'", &[]),
-        3
-    );
+    let linked = w.stamp("n1");
+    assert_ne!(linked, about, "a links edge touches it again");
     assert_eq!(
         w.one::<String>("SELECT anchor FROM edge WHERE rel = 'links'", &[]),
         r#"{"from":3,"to":9}"#
@@ -704,19 +691,14 @@ fn an_about_or_links_edge_touches_the_note_at_its_start_and_no_other_edge_does()
         "edge.remove",
         json!({"from": "n1", "rel": "about", "to": "mum"}),
     );
-    assert_eq!(
-        w.one::<i64>("SELECT version FROM entity WHERE id = 'n1'", &[]),
-        4
-    );
+    let removed = w.stamp("n1");
+    assert_ne!(removed, linked, "removing an about edge touches it");
     // Removing an edge that is not there changes nothing.
     w.ok(
         "edge.remove",
         json!({"from": "n1", "rel": "about", "to": "mum"}),
     );
-    assert_eq!(
-        w.one::<i64>("SELECT version FROM entity WHERE id = 'n1'", &[]),
-        4
-    );
+    assert_eq!(w.stamp("n1"), removed);
 }
 
 // ---------------------------------------------------------------------------
@@ -801,21 +783,23 @@ fn garbage_collection_takes_what_no_foreign_key_names_and_what_only_a_collected_
     let w = World::new();
     let kept = w.document("d1", "Kept", b"kept", None);
     let orphan = centraid_vault::blob::content_digest(b"orphan");
-    w.ok("blob.stage", json!({"hash": &orphan, "size": 6}));
     // A derivative of the orphan has bytes of its own; the orphan's collection
-    // takes the derivative, and its bytes then have no claim either.
+    // takes the derivative, and its bytes then have no claim either. Written
+    // through the library, not the command: `derivative.write` collects, and
+    // would take the orphan before this test asks.
     let thumb = centraid_vault::blob::content_digest(b"orphan thumb");
-    w.ok(
-        "derivative.write",
-        json!({"blob": &orphan, "variant": "thumb", "out": &thumb, "out_size": 12, "media_type": "image/jpeg"}),
-    );
-    // A derivative of the kept document keeps its own bytes alive only while it exists.
-    let kept_thumb = centraid_vault::blob::content_digest(b"kept thumb");
-    w.ok(
-        "derivative.write",
-        json!({"blob": &kept, "variant": "preview", "out": &kept_thumb, "out_size": 10, "media_type": "image/jpeg"}),
-    );
-    let collected = w.ok("blob.collect", json!({}))["collected"]
+    w.commit(|tx| {
+        centraid_vault::blob::stage(tx.connection(), &orphan, 6)?;
+        centraid_vault::blob::write_derivative(
+            tx.connection(),
+            AT,
+            &orphan,
+            "thumb",
+            Some((&thumb, 12, "image/jpeg")),
+            None,
+        )
+    });
+    let collected = w.ok("blob.collect", json!({}))["released"]
         .as_array()
         .expect("hashes")
         .clone();
@@ -827,6 +811,13 @@ fn garbage_collection_takes_what_no_foreign_key_names_and_what_only_a_collected_
     let mut expected = vec![orphan.clone(), thumb.clone()];
     expected.sort();
     assert_eq!(collected, expected);
+    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM blob", &[]), 1);
+    // A derivative of the kept document keeps its own bytes alive only while it exists.
+    let kept_thumb = centraid_vault::blob::content_digest(b"kept thumb");
+    w.ok(
+        "derivative.write",
+        json!({"blob": &kept, "variant": "preview", "out": &kept_thumb, "out_size": 10, "media_type": "image/jpeg"}),
+    );
     assert_eq!(
         w.one::<i64>("SELECT COUNT(*) FROM blob", &[]),
         2,
@@ -837,7 +828,7 @@ fn garbage_collection_takes_what_no_foreign_key_names_and_what_only_a_collected_
     // Trash keeps the reference alive; a purge releases it.
     w.ok("entity.trash", json!({"id": "d1"}));
     assert!(
-        w.ok("blob.collect", json!({}))["collected"]
+        w.ok("blob.collect", json!({}))["released"]
             .as_array()
             .expect("hashes")
             .is_empty()
@@ -846,7 +837,7 @@ fn garbage_collection_takes_what_no_foreign_key_names_and_what_only_a_collected_
     let purged = w.ok("entity.purge", json!({"id": "d1"}));
     assert_eq!(purged["released"].as_array().expect("hashes").len(), 2);
     assert!(
-        w.ok("blob.collect", json!({}))["collected"]
+        w.ok("blob.collect", json!({}))["released"]
             .as_array()
             .expect("hashes")
             .is_empty(),
@@ -1036,10 +1027,7 @@ fn a_merge_repoints_every_reference_and_purges_the_person_who_goes() {
         w.one::<i64>("SELECT cadence_days FROM person WHERE id = 'keep'", &[]),
         14
     );
-    assert_eq!(
-        w.one::<i64>("SELECT version FROM entity WHERE id = 'keep'", &[]),
-        2
-    );
+    assert_ne!(w.stamp("keep"), AT, "a merge touches the survivor");
 }
 
 #[test]
@@ -1180,7 +1168,7 @@ fn a_new_record_is_added_with_its_source_and_a_known_one_updates_only_what_the_m
     );
     assert_eq!(field(&w, &id, "nickname").as_deref(), Some("Countess"));
     // An identical statement is no change at all.
-    let version = w.one::<i64>("SELECT version FROM entity WHERE id = ?1", &[&id]);
+    let stamped = w.stamp(&id);
     let out = contacts(
         &w,
         true,
@@ -1192,10 +1180,7 @@ fn a_new_record_is_added_with_its_source_and_a_known_one_updates_only_what_the_m
         )]),
     );
     assert_eq!(out["unchanged"], 1);
-    assert_eq!(
-        w.one::<i64>("SELECT version FROM entity WHERE id = ?1", &[&id]),
-        version
-    );
+    assert_eq!(w.stamp(&id), stamped);
 }
 
 #[test]

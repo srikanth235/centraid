@@ -39,7 +39,7 @@
 //! that table with the connector plane and nothing called the door, so it is
 //! deleted (R-1047-D2). A Locker cell is opened only by the core holding `K`
 //! (`crates/core/src/locker`), behind the member's unlock and after
-//! `locker.reveal_receipt`; the access plane has no path to one to refuse.
+//! `locker.mark_used`; the access plane has no path to one to refuse.
 
 use std::collections::BTreeSet;
 
@@ -137,8 +137,8 @@ pub enum Principal {
     // THE ASSISTANT IS NOT A PRINCIPAL (#1135, the owner's direction). It acts
     // as the member does, with the member's authority; the one rule that
     // differs is a channel rule and not an authority: a sealed value's
-    // plaintext never reaches the model, an event, the stored thread, the
-    // journal or the index. The chat's door and runtime enforce it
+    // plaintext never reaches the model, an event, the stored thread or the
+    // index. The chat's door and runtime enforce it
     // (`crates/core/src/assist/door.rs`, `crates/assist/src/native`); the
     // vault takes ciphertext only (`assert_sealed_cell`) from whoever runs.
     //

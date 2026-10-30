@@ -1468,6 +1468,11 @@
           "origin": {
             "additionalProperties": false,
             "properties": {
+              "color": {
+                "description": "The colour the phone paints the store with, as the design wheel names it.",
+                "maxLength": 64,
+                "type": ["string", "null"]
+              },
               "config": {
                 "type": ["object", "null"]
               },
@@ -1499,6 +1504,11 @@
                 },
                 "fields": {
                   "type": "object"
+                },
+                "size": {
+                  "description": "How large the bytes a record names are, counted by the phone; the command claims them.",
+                  "minimum": 0,
+                  "type": ["integer", "null"]
                 }
               },
               "required": ["external_id", "fields"],

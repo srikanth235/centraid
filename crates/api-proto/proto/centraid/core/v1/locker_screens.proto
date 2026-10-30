@@ -1,10 +1,10 @@
 // LOCKER'S SCREENS, DECIDED IN RUST (#1135, lane E). The view states and events
-// of `locker.home`, `locker.item`, `locker.editor`, `locker.access`,
+// of `locker.home`, `locker.item`, `locker.editor`,
 // `locker.export`, `locker.import` and `locker.lock` (the wall chat opens). The
 // trash is the kit's (`kit_screens.proto`).
 //
 // THE LIST IS METADATA; THE SECRET IS NOT. A sealed value reaches a view only as
-// a reveal the core receipted (`LockerSessionRequest.reveal`), lives in the
+// a reveal the core ran (`LockerSessionRequest.reveal`), lives in the
 // screen's `kit::secret::Secrets` for the core's reveal window, and is gone on
 // conceal, on the timer, on a relock and on leave. A view never carries a
 // secret it was not asked to draw this instant.
@@ -118,7 +118,7 @@ message LockerChoice {
 message LockerSection {
   string title = 1;
   repeated LockerFieldRow rows = 2;
-  // A sentence under the rows (the access history's rule); empty for none.
+  // A sentence under the rows; empty for none.
   string note = 3;
 }
 
@@ -228,7 +228,7 @@ message LockerHomeChrome {
 }
 
 message LockerMoreRow {
-  // `import`, `trash`, `export`, `access`, `facts`, `lock`.
+  // `import`, `trash`, `export`, `facts`, `lock`.
   string key = 1;
   string label = 2;
   string meta = 3;
@@ -239,7 +239,8 @@ message LockerMoreRow {
 
 message LockerHomeData {
   // "Titles, usernames and addresses are browsable · a secret is revealed per
-  // item, per gesture, and receipted".
+  // item, per gesture", then — once — the unlocks the phone refused while the
+  // Locker was shut ("3 failed unlocks · last 12 Oct 14:05", #1146).
   string status_line = 1;
 
   // ITEMS: the filter chips, the rows, the window's honest end.
@@ -415,8 +416,7 @@ message LockerItemData {
   string type_key = 4;
   bool starred = 5;
   repeated StatusChip chips = 6;
-  // "Sealed at rest. Revealing one writes a receipt and it conceals itself
-  // after 30 seconds."
+  // "Sealed at rest. A revealed secret conceals itself after 30 seconds."
   string status_line = 7;
   repeated LockerSection sections = 8;
   repeated string tags = 9;
@@ -657,43 +657,6 @@ message LockerEditorEvent {
 
   message CompromisedToggled {
     bool on = 1;
-  }
-
-  message Refreshed {}
-}
-
-// ---------------------------------------------------------------------------
-// locker.access: the whole Locker's access history
-// ---------------------------------------------------------------------------
-
-// Every unlock, reveal, copy, one-time code and export, newest first. METADATA
-// ONLY: a row names the act, the item and the minute, never a value.
-message LockerAccessState {
-  optional LockerWall wall = 1;
-  bool secure = 2;
-  oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    Denied denied = 5;
-    LockerAccessData data = 6;
-  }
-  LockerAccessChrome chrome = 7;
-}
-
-message LockerAccessChrome {
-  string title = 1;
-  string back_label = 2;
-  string retry = 3;
-}
-
-message LockerAccessData {
-  string lede = 1;
-  LockerSection history = 2;
-}
-
-message LockerAccessEvent {
-  oneof kind {
-    Refreshed refreshed = 1;
   }
 
   message Refreshed {}

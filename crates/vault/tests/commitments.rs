@@ -131,6 +131,76 @@ fn foreign_keys(connection: &Connection) -> Vec<Fk> {
     all
 }
 
+/// The leading column of every index of `table`, the primary key included: a
+/// lookup of `column = ?` on the child is served by an index only when the column
+/// leads it.
+fn leading_columns(connection: &Connection, table: &str) -> BTreeSet<String> {
+    let mut leads = BTreeSet::new();
+    let indexes: Vec<String> = connection
+        .prepare("SELECT name FROM pragma_index_list(?1)")
+        .and_then(|mut statement| {
+            statement
+                .query_map([table], |row| row.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()
+        })
+        .expect("lists indexes");
+    for index in indexes {
+        let lead: Option<String> = connection
+            .query_row(
+                "SELECT name FROM pragma_index_info(?1) WHERE seqno = 0",
+                [&index],
+                |row| row.get(0),
+            )
+            .ok();
+        leads.extend(lead);
+    }
+    // A rowid-alias primary key has no index of its own.
+    let key: Option<String> = connection
+        .query_row(
+            "SELECT name FROM pragma_table_info(?1) WHERE pk = 1",
+            [table],
+            |row| row.get(0),
+        )
+        .ok();
+    leads.extend(key);
+    leads
+}
+
+/// Tables of one row, where a child-side scan costs nothing.
+const ONE_ROW_TABLES: [(&str, &str); 1] = [(
+    "vault",
+    "the one-row identity record: `self_id` is checked against a table of one row",
+)];
+
+#[test]
+fn every_foreign_key_column_leads_an_index() {
+    // Deleting a parent row (a blob's collection, a purge, emptying the trash)
+    // makes SQLite look up the children that name it, once per deleted row; with
+    // no index leading on the child column each lookup reads the whole child
+    // table. `EXPLAIN QUERY PLAN` never shows that lookup, so the plan sweep in
+    // `crates/core/tests/query_plans.rs` cannot see its absence.
+    let scratch = founded("c4-fk-index");
+    let unindexed: Vec<String> = read(&scratch.vault, |connection| {
+        Ok(foreign_keys(connection)
+            .into_iter()
+            .filter(|fk| !ONE_ROW_TABLES.iter().any(|(table, _)| *table == fk.table))
+            .filter(|fk| {
+                let lead = fk.from.split(',').next().unwrap_or_default().to_owned();
+                !leading_columns(connection, &fk.table).contains(&lead)
+            })
+            .map(|fk| format!("{}({}) -> {}({})", fk.table, fk.from, fk.to_table, fk.to))
+            .collect())
+    });
+    assert!(
+        unindexed.is_empty(),
+        "foreign keys whose child column leads no index (add one to the baseline, \
+         partial `WHERE col IS NOT NULL` when it is mostly NULL): {unindexed:?}"
+    );
+    for (table, reason) in ONE_ROW_TABLES {
+        assert!(!reason.is_empty(), "{table} is exempt without a reason");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // 1. One host per kind
 // ---------------------------------------------------------------------------
@@ -433,6 +503,60 @@ fn delete_rules_cascade_only_where_a_row_cannot_outlive_its_parent() {
                     .any(|fk| fk.table == *table && fk.from == *from)
             );
         }
+        Ok(())
+    });
+}
+
+#[test]
+fn every_pointer_into_an_entity_that_deletes_nothing_has_a_purge_rule() {
+    use centraid_vault::commands::entity::PURGE_RULES;
+    let scratch = founded("c4b");
+    read(&scratch.vault, |connection| {
+        let hosts: BTreeSet<String> = Kind::ALL
+            .iter()
+            .map(|kind| kind.host().to_owned())
+            .collect();
+        // The pointers the engine would refuse to delete out from under: no
+        // action on delete, into an entity or into a kind's own table.
+        let derived: BTreeSet<(String, String)> = foreign_keys(connection)
+            .into_iter()
+            .filter(|fk| {
+                fk.on_delete == "NO ACTION"
+                    && (fk.to_table == "entity" || hosts.contains(&fk.to_table))
+            })
+            .map(|fk| (fk.table, fk.from))
+            .collect();
+        let named: BTreeSet<(String, String)> = PURGE_RULES
+            .iter()
+            .map(|(table, from, _)| ((*table).to_owned(), (*from).to_owned()))
+            .collect();
+        assert_eq!(
+            derived, named,
+            "left: the file's pointers; right: the purge rules. A pointer with no rule \
+             fails a member's purge, or strands what points at it"
+        );
+        Ok(())
+    });
+}
+
+#[test]
+fn every_column_that_rents_a_blob_says_whose_the_bytes_are() {
+    use centraid_vault::backup::files::RENTERS;
+    let scratch = founded("c4c");
+    read(&scratch.vault, |connection| {
+        let rented: BTreeSet<(String, String)> = centraid_vault::blob::references(connection)?
+            .into_iter()
+            // A cascading reference (a derivative of a blob) keeps nothing alive;
+            // `derivative.out` is a plain one and follows its original.
+            .filter(|reference| reference.keeps_alive)
+            .map(|reference| (reference.table, reference.column))
+            .filter(|(table, column)| !(table == "derivative" && column == "out"))
+            .collect();
+        let named: BTreeSet<(String, String)> = RENTERS
+            .iter()
+            .map(|(table, column, _)| ((*table).to_owned(), (*column).to_owned()))
+            .collect();
+        assert_eq!(rented, named);
         Ok(())
     });
 }
@@ -1138,10 +1262,11 @@ fn the_founded_file_holds_the_spec_s_tables_and_nothing_else() {
         "origin",
         "source",
         "revision",
-        "journal",
+        "action_key",
         "search",
         "search_vocab",
         "search_word",
+        "search_owed",
         // the kinds' own rows and their children
         "person",
         "contact_point",
@@ -1170,7 +1295,6 @@ fn the_founded_file_holds_the_spec_s_tables_and_nothing_else() {
         "locker_item_field",
         "locker_item_passkey",
         "locker_key",
-        "receipt",
     ]
     .into();
     read(&scratch.vault, |connection| {
@@ -1315,11 +1439,16 @@ fn names_a_computable(column: &str, declared: &str) -> bool {
 /// reason. A new computable column fails the test until it is argued for here.
 /// (`derivative` is the spec's other exception: it holds caches of a blob's
 /// content, and no column of it is named like a rollup, so it needs no line.)
-const STATED_NOT_COMPUTED: [(&str, &str, &str); 3] = [
+const STATED_NOT_COMPUTED: [(&str, &str, &str); 4] = [
     (
         "checkpoint",
         "balance_minor",
         "the bank's stated balance on a date: a statement, never recomputed from txn",
+    ),
+    (
+        "locker_item",
+        "last_used_at",
+        "the one record of a use: the Locker keeps no access log to recompute it from (#1146, owner-ruled), and a stamp is a fact the core states, not a rollup",
     ),
     (
         "measurement",
@@ -1394,6 +1523,11 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         "word",
         Reach::Not("the index's own vocabulary, kept as a list"),
     ),
+    (
+        "search_owed",
+        "after",
+        Reach::Not("a cursor in id order over what a label feeds, not prose"),
+    ),
     ("person", "nickname", Reach::Own),
     ("person", "role", Reach::Own),
     ("person", "met", Reach::Own),
@@ -1416,6 +1550,12 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("event", "zone", Reach::Not("a time zone name, not prose")),
     ("event", "rule", Reach::Not("an RFC 5545 rule")),
     ("event", "url", Reach::Not("a link, not prose")),
+    (
+        "occurrence",
+        "zone",
+        Reach::Not("a time zone name, not prose"),
+    ),
+    ("occurrence", "url", Reach::Not("a link, not prose")),
     ("occurrence", "title", Reach::Own),
     ("occurrence", "description", Reach::Own),
     ("task", "description", Reach::Own),
@@ -1483,23 +1623,24 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         Reach::Not("the vault's own name, one per file and not an entity"),
     ),
     ("vault", "zone", Reach::Not("a time zone name, not prose")),
-    ("journal", "command", Reach::Not("a command name")),
     (
-        "journal",
-        "invoke_key",
+        "action_key",
+        "key",
         Reach::Not("an act's correlation key, a token and not prose"),
     ),
     (
-        "journal",
+        "action_key",
         "asked",
         Reach::Not("a digest of what an act asked, not prose"),
     ),
-    (
-        "journal",
-        "detail",
-        Reach::Not("a refusal's sentence, evidence rather than content"),
-    ),
     ("account", "currency", Reach::Not("an ISO code")),
+    (
+        "rule",
+        "display_name",
+        Reach::Not(
+            "a rule is not an entity; the name it gives lands on the line's title, which is indexed",
+        ),
+    ),
     ("txn", "currency", Reach::Not("an ISO code")),
     ("budget", "currency", Reach::Not("an ISO code")),
     ("budget", "month", Reach::Not("a month")),
@@ -1511,7 +1652,7 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("occurrence", "original_start", Reach::Not("an instant")),
     ("occurrence", "starts", Reach::Not("an instant")),
     ("occurrence", "ends", Reach::Not("an instant")),
-    ("journal", "at", Reach::Not("an instant")),
+    ("action_key", "at", Reach::Not("an instant")),
     ("revision", "at", Reach::Not("an instant")),
     // Locker: the plain cells a member sees in the list are found by; every
     // sealed cell is `lk1:` ciphertext and is never text (`SEALED_ITEM_CELLS`).
@@ -1641,9 +1782,6 @@ fn column_definition(sql: &str, column: &str) -> String {
 /// tables are NOT exempt: its plain cells are findable and its sealed ones are
 /// argued out by name, in [`CENSUS`].
 fn is_structural(connection: &Connection, table: &str, column: &str) -> bool {
-    if table == "receipt" {
-        return true;
-    }
     if column == "id"
         || column == "kind"
         || column.ends_with("_id")

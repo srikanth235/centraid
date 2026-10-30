@@ -19,8 +19,8 @@
 //! ## The gate order, and each gate's reason
 //!
 //! 1. **Input-schema validation**, with every error run through the sealed
-//!    scrub before it reaches the journal or a response. A validation message
-//!    quotes the value that failed, which for a sealed field is the secret.
+//!    scrub before it reaches a response. A validation message quotes the value
+//!    that failed, which for a sealed field is the secret.
 //! 2. **Authority**: the principal's declared reach, and whether it may act.
 //! 3. **The LIVE definition is what runs.** A predicate is a function; the
 //!    registry is Rust, not a table, and nothing is installed into the file.
@@ -28,19 +28,20 @@
 //! 5. **The handler, inside the commit guard** — its writes, the entities it
 //!    touched and their search rows land together or not at all.
 //! 6. **Postconditions**: a failed one rolls the whole commit back.
-//! 7. **The journal row**, in the same transaction. A refusal is journalled
-//!    too; a handler that errored leaves a `failed` row written after the
-//!    rollback.
+//! 7. **The action key**, when the caller sent one, in the same transaction
+//!    ([`crate::action_key`]). A refusal and a failure write nothing anywhere:
+//!    the sentence goes back to the caller and no row remembers the attempt.
 //!
 //! ## There is no replay ledger
 //!
 //! `execute` takes a name and an input, and nothing else: no intent id, no
 //! device, no payload hash. The caller is the shell on the device the file is
 //! on, so a command that arrives twice **was made twice**: the second delivery
-//! runs the handler again (#1029 §1, R-1088-12). The `invoke_key` a shell sends
-//! is its own correlation key and never reaches this module. A write a shell
-//! may re-offer is idempotent by its own content, or by an id the phone minted
-//! before the first attempt.
+//! runs the handler again (#1029 §1, R-1088-12). The one exception is an `act`
+//! that carries a key ([`Vault::execute_keyed`]): the commit records the key,
+//! and a delivery repeated after a restart is answered `replayed` and runs
+//! nothing (#1146). A write a shell may re-offer without a key is idempotent by
+//! its own content, or by an id the phone minted before the first attempt.
 
 pub mod blob;
 pub mod contact_point;
@@ -56,9 +57,11 @@ pub mod measurement;
 pub mod money;
 pub mod note;
 pub mod person;
+pub mod person_reminder;
 pub mod photo;
 pub mod place;
 pub mod rule;
+pub mod sealed;
 pub mod tag;
 pub mod task;
 pub mod thread;
@@ -70,10 +73,10 @@ use std::collections::BTreeMap;
 use rusqlite::Connection;
 
 use crate::access::{Decision, Principal, Verb, evaluate_access};
+use crate::action_key;
 use crate::clock::Ids;
 use crate::error::{Result, VaultError};
 use crate::file::Vault;
-use crate::journal::{self, Outcome};
 use crate::log::CommitTx;
 use crate::model::Kind;
 
@@ -129,10 +132,6 @@ pub struct CommandCtx<'tx, 'conn> {
     pub input: serde_json::Value,
     pub principal: Principal,
     pub now: String,
-    /// The `journal.seq` this invocation's row will take, reserved before the
-    /// handler runs so evidence a handler writes can name the row that
-    /// explains it.
-    pub journal_seq: i64,
     ids: &'tx dyn Ids,
     /// The vault's local content store, when it has one. See [`CommandCtx::blobs`].
     blobs: Option<&'tx (dyn crate::bytes::BlobStore + Send + Sync)>,
@@ -161,7 +160,7 @@ impl<'conn> CommandCtx<'_, 'conn> {
         self.ids.next()
     }
 
-    /// Stamp an entity as changed: `updated_at`, `version`, and a place on the
+    /// Stamp an entity as changed: `updated_at`, and a place on the
     /// list the search index is rebuilt from at commit.
     ///
     /// **Every command that changes an entity's row, its kind row or its child
@@ -189,18 +188,6 @@ impl<'conn> CommandCtx<'_, 'conn> {
     /// shell may re-offer, keyed by an id the phone minted).
     pub fn insert_entity_as(&self, id: &str, kind: Kind, title: &str) -> Result<()> {
         self.tx.insert_entity(id, kind, title, &self.now)
-    }
-
-    /// Append Locker's access evidence: that an item (or, with `None`, the
-    /// locker itself) was opened, revealed or exported. The row names the
-    /// journal row that explains it; it is evidence a member can read, and
-    /// `receipt_is_evidence` refuses to rewrite it.
-    pub fn write_receipt(&self, item_id: Option<&str>, act: &str) -> Result<i64> {
-        self.connection().execute(
-            "INSERT INTO receipt (at, item_id, act, journal_seq) VALUES (?1, ?2, ?3, ?4)",
-            rusqlite::params![self.now, item_id, act, self.journal_seq],
-        )?;
-        Ok(self.connection().last_insert_rowid())
     }
 
     /// A required string input.
@@ -250,7 +237,7 @@ pub struct CommandDefinition {
     pub preconditions: &'static [CommandCondition],
     pub postconditions: &'static [CommandCondition],
     pub handler: CommandHandler,
-    /// Input keys whose values are secrets: tokenised before the journal.
+    /// Input keys whose values are secrets: scrubbed out of a message before it leaves.
     pub sealed_input: &'static [&'static str],
 }
 
@@ -310,7 +297,7 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 21] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 22] = [
             blob::definitions,
             contact_point::definitions,
             container::definitions,
@@ -325,6 +312,7 @@ impl Registry {
             money::definitions,
             note::definitions,
             person::definitions,
+            person_reminder::definitions,
             photo::definitions,
             place::definitions,
             rule::definitions,
@@ -433,19 +421,17 @@ pub enum CommandStatus {
 #[derive(Debug, Clone)]
 pub struct CommandOutcome {
     pub status: CommandStatus,
-    /// The `journal.seq` of the row that records this run, as text.
-    pub invocation_id: String,
     /// The tables this command changed, from the commit guard's
     /// `update_hook`. What a change event is made of (#1029 §1).
     pub tables: Vec<String>,
     pub output: serde_json::Value,
     /// The owner-facing sentence, on a refusal.
     pub reason: Option<String>,
-    /// The raw predicate that refused, for the journal.
+    /// The raw predicate that refused.
     pub predicate: Option<String>,
     /// Whether this is the answer to a run an earlier delivery of the same
     /// `act` key already made: nothing was run, and `output` and `tables` are
-    /// empty because the journal keeps evidence and not answers.
+    /// empty because the action key keeps a digest and not an answer.
     pub replayed: bool,
 }
 
@@ -460,18 +446,18 @@ impl Vault {
         self.execute_keyed(registry, principal, command, None)
     }
 
-    /// The run an `act` key already names, if the journal holds one: what a
+    /// The run an `act` key already names, if the vault holds one: what a
     /// caller asks before it runs anything, so a delivery repeated after a
-    /// restart is answered and not run again (#1135).
+    /// restart is answered and not run again (#1146).
     ///
     /// # Errors
     /// The read's own.
-    pub fn recall_key(&self, key: &str) -> Result<Option<journal::Recalled>> {
-        self.read(|connection| journal::recall(connection, key))
+    pub fn recall_key(&self, key: &str) -> Result<Option<action_key::Recalled>> {
+        self.read(|connection| action_key::recall(connection, key))
     }
 
     /// [`execute`](Self::execute), recording `keyed` with the commit when it
-    /// executes. A key the journal already holds is answered inside the commit
+    /// executes. A key the vault already holds is answered inside the commit
     /// (`replayed`) and nothing runs, so two deliveries racing for the write
     /// lock still run once.
     pub fn execute_keyed(
@@ -479,7 +465,7 @@ impl Vault {
         registry: &Registry,
         principal: &Principal,
         command: &Command,
-        keyed: Option<&journal::KeyMark<'_>>,
+        keyed: Option<&action_key::KeyMark<'_>>,
     ) -> Result<CommandOutcome> {
         // Gate 3, first in the code because it is what the rest is about: the
         // LIVE definition.
@@ -495,7 +481,7 @@ impl Vault {
             .validator
             .iter_errors(&command.input)
             .map(|error| {
-                journal::scrub_sealed(
+                sealed::scrub_sealed(
                     &format!("{}: {error}", error.instance_path),
                     definition.sealed_input,
                     &command.input,
@@ -519,40 +505,17 @@ impl Vault {
             tx.set_producer(&command.name);
             let connection = tx.connection();
             if let Some(mark) = keyed
-                && let Some(earlier) = journal::recall(connection, mark.key)?
+                && action_key::recall(connection, mark.key)?.is_some()
             {
                 return Ok(Ran {
-                    seq: earlier.seq,
                     refusal: None,
                     output: serde_json::Value::Null,
                     replayed: true,
                 });
             }
-            let seq = journal::next_seq(connection)?;
             let at = self.clock().now_text();
-            let record = |outcome: Outcome, detail: Option<&str>| {
-                journal::write(
-                    connection,
-                    &journal::Entry {
-                        seq,
-                        at: &at,
-                        command: &command.name,
-                        input: &command.input,
-                        sealed_keys: definition.sealed_input,
-                        outcome,
-                        detail,
-                        keyed: if outcome == Outcome::Executed {
-                            keyed
-                        } else {
-                            None
-                        },
-                    },
-                )
-            };
             let refused = |sentence: String, predicate: &str| -> Result<Ran> {
-                record(Outcome::Refused, Some(&sentence))?;
                 Ok(Ran {
-                    seq,
                     refusal: Some((sentence, predicate.to_owned())),
                     output: serde_json::Value::Null,
                     replayed: false,
@@ -572,7 +535,6 @@ impl Vault {
                 input: command.input.clone(),
                 principal: principal.clone(),
                 now: at.clone(),
-                journal_seq: seq,
                 ids: self.ids(),
                 blobs: self.blobs(),
             };
@@ -603,47 +565,19 @@ impl Vault {
             }
 
             // Gate 7.
-            record(Outcome::Executed, None)?;
+            if let Some(mark) = keyed {
+                action_key::remember(connection, mark, self.clock())?;
+            }
             Ok(Ran {
-                seq,
                 refusal: None,
                 output,
                 replayed: false,
             })
         });
 
-        let result = match ran {
-            Ok(result) => result,
-            Err(error) => {
-                // The command's writes rolled back and took the row with them,
-                // so the failure is written in a transaction of its own. Best
-                // effort: a vault that cannot take this write (a full disk) is
-                // the failure being reported, not a second one.
-                let _ = self.commit(|tx| {
-                    journal::write(
-                        tx.connection(),
-                        &journal::Entry {
-                            seq: journal::next_seq(tx.connection())?,
-                            at: &self.clock().now_text(),
-                            command: &command.name,
-                            input: &command.input,
-                            sealed_keys: definition.sealed_input,
-                            outcome: Outcome::Failed,
-                            detail: Some(&journal::scrub_sealed(
-                                &error.to_string(),
-                                definition.sealed_input,
-                                &command.input,
-                            )),
-                            keyed: None,
-                        },
-                    )
-                });
-                return Err(error);
-            }
-        };
+        let result = ran?;
 
         let Ran {
-            seq,
             refusal,
             output,
             replayed,
@@ -656,7 +590,10 @@ impl Vault {
         // commit; with the commit made, their files go from this device's store.
         // A file that will not delete is left for a later sweep: the rows are
         // already gone, so nothing refers to it.
+        // A replayed run is answered from the key and ran nothing now: the hashes
+        // it names may have been claimed again since, so none of them is touched.
         if status == CommandStatus::Executed
+            && !replayed
             && let (Some(store), Some(released)) = (
                 self.blobs(),
                 output.get("released").and_then(serde_json::Value::as_array),
@@ -668,7 +605,6 @@ impl Vault {
         }
         Ok(CommandOutcome {
             status,
-            invocation_id: seq.to_string(),
             tables: result.tables,
             output,
             reason,
@@ -681,7 +617,6 @@ impl Vault {
 /// What the gate's transaction produced.
 struct Ran {
     replayed: bool,
-    seq: i64,
     /// The sentence and the raw predicate, when the gate refused.
     refusal: Option<(String, String)>,
     output: serde_json::Value,
@@ -691,7 +626,7 @@ struct Ran {
 ///
 /// A TYPED error, not a panic: a shell renders "not in this build yet" and the
 /// process survives. And it is reached only AFTER the gate order has run, so a
-/// stub still validates its input and journals the refusal.
+/// stub still validates its input and refuses with its sentence.
 pub fn not_implemented(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     Err(VaultError::NotImplemented {
         name: ctx.command.to_owned(),

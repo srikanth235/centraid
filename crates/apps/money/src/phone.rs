@@ -968,6 +968,8 @@ pub struct RuleLine {
     pub amount_max: Option<i64>,
     pub account_label: Option<String>,
     pub category_label: Option<String>,
+    /// The payee the rule gives the lines it files.
+    pub rename_to: Option<String>,
     pub specificity: u32,
 }
 
@@ -993,6 +995,7 @@ pub fn rules(door: &dyn PageDoor) -> KitResult<MoneyRules> {
                 amount_max: rule.amount_max_minor,
                 account_label: rule.account_id.as_deref().map(|id| data.account_name(id)),
                 category_label: rule.category_concept_id.as_deref().map(|id| data.label(id)),
+                rename_to: rule.display_name.clone(),
                 specificity: rules::specificity(rule),
             })
             .collect(),

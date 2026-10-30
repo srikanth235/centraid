@@ -21,7 +21,7 @@ pub fn driver() -> Driver {
 pub fn arrange(d: &Driver, request: impl Into<wire::ActRequest>) -> wire::ActResponse {
     let was_open = session(
         d,
-        wire::locker_session_request::Step::State(wire::LockerStateAsk {}),
+        wire::locker_session_request::Step::State(wire::LockerStateAsk::default()),
     )
     .state
         == wire::LockerSessionState::Unlocked as i32;
@@ -64,7 +64,7 @@ pub fn session(
 pub fn unlock_core(d: &Driver) {
     session(
         d,
-        wire::locker_session_request::Step::Unlock(wire::LockerUnlock {}),
+        wire::locker_session_request::Step::Unlock(wire::LockerUnlock::default()),
     );
 }
 
@@ -199,7 +199,6 @@ pub fn wall_of(d: &Driver, id: u64) -> Option<wire::LockerWall> {
         Some(wire::view_state::Kind::LockerHome(home)) => home.wall.clone(),
         Some(wire::view_state::Kind::LockerItem(item)) => item.wall.clone(),
         Some(wire::view_state::Kind::LockerEditor(editor)) => editor.wall.clone(),
-        Some(wire::view_state::Kind::LockerAccess(access)) => access.wall.clone(),
         Some(wire::view_state::Kind::LockerExport(export)) => export.wall.clone(),
         Some(wire::view_state::Kind::LockerImport(import)) => import.wall.clone(),
         Some(wire::view_state::Kind::LockerLock(lock)) => lock.wall.clone(),

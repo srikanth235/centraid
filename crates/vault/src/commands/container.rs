@@ -144,7 +144,85 @@ fn move_container(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         rusqlite::params![id, parent, position, kind],
     )?;
     ctx.touch(id)?;
+    // A SECTION TAKES ITS TASKS WITH IT. A task names its project and its
+    // section, and the baseline's trigger refuses a task whose section is in
+    // another project; it fires on a write to the task, so moving the section
+    // alone would leave its tasks (trashed ones too) pointing at the old
+    // project, a state no task command could then edit.
+    if kind.as_deref() == Some("section") {
+        let tasks: Vec<String> = ctx
+            .connection()
+            .prepare("SELECT id FROM task WHERE section_id = ?1 AND project_id IS NOT ?2")?
+            .query_map(rusqlite::params![id, parent], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        for task in tasks {
+            ctx.connection().execute(
+                "UPDATE task SET project_id = ?2 WHERE id = ?1",
+                rusqlite::params![task, parent],
+            )?;
+            ctx.touch(&task)?;
+        }
+    }
     Ok(serde_json::json!({ "id": id }))
+}
+
+/// The calendar a followed phone calendar is, founded the first time the calendar is read and kept
+/// every time after ([#1146](https://github.com/srikanth235/centraid/issues/1146)): a calendar of
+/// the vault titled as the phone calls it, with the phone's colour. The phone's colour and name
+/// follow it, except that a name the member changed stands, and a calendar the member trashed is
+/// left where they put it. Events an older pass filed under the vault's own calendar move to it.
+pub(crate) fn follow_calendar(
+    ctx: &CommandCtx<'_, '_>,
+    home: &crate::commands::follow::Home<'_>,
+) -> Result<String> {
+    let connection = ctx.connection();
+    let title = home.label.trim();
+    if let Some(fills) = home.fills {
+        let Some(found) = crate::commands::entity::find(connection, fills)? else {
+            return Ok(fills.to_owned());
+        };
+        if found.deleted_at.is_some() {
+            return Ok(fills.to_owned());
+        }
+        if let Some(color) = home.color
+            && connection.execute(
+                "UPDATE container SET color = ?2 WHERE id = ?1 AND color IS NOT ?2",
+                [fills, color],
+            )? > 0
+        {
+            ctx.touch(fills)?;
+        }
+        if home.was == Some(found.title.as_str()) && found.title != title {
+            connection.execute("UPDATE entity SET title = ?2 WHERE id = ?1", [fills, title])?;
+            ctx.touch(fills)?;
+        }
+        return Ok(fills.to_owned());
+    }
+    let id = ctx.insert_entity(Kind::Calendar, title)?;
+    connection.execute(
+        "INSERT INTO container (id, kind, color, position)
+         VALUES (?1, 'calendar', ?2,
+           (SELECT COALESCE(MAX(position), 0) + 1 FROM container
+             WHERE kind = 'calendar' AND parent_id IS NULL))",
+        rusqlite::params![id, home.color],
+    )?;
+    let filed: Vec<String> = connection
+        .prepare(
+            "SELECT e.id FROM source s JOIN event e ON e.id = s.entity_id
+              WHERE s.origin_id = ?1 AND e.calendar_id = ?2",
+        )?
+        .query_map([home.origin, crate::model::DEFAULT_CALENDAR_ID], |row| {
+            row.get(0)
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    for event in filed {
+        connection.execute(
+            "UPDATE event SET calendar_id = ?2 WHERE id = ?1",
+            [&event, &id],
+        )?;
+        ctx.touch(&event)?;
+    }
+    Ok(id)
 }
 
 #[must_use]

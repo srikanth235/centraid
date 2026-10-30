@@ -26,7 +26,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
     (
         "kernel",
         "the kernel",
-        "What every kind shares: the entity, the typed edge between two of them, the vault's own row, the journal of every command, revisions and the one search index.",
+        "What every kind shares: the entity, the typed edge between two of them, the vault's own row, the keys of acts already run, revisions and the one search index.",
     ),
     (
         "words",
@@ -51,7 +51,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
     (
         "locker",
         "Locker",
-        "An entity kind whose secrets stay in sealed cells nothing entity-wide reads: items, their custom fields, passkeys, aliases and addresses, and Locker's own receipts. Its tags, star and archive are the vault's; a generic page read passes it by, and the assistant reads its plain rows as the owner does, never a sealed value.",
+        "An entity kind whose secrets stay in sealed cells nothing entity-wide reads: items, their custom fields, passkeys, aliases and addresses. Each item remembers when it was last used. Its tags, star and archive are the vault's; a generic page read passes it by, and the assistant reads its plain rows as the owner does, never a sealed value.",
     ),
 ];
 
@@ -78,12 +78,12 @@ pub const TABLES: [(&str, &str, &str); 42] = [
     (
         "kernel",
         "vault",
-        "The vault's own row: its name, its self person, its currency and its zone. There is exactly one.",
+        "The vault's own row: its name, its self person, its currency and its zone, and the count of commits that changed something with the time of the last. There is exactly one.",
     ),
     (
         "kernel",
-        "journal",
-        "One row for every command the gate was asked to run, in the command's own transaction. Evidence: it cannot be updated and nothing reads it to learn a fact.",
+        "action_key",
+        "The key an act carried and a digest of what it asked, written in the act's own commit, so a delivery repeated after a restart runs nothing. Forgotten after thirty days.",
     ),
     (
         "kernel",
@@ -104,6 +104,11 @@ pub const TABLES: [(&str, &str, &str); 42] = [
         "kernel",
         "search_word",
         "The words the index holds, numbered in the order they arrived: the list a correction reads whole.",
+    ),
+    (
+        "kernel",
+        "search_owed",
+        "The labels whose members a commit left owed a search row, because the label it trashed or restored has too many to write in one commit.",
     ),
     (
         "words",
@@ -259,12 +264,7 @@ pub const TABLES: [(&str, &str, &str); 42] = [
     (
         "locker",
         "locker_key",
-        "The one key generation Locker's items are sealed under.",
-    ),
-    (
-        "locker",
-        "receipt",
-        "Locker's own evidence of who looked: appended on every reveal, never rewritten.",
+        "The one key generation Locker's items are sealed under, and how many unlocks the phone has refused since the last one it allowed.",
     ),
 ];
 

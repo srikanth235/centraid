@@ -33,7 +33,7 @@ impl Settled {
 
 /// A number no earlier gesture used, on this phone, ever: microseconds since
 /// the epoch when the process first asked, plus a count. The core remembers an
-/// `invoke_key` in the vault's journal for good and answers a second delivery
+/// `invoke_key` in the vault for thirty days and answers a second delivery
 /// "replayed" without running it, so a counter a screen restarts at one every
 /// time it opens would turn a later tap into a silent no-op. Screens take their
 /// [`key`] sequence from here.

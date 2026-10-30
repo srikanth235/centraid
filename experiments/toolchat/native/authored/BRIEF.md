@@ -88,7 +88,7 @@ Full text in SPEC §14 and §14.1; `eval/conventions.py` holds the phrase patter
 - `where` numbers take the field's own unit only (`effort > 60`, `effort > 60 minutes`, `cadence > 14 days`); money takes a currency code (`amount > 50 EUR`). "1 hour" is refused.
 - Undoing a photo delete puts it back in its albums; a later `restore` does not (the vault forgets the album once the photo is trashed).
 - An `act` whose selector matches more than one row comes back `ambiguous`. A write on several rows names them (`rows="$a, $b"`) or uses an earlier result (`rows="@2"`).
-- `undo` after `log`, `cancel` or a notebook delete replies "not undone" (the journal keeps it); its gold is an empty diff.
+- `undo` after `log`, `cancel` or a notebook delete replies "not undone" (nothing is kept of it); its gold is an empty diff.
 - A document's date cannot be edited (no `reschedule` on documents); name is its only editable field. Notebooks likewise, and their names are unique, so a multi-row notebook edit is refused.
 - Tasks always carry a status, so `status is empty` on tasks only ever answers empty.
 - Rescheduling a cancelled event is refused ("not here to change"). A trashed event still blocks its slot: creating over it is refused as an overlap.

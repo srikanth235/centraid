@@ -4,7 +4,7 @@ import SwiftUI
 
 /// ONE DOCUMENT'S PAGE (#1046, #1135): its surface — the reader (text), the
 /// stage (image, video, PDF), facts only, or gone — then its path, facts, a row
-/// to its version history, activity, and the verbs Rust offers.
+/// to its version history and the verbs Rust offers.
 ///
 /// **THE VIEW DECIDES NOTHING.** Which verbs exist and whether each is
 /// enabled are `DocsDocumentData.actions`; the editor, a crumb's folder and the
@@ -86,24 +86,13 @@ struct DocsDocumentView: View {
                                 if !document.path.isEmpty { path(document.path) }
                                 if !document.facts.isEmpty {
                                     SectionHeader(title: state.chrome.factsHeading)
-                                    // Ids prefixed per list: facts and activity share one
-                                    // `LazyVStack`, where equal offset ids collide.
+                                    // Ids prefixed per list, so a second list added here never collides
+                                    // with these in the `LazyVStack`.
                                     ForEach(Array(document.facts.enumerated()).map { ("fact-\($0.offset)", $0.element) }, id: \.0) { _, fact in
                                         FieldRow(key: fact.label, value: fact.detail)
                                     }
                                 }
                                 if document.hasVersions { versionsRow(document.versions) }
-                                SectionHeader(title: state.chrome.activityHeading)
-                                if document.activity.isEmpty, !document.activityEmpty.isEmpty {
-                                    Text(document.activityEmpty)
-                                        .centraidType("annotLabel")
-                                        .foregroundStyle(Theme.color("textSoft", scheme))
-                                        .padding(.horizontal, CentraidGeometry.pageMargin)
-                                        .padding(.vertical, 6)
-                                }
-                                ForEach(Array(document.activity.enumerated()).map { ("activity-\($0.offset)", $0.element) }, id: \.0) { _, row in
-                                    CentraidRow(title: row.label, meta: row.meta)
-                                }
                             }
                             .padding(.bottom, 16)
                         }

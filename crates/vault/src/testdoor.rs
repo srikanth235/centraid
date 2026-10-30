@@ -114,6 +114,91 @@ pub fn forget_derivatives(connection: &Connection) -> usize {
         .unwrap_or(0)
 }
 
+/// How many entities carry this id: one while it is there, none once purged.
+#[must_use]
+pub fn entity_rows(connection: &Connection, id: &str) -> i64 {
+    connection
+        .query_row("SELECT COUNT(*) FROM entity WHERE id = ?1", [id], |row| {
+            row.get(0)
+        })
+        .unwrap_or(0)
+}
+
+/// A note in the trash whose window ran out long ago (`overdue`), or one whose
+/// window ends in the year 9999, for a test of the launch pass that must not
+/// hand-write SQL.
+///
+/// # Errors
+/// The commit's own.
+pub fn add_trashed_note(vault: &crate::Vault, id: &str, overdue: bool) -> crate::Result<()> {
+    let purge_at = if overdue {
+        "2020-02-01T00:00:00.000Z"
+    } else {
+        "9999-12-31T00:00:00.000Z"
+    };
+    vault.commit(|tx| {
+        tx.insert_entity(id, crate::model::Kind::Note, id, "2020-01-01T00:00:00.000Z")?;
+        tx.connection()
+            .execute("INSERT INTO note (id, body) VALUES (?1, 'words')", [id])?;
+        tx.connection().execute(
+            "UPDATE entity SET deleted_at = '2020-01-02T00:00:00.000Z', purge_at = ?2
+              WHERE id = ?1",
+            [id, purge_at],
+        )?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// An album that holds the first `members` live photographs (by arrival), written in one commit:
+/// the label a measurement trashes. Returns how many photographs it holds.
+///
+/// # Errors
+/// The commit's.
+pub fn add_album_of_photos(vault: &crate::Vault, id: &str, members: usize) -> crate::Result<usize> {
+    let limit = i64::try_from(members).unwrap_or(i64::MAX);
+    Ok(vault
+        .commit(|tx| {
+            tx.insert_entity(
+                id,
+                crate::model::Kind::Album,
+                id,
+                "2020-01-01T00:00:00.000Z",
+            )?;
+            tx.connection().execute(
+                "INSERT INTO container (id, kind) VALUES (?1, 'album')",
+                [id],
+            )?;
+            Ok(tx.connection().execute(
+                "INSERT INTO edge (from_id, rel, to_id, created_at)
+                 SELECT ?1, 'contains', id, '2020-01-01T00:00:00.000Z' FROM entity
+                  WHERE kind = 'photo' AND deleted_at IS NULL ORDER BY n LIMIT ?2",
+                rusqlite::params![id, limit],
+            )?)
+        })?
+        .value)
+}
+
+/// The first `count` live photographs, in the trash and past their `purge_at`: the trash a launch
+/// pass finds after a long holiday. Returns how many it moved.
+///
+/// # Errors
+/// The commit's.
+pub fn trash_photos_overdue(vault: &crate::Vault, count: usize) -> crate::Result<usize> {
+    let limit = i64::try_from(count).unwrap_or(i64::MAX);
+    Ok(vault
+        .commit(|tx| {
+            Ok(tx.connection().execute(
+                "UPDATE entity SET deleted_at = '2020-01-02T00:00:00.000Z',
+                                   purge_at = '2020-02-01T00:00:00.000Z'
+                  WHERE id IN (SELECT id FROM entity WHERE kind = 'photo' AND deleted_at IS NULL
+                                ORDER BY n LIMIT ?1)",
+                [limit],
+            )?)
+        })?
+        .value)
+}
+
 fn pairs(connection: &Connection, sql: &str) -> Vec<(String, String)> {
     let Ok(mut statement) = connection.prepare(sql) else {
         return Vec::new();
@@ -126,7 +211,7 @@ fn pairs(connection: &Connection, sql: &str) -> Vec<(String, String)> {
 
 /// EVERY ROW OF THE TABLES `include` NAMES, AS TEXT, one line a row: `table|cell|cell|…`. Blobs are
 /// read as lossy text. The question a test asks to prove a value is in no stored place (a planted
-/// secret in the thread, the journal or the index, #1135): search the answer for it.
+/// secret in the thread, an action key or the index, #1135): search the answer for it.
 ///
 /// # Errors
 /// The connection's.
@@ -160,6 +245,29 @@ pub fn text_of_tables(
         }
     }
     Ok(out)
+}
+
+/// Make a founded, closed vault file one this build refuses as the model before #1135: stamp it with
+/// that model's `application_id` ([`crate::format::EARLIER_APPLICATION_ID`]). For a test of what
+/// crosses the ABI when `Vault::open` says no (#1146).
+///
+/// # Errors
+/// SQLite's refusal to open or write the file.
+pub fn stamp_earlier_model(path: &std::path::Path) -> rusqlite::Result<()> {
+    Connection::open(path)?.pragma_update(
+        None,
+        "application_id",
+        crate::format::EARLIER_APPLICATION_ID,
+    )
+}
+
+/// Make a founded, closed vault file one this build refuses for its tables: add one the baseline
+/// does not have.
+///
+/// # Errors
+/// SQLite's refusal to open or write the file.
+pub fn add_stray_table(path: &std::path::Path) -> rusqlite::Result<()> {
+    Connection::open(path)?.execute_batch("CREATE TABLE stray (x TEXT)")
 }
 
 #[cfg(test)]

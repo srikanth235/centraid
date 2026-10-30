@@ -15,7 +15,7 @@
 //!
 //! ## Reads and writes
 //!
-//! Every read is `docs.drive`, `docs.search`, `docs.history` or `docs.activity`
+//! Every read is `docs.drive`, `docs.search` or `docs.history`
 //! and every write is a manifest action (`crates/apps/docs/manifest.json`), the
 //! same door chat and the training harness use. The shelf, the three filters
 //! and the order are part of the core's REQUEST, so changing one reads again.

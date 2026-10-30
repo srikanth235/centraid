@@ -213,7 +213,7 @@ fn a_bare_run_is_refused_and_a_keyed_run_writes_once_through_the_change_feed() {
         )
         .unwrap();
     assert!(again.ok);
-    // the vault holds the key with the commit, and the journal keeps evidence and not answers
+    // the vault holds the key with the commit, and the vault keeps a digest and not answers
     assert!(again.output.is_null());
     assert_eq!(project_names(&door).len(), before + 1);
     assert!(

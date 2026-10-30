@@ -73,6 +73,8 @@ struct Editor {
     max: Option<i64>,
     min_text: String,
     max_text: String,
+    /// The payee the rule gives a line it files; empty leaves the bank's words.
+    rename: String,
 }
 
 struct Rules {
@@ -307,6 +309,9 @@ impl Rules {
                     },
                     min: absent(min),
                     max: absent(max),
+                    display_name: Some(editor.rename.trim().to_owned())
+                        .filter(|name| !name.is_empty())
+                        .map_or(Field::Keep, Field::Is),
                     ..Default::default()
                 },
                 words::done_rule(locale),
@@ -336,6 +341,10 @@ impl Rules {
                 max,
                 min,
                 text: Some(text),
+                // Blank clears the payee: the line keeps the bank's words.
+                display_name: Some(editor.rename.trim().to_owned())
+                    .filter(|name| !name.is_empty())
+                    .map_or(Field::Clear, Field::Is),
                 ..Default::default()
             },
             words::done_rule(locale),
@@ -390,6 +399,7 @@ impl Rules {
             max: rule.amount_max,
             min_text: seeded(rule.amount_min, exponent),
             max_text: seeded(rule.amount_max, exponent),
+            rename: rule.rename_to.clone().unwrap_or_default(),
         });
         self.sheet = Sheet::Editor;
         self.status = None;
@@ -439,6 +449,7 @@ impl Rules {
                     max: None,
                     min_text: String::new(),
                     max_text: String::new(),
+                    rename: String::new(),
                 });
             }
             Some(R::Rule(tapped)) => self.open_rule(&tapped.rule_id),
@@ -508,6 +519,7 @@ impl Rules {
                 match other {
                     Some(R::KindPicked(picked)) => editor.kind = picked.kind,
                     Some(R::Pattern(typed)) => editor.pattern = typed.text,
+                    Some(R::Rename(typed)) => editor.rename = typed.text,
                     Some(R::AmountMin(typed)) => editor.min_text = typed.text,
                     Some(R::AmountMax(typed)) => editor.max_text = typed.text,
                     _ => {}
@@ -544,6 +556,8 @@ impl Rules {
             account_label: editor.account_label.clone(),
             amount_min_text: editor.min_text.clone(),
             amount_max_text: editor.max_text.clone(),
+            rename_text: editor.rename.clone(),
+            rename_label: words::rule_rename(locale),
             can_save: issue.is_empty(),
             issue: if editor.pattern.is_empty() && add {
                 String::new()
@@ -613,6 +627,9 @@ impl Rules {
                         &words::rule_files_under(locale),
                         &[("category", category)],
                     ));
+                }
+                if let Some(name) = &rule.rename_to {
+                    parts.push(fill(&words::rule_renames_to(locale), &[("name", name)]));
                 }
                 if rule.amount_min.is_some() || rule.amount_max.is_some() {
                     parts.push(words::rule_amount_limits(locale));

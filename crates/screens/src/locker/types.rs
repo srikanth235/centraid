@@ -98,7 +98,7 @@ impl TypeInfo {
 // ---------------------------------------------------------------------------
 
 /// The five columns that hold ciphertext under `K`. A secret is revealed per
-/// item, per gesture, and receipted; it is never read into a list.
+/// item, per gesture; it is never read into a list.
 pub const SECRETS: [&str; 5] = ["password", "otp_seed", "card_number", "cvv", "content"];
 
 /// The column whose value is never shown, only the codes it makes.

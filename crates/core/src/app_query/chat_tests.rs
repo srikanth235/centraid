@@ -269,8 +269,8 @@ fn the_drawer_searches_threads_and_says_what_it_corrected() {
 
     // A RENAME MOVES THE HIT, and a DELETE drops it.
     scratch.run(
-        "thread.rename",
-        serde_json::json!({ "thread_id": other, "title": "Teeth appointment" }),
+        "entity.retitle",
+        serde_json::json!({ "id": other, "title": "Teeth appointment" }),
     );
     assert_eq!(ids(&scratch.drawer("teeth", 0)), [other.as_str()]);
     scratch.run("entity.purge", serde_json::json!({ "id": other }));

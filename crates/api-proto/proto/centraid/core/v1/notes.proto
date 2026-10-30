@@ -223,10 +223,10 @@ message NotesLinkTargets {
 // an empty note a save would write over.
 message NotesNote {
   // `body_content_id` and `current_revision_id`: a body is the note's own
-  // column now and a version is a `revision` with a `seq`; `row_version` is the
-  // editor's base.
-  reserved 7, 8;
-  reserved "body_content_id", "current_revision_id";
+  // column now and a version is a `revision` with a `seq`. `row_version` (9) was the
+  // editor's base; there is no entity version and the last save wins (#1146).
+  reserved 7, 8, 9;
+  reserved "body_content_id", "current_revision_id", "row_version";
   bool found = 1;
   string note_id = 2;
   string title = 3;
@@ -235,11 +235,6 @@ message NotesNote {
   bool pinned = 5;
   // The whole body.
   string body = 6;
-  // THE EDITOR'S BASE: bumped once by every commit that changes the note — title,
-  // pin, format, body, notebook, trash. An editor that saw this version and
-  // reads a different one has lost a race; the command takes no base, so the
-  // last save wins (R-1047-K3).
-  int64 row_version = 9;
   string created_at = 10;
   string updated_at = 11;
   // Set when the note is in the trash; `note.edit` refuses it.

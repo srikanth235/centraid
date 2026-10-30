@@ -5,21 +5,5 @@
     "budget": 0
   },
   "entries": [],
-  "lanes": {
-    "device-rung-android": {
-      "issue": 927,
-      "expires": "2026-10-04",
-      "why": "#927 W4 — the device rung's Android cell cannot run until CENTRAID_DEVICE_FARM_TOKEN and CENTRAID_DEVICE_FARM_PROJECT exist; the job is SKIPPED rather than failed, and `device-rung-gate` writes this lane's evidence as parked so the report shows the debt with a date instead of a silent gap. Unblocked by those two secrets plus CENTRAID_DEVICE_FARM_ANDROID_ENDPOINT, which the lease reads."
-    },
-    "device-rung-ios": {
-      "issue": 927,
-      "expires": "2026-10-04",
-      "why": "#927 W4 — the iPhone cell needs the farm secrets AND the harness taught to enumerate a physical device: tests/agent-e2e-mobile/lib/harness.mjs reads `xcrun simctl list devices`, which lists simulators only. scripts/ci/device-farm-lease.sh refuses loudly rather than leasing a device the harness could never find. Unblocked by that enumeration plus vars.CENTRAID_DEVICE_FARM_IOS."
-    },
-    "device-rung-gateway-pi": {
-      "issue": 927,
-      "expires": "2026-10-04",
-      "why": "#927 W4 — the Pi-class gateway cell runs on a self-hosted runner labelled `centraid-pi`, which no repository has registered yet. Unblocked by registering one and setting vars.CENTRAID_PI_CELL=true. Until then the constrained hardware profile is only ever measured on a cloud x64 runner with the profile pinned, which changes SQLite's durability mode and nothing about the disk underneath it."
-    }
-  }
+  "lanes": {}
 }

@@ -62,9 +62,6 @@ pub const SEARCH_LIMIT: usize = 100;
 /// The newest versions a history draws.
 pub const MAX_VERSIONS: usize = 500;
 
-/// The activity rail's length.
-pub const ACTIVITY_ROWS: usize = 100;
-
 /// Pages one starred walk may take. A star is the owner's own gesture, so 8 x
 /// 500 stars is a bound a member does not reach; past it the read says so rather
 /// than answering short.
@@ -166,30 +163,6 @@ pub fn revisions_statement(document_id: &str) -> PageQuery {
     .filter("entity_id = ?", text(document_id))
 }
 
-/// The commands that named this document, newest first: the journal is the
-/// evidence of what was done to it, and a command names its subject as `id`, or
-/// as an edge's two ends.
-#[must_use]
-pub fn activity_statement(document_id: &str) -> PageQuery {
-    PageQuery::new(
-        "docs.activity.journal",
-        "seq, at, command",
-        "journal",
-        PageOrder::desc("seq", "seq"),
-    )
-    .filter(
-        "outcome = ? AND (json_extract(input, '$.id') = ? OR json_extract(input, '$.from') = ? \
-         OR json_extract(input, '$.to') = ?)",
-        {
-            let mut bind = text("executed");
-            bind.extend(text(document_id));
-            bind.extend(text(document_id));
-            bind.extend(text(document_id));
-            bind
-        },
-    )
-}
-
 /// The folders: live, and the `container` row each sits on.
 fn folders_statement() -> PageQuery {
     PageQuery::new(
@@ -278,19 +251,6 @@ pub struct VersionRow {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct HistoryData {
     pub versions: Vec<VersionRow>,
-}
-
-/// One command on the activity rail.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ActivityEvent {
-    pub activity: Option<String>,
-    pub occurred_at: Option<String>,
-}
-
-/// What `activity` answers. An empty list is honest: nothing has been done yet.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct ActivityData {
-    pub events: Vec<ActivityEvent>,
 }
 
 /// The drive's input, clamped.
@@ -840,7 +800,7 @@ pub fn load_document(
 }
 
 // ---------------------------------------------------------------------------
-// `history` and `activity`
+// `history`
 // ---------------------------------------------------------------------------
 
 /// `history`: the head's bytes, then each version a replace put down, newest
@@ -940,28 +900,6 @@ pub fn load_history(
     })
 }
 
-/// `activity`: what was done to this document, newest first.
-pub fn load_activity(
-    door: &dyn PageDoor,
-    document_id: &str,
-) -> KitResult<(ActivityData, Option<Denial>)> {
-    if document_id.is_empty() {
-        return Ok((ActivityData::default(), None));
-    }
-    guarded(|| {
-        let rows = read_window(door, &activity_statement(document_id), ACTIVITY_ROWS)?.rows;
-        Ok(ActivityData {
-            events: rows
-                .iter()
-                .map(|row| ActivityEvent {
-                    activity: text_of(row, "command"),
-                    occurred_at: text_of(row, "at"),
-                })
-                .collect(),
-        })
-    })
-}
-
 /// The statements this module owns, named so a plan snapshot can be compared
 /// against one list.
 #[must_use]
@@ -972,7 +910,6 @@ pub fn statement_names() -> Vec<&'static str> {
         "docs.shelf.starred",
         "docs.shelf.trash",
         "docs.history.revisions",
-        "docs.activity.journal",
         "docs.folders",
     ];
     names.sort_unstable();
@@ -1025,7 +962,6 @@ mod tests {
             starred_statement().name,
             trash_statement().name,
             revisions_statement("d").name,
-            activity_statement("d").name,
             folders_statement().name,
         ];
         let mut expected: Vec<String> = built.to_vec();

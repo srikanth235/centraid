@@ -24,6 +24,8 @@
 //! - **A person is a holder of what is written about them alone**: a note, a
 //!   touch or a yearly date about that person and no one else goes to the trash
 //!   with them and comes back with them. A task about them stays.
+//! - **A row past its `purge_at` is emptied by the launch pass**
+//!   (`Vault::empty_overdue_trash`) and restores until then.
 //! - **A purge refuses with a sentence** when something would lose its meaning:
 //!   a calendar with events, an activity kind in use, the self person, a flag.
 
@@ -97,8 +99,10 @@ pub(crate) fn require(connection: &Connection, id: &str) -> Result<Found> {
     })
 }
 
-/// Whether the vault's self person is this entity.
-fn is_self(connection: &Connection, id: &str) -> Result<bool> {
+/// Whether the vault's self person is this entity: the one person nothing may
+/// follow, trash, merge away or purge. Every path that could take the owner
+/// asks here, so there is one answer ([#1146](https://github.com/srikanth235/centraid/issues/1146)).
+pub(crate) fn is_self(connection: &Connection, id: &str) -> Result<bool> {
     Ok(connection
         .query_row("SELECT self_id = ?1 FROM vault", [id], |row| row.get(0))
         .optional()?
@@ -171,12 +175,59 @@ const DETACH: &[(Kind, &str, &str, &str)] = &[
     (Kind::Category, "txn", "category_id = NULL", "category_id"),
     (Kind::Category, "concept", "parent_id = NULL", "parent_id"),
     (Kind::Place, "event", "place_id = NULL", "place_id"),
+    (Kind::Place, "occurrence", "place_id = NULL", "place_id"),
     (Kind::Place, "activity", "place_id = NULL", "place_id"),
     (Kind::Place, "photo", "place_id = NULL", "place_id"),
     (Kind::Task, "task", "parent_id = NULL", "parent_id"),
     (Kind::Task, "task", "series_id = NULL", "series_id"),
     (Kind::Txn, "txn", "transfer_id = NULL", "transfer_id"),
     (Kind::Photo, "photo", "edited_from = NULL", "edited_from"),
+];
+
+/// What a purge does with a pointer the engine would refuse to delete out from
+/// under.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PurgeRule {
+    /// The referrer moves to the top level ([`DETACH`]), or goes with the
+    /// holder when it went to the trash with it or cannot outlive it.
+    Detach,
+    /// The referrer is purged with its target: it cannot outlive it.
+    Purge,
+    /// The purge refuses with a sentence while the referrer exists
+    /// ([`purge_refusal`]).
+    Refuse,
+    /// The origin's follow ends with its target.
+    Forget,
+}
+
+/// Every foreign key into an entity (or a kind's table) that deletes nothing
+/// itself (`ON DELETE NO ACTION`), and what a purge does about it:
+/// `(table, the key's columns as PRAGMA foreign_key_list states them, rule)`.
+///
+/// A commitment test (`commitments.rs`) derives the same list from the founded
+/// file and requires it equal, so a pointer added to the schema without a
+/// purge rule fails there and not in a member's vault.
+pub const PURGE_RULES: &[(&str, &str, PurgeRule)] = &[
+    ("activity", "type_id,type_kind", PurgeRule::Refuse),
+    ("activity", "place_id", PurgeRule::Detach),
+    ("concept", "parent_id", PurgeRule::Detach),
+    ("container", "parent_id", PurgeRule::Detach),
+    ("document", "folder_id,folder_kind", PurgeRule::Detach),
+    ("event", "calendar_id,calendar_kind", PurgeRule::Refuse),
+    ("event", "place_id", PurgeRule::Detach),
+    ("note", "notebook_id,notebook_kind", PurgeRule::Detach),
+    ("occurrence", "place_id", PurgeRule::Detach),
+    ("origin", "fills", PurgeRule::Forget),
+    ("photo", "place_id", PurgeRule::Detach),
+    ("photo", "edited_from", PurgeRule::Detach),
+    ("task", "section_id,section_kind", PurgeRule::Detach),
+    ("task", "project_id,project_kind", PurgeRule::Detach),
+    ("task", "parent_id", PurgeRule::Detach),
+    ("task", "series_id", PurgeRule::Detach),
+    ("txn", "category_id,category_kind", PurgeRule::Detach),
+    ("txn", "account_id,currency", PurgeRule::Purge),
+    ("txn", "transfer_id", PurgeRule::Detach),
+    ("vault", "self_id,self_kind", PurgeRule::Refuse),
 ];
 
 /// A sentence when this kind of entity cannot be purged as it stands.
@@ -233,12 +284,22 @@ pub(crate) fn trash_stamp(ctx: &CommandCtx<'_, '_>) -> Result<(String, String)> 
 }
 
 /// Trash one entity at `(deleted_at, purge_at)`; its live members follow it.
+///
+/// **The owner's person is refused by every path** (a follower's absence, a
+/// merge, a member's trash): this is the one place that takes anything to the
+/// trash. A member of a holder that is the owner is left where it is.
 pub(crate) fn trash_one(
     ctx: &CommandCtx<'_, '_>,
     id: &str,
     stamp: &(String, String),
     trashed: &mut Vec<String>,
 ) -> Result<()> {
+    if is_self(ctx.connection(), id)? {
+        return Err(VaultError::InvalidInput {
+            name: "id".to_owned(),
+            detail: "this is you; a vault cannot do without its owner".to_owned(),
+        });
+    }
     let found = require(ctx.connection(), id)?;
     ctx.connection().execute(
         "UPDATE entity SET deleted_at = ?2, purge_at = ?3 WHERE id = ?1",
@@ -247,7 +308,9 @@ pub(crate) fn trash_one(
     ctx.touch(id)?;
     trashed.push(id.to_owned());
     for member in members(ctx.connection(), &found)? {
-        if find(ctx.connection(), &member)?.is_some_and(|m| m.deleted_at.is_none()) {
+        if !is_self(ctx.connection(), &member)?
+            && find(ctx.connection(), &member)?.is_some_and(|m| m.deleted_at.is_none())
+        {
             trash_one(ctx, &member, stamp, trashed)?;
         }
     }
@@ -284,9 +347,15 @@ pub(crate) fn purge_one(
         if *holder != found.kind {
             continue;
         }
+        // A day of a series is named by its series, which is what is touched.
+        let named = if *table == "occurrence" {
+            "series_id"
+        } else {
+            "id"
+        };
         let referrers = ids(
             connection,
-            &format!("SELECT id FROM {table} WHERE {column} = ?1"),
+            &format!("SELECT {named} FROM {table} WHERE {column} = ?1"),
             id,
         )?;
         connection.execute(
@@ -316,15 +385,16 @@ pub(crate) fn purge_one(
             ctx.touch(&album)?;
         }
     }
-    // An account's statement origin goes with it, and the lines it followed
-    // (their rows are gone, so what is left of them is only their tombstones).
-    if found.kind == Kind::Account {
-        connection.execute(
-            "DELETE FROM source WHERE origin_id IN (SELECT id FROM origin WHERE fills = ?1)",
-            [id],
-        )?;
-        connection.execute("DELETE FROM origin WHERE fills = ?1", [id])?;
-    }
+    // WHAT AN ORIGIN FILLS IS THE TARGET OF ITS FOLLOW, for whatever kind it
+    // is (an account, a calendar, a folder): the follow stops with it, as
+    // `follow.stop` stops one. The sources it kept are forgotten (the rows they
+    // named stay the member's own, or are already gone with the target and
+    // leave only their tombstones), and the origin is retired.
+    connection.execute(
+        "DELETE FROM source WHERE origin_id IN (SELECT id FROM origin WHERE fills = ?1)",
+        [id],
+    )?;
+    connection.execute("DELETE FROM origin WHERE fills = ?1", [id])?;
     // The people and things a note was about lose its words from their search
     // text; they are not touched, only re-indexed.
     for target in ids(
@@ -385,12 +455,6 @@ fn pre_retitle(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if found.kind == Kind::Flag {
         return Ok(Some("a flag is built in and keeps its name".to_owned()));
     }
-    if found.kind == Kind::Thread {
-        return Ok(Some(
-            "a chat is renamed with `thread.rename`, which keeps its name out of the journal"
-                .to_owned(),
-        ));
-    }
     // A photograph may have no title at all; nothing else may.
     if found.kind != Kind::Photo && ctx.required_str("title")?.trim().is_empty() {
         return Ok(Some(format!("a {} needs a name", found.kind.noun())));
@@ -436,22 +500,10 @@ fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if found.deleted_at.is_none() {
         return Ok(Some(format!("“{}” is not in the trash", found.title)));
     }
-    // The grace window is an instant: once it has passed the vault will not bring
-    // the thing back, and the phone's countdown (`purge_in_days`) is positive
-    // exactly while it will. Nothing sweeps on the phone, so it waits in the
-    // trash for "Delete forever" or "Empty trash".
-    let lapsed: bool = ctx.connection().query_row(
-        "SELECT purge_at <= ?2 FROM entity WHERE id = ?1",
-        [ctx.required_str("id")?, ctx.now.as_str()],
-        |row| row.get(0),
-    )?;
-    Ok(lapsed.then(|| {
-        format!(
-            "“{}” has been in the trash past its grace window and can no longer be restored; \
-             delete it forever",
-            found.title
-        )
-    }))
+    // THE GRACE WINDOW REFUSES NOTHING. An overdue row is emptied by the pass
+    // at launch (`Vault::empty_overdue_trash`); until that pass runs it is a
+    // trashed row like any other, and a member who got there first gets it back.
+    Ok(None)
 }
 
 /// Everything that went to the trash together with `holder`, however deep.
@@ -469,8 +521,8 @@ fn went_with(connection: &Connection, holder: &Found) -> Result<Vec<String>> {
     Ok(found)
 }
 
-fn restore(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
+/// Bring one entity back from the trash, and what went to the trash with it.
+pub(crate) fn restore_one(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Vec<String>> {
     let holder = require(ctx.connection(), id)?;
     let mut restored = Vec::new();
     // What went to the trash WITH the holder (its members, and theirs in turn)
@@ -484,6 +536,11 @@ fn restore(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         ctx.touch(&target)?;
         restored.push(target);
     }
+    Ok(restored)
+}
+
+fn restore(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let restored = restore_one(ctx, ctx.required_str("id")?)?;
     Ok(serde_json::json!({ "restored": restored }))
 }
 
@@ -523,38 +580,91 @@ fn pre_empty(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     })
 }
 
+/// How many trashed rows one read of the pass takes.
+const DOOMED_CHUNK: i64 = 64;
+
 /// Purge what is in the trash: one kind's, or every kind's; all of it, or only
-/// what has waited out its window.
+/// what has waited out its window; and, with a `limit`, at most that many
+/// roots (what went with them is not counted against it), saying `more` when
+/// something else is due. What cannot be purged as it stands (a calendar with
+/// events, the self person) stays in the trash, and does not stop the rest. With
+/// `defer_collect` the bytes nothing names any more are not collected here: the caller of a
+/// pass in batches collects once at its end.
 fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let due_only = ctx
         .input
         .get("due_only")
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
+    let limit = ctx
+        .input
+        .get("limit")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|limit| usize::try_from(limit).ok());
+    let defer_collect = ctx
+        .input
+        .get("defer_collect")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
     let kind = ctx.optional_str("kind");
-    let doomed: Vec<String> = ctx
-        .connection()
-        .prepare(
-            "SELECT id FROM entity
-              WHERE deleted_at IS NOT NULL
-                AND (?1 IS NULL OR kind = ?1)
-                AND (?2 = 0 OR purge_at <= ?3)
-              ORDER BY deleted_at, n",
-        )?
-        .query_map(
-            rusqlite::params![kind, i64::from(due_only), ctx.now],
-            |row| row.get::<_, String>(0),
-        )?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut purged = Vec::new();
-    for id in &doomed {
-        if is_self(ctx.connection(), id)? {
-            continue;
+    let mut roots = 0usize;
+    let mut more = false;
+    // The doomed are read in chunks, in the order they went to the trash, so a pass of a few
+    // roots reads a few chunks and not the whole trash (a batch of the launch tidy pays for
+    // what it purges, not for what is left).
+    let mut after: Option<(String, i64)> = None;
+    'pass: loop {
+        let chunk: Vec<(String, String, i64)> = ctx
+            .connection()
+            .prepare(
+                "SELECT id, deleted_at, n FROM entity
+                  WHERE deleted_at IS NOT NULL
+                    AND (?1 IS NULL OR kind = ?1)
+                    AND (?2 = 0 OR purge_at <= ?3)
+                    AND (?4 IS NULL OR (deleted_at, n) > (?4, ?5))
+                  ORDER BY deleted_at, n LIMIT ?6",
+            )?
+            .query_map(
+                rusqlite::params![
+                    kind,
+                    i64::from(due_only),
+                    ctx.now,
+                    after.as_ref().map(|(at, _)| at),
+                    after.as_ref().map_or(0, |(_, n)| *n),
+                    DOOMED_CHUNK
+                ],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )?
+            .collect::<rusqlite::Result<_>>()?;
+        let Some((_, last_at, last_n)) = chunk.last().cloned() else {
+            break;
+        };
+        for (id, _, _) in &chunk {
+            // Gone already: it went with a holder purged earlier in this pass.
+            let Some(found) = find(ctx.connection(), id)? else {
+                continue;
+            };
+            if purge_refusal(ctx.connection(), &found)?.is_some() {
+                continue;
+            }
+            if limit.is_some_and(|limit| roots >= limit) {
+                more = true;
+                break 'pass;
+            }
+            purge_one(ctx, id, &mut purged)?;
+            roots += 1;
         }
-        purge_one(ctx, id, &mut purged)?;
+        after = Some((last_at, last_n));
     }
-    let released = crate::blob::collect(ctx.connection())?;
-    Ok(serde_json::json!({ "purged": purged.len(), "released": released }))
+    // A pass in batches collects once at its end (`defer_collect`): collecting is one walk of
+    // every blob, and a batch that paid it each time paid the whole library for a handful of rows.
+    let released = if defer_collect {
+        Vec::new()
+    } else {
+        crate::blob::collect(ctx.connection())?
+    };
+    Ok(serde_json::json!({ "purged": purged.len(), "released": released, "more": more }))
 }
 
 #[must_use]
@@ -620,7 +730,9 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "additionalProperties": false,
               "properties": {
                 "kind": { "type": "string", "minLength": 1 },
-                "due_only": { "type": "boolean" }
+                "due_only": { "type": "boolean" },
+                "limit": { "type": "integer", "minimum": 1 },
+                "defer_collect": { "type": "boolean" }
               }
             }"#,
             Idempotency::Idempotent,
@@ -641,4 +753,25 @@ fn permanent(mut definition: CommandDefinition) -> CommandDefinition {
     definition.risk = Risk::Medium;
     definition.confirm = true;
     definition
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every pointer a purge detaches is one `DETACH` performs, and the other way
+    /// round: the two tables cannot drift apart.
+    #[test]
+    fn the_detach_table_and_the_purge_rules_name_the_same_pointers() {
+        let named: std::collections::BTreeSet<(&str, &str)> = PURGE_RULES
+            .iter()
+            .filter(|(_, _, rule)| *rule == PurgeRule::Detach)
+            .map(|(table, columns, _)| (*table, columns.split(',').next().unwrap_or("")))
+            .collect();
+        let performed: std::collections::BTreeSet<(&str, &str)> = DETACH
+            .iter()
+            .map(|(_, table, _, column)| (*table, *column))
+            .collect();
+        assert_eq!(named, performed);
+    }
 }

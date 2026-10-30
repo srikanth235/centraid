@@ -76,7 +76,7 @@ fn trashed(ctx: &Ctx) -> Reading<Vec<TrashItem>> {
     let open = ctx
         .locker(&wire::LockerSessionRequest {
             step: Some(wire::locker_session_request::Step::State(
-                wire::LockerStateAsk {},
+                wire::LockerStateAsk::default(),
             )),
         })
         .is_ok_and(|answer| answer.state == wire::LockerSessionState::Unlocked as i32);

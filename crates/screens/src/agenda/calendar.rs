@@ -89,6 +89,8 @@ pub type PhoneEvent = wire::PhoneCalendarEvent;
 pub struct OriginRef {
     pub id: String,
     pub label: String,
+    /// The design wheel's `var(--c-<hue>)` nearest the colour the phone paints the calendar with.
+    pub color: Option<String>,
 }
 
 /// Whitespace runs (and no-break spaces) become one space; the ends go.
@@ -120,6 +122,8 @@ pub fn origin_of(locale: Locale, calendar: &wire::PhoneCalendar) -> OriginRef {
     OriginRef {
         id: format!("calendar:{}", calendar.key),
         label,
+        color: centraid_design::hue_key_of_hex(&calendar.color)
+            .map(centraid_design::party_hue_value),
     }
 }
 
@@ -332,12 +336,23 @@ fn zone_of(event: &PhoneEvent, device_zone: &str) -> Option<String> {
     .map(str::to_owned)
 }
 
+/// How an event's times read: the vault's word for it, and the zone of a zoned one.
+fn timing_of(event: &PhoneEvent, device_zone: &str) -> (&'static str, Option<String>) {
+    if event.all_day {
+        return ("all-day", None);
+    }
+    match zone_of(event, device_zone) {
+        Some(zone) => ("zoned", Some(zone)),
+        None => ("floating", None),
+    }
+}
+
 /// WHAT THE PHONE SAYS OF A SERIES' DAYS, over the window it read: the days it
 /// showed as the rule has them (`shown`, by the series-local wall clock) and each
 /// it moved (`moved`, with its own times and words). A day the rule produces in
 /// the window that is neither is one the member cancelled there; the vault works
 /// that out, because the phone has no rule engine.
-fn overrides(series: &Series, now_ms: i64) -> Value {
+fn overrides(series: &Series, now_ms: i64, device_zone: &str) -> Value {
     let all_day = series.event.all_day;
     let (from, to) = observed(now_ms);
     let key_of = |occurrence: &PhoneEvent| {
@@ -350,8 +365,10 @@ fn overrides(series: &Series, now_ms: i64) -> Value {
             all_day,
         )
     };
-    let day_or_time = |value: &str| {
-        if all_day {
+    // A moved day is read under ITS OWN timing: an all-day series' day moved to 15:00 is a time,
+    // a timed series' day made all-day is a date (#1146).
+    let day_or_time = |day: &PhoneEvent, value: &str| {
+        if day.all_day {
             value.get(..DAY).unwrap_or(value).to_owned()
         } else {
             value.to_owned()
@@ -373,12 +390,26 @@ fn overrides(series: &Series, now_ms: i64) -> Value {
         .iter()
         .filter(|occurrence| occurrence.moved)
         .map(|day| {
+            let (timing, zone) = timing_of(day, device_zone);
+            // A link and a place are stated only where they are the day's own.
+            let own = |day_text: &str, series_text: &str| {
+                let day_text = day_text.trim();
+                if day_text == series_text.trim() {
+                    String::new()
+                } else {
+                    day_text.to_owned()
+                }
+            };
             json!({
                 "original_start": key_of(day),
-                "starts": day_or_time(&day.start),
-                "ends": day_or_time(&day.end),
+                "timing": timing,
+                "zone": zone,
+                "starts": day_or_time(day, &day.start),
+                "ends": day_or_time(day, &day.end),
                 "title": day.title.trim(),
                 "description": day.notes.trim(),
+                "url": day.url.trim(),
+                "location": own(&day.location, &series.event.location),
             })
         })
         .collect();
@@ -406,6 +437,7 @@ fn fields(
             json!(event.notes)
         },
     );
+    let (timing, zone) = timing_of(event, device_zone);
     if event.all_day {
         fields.insert(
             "starts".into(),
@@ -415,18 +447,20 @@ fn fields(
             "ends".into(),
             json!(event.end.get(..DAY).unwrap_or(&event.end)),
         );
-        fields.insert("timing".into(), json!("all-day"));
-        fields.insert("zone".into(), Value::Null);
     } else {
         fields.insert("starts".into(), json!(event.start));
         fields.insert("ends".into(), json!(event.end));
-        let zone = zone_of(event, device_zone);
-        fields.insert(
-            "timing".into(),
-            json!(if zone.is_some() { "zoned" } else { "floating" }),
-        );
-        fields.insert("zone".into(), zone.map_or(Value::Null, Value::from));
     }
+    fields.insert("timing".into(), json!(timing));
+    fields.insert("zone".into(), zone.map_or(Value::Null, Value::from));
+    fields.insert(
+        "url".into(),
+        if event.url.trim().is_empty() {
+            Value::Null
+        } else {
+            json!(event.url.trim())
+        },
+    );
     fields.insert(
         "rule".into(),
         if rrule.is_empty() {
@@ -437,7 +471,7 @@ fn fields(
     );
     fields.insert("busy".into(), json!(!event.free));
     if let Some(series) = series {
-        fields.insert("overrides".into(), overrides(series, now_ms));
+        fields.insert("overrides".into(), overrides(series, now_ms, device_zone));
     }
     Value::Object(fields)
 }
@@ -516,7 +550,11 @@ pub fn batch(locale: Locale, snapshot: &wire::CalendarSnapshot) -> Batch {
                     id.clone()
                 }
             });
-        present.push(OriginRef { id, label });
+        let color = named
+            .iter()
+            .find(|origin| origin.id == id)
+            .and_then(|origin| origin.color.clone());
+        present.push(OriginRef { id, label, color });
     }
     Batch {
         complete: snapshot.complete,
@@ -546,7 +584,13 @@ pub fn follow_request(
         })
         .collect();
     act::agenda::FollowCalendar {
-        origin: json!({ "ref": origin.id, "label": origin.label, "device_id": device }).to_string(),
+        origin: json!({
+            "ref": origin.id,
+            "label": origin.label,
+            "device_id": device,
+            "color": origin.color,
+        })
+        .to_string(),
         records: Value::Array(records).to_string(),
         complete: Some(complete),
         since: None,

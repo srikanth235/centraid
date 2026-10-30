@@ -108,7 +108,6 @@ fn every_envelope_body_round_trips() {
         envelope::Body::Response(core::Response {
             kind: Some(core::response::Kind::Act(Box::new(core::ActResponse {
                 status: core::ActStatus::Executed as i32,
-                invocation_id: "inv_1".to_owned(),
                 ..core::ActResponse::default()
             }))),
         }),

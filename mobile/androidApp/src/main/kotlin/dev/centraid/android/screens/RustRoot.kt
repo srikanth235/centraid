@@ -62,7 +62,6 @@ import dev.centraid.android.screens.health.HealthHomeScreen
 import dev.centraid.android.screens.health.HealthMetricScreen
 import dev.centraid.android.screens.health.HealthRationale
 import dev.centraid.android.screens.health.HealthWorkoutScreen
-import dev.centraid.android.screens.locker.LockerAccessScreen
 import dev.centraid.android.screens.locker.LockerEditorScreen
 import dev.centraid.android.screens.locker.LockerExportScreen
 import dev.centraid.android.screens.locker.LockerHomeScreen
@@ -84,8 +83,6 @@ import dev.centraid.android.screens.notes.NotesHomeScreen
 import dev.centraid.android.screens.people.PeopleEditorScreen
 import dev.centraid.android.screens.people.PeopleHomeScreen
 import dev.centraid.android.screens.people.PeoplePersonScreen
-import dev.centraid.android.screens.photos.PhotosDuplicateReviewScreen
-import dev.centraid.android.screens.photos.PhotosDuplicatesScreen
 import dev.centraid.android.screens.photos.PhotosEditorScreen
 import dev.centraid.android.screens.photos.PhotosHomeScreen
 import dev.centraid.android.screens.photos.PhotosLightboxScreen
@@ -427,7 +424,6 @@ internal class RustRoot(
         val lockerHome = view.locker_home
         val lockerItem = view.locker_item
         val lockerEditor = view.locker_editor
-        val lockerAccess = view.locker_access
         val lockerExport = view.locker_export
         val lockerImport = view.locker_import
         val lockerLock = view.locker_lock
@@ -473,8 +469,6 @@ internal class RustRoot(
         val photosHome = view.photos_home
         val photosLightbox = view.photos_lightbox
         val photosEditor = view.photos_editor
-        val photosDuplicates = view.photos_duplicates
-        val photosReview = view.photos_duplicate_review
         val homeSearch = view.home_search
         val chat = view.chat
 
@@ -559,13 +553,6 @@ internal class RustRoot(
                 sendWall = sendWall,
                 onWords = { wordsRoute(view)?.let(open) },
                 onClose = back,
-            )
-            lockerAccess != null -> LockerAccessScreen(
-                state = lockerAccess,
-                onEvent = { send(ScreenEvent(locker_access = it)) },
-                sendWall = sendWall,
-                onWords = { wordsRoute(view)?.let(open) },
-                onBack = back,
             )
             lockerExport != null -> LockerExportScreen(
                 state = lockerExport,
@@ -719,7 +706,7 @@ internal class RustRoot(
                 onEvent = { send(ScreenEvent(health_connect = it)) },
                 onBack = back,
             )
-            // PHOTOS (#1135): its home, the lightbox, the editor and the duplicates. The shelf
+            // PHOTOS (#1135): its home, the lightbox and the editor. The shelf
             // family (a shelf, the picker, places) drew itself above.
             photosHome != null -> PhotosHomeScreen(
                 state = photosHome,
@@ -748,17 +735,6 @@ internal class RustRoot(
                         runtime.navigate(NavEvent(push = NavPush(tab = TAB, route = route)))
                     }
                 },
-            )
-            photosDuplicates != null -> PhotosDuplicatesScreen(
-                state = photosDuplicates,
-                onEvent = { send(ScreenEvent(photos_duplicates = it)) },
-                onOpen = open,
-                onBack = back,
-            )
-            photosReview != null -> PhotosDuplicateReviewScreen(
-                state = photosReview,
-                onEvent = { send(ScreenEvent(photos_duplicate_review = it)) },
-                onBack = back,
             )
             // HOME'S SEARCH (R-CHROME-6): a Rust screen like the rest.
             homeSearch != null -> HomeSearchScreen(
@@ -848,7 +824,6 @@ private fun wordsRoute(view: centraid.core.v1.ViewState): Route? = listOfNotNull
     view.locker_home?.wall,
     view.locker_item?.wall,
     view.locker_editor?.wall,
-    view.locker_access?.wall,
     view.locker_export?.wall,
     view.locker_import?.wall,
     view.locker_lock?.wall,

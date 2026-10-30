@@ -34,7 +34,7 @@ Agenda is **4 manifest queries plus the core's by-id `event` read, 7 actions, 17
 | `timing: "floating"` | a wall clock, no zone | verbatim: 09:00 wherever the member is |
 | `timing: "all-day"` | dates; `ends` is the LAST day | verbatim |
 
-An instant with no zone, an unknown zone and a wall clock the zone skips are refused; one it repeats takes the earlier instant. A timed end must not precede its start. A series' days are overridden by `event.edit_occurrence` (`override`, `skip`, `restore`; scope `occurrence` or `future`, [R-1135-4-1](../../../docs/decisions.md#agenda)), keyed by the series-local wall clock.
+An instant with no zone, an unknown zone and a wall clock the zone skips are refused; one it repeats takes the earlier instant. A timed end must not precede its start. A series' days are overridden by `event.edit_occurrence` (`override`, `skip`, `restore`; scope `occurrence` or `future`, [R-1135-4-1](../../../docs/decisions.md#agenda)), keyed by the series-local wall clock. A day also carries what is its own and the rest is the series' ([#1146](https://github.com/srikanth235/centraid/issues/1146)): a `timing` (and `zone`) when it does not read as its series does — an all-day series' day moved to 15:00 is a timed row at 15:00, a zoned series' day made all-day is a date with no borrowed length, and the row's semantics are the day's, so it is placed by its own — and a `url` and a `place_id` (the row's `conferencing_uri` and `location_*`). Guests and reminders stay the series'. A followed phone calendar is listed with its own name and the colour the phone paints it with (the design wheel's nearest hue).
 
 ## The bounds, and where each one is stated
 

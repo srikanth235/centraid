@@ -243,7 +243,6 @@ pub struct NoteRow {
     pub updated_at: String,
     pub deleted_at: Option<String>,
     pub purge_at: Option<String>,
-    pub version: i64,
     pub body: String,
     pub format: String,
     pub notebook_id: Option<String>,
@@ -253,7 +252,7 @@ pub struct NoteRow {
 // The statements
 // ---------------------------------------------------------------------------
 
-const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at, deleted_at, purge_at, version";
+const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at, deleted_at, purge_at";
 
 fn note_kind() -> Vec<PageBindValue> {
     vec![PageBindValue::Text("note".to_owned())]
@@ -396,7 +395,6 @@ pub(crate) fn note_rows(
                     updated_at: text_of(row, "updated_at").unwrap_or_default(),
                     deleted_at: text_of(row, "deleted_at"),
                     purge_at: text_of(row, "purge_at"),
-                    version: integer_or_zero(row, "version"),
                     body: text_of(kind_row, "body").unwrap_or_default(),
                     format: text_of(kind_row, "format").unwrap_or_default(),
                     notebook_id: text_of(kind_row, "notebook_id"),

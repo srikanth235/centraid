@@ -135,6 +135,7 @@ fn a_founded_vault_round_trips_through_a_snapshot_and_a_restore() {
             "db_hash",
             "integrity_check",
             "header",
+            "schema",
             "census"
         ]
     );
@@ -398,4 +399,41 @@ fn a_restore_refuses_every_file_that_is_not_the_snapshots_and_leaves_nothing() {
         restore_head(&store, &keys, &out),
         Err(RestoreError::Exists(_))
     ));
+}
+
+/// A restore refuses a file of the model before #1135 and a file whose schema is not this
+/// version's, with a sentence, and leaves nothing at its path (#1146, D3; R-FP-10).
+#[test]
+fn a_restore_refuses_a_file_of_an_earlier_model_or_another_schema_and_leaves_nothing() {
+    let keys = keys();
+    for (what, sql, sentence) in [
+        (
+            "an earlier application id",
+            "PRAGMA application_id = 1128615473", // 0x4345_4e31, `CEN1`
+            "made by an earlier version of Centraid that this one cannot open",
+        ),
+        (
+            "another schema",
+            "CREATE TABLE intruder (x TEXT)",
+            "does not match this version of Centraid",
+        ),
+    ] {
+        let scratch = common::Scratch::founded("backup-identity").expect("a vault");
+        scratch
+            .vault
+            .commit(|tx| {
+                tx.connection().execute_batch(sql)?;
+                Ok(())
+            })
+            .unwrap_or_else(|error| panic!("{what}: {error}"));
+        let store = MemoryStore::new("laptop");
+        let _ = back_up(&scratch.vault, scratch.dir(), &store);
+        let out = scratch.join("restored.db");
+        let said = restore_head(&store, &keys, &out)
+            .expect_err(what)
+            .to_string();
+        assert!(said.contains(sentence), "{what}: {said}");
+        assert!(!out.exists(), "{what}: a refused restore leaves nothing");
+        assert!(!scratch.join("restored.db.partial").exists(), "{what}");
+    }
 }

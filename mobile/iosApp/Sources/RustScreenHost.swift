@@ -81,7 +81,6 @@ struct RustScreenView: View {
         case .lockerHome(let state)?: wall = state.hasWall ? state.wall : nil
         case .lockerItem(let state)?: wall = state.hasWall ? state.wall : nil
         case .lockerEditor(let state)?: wall = state.hasWall ? state.wall : nil
-        case .lockerAccess(let state)?: wall = state.hasWall ? state.wall : nil
         case .lockerExport(let state)?: wall = state.hasWall ? state.wall : nil
         case .lockerImport(let state)?: wall = state.hasWall ? state.wall : nil
         case .lockerLock(let state)?: wall = state.hasWall ? state.wall : nil
@@ -233,14 +232,6 @@ struct RustScreenView: View {
                 sendWall: { store.send(instance, .lockerWall($0)) },
                 onWords: words,
                 onClose: pop
-            )
-        case .lockerAccess(let state)?:
-            LockerAccessView(
-                state: state,
-                send: { store.send(instance, .lockerAccess($0)) },
-                sendWall: { store.send(instance, .lockerWall($0)) },
-                onWords: words,
-                onBack: pop
             )
         case .lockerExport(let state)?:
             LockerExportView(
@@ -460,27 +451,6 @@ struct RustScreenView: View {
                     pop()
                     shell.open(route)
                 }
-            )
-        case .photosDuplicates(let state)?:
-            PhotosDuplicatesView(
-                state: state,
-                send: { kind in
-                    var event = Centraid_Core_V1_PhotosDuplicatesEvent()
-                    event.kind = kind
-                    store.send(instance, .photosDuplicates(event))
-                },
-                open: open,
-                onBack: pop
-            )
-        case .photosDuplicateReview(let state)?:
-            PhotosDuplicateReviewView(
-                state: state,
-                send: { kind in
-                    var event = Centraid_Core_V1_PhotosDuplicateReviewEvent()
-                    event.kind = kind
-                    store.send(instance, .photosDuplicateReview(event))
-                },
-                onBack: pop
             )
         // THE CHAT as a page (#1135, lane I): a search's Ask (`chat.ask`) or a found conversation
         // (`chat.thread`). The tab's root draws the same state through `HomeView`.

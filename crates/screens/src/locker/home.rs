@@ -558,8 +558,9 @@ impl Home {
             retry: words::retry(locale),
             more_title: words::more_title(locale),
             // THE HANDOFF'S MORE ROWS, in its order, as far as the phone has
-            // them: Import, Trash, Export and the whole Locker's Access
-            // history — then what the phone adds, the facts and the Lock.
+            // them: Import, Trash and Export — then what the phone adds, the
+            // facts and the Lock. There is no Access history (#1146): the
+            // Locker keeps no log to show.
             more_rows: vec![
                 more(
                     "import",
@@ -581,13 +582,6 @@ impl Home {
                     words::more_export_meta(locale),
                     "Share",
                     Some(routes::export(&parent)),
-                ),
-                more(
-                    "access",
-                    words::more_access(locale),
-                    words::more_access_meta(locale),
-                    "History",
-                    Some(routes::access()),
                 ),
                 more(
                     "facts",
@@ -615,8 +609,8 @@ impl Home {
                     detail: words::keeps_secret_detail(locale),
                 },
                 wire::LockerFact {
-                    label: words::keeps_receipts(locale),
-                    detail: words::keeps_receipts_detail(locale),
+                    label: words::keeps_use(locale),
+                    detail: words::keeps_use_detail(locale),
                 },
                 wire::LockerFact {
                     label: words::keeps_backup(locale),
@@ -687,12 +681,20 @@ impl Screen for Home {
         let locale = ctx.locale();
         let open = self.wall.is_open();
         let searched = self.search_open || self.destination == wire::LockerDestination::Search;
+        // THE UNLOCKS THE PHONE REFUSED while Locker was shut (#1146), said once
+        // under the line that tells what stays hidden.
+        let mut content = self.content(locale);
+        if let (Some(wire::locker_home_state::Content::Data(data)), Some(failed)) =
+            (content.as_mut(), self.wall.failures_line(locale))
+        {
+            data.status_line = format!("{} {failed}", data.status_line);
+        }
         wire::ViewState {
             kind: Some(wire::view_state::Kind::LockerHome(wire::LockerHomeState {
                 wall: self.wall.view(locale),
                 secure: open,
                 destination: self.destination as i32,
-                content: self.content(locale),
+                content,
                 sheet: self.sheet as i32,
                 band: self.band(locale),
                 chrome: Some(Self::chrome(locale)),

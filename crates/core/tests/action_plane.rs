@@ -292,10 +292,6 @@ fn every_app_takes_an_act_and_refuses_a_bad_input_with_its_check() {
             "{app}.{action}: {done:?}"
         );
         assert!(
-            !done.invocation_id.is_empty(),
-            "{app}.{action} left no journal row"
-        );
-        assert!(
             !done.tables.is_empty(),
             "{app}.{action} wrote no table: {done:?}"
         );
@@ -391,8 +387,7 @@ fn the_same_invoke_key_runs_once() {
     let second = ask("tap-1", "Dedupe me");
     assert!(second.replayed, "the second tap is the first's answer");
     assert_eq!(second.status, wire::ActStatus::Executed as i32);
-    // the run it named; the journal keeps evidence and not answers, so no output rides it
-    assert_eq!(second.invocation_id, first.invocation_id);
+    // the vault keeps a digest and not answers, so no output rides it
     assert!(second.output.is_empty());
     assert_eq!(
         count(&sample, "title = ?", "Dedupe me"),
@@ -446,7 +441,6 @@ fn the_same_invoke_key_runs_once_across_a_restart() {
     .expect("an act");
     assert!(second.replayed, "the restarted core remembers the key");
     assert_eq!(second.status, wire::ActStatus::Executed as i32);
-    assert_eq!(second.invocation_id, first.invocation_id);
     assert!(matches!(
         act_on(&reopened, "agenda", "add-task", "tap-restart", &[("title", text("Another"))]),
         Err(CoreError::InvalidRequest { detail }) if detail.contains("different act")

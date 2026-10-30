@@ -491,7 +491,6 @@ fn the_families_the_data_is_built_from_are_all_there() {
         "act.name_state",
         // vault refusals
         "act.x_name_said",
-        "act.restore_name_it_is_in_the",
         // the trace guard and the repeat policy
         "trace.the_trace_contradicts_the_call_why",
         "session.repeated_call_again_do_not_send",

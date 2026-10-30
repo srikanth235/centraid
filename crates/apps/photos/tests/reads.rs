@@ -1,13 +1,12 @@
 //! What Photos reads, against a vault the product founds and Photos' own commands
 //! fill: the albums and their covers, the places, the full-text leg of the search,
-//! the duplicates and the count of the library, each asked through the paged door a
+//! and the count of the library, each asked through the paged door a
 //! phone's core asks through. (The shelves are `shelves.rs`; the overview, one
 //! photograph and the search's other legs are `collections.rs`.)
 
 mod common;
 
 use centraid_apps_kit::testdoor::TestDoor;
-use centraid_apps_photos::duplicates::{Fingerprint, duplicate_clusters};
 use centraid_apps_photos::overview::{live_photo_count, load_albums};
 use centraid_apps_photos::places::load_places;
 use centraid_apps_photos::queries::load_search_term;
@@ -116,48 +115,6 @@ fn search_finds_a_caption_or_a_place_and_leaves_out_the_archive() {
     assert!(denial.is_none());
     assert_eq!(found.photo_ids, [dog]);
     assert!(search("zeppelin").0.photo_ids.is_empty());
-}
-
-#[test]
-fn duplicates_are_clustered_at_read_over_live_photographs_only() {
-    let w = World::new();
-    let a = w.photo("a", json!({ "phash": "ffff0000ffff0000" }));
-    let b = w.photo("b", json!({ "phash": "ffff0000ffff0001" }));
-    let c = w.photo("c", json!({ "phash": "0000ffff0000ffff" }));
-    let d = w.photo("d", json!({ "phash": "ffff0000ffff0003" }));
-    w.ok("entity.trash", json!({ "id": d }));
-    let clusters = w.read(|door| {
-        duplicate_clusters(door, 0, |prints: &[Fingerprint]| {
-            let rows: Vec<centraid_media::duplicates::Fingerprint> = prints
-                .iter()
-                .map(|p| centraid_media::duplicates::Fingerprint {
-                    asset_id: p.photo_id.clone(),
-                    phash: p.phash.clone(),
-                    cluster_id: None,
-                })
-                .collect();
-            centraid_media::duplicates::cluster(
-                &rows,
-                centraid_media::duplicates::DUPLICATE_HAMMING_THRESHOLD,
-            )
-        })
-        .expect("reads")
-    });
-    assert_eq!(clusters.len(), 1);
-    let mut members: Vec<&str> = clusters[0]
-        .photos
-        .iter()
-        .map(|p| p.photo_id.as_str())
-        .collect();
-    members.sort_unstable();
-    let mut expected = [a.as_str(), b.as_str()];
-    expected.sort_unstable();
-    assert_eq!(
-        members, expected,
-        "the trashed twin is not offered, and a lone photograph is no cluster"
-    );
-    assert!(!members.contains(&c.as_str()));
-    assert_eq!(clusters[0].tier, "phash");
 }
 
 /// THE PHOTO COUNT IS THE LIBRARY'S, NOT THE ROWS' (#1135): an edit and the photograph

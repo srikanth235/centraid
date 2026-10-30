@@ -815,6 +815,7 @@ fn rules_set_the_category_on_the_plan_rows_and_a_bank_row_is_never_dropped() {
         amount_max_minor: None,
         account_id: None,
         category_concept_id: Some("subscriptions".into()),
+        display_name: Some("Netflix".into()),
         position: 0,
     }];
     let planned =
@@ -832,6 +833,7 @@ fn rules_set_the_category_on_the_plan_rows_and_a_bank_row_is_never_dropped() {
         netflix.category_concept_id.as_deref(),
         Some("subscriptions")
     );
+    assert_eq!(netflix.display_name.as_deref(), Some("Netflix"));
     assert_eq!(planned.totals.rows, 5);
     assert_eq!(planned.totals.new, 5);
     assert_eq!(

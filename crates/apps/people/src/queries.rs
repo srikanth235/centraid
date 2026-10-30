@@ -61,7 +61,8 @@ pub const BIRTHDAY_LABEL: &str = "Birthday";
 
 const STARRED: &str = "flag:starred";
 const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at, deleted_at, purge_at";
-const PERSON_COLUMNS: &str = "id, form, nickname, role, met, birthday, cadence_days";
+const PERSON_COLUMNS: &str =
+    "id, form, nickname, role, met, birthday, birthday_reminder, cadence_days";
 
 fn text(word: &str) -> PageBindValue {
     PageBindValue::Text(word.to_owned())
@@ -106,6 +107,8 @@ pub struct PersonRow {
     pub nickname: String,
     pub met: String,
     pub birthday: Option<String>,
+    /// Whether the birthday's reminder is on (the member's per-person switch; on by default).
+    pub birthday_reminder: bool,
     /// 0 is no cadence.
     pub cadence_days: i64,
     pub created_at: String,
@@ -191,6 +194,10 @@ fn members(door: &dyn PageDoor, entities: &[Row]) -> KitResult<Vec<PersonRow>> {
                 nickname: text_of(kind, "nickname").unwrap_or_default(),
                 met: text_of(kind, "met").unwrap_or_default(),
                 birthday: text_of(kind, "birthday"),
+                birthday_reminder: kind
+                    .get("birthday_reminder")
+                    .and_then(Cell::integer)
+                    .is_none_or(|on| on != 0),
                 cadence_days: kind
                     .get("cadence_days")
                     .and_then(Cell::integer)
@@ -391,6 +398,24 @@ pub(crate) fn touch_stubs(door: &dyn PageDoor, ids: &[String]) -> KitResult<Vec<
         .filter_map(|row| Some((text_of(row, "from_id")?, text_of(row, "to_id")?)))
         .collect();
     let activity_ids: Vec<String> = person_of.keys().cloned().collect();
+    // A TOUCH IN THE TRASH IS NO TOUCH: it counts toward nothing (#1146 M21).
+    let live: BTreeSet<String> = Read {
+        name: "people.touches.live",
+        table: "entity",
+        select: "id",
+        order: ("id", "id"),
+        column: "id",
+    }
+    .among(
+        WIDE,
+        door,
+        &activity_ids,
+        Some(("kind = ? AND deleted_at IS NULL", vec![text("activity")])),
+    )?
+    .iter()
+    .filter_map(|row| text_of(row, "id"))
+    .collect();
+    let activity_ids: Vec<String> = live.into_iter().collect();
     let mut stubs: Vec<TouchStub> = Read {
         name: "people.touches.activity",
         table: "activity",
@@ -433,6 +458,114 @@ pub(crate) fn last_contacts(stubs: &[TouchStub]) -> BTreeMap<String, String> {
             .or_insert_with(|| stub.at.clone());
     }
     last
+}
+
+/// Which end of a `related` edge a sheet's person is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RelationDirection {
+    /// The sheet's person listed the other as `label` ("Beth is Ada's Mum": Ada's sheet).
+    Outgoing,
+    /// The other listed the sheet's person as `label` (Beth's sheet reads "Mum of Ada").
+    Incoming,
+}
+
+/// One relationship of a person, as the sheet draws it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelationRow {
+    /// The other person.
+    pub person_id: String,
+    pub name: String,
+    /// What the edge's relation concept is called ("Mum"): what the TARGET is to the SOURCE.
+    pub label: String,
+    pub direction: RelationDirection,
+}
+
+/// The live relationships of one person, both directions: the `related` edges that start at them
+/// (the other is what `label` says) and end at them (they are what `label` says to the other).
+/// The other end must be live: a relative in the trash is not shown. A pet is shown on its
+/// owner's sheet (an outgoing edge).
+pub(crate) fn relations(door: &dyn PageDoor, id: &str) -> KitResult<Vec<RelationRow>> {
+    let ids = [id.to_owned()];
+    let wide = |name: &'static str, order, column| Read {
+        name,
+        table: "edge",
+        select: "from_id, to_id, label_id",
+        order,
+        column,
+    };
+    let outgoing = wide("people.relations.out", ("from_id", "to_id"), "from_id").among(
+        WIDE,
+        door,
+        &ids,
+        Some(("rel = ?", vec![text("related")])),
+    )?;
+    let incoming = wide("people.relations.in", ("to_id", "from_id"), "to_id").among(
+        WIDE,
+        door,
+        &ids,
+        Some(("rel = ?", vec![text("related")])),
+    )?;
+    let mut pairs: Vec<(String, String, RelationDirection)> = Vec::new();
+    for (rows, direction, other) in [
+        (&outgoing, RelationDirection::Outgoing, "to_id"),
+        (&incoming, RelationDirection::Incoming, "from_id"),
+    ] {
+        for row in rows {
+            if let (Some(other), Some(label)) = (text_of(row, other), text_of(row, "label_id")) {
+                pairs.push((other, label, direction));
+            }
+        }
+    }
+    let others: Vec<String> = pairs
+        .iter()
+        .map(|(other, ..)| other.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let live: BTreeMap<String, String> = Read {
+        name: "people.relations.who",
+        table: "entity",
+        select: "id, title",
+        order: ("id", "id"),
+        column: "id",
+    }
+    .among(
+        WIDE,
+        door,
+        &others,
+        Some(("deleted_at IS NULL", Vec::new())),
+    )?
+    .iter()
+    .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "title")?)))
+    .collect();
+    let labels = titles(
+        door,
+        &pairs
+            .iter()
+            .map(|(_, label, _)| label.clone())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>(),
+    )?;
+    let mut rows: Vec<RelationRow> = pairs
+        .into_iter()
+        .filter_map(|(other, label, direction)| {
+            Some(RelationRow {
+                name: live.get(&other)?.clone(),
+                label: labels.get(&label)?.clone(),
+                person_id: other,
+                direction,
+            })
+        })
+        .collect();
+    rows.sort_by(|left, right| {
+        left.name
+            .to_lowercase()
+            .cmp(&right.name.to_lowercase())
+            .then_with(|| left.person_id.cmp(&right.person_id))
+            .then_with(|| left.label.cmp(&right.label))
+    });
+    Ok(rows)
 }
 
 /// One touch, with what it was and what was said.
@@ -611,8 +744,8 @@ impl DateRow {
 }
 
 /// The important dates of these people: the birthday column, and the yearly
-/// all-day events `about` them. **A birthday always has its reminder**; any
-/// other date has one when its event does.
+/// all-day events `about` them. **A birthday has its reminder unless the member turned it off**
+/// (`person.set_birthday_reminder`); any other date has one when its event does.
 pub(crate) fn dates(door: &dyn PageDoor, people: &[&PersonRow]) -> KitResult<Vec<DateRow>> {
     let mut found: Vec<DateRow> = people
         .iter()
@@ -623,7 +756,7 @@ pub(crate) fn dates(door: &dyn PageDoor, people: &[&PersonRow]) -> KitResult<Vec
                 date_id: format!("birthday:{}", person.id),
                 label: BIRTHDAY_LABEL.to_owned(),
                 month_day: birthday.get(birthday.len().checked_sub(5)?..)?.to_owned(),
-                reminder_on: true,
+                reminder_on: person.birthday_reminder,
             })
         })
         .collect();

@@ -761,3 +761,111 @@ fn the_unused_resource_helper_builds_a_role() {
     let r = resource("x", wire::roll_resource::Role::CameraOriginal);
     assert_eq!(r.role, wire::roll_resource::Role::CameraOriginal as i32);
 }
+
+fn number_of(input: &std::collections::HashMap<String, wire::Value>, name: &str) -> f64 {
+    match &input[name].kind {
+        Some(wire::value::Kind::Integer(n)) => *n as f64,
+        Some(wire::value::Kind::Real(n)) => *n,
+        other => panic!("{name} is {other:?}"),
+    }
+}
+
+/// THE LIBRARY'S OWN FACTS RIDE WITH THE PHOTOGRAPH (D5, #1146): the pixel box, a movie's length
+/// and where it was taken are written from the asset's library metadata when it has them, and
+/// left out (never zero, never invented) when it has not.
+#[test]
+fn the_librarys_pixel_box_duration_and_location_ride_with_the_write_when_it_has_them() {
+    let hash = "cd".repeat(32);
+    let mut movie = photo("M");
+    movie.kind = wire::roll_asset::Kind::Video as i32;
+    movie.width = 1920;
+    movie.height = 1080;
+    movie.duration_s = 12.5;
+    movie.latitude = Some(47.6062);
+    movie.longitude = Some(-122.3321);
+    let input = input_of(add_request(&movie, &hash, 99, "video/mp4", true, None).into());
+    assert_eq!(number_of(&input, "width"), 1920.0);
+    assert_eq!(number_of(&input, "height"), 1080.0);
+    assert_eq!(number_of(&input, "duration_s"), 12.5);
+    assert_eq!(number_of(&input, "lat"), 47.6062);
+    assert_eq!(number_of(&input, "lon"), -122.3321);
+
+    // A still the library knows nothing more of says nothing more.
+    let bare = input_of(add_request(&photo("S"), &hash, 12, "image/jpeg", false, None).into());
+    for name in ["width", "height", "duration_s", "lat", "lon"] {
+        assert!(!bare.contains_key(name), "{name} was invented");
+    }
+    // A coordinate pair is a pair: one half alone is no location.
+    let mut half = photo("H");
+    half.latitude = Some(1.0);
+    let half = input_of(add_request(&half, &hash, 12, "image/jpeg", false, None).into());
+    assert!(!half.contains_key("lat") && !half.contains_key("lon"));
+    // An edit's render is its own pixel box, and it inherits its place from the original.
+    let mut edit = photo("E");
+    edit.width = 800;
+    edit.height = 600;
+    edit.latitude = Some(1.0);
+    edit.longitude = Some(2.0);
+    let edit = input_of(add_request(&edit, &hash, 12, "image/jpeg", false, Some("orig")).into());
+    assert_eq!(number_of(&edit, "width"), 800.0);
+    assert!(!edit.contains_key("lat") && !edit.contains_key("lon"));
+}
+
+/// ... and through a whole walk the photograph the vault holds has them: a pixel box and a place
+/// the member can browse by.
+#[test]
+fn a_walked_photograph_lands_with_its_pixel_box_and_its_place() {
+    let cells = |shell: &Shell| {
+        shell.d.with_ctx(|ctx| {
+            match read::read(
+                ctx,
+                load::photos::Shelf {
+                    limit: 500,
+                    view: load::photos::ShelfView::Live,
+                    after: None,
+                    id: None,
+                },
+                |answer| match answer {
+                    Answer::PhotosShelf(shelf) => Some(*shelf),
+                    _ => None,
+                },
+            ) {
+                read::Reading::Data(shelf) => shelf.cells,
+                _ => panic!("the shelf reads"),
+            }
+        })
+    };
+    let places = |shell: &Shell| {
+        shell.d.with_ctx(|ctx| {
+            match read::read(ctx, load::photos::Places {}, |answer| match answer {
+                Answer::PhotosPlaces(places) => Some(places),
+                _ => None,
+            }) {
+                read::Reading::Data(places) => places,
+                _ => panic!("the places read"),
+            }
+        })
+    };
+    let mut asset = photo("G");
+    asset.width = 4032;
+    asset.height = 3024;
+    asset.latitude = Some(47.6062);
+    asset.longitude = Some(-122.3321);
+    let mut library = Library::new().with(asset, &[("G", STILL)]);
+    let mut shell = started(&mut library);
+    let before: Vec<String> = cells(&shell)
+        .into_iter()
+        .map(|cell| cell.photo_id)
+        .collect();
+    let placed_before = places(&shell).places.len();
+    walk(&mut shell, &mut library);
+    assert_eq!(phase(&shell), wire::PhotosBackupPhase::Done as i32);
+    let added: Vec<_> = cells(&shell)
+        .into_iter()
+        .filter(|cell| !before.contains(&cell.photo_id))
+        .collect();
+    assert_eq!(added.len(), 1, "the walk added one photograph");
+    assert_eq!((added[0].width, added[0].height), (Some(4032), Some(3024)));
+    // THE PLACE: the library's coordinates became a place the photograph is filed under.
+    assert_eq!(places(&shell).places.len(), placed_before + 1);
+}

@@ -339,7 +339,7 @@ impl World {
     ///
     /// **The vault's tables, read as an app reads them** (#1135): an entity row (its title, its
     /// trash) beside its kind row, and the relations as edges or as the column that holds them.
-    /// Nothing is read from the journal, and a container's kind is the container's own.
+    /// A container's kind is the container's own.
     pub fn load_in(door: &dyn Door, at: Option<&Standing>) -> Result<Self, String> {
         let mut world = Self::default();
         let vault = door.table("vault", "id, self_id, currency", "id", "id")?;

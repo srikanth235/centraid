@@ -145,19 +145,19 @@
       "verb": "edit",
       "kind": "chat_thread",
       "inverse": null,
-      "sealed": ["title"],
-      "command": "thread.rename",
+      "sealed": [],
+      "command": "entity.retitle",
       "phrasings": [
         "rename this chat",
         "call this chat something else",
         "change the title of this chat"
       ],
-      "description": "Rename a stored chat through thread.rename.",
+      "description": "Rename a stored chat through entity.retitle.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "thread_id": {
+          "id": {
             "type": "string",
             "minLength": 1
           },
@@ -166,7 +166,7 @@
             "minLength": 1
           }
         },
-        "required": ["thread_id", "title"],
+        "required": ["id", "title"],
         "additionalProperties": false
       }
     },
@@ -262,37 +262,6 @@
           }
         },
         "required": ["origin", "records"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "claim-bytes",
-      "verb": "attach",
-      "kind": "followed_folder",
-      "inverse": null,
-      "sealed": [],
-      "command": "blob.stage",
-      "phrasings": [
-        "claim the bytes I just staged",
-        "name the staged file",
-        "count the staged bytes"
-      ],
-      "description": "(imports, lane I) Name bytes the stage door stored through blob.stage, at the size the core counted, so no stored bytes sit in the vault that nothing names.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "hash": {
-            "type": "string",
-            "minLength": 64,
-            "maxLength": 64
-          },
-          "size": {
-            "type": "integer",
-            "minimum": 0
-          }
-        },
-        "required": ["hash", "size"],
         "additionalProperties": false
       }
     },

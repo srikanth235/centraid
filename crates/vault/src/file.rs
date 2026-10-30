@@ -29,7 +29,8 @@ use rusqlite::Connection;
 
 use crate::clock::{Clock, ClockIds, Ids, SystemClock};
 use crate::error::{Result, VaultError};
-use crate::migrations::{APPLICATION_ID, head_version};
+use crate::format::{APPLICATION_ID, EARLIER_APPLICATION_ID, SCHEMA_DIGEST};
+use crate::migrations::head_version;
 
 /// THE PAGE SIZE, PINNED (#1029 §1).
 ///
@@ -79,7 +80,7 @@ pub struct Vault {
     ///
     /// `core_content_item.content_uri` is `blob:blake3-<hex>` for anything
     /// binary, and the bytes themselves live here — a vault file is rows, and
-    /// a photograph in a row is a photograph in the journal. See
+    /// a photograph in a row is a photograph in the file. See
     /// [`Vault::with_blobs`].
     blobs: Option<Box<dyn crate::bytes::BlobStore + Send + Sync>>,
 }
@@ -166,6 +167,9 @@ impl Vault {
         // "this is not a Centraid vault".
         let application_id: i64 =
             connection.query_row("PRAGMA application_id", [], |row| row.get(0))?;
+        if application_id == EARLIER_APPLICATION_ID {
+            return Err(VaultError::EarlierModel { path });
+        }
         if application_id != APPLICATION_ID {
             return Err(VaultError::NotAVault {
                 path,
@@ -200,16 +204,35 @@ impl Vault {
             let reached: i64 = vault
                 .connection()
                 .query_row("PRAGMA user_version", [], |row| row.get(0))?;
-            return Self::wrap(
+            let vault = Self::wrap(
                 Connection::open(&path)?,
                 path,
                 reached,
                 Box::new(SystemClock),
                 Box::new(ClockIds::system()),
-            );
+            )?;
+            vault.check_schema()?;
+            return Ok(vault);
         }
 
-        Self::wrap(connection, path, found, clock, ids)
+        let vault = Self::wrap(connection, path, found, clock, ids)?;
+        vault.check_schema()?;
+        Ok(vault)
+    }
+
+    /// THE FILE'S TABLES ARE THIS BUILD'S ([`crate::format`], #1146). A file at the head of the
+    /// ladder whose schema digest is not [`SCHEMA_DIGEST`] was changed by something other than
+    /// this build, and is refused rather than read.
+    fn check_schema(&self) -> Result<()> {
+        let found = crate::format::schema_digest(self.connection())?;
+        if found == SCHEMA_DIGEST {
+            return Ok(());
+        }
+        Err(VaultError::SchemaMismatch {
+            path: self.path.clone(),
+            found,
+            expected: SCHEMA_DIGEST.to_owned(),
+        })
     }
 
     /// THE PRAGMA SET, IN ONE PLACE, ON EVERY CONNECTION THIS CRATE OPENS

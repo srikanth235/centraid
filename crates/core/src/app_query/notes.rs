@@ -410,7 +410,6 @@ pub(crate) fn note(
                 format: note.format,
                 pinned: note.pinned,
                 body: note.body,
-                row_version: note.row_version,
                 created_at: note.created_at,
                 updated_at: note.updated_at,
                 deleted_at: note.deleted_at,
@@ -1069,12 +1068,11 @@ mod tests {
         );
     }
 
-    /// HISTORY IS NEWEST FIRST, AND THE BASE MOVES WITH EVERY WRITE. Two body
-    /// edits are three versions with the head marked current and each older
-    /// version named by its `seq`; a title edit bumps `row_version` and adds no
-    /// version — the fact an autosaving editor's conflict check rests on.
+    /// HISTORY IS NEWEST FIRST. Two body edits are three versions with the head
+    /// marked current and each older version named by its `seq`; a title edit adds
+    /// no version.
     #[test]
-    fn history_is_newest_first_and_the_base_moves_with_every_write() {
+    fn history_is_newest_first_and_a_title_edit_adds_no_version() {
         let scratch = Scratch::founded();
         let note = scratch.create("Draft", "one");
         let first = scratch.note(&note);
@@ -1089,8 +1087,6 @@ mod tests {
             "note.edit",
             serde_json::json!({ "id": note, "body": "three" }),
         );
-        let edited = scratch.note(&note);
-        assert!(edited.row_version > first.row_version);
 
         scratch.run(
             "note.edit",
@@ -1098,7 +1094,6 @@ mod tests {
         );
         let renamed = scratch.note(&note);
         assert_eq!(renamed.title, "Renamed");
-        assert!(renamed.row_version > edited.row_version);
 
         let history = || {
             let Ok(Answer::NotesHistory(history)) =

@@ -4,8 +4,8 @@
 //! The registry validates a command's input against its `input_schema` when
 //! it executes, so a mapped pair is only proven when a call to the runtime
 //! made the vault EXECUTE that command. This test drives each pair once
-//! against the fixture world and reads the vault's own invocation journal
-//! for the command, so a pair the runtime never reaches (or reaches with
+//! against the fixture world and reads the commands the harness's door ran
+//! on it, so a pair the runtime never reaches (or reaches with
 //! input the schema rejects) fails here and is named in the message. A pair
 //! that cannot be driven from the fixture world is listed in `UNDRIVEN` with
 //! its reason; an empty reason fails.
@@ -18,7 +18,7 @@ mod common;
 use std::collections::BTreeMap;
 
 use centraid_nativetools::meta::VERBS;
-use centraid_nativetools::vaultio::{self, SetClock};
+use centraid_nativetools::vaultio;
 use common::drive::drive;
 use common::{World, call, seeded};
 use serde_json::Value;
@@ -30,7 +30,7 @@ const UNDRIVEN: &[(&str, &str, &str)] = &[
         "reveal",
         "locker item",
         "a reveal runs no command: it ends the turn in a member action the member completes in \
-         Locker, whose own flow writes the receipt (#1135); tests/locker_parity.rs drives it",
+         Locker, whose own flow stamps the item (#1146); tests/locker_parity.rs drives it",
     ),
     (
         "restore",
@@ -41,18 +41,12 @@ const UNDRIVEN: &[(&str, &str, &str)] = &[
     ),
 ];
 
-/// Executed commands in the vault's journal, counted per command id.
+/// Executed commands the harness's door has run on the world's vault, counted per command id.
 fn executed(world: &World) -> BTreeMap<String, usize> {
-    let handle = vaultio::Handle::open(world.path(), SetClock::at(1_800_000_000_000), "coverage")
-        .expect("the journal opens");
-    let rows = handle
-        .table("journal", "seq, command, outcome", "seq", "seq")
-        .expect("the journal reads");
     let mut counts = BTreeMap::new();
-    for row in &rows {
-        if vaultio::text(row, "outcome").as_deref() == Some("executed") {
-            let command = vaultio::text(row, "command").unwrap_or_default();
-            *counts.entry(command).or_insert(0) += 1;
+    for ((command, outcome), count) in vaultio::commands_run(world.path()) {
+        if outcome == "executed" {
+            counts.insert(command, count);
         }
     }
     counts

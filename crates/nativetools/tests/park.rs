@@ -143,7 +143,7 @@ fn a_parked_write_answers_what_a_run_answers_and_writes_nothing() {
     assert_eq!(compared, run.len());
 }
 
-/// The commands the seeding ran, before any session: the journal of a fresh world.
+/// The commands run on a fresh world before any session: none.
 fn seeded_journal() -> BTreeMap<(String, String), usize> {
     journal(&seeded())
 }

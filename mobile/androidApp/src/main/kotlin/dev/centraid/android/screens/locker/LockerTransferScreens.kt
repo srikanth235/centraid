@@ -19,8 +19,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import centraid.core.v1.LockerAccessEvent
-import centraid.core.v1.LockerAccessState
 import centraid.core.v1.LockerExportEvent
 import centraid.core.v1.LockerExportState
 import centraid.core.v1.LockerImportEvent
@@ -216,38 +214,6 @@ internal fun LockerImportScreen(
                                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).semantics { },
                             ) { onEvent(LockerImportEvent(discard = LockerImportEvent.DiscardTapped())) }
                         }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** `locker.access`: the whole Locker's access history, metadata only. */
-@Composable
-internal fun LockerAccessScreen(
-    state: LockerAccessState,
-    onEvent: (LockerAccessEvent) -> Unit,
-    sendWall: (LockerWallEvent) -> Unit,
-    onWords: () -> Unit,
-    onBack: () -> Unit,
-) {
-    SecureWindow(state.secure)
-    val chrome = state.chrome
-    LockerCovered(state.wall, chrome?.back_label.orEmpty(), onBack, sendWall, onWords) {
-        PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back_label.orEmpty(), onBack = onBack) {
-            ReadStateView(
-                content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
-                onRetry = { onEvent(LockerAccessEvent(refreshed = LockerAccessEvent.Refreshed())) },
-                retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-            ) { access ->
-                LazyColumn(Modifier.fillMaxSize().testTag("locker-access")) {
-                    item(key = "lede") { LockerNote(access.lede) }
-                    val history = access.history
-                    if (history != null) {
-                        item(key = "head") { if (history.title.isNotEmpty()) SectionHeader(SectionHead(title = history.title)) }
-                        items(history.rows, key = { "a-" + it.key }) { row -> FieldRow(row.label, row.value_, note = row.note) }
-                        item(key = "note") { LockerNote(history.note) }
                     }
                 }
             }

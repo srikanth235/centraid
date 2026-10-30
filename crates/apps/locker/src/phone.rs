@@ -16,15 +16,14 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::Denial;
 use centraid_apps_kit::error::KitResult;
-use centraid_apps_kit::reads::{PageDoor, Read, in_list, read_by_id, read_window};
+use centraid_apps_kit::reads::{PageDoor, Read, read_by_id, read_window};
 use centraid_apps_kit::row::{Cell, Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 use centraid_search::{Answer, Principal, Search, SearchError, SearchRequest};
 
 use crate::queries::{
-    AccessAnswer, ENTITY_COLUMNS, ITEMS_MAX, ItemRow, KIND_COLUMNS, SEALED_ITEM_COLUMNS,
-    SEARCH_ROWS, TRASH_ROWS, access_answer, access_statement, access_window, items_window,
-    subtitle_of,
+    ENTITY_COLUMNS, ITEMS_MAX, ItemRow, KIND_COLUMNS, SEALED_ITEM_COLUMNS, SEARCH_ROWS, TRASH_ROWS,
+    items_window, subtitle_of,
 };
 use crate::transfer::{Entry, EntryField, EntryPasskey, Existing, type_columns};
 use crate::types::{ITEM_TYPES, degrade_type, degraded_from};
@@ -629,128 +628,6 @@ pub fn load_review(door: &dyn PageDoor, today: &str) -> KitResult<ReviewData> {
     Ok(review)
 }
 
-/// The access-history window's default on the item page.
-pub const ACCESS_DEFAULT: i64 = 50;
-
-/// THE ACCESS HISTORY (#1047 T2, L-access; Q-1047-21): the receipts the vault
-/// already wrote — reveals, copies and one-time codes, refusals included —
-/// newest first, as metadata. A receipt never carried a value.
-///
-/// **`Some(item)` is that item's history**, the item page's. **`None` is the
-/// whole Locker's**: every item's receipts and the two that name no item, an
-/// unlock and an export. The audit band is read the same way in both — the
-/// statement's own `object_type` predicate is the wall ([`access_statement`]),
-/// and no grant is evaluated, because the phone is the owner (#1029 §1; L1).
-///
-/// The whole-Locker answer also NAMES each receipt's item and custom field as
-/// they are now ([`name_access`]), because a receipt holds ids only and a
-/// history of ids is not one a member can read.
-pub fn load_access(
-    door: &dyn PageDoor,
-    item_id: Option<&str>,
-    limit: Option<i64>,
-) -> KitResult<AccessAnswer> {
-    let window = access_window(limit.or(Some(ACCESS_DEFAULT)));
-    let read = read_window(door, &access_statement(item_id)?, window)?;
-    let mut answer = access_answer(window, &read.rows);
-    if item_id.is_none() {
-        name_access(door, &mut answer)?;
-    }
-    Ok(answer)
-}
-
-/// The titles of the items a history names, trashed ones included: a title is
-/// the browsable half of an item, and a trashed item is still the one a
-/// receipt is about. An item the vault no longer holds has no row.
-pub fn access_titles_statement(item_ids: &[String]) -> KitResult<PageQuery> {
-    let ids = in_list("id", item_ids)?;
-    // A receipt names an item by value and may name anything: only a Locker
-    // item's title is read, whatever the id.
-    let mut bind = vec![PageBindValue::Text(KIND.to_owned())];
-    bind.extend(ids.bind);
-    Ok(PageQuery::new(
-        "locker.phone.access_titles",
-        "id, title",
-        "entity",
-        PageOrder::asc("id", "id"),
-    )
-    .filter(&format!("kind = ? AND {}", ids.sql), bind))
-}
-
-/// The labels of the custom fields a history names. A sealed field's VALUE is
-/// not selected, and its label is plain metadata.
-pub fn access_labels_statement(field_ids: &[String]) -> KitResult<PageQuery> {
-    let ids = in_list("field_id", field_ids)?;
-    Ok(PageQuery::new(
-        "locker.phone.access_labels",
-        "field_id, label",
-        "locker_item_field",
-        PageOrder::asc("field_id", "field_id"),
-    )
-    .filter(&ids.sql, ids.bind))
-}
-
-/// Put each receipt's item title and custom-field label on its entry, from one
-/// read of each. Two statements over the DISTINCT ids a history of at most
-/// [`crate::queries::ACCESS_MAX`] receipts names, so the cost is bounded by
-/// the window and not by the vault.
-fn name_access(door: &dyn PageDoor, answer: &mut AccessAnswer) -> KitResult<()> {
-    let item_ids: Vec<String> = answer
-        .entries
-        .iter()
-        .filter_map(|entry| entry.item_id.clone())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect();
-    let field_ids: Vec<String> = answer
-        .entries
-        .iter()
-        .filter_map(|entry| entry.field_id.clone())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect();
-    let titles = named(door, &item_ids, access_titles_statement, "id", "title")?;
-    let labels = named(
-        door,
-        &field_ids,
-        access_labels_statement,
-        "field_id",
-        "label",
-    )?;
-    for entry in &mut answer.entries {
-        entry.item_title = entry
-            .item_id
-            .as_ref()
-            .and_then(|id| titles.get(id))
-            .cloned();
-        entry.field_label = entry
-            .field_id
-            .as_ref()
-            .and_then(|id| labels.get(id))
-            .cloned();
-    }
-    Ok(())
-}
-
-/// `id -> name` for `ids`, by one statement; nothing to ask when there are
-/// none (an empty `IN ()` is a shape the kit refuses).
-fn named(
-    door: &dyn PageDoor,
-    ids: &[String],
-    statement: fn(&[String]) -> KitResult<PageQuery>,
-    id_column: &str,
-    name_column: &str,
-) -> KitResult<BTreeMap<String, String>> {
-    if ids.is_empty() {
-        return Ok(BTreeMap::new());
-    }
-    Ok(read_window(door, &statement(ids)?, ids.len())?
-        .rows
-        .iter()
-        .filter_map(|row| Some((text_of(row, id_column)?, text_of(row, name_column)?)))
-        .collect())
-}
-
 /// Every item an import could land on: live and archived, with which of its
 /// sealed cells hold a value (#1047 T2). The window is the shelves' ceiling.
 pub fn load_import_targets(door: &dyn PageDoor) -> KitResult<Vec<Existing>> {
@@ -1197,10 +1074,6 @@ mod tests {
             presence_statement("x"),
             fields_statement("x"),
             passkey_statement("x"),
-            // THE WHOLE-LOCKER HISTORY'S NAMES (Q-1047-21): a title and a
-            // field's label, never a field's value.
-            access_titles_statement(&["x".to_owned()]).expect("the statement builds"),
-            access_labels_statement(&["x".to_owned()]).expect("the statement builds"),
         ];
         for statement in statements {
             for column in statement.select.split(',').map(str::trim) {

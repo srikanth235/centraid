@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "photos",
   "name": "Photos",
-  "description": "Your photo library as a projection of the vault: a photograph is an entity over one blob — its title is the caption, its capture time, size and place are columns of its row — an album is a container with an ordered list of photographs, a heart or the archive is an edge to a flag, and a thumbnail, a caption or a perceptual hash is a derivative of the bytes. Uploading, captioning, deleting and organizing into albums all run through typed vault commands — the photograph's own (photo.*, album.set_cover) and the shared ones every app uses — contract-checked and journalled, and identical bytes are one photograph. No data of its own — revoke the grant and the app goes dark while the library stays the owner's.",
+  "description": "Your photo library as a projection of the vault: a photograph is an entity over one blob — its title is the caption, its capture time, size and place are columns of its row — an album is a container with an ordered list of photographs, a heart or the archive is an edge to a flag, and a thumbnail, a caption or a perceptual hash is a derivative of the bytes. Uploading, captioning, deleting and organizing into albums all run through typed vault commands — the photograph's own (photo.*, album.set_cover) and the shared ones every app uses — contract-checked, and identical bytes are one photograph. No data of its own — revoke the grant and the app goes dark while the library stays the owner's.",
   "version": "0.5.0",
   "iconKey": "Camera",
   "colorKey": "amber",
@@ -1193,27 +1193,6 @@
       }
     },
     {
-      "name": "duplicates",
-      "kind": "photo",
-      "figures": ["clusters", "members"],
-      "description": "Near-duplicate clusters over the live library: groups the photographs whose perceptual hashes (a derivative of each blob) lie within a few bits of one another, recomputed at read — a true visual-similarity signal, not a coincidence-prone fingerprint, and nothing stored. Each cluster lists its members as cells (pixel box, size, form, capture time, heart, the albums that hold it, held thumbnail path) so a review can show which copy to keep and which are placed in an album or hearted. The archive, the trash and an edited photograph's original are never members.",
-      "input": {
-        "type": "object",
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "clusters": {
-            "type": "array"
-          },
-          "vaultDenied": {
-            "type": "object"
-          }
-        }
-      }
-    },
-    {
       "name": "shelf",
       "kind": "photo",
       "figures": ["cells", "total"],
@@ -1351,9 +1330,6 @@
             "type": "integer"
           },
           "unplaced": {
-            "type": "integer"
-          },
-          "duplicate_clusters": {
             "type": "integer"
           },
           "vaultDenied": {

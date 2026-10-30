@@ -16,8 +16,9 @@
 //    passphrase. The OS prompt is the SHELL's (LAContext
 //    `.deviceOwnerAuthentication`, BiometricPrompt with `DEVICE_CREDENTIAL`);
 //    the core cannot see it happen, so `LockerUnlock` is the shell's REPORT
-//    that it did, receipted as `locker.auth`. What the core enforces is the
-//    other half: `K` is loaded only by an unlock, a reveal and a
+//    that it did and `LockerUnlockFailed` its report that it was refused; the
+//    core counts the second on the Locker's key row (#1146). What the core
+//    enforces is the other half: `K` is loaded only by an unlock, a reveal and a
 //    secret-bearing write are refused while locked, idle ends a session, and
 //    a relock zeroes the key.
 //
@@ -161,6 +162,9 @@ message LockerItem {
   string created_local_day = 29;
   string updated_local_day = 30;
   string purge_local_day = 31;
+  // The day the core last opened one of this item's sealed cells or made a
+  // code from its seed, in `tz`; empty when it never has (#1146).
+  string last_used_local_day = 32;
 }
 
 message LockerSecret {
@@ -268,19 +272,20 @@ message LockerSessionRequest {
     // Where the session stands. Answers `state` and nothing else.
     LockerStateAsk state = 1;
     // The OS prompt succeeded. Loads `K` (minting it on this device's first
-    // unlock, D-L3), opens a session and writes a `locker.auth` receipt.
+    // unlock, D-L3), opens a session, and clears the count of refused unlocks
+    // (the answer carries what it cleared, #1146).
     LockerUnlock unlock = 2;
     // Zero the key. Idempotent: relocking a locked Locker is a no-op.
     LockerRelock relock = 3;
-    // One sealed cell's plaintext, receipted first.
+    // One sealed cell's plaintext, the item stamped as used first.
     LockerReveal reveal = 4;
     // The one-time code an item's `otp_seed` makes now (RFC 6238: HMAC-SHA-1,
-    // six digits, thirty seconds), receipted first through
+    // six digits, thirty seconds), the item stamped first through
     // `locker.totp_code`. The seed itself is never answered.
     LockerTotpAsk totp = 5;
-    // EVERY SECRET, IN A FILE (#1047 T2): the plaintext export, receipted as
-    // one mass reveal (`locker.export`) before a value is opened. Refused
-    // while locked. The shell asks the phone's owner check afresh before it
+    // EVERY SECRET, IN A FILE (#1047 T2): the plaintext export, run as one
+    // confirmed mass reveal (`locker.export`) before a value is opened. It
+    // stamps no item. Refused while locked. The shell asks the phone's owner check afresh before it
     // sends this, and hands `LockerExported.content` to the OS save sheet —
     // never to app storage.
     LockerExportAsk export = 6;
@@ -289,12 +294,28 @@ message LockerSessionRequest {
     // calls new or gap-fill is written, each secret sealed under `K` on the
     // way in. The vault wins every collision.
     LockerImportAsk import_file = 7;
+    // The OS prompt was refused (not recognised, or locked out; a dismissal is
+    // not a failure). The core counts it and dates it on the Locker's key row
+    // and answers the figures (#1146). Opens nothing.
+    LockerUnlockFailed unlock_failed = 8;
   }
 }
 
-message LockerStateAsk {}
+message LockerStateAsk {
+  // The zone `failed_unlock_local_*` are answered in (#1146); empty is the
+  // vault's own, and a vault that names none reads UTC.
+  string tz = 1;
+}
 
-message LockerUnlock {}
+message LockerUnlock {
+  // As `LockerStateAsk.tz`, for the figures this unlock cleared.
+  string tz = 1;
+}
+
+message LockerUnlockFailed {
+  // As `LockerStateAsk.tz`.
+  string tz = 1;
+}
 
 message LockerRelock {}
 
@@ -306,14 +327,14 @@ message LockerReveal {
   string column = 2;
   // A custom field of `item_id`, whose ciphertext is bound to this id.
   string field_id = 3;
-  // The value goes to the clipboard, not the screen. Receipted as a copy;
-  // the value answered is the same.
+  // The value goes to the clipboard, not the screen; the value answered is the
+  // same.
   bool copy = 4;
 }
 
 message LockerTotpAsk {
   string item_id = 1;
-  // The code goes to the clipboard, not the screen (receipted as a copy).
+  // The code goes to the clipboard, not the screen.
   bool copy = 2;
 }
 
@@ -344,7 +365,9 @@ message LockerExported {
   string file_name = 2;
   string media_type = 3;
   uint32 item_count = 4;
-  string receipt_id = 5;
+  // 5 was the access receipt's id; the Locker keeps no access log (#1146).
+  reserved 5;
+  reserved "receipt_id";
   // Sealed values that did not open under this phone's `K` (a cell sealed
   // under a key the 24 words do not derive) and are NOT in the file. The
   // screen says so; zero on every ordinary export.
@@ -408,8 +431,9 @@ message LockerSessionResponse {
   LockerSessionState state = 1;
   // How long an unlocked session has left before idle ends it.
   uint64 remaining_ms = 2;
-  // The unlock's receipt, on an unlock.
-  string receipt_id = 3;
+  // 3 was the access receipt's id; the Locker keeps no access log (#1146).
+  reserved 3;
+  reserved "receipt_id";
   // A reveal's answer, when it happened.
   optional LockerRevealed revealed = 4;
   // Why a reveal or a code did not happen. `UNSPECIFIED` on every other step.
@@ -423,6 +447,13 @@ message LockerSessionResponse {
   // This core holds the vault's keys, so an unlock can succeed. False on a core
   // opened without the seed: the wall says so before it raises any prompt.
   bool keyed = 9;
+  // UNLOCKS THE PHONE REFUSED since the last one it allowed, and when the latest
+  // was, on the vault's own clock (#1146). On every answer; an UNLOCK answers
+  // the figures it just cleared, so the member is told once what happened while
+  // the Locker was shut. Zero and empty when none were refused.
+  uint32 failed_unlocks = 10;
+  string failed_unlock_local_day = 11;
+  string failed_unlock_local_time = 12;
 }
 
 enum LockerSessionState {
@@ -431,13 +462,15 @@ enum LockerSessionState {
   LOCKER_SESSION_STATE_UNLOCKED = 2;
 }
 
-// ONE CELL'S PLAINTEXT, WITH A LIFE. The receipt is written before the value
-// exists; a shell conceals it at `expires_in_ms` and keeps no copy.
+// ONE CELL'S PLAINTEXT, WITH A LIFE. The item is stamped as used before the
+// value exists; a shell conceals it at `expires_in_ms` and keeps no copy.
 message LockerRevealed {
   string item_id = 1;
   string column = 2;
   string value = 3;
-  string receipt_id = 4;
+  // 4 was the access receipt's id; the Locker keeps no access log (#1146).
+  reserved 4;
+  reserved "receipt_id";
   uint64 expires_in_ms = 5;
   // The custom field revealed, when it was one.
   string field_id = 6;
@@ -454,7 +487,9 @@ message LockerTotp {
   uint32 period_seconds = 3;
   // Seconds until this code rolls: 1–30, never 0.
   uint32 remaining_seconds = 4;
-  string receipt_id = 5;
+  // 5 was the access receipt's id; the Locker keeps no access log (#1146).
+  reserved 5;
+  reserved "receipt_id";
 }
 
 enum LockerRevealRefusal {
@@ -473,79 +508,14 @@ enum LockerRevealRefusal {
   LOCKER_REVEAL_REFUSAL_NOT_A_SEED = 5;
   // A reveal named `otp_seed`. The seed is the second factor: the phone asks
   // `totp` for a code and never for the seed, so the core refuses it before
-  // the session is consulted and before any receipt (R-1047-D6).
+  // the session is consulted and before any stamp (R-1047-D6).
   LOCKER_REVEAL_REFUSAL_SEED_NOT_SHOWN = 6;
   // A reveal named a passkey's `private_key`. A passkey is storage only
   // (L-passkey): nothing on the phone signs with it, so nothing needs it in
   // the clear, and it is refused before the session is consulted and before
-  // any receipt (#1047 T2).
+  // any stamp (#1047 T2).
   LOCKER_REVEAL_REFUSAL_KEY_NOT_SHOWN = 7;
   // An import file that is neither a password-manager CSV (by its header)
   // nor Centraid's own JSON.
   LOCKER_REVEAL_REFUSAL_NOT_READABLE = 8;
-}
-
-// ---------------------------------------------------------------------------
-// `locker.access` (64): the access history, one item's or the whole
-// Locker's (#1047 T2, Q-1047-21).
-// ---------------------------------------------------------------------------
-
-// The receipts the vault already wrote — reveals, copies and one-time codes,
-// refusals included — newest first. METADATA ONLY: a receipt names the act,
-// the time and the column, and never carried a value.
-//
-// WITH AN `item_id` it is that item's history, which the item page draws. With
-// NONE it is the whole Locker's, which the More sheet's Access history draws:
-// every item's receipts and the two kinds that name no item, an unlock and an
-// export. Both ride the same arm and the same shell gate: a shell asks
-// nothing of either while the Locker is locked.
-message LockerAccessRequest {
-  // Empty: the whole Locker.
-  string item_id = 1;
-  // At most this many; 0 is 50. Clamped to 20–2,000.
-  uint32 limit = 2;
-  string tz = 3;
-}
-
-message LockerAccess {
-  repeated LockerAccessEntry entries = 1;
-  // More receipts than `window` match the request.
-  bool truncated = 2;
-  uint32 window = 3;
-}
-
-message LockerAccessEntry {
-  string receipt_id = 1;
-  LockerAccessKind kind = 2;
-  // The value went to the clipboard.
-  bool copied = 3;
-  // `false` for a refusal the vault receipted.
-  bool allowed = 4;
-  // The sealed columns named, `value_sealed` for a custom field.
-  repeated string columns = 5;
-  // The custom field, when one was revealed.
-  string field_id = 6;
-  // In the request's zone: `YYYY-MM-DD` and `HH:MM`.
-  string local_day = 7;
-  string local_time = 8;
-  // The item the receipt is about; empty for an unlock or an export.
-  string item_id = 9;
-  // WHOLE-LOCKER READS ONLY: the item's title as it is now. Empty for an
-  // unlock or an export, and for an item the vault no longer holds (a purge
-  // takes the row, not the receipt). Plain metadata, as on a shelf.
-  string item_title = 10;
-  // WHOLE-LOCKER READS ONLY: the custom field's label as it is now; empty
-  // when none was opened or the field is gone.
-  string field_label = 11;
-}
-
-enum LockerAccessKind {
-  LOCKER_ACCESS_KIND_UNSPECIFIED = 0;
-  LOCKER_ACCESS_KIND_REVEAL = 1;
-  // A one-time code made from the item's seed.
-  LOCKER_ACCESS_KIND_CODE = 2;
-  // The Locker was unlocked: the receipt names the vault, no item.
-  LOCKER_ACCESS_KIND_UNLOCK = 3;
-  // Every secret went into a file: the receipt names the Locker, no item.
-  LOCKER_ACCESS_KIND_EXPORT = 4;
 }

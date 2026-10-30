@@ -236,11 +236,10 @@ pub fn menu(locale: Locale, starred: bool) -> Vec<wire::DocsAction> {
 pub fn head_actions(locale: Locale, row: &wire::DocsDocumentRow) -> Vec<wire::DocsAction> {
     if row.trashed {
         return vec![
-            wire::DocsAction {
-                // A lapsed grace window cannot be restored: the vault refuses.
-                enabled: row.purge_in_days > 0,
-                ..action(KEY_RESTORE, words::action_restore(locale), "restore")
-            },
+            // RESTORE IS ALWAYS OFFERED: a window that has run out is when the
+            // launch pass may empty the row, not when the vault stops giving it
+            // back (#1146, decision T).
+            action(KEY_RESTORE, words::action_restore(locale), "restore"),
             // DOCS DESTROYS (D-1 of 2026-09-25): one trashed document, behind a confirm.
             wire::DocsAction {
                 destructive: true,
@@ -295,13 +294,12 @@ pub fn labels_sheet(
 // One document
 // ---------------------------------------------------------------------------
 
-/// The document screen's data: its surface, facts and activity, with the
+/// The document screen's data: its surface and facts, with the
 /// drive's folders and labels for the move and labels sheets.
 #[must_use]
 pub fn document(
     locale: Locale,
     answer: &wire::DocsDocument,
-    activity: Option<&wire::DocsActivity>,
     drive: Option<&wire::DocsDrive>,
 ) -> wire::DocsDocumentData {
     use wire::docs_document_data::Surface;
@@ -317,7 +315,6 @@ pub fn document(
     // The document's own page is the parent of what it opens (its crumbs and
     // versions): they name it, so its title is the back word.
     let view = row(locale, found, &answer.today, "");
-    let events = activity.map(|a| a.events.as_slice()).unwrap_or_default();
     let surface = match found.surface() {
         wire::DocsSurface::Reading => Surface::Reading(reader(locale, found, answer)),
         wire::DocsSurface::Stage => Surface::Stage(stage(locale, found, answer, &view.title)),
@@ -333,12 +330,6 @@ pub fn document(
         facts: facts(locale, found, answer, &view),
         path: folders::path_crumbs(locale, &answer.path, &view.title),
         versions: versions_link(locale, answer, found, &view.title),
-        activity: events.iter().map(|e| activity_row(locale, e)).collect(),
-        activity_empty: if events.is_empty() {
-            words::activity_empty(locale)
-        } else {
-            String::new()
-        },
         actions: head_actions(locale, found),
         trashed_note: trashed_note(locale, found),
         folders: nodes,
@@ -503,32 +494,8 @@ pub fn version(locale: Locale, version: &wire::DocsVersion, trashed: bool) -> wi
     }
 }
 
-fn activity_row(locale: Locale, event: &wire::DocsActivityEvent) -> wire::DocsActivityRow {
-    let label = match event.activity.as_str() {
-        "document.add" | "document.create_text" => words::activity_added(locale),
-        "document.edit" => words::activity_edited(locale),
-        "entity.retitle" => words::activity_renamed(locale),
-        "document.move" => words::activity_moved(locale),
-        "flag.set" => words::activity_starred(locale),
-        "flag.clear" => words::activity_unstarred(locale),
-        "entity.trash" => words::activity_trashed(locale),
-        "entity.restore" => words::activity_restored(locale),
-        "document.replace" => words::activity_replaced(locale),
-        "document.restore_version" => words::activity_version_restored(locale),
-        "tag.add" => words::activity_labelled(locale),
-        "tag.remove" => words::activity_unlabelled(locale),
-        "entity.empty_trash" => words::activity_trash_emptied(locale),
-        _ => words::activity_other(locale),
-    };
-    wire::DocsActivityRow {
-        label,
-        // THE JOURNAL DOES NOT SAY WHO ACTED (#1135): the line is the day alone.
-        meta: stamp(locale, &event.occurred_local).unwrap_or_default(),
-    }
-}
-
-/// The grace window's end is when a restore stops being possible, never a
-/// promise that the document is deleted then.
+/// The grace window's end is when the next launch may empty the trash, never a
+/// promise that the document is deleted then: until that pass runs it restores.
 fn trashed_note(locale: Locale, row: &wire::DocsDocumentRow) -> String {
     if !row.trashed {
         return String::new();

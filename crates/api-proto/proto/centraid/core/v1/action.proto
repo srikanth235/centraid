@@ -93,13 +93,14 @@ message ActResponse {
   bytes output = 2;
   // A sentence for the member. Empty when executed. AN OWNER-FACING SENTENCE:
   // the author's words for a failed precondition, the access plane's for a
-  // denial. The raw predicate is `refusal.check` and the audit trail's, and
-  // never a member's.
+  // denial. The raw predicate is `refusal.check` and never a member's.
   string reason = 3;
   // The check that refused, when `status` is refused.
   optional ActRefusal refusal = 4;
-  // The audit-band id of the invocation, when one ran.
-  string invocation_id = 5;
+  // Field 5 was the id of the journal row that recorded the run. There is no journal; a
+  // replay is told by `replayed` alone (#1146).
+  reserved 5;
+  reserved "invocation_id";
   // How to take it back, when the action has an inverse.
   optional ActInverse inverse = 6;
   // This is the answer to the first run of this `invoke_key`; nothing ran now.

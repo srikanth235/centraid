@@ -3,7 +3,7 @@
 //!
 //! The core's stage door reaches the same functions through
 //! [`crate::Vault::stage_bytes`]; a command is for a caller that wants the
-//! journal.
+//! gate.
 
 use crate::blob;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
@@ -49,7 +49,18 @@ fn stage(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
 }
 
 fn collect(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    Ok(serde_json::json!({ "collected": blob::collect(ctx.connection())? }))
+    let limit = ctx
+        .input
+        .get("limit")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|limit| usize::try_from(limit).ok());
+    let released = match limit {
+        Some(limit) => blob::collect_up_to(ctx.connection(), limit)?,
+        None => blob::collect(ctx.connection())?,
+    };
+    // With a `limit`, a full piece says there may be more.
+    let more = limit.is_some_and(|limit| released.len() >= limit);
+    Ok(serde_json::json!({ "released": released, "more": more }))
 }
 
 fn pre_variant(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -107,7 +118,9 @@ fn write(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     for owner in blob::owners_of_blob(ctx.connection(), hash)? {
         ctx.mark_for_index(&owner);
     }
-    Ok(serde_json::json!({ "blob": hash }))
+    // A variant holds one file: the one it replaced is named by nothing now.
+    let released = blob::collect(ctx.connection())?;
+    Ok(serde_json::json!({ "blob": hash, "released": released }))
 }
 
 fn drop_derivative(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
@@ -119,7 +132,9 @@ fn drop_derivative(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     for owner in blob::owners_of_blob(ctx.connection(), hash)? {
         ctx.mark_for_index(&owner);
     }
-    Ok(serde_json::json!({ "removed": removed > 0 }))
+    // The file the dropped variant held is named by nothing now.
+    let released = blob::collect(ctx.connection())?;
+    Ok(serde_json::json!({ "removed": removed > 0, "released": released }))
 }
 
 const WRITE_SCHEMA: &str = r#"{
@@ -170,7 +185,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
         CommandDefinition::plain(
             "blob.collect",
             "blob",
-            r#"{ "type": "object", "additionalProperties": false, "properties": {} }"#,
+            r#"{ "type": "object", "additionalProperties": false, "properties": {
+              "limit": { "type": "integer", "minimum": 1 } } }"#,
             Idempotency::RetrySafe,
             &[],
             collect,

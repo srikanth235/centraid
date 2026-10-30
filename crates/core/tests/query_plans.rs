@@ -67,7 +67,6 @@ fn covers(query: &Q) -> &'static str {
         Q::DocsDrive(_) => "docs.drive",
         Q::DocsSearch(_) => "docs.search",
         Q::DocsDocument(_) => "docs.document",
-        Q::DocsActivity(_) => "docs.activity",
         Q::NotesLibrary(_) => "notes.library",
         Q::NotesNotebooks(_) => "notes.notebooks",
         Q::NotesJournal(_) => "notes.journal",
@@ -86,13 +85,11 @@ fn covers(query: &Q) -> &'static str {
         Q::LockerItem(_) => "locker.item",
         Q::LockerSearch(_) => "locker.search",
         Q::LockerReview(_) => "locker.review",
-        Q::LockerAccess(_) => "locker.access",
         Q::ChatThreads(_) => "chat.threads",
         Q::ChatThread(_) => "chat.thread",
         Q::ChatCard(_) => "chat.card",
         Q::VaultSearch(_) => "vault.search",
         Q::PhotosSearch(_) => "photos.search",
-        Q::PhotosDuplicates(_) => "photos.duplicates",
         Q::PhotosShelf(_) => "photos.shelf",
         Q::PhotosPhoto(_) => "photos.photo",
         Q::PhotosAlbums(_) => "photos.albums",
@@ -171,10 +168,6 @@ fn requests(word: &str) -> Vec<Q> {
             document_id: some("document"),
             tz: tz(),
         }),
-        Q::DocsActivity(wire::DocsActivityRequest {
-            document_id: some("document"),
-            tz: tz(),
-        }),
         Q::NotesNotebooks(wire::NotesNotebooksRequest {}),
         Q::NotesJournal(wire::NotesJournalRequest {
             window: 100,
@@ -223,16 +216,6 @@ fn requests(word: &str) -> Vec<Q> {
             tz: tz(),
         }),
         Q::LockerReview(wire::LockerReviewRequest { tz: tz() }),
-        Q::LockerAccess(wire::LockerAccessRequest {
-            item_id: some("locker"),
-            limit: 50,
-            tz: tz(),
-        }),
-        Q::LockerAccess(wire::LockerAccessRequest {
-            limit: 50,
-            tz: tz(),
-            ..Default::default()
-        }),
         Q::ChatThreads(wire::ChatThreadsRequest {
             limit: 50,
             term: String::new(),
@@ -263,7 +246,6 @@ fn requests(word: &str) -> Vec<Q> {
             limit: 50,
             correct: true,
         }),
-        Q::PhotosDuplicates(wire::PhotosDuplicatesRequest {}),
         Q::PhotosAlbums(wire::PhotosAlbumsRequest {}),
         Q::PhotosPlaces(wire::PhotosPlacesRequest {}),
         Q::PhotosPhoto(wire::PhotosPhotoRequest { id: some("photo") }),
@@ -854,11 +836,11 @@ fn ask(handle: &centraid_core::Handle, query: Q) -> Result<(), String> {
 }
 
 /// Every wire query has an entry in [`requests`]: the names it asks are the names
-/// [`covers`] knows. The wire has 61 queries (`app_query.proto`'s `oneof query`);
+/// [`covers`] knows. The wire has 58 queries (`app_query.proto`'s `oneof query`);
 /// a new one is a compile error in [`covers`], and this count says it was also
 /// asked.
 #[test]
 fn the_sweep_asks_every_query_the_wire_has() {
     let asked: BTreeSet<&str> = requests("word").iter().map(covers).collect();
-    assert_eq!(asked.len(), 61, "{asked:?}");
+    assert_eq!(asked.len(), 58, "{asked:?}");
 }

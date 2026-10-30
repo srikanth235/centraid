@@ -87,9 +87,9 @@ A formal model is worth building for exactly the invariants where the failure is
 
 ### M3 — the sealed-column read boundary
 
-**The invariant.** Every read path yields either the placeholder or a receipted reveal; there is no third outcome, and no path yields plaintext without a receipt.
+**The invariant.** Every read path yields either the placeholder or a reveal the core ran after stamping the item as used; there is no third outcome, and no path yields plaintext without that stamp.
 
-**Why a model, and why it ranks third.** The Locker plaintext gate (`crates/vault/tests/locker_plaintext_gate.rs`) already searches every byte-returning door for planted plaintext, and the access plane has no reveal judgement at all: a Locker cell opens only in the core's Locker session, after `locker.reveal_receipt` ([R-1047-D2](decisions.md#locker)). The model's marginal value is limited to proving the _enumeration_ is complete — that the set of read paths is closed — which is a code-structure question a model expressed over an abstract path set cannot answer honestly. Build it only after M1 and M2, and only if a surface is ever found that the registry missed.
+**Why a model, and why it ranks third.** The Locker plaintext gate (`crates/vault/tests/locker_plaintext_gate.rs`) already searches every byte-returning door for planted plaintext, and the access plane has no reveal judgement at all: a Locker cell opens only in the core's Locker session, after `locker.mark_used` ([R-1047-D2](decisions.md#locker)). The model's marginal value is limited to proving the _enumeration_ is complete — that the set of read paths is closed — which is a code-structure question a model expressed over an abstract path set cannot answer honestly. Build it only after M1 and M2, and only if a surface is ever found that the registry missed.
 
 ### Explicitly not worth modelling
 

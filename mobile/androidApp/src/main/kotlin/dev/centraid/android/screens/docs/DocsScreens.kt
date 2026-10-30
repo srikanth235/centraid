@@ -605,7 +605,7 @@ private fun Tile(
 }
 
 // ---------------------------------------------------------------------------
-// docs.document — reader, stage or facts; path, versions, activity, actions
+// docs.document — reader, stage or facts; path, versions, actions
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -695,13 +695,6 @@ internal fun DocsDocumentScreen(
                             onTap = { versions.route?.let(onOpen) },
                         )
                     }
-                }
-                item(key = "activity-head") { Heading(chrome?.activity_heading.orEmpty()) }
-                if (document.activity.isEmpty()) {
-                    item(key = "activity-empty") { StatusLine(document.activity_empty) }
-                }
-                items(document.activity.withIndex().toList(), key = { "a-" + it.index }) { (_, entry) ->
-                    CentraidRow(title = entry.label, meta = entry.meta)
                 }
             }
         }

@@ -8,10 +8,8 @@
 //!   whatever the trace's `scope` and the call's `more` say: the turn ends in an
 //!   ask with the count (`this would delete 734 tasks; delete all of them?`),
 //!   and the same write, sent in the turn right after a yes, goes through.
-//! - A REFUSAL OF THE VAULT to restore or to delete. A restore the vault will
-//!   not make because the row's window has run out ends in `decline not_found`;
-//!   a delete it refuses because the row still holds others (a folder with
-//!   documents, a notebook with notebooks) ends in an ask
+//! - A REFUSAL OF THE VAULT to restore or to delete. A delete it refuses because the row still
+//!   holds others (a folder with documents, a notebook with notebooks) ends in an ask
 //!   that names what the person can do. Every other refusal (a call the
 //!   command's schema rejects, a check this file does not name, any other
 //!   verb) stays an `error:` for the model to repair.
@@ -1577,11 +1575,6 @@ impl Session {
         let mut touched: Vec<Key> = Vec::new();
         let mut offered: Vec<MemberAction> = Vec::new();
         let mut offered_rows: Vec<Key> = Vec::new();
-        // A RESTORE OVER SEVERAL ROWS does not depend on their order: a row past the vault's
-        // window is set aside and the others still come back; the set-aside rows are reported
-        // (nt9, rule 6), or, when none came back, the first of them ends the turn as before.
-        let several = plans.len() > 1;
-        let mut set_aside: Vec<(Key, &'static str, Value, Ran, String)> = Vec::new();
         for (key, plan) in plans {
             match plan {
                 Plan::Refused {
@@ -1597,8 +1590,7 @@ impl Session {
                         predicate: Some(predicate.to_owned()),
                     };
                     if touched.is_empty()
-                        && let Some(ended) =
-                            self.refusal(verb, &key, (command, &input), &ran, &before)
+                        && let Some(ended) = self.refusal(verb, &key, (command, &input), &ran)
                     {
                         return Ok(ended);
                     }
@@ -1628,68 +1620,28 @@ impl Session {
                     note,
                 } => {
                     let mut outputs = Vec::new();
-                    let mut lapsed_row = false;
                     for step in steps {
                         let ran = self.write_step(&step.act, &step.input)?;
                         if !ran.ok {
-                            if verb == Verb::Restore
-                                && several
-                                && outputs.is_empty()
-                                && before.row(&key).is_some_and(|row| row.trashed)
-                            {
-                                let name = self.named(&key);
-                                let reason = ran.reason.clone().unwrap_or_default();
-                                let said = format!(
-                                    "error: restore {name} was refused: it is in the trash but past the vault's restore window, so it cannot come back (vault: {reason})."
-                                );
-                                set_aside.push((
-                                    key.clone(),
-                                    step.act.command,
-                                    step.input.clone(),
-                                    ran,
-                                    said,
-                                ));
-                                lapsed_row = true;
-                                break;
-                            }
                             // NOTHING HAS LANDED YET, so the runtime can end the
-                            // turn itself (D-1044-10): a decline when nothing can
-                            // lift the refusal, an ask when the person can still
+                            // turn itself (D-1044-10): an ask when the person can still
                             // act on it (`Session::refusal`).
                             if touched.is_empty()
                                 && outputs.is_empty()
-                                && let Some(ended) = self.refusal(
-                                    verb,
-                                    &key,
-                                    (step.act.command, &step.input),
-                                    &ran,
-                                    &before,
-                                )
+                                && let Some(ended) =
+                                    self.refusal(verb, &key, (step.act.command, &step.input), &ran)
                             {
                                 return Ok(ended);
                             }
                             let name = self.named(&key);
                             let reason = ran.reason.unwrap_or_default();
-                            // RETENTION: the row lists as trashed, so the only
-                            // reason the vault refuses to bring it back is
-                            // that its restore window has run out. Say that,
-                            // so the model tells the person instead of
-                            // retrying.
-                            let lapsed = verb == Verb::Restore
-                                && before.row(&key).is_some_and(|row| row.trashed);
-                            failure = Some(if lapsed {
-                                format!(
-                                    "error: restore {name} was refused: it is in the trash but past the vault's restore window, so it cannot come back (vault: {reason})."
-                                )
-                            } else {
-                                format!("error: {} {name} was refused: {reason}", verb.spec().name)
-                            });
+                            failure = Some(format!(
+                                "error: {} {name} was refused: {reason}",
+                                verb.spec().name
+                            ));
                             break;
                         }
                         outputs.push(ran.output);
-                    }
-                    if lapsed_row {
-                        continue;
                     }
                     if failure.is_some() {
                         break;
@@ -1711,18 +1663,6 @@ impl Session {
                     }
                 }
             }
-        }
-        if touched.is_empty()
-            && failure.is_none()
-            && let Some((key, command, input, ran, _)) = set_aside.first()
-            && let Some(ended) = self.refusal(verb, key, (command, input), ran, &before)
-        {
-            return Ok(ended);
-        }
-        if !set_aside.is_empty() {
-            let mut said: Vec<String> = set_aside.into_iter().map(|(.., said)| said).collect();
-            said.extend(failure);
-            failure = Some(said.join("\n"));
         }
         if let Some(created) = &created {
             touched.push(created.clone());
@@ -2179,7 +2119,7 @@ impl Session {
                         input_of(action, &id, &[("kind", json!(log))]),
                     )],
                     inverse: Vec::new(),
-                    not_undoable: Some("a logged interaction stays in the journal".to_owned()),
+                    not_undoable: Some("a logged interaction stays in the vault".to_owned()),
                     note: None,
                 }
             }
@@ -4006,9 +3946,6 @@ impl Session {
     /// a `delete`, and only when the refused step is the first that landed
     /// anything, so the turn can end without a half-made write.
     ///
-    /// - A `restore` of a row the vault lists as trashed and will not bring
-    ///   back has run past its window: nothing can lift that, so the turn
-    ///   ends in `decline not_found`.
     /// - A `delete` the vault refuses because the row still holds others (a
     ///   folder with documents, a notebook with notebooks) ends in an ask that names what the person can do
     ///   (`refusal_question`).
@@ -4027,7 +3964,6 @@ impl Session {
         key: &Key,
         (command, _): (&str, &Value),
         ran: &Ran,
-        before: &World,
     ) -> Option<Outcome> {
         let predicate = ran.predicate.as_deref().unwrap_or_default();
         let lifted = self.flags.compose
@@ -4041,13 +3977,7 @@ impl Session {
         {
             return None;
         }
-        let restore_lapsed =
-            verb == Verb::Restore && before.row(key).is_some_and(|row| row.trashed);
-        let question = if restore_lapsed {
-            None
-        } else {
-            Some(self.refusal_question(key, command, predicate)?)
-        };
+        let (question, options) = self.refusal_question(key, command, predicate)?;
         let reason = ran.reason.clone().unwrap_or_default();
         let said = reason.trim_end_matches('.').to_owned();
         let name = self.named(key);
@@ -4060,7 +3990,7 @@ impl Session {
             "predicate": predicate,
             "reason": reason,
         });
-        let mut outcome = if let Some((question, options)) = question {
+        let mut outcome = {
             let lead = format!("refused: {} {name}: {said}.", verb.spec().name);
             let mut asked = self.ends_in_ask(
                 Some(lead),
@@ -4075,19 +4005,6 @@ impl Session {
                 .effect
                 .insert("refusal".to_owned(), with_outcome(facts, "ask"));
             crate::native::compose::marked(asked, "refused_write", "ask_options")
-        } else {
-            let lead = format!(
-                "refused: restore {name}: it is in the trash but past the vault's restore window, so it cannot come back (vault: {said})."
-            );
-            let mut declined = self.ends_in_decline(
-                Some(lead),
-                "not_found",
-                "the runtime ended the turn: a row past its restore window cannot be brought back",
-            );
-            declined
-                .effect
-                .insert("refusal".to_owned(), with_outcome(facts, "decline"));
-            crate::native::compose::marked(declined, "refused_write", "decline")
         };
         outcome
             .effect

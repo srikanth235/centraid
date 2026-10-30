@@ -27,6 +27,16 @@
 //! rather than a row image. A rollback reports nothing, because the census is
 //! only read on the success path.
 //!
+//! ## The write counter
+//!
+//! A commit that changed at least one row a screen reads also bumps `vault.writes` and
+//! `vault.written_at`, once, before `COMMIT` and in the same transaction
+//! ([#1146](https://github.com/srikanth235/centraid/issues/1146)). It is here, not in the gate, so
+//! every write path counts: a command, an import, a follow, the enricher. A takeover compares the
+//! counter to tell which of two copies of the vault is ahead. The bump is muted in the census: it
+//! is not a change a screen re-reads, and a commit that changed nothing else is not made a change
+//! by it.
+//!
 //! The hook counts nothing else. A backup counts rows on its own scratch copy
 //! of the file, off the request path
 //! ([#1080](https://github.com/srikanth235/centraid/issues/1080)), so the
@@ -66,8 +76,8 @@ pub struct CommitTx<'conn> {
 pub struct Pending {
     /// Every id to re-index at commit.
     reindex: BTreeSet<String>,
-    /// The ids already stamped in this commit, so a second touch does not bump
-    /// `version` a second time: a commit is one change.
+    /// The ids already stamped in this commit, so a second touch does not stamp
+    /// `updated_at` a second time: a commit is one change.
     stamped: BTreeSet<String>,
 }
 
@@ -85,7 +95,7 @@ impl<'conn> CommitTx<'conn> {
         *self.producer.borrow_mut() = producer.into();
     }
 
-    /// Stamp an entity as changed: `updated_at`, `version`, and a place on the
+    /// Stamp an entity as changed: `updated_at`, and a place on the
     /// list the search index is rebuilt from at commit. Once per commit per
     /// entity; a second call only keeps it on the list.
     ///
@@ -95,7 +105,7 @@ impl<'conn> CommitTx<'conn> {
         let first = self.pending.borrow_mut().stamped.insert(id.to_owned());
         if first {
             let changed = self.connection.execute(
-                "UPDATE entity SET updated_at = ?2, version = version + 1 WHERE id = ?1",
+                "UPDATE entity SET updated_at = ?2 WHERE id = ?1",
                 rusqlite::params![id, now],
             )?;
             if changed != 1 {
@@ -109,8 +119,8 @@ impl<'conn> CommitTx<'conn> {
         Ok(())
     }
 
-    /// An entity this commit inserted: it is already at its first version, so
-    /// it is only owed an index row.
+    /// An entity this commit inserted: it is already stamped, so it is only
+    /// owed an index row.
     pub fn born(&self, id: &str) {
         self.pending.borrow_mut().stamped.insert(id.to_owned());
         self.mark_for_index(id);
@@ -180,6 +190,8 @@ pub struct CommitResult<T> {
 struct Tally {
     tables: BTreeSet<String>,
     rows: usize,
+    /// While the guard writes the write counter: the bump is not a change to report.
+    muted: bool,
 }
 
 /// The tally the hook fills and the guard reads.
@@ -238,6 +250,7 @@ impl Vault {
             // land together or not at all.
             let owed = std::mem::take(&mut self.pending.borrow_mut().reindex);
             crate::index::reindex(connection, &owed)?;
+            bump_writes(connection, &census, &self.clock().now_text())?;
             Ok(value)
         })();
 
@@ -291,21 +304,24 @@ const FTS_SHADOW_SUFFIXES: [&str; 5] = ["_content", "_data", "_docsize", "_idx",
 /// list of its words: derived rows the writer keeps and a rebuild rewrites,
 /// not rows a member made.
 pub(crate) fn is_index(table: &str) -> bool {
-    table == "search"
-        || table == "search_word"
-        || (table.starts_with("search_")
-            && FTS_SHADOW_SUFFIXES
-                .iter()
-                .any(|suffix| table.ends_with(suffix)))
+    table == "search" || table == "search_word" || table == "search_owed" || is_fts_shadow(table)
+}
+
+/// Whether a table is one of FTS5's shadows of the `search` index.
+pub(crate) fn is_fts_shadow(table: &str) -> bool {
+    table.starts_with("search_")
+        && FTS_SHADOW_SUFFIXES
+            .iter()
+            .any(|suffix| table.ends_with(suffix))
 }
 
 /// Whether a table name is a change a screen could care about.
 ///
-/// Not SQLite's own, not the search index, and not the journal, which every
-/// command writes and no screen reads.
+/// Not SQLite's own, not the search index, and not the action keys, which an
+/// executed act writes and no screen reads.
 pub(crate) fn is_reportable(table: &str) -> bool {
     !table.starts_with("sqlite_")
-        && table != "journal"
+        && table != "action_key"
         && table != WITHOUT_ROWID_TOUCHED
         && !is_index(table)
 }
@@ -358,6 +374,9 @@ fn install_hook(connection: &Connection, census: &Census) -> Result<()> {
                 return;
             }
             if let Ok(mut held) = shared.lock() {
+                if held.muted {
+                    return;
+                }
                 held.rows += 1;
                 if !held.tables.contains(table) {
                     held.tables.insert(table.to_owned());
@@ -366,6 +385,45 @@ fn install_hook(connection: &Connection, census: &Census) -> Result<()> {
         },
     ))?;
     Ok(())
+}
+
+/// Count this commit as a write when it changed something a screen reads: `vault.writes` one
+/// higher and `vault.written_at` the commit's time, inside the transaction that is about to
+/// commit. Called with the body's writes made and nothing after it.
+///
+/// The census is muted while the vault row is written, so the bump is not among the tables the
+/// commit reports and a commit with no other change is not made one. A vault with no row yet
+/// (a commit before founding) has nothing to count on, and the update matches none.
+fn bump_writes(connection: &Connection, census: &Census, now: &str) -> Result<()> {
+    let changed = {
+        let held = census.lock().map_err(|_| VaultError::Invariant {
+            context: "the commit census was poisoned".to_owned(),
+        })?;
+        held.rows > 0
+    } || connection
+        .query_row(
+            &format!("SELECT EXISTS (SELECT 1 FROM temp.{WITHOUT_ROWID_TOUCHED})"),
+            [],
+            |row| row.get::<_, bool>(0),
+        )
+        .unwrap_or(false);
+    if !changed {
+        return Ok(());
+    }
+    set_muted(census, true);
+    let bumped = connection.execute(
+        "UPDATE vault SET writes = writes + 1, written_at = ?1",
+        [now],
+    );
+    set_muted(census, false);
+    bumped?;
+    Ok(())
+}
+
+fn set_muted(census: &Census, muted: bool) {
+    if let Ok(mut held) = census.lock() {
+        held.muted = muted;
+    }
 }
 
 /// Take the census and remove the hook.
@@ -401,7 +459,7 @@ mod tests {
     /// A shadow table is the index, not the rows. The base table's own entry
     /// is what a screen reads, and it is already in the census.
     #[test]
-    fn the_index_the_journal_and_sqlites_own_are_not_reported() {
+    fn the_index_the_action_keys_and_sqlites_own_are_not_reported() {
         assert!(is_reportable("note"));
         assert!(is_reportable("locker_item"));
         for hidden in [
@@ -412,7 +470,8 @@ mod tests {
             "search_idx",
             "search_config",
             "search_word",
-            "journal",
+            "search_owed",
+            "action_key",
             "sqlite_sequence",
         ] {
             assert!(!is_reportable(hidden), "{hidden}");

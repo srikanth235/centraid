@@ -14,8 +14,10 @@
 //! one file through the stage door (`StageFolderFile`); it never opens a picker for a pass. Here:
 //! which folders (the vault's), which files are records (named, not hidden, not empty, one per
 //! path), the **stat pre-check** (a file whose `size:modified` the vault already holds reads no
-//! bytes), the claim of the bytes the core counted (`claim-bytes`), whether the read was whole
-//! (a file that would not read, or a partial listing, trashes nothing), and **when** a pass runs.
+//! bytes), the size the core counted for the bytes a record names (the vault claims them in the
+//! same `follow-files` commit, so no bytes sit unreferenced between the two), whether the read was
+//! whole (a file that would not read, or a partial listing, trashes nothing), and **when** a pass
+//! runs.
 //!
 //! ## When a pass runs
 //!
@@ -23,10 +25,11 @@
 //! during a pass queues exactly one more. **A pass never runs for a vault that follows no folder**
 //! (the vault holds no `files` origin): a foreground pass never imports into a vault that never
 //! picked one. A read that has not answered in two minutes is abandoned, so one stuck read cannot
-//! hold the follow for good. A complete read that lost at least five followed files and more than
-//! half of them is sent as partial, so nothing is trashed for it: a sync glitch looks like a mass
-//! delete, and Keep is the default (R-1127-9). The member is not asked; the KMP "keep or trash?"
-//! question went with the Kotlin follower.
+//! hold the follow for good. A complete read that lost most of what the vault follows here is
+//! sent as it is: the vault doubts it (one guard for contacts, calendars and folders alike,
+//! `follow.rs`) and trashes nothing, because a sync glitch looks like a mass delete and Keep is
+//! the default (R-1127-9). The member is not asked; the KMP "keep or trash?" question went with
+//! the Kotlin follower.
 //!
 //! ## What reaches it by name
 //!
@@ -295,7 +298,7 @@ impl Files {
                 } else {
                     squash(&folder.label)
                 },
-                whole: listing.complete && !vanished(&held.stats, &todo),
+                whole: listing.complete,
                 todo,
                 records: Vec::new(),
                 refused: 0,
@@ -351,22 +354,18 @@ impl Files {
         let Some(plan) = pass.plan.front_mut() else {
             return Vec::new();
         };
-        let claimed = staged.ok
-            && kit_act::act(
-                ctx,
-                act::shell::ClaimBytes {
-                    hash: staged.content_hash.clone(),
-                    size: i64::try_from(staged.byte_size).unwrap_or(i64::MAX),
-                },
-                &kit_act::key(&["claim-bytes", &staged.content_hash], kit_act::fresh()),
-            )
-            .committed;
-        if claimed {
+        if staged.ok {
+            // The record names the bytes and says how large the core counted them: the vault
+            // claims them in the `follow-files` commit that names them.
             let media = media_type_of(&name_of(&file.path), &file.media_type);
             plan.records.push(record(
                 &file,
                 &stat_of(&file),
-                Some((&staged.content_hash, &media)),
+                Some((
+                    &staged.content_hash,
+                    &media,
+                    i64::try_from(staged.byte_size).unwrap_or(i64::MAX),
+                )),
             ));
         } else {
             // A file that would not read is neither sent nor missed: the read is not whole.
@@ -476,16 +475,22 @@ fn name_of(path: &str) -> String {
 }
 
 /// ONE FILE AS A RECORD: its stat alone when the vault already holds it as last stated, else its
-/// bytes too (the hash the core named and the media type).
-fn record(file: &wire::FolderFile, stat: &str, bytes: Option<(&str, &str)>) -> Value {
+/// bytes too (the hash the core named, the media type, and the size the core counted).
+fn record(file: &wire::FolderFile, stat: &str, bytes: Option<(&str, &str, i64)>) -> Value {
     let mut fields = serde_json::Map::new();
     fields.insert("title".to_owned(), json!(name_of(&file.path)));
-    if let Some((hash, media)) = bytes {
+    let mut size = None;
+    if let Some((hash, media, counted)) = bytes {
         fields.insert("blob".to_owned(), json!(hash));
         fields.insert("media_type".to_owned(), json!(media));
+        size = Some(counted);
     }
     fields.insert("stat".to_owned(), json!(stat));
-    json!({ "external_id": file.path, "fields": fields })
+    let mut record = json!({ "external_id": file.path, "fields": fields });
+    if let Some(size) = size {
+        record["size"] = json!(size);
+    }
+    record
 }
 
 fn count(output: &Value, name: &str) -> u32 {
@@ -572,20 +577,4 @@ impl Screen for Files {
             ..wire::ViewState::default()
         }
     }
-}
-
-/// THE FEWEST FOLLOWED FILES A READ MUST LOSE BEFORE IT IS DOUBTED (R-1127-9).
-const VANISHED_AT_LEAST: usize = 5;
-
-/// A complete read that lost at least [`VANISHED_AT_LEAST`] of the files the vault follows here,
-/// and more than half of them, looks like a mass delete and is most likely a sync glitch (a cloud
-/// folder not yet downloaded, an unmounted card). Such a read is sent as partial, so the vault
-/// trashes nothing: Keep is the default (R-1127-9). An ordinary removal of a few files is not
-/// doubted.
-fn vanished(held: &[(String, String)], listed: &VecDeque<wire::FolderFile>) -> bool {
-    let lost = held
-        .iter()
-        .filter(|(path, _)| !listed.iter().any(|file| file.path == *path))
-        .count();
-    lost >= VANISHED_AT_LEAST && lost * 2 > held.len()
 }

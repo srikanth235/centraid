@@ -348,13 +348,6 @@ fn purge_at(now: &str) -> String {
     centraid_vault::clock::format_iso_ms(millis + PURGE_MS)
 }
 
-/// Whether the window of a trashed row is still open: `purge_at IS NULL OR purge_at > now`.
-fn window_open(row: &Row, now: &str) -> bool {
-    row.extra
-        .get("purge_at")
-        .is_none_or(|purge| purge.as_str() > now)
-}
-
 fn live<'w>(world: &'w World, kind: Kind, id: &str) -> Option<&'w Row> {
     world
         .rows
@@ -478,7 +471,9 @@ pub(crate) fn apply(
         "edge.add" | "edge.remove" => edge_entity(world, input, command == "edge.add"),
         "locker.add_item" => locker_add(world, cx, input),
         "locker.edit_item" => locker_edit(world, cx, input),
-        "locker.reveal_receipt" => Ok(ok(json!({"receipt_id": cx.id("receipt_id")}))),
+        "locker.mark_used" => Ok(ok(
+            json!({"item_id": text(input, "item_id").unwrap_or_default()}),
+        )),
         "account.add" => account_add(world, cx, input),
         "category.add" => category_add(world, cx, input),
         "account.edit" => account_edit(world, cx, input),
@@ -669,15 +664,6 @@ fn restore_entity(
         return Ok(refused(
             "entity_is_in_the_trash",
             &format!("“{}” is not in the trash", row.name),
-        ));
-    }
-    if !window_open(&row, &cx.now) {
-        return Ok(refused(
-            "entity_is_in_the_trash",
-            &format!(
-                "“{}” has been in the trash past its grace window and can no longer be restored; delete it forever",
-                row.name
-            ),
         ));
     }
     let stamp = row.extra.get("purge_at").cloned().unwrap_or_default();

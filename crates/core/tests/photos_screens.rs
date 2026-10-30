@@ -384,14 +384,14 @@ fn every_write_a_photos_screen_sends_is_an_action_with_the_input_it_sends() {
 }
 
 #[test]
-fn the_places_the_search_and_the_duplicates_answer_what_the_screens_draw() {
+fn the_places_and_the_search_answer_what_the_screens_draw() {
     let w = World::founded();
     let a = w.photo(
         "a",
         json!({ "taken_at": "2025-01-01T00:00:00.000Z", "lat": 37.7955, "lon": -122.3937,
-                "phash": "ffff0000ffff0000", "title": "Pier day" }),
+                "title": "Pier day" }),
     );
-    let b = w.photo("b", json!({ "phash": "ffff0000ffff0001" }));
+    let b = w.photo("b", json!({}));
     let places = match w.answer("places", 0, "", &[]) {
         Answer::PhotosPlaces(places) => places,
         other => panic!("{other:?}"),
@@ -416,24 +416,11 @@ fn the_places_the_search_and_the_duplicates_answer_what_the_screens_draw() {
     assert_eq!(found.total_hits, 1);
     assert_eq!(found.cells[0].photo_id, b);
     assert_eq!(found.top_hits.len(), 1);
-    // The duplicates carry their members as cells, and the overview counts the cluster.
-    let duplicates = match w.answer("duplicates", 0, "", &[]) {
-        Answer::PhotosDuplicates(duplicates) => duplicates,
-        other => panic!("{other:?}"),
-    };
-    assert_eq!(duplicates.clusters.len(), 1);
-    assert_eq!(duplicates.clusters[0].members.len(), 2);
-    assert!(
-        duplicates.clusters[0]
-            .members
-            .iter()
-            .any(|member| member.photo_id == a)
-    );
+    let _ = a;
     let overview = match w.answer("albums", 0, "", &[]) {
         Answer::PhotosAlbums(albums) => *albums,
         other => panic!("{other:?}"),
     };
-    assert_eq!(overview.duplicate_clusters, 1);
     assert_eq!(overview.places, 1);
     assert_eq!(overview.unplaced, 1);
     // The tables an answer was drawn from ride with it.

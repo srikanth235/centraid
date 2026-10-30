@@ -23,9 +23,11 @@
 //!    with any parameter the caller did not bind bound to `NULL` (the plan of
 //!    `x = ?` does not depend on the value; the statistics, not the bind, choose
 //!    the index).
-//! 3. [`statements_in_source`]: the `SELECT`s and `WITH`s a source file writes as
-//!    string literals, for the statements that are hand-written rather than
-//!    composed.
+//! 3. [`statements_in_source`]: the `SELECT`s, `WITH`s, `UPDATE`s and `DELETE`s a source
+//!    file writes as string literals, for the statements that are hand-written rather
+//!    than composed. A write is planned the same way (`EXPLAIN QUERY PLAN` prepares it
+//!    and runs nothing), because `UPDATE … WHERE` and `DELETE … WHERE` scan a table the
+//!    way a read does.
 //!
 //! **What is a finding.** [`full_scans`] names a step that reads a whole table
 //! (`SCAN <table>` with no index) of a table over a row floor; [`sorts_after_read`]
@@ -262,7 +264,7 @@ pub fn sorts_after_read(plan: &[String]) -> bool {
         .any(|step| step.contains("USE TEMP B-TREE FOR ORDER BY"))
 }
 
-/// A string literal of a source file that reads like a read statement.
+/// A string literal of a source file that reads like a statement.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceStatement {
     /// The line the literal opens on, from 1.
@@ -286,9 +288,11 @@ impl SourceStatement {
     }
 }
 
-/// The `SELECT` and `WITH` statements written as string literals in `source`.
+/// The `SELECT`, `WITH`, `UPDATE … SET` and `DELETE FROM` statements written as string literals in
+/// `source`.
 ///
-/// A literal counts when its first word is `SELECT` or `WITH` (any case). Comments
+/// A literal counts when its first word is `SELECT` or `WITH` (any case), `UPDATE` with a `SET`
+/// after it, or `DELETE` followed by `FROM`. Comments
 /// and character literals are skipped, raw strings and escapes are read; a
 /// `concat!` or a `format!` that joins literals is not followed, which is why
 /// [`SourceStatement::is_dynamic`] exists and why the statements a composer builds
@@ -420,11 +424,21 @@ fn is_raw_start(chars: &[char], at: usize) -> bool {
 }
 
 fn keep(found: &mut Vec<SourceStatement>, line: usize, sql: String) {
-    let first = sql
+    let words: Vec<String> = sql
         .split(|c: char| !c.is_ascii_alphabetic())
-        .find(|word| !word.is_empty())
-        .map(str::to_ascii_lowercase);
-    if matches!(first.as_deref(), Some("select" | "with")) && sql.trim_start().len() > 7 {
+        .filter(|word| !word.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect();
+    let first = words.first().map(String::as_str);
+    let is_statement = match first {
+        Some("select" | "with") => sql.trim_start().len() > 7,
+        // A write counts only when it reads like one: prose that starts with the
+        // word ("Delete this note?") is not a statement.
+        Some("update") => words.iter().skip(1).any(|word| word == "set"),
+        Some("delete") => words.get(1).is_some_and(|word| word == "from"),
+        _ => false,
+    };
+    if is_statement {
         found.push(SourceStatement { line, sql });
     }
 }
@@ -458,6 +472,27 @@ mod tests {
     }
 
     #[test]
+    fn an_update_or_a_delete_in_a_string_is_found_and_prose_that_starts_like_one_is_not() {
+        let source = r#"
+            let a = "UPDATE entity SET title = ?1 WHERE id = ?2";
+            let b = "DELETE FROM edge WHERE from_id = ?1";
+            let c = "Delete this note?";
+            let d = "update the list before you go";
+        "#;
+        let texts: Vec<_> = statements_in_source(source)
+            .iter()
+            .map(SourceStatement::normalized)
+            .collect();
+        assert_eq!(
+            texts,
+            [
+                "UPDATE entity SET title = ?1 WHERE id = ?2",
+                "DELETE FROM edge WHERE from_id = ?1",
+            ]
+        );
+    }
+
+    #[test]
     fn a_hole_marks_a_statement_dynamic() {
         let found = statements_in_source(r#"let a = "SELECT {cols} FROM entity";"#);
         assert!(found[0].is_dynamic());
@@ -476,24 +511,24 @@ mod tests {
         let (dir, vault) = founded();
         let big: BTreeSet<String> = ["entity".to_owned(), "note".to_owned()].into();
         let scan = vault
-            .explain_query_plan("SELECT id FROM entity WHERE version = ?1", &[])
+            .explain_query_plan("SELECT id FROM note WHERE body = ?1", &[])
             .expect("it plans");
         assert_eq!(
-            full_scans(&scan, "SELECT id FROM entity WHERE version = ?1", &big),
-            ["entity"],
+            full_scans(&scan, "SELECT id FROM note WHERE body = ?1", &big),
+            ["note"],
             "{scan:?}"
         );
         // An alias is the table's name in the plan or after it; the table is what counts.
         let aliased = vault
-            .explain_query_plan("SELECT e.id FROM entity AS e WHERE e.version = ?1", &[])
+            .explain_query_plan("SELECT n.id FROM note AS n WHERE n.body = ?1", &[])
             .expect("it plans");
         assert_eq!(
             full_scans(
                 &aliased,
-                "SELECT e.id FROM entity AS e WHERE e.version = ?1",
+                "SELECT n.id FROM note AS n WHERE n.body = ?1",
                 &big
             ),
-            ["entity"],
+            ["note"],
             "{aliased:?}"
         );
         let seek = vault

@@ -1,5 +1,5 @@
 //! A conversation in the model's own tables (#1135, lane 7): a turn saved in one commit with its
-//! cards and attachments, a proposal settled once, a rename that stays out of the journal, a delete
+//! cards and attachments, a proposal settled once, a refusal that never quotes what was said, a delete
 //! that leaves nothing, and the roster the cards and scopes are held to.
 
 mod common;
@@ -172,29 +172,21 @@ fn a_turn_is_one_commit_with_its_cards_and_attachments() {
 }
 
 #[test]
-fn the_journal_keeps_a_token_never_what_was_said() {
+fn a_refusal_never_quotes_what_was_said() {
     let w = World::new();
     let saved = w.turn(None, "my secret question", answered("a secret answer"));
     let thread = saved["thread_id"].as_str().unwrap();
-    w.ok(
-        "thread.rename",
-        json!({ "thread_id": thread, "title": "a secret name" }),
+    // A settled line past its bound fails the schema, whose message quotes the value that failed.
+    let long = format!("a secret name {}", "x".repeat(20_100));
+    let sentence = w.refused(
+        "thread.settle_proposal",
+        json!({ "thread_id": thread, "outcome": "applied", "text": long }),
     );
-    let journal: String = w
-        .scratch
-        .vault
-        .read(|c| {
-            Ok(
-                c.query_row("SELECT group_concat(input, ' ') FROM journal", [], |r| {
-                    r.get(0)
-                })?,
-            )
-        })
-        .unwrap();
-    for said in ["secret question", "secret answer", "secret name"] {
-        assert!(!journal.contains(said), "the journal holds {said:?}");
-    }
-    assert!(journal.contains("sealed"), "{journal}");
+    assert!(!sentence.contains("secret name"), "{sentence}");
+    assert!(sentence.contains("‹sealed›"), "{sentence}");
+    // And nothing outside the thread keeps the words: no action key was written, and the
+    // conversation's text is in the chat's own rows only.
+    assert_eq!(w.count("SELECT count(*) FROM action_key", &[]), 0);
 }
 
 #[test]
@@ -211,8 +203,8 @@ fn search_finds_a_thread_by_its_title_and_the_members_words_never_the_assistants
     w.turn(Some(thread), "and the electrician", answered("ok"));
     assert!(w.finds("electrician", thread));
     w.ok(
-        "thread.rename",
-        json!({ "thread_id": thread, "title": "  Home   repairs " }),
+        "entity.retitle",
+        json!({ "id": thread, "title": "  Home repairs " }),
     );
     assert!(w.finds("repairs", thread));
     assert_eq!(
@@ -340,9 +332,19 @@ fn a_chat_is_renamed_and_deleted_by_its_own_door_and_leaves_nothing() {
                 "answer": answered("kept") } }),
     );
     let thread = saved["thread_id"].as_str().unwrap();
+    // A chat is retitled like any entity (R-1146-0-3): the one verb, no door of its own.
+    w.ok(
+        "entity.retitle",
+        json!({ "id": thread, "title": "  Kept for later " }),
+    );
+    assert_eq!(
+        w.text("SELECT title FROM entity WHERE id = ?1", &[thread])
+            .as_deref(),
+        Some("Kept for later")
+    );
     assert!(
-        w.refused("entity.retitle", json!({ "id": thread, "title": "x" }))
-            .contains("thread.rename")
+        w.refused("entity.retitle", json!({ "id": thread, "title": "  " }))
+            .contains("needs a name")
     );
     assert!(
         w.refused("entity.trash", json!({ "id": thread }))

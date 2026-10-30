@@ -96,10 +96,6 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `words-shown` | words.make / words.show | the recovery key's 24 cells, read as one grid (each cell is `words-word-<n>`) |
 | `words-save-copy` | words.make / words.show | "Save a copy" — the share sheet with the key as one line |
 | `words-make-primary` | words.make | the sheet's primary ("I've saved it", "Done") |
-| `locker-more-access` | Locker | the More sheet's Access history row — pushes the whole Locker's access history ([Q-1047-21](../../../docs/decisions.md#locker)); **iOS**. Android draws every More row as `sheet-option-<key>`, here `sheet-option-access` |
-| `locker-access-lede` | Locker Access history | the one-line lede under the title ("Every unlock, reveal, copy and export, newest first.") |
-| `locker-access` | Locker Access history | the list of receipts — **Android only** (an iOS container id would leak onto its rows) |
-| `locker-field-access:<receiptId>-value` | Locker Access history, and an item's own Access history | one receipt's day and minute, the value of the item page's history row (`<receiptId>` is the receipt's); **iOS**. Android tags the row `locker-field-access:<receiptId>` and its value `locker-value-access:<receiptId>`. A receipt never carries a value, so these hold a time and never a secret |
 | `health-band-<tab>` | Health | one band tab (`today`, `trends`, `workouts`, `more`, the label lowercased); `health-band` is the plate (#1129) |
 | `health-connect-open` | Health | the not-connected empty state's one action, which pushes Connect |
 | `health-hero`, `health-metric-<key>`, `health-trend-<key>` | Health | Today's steps card, a Today metric line and a Trends row, each the tap to its metric page (`<key>` is `steps`, `sleep_min`, …) |

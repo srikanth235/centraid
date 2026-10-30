@@ -45,11 +45,11 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_four_queries_and_eighteen_actions() {
+    fn it_declares_three_queries_and_eighteen_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 4);
+        assert_eq!(manifest.queries.len(), 3);
         assert_eq!(manifest.actions.len(), 18);
-        for name in ["drive", "search", "history", "activity"] {
+        for name in ["drive", "search", "history"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
     }
@@ -122,19 +122,19 @@ mod tests {
         }
     }
 
-    /// TWENTY-FOUR SCOPES: eight reads over the vault's own tables, and **sixteen
-    /// `act` scopes, one per distinct command**. `journal` is the activity rail's;
-    /// `derivative` is the words extracted from the bytes.
+    /// TWENTY-THREE SCOPES: seven reads over the vault's own tables, and **sixteen
+    /// `act` scopes, one per distinct command**. `derivative` is the words extracted from
+    /// the bytes.
     ///
     /// The `act` half is compared against the action table rather than
     /// transcribed, because the whole point of the narrow form is that it tracks
     /// the actions: a nineteenth action with no scope is an action the grant does
     /// not cover, and a scope with no action is reach nothing uses.
     #[test]
-    fn it_declares_twenty_four_scopes_with_one_act_scope_per_command() {
+    fn it_declares_twenty_three_scopes_with_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Docs declares its reach");
-        assert_eq!(vault.scopes.len(), 24);
+        assert_eq!(vault.scopes.len(), 23);
 
         let mut declared: Vec<(&str, &str)> = vault
             .scopes
@@ -173,7 +173,6 @@ mod tests {
                 "document",
                 "edge",
                 "entity",
-                "journal",
                 "revision"
             ]
         );

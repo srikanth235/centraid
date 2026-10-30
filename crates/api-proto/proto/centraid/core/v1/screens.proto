@@ -208,6 +208,12 @@ message InstanceEvent {
 }
 
 message ScreenEvent {
+  // 404 was `locker.access`'s event, gone with the Locker's access history (#1146).
+  reserved 404;
+  reserved "locker_access";
+  // 806 and 807 were Photos' Duplicates and its review, retired (#1146 D5).
+  reserved 806, 807;
+  reserved "photos_duplicates", "photos_duplicate_review";
   oneof kind {
     // The screen came into view. The first one loads.
     Appeared appeared = 1;
@@ -257,14 +263,11 @@ message ScreenEvent {
     PhotosPlacesEvent photos_places = 803;
     PhotosLightboxEvent photos_lightbox = 804;
     PhotosEditorEvent photos_editor = 805;
-    PhotosDuplicatesEvent photos_duplicates = 806;
-    PhotosDuplicateReviewEvent photos_duplicate_review = 807;
     // ---- locker (400-499) ----
     LockerWallEvent locker_wall = 400;
     LockerHomeEvent locker_home = 401;
     LockerItemEvent locker_item = 402;
     LockerEditorEvent locker_editor = 403;
-    LockerAccessEvent locker_access = 404;
     LockerExportEvent locker_export = 405;
     LockerImportEvent locker_import = 406;
     // ---- money (500-599) ----
@@ -357,6 +360,12 @@ message DataChanged {
 message ViewState {
   uint64 instance = 1;
   uint64 revision = 2;
+  // 403 was `locker.access`'s state, gone with the Locker's access history (#1146).
+  reserved 403;
+  reserved "locker_access";
+  // 806 and 807 were Photos' Duplicates and its review, retired (#1146 D5).
+  reserved 806, 807;
+  reserved "photos_duplicates", "photos_duplicate_review";
   oneof kind {
     CounterView counter = 10;
     // ---- words (1300-1399, lane H2) ----
@@ -378,13 +387,10 @@ message ViewState {
     PhotosPlacesState photos_places = 803;
     PhotosLightboxState photos_lightbox = 804;
     PhotosEditorState photos_editor = 805;
-    PhotosDuplicatesState photos_duplicates = 806;
-    PhotosDuplicateReviewState photos_duplicate_review = 807;
     // ---- locker (400-499) ----
     LockerHomeState locker_home = 400;
     LockerItemState locker_item = 401;
     LockerEditorState locker_editor = 402;
-    LockerAccessState locker_access = 403;
     LockerExportState locker_export = 404;
     LockerImportState locker_import = 405;
     LockerLockState locker_lock = 406;
@@ -1011,6 +1017,8 @@ message PhoneCalendar {
   string key = 1;
   string source_title = 2;
   string title = 3;
+  // The colour the phone paints it with, `#RRGGBB`; empty when it has none.
+  string color = 4;
 }
 
 // One occurrence. An all-day `start`/`end` is `YYYY-MM-DD` with `end` the LAST
@@ -1032,6 +1040,9 @@ message PhoneCalendarEvent {
   // The phone's most durable id, kind-prefixed (`uid:`, `lookup:`, `local:`).
   string phone_id = 11;
   string calendar_key = 12;
+  // The event's link and where it is, as the phone holds them; empty when it has none.
+  string url = 13;
+  string location = 14;
 }
 
 // A repeating series as the phone holds it; `start`/`end` are the series' OWN

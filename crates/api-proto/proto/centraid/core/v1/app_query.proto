@@ -59,12 +59,20 @@ message AppQueryRequest {
            "tally_trash", "tally_export";
   // 92 was `photos.library`, a windowed overview the screens' shelf, albums and
   // places reads replaced (#1135).
-  reserved 92;
-  reserved "photos_library";
+  reserved 91, 92;
+  reserved "photos_duplicates", "photos_library";
   // 10-14 and 16 were Tasks' queries before Agenda took them (#1135).
   reserved 10 to 14, 16;
   reserved "tasks_board", "tasks_task", "tasks_projects", "tasks_search",
            "tasks_catch_up", "tasks_trash";
+  // 64 was `locker.access`, the Locker's access history, gone with its receipt
+  // table (#1146).
+  reserved 64;
+  reserved "locker_access";
+  // 33 was `docs.activity`, the Docs activity rail, which read the command journal; both are gone
+  // (#1146).
+  reserved 33;
+  reserved "docs_activity";
   oneof query {
     AgendaUpcomingRequest agenda_upcoming = 1;
     AgendaDayContextRequest agenda_day_context = 2;
@@ -84,7 +92,6 @@ message AppQueryRequest {
     DocsDriveRequest docs_drive = 30;
     DocsSearchRequest docs_search = 31;
     DocsDocumentRequest docs_document = 32;
-    DocsActivityRequest docs_activity = 33;
     NotesLibraryRequest notes_library = 40;
     NotesNotebooksRequest notes_notebooks = 41;
     NotesJournalRequest notes_journal = 42;
@@ -105,7 +112,6 @@ message AppQueryRequest {
     LockerItemRequest locker_item = 61;
     LockerSearchRequest locker_search = 62;
     LockerReviewRequest locker_review = 63;
-    LockerAccessRequest locker_access = 64;
     // Chat history (R-CHAT-1): 70-79. Reads only; the writes are `chat.*` commands.
     ChatThreadsRequest chat_threads = 70;
     ChatThreadRequest chat_thread = 71;
@@ -114,7 +120,6 @@ message AppQueryRequest {
     VaultSearchRequest vault_search = 80;
     // Photos' own search (#1097, R-1097-25..27): 90.
     PhotosSearchRequest photos_search = 90;
-    PhotosDuplicatesRequest photos_duplicates = 91;
     // The screens' reads (#1135): one shelf, one photograph, the collections, the places.
     PhotosShelfRequest photos_shelf = 93;
     PhotosPhotoRequest photos_photo = 94;
@@ -155,12 +160,18 @@ message AppQueryResponse {
   reserved "tally_dashboard", "tally_group", "tally_friend", "tally_expense",
            "tally_settle_up", "tally_recurring", "tally_spending", "tally_search",
            "tally_trash", "tally_export";
-  reserved 92;
-  reserved "photos_library";
+  reserved 91, 92;
+  reserved "photos_duplicates", "photos_library";
   // 10-14 and 16 were Tasks' queries before Agenda took them (#1135).
   reserved 10 to 14, 16;
   reserved "tasks_board", "tasks_task", "tasks_projects", "tasks_search",
            "tasks_catch_up", "tasks_trash";
+  // 64 was `locker.access`, the Locker's access history, gone with its receipt
+  // table (#1146).
+  reserved 64;
+  reserved "locker_access";
+  reserved 33;
+  reserved "docs_activity";
   oneof answer {
     AgendaUpcoming agenda_upcoming = 1;
     AgendaDayContext agenda_day_context = 2;
@@ -176,7 +187,6 @@ message AppQueryResponse {
     DocsDrive docs_drive = 30;
     DocsSearch docs_search = 31;
     DocsDocument docs_document = 32;
-    DocsActivity docs_activity = 33;
     NotesLibrary notes_library = 40;
     NotesNotebooks notes_notebooks = 41;
     NotesJournal notes_journal = 42;
@@ -195,13 +205,11 @@ message AppQueryResponse {
     LockerItemDetail locker_item = 61;
     LockerSearch locker_search = 62;
     LockerReview locker_review = 63;
-    LockerAccess locker_access = 64;
     ChatThreads chat_threads = 70;
     ChatThread chat_thread = 71;
     ChatCardLive chat_card = 72;
     VaultSearch vault_search = 80;
     PhotosSearch photos_search = 90;
-    PhotosDuplicates photos_duplicates = 91;
     PhotosShelf photos_shelf = 93;
     PhotosPhoto photos_photo = 94;
     PhotosAlbums photos_albums = 95;

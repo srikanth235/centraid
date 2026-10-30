@@ -37,7 +37,7 @@ use super::PlaneError;
 use super::naming::{BackupKeys, Name, PlaintextHash};
 use super::snapshot::{Manifest, RANGE_BYTES, RangeRef, census_of, read_copy};
 use super::store::{NAMES_PER_CALL, Store, StoreError};
-use crate::migrations::APPLICATION_ID;
+use crate::format::{APPLICATION_ID, EARLIER_APPLICATION_ID, SCHEMA_DIGEST, schema_digest};
 
 /// Why a restore refused the file.
 #[derive(Debug, thiserror::Error)]
@@ -62,6 +62,14 @@ pub enum RestoreError {
         expected: i64,
         found: i64,
     },
+    /// The snapshot is of a vault the model before #1135 made: no compatibility (R-FP-10).
+    #[error("this backup was made by an earlier version of Centraid that this one cannot open")]
+    EarlierModel,
+    /// The snapshot's tables are not the ones this build was written against.
+    #[error(
+        "this backup does not match this version of Centraid: its tables are not the ones this version expects"
+    )]
+    SchemaMismatch { found: String, expected: String },
     #[error(
         "census: {table}: the manifest says {expected:?} rows and the restored file holds {found:?}"
     )]
@@ -281,7 +289,7 @@ fn rebuild(
         detail: manifest.db_hash.to_hex(),
     });
 
-    let (integrity, page_size, user_version, application_id, census) =
+    let (integrity, page_size, user_version, application_id, census, digest) =
         read_copy(partial, |connection| {
             let integrity: String =
                 connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
@@ -296,6 +304,7 @@ fn rebuild(
                 user_version,
                 application_id,
                 census_of(connection)?,
+                schema_digest(connection)?,
             ))
         })?;
     if integrity != "ok" {
@@ -305,6 +314,12 @@ fn rebuild(
         name: "integrity_check",
         detail: integrity,
     });
+    // THE FORMAT, BEFORE ANYTHING ELSE IS ASKED OF THE FILE (#1146, D3): a backup of the model
+    // before #1135 and one whose tables are not this build's are refused with a sentence, and the
+    // partial file is removed by the caller, so nothing replaces the vault that is here.
+    if application_id == EARLIER_APPLICATION_ID {
+        return Err(RestoreError::EarlierModel);
+    }
     for (check, expected, found) in [
         ("application_id", APPLICATION_ID, application_id),
         ("page_size", i64::from(manifest.page_size), page_size),
@@ -321,6 +336,16 @@ fn rebuild(
     checks.push(Check {
         name: "header",
         detail: format!("page_size {page_size}, user_version {user_version}"),
+    });
+    if digest != SCHEMA_DIGEST {
+        return Err(RestoreError::SchemaMismatch {
+            found: digest,
+            expected: SCHEMA_DIGEST.to_owned(),
+        });
+    }
+    checks.push(Check {
+        name: "schema",
+        detail: format!("digest {digest}"),
     });
 
     let tables: BTreeSet<&String> = manifest.census.keys().chain(census.keys()).collect();
@@ -368,17 +393,15 @@ pub struct StructuralReport {
 }
 
 impl StructuralReport {
-    /// Clean means: pages sound and keys hold. (A journal or Locker receipt
-    /// names a row by value, never by foreign key: evidence outlives its row.)
+    /// Clean means: pages sound and keys hold.
     #[must_use]
     pub fn is_clean(&self) -> bool {
         self.integrity == "ok" && self.foreign_key_violations.is_empty()
     }
 }
 
-/// THE STRUCTURAL CHECK over a vault file that is not live: `integrity_check`,
-/// `foreign_key_check`, and the receipts' references, which no foreign key
-/// covers because they cross a band on purpose.
+/// THE STRUCTURAL CHECK over a vault file that is not live: `integrity_check`
+/// and `foreign_key_check`.
 ///
 /// Read-only and lock-free, so it never changes the file it judges. It is the
 /// one definition of "sound" `centraid doctor` reports; [`restore_head`]'s own

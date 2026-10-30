@@ -20,6 +20,13 @@ package centraid.core.v1;
 message Route {
   // The screen's registered name, e.g. `proof.counter`, `agenda.event`.
   string screen = 1;
+  // 403 was `locker.access`, the Locker's access history, gone with its receipt
+  // table (#1146).
+  reserved 403;
+  reserved "locker_access";
+  // 806 and 807 were Photos' Duplicates and its review, retired (#1146 D5).
+  reserved 806, 807;
+  reserved "photos_duplicates", "photos_duplicate_review";
   oneof args {
     CounterRoute counter = 10;
     // ---- words (1300-1399, lane H2) ----
@@ -41,13 +48,10 @@ message Route {
     PhotosPlacesRoute photos_places = 803;
     PhotosLightboxRoute photos_lightbox = 804;
     PhotosEditorRoute photos_editor = 805;
-    PhotosDuplicatesRoute photos_duplicates = 806;
-    PhotosDuplicateReviewRoute photos_duplicate_review = 807;
     // ---- locker (400-499) ----
     LockerHomeRoute locker_home = 400;
     LockerItemRoute locker_item = 401;
     LockerEditorRoute locker_editor = 402;
-    LockerAccessRoute locker_access = 403;
     LockerExportRoute locker_export = 404;
     LockerImportRoute locker_import = 405;
     LockerLockRoute locker_lock = 406;
@@ -296,15 +300,6 @@ message PhotosEditorRoute {
   string photo_id = 1;
 }
 
-// `photos.duplicates`: the near-duplicate sets.
-message PhotosDuplicatesRoute {}
-
-// `photos.duplicate_review`: one set, and the decision about its copies.
-message PhotosDuplicateReviewRoute {
-  // The cluster's key (`PhotosDuplicateCluster.key`).
-  string cluster_key = 1;
-}
-
 // ---------------------------------------------------------------------------
 // Docs
 // ---------------------------------------------------------------------------
@@ -521,8 +516,6 @@ enum LockerEditorMode {
   LOCKER_EDITOR_MODE_ADD = 1;
   LOCKER_EDITOR_MODE_EDIT = 2;
 }
-
-message LockerAccessRoute {}
 
 message LockerExportRoute {
   string parent = 1;
