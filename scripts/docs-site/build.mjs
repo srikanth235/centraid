@@ -92,7 +92,7 @@ async function normalizePagefindAnchors() {
 
 async function buildSearchIndex() {
   // Pagefind's Node API instead of `bun x pagefind` — the dependency is now a
-  // real import the lockfile pins and knip can trace, not an opaque subprocess.
+  // real import the lockfile pins, not an opaque subprocess.
   // Flag parity with the old CLI call: --force-language en, --include-characters
   // '._:/<>-', --site outDir (addDirectory), --output-subdir pagefind
   // (writeFiles outputPath). --quiet maps to the API's default (no logging).

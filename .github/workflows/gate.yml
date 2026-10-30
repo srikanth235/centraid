@@ -1,38 +1,17 @@
 name: gate
 
-# THE PULL-REQUEST GATE for the v1 tree ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
+# The pull-request gate, and the only workflow that listens on `pull_request`.
+# Nothing here is path-filtered: a filtered-out job reports no status, and a
+# required check that never reports blocks the PR forever (#557).
 #
-# `cargo xtask gate --profile pr` is the only thing this workflow runs, because
-# the issue rules it the only CI entrypoint: v1 is three languages, and a gate
-# assembled out of per-language jobs would have to be kept in step by hand in
-# four places. One command, one step list, one budget
-# (contracts/ledgers/gate-budgets.json), one artifact directory.
-#
-# THIS WORKFLOW IS NOW THE SINGLE OPEN-PR ENTRY POINT, taking that role from
-# ci.yml. #557's ruling has not changed and is the reason there is exactly one:
-# a workflow that needs `paths:` filters to be affordable can never be a
-# required check, because a filtered-out workflow reports no status and a
-# required check that never reports blocks the PR forever. So there is one
-# PR-triggered workflow and everything a PR must satisfy is inside it. Three jobs,
-# not one, and none is path-filtered so all always report:
-# `gate` runs the profile, `engine` checks the on-device chat's llama.cpp build
-# that the profile's cold budget has no room for (see its comment below), and
-# `dependency-review` is the one PR gate that cannot be a step of a command
-# (see its comment below).
-# `scripts/lint-workflow-pins.mjs` rule 5 enforces the single-entry-point
-# property and now names this file.
-#
-# OWNER HAND-OFF — branch protection must be repointed. The required check today
-# is `check`, ci.yml's aggregator, and ci.yml no longer listens on
-# `pull_request`, so `check` will stop reporting. The owner must make `gate`,
-# `engine` AND `dependency-review` (the three jobs here) the required checks;
-# until then pull requests will block. Branch protection is configured outside this repository,
-# like the code-owner review requirement — see crates/xtask/README.md and
-# docs/toolchain.md.
-#
-# Governance is NOT run here. `.governance/run.sh` is governance.yml's job and
-# its own required check; running it twice would charge the budget twice for one
-# answer and give one failure two places to be reported from.
+#   gate               `cargo xtask gate --profile pr` — every step a PR must
+#                      pass, Rust, protobuf, TypeScript and CI policy alike
+#                      (crates/xtask/README.md).
+#   engine             the on-device chat's llama.cpp build, too slow for the
+#                      `pr` profile's budget (R-CHAT-10).
+#   native-python      the native tool task's CPU suite (#1044).
+#   dependency-review  the PR's dependency diff, read through the API.
+#   pr-title           the squash subject, checked by `.githooks/commit-msg`.
 
 on:
   pull_request:
@@ -40,9 +19,8 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Cancel superseded PR runs, exactly as ci.yml does for the same reason.
 concurrency:
-  group: gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: gate-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -51,142 +29,45 @@ permissions:
 jobs:
   gate:
     runs-on: ubuntu-latest
-    # The `pr` profile's budget is 15 minutes and the runner bound is a backstop
-    # against a hung job, not a second budget: a cancelled job is red with no
-    # evidence (#557), and the profile's own timing table is the number that
-    # matters.
-    # The `pr` profile's own ceiling is `gate-budgets.json`'s 1500 s, measured
-    # on a COLD tree (a Cargo cache miss); a cache hit runs it in under two
-    # minutes. This bound has to sit above the budget plus the provisioning
-    # steps above it, or a cache-miss run would be killed by the runner before
-    # the budget it is scored against could report (#1020, D-1020-B2-3).
+    # A backstop against a hung job, above the `pr` profile's own cold budget
+    # (contracts/ledgers/gate-budgets.json) plus provisioning.
     timeout-minutes: 40
     steps:
-      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
-        with:
-          # `audit` for the reason hygiene.yml uses it: the allowlist for a
-          # lane that talks to crates.io, the sparse index and the Bun registry
-          # has not been learned yet, and a job that dies on an unlisted
-          # endpoint blocks every pull request. Flip to `block` once the
-          # run summaries have named the destinations.
-          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # `buf breaking --against .git#branch=main,...` and the released tags
-          # inside the version window are read out of the local clone, and
-          # actions/checkout fetches one commit by default. Without the full
-          # history the `buf` step would compare the schema against nothing and
-          # report a pass, which is a gate that gates nothing.
+          # `buf breaking` compares against `main` and the released tags, read
+          # out of the local clone.
           fetch-depth: 0
-      # buf reads `.git#branch=main` as a LOCAL branch. On a pull request the
-      # checkout is a detached merge commit and `main` exists only as
-      # `origin/main`, so buf's clone fails with "couldn't find remote ref
-      # main" (#1047). Point a local `main` at the fetched one when it is absent.
-      - name: Give the buf step a local main branch
-        run: |
-          set -euo pipefail
-          git show-ref --verify --quiet refs/heads/main || git branch main origin/main
-      # Bun and Node for the profile's `ts-static` step, which runs
-      # `bun run check:push:static` over whatever TypeScript the v1 tree grows,
-      # and the v1 Cargo cache (`target/` plus `~/.cargo/bin`, so cargo-deny
-      # survives between runs).
+      # buf reads `.git#branch=main` as a LOCAL branch; a PR checkout is a
+      # detached merge commit with only `origin/main` (#1047).
+      - run: git show-ref --verify --quiet refs/heads/main || git branch main origin/main
       - uses: ./.github/actions/setup
         with:
-          cargo-cache: v1
-      # rust-toolchain.toml is the one version file. Reading the channel out of
-      # it here rather than repeating `1.94.1` is what keeps it the only one:
-      # dtolnay/rust-toolchain reads its toolchain from its OWN ref, and a SHA
-      # pin has no ref name to read, so the input is required (lint:workflow-pins
-      # rule 7) and must come from somewhere.
-      - id: channel
-        run: |
-          set -euo pipefail
-          channel="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml | head -1)"
-          if [ -z "$channel" ]; then
-            echo "::error::gate: rust-toolchain.toml has no [toolchain] channel"
-            exit 1
-          fi
-          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
-        with:
-          toolchain: ${{ steps.channel.outputs.channel }}
-          components: rustfmt, clippy
-      # The `pr` profile's external tools. Each one FAILS rather than skips when
-      # its binary is absent under CI (see crates/xtask/src/gate.rs `external`),
-      # so an install that silently stopped working reds the gate instead of
-      # quietly removing a lane. Versions are pinned here and nowhere else.
-      - name: Install cargo-deny
-        run: |
-          set -euo pipefail
-          if command -v cargo-deny >/dev/null 2>&1; then
-            echo "cargo-deny already on PATH from the restored Cargo cache: $(cargo-deny --version)"
-          else
-            cargo install cargo-deny --locked
-          fi
-      # The `test` step runs `cargo nextest run --workspace` (then the doctests,
-      # which nextest does not run) when nextest is on PATH. Without it the ~150
-      # test binaries run one after another, and that serial tail is an estimated 40 %
-      # of the `test` step on a cold run (#1047). A release BINARY, pinned by
-      # version and by the SHA-256 GitHub records for the asset, rather than
-      # `cargo install`, which would compile ~300 crates before the gate starts.
-      - name: Install cargo-nextest
+          rust: "true"
+          cargo-cache: gate
+      # The profile's external tools. Under CI each step FAILS rather than
+      # skips when its binary is missing, so a broken install reds the gate.
+      # Release binaries, pinned here and nowhere else.
+      - name: Install the gate's tools
         env:
           NEXTEST_VERSION: 0.9.144
           NEXTEST_SHA256: 8a4f726272b0a1c499bd87ca3978bfbb1a8c20bb08ccf075b9996e2081bd1e1e
-        run: |
-          set -euo pipefail
-          archive="cargo-nextest-${NEXTEST_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
-          curl -sSfL "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-${NEXTEST_VERSION}/${archive}" \
-            -o "${RUNNER_TEMP}/${archive}"
-          echo "${NEXTEST_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum -c -
-          tar -xzf "${RUNNER_TEMP}/${archive}" -C /usr/local/bin cargo-nextest
-          cargo nextest --version
-      - name: Install actionlint, gitleaks, osv-scanner and buf
-        env:
-          # actionlint: the version ci.yml's `static` job pins as a container
-          # action. gitleaks and osv-scanner: the same release pins ci.yml's
-          # `gitleaks` and `osv-scanner` jobs use. Those two steps are red on
-          # inherited tree state (D-1020-B1, #1020) and are here anyway: a PR
-          # gate that stops reporting because its target is red today is a
-          # weakening, and inherited red is named, never hidden.
-          #
-          # buf: the `buf` step runs `buf lint` and `buf breaking` over
-          # `crates/api-proto/proto` against the PR base AND every released tag
-          # inside the version window, which is the promise #1020's Compatibility
-          # section makes to seats that update on their own schedule
-          # (docs/decisions.md#the-pr-gate-loop-892 is why this install lives in
-          # this workflow and not in a second one). It is a release BINARY rather
-          # than a marketplace action so the version below is the only pin, the
-          # same posture as the three above; `cargo xtask gate`'s `buf` step
-          # FAILS rather than skips when it is absent under CI.
           ACTIONLINT_VERSION: 1.7.12
           GITLEAKS_VERSION: 8.30.1
           OSV_VERSION: 2.4.0
           BUF_VERSION: 1.61.0
         run: |
           set -euo pipefail
-          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
-            | tar -xz -C /usr/local/bin actionlint
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
-            | tar -xz -C /usr/local/bin gitleaks
-          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" \
-            -o /usr/local/bin/osv-scanner
-          chmod +x /usr/local/bin/osv-scanner
-          curl -sSfL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64" \
-            -o /usr/local/bin/buf
-          chmod +x /usr/local/bin/buf
-          actionlint --version
-          gitleaks version
-          osv-scanner --version
-          buf --version
-      # The profile's `ts-static` step runs `bun run check:push:static`, which
-      # resolves `@centraid/*` through the published entry points and so needs
-      # the packages' `dist/` on disk. Provisioning the tree is the workflow's
-      # job — it already installs four binaries — and not the gate's: a build
-      # inside `cargo xtask gate` would charge the profile's own budget for an
-      # environment prerequisite. Turbo-cached, and filtered to nothing because
-      # the static gate typechecks the whole workspace (#1020).
-      - run: bun run build
+          command -v cargo-deny >/dev/null || cargo install cargo-deny --locked
+          nextest="cargo-nextest-${NEXTEST_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          curl -sSfL "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-${NEXTEST_VERSION}/${nextest}" -o "${RUNNER_TEMP}/${nextest}"
+          echo "${NEXTEST_SHA256}  ${RUNNER_TEMP}/${nextest}" | sha256sum -c -
+          tar -xzf "${RUNNER_TEMP}/${nextest}" -C /usr/local/bin cargo-nextest
+          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" | tar -xz -C /usr/local/bin actionlint
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C /usr/local/bin gitleaks
+          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" -o /usr/local/bin/osv-scanner
+          curl -sSfL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64" -o /usr/local/bin/buf
+          chmod +x /usr/local/bin/osv-scanner /usr/local/bin/buf
       - run: cargo xtask gate --profile pr
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
@@ -196,228 +77,60 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-  # THE ON-DEVICE CHAT'S ENGINE, checked here and not in `gate` (#1078, R-CHAT-10
-  # in docs/decisions.md). llama.cpp is a `cmake` build of about five minutes
-  # cold, and compiling it inside the `pr` profile added 196 s to its clippy
-  # step, 343 s to test and 199 s to release-build on this runner, which put
-  # the profile's cold run over its 1,500 s budget. So `centraid-assist-llama`'s
-  # `engine` feature and `centraid-core-ffi`'s `llama` feature are OFF in a
-  # workspace build — `gate` compiles, lints and tests the rest of the tree
-  # without llama.cpp, including the engine-free half of `centraid-assist-llama`
-  # (`generate`, `wire`, `Config`) and the ABI's no-engine behaviour — and THIS job
-  # builds, lints and tests the two crates with the engine ON: the loader, the
-  # process-wide host, the `assist-step` binary, the two real-model suites'
-  # compile, `centraid-core-ffi`'s engine-wired tests, and the five-symbol `nm`
-  # check over a cdylib that
-  # carries llama.cpp. What no pull-request job checks is a phone's
-  # cross-compile of the engine (Android NDK, iOS Metal), which
-  # `lane-prebuilt-core.yml` does on a release tag.
-  #
-  # OUTSIDE `cargo xtask gate` ON PURPOSE: the profile's budget is a ceiling on
-  # the feedback a pull request waits for, and this job's cost is not a
-  # property of the change under review. It runs beside `gate`, so a PR waits
-  # for the slower of the two, not their sum. Not path-filtered, so it always
-  # reports and can be required (#557).
-  #
-  # ITS OWN CARGO CACHE KEY, not the `v1` preset: both jobs would save on `main`
-  # under one key, and whichever finished first would decide what a PR's `gate`
-  # restores — an engine-flavoured `target/` with no `release/` in it, which
-  # is a cold `release-build` inside the 1,500 s budget. `cmake` and a C++
-  # compiler are on the ubuntu-latest image.
+  # llama.cpp is a ~5 minute cmake build, so `centraid-assist-llama/engine`
+  # and `centraid-core-ffi/llama` are off in the workspace build and this job
+  # builds, lints and tests the two crates with the engine on. A phone's
+  # cross-compile of the engine is `lane-prebuilt-core.yml`'s.
   engine:
     runs-on: ubuntu-latest
-    # No budget of its own; the bound is a backstop against a hung job (#557).
     timeout-minutes: 45
     steps:
-      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
-        with:
-          # `audit`, for the reason the `gate` job states.
-          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # No Bun packages: this job runs cargo and nothing else.
       - uses: ./.github/actions/setup
         with:
-          install: "false"
-          cargo-cache: none
-      # Restore always, save only from `main` (#637), exactly as the setup
-      # action's `v1` preset does, under a key of this job's own.
-      - name: Restore Cargo (engine)
-        id: cargo-engine
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: cargo-engine-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            cargo-engine-${{ runner.os }}-${{ runner.arch }}-
-      - id: channel
-        run: |
-          set -euo pipefail
-          channel="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml | head -1)"
-          if [ -z "$channel" ]; then
-            echo "::error::engine: rust-toolchain.toml has no [toolchain] channel"
-            exit 1
-          fi
-          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
-        with:
-          toolchain: ${{ steps.channel.outputs.channel }}
-          components: clippy
-      # `centraid-core-ffi/llama` turns on `centraid-assist-llama/engine` too
-      # (the package/feature form names one package's feature unambiguously
-      # across two `-p`s), so both crates are built with llama.cpp.
-      - name: Clippy, engine on
-        run: cargo clippy -p centraid-assist-llama -p centraid-core-ffi --all-targets --features centraid-core-ffi/llama -- -D warnings
-      # `cargo test` rather than nextest: two crates, a handful of binaries, and
-      # it runs their doctests too. The real-model suites are `#[ignore]`d and
-      # need a GGUF file the repository does not carry.
-      - name: Test, engine on
-        run: cargo test -p centraid-assist-llama -p centraid-core-ffi --features centraid-core-ffi/llama
-      - name: Save Cargo (engine)
-        if: github.ref == 'refs/heads/main' && steps.cargo-engine.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: ${{ steps.cargo-engine.outputs.cache-primary-key }}
+          bun: "false"
+          rust: "true"
+          # Its own key: an engine-flavoured `target/` restored into `gate`
+          # would be a cold release build inside the `pr` budget.
+          cargo-cache: engine
+      - run: cargo clippy -p centraid-assist-llama -p centraid-core-ffi --all-targets --features centraid-core-ffi/llama -- -D warnings
+      # The real-model suites are `#[ignore]`d: they need a GGUF file the
+      # repository does not carry.
+      - run: cargo test -p centraid-assist-llama -p centraid-core-ffi --features centraid-core-ffi/llama
 
-  # The ONE pull-request gate that cannot be a step of `cargo xtask gate`: it is
-  # a GitHub Action reading the PR's dependency diff through the API, not a
-  # command over the tree. It keeps its own job so `pull-requests: write` is not
-  # handed to the job that compiles third-party crates, and it is unfiltered, so
-  # it always reports on a pull request and can be required. Moved here verbatim
-  # from ci.yml's `dependency-review` job, minus that file's evidence-writing
-  # steps, which belong to its own report pipeline on `main`.
-  dependency-review:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
-        with:
-          # Start at `high`. Starting at `low` on a monorepo this size means the
-          # gate is muted within a week; tighten once the baseline is clean.
-          fail-on-severity: high
-          comment-summary-in-pr: on-failure
-          # Denies the licence on NEW dependencies only — existing ones are
-          # untouched, so it cannot retroactively red an unrelated PR.
-          deny-licenses: AGPL-3.0, AGPL-3.0-only, AGPL-3.0-or-later, GPL-3.0, GPL-3.0-only, GPL-3.0-or-later
-
-  # THE PREBUILT CORE, and deliberately NOT on a pull request.
-  #
-  # #1020 ships a prebuilt core: six binary triples, four Android ABIs and an
-  # iOS XCFramework. Building all eleven on every pull request would buy nothing
-  # a PR needs — the `gate` job above already compiles the workspace in release
-  # configuration for the host triple, which is what catches a code change that
-  # does not build. What the OTHER triples catch is a cross-compilation or a
-  # platform-conditional break, and that answer is worth having once per merge,
-  # not once per push to a branch.
-  #
-  # So this job runs on `push: main` and on `workflow_dispatch`, never on
-  # `pull_request` — which is also why it is a job here rather than a second
-  # workflow: `gate.yml` is the one workflow allowed to listen on open-PR events
-  # (lint:workflow-pins rule 5), and `release.yml` is the one allowed to listen
-  # on tags (rule 6), so a lane that wants both callers has to be
-  # `workflow_call` and be invoked from each. `release.yml` invokes the same
-  # lane on a tag, with `binary-only: false`.
-  #
-  # `binary-only: true` here: on `main` the point is to keep the cache warm and
-  # to catch a cross-compilation break, and the mobile artifacts need an Android
-  # NDK and a macOS runner per push to do it.
-  prebuilt-core:
-    if: github.event_name != 'pull_request'
-    uses: ./.github/workflows/lane-prebuilt-core.yml
-    with:
-      binary-only: true
-
-  # THE NATIVE HARNESS'S CPU PYTHON TESTS (#1044), on every pull request and every
-  # push to `main`, unfiltered: `experiments/toolchat/native` is Python, and nothing
-  # in `cargo xtask gate --profile pr` runs Python. It is a job of its own, outside
-  # that command and its 1500 s budget, because it needs what the gate does not: a
-  # Python toolchain, ~200 MB of CPU torch, a tokenizer from the model hub and a
-  # build of the `nativetools` binary the tests drive. (The gate still reads and
-  # scans the tree: the Rust tests read `authored/golden_v3.json`, and `secrets`
-  # scans every file.)
-  #
-  # What it runs is `experiments/toolchat/native/run_cpu_tests.py`: all 29 test
-  # modules of `authored/`, `authored/gen/`, `eval/` and `train/`, each in an
-  # interpreter of its own, none skipped and none left out. A red or a skipped
-  # test fails the job; the script has no list of tolerated failures.
-  # Nothing here needs model weights or a GPU. Reproduce a run by following the
-  # steps below by hand, or read them as the setup the script's docstring lists.
-  #
-  # Its inputs are pinned by content, not by name: `requirements-ci.txt` carries a
-  # hash for every package (`pip install --require-hashes`), the tokenizer is
-  # fetched at a commit and checked against SHA-256 sums, and the actions are SHAs.
+  # `experiments/toolchat/native/run_cpu_tests.py`: every test module of the
+  # native tool task, none skipped. Inputs are pinned by content: hashed pip
+  # requirements, a tokenizer fetched at a commit and checked by SHA-256.
   native-python:
     runs-on: ubuntu-latest
-    # A cold run is a ~3 minute Rust build, a ~1 minute install and the suite. The
-    # suite took 31.5 minutes with its modules run one at a time on four cores and
-    # takes ~16 with them four at a time (`--jobs 4`): train/test_dpo.py, on two
-    # threads, is the tail, and every other module is done in ~10. The bound is a
-    # backstop well above that, not a second budget.
+    # The suite takes ~16 minutes at `--jobs 4`.
     timeout-minutes: 60
     steps:
-      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
-        with:
-          # `audit` for the reason `gate` uses it: crates.io, PyPI, the PyTorch
-          # index and the model hub are not an allowlist anybody has learned yet.
-          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The same channel read as the `gate` job's, from the one version file.
-      - id: channel
-        run: |
-          set -euo pipefail
-          channel="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml | head -1)"
-          if [ -z "$channel" ]; then
-            echo "::error::native-python: rust-toolchain.toml has no [toolchain] channel"
-            exit 1
-          fi
-          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+      - uses: ./.github/actions/setup
         with:
-          toolchain: ${{ steps.channel.outputs.channel }}
-      # No Cargo cache: the `gate` job owns the `cargo-v1` entry, and a second job
-      # saving under its key on `main` could leave it holding only this build.
-      - name: Build the nativetools binary
-        run: cargo build --locked -p centraid-nativetools --bin nativetools
+          bun: "false"
+          rust: "true"
+      - run: cargo build --locked -p centraid-nativetools --bin nativetools
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           # The minor the training image runs (train/vm/run_job.sh).
           python-version: "3.11"
-      - name: Install the pinned Python dependencies
-        run: |
-          set -euo pipefail
-          python -m pip install --require-hashes --only-binary=:all: --no-deps \
-            -r experiments/toolchat/native/requirements-ci.txt
-      # The trainer's tiny-model tests build a random model from the config of
-      # Qwen3.5-0.8B and tokenize with its tokenizer: six small files, 23 MB, and no
-      # weights. The commit pins the tree; the sums pin each file. The tests then
-      # read them offline, where `from_pretrained` resolves `main` through refs/main.
+      - run: >-
+          python -m pip install --require-hashes --only-binary=:all: --no-deps -r experiments/toolchat/native/requirements-ci.txt
+      # The trainer's tiny-model tests build a random model from Qwen3.5-0.8B's
+      # config and tokenize with its tokenizer: six small files, no weights.
       - name: Fetch the Qwen3.5-0.8B tokenizer and config
         env:
           HF_HOME: ${{ runner.temp }}/hf
           QWEN_REVISION: 2fc06364715b967f1860aea9cf38778875588b17
         run: |
           set -euo pipefail
-          attempt=1
-          until hf download Qwen/Qwen3.5-0.8B --revision "${QWEN_REVISION}" \
-            config.json tokenizer.json tokenizer_config.json vocab.json merges.txt chat_template.jinja; do
-            if [ "$attempt" -ge 3 ]; then
-              exit 1
-            fi
+          for attempt in 1 2 3; do
+            hf download Qwen/Qwen3.5-0.8B --revision "${QWEN_REVISION}" \
+              config.json tokenizer.json tokenizer_config.json vocab.json merges.txt chat_template.jinja && break
+            [ "$attempt" -lt 3 ] || exit 1
             echo "::warning::hf download failed (attempt ${attempt}); retrying"
-            attempt=$((attempt + 1))
             sleep 5
           done
           repo="${HF_HOME}/hub/models--Qwen--Qwen3.5-0.8B"
@@ -432,17 +145,11 @@ jobs:
           49e2b6e395f959f077f1e992b338919c0d4a9732fc6e613995e06557f843500c  tokenizer_config.json
           ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003  vocab.json
           SUMS
-      # The built data of the native task is not in the tree (R-1088-16,
-      # `experiments/toolchat/native/artefacts.json`). What the suite reads is the
-      # 35 public train worlds, which a builder in the tree rebuilds byte for byte
-      # and the manifest verifies. It reads no held-out file (val, test, their
-      # worlds), so there is no secret here and no download, and a pull request
-      # from a fork runs the same steps. The tests that need a seeded household
-      # seed a public world into a temporary directory themselves.
+      # The 35 public train worlds, rebuilt byte for byte from the tree and
+      # verified by the manifest (R-1088-16); no held-out file, no secret.
       - name: Materialise the public worlds
         working-directory: experiments/toolchat/native
         run: |
-          set -euo pipefail
           python artefacts.py fetch --public-only
           python artefacts.py check --public-only
       - name: Run the CPU suite
@@ -455,3 +162,35 @@ jobs:
           NOISE_INTEGRATION: "1"
           PYTHONDONTWRITEBYTECODE: "1"
         run: python experiments/toolchat/native/run_cpu_tests.py --jobs 4
+
+  # Its own job so `pull-requests: write` is not handed to the job that
+  # compiles third-party crates.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+          # New dependencies only; existing ones cannot red an unrelated PR.
+          deny-licenses: AGPL-3.0, AGPL-3.0-only, AGPL-3.0-or-later, GPL-3.0, GPL-3.0-only, GPL-3.0-or-later
+
+  # A squash merge's subject is the PR title, and the commit-msg hook never
+  # sees it. Dependabot cannot append an issue number.
+  pr-title:
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$TITLE" > "${RUNNER_TEMP}/title"
+          bash .githooks/commit-msg "${RUNNER_TEMP}/title"

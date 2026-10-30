@@ -1,0 +1,110 @@
+name: nightly
+
+# What is too slow or too wide for every pull request, once a day on `main`:
+#
+#   gate           `cargo xtask gate --profile nightly` (the `pr` profile plus
+#                  the device lanes, which skip loudly on a hosted runner).
+#   mobile-jvm     `cargo xtask gate --profile mobile-jvm`: the Kotlin binding
+#                  specs over the real cdylib, then the generated design tables
+#                  regenerated and diffed.
+#   prebuilt-core  the release binaries for all six triples, so a
+#                  cross-compilation break surfaces before a tag does.
+#
+# All three green moves `refs/candidates/latest`, which is what `release.yml`
+# requires a tag to point at (docs/release.md).
+
+on:
+  schedule:
+    - cron: "30 5 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - run: git show-ref --verify --quiet refs/heads/main || git branch main origin/main
+      - uses: ./.github/actions/setup
+        with:
+          rust: "true"
+          cargo-cache: gate
+      # The same tools and pins as gate.yml's `gate` job.
+      - name: Install the gate's tools
+        env:
+          NEXTEST_VERSION: 0.9.144
+          NEXTEST_SHA256: 8a4f726272b0a1c499bd87ca3978bfbb1a8c20bb08ccf075b9996e2081bd1e1e
+          ACTIONLINT_VERSION: 1.7.12
+          GITLEAKS_VERSION: 8.30.1
+          OSV_VERSION: 2.4.0
+          BUF_VERSION: 1.61.0
+        run: |
+          set -euo pipefail
+          command -v cargo-deny >/dev/null || cargo install cargo-deny --locked
+          nextest="cargo-nextest-${NEXTEST_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          curl -sSfL "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-${NEXTEST_VERSION}/${nextest}" -o "${RUNNER_TEMP}/${nextest}"
+          echo "${NEXTEST_SHA256}  ${RUNNER_TEMP}/${nextest}" | sha256sum -c -
+          tar -xzf "${RUNNER_TEMP}/${nextest}" -C /usr/local/bin cargo-nextest
+          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" | tar -xz -C /usr/local/bin actionlint
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C /usr/local/bin gitleaks
+          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" -o /usr/local/bin/osv-scanner
+          curl -sSfL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64" -o /usr/local/bin/buf
+          chmod +x /usr/local/bin/osv-scanner /usr/local/bin/buf
+      - run: cargo xtask gate --profile nightly
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: nightly-gate-artifacts
+          path: target/xtask/**
+          retention-days: 7
+          if-no-files-found: warn
+
+  mobile-jvm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          rust: "true"
+          cargo-cache: mobile-jvm
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: cargo xtask gate --profile mobile-jvm
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: nightly-mobile-jvm-artifacts
+          path: |
+            target/xtask/**
+            mobile/**/build/reports/**
+          retention-days: 7
+          if-no-files-found: warn
+
+  prebuilt-core:
+    uses: ./.github/workflows/lane-prebuilt-core.yml
+    with:
+      binary-only: true
+
+  # The candidate pointer `release.yml` and `bun run release:prepare` check.
+  promote-candidate:
+    needs: [gate, mobile-jvm, prebuilt-core]
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: git push --force origin "${GITHUB_SHA}:refs/candidates/latest"

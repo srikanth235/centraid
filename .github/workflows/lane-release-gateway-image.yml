@@ -1,11 +1,8 @@
 name: lane-release-gateway-image
 
-# A `release.yml` lane, not an independently-triggered workflow (#557).
-
-# #501 / #504 — optional GHCR image for centraid-gateway (D5: never move latest on beta).
-# Build uses deploy/gateway/Dockerfile, the gateway image (#1080): the
-# `centraid-gateway` binary from `crates/gateway`, run as an unprivileged user
-# with its own `health` as the health check.
+# A `release.yml` lane: the `centraid-gateway` image on GHCR, built from
+# deploy/gateway/Dockerfile (#1080), Trivy-scanned before the lane reports
+# success. A beta tag never moves `latest` (D5).
 
 on:
   workflow_call:

@@ -765,6 +765,20 @@ The phone is the vault; a machine running `centraid-gateway` is a blind store fo
 
 <a id="G-rung0-deferral"></a> <a id="adversary-lanes-and-provisional-evidence-839"></a> <a id="gate-and-ledger-diet"></a>
 
+### CI without governance (#1149)
+
+<a id="ci-without-governance-1149"></a>
+
+| Id | Decision |
+| --- | --- |
+| **R-1149-1** | There is no governance layer: `.governance/` (the vendored kit, the law engine, its packs, docket and estates), `CONSTITUTION.md` and the `governance` workflow are deleted. Two git hooks remain — `pre-commit` (oxfmt and oxlint over the staged files) and `commit-msg` (`type(scope)!: subject (#N)`, at most 100 characters) — and CI re-asks both: `ts-static` over the whole tree, `pr-title` over the squash subject. Receipts, the CHANGELOG and this file are conventions a reviewer holds, not gates. _Why:_ the law policed process (estates, dockets, amendment pairing, doctrine citations) for a product that had moved on; its own enforcing directives guarded trees that no longer existed, and nothing it caught was worth a commit hook. [#1149](https://github.com/srikanth235/centraid/issues/1149) |
+| **R-1149-2** | CI is seven workflows: `gate` (the only `pull_request` listener: jobs `gate`, `engine`, `native-python`, `dependency-review`, `pr-title`), `nightly` (`gate --profile nightly`, `mobile-jvm`, the six-triple prebuilt core; all green moves `refs/candidates/latest`), `codeql`, `release` and its three lanes. The required checks are the five `gate` jobs. _Why:_ every other lane wrote evidence rows, rolling issues or lane-health scores for a v0 test-report pipeline that no longer exists. [#1149](https://github.com/srikanth235/centraid/issues/1149) |
+| **R-1149-3** | `cargo xtask gate` is the only gate entrypoint, and the TypeScript half is `bun run check` (format, lint, `tsc`, vitest over `packages/*`, the release scripts' tests) as its `ts-static` step. `ci-policy` is the SHA-pin check plus actionlint, in Rust; `advisory` and the evidence rows are gone. The `tests/` ledgers other than `journeys.json` and `design-grammar-matrix.json` are deleted; the enforced ledgers are `contracts/ledgers/`. _Why:_ one entrypoint, and the TypeScript tests had not been run by any CI lane. [#1149](https://github.com/srikanth235/centraid/issues/1149) |
+
+Superseded by the three rows above: every row of [Governance as a constitution](#governance-as-a-constitution-1005); **X-1020-knip**, **G-security-rung3**, **X-915-severity-declared**, **G-file-ceiling** (the one exemption is inline in `oxlint.config.ts`), **D-1020-G3**, **D-1020-G6**, **G-advisory-expiry**, **G-filter-inverse**, **G-filter-escape-hatch** and **X-1072-required-set** below; and the CONSTITUTION's principles, whose owner questions Q-1005-1..3 stand as questions about the product rather than about a statute.
+
+#### Earlier rulings
+
 | Id | Decision |
 | --- | --- |
 | **X-1020-gate-is-ci** | CI is `cargo xtask gate` in its profiles (local, pr, nightly, release, mobile-jvm): pull requests run the fast lanes and nightly owns the full cross-client, performance, scale, mutation and mobile lanes. [TESTING.md](../TESTING.md) is the winning test contract, and a contradictory suite README is corrected. _Why:_ one gate, one contract. [#1020](https://github.com/srikanth235/centraid/issues/1020) |

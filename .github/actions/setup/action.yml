@@ -1,156 +1,82 @@
 name: Set up the repo toolchain
 description: >-
-  Pin Node from `.node-version` and Bun from package.json `packageManager`, install dependencies, and warm the Turbo/Cargo build caches — the prologue every job in this repo shares.
-
-# #557 replaced 35 hand-copied `bun-version:` literals with a Bun-only version
-# of this action. The prologue around it stayed copied: 33 duplicate
-# `bun install --frozen-lockfile` lines, 5 copies of the Turbo cache block, and
-# 5 copies of the ~12-line Cargo cache block (3 of them byte-identical inside a
-# single file). Copies drift silently — a cache key fixed in one lane and missed
-# in four others produces no error, just slower jobs nobody attributes.
-#
-# #637 — Cargo caches use restore on every ref and save only from `main`, so
-# PR branches stop re-saving multi-GB cargo-* duplicates into the 10 GB pool.
-# Turbo remote cache remains opt-in per job.
-#
-# The version is read from package.json at run time with `sed` rather than
-# `node -p`, because this action runs BEFORE any toolchain is installed — the
-# only thing guaranteed present is the shell. `shell: bash` resolves to git-bash
-# on Windows runners, where sed is also available.
-#
-# Requires actions/checkout to have run first (package.json must be on disk).
-# That is also why checkout cannot move in here: a composite action has to be on
-# disk already to be resolved, so `checkout` + `setup` is the irreducible
-# two-line prologue.
-#
-# Enforced repo-wide by scripts/lint-workflow-pins.mjs, which fails if any
-# workflow reintroduces a literal `bun-version:`.
+  Node from `.node-version` and Bun from package.json `packageManager` (then `bun install`), and optionally the Rust toolchain `rust-toolchain.toml` pins, with a Cargo cache. Requires actions/checkout to have run first.
 
 inputs:
-  working-directory:
-    description: Directory containing the package.json that carries `packageManager`.
-    required: false
-    default: "."
-  install:
-    description: Run `bun install --frozen-lockfile` after Bun is on PATH.
+  bun:
+    description: Install Node and Bun and run `bun install --frozen-lockfile`.
     required: false
     default: "true"
-  turbo-cache:
-    description: >-
-      Enable Turbo's native remote cache, backed by the GitHub Actions cache API via a local adapter (#538). Per-task and content-addressed, so unchanged tasks are re-read rather than re-saved as a fresh ~600 MiB blob.
+  rust:
+    description: Install the toolchain `rust-toolchain.toml` pins (channel and components).
     required: false
     default: "false"
+  rust-targets:
+    description: Extra rustup targets, space-separated.
+    required: false
+    default: ""
   cargo-cache:
     description: >-
-      Which Cargo cache preset to restore — `none`, or `v1` (the #1020 workspace at the repo root, whose target/ and cargo-deny binary the gate lanes reuse). Saves only on `main` (#637).
+      Cache key for `Swatinem/rust-cache` (registry, git deps, `~/.cargo/bin` and `target/`), or empty for no cache. Restored everywhere, saved only from `main`, so PR branches never fill the 10 GB cache pool (#637).
     required: false
-    default: "none"
-
-outputs:
-  bun-version:
-    description: The Bun version resolved from `packageManager`.
-    value: ${{ steps.resolve.outputs.version }}
+    default: ""
 
 runs:
   using: composite
   steps:
-    - id: resolve
+    - id: bun-version
+      if: inputs.bun == 'true'
       shell: bash
-      working-directory: ${{ inputs.working-directory }}
       run: |
         set -euo pipefail
-        if [ ! -f package.json ]; then
-          echo "::error::setup: no package.json in $(pwd) — did actions/checkout run first?"
-          exit 1
-        fi
         version="$(sed -n 's/.*"packageManager"[[:space:]]*:[[:space:]]*"bun@\([^"]*\)".*/\1/p' package.json | head -1)"
-        if [ -z "$version" ]; then
-          echo "::error::setup: package.json has no \"packageManager\": \"bun@<version>\" pin"
-          exit 1
-        fi
+        [ -n "$version" ] || { echo "::error::setup: package.json has no \"packageManager\": \"bun@<version>\" pin"; exit 1; }
         echo "version=${version}" >> "$GITHUB_OUTPUT"
-        echo "Bun pinned by packageManager: ${version}"
 
-    # A typo'd preset would otherwise match no `if:` and silently give the job
-    # no Cargo cache at all — a slow lane with a green check, the exact failure
-    # mode this action exists to remove.
-    - name: Validate cargo-cache preset
-      shell: bash
-      env:
-        PRESET: ${{ inputs.cargo-cache }}
-      run: |
-        set -euo pipefail
-        case "$PRESET" in
-          none | v1) ;;
-          *)
-            echo "::error::setup: cargo-cache must be none|v1, got '$PRESET'"
-            exit 1
-            ;;
-        esac
-
-    - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+    - if: inputs.bun == 'true'
+      uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
       with:
-        bun-version: ${{ steps.resolve.outputs.version }}
+        bun-version: ${{ steps.bun-version.outputs.version }}
 
-    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+    - if: inputs.bun == 'true'
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with:
-        node-version-file: ${{ inputs.working-directory }}/.node-version
-
-    - name: Turbo remote cache (GitHub-backed, granular)
-      if: inputs.turbo-cache == 'true'
-      uses: rharkor/caching-for-turbo@75f8ebf4a43d2c60b23bc2a27082cfea94ffdad9 # v2.5.0
-
-    # #637 Phase 0: restore always, save only from main. Per-ref cargo saves were
-    # ~2.7 GB of duplicate waste in the 10 GB Actions cache pool.
-    #
-    # #1020 — the v1 workspace at the repo root. `~/.cargo/bin` is in the path
-    # set so `cargo-deny` survives between gate runs; the install step in
-    # gate.yml is a no-op on a warm cache and a real install on a cold one.
-    # The key carries the CPU architecture: `~/.cargo/bin` holds native
-    # binaries, so an arm64 runner restoring an x86_64 entry (same OS, same
-    # lockfile) dies with `rustup: cannot execute binary file` (#1075).
-    - name: Restore Cargo (v1 workspace)
-      id: cargo-v1
-      if: inputs.cargo-cache == 'v1'
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: |
-          ~/.cargo/registry/index
-          ~/.cargo/registry/cache
-          ~/.cargo/git/db
-          ~/.cargo/bin
-          target
-        key: cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
-        restore-keys: |
-          cargo-v1-${{ runner.os }}-${{ runner.arch }}-
-
-    - name: Save Cargo (v1 workspace)
-      if: >
-        inputs.cargo-cache == 'v1' && github.ref == 'refs/heads/main' && steps.cargo-v1.outputs.cache-hit != 'true'
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: |
-          ~/.cargo/registry/index
-          ~/.cargo/registry/cache
-          ~/.cargo/git/db
-          ~/.cargo/bin
-          target
-        key: ${{ steps.cargo-v1.outputs.cache-primary-key }}
+        node-version-file: .node-version
 
     # No Bun cache: a cold `bun install` is faster than restoring one (#538).
-    # Retry transient registry/extract flakes without unpinning the lockfile.
-    - name: Install dependencies
-      if: inputs.install == 'true'
+    # Retries ride out transient registry flakes without unpinning the lockfile.
+    - if: inputs.bun == 'true'
       shell: bash
-      working-directory: ${{ inputs.working-directory }}
       run: |
         set -euo pipefail
-        attempt=1
-        until bun install --frozen-lockfile; do
-          if [ "$attempt" -ge 3 ]; then
-            exit 1
-          fi
+        for attempt in 1 2 3; do
+          bun install --frozen-lockfile && exit 0
           echo "::warning::bun install failed (attempt ${attempt}); retrying"
-          attempt=$((attempt + 1))
           sleep 5
         done
+        exit 1
+
+    # `rustup toolchain install` with no argument installs what
+    # `rust-toolchain.toml` names, components included, so the channel is
+    # stated in exactly one file. Every hosted image ships rustup; putting
+    # `~/.cargo/bin` on PATH covers the images that do not (#1075).
+    - if: inputs.rust == 'true'
+      shell: bash
+      env:
+        TARGETS: ${{ inputs.rust-targets }}
+      run: |
+        set -euo pipefail
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+        export PATH="$HOME/.cargo/bin:$PATH"
+        rustup toolchain install
+        if [ -n "$TARGETS" ]; then
+          # shellcheck disable=SC2086 # a space-separated list, split on purpose
+          rustup target add $TARGETS
+        fi
+        rustc --version
+
+    - if: inputs.cargo-cache != ''
+      uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      with:
+        shared-key: ${{ inputs.cargo-cache }}
+        save-if: ${{ github.ref == 'refs/heads/main' }}

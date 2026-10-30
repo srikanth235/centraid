@@ -2,22 +2,14 @@
 //!
 //! One step list per profile, each step named, timed, and buffered — output is
 //! printed only when the step fails, and every step prints exactly one line
-//! whatever it does. That posture is copied from `scripts/ci/run-gates.mjs`,
-//! which the repo already runs the TypeScript gates through, and from the one
-//! sentence in it that matters: **a silent gate is not a gate.** Every step
-//! runs even when an earlier one failed, so one pass tells you everything that
-//! is wrong.
+//! whatever it does: **a silent gate is not a gate.** Every step runs even when
+//! an earlier one failed, so one pass tells you everything that is wrong.
 //!
 //! There are exactly three verdicts per step and no fourth: `ok`, `FAIL`, and a
 //! loud `SKIP` that names the command which turns it into a real run. A guarded
-//! skip that could be mistaken for a pass is the failure mode
-//! `scripts/security/rust-supply-chain.mjs` was written to avoid, and the
-//! `deny` step below is the same posture: required in CI, loud-skipped locally.
-//!
-//! **Governance is not a step here.** `.governance/run.sh` runs in
-//! `governance.yml` on every PR as its own required check; duplicating it would
-//! charge the `pr` budget twice for one answer and give a failure two places to
-//! be reported from.
+//! skip that could be mistaken for a pass is the failure mode this runner is
+//! written to avoid: an external tool (`deny`, `buf`, `gitleaks`…) is required
+//! in CI and loud-skipped locally.
 //!
 //! Failure artifacts land under `target/xtask/<profile>/<step>/` — the command,
 //! its stdout and its stderr — and the step's one line names the directory.
@@ -37,9 +29,8 @@ use crate::ledger;
 use crate::rules;
 use crate::select;
 
-/// The four device cells (#1020 open question 13, D-1020-G4). Named here, in
-/// the runner, so `gate-nightly.yml`'s matrix and this file cannot disagree
-/// about which lanes exist.
+/// The four device cells (#1020 open question 13, D-1020-G4), each runnable
+/// alone as `cargo xtask gate --profile nightly --lane <name>`.
 pub const DEVICE_LANES: [&str; 4] = [
     "backup-measurement",
     "android-macrobenchmark",
@@ -54,9 +45,7 @@ pub const DEFAULT_HARDWARE: &str = "ci-linux-x64-4c";
 /// Everything a step needs to know about the run it is part of.
 pub struct Ctx {
     pub root: PathBuf,
-    /// `--lane <name>`: run only this step. The device cells of
-    /// `gate-nightly.yml` are four jobs over one profile, so each needs to name
-    /// the one lane it is (D-1020-G4).
+    /// `--lane <name>`: run only this step, or one device cell (D-1020-G4).
     pub lane: Option<String>,
     pub hardware: String,
     /// True under `CI`. A tool that is merely absent is a skip locally and an
@@ -175,11 +164,6 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         step("emitters", run_emitters),
         // NO DESKTOP OR EXTENSION STEPS: the only shell is mobile, and there is
         // no desktop shell and no browser extension (#1029 §6, R-1047-D3).
-        // THE CI-SHAPE GATES, re-homed out of `scripts/ci/**` (D-1020-G3).
-        // They are not v0's gates — they are gates about the shape of CI and
-        // about the supply chain — so taking `ci.yml` off `pull_request` had to
-        // move them rather than drop them.
-        step("advisory", run_advisory),
         step("lockfile", run_lockfile),
         // `prompt-injection` STOOD HERE (#1029 §1). It ran the #842 corpus
         // against the ASSISTANT's standing answer when content inside the
@@ -415,8 +399,7 @@ fn run_mobile_jvm(ctx: &Ctx) -> Result<Outcome> {
         return Ok(gradle);
     }
     // THE DRIFT CHECK. `bun` is already a gate dependency (`ts-static`), and
-    // the check is a regeneration followed by a clean-tree assertion, which is
-    // the same shape `lint:site-tokens` uses for the CSS side.
+    // the check is a regeneration followed by a clean-tree assertion.
     let emitted = process(
         ctx,
         "mobile-jvm",
@@ -590,30 +573,6 @@ pub fn run(profile: Profile, root: &Path, forced_cold: bool, lane: Option<String
 
     if !score(profile, tree, total.as_secs_f64(), budget, &ctx) {
         ok = false;
-    }
-
-    // THE PER-PR EVIDENCE ROW (D-1020-G3). Written on success as well as
-    // failure: a report that only has rows when something broke cannot show a
-    // lane going quiet, which is the failure mode `gate.yml` had — it wrote no
-    // evidence at all, so the per-PR test report had no row for the gate that
-    // decides a v1 pull request. Written BEFORE the verdict line so the file
-    // exists even when the verdict path below panics.
-    let rows: Vec<(&'static str, f64, &'static str, String)> = results
-        .iter()
-        .map(|(name, elapsed, outcome)| {
-            let (verdict, detail) = match outcome {
-                Outcome::Ok(detail) => ("ok", detail.clone()),
-                Outcome::Skipped(detail) => ("SKIP", detail.clone()),
-                Outcome::Failed(detail) => ("FAIL", detail.clone()),
-            };
-            (*name, elapsed.as_secs_f64(), verdict, detail)
-        })
-        .collect();
-    match ci::write_evidence(&ctx.artifacts, profile.name(), &hardware, &rows) {
-        Ok(path) => println!("  evidence {}", display_relative(root, Path::new(&path))),
-        // A gate that went red because its own report would not write is a gate
-        // reporting the wrong problem. Said out loud, not swallowed.
-        Err(error) => println!("  EVIDENCE could not be written: {error:#}"),
     }
 
     // The last line is the verdict, and the verdict includes the budget. Before
@@ -1536,40 +1495,24 @@ fn missing_binary(ctx: &Ctx, program: &str, covers: &str, install: &str) -> Outc
     ))
 }
 
-/// THE REPO'S OWN CI POLICY, which is neither v0's nor v1's.
-///
-/// #1020 rules v0's gates off pull requests, and these four are not v0 gates:
-/// they are standing checks over `.github/**` and `tests/path-filter-ledger.json`
-/// — that every third-party action is SHA-pinned, that every job is bounded,
-/// that exactly one workflow listens on open-PR events, that a new workflow
-/// carries an egress policy, and that no tracked directory merges unexercised.
-/// They ran in `ci.yml`'s `static` and `gates` jobs on every PR. Taking the
-/// `pull_request:` trigger off that file would have taken them off PRs too,
-/// which would be weakening a gate rather than moving one — so they move HERE,
-/// into the gate that replaced it. They are the gates that guard this very
-/// workflow, and they cost under a second.
+/// The shape of CI itself: every third-party action SHA-pinned
+/// ([`ci::action_pins`]), and actionlint over workflow syntax and expressions.
 fn run_ci_policy(ctx: &Ctx) -> Result<Outcome> {
-    const SCRIPTS: [&str; 3] = ["lint:workflow-pins", "lint:ci-egress", "lint:path-filters"];
-    for script in SCRIPTS {
-        let outcome = process(ctx, "ci-policy", "bun", &["run", script])?;
-        if let Outcome::Failed(detail) = outcome {
-            return Ok(Outcome::Failed(detail));
-        }
+    let pins = verdict(ctx, "ci-policy", ci::action_pins(&ctx.root)?)?;
+    if !matches!(pins, Outcome::Ok(_)) {
+        return Ok(pins);
     }
-    // actionlint validates syntax and expressions, which the three scripts above
-    // deliberately do not model. `ci.yml` runs it through a pinned container
-    // action; here it is a pinned binary the workflow installs.
     let linted = external(
         ctx,
-        "actionlint",
+        "ci-policy",
         "actionlint",
         &["-color"],
         "workflow syntax and expressions",
         "install the pinned release from github.com/rhysd/actionlint (gate.yml does)",
     )?;
-    Ok(match linted {
-        Outcome::Ok(_) => Outcome::Ok(format!("{} + actionlint", SCRIPTS.join(", "))),
-        other => other,
+    Ok(match (pins, linted) {
+        (Outcome::Ok(pinned), Outcome::Ok(_)) => Outcome::Ok(format!("{pinned} + actionlint")),
+        (_, other) => other,
     })
 }
 
@@ -1809,35 +1752,10 @@ fn run_release_build(ctx: &Ctx) -> Result<Outcome> {
     Ok(outcome)
 }
 
-/// The tree's TypeScript, through the repo's own script.
-///
-/// A tree with no `.ts` file under the listed roots skips with that reason;
-/// otherwise the step runs `bun run check:push:static`.
+/// The TypeScript workspaces (`packages/design`, `packages/test-kit`) and the
+/// release scripts: format, lint, typecheck and tests, through `bun run check`.
 fn run_ts_static(ctx: &Ctx) -> Result<Outcome> {
-    const V1_DIRS: [&str; 3] = ["crates", "contracts", "mobile"];
-    const EXTENSIONS: [&str; 4] = ["ts", "tsx", "mts", "cts"];
-    let mut found = Vec::new();
-    for dir in V1_DIRS {
-        let path = ctx.root.join(dir);
-        if !path.is_dir() {
-            continue;
-        }
-        for extension in EXTENSIONS {
-            found.extend(rules::source_files(&path, extension));
-        }
-    }
-    if found.is_empty() {
-        return Ok(Outcome::Skipped(
-            "no TypeScript under crates/, contracts/ or mobile/ — `bun run check:push:static` runs here the moment there is (#1020)"
-                .to_owned(),
-        ));
-    }
-    process(ctx, "ts-static", "bun", &["run", "check:push:static"])
-}
-
-/// The advisory register (D-1020-G3). See `crate::ci::advisory`.
-fn run_advisory(ctx: &Ctx) -> Result<Outcome> {
-    verdict(ctx, "advisory", ci::advisory(&ctx.root, &ci::today_utc())?)
+    process(ctx, "ts-static", "bun", &["run", "check"])
 }
 
 /// Both lockfiles (D-1020-G3). See `crate::ci::lockfile`.
@@ -1848,7 +1766,7 @@ fn run_lockfile(ctx: &Ctx) -> Result<Outcome> {
 /// THE DEVICE LANES, with a RUNNER CONTRACT rather than a bare skip
 /// (D-1020-G4).
 ///
-/// Four lanes, each a cell of `gate-nightly.yml` that runs **only** on a runner
+/// Four lanes, each runnable **only** on a runner
 /// carrying the `[self-hosted, macos, devices]` labels with one iPhone and one
 /// Android attached. On a hosted runner they are a loud `Skipped` naming open
 /// question 13 — never a pass, and never a test that reads green.
@@ -1903,10 +1821,8 @@ fn run_device_lanes(ctx: &Ctx) -> Result<Outcome> {
     }
     // THE FOUR BODIES (#1020 wave 3 lane E, `contracts/handoff/E/device-lane-bodies.md`).
     //
-    // In Rust rather than as four `run:` blocks in `gate-nightly.yml`, because
-    // the workflow's cell is already `cargo xtask gate --lane <name>` and a
-    // second copy of each body in YAML would be a second thing to keep true.
-    // An owner with a phone on a laptop can run the same lane the same way.
+    // In Rust rather than in a workflow, so an owner with a phone on a laptop
+    // runs the same lane the same way: `cargo xtask gate --lane <name>`.
     let mut outcomes: Vec<(String, Outcome)> = Vec::new();
     for lane in &lanes {
         let outcome = match *lane {
@@ -2416,12 +2332,7 @@ mod tests {
         assert_eq!(&release[..nightly.len()], &nightly[..]);
     }
 
-    /// The repo-wide CI policy and security lanes are not v0's gates, so taking
-    /// ci.yml off `pull_request` must not take them off pull requests. They are
-    /// steps of the gate that replaced it, and this test is what says so. Two of
-    /// them are red on inherited tree state (D-1020-B1) and that is not a reason
-    /// for them to be absent — a gate that stops reporting because its target is
-    /// red today is a weakening.
+    /// The CI-policy and supply-chain steps run on every pull request.
     #[test]
     fn pr_carries_the_ci_policy_and_security_steps() {
         let pr = names(Profile::Pr);

@@ -8,8 +8,8 @@
  * exercised — the release would be green, because every release lane BUILDS the
  * tree rather than testing it.
  *
- * Rung 3 (`candidate.yml`) publishes `refs/candidates/latest` on every green
- * promotion. This is the guard that reads it, and it is enforced in three
+ * `nightly.yml` moves `refs/candidates/latest` on every green night.
+ * This is the guard that reads it, and it is enforced in three
  * places so the answer arrives as early as possible:
  *
  *   prepare.mjs               before anything is versioned — the useful one
@@ -21,7 +21,7 @@
  */
 import { execFileSync } from "node:child_process";
 
-/** The ref rung 3 moves on every green promotion. */
+/** The ref `nightly.yml` moves on every green night. */
 export const CANDIDATE_REF = "refs/candidates/latest";
 
 /**
@@ -66,12 +66,12 @@ export function judgeCandidate({ head, candidate, allowUncandidated, reason }) {
   if (!candidate) {
     return {
       ok: false,
-      message: `release-guard: no candidate has ever been promoted, so nothing is releasable yet. \`candidate.yml\` moves ${CANDIDATE_REF} on every green push to main; wait for one, or pass --allow-uncandidated with a reason.`,
+      message: `release-guard: no candidate has ever been promoted, so nothing is releasable yet. \`nightly.yml\` moves ${CANDIDATE_REF} on every green night; wait for one, or pass --allow-uncandidated with a reason.`,
     };
   }
   return {
     ok: false,
-    message: `release-guard: HEAD is ${head}, but the promoted candidate is ${candidate}. Releases ship builds rung 3 promoted and rungs 4-5 tested — otherwise the release lanes only prove the tree BUILDS, which they would have done for a broken commit too. Release the candidate, wait for HEAD to be promoted, or pass --allow-uncandidated with a reason.`,
+    message: `release-guard: HEAD is ${head}, but the promoted candidate is ${candidate}. Releases ship builds a green nightly promoted — otherwise the release lanes only prove the tree BUILDS, which they would have done for a broken commit too. Release the candidate, wait for HEAD to be promoted, or pass --allow-uncandidated with a reason.`,
   };
 }
 

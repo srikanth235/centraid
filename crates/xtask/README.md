@@ -19,7 +19,7 @@ cargo xtask artifact-key --triple <t>  # the prebuilt core's cache key
 
 ## The tree a run scans is **the current directory's**
 
-Every path-based rule — `sql-confinement`, `no-listening-socket`, `abi-five-symbols`, `ts-static`, `commonmain-no-platform-import` — reads files under one root, and that root is resolved when the binary RUNS: `git rev-parse --show-toplevel` from the current directory, then a walk up for the `CONSTITUTION.md` + `Cargo.toml` pair only the root carries, then the compile-time manifest path with a warning on stderr.
+Every path-based rule — `sql-confinement`, `no-listening-socket`, `abi-five-symbols`, `ts-static`, `commonmain-no-platform-import` — reads files under one root, and that root is resolved when the binary RUNS: `git rev-parse --show-toplevel` from the current directory, then a walk up for the `rust-toolchain.toml` + `Cargo.toml` pair only the root carries, then the compile-time manifest path with a warning on stderr.
 
 A root baked in at compile time (`env!("CARGO_MANIFEST_DIR")`) would be wrong under a shared `CARGO_TARGET_DIR`: the cached binary belongs to whichever worktree built it last, the gate scans **that** worktree, and the failure direction is _reports clean_ ([#1020](https://github.com/srikanth235/centraid/issues/1020)). `cargo xtask repo-root` prints the answer in one line, and `crates/xtask/tests/repo_root.rs` runs the compiled binary from a second checkout and asserts it reports that checkout.
 
@@ -33,11 +33,11 @@ Each of `local`, `pr`, `nightly` and `release` is a **superset** of the one befo
 
 | Profile | Steps it adds | Budget | Where it runs |
 | --- | --- | --- | --- |
-| `local` | `fmt`, `clippy`, `test` (**only the crates the change touches, and their dependents** — see below), `restore-drill`, `rules`, `doc-links`, `ledgers` | < 120 s **warm**, < 3200 s **cold** | the pre-push loop, by hand |
-| `pr` | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static`, `emitters`, `advisory`, `lockfile`, `call-budget`, `search-budget`, `fault-door` — and its `test` step runs the **whole** workspace | < 1500 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
-| `nightly` | `device-lanes` | unbounded | `.github/workflows/gate-nightly.yml`, 05:30 UTC |
+| `local` | `fmt`, `clippy`, `test` (**only the crates the change touches, and their dependents** — see below), `restore-drill`, `rules`, `doc-links`, `ledgers` | < 120 s **warm**, < 3200 s **cold** | by hand, before a push |
+| `pr` | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static`, `emitters`, `lockfile`, `call-budget`, `search-budget`, `fault-door` — and its `test` step runs the **whole** workspace | < 1500 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
+| `nightly` | `device-lanes` | unbounded | `.github/workflows/nightly.yml`, 05:30 UTC |
 | `release` | `artifact-identity`, `prebuilt-core-required` (and `restore-drill`, inherited from `local`) | unbounded | the release workflows |
-| `mobile-jvm` | `mobile-jvm` — one step, not a superset of anything | < 420 s | `.github/workflows/gate-nightly.yml`; on demand from `mobile/` |
+| `mobile-jvm` | `mobile-jvm` — one step, not a superset of anything | < 420 s | `.github/workflows/nightly.yml`; on demand from `mobile/` |
 
 **`local`'s `test` step runs the crates the change touches, and the crates that depend on them; every other profile runs the whole workspace** (hand-off 6.5, the owner's ruling of 2026-10-15). The loop took 290 to 500 s against its 120 s budget and `cargo nextest run --workspace` was nearly all of it, so the step now asks [`src/select.rs`](src/select.rs) which crates a change can affect:
 
@@ -83,25 +83,26 @@ Three verdicts, no fourth:
   FAIL  test                1.4s  `cargo test --workspace` exited 101 — … · artifact: target/xtask/pr/test
 ```
 
-Output is buffered and printed only on failure; **every step prints one line whatever it does**, because a silent gate is not a gate (the same posture as [`scripts/ci/run-gates.mjs`](../../scripts/ci/run-gates.mjs), which the TypeScript static gates run through). Every step runs even when an earlier one failed, so one pass tells you everything that is wrong.
+Output is buffered and printed only on failure; **every step prints one line whatever it does**, because a silent gate is not a gate. Every step runs even when an earlier one failed, so one pass tells you everything that is wrong.
 
 ### Failure artifacts
 
-A failing step writes its whole output under `target/xtask/<profile>/<step>/` — `command.txt`, `stdout.log`, `stderr.log`, or `findings.txt` for the two internal steps — and the step's one line names the directory. Both gate workflows upload `target/xtask/**` on failure.
+A failing step writes its whole output under `target/xtask/<profile>/<step>/` — `command.txt`, `stdout.log`, `stderr.log`, or `findings.txt` for the two internal steps — and the step's one line names the directory. `gate.yml` and `nightly.yml` upload `target/xtask/**` on failure.
 
 ### The `deny` step's posture
 
-`cargo-deny` is a separate binary. When it is absent the step **loud-skips with the install command locally** and **fails in CI**, where the workflow installs it and a missing binary is therefore an infrastructure failure. That is the same contract [`scripts/security/rust-supply-chain.mjs`](../../scripts/security/rust-supply-chain.mjs) states, and it exists because a guarded skip that could be mistaken for a pass is worse than no lane at all. The policy is the repo's one shared [`deny.toml`](../../deny.toml); there is no per-crate copy to drift.
+`cargo-deny` is a separate binary. When it is absent the step **loud-skips with the install command locally** and **fails in CI**, where the workflow installs it and a missing binary is therefore an infrastructure failure. The contract exists because a guarded skip that could be mistaken for a pass is worse than no lane at all. The policy is the repo's one shared [`deny.toml`](../../deny.toml); there is no per-crate copy to drift.
 
 `cargo nextest` gets the same treatment in the other direction: `test` uses `cargo nextest run --workspace` (with the filter above on `local`) when the binary is on PATH and `cargo test --workspace` when it is not, and the step's line says which one ran. nextest never runs doctests, so its branch is followed by `cargo test --workspace --doc` over the libraries it just built: the two branches run the same tests, and a doctest written tomorrow is not silently skipped because the runner changed. `gate.yml` installs a pinned, checksum-verified nextest release binary, because it runs the ~150 test binaries concurrently rather than back to back — the one part of the `test` step that is not compilation ([#1047](https://github.com/srikanth235/centraid/issues/1047)).
 
 ### The `ci-policy`, `secrets` and `osv` steps
 
-Standing checks over `.github/**`, `tests/path-filter-ledger.json`, the working tree and `bun.lock`, run on every pull request.
+Standing checks over `.github/**`, the working tree and the lockfiles, run on every pull request.
 
 | Step | What it runs | Verdict today |
 | --- | --- | --- |
-| `ci-policy` | `lint:workflow-pins`, `lint:ci-egress`, `lint:path-filters`, `actionlint` — the gates that guard this very workflow | green, under a second |
+| `ci-policy` | every third-party `uses:` under `.github/` pinned to a 40-hex commit SHA (`ci::action_pins`), then `actionlint` | green, under a second |
+| `lockfile` | `bun.lock`: no `http:` package URL, integrity markers present; `Cargo.lock`: every registry `[[package]]` pinned by `checksum` and sourced over TLS (`ci::lockfile`) | green |
 | `secrets` | `gitleaks detect` over the working tree with `.gitleaks.toml` (#671); findings in files git does not track are reported and dropped | no inherited finding recorded |
 | `osv` | `scripts/ci/osv-lockfile-scan.mjs`, CRITICAL-only (#671) | **inherited red** |
 
@@ -115,29 +116,15 @@ Standing checks over `.github/**`, `tests/path-filter-ledger.json`, the working 
 
 Every relative link and in-repo anchor in the repository's markdown resolves — the statute for "broken internal links are bugs" (Q-1005-1). It is a `local` step, so every profile carries it, and it costs about a third of a second: no network, so `http:`, `https:`, `mailto:` and every other scheme are skipped. It checks inline links and images, reference definitions, and `href`/`src` in embedded HTML, outside fenced code, inline code and HTML comments; the file part must be a file or directory **git knows about** (a file git ignores resolves here and 404s everywhere else, and a case difference resolves on macOS and breaks on Linux), and a `#fragment` into a markdown file must be a heading's GitHub slug or an explicit `id`/`name`. Line anchors (`#L10`) and fragments into other file types are skipped.
 
-What it does not read is only what the repository already forbids editing, so a finding there could never be fixed: `doc-integrity`'s frozen set, **read from its pack row** (`.governance/law/packs/governance-kit-audit.json`: `receipts/*.md`, `QUALITY.md` § Resolved, `CONSTITUTION.md` § Evolution Log) rather than copied, and the vendored kit under `.governance/packs/`. Links _into_ a frozen section are still checked, and the step's line names every skip. There is no allowlist of findings and no narration tripwire: "history is cited, never narrated" is a judgement a scanner cannot make, and one that tried would teach authors to phrase around it. The rule is the module doc of [`src/doc_links.rs`](src/doc_links.rs); `cargo xtask doc-links` runs it alone.
+What it does not read is only the append-only records, where a finding could never be fixed: `receipts/*.md` and `QUALITY.md` § Resolved. Links _into_ a frozen section are still checked, and the step's line names every skip. There is no allowlist of findings and no narration tripwire: "history is cited, never narrated" is a judgement a scanner cannot make, and one that tried would teach authors to phrase around it. The rule is the module doc of [`src/doc_links.rs`](src/doc_links.rs); `cargo xtask doc-links` runs it alone.
 
 ### The `ts-static` step
 
-When any `.ts`/`.tsx`/`.mts`/`.cts` file exists under `crates/`, `contracts/` or `mobile/` — which `contracts/tools/` makes true — the step runs `bun run check:push:static` (format check, lint and affected typecheck through `scripts/ci/run-gates.mjs`). With none, it loud-skips and names that command.
-
-### Governance is NOT a step here
-
-`.governance/run.sh` already runs in [`governance.yml`](../../.github/workflows/governance.yml) on every pull request as its own required check. Duplicating it inside the `pr` profile would charge the budget twice for one answer and give a single failure two places to be reported from. The law is enforced; it is just not enforced from here.
+`bun run check`: `oxfmt --check` and `oxlint` over the tree, then `tsc` and vitest in each workspace under `packages/`, then the release scripts' tests. The pre-commit hook runs the format and lint halves over the staged files.
 
 ## Required checks
 
-Branch protection's required checks are **`gate`**, **`engine`** and **`dependency-review`**, the three jobs in [`gate.yml`](../../.github/workflows/gate.yml). Branch protection is configured outside the repository, the same way the code-owner review requirement is ([docs/dev-environment.md](../../docs/dev-environment.md#the-local-gate-loop)); a required check that never reports blocks every pull request, which is the failure #557 was written about, so renaming any of them is an owner change to branch protection in the same breath.
-
-## The steps re-homed from `scripts/ci/**` (#1020, D-1020-G3)
-
-Gates about the shape of CI and about the supply chain rather than the product. Each keeps the rule of the script it names.
-
-| Step | Profile | From | What it holds |
-| --- | --- | --- | --- |
-| `advisory` | `pr` | `scripts/ci/advisory-expiry.mjs` | a step whose NAME declares it advisory carries an owner, an issue and an unexpired `revisitBy`. A past date fails; a row naming a step that no longer exists fails too. Rows live in `contracts/ledgers/advisory.json` |
-| `lockfile` | `pr` | `scripts/ci/lockfile-lint.mjs` | no `http:` package URL and integrity markers present in `bun.lock`; every registry `[[package]]` in `Cargo.lock` pinned by `checksum` and sourced over TLS. A workspace member with no `source` is not a finding — its bytes are in the tree |
-| the evidence row | every profile | `scripts/test-report/write-evidence.mjs` | one row per step in `target/xtask/<profile>/evidence.json`, written on success as well as failure, so the per-PR test report has a row for the gate that decides a pull request |
+Branch protection's required checks are **`gate`**, **`engine`**, **`native-python`**, **`dependency-review`** and **`pr-title`**, the jobs in [`gate.yml`](../../.github/workflows/gate.yml). Branch protection is configured outside the repository, the same way the code-owner review requirement is ([docs/dev-environment.md](../../docs/dev-environment.md#the-local-gate-loop)); a required check that never reports blocks every pull request, which is the failure #557 was written about, so renaming any of them is an owner change to branch protection in the same breath.
 
 ## `cargo xtask artifact-key` (#1020, D-1020-G2)
 
@@ -191,11 +178,11 @@ Three files under [`contracts/ledgers/`](../../contracts/ledgers), all down-only
 | `compile-time.json` | clean check, incremental check, single-crate test, release build, the cold `local` profile, and a null `kotlinNativeLinkSeconds` |
 | `library-size.json` | the prebuilt core's stripped size per ABI. A `null` gates nothing and says so; `x86_64-unknown-linux-gnu` carries the first measured artifact |
 
-The comparison follows [`scripts/check-ledgers.mjs`](../../scripts/check-ledgers.mjs): the base copy is read with `git show <merge-base>:<path>`, and "the base has no such file" means the entry is new and passes — without that fallback the very commit that introduces a ledger could not pass its own gate. A number that rose is a finding, and so is a number that was **removed**, because deleting a ceiling is the widest possible widen.
+The base copy is read with `git show <merge-base>:<path>`, and "the base has no such file" means the entry is new and passes — without that fallback the very commit that introduces a ledger could not pass its own gate. A number that rose is a finding, and so is a number that was **removed**, because deleting a ceiling is the widest possible widen.
 
 What each ledger stores is a ceiling with **stated headroom**, not the last measurement. A ceiling pinned to today's number would fail the first time a crate landed, and the author would learn to widen ledgers instead of fixing loops. Each entry's `headroom` quotes its measurement, the state of the tree it was taken on, and the multiplier that produced the ceiling.
 
-**There is no waiver, deviation or override path here, and adding one is not how a number moves.** `scripts/check-ledgers.mjs` has an `approvedDeviation` mechanism for the `tests/` ledgers; these have none, because a waiver added before the first widen is asked for is an invitation. The numbers rose once, on 2026-09-12, under an owner ruling quoted per key — not through a mechanism — and the ratchet code is exactly as strict as it was: `ledger.rs`'s `a_risen_number_is_a_finding` still fails a raise against an existing base copy. That re-base passed the `ledgers` step only because `origin/main` carries no `contracts/ledgers/` yet, so the base copy is `None` and every entry reads as new. Once #1020 merges, these numbers are the baseline and they only fall.
+**There is no waiver, deviation or override path here, and adding one is not how a number moves**: a waiver added before the first widen is asked for is an invitation. The numbers rose once, on 2026-09-12, under an owner ruling quoted per key — not through a mechanism — and the ratchet code is exactly as strict as it was: `ledger.rs`'s `a_risen_number_is_a_finding` still fails a raise against an existing base copy. That re-base passed the `ledgers` step only because `origin/main` carries no `contracts/ledgers/` yet, so the base copy is `None` and every entry reads as new. Once #1020 merges, these numbers are the baseline and they only fall.
 
 **A gate run never writes a ledger.** `cargo xtask measure --write` is the only writer, and it only ever _lowers_ `budgetSeconds`, printing one note per key saying what it did. A ratchet that records whatever the last run cost is a log.
 

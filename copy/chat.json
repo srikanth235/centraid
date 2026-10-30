@@ -1,5 +1,5 @@
 {
-  "$comment": "The assistant's own turn sentences (`SAID_*`): what a step said, filled from its effect. `crates/assist/src/native_turn/words.rs` compiles this file in and owns the key names; `scripts/lint-copy.mjs` holds it to DESIGN.md's Copy rules. The chat screen's own sentences are `crates/screens/src/strings/chat.rs` (#1135).",
+  "$comment": "The assistant's own turn sentences (`SAID_*`): what a step said, filled from its effect. `crates/assist/src/native_turn/words.rs` compiles this file in and owns the key names. The chat screen's own sentences are `crates/screens/src/strings/chat.rs` (#1135).",
   "app": "chat",
   "strings": {
     "SAID_APPLIED": "Done.",

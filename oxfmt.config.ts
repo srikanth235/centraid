@@ -4,14 +4,10 @@ import ultracite from "ultracite/oxfmt";
 // Ultracite supplies the reviewed formatting baseline. Oxfmt is the sole style
 // owner and this file is the repository's only formatter configuration.
 //
-// In addition to the preset's standard generated-output exclusions, these
-// entries exist because oxfmt must not rewrite them:
-//   - `.governance/**` and the kit-managed CI workflow are owned by
-//     governance-kit and re-stamped on every `kit update`; reformatting them
-//     diverges from upstream and re-breaks CI (this happened once already on
-//     the 0.2 -> 0.3 update).
-//   - the rest are generator output whose byte-exactness is asserted elsewhere,
-//     so reformatting them just re-breaks `format:check` on regeneration.
+// In addition to the preset's standard generated-output exclusions, the
+// entries below are append-only records or generator output whose
+// byte-exactness is asserted elsewhere, so reformatting them would rewrite
+// history or re-break `format:check` on regeneration.
 const base = ultracite;
 
 export default defineConfig({
@@ -43,13 +39,9 @@ export default defineConfig({
     ...base.ignorePatterns,
     // Xcode owns asset catalog metadata.
     "**/*.xcassets/**/Contents.json",
-    // governance-kit owns this vendored tree and workflow byte-for-byte.
-    ".governance/**",
-    ".github/workflows/governance.yml",
-    // Governance freezes historical receipts/ledgers byte-for-byte and freezes
-    // historical sections in the constitution and quality ledger.
+    // Receipts and the quality ledger are append-only records; a reformat
+    // would rewrite history.
     "receipts/**",
-    "CONSTITUTION.md",
     "QUALITY.md",
     // Generator-owned outputs with regeneration checks elsewhere in the repo.
     // The public site's token sheet is lowered from @centraid/design by
@@ -63,11 +55,6 @@ export default defineConfig({
     // is recorded in eval/FROZEN.md and `eval/build_sets.py check` compares it,
     // so a reformat is a new set version, not a style fix.
     "experiments/toolchat/native/eval/sets/**",
-    // The nightly report's sheet (#853) is the same lowering from the same
-    // emitter, gated the same way — one file rather than a per-surface
-    // `assets/` copy, because the report is published at two depths and
-    // inlines its faces. See docs/design-machinery.md#the-nightly-test-report.
-    "scripts/test-report/report-tokens.css",
     "scripts/docs-site/src/content/**",
   ],
 });

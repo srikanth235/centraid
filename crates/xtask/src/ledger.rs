@@ -7,8 +7,7 @@
 //! wave 3. v0's ledgers live under `tests/` and retire with v0; these are v1's,
 //! seeded from wave 1 measurements.
 //!
-//! The comparison mirrors `scripts/check-ledgers.mjs`: read the base copy with
-//! `git show <merge-base>:<path>`, and treat "the base has no such file" as a
+//! The comparison reads the base copy with `git show <merge-base>:<path>`, and treat "the base has no such file" as a
 //! new entry that passes, because otherwise the very commit that introduces a
 //! ledger could not pass its own gate. What is NOT mirrored is the waiver
 //! mechanism — these ledgers have no `approvedDeviation` yet, so there is
@@ -30,7 +29,7 @@ pub const LEDGER_DIR: &str = "contracts/ledgers";
 pub const BUDGETS: &str = "contracts/ledgers/gate-budgets.json";
 pub const COMPILE_TIME: &str = "contracts/ledgers/compile-time.json";
 
-/// The refs `check-ledgers.mjs` tries, in the same order.
+/// The refs the merge-base is taken against, in order.
 const BASE_CANDIDATES: [&str; 4] = ["origin/main", "main", "origin/master", "master"];
 
 pub struct LedgerVerdict {

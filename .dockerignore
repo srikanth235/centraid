@@ -4,7 +4,6 @@
 .git
 .githooks
 .github
-.governance
 .claude
 .agents
 .vscode
@@ -51,11 +50,8 @@ dist
 # Large / non-runtime docs and ledgers
 *.md
 !packages/server/README.md
-COSTS.md
-STEERING.md
 QUALITY.md
 CHANGELOG.md
-CONSTITUTION.md
 ARCHITECTURE.md
 CONTRIBUTING.md
 AGENTS.md

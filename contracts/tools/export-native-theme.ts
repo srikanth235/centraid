@@ -160,7 +160,7 @@ const resolvedFaces = Object.entries(FACES).map(([family, faces]) => ({
   faces: faces.map((face) => {
     const source = path.join(fontSource, face.file);
     // A BYTE COPY AND NOTHING ELSE. `git diff --exit-code` after regeneration
-    // is the gate (CONSTITUTION, and the banner at the top of this file), so a
+    // is the gate (the banner at the top of this file), so a
     // re-emit that rewrote, subsetted or re-timestamped the file would red a
     // clean tree. `copyFileSync` is deterministic; anything cleverer is not.
     copyFileSync(source, path.join(iosFonts, face.file));

@@ -1,47 +1,20 @@
 name: lane-prebuilt-core
 
-# THE PREBUILT CORE LANE ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-G2).
+# The prebuilt core (D-1020-G2): the `centraid` binary (and `centraid-gateway`
+# beside it on Linux and macOS, #1080) for six triples, the four Android ABIs
+# of `centraid-core-ffi`, and its iOS XCFramework. Called by `nightly.yml`
+# (binaries only, to catch cross-compilation breaks) and by `release.yml`.
 #
-# A `workflow_call` lane, not an independently-triggered workflow: `gate.yml`
-# invokes it on pushes to `main`, `release.yml` invokes it on a tag, and nothing
-# else may. Two rules of this repository make that the only available shape —
-# `gate.yml` is the single `pull_request` entry point and `release.yml` is the
-# single `push: tags` listener (`scripts/lint-workflow-pins.mjs` rules 5 and 6).
+# Two mechanisms keep "which build is this" answerable:
+#   * the KEY (`cargo xtask artifact-key`, crates/xtask/src/artifact.rs) is
+#     computed from sources before the build;
+#   * the IDENTITY STAMP is baked into the artifact by `crates/core/build.rs`
+#     and read back out of the built binary below, so a build that dropped it
+#     cannot publish.
 #
-# WHY A PREBUILT CORE AT ALL. Three shells link this artifact and none of them
-# compiles Rust: the KMP module takes an AAR and an XCFramework, the Electron
-# seat spawns a binary, the extension talks to a native host. If each shell
-# built its own core, "it works on my machine" would be four different cores.
-#
-# THE TWO MECHANISMS, and they are not the same one twice:
-#
-#   * THE KEY (`cargo xtask artifact-key`) answers *is the artifact in the cache
-#     the one this tree would produce?* It is computed from sources BEFORE a
-#     build: crates/, contracts/ (minus the ledgers), the toolchain channel, the
-#     triple, the features, the profile, and the resolved dependency graph. The
-#     exact rule, with the `Cargo.lock` half stated both ways, is in
-#     `crates/xtask/src/artifact.rs`.
-#   * THE IDENTITY STAMP answers *is the artifact a shell just loaded the one
-#     this tree produced?* It is baked INTO the artifact during the build
-#     (`crates/core/build.rs`) and checked at load
-#     (`crates/core/src/identity.rs`'s `require_digest`) and at install
-#     (`deploy/vps/install.sh`).
-#
-# A SYMBOL FILE BESIDE EVERY ARTIFACT. There is no precedent in this repository
-# for publishing one — nothing in v0 ships a dSYM or an NDK `symbols.zip`
-# (census §G4) — so the steps are written here per platform: `objcopy
-# --only-keep-debug` on Linux, `dsymutil` on macOS, the `.pdb` cargo already
-# emits on Windows, all three produced by `split-debuginfo = "packed"`. Neither
-# optimised profile `strip`s (see the comment on `[profile.release]` and
-# `[profile.dist]` in the root `Cargo.toml`): stripping happens here, after the
-# symbol file has been collected, so the shipped binary is stripped AND the
-# symbols exist. This lane builds `--profile dist` — `release` plus thin LTO —
-# because that is what a tag publishes.
-#
-# `required: true` TARGETS GATE THE PUBLISH, the rest do not — the same three
-# that v0's native matrix requires before it publishes
-# (`scripts/gateway-npm/native-platforms.mjs:15`–`:56`): Linux x64, macOS arm64,
-# Windows x64.
+# Symbols: `split-debuginfo = "packed"` makes cargo write one symbol file
+# beside each binary (`.dwp`, `.dSYM`, `.pdb`); it is collected FIRST, then the
+# binary is stripped. `--profile dist` is `release` plus thin LTO.
 
 on:
   workflow_call:
@@ -52,8 +25,7 @@ on:
         default: ""
         type: string
       binary-only:
-        description: >-
-          Build only the `centraid` binary targets and skip the mobile FFI artifacts. `gate.yml` passes true on a push to `main`, where the point is to keep the cache warm rather than to produce a release.
+        description: Build only the `centraid` binary triples, not the mobile FFI artifacts.
         required: false
         default: false
         type: boolean
@@ -62,130 +34,63 @@ permissions:
   contents: read
 
 jobs:
-  # WHAT EXISTS TO BUILD. `crates/core-ffi` is wave 2 lane D2's crate and the
-  # mobile artifacts cannot be built before it is on the branch. This job says
-  # so out loud in the run summary rather than letting four matrix legs fail with
-  # "no such package", which reads like an infrastructure fault.
-  probe:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      ffi: ${{ steps.look.outputs.ffi }}
-    steps:
-      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
-        with:
-          # Same learning posture and the same reason as gate.yml: the allowlist
-          # for a lane that talks to crates.io and the sparse index has not been
-          # learned yet, and a job that dies on an unlisted endpoint blocks a
-          # release.
-          egress-policy: audit
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.ref || github.ref }}
-      - id: look
-        run: |
-          set -euo pipefail
-          if [ -f crates/core-ffi/Cargo.toml ]; then
-            echo "ffi=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ffi=false" >> "$GITHUB_OUTPUT"
-            {
-              echo "### prebuilt-core: NO FFI ARTIFACTS WERE BUILT"
-              echo
-              echo "\`crates/core-ffi\` is not on this ref, so the four Android ABIs and the"
-              echo "iOS XCFramework were skipped. They are wave 2 lane D2's crate. This is a"
-              echo "LOUD SKIP, not a pass: no mobile artifact was published by this run, and"
-              echo "no shell can have checked one it did not receive."
-            } >> "$GITHUB_STEP_SUMMARY"
-            echo "::warning title=No FFI artifacts::crates/core-ffi is absent on this ref; the Android and iOS legs were skipped."
-          fi
-
-  # THE BINARY, one leg per triple. The artifact NAME is the triple, which is the
-  # rule v0 already follows (`centraid-tunnel-native.${platform}-${arch}.node`):
-  # the name is the key, so a leg that published the wrong file is caught by the
-  # consumer looking for its own triple rather than by a reviewer.
   binary:
-    needs: [probe]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     strategy:
-      # One red triple must not cancel the other five: the run summary is the
-      # only place the required/optional split is visible, and a cancelled leg
-      # is red with no evidence (gate.yml's backstop comment, #557).
+      # One red triple must not cancel the other five.
       fail-fast: false
       matrix:
-        # `gateway` says whether the leg also ships `centraid-gateway` (#1080):
-        # the member's laptop or VPS runs it, and `centraid-gateway install`
-        # writes a systemd or launchd unit, so the Linux and macOS tarballs
-        # carry it beside `centraid`. Windows has no unit writer yet, so its
-        # tarball carries the operator binary alone until that lands.
+        # `required` triples gate the publish (`prebuilt-core-required`).
+        # `gateway`: the leg also ships `centraid-gateway`, whose `install`
+        # writes a systemd or launchd unit; Windows has no unit writer yet.
         include:
-          - triple: x86_64-unknown-linux-gnu
-            runner: ubuntu-latest
-            required: true
-            gateway: true
-          - triple: aarch64-unknown-linux-gnu
-            runner: ubuntu-24.04-arm
-            required: false
-            gateway: true
-          - triple: aarch64-apple-darwin
-            runner: macos-latest
-            required: true
-            gateway: true
-          - triple: x86_64-apple-darwin
-            runner: macos-15-intel
-            required: false
-            gateway: true
-          - triple: x86_64-pc-windows-msvc
-            runner: windows-latest
-            required: true
-            gateway: false
-          - triple: aarch64-pc-windows-msvc
-            runner: windows-11-arm
-            required: false
-            gateway: false
+          - {
+              triple: x86_64-unknown-linux-gnu,
+              runner: ubuntu-latest,
+              required: true,
+              gateway: true,
+            }
+          - {
+              triple: aarch64-unknown-linux-gnu,
+              runner: ubuntu-24.04-arm,
+              required: false,
+              gateway: true,
+            }
+          - {
+              triple: aarch64-apple-darwin,
+              runner: macos-latest,
+              required: true,
+              gateway: true,
+            }
+          - {
+              triple: x86_64-apple-darwin,
+              runner: macos-15-intel,
+              required: false,
+              gateway: true,
+            }
+          - {
+              triple: x86_64-pc-windows-msvc,
+              runner: windows-latest,
+              required: true,
+              gateway: false,
+            }
+          - {
+              triple: aarch64-pc-windows-msvc,
+              runner: windows-11-arm,
+              required: false,
+              gateway: false,
+            }
     steps:
-      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
-        if: runner.os == 'Linux'
-        with:
-          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.ref }}
-          # The identity stamp carries the commit, and `git rev-parse HEAD` on a
-          # shallow clone is still the right commit — but `cargo xtask
-          # artifact-key` reads the tree and the lane below also records the ref,
-          # so the full history costs nothing here and removes a class of
-          # surprise.
-          fetch-depth: 0
       - uses: ./.github/actions/setup
         with:
-          install: "false"
-          cargo-cache: v1
-      - id: channel
-        shell: bash
-        run: |
-          set -euo pipefail
-          channel="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml | head -1)"
-          if [ -z "$channel" ]; then
-            echo "::error::prebuilt-core: rust-toolchain.toml has no [toolchain] channel"
-            exit 1
-          fi
-          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
-      # On the Intel macOS runner `rustup default` succeeds and the next step
-      # dies with `rustc: command not found`: dtolnay only puts `~/.cargo/bin`
-      # on PATH when it has to install rustup itself, and the image already
-      # has one (#1075).
-      - name: Put the cargo proxies on PATH
-        if: runner.os == 'macOS'
-        shell: bash
-        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
-        with:
-          toolchain: ${{ steps.channel.outputs.channel }}
-          targets: ${{ matrix.triple }}
-      # THE KEY, computed before the build so it can be printed beside the
-      # artifact and compared by whoever consumes it.
+          bun: "false"
+          rust: "true"
+          rust-targets: ${{ matrix.triple }}
+          cargo-cache: prebuilt-${{ matrix.triple }}
       - id: key
         shell: bash
         run: |
@@ -199,7 +104,6 @@ jobs:
           CENTRAID_BUILD_GIT_SHA: ${{ github.sha }}
           CENTRAID_BUILD_DIGEST: ${{ steps.key.outputs.key }}
         run: cargo build --profile dist --bin centraid ${{ matrix.gateway && '--bin centraid-gateway' || '' }} --target '${{ matrix.triple }}'
-      # SYMBOLS FIRST, THEN STRIP. The other order throws them away.
       - name: Collect the symbol file and strip the binary
         shell: bash
         run: |
@@ -207,15 +111,6 @@ jobs:
           out="artifact/${{ matrix.triple }}"
           mkdir -p "$out"
           built="target/${{ matrix.triple }}/dist"
-          # `split-debuginfo = "packed"` means cargo has ALREADY written one
-          # symbol file beside the binary — `.dwp` on Linux, `.dSYM` on macOS,
-          # and on Windows the `.pdb` the linker always emits. Collecting what
-          # cargo produced, rather than running objcopy/dsymutil here, is what
-          # keeps the symbol file and the binary from being derived by two
-          # different tools at two different times.
-          # Every binary the leg built, the same way: `centraid`, and on a leg
-          # with `gateway: true` the gateway beside it (deploy/vps/install.sh
-          # looks for `centraid-gateway` at the tarball's root).
           bins="centraid"
           if [ "${{ matrix.gateway }}" = "true" ]; then bins="centraid centraid-gateway"; fi
           case "${{ runner.os }}" in
@@ -246,17 +141,15 @@ jobs:
         run: |
           set -euo pipefail
           out="artifact/${{ matrix.triple }}"
-          # The stamp the binary reports, read back OUT OF THE BINARY rather than
-          # copied from the environment: a build that dropped the stamp would
-          # otherwise publish an identity file nothing in the artifact matches,
-          # which is the one failure the identity scheme cannot survive.
+          identity="$out/centraid-${{ matrix.triple }}.identity.json"
+          # Read back OUT OF THE BINARY, not copied from the environment.
           if [ "${{ runner.os }}" = "Windows" ]; then
-            "$out/centraid.exe" --version --json > "$out/centraid-${{ matrix.triple }}.identity.json"
+            "$out/centraid.exe" --version --json > "$identity"
           else
-            "$out/centraid" --version --json > "$out/centraid-${{ matrix.triple }}.identity.json"
+            "$out/centraid" --version --json > "$identity"
           fi
-          cat "$out/centraid-${{ matrix.triple }}.identity.json"
-          grep -q "\"digest\":\"${KEY}\"" "$out/centraid-${{ matrix.triple }}.identity.json" \
+          cat "$identity"
+          grep -q "\"digest\":\"${KEY}\"" "$identity" \
             || { echo "::error title=Identity stamp missing::the built binary does not report the digest this run computed"; exit 1; }
           tar -czf "centraid-${{ matrix.triple }}.tar.gz" -C "$out" .
           sha256sum "centraid-${{ matrix.triple }}.tar.gz" > "SHA256SUMS.${{ matrix.triple }}"
@@ -271,64 +164,36 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
-  # THE FOUR ANDROID ABIs, in one AAR-shaped artifact. `x86_64` is not optional
-  # padding: it is what lets the KVM emulator load the library at all
-  # (census §G5).
+  # The four Android ABIs in the AAR's `jni/<abi>/` layout, with an NDK
+  # symbols.zip. `x86_64` is what lets the KVM emulator load the library.
+  # `--features llama` in the key and the build: the on-device chat's engine is
+  # off in the workspace build (R-CHAT-10), and the key names what was built.
   android:
-    needs: [probe]
-    if: needs.probe.outputs.ffi == 'true' && !inputs.binary-only
+    if: ${{ !inputs.binary-only }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
-        with:
-          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.ref }}
-          fetch-depth: 0
       - uses: ./.github/actions/setup
         with:
-          install: "false"
-          cargo-cache: v1
-      - id: channel
-        run: |
-          set -euo pipefail
-          channel="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml | head -1)"
-          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
-        with:
-          toolchain: ${{ steps.channel.outputs.channel }}
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
-      - run: cargo install cargo-ndk --locked
-      # `--features llama` is in the key AND on the build below, and in both on
-      # purpose: the on-device chat's engine (llama.cpp) is off by default so the
-      # PR gate's workspace build compiles none of it, and a phone's library
-      # without it reports every model file as NO_ENGINE (R-CHAT-10). The key
-      # names what was built.
+          bun: "false"
+          rust: "true"
+          rust-targets: aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+          cargo-cache: prebuilt-android
+      - run: command -v cargo-ndk >/dev/null || cargo install cargo-ndk --locked
       - id: key
-        run: |
-          set -euo pipefail
-          key="$(cargo xtask artifact-key --triple android-all-abis --features llama --profile dist)"
-          echo "key=${key}" >> "$GITHUB_OUTPUT"
+        run: echo "key=$(cargo xtask artifact-key --triple android-all-abis --features llama --profile dist)" >> "$GITHUB_OUTPUT"
       - name: Build the four ABIs
         env:
           CENTRAID_BUILD_GIT_SHA: ${{ github.sha }}
           CENTRAID_BUILD_DIGEST: ${{ steps.key.outputs.key }}
         run: |
-          set -euo pipefail
-          cargo ndk \
-            -t arm64-v8a -t armeabi-v7a -t x86 -t x86_64 \
-            -o dist/android/jni \
+          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86 -t x86_64 -o dist/android/jni \
             build --profile dist -p centraid-core-ffi --features llama
           find dist/android -name '*.so' -print
-      # THE JNI INITIALIZER STUB is lane E's: the AAR needs a class whose static
-      # initializer calls `System.loadLibrary`, and where that class lives is a
-      # decision about the KMP module's package, not about this lane. Until lane
-      # E hands it over, this lane publishes the four `.so` files in the AAR's
-      # `jni/<abi>/` layout and SAYS the AAR is not assembled — the same posture
-      # the probe job takes about `crates/core-ffi`.
-      - name: Symbols, and the loud gap
+      - name: Collect symbols, then strip
         run: |
           set -euo pipefail
           mkdir -p dist/android/symbols
@@ -339,14 +204,6 @@ jobs:
             "${ANDROID_NDK_HOME:-/usr/local/lib/android/sdk/ndk-bundle}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" "$lib" || true
           done < <(find dist/android/jni -name '*.so' -print0)
           (cd dist/android && zip -qr ../../centraid-android-symbols.zip symbols)
-          {
-            echo "### prebuilt-core: the Android AAR is NOT assembled"
-            echo
-            echo "Four ABIs were built and stripped, with an NDK symbols.zip beside them."
-            echo "The AAR itself needs the JNI initializer class, which is wave 3 lane E's"
-            echo "(\`contracts/handoff/E/\`). Until it lands this lane publishes the \`jni/\`"
-            echo "layout and no AAR, and no shell can have loaded one."
-          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: prebuilt-core-android
@@ -356,14 +213,10 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
-  # THE iOS XCFRAMEWORK: `libcentraid_core_ffi.a` per slice plus the cbindgen
-  # header. The DEPLOYMENT FLOOR is declared once, here, and read by lane E's
-  # XcodeGen project — v0 learned that lesson the hard way, where the pod's floor
-  # had to match the vendored framework's or the app target would not link
-  # (`CentraidTunnel.podspec:9`–`:13`).
+  # `libcentraid_core_ffi.a` per slice plus the cbindgen header. The simulator
+  # slice is ONE lipo'd library: Xcode rejects an xcframework with two.
   ios:
-    needs: [probe]
-    if: needs.probe.outputs.ffi == 'true' && !inputs.binary-only
+    if: ${{ !inputs.binary-only }}
     runs-on: macos-latest
     timeout-minutes: 60
     env:
@@ -372,27 +225,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.ref }}
-          fetch-depth: 0
       - uses: ./.github/actions/setup
         with:
-          install: "false"
-          cargo-cache: v1
-      - id: channel
-        run: |
-          set -euo pipefail
-          channel="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml | head -1)"
-          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
-        with:
-          toolchain: ${{ steps.channel.outputs.channel }}
-          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
-      - run: cargo install cbindgen --locked
-      # `--features llama` in the key and on the build: see the Android leg.
+          bun: "false"
+          rust: "true"
+          rust-targets: aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+          cargo-cache: prebuilt-ios
+      - run: command -v cbindgen >/dev/null || cargo install cbindgen --locked
       - id: key
-        run: |
-          set -euo pipefail
-          key="$(cargo xtask artifact-key --triple apple-ios-xcframework --features llama --profile dist)"
-          echo "key=${key}" >> "$GITHUB_OUTPUT"
+        run: echo "key=$(cargo xtask artifact-key --triple apple-ios-xcframework --features llama --profile dist)" >> "$GITHUB_OUTPUT"
       - name: Build the three slices and the header
         env:
           CENTRAID_BUILD_GIT_SHA: ${{ github.sha }}
@@ -402,12 +243,8 @@ jobs:
           for target in aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios; do
             cargo build --profile dist -p centraid-core-ffi --features llama --target "$target"
           done
-          mkdir -p dist/ios/Headers
+          mkdir -p dist/ios/Headers dist/ios/sim
           cbindgen --crate centraid-core-ffi --output dist/ios/Headers/centraid_core.h
-          # The simulator slice is one static library covering both simulator
-          # architectures; `lipo` is what makes it one, and an xcframework with
-          # two separate simulator slices is rejected by Xcode.
-          mkdir -p dist/ios/sim
           lipo -create \
             target/aarch64-apple-ios-sim/dist/libcentraid_core_ffi.a \
             target/x86_64-apple-ios/dist/libcentraid_core_ffi.a \
@@ -424,9 +261,9 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
-  # THE ONE VERDICT. `required: true` targets must be present with a matching
-  # key; the rest are reported and do not gate. A lane whose verdict is "some
-  # legs were green" is a lane nobody can require.
+  # The lane's one verdict: every required triple published, every artifact
+  # stamped from one commit, and one SHA256SUMS over all of them for
+  # `deploy/vps/install.sh`.
   prebuilt-core-required:
     needs: [binary]
     if: always()
@@ -445,7 +282,7 @@ jobs:
             if [ -f "artifacts/prebuilt-core-${triple}/centraid-${triple}.tar.gz" ]; then
               echo "ok       ${triple}"
             else
-              echo "::error title=Required triple missing::${triple} produced no artifact. Every required target must publish before a release (docs/release.md)."
+              echo "::error title=Required triple missing::${triple} produced no artifact (docs/release.md)."
               missing=$((missing + 1))
             fi
           done
@@ -456,22 +293,14 @@ jobs:
               echo "::warning title=Optional triple missing::${triple} produced no artifact; it does not gate the publish."
             fi
           done
-          # One SHA256SUMS over every triple, so `deploy/vps/install.sh` has a
-          # single file to verify against whichever one it downloaded.
-          cat artifacts/prebuilt-core-*/SHA256SUMS.* > SHA256SUMS
-          sort -o SHA256SUMS SHA256SUMS
+          cat artifacts/prebuilt-core-*/SHA256SUMS.* | sort > SHA256SUMS
           cat SHA256SUMS
-          # Every published artifact must come from ONE tree. The digest cannot
-          # say so: it is the artifact key, and the key hashes the triple, so
-          # each triple's digest differs by construction (each leg already
-          # proved above that its binary reports ITS OWN triple's key). What
-          # the legs share is the commit and the schema they were stamped with,
-          # and a divergence there means one leg built a different commit,
-          # which is exactly the confusion the stamp exists to make impossible.
+          # Each triple's digest differs by construction (the key hashes the
+          # triple); what every leg must share is the commit and the schema.
           for field in gitSha schemaVersion; do
             values="$(grep -ho "\"${field}\":\"\?[^\",}]*" artifacts/prebuilt-core-*/artifact/*/centraid-*.identity.json | sort -u)"
             if [ "$(printf '%s\n' "$values" | wc -l)" -gt 1 ]; then
-              echo "::error title=Stamps disagree::the published artifacts report more than one ${field}, so they were not all built from one tree"
+              echo "::error title=Stamps disagree::the artifacts report more than one ${field}"
               printf '%s\n' "$values"
               exit 1
             fi
