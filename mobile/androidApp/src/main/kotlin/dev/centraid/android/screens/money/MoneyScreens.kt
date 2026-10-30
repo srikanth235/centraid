@@ -1,6 +1,7 @@
 package dev.centraid.android.screens.money
 
 import dev.centraid.android.kit.SearchAskRow
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -195,21 +196,21 @@ private fun LazyListScope.spending(state: MoneyHomeState, onOpen: (Route) -> Uni
     items(spending.heroes.size, key = { "hero-$it" }) { index -> MoneyHeroView(spending.heroes[index]) }
     item(key = "days") { MoneyNote(spending.days_left_label) }
     items(spending.in_out_net.size, key = { "net-$it" }) { index ->
-        spending.in_out_net[index].figures.forEach { MoneyFigureRow(it) }
+        MoneyFigureCard(spending.in_out_net[index].figures)
     }
     spending.tables.forEach { table ->
-        item(key = "table-${table.currency}") { MoneySection(table.heading) }
+        item(key = "table-${table.currency}") {
+            // THE COLUMN HEADS are the table's own words, drawn once above its lines.
+            Column {
+                MoneySection(table.heading)
+                MoneyCategoryHeader(planned = table.planned_label, spent = table.spent_label, left = table.left_label)
+            }
+        }
         items(table.rows, key = { "c-${table.currency}-${it.route?.money_target?.category_id}" }) { line ->
-            CentraidRow(
-                title = line.label,
-                meta = if (line.has_plan) money(line.planned) else "",
-                trailing = money(if (line.has_plan) line.left else line.spent),
-                trailingTone = if (line.over) {
-                    centraid.core.v1.StatusChip.Tone.TONE_NET
-                } else {
-                    centraid.core.v1.StatusChip.Tone.TONE_NEUTRAL
-                },
-                a11y = spoken(line.accessibility_label, if (line.has_plan) line.left else line.spent),
+            // Planned, spent and left across the page; a line with no plan has only what was spent.
+            MoneyCategoryRow(
+                line = line,
+                accessibility = spoken(line.accessibility_label, if (line.has_plan) line.left else line.spent),
                 testTag = "money-category-${line.route?.money_target?.category_id}",
                 onTap = { line.route?.let(onOpen) },
             )
