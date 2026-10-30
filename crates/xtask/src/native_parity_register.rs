@@ -33,7 +33,6 @@ const OS_UPLOADS: &str = "the OS-owned background uploads are iOS's `URLSession`
 
 pub const REGISTER: &[Entry] = &[
     // Lane C: reads SwiftUI does not make yet (iOS missing).
-    ("Effect.screenshot_shield", gap("C", Missing::Ios)),
     ("PhotosLibraryData.scrub_next_label", gap("C", Missing::Ios)),
     (
         "PhotosLibraryData.scrub_previous_label",

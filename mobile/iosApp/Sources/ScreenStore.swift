@@ -33,6 +33,9 @@ extension Core: ScreenCore {}
 final class ScreenStore: ObservableObject {
     @Published private(set) var navigation: Centraid_Core_V1_Navigation?
     @Published private(set) var views: [UInt64: Centraid_Core_V1_ViewState] = [:]
+    /// THE SCREENS RUST SHIELDED (`ScreenshotShield`): `RustScreenView` draws an instance in
+    /// `WordsShield` while its id is here. Dropped when the screen closes.
+    @Published private(set) var shielded: Set<UInt64> = []
 
     /// Told when Rust announces something the shell may act on (a gateway paired).
     var onAnnounce: ((String) -> Void)?
@@ -271,6 +274,7 @@ final class ScreenStore: ObservableObject {
             closed.insert(id)
             views[id] = nil
             queues[id] = nil
+            shielded.remove(id)
             // A BROWSE LASTS AS LONG AS THE SCREEN THAT ASKED FOR IT.
             GatewayBrowsing.shared.stop(id)
         }
@@ -514,6 +518,11 @@ final class ScreenStore: ObservableObject {
         // hears progress and the end as events (`ChatModel`).
         case .modelDownload(let download)?:
             ChatModelDownloader.shared.start(ChatAsset(download))
+            answer(request, done)
+        // THE CAPTURE SHIELD, per screen: the host wraps the instance's content in `WordsShield`
+        // while it holds one. No screen asks today (Locker shields through its own `secure`).
+        case .screenshotShield(let shield)?:
+            if shield.on { shielded.insert(request.instance) } else { shielded.remove(request.instance) }
             answer(request, done)
         #if os(iOS)
         case .pickLibraryPhoto?:

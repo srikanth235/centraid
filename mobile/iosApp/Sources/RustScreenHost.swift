@@ -90,7 +90,14 @@ struct RustScreenView: View {
         return wall.wordsRoute
     }
 
+    /// THE SCREEN, SHIELDED while Rust holds a `ScreenshotShield` for it: always wrapped, so the
+    /// view keeps its identity (and its state) as the shield goes on and off.
     var body: some View {
+        WordsShield(secure: store.shielded.contains(instance)) { screen }
+    }
+
+    @ViewBuilder
+    private var screen: some View {
         let open: (Centraid_Core_V1_Route) -> Void = { shell.open($0) }
         let words: () -> Void = { if let route = wordsRoute { shell.open(route) } }
         switch store.views[instance]?.kind {
