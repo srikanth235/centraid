@@ -6,7 +6,6 @@ No policy: `crates/vault` decides, this crate moves bytes.
 | --- | --- |
 | `sealed` | **`centraid-sealed/2`** ([#1080](https://github.com/srikanth235/centraid/issues/1080)) — the one format every byte a gateway stores wears. A file is hashed and sealed in the same stream (`FileSealer`, `PartSealer`), and a file whose hash is already known can be sealed a window of parts per read (`WindowSealer`, R-1080-C39); each part ≤ 64 MiB carries a 30-byte clear header, is keyed from its own random salt under `K_backup`, framed in 4 MiB XChaCha20-Poly1305 chunks, and named `hex(keyed_hash(K_name, h ‖ u32be(i)))`, so the gateway holds ciphertext under names it cannot invert; `Assembler` and `open_whole` check a whole file against the `h` its names were computed from. |
 | `format` | The BLAKE3 content hash, the BLAKE3 KDF, and canonical (ECMAScript-spelled) JSON. |
-| `phash` | Hamming distance over hex digests. Unequal widths, non-hex characters and an empty digest are all **not comparable** — `None`, never `0`. |
 | `models` | `models.lock.json`: the parser, and the one verify-then-fetch (`stat` size, then digest; temp file, digest, rename). A failure is **reported, never thrown**. Fetching is a trait; this crate opens no socket. |
 | `renditions` | The JPEG derivatives (thumbnail, preview) the core draws when the shell staged none. Pure: bytes in, bytes out. |
 
@@ -27,13 +26,12 @@ Both regenerate with `CENTRAID_UPDATE_FIXTURES=1`, and the comparison still runs
 
 ## Arithmetic, not format
 
-`phash` and `models` ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-P3) are not format decisions and may be changed on their merits — with one exception that is:
+`models` ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-P3) is not a format decision and may be changed on their merits — with one exception that is:
 
 - **`models.lock.json`'s pins**: a digest, a byte length and an immutable upstream URL per file. Sizes today: ArcFace 249 MB, CLIP ViT-B/32 606 MB, Whisper tiny.en q8 41 MB, PP-OCRv5 21 MB, YuNet 0.2 MB.
 
-Two things are deliberately absent:
+One thing is deliberately absent:
 
-- **multi-index banding** to avoid the pairwise scan. It is a cost optimisation whose answer is identical by construction, and a query plan without a scale rig to justify it is a plan nobody can check. `crates/apps/photos/tests/year3.rs` measures the pairwise cost at the year-3 photos axis.
 - **the network fetcher**. `models::Fetch` is the seam and `DirectoryFetch` drives every line of `ensure` except the socket; the HTTP implementation belongs to the host that has one.
 
 ## What is not here

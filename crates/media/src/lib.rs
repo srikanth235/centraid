@@ -9,7 +9,6 @@
 //! | [`format`] | the BLAKE3 content hash and the canonical JSON spelling |
 //! | [`models`] | the media model lock's verify-then-fetch |
 //! | [`renditions`] | JPEG derivatives |
-//! | [`phash`] | the perceptual hash's Hamming distance (the Duplicates screen that read it is retired, #1146 D5) |
 //!
 //! ## ONE FORMAT
 //!
@@ -22,6 +21,5 @@
 
 pub mod format;
 pub mod models;
-pub mod phash;
 pub mod renditions;
 pub mod sealed;
