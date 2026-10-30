@@ -163,3 +163,34 @@
 
 1. *The extraction changed nothing.* Throwaway `ThrowawayDifferentialTest` (deleted, not committed) held the verbatim pre-extraction `MediaStoreDeleter.uriOf` and `LibraryRoll.uriOf` logic and compared it with `LibraryDeletion.target` / `LibraryRefs.row` over 14 refs (empty, bare id, negative, prefix-only, doubled prefixes, `#r` suffix, overflow) times 6 media types → 84 pairs, all equal.
 2. *Each new test fails when its subject is broken.* `ChatMarkdown`: bullet marker changed to `-` and link regex keeping the address → `bulletsAndNumbersBecomeItems` and `aLinkKeepsItsWordsAndIsNotTappable` failed (2 of 8). `SleepNights`: the day taken from the earliest end and touching sessions merged → my first tests did NOT catch it (BUILD SUCCESSFUL under the break), so I replaced two tests with ones where a night spans midnight and where touching sessions end on different days; rerun → both failed (2 of 7), restored → green. `LibraryDeletion`: dropped the image-prefix/video-type check, treated a missing size as unchanged, inverted the gone filter → three tests failed (3 of 8). All breaks reverted; the tree matches the commits.
+
+## Lane Ca — Android: the one-sided reads Compose did not make, and the page margin
+
+Nine register rows leave `crates/xtask/src/native_parity_register.rs`, each in the commit that makes Compose read the field: `TodoRow.subtask`, `PeoplePersonChrome.add_note` / `add_date` / `add_channel`, `PhotosPlaceRow.current_name`, `HomeVault.originals_withheld`, `ShellVault.originals_withheld`, `PhotosLightboxPhoto.original_media_type`, `ShellFact.expired`. The page margin and Money's legend carry no register row.
+
+**What changed**
+
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/agenda/TodoViews.kt`: `TodoCheckBox(round)` draws a subtask as the `sm`-radius box, `TodoRowView` sets its title `small` (iOS `KitCheckBox(round: !row.subtask)`, `TodoRowViews.swift:57,70`).
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/people/PeoplePersonScreen.kt`: the verb strip (log touch, note, date, channel; horizontal scroll; empty labels dropped) under iOS's identifiers `people-person-log-touch|add-note|add-date|add-channel`; Edit stays at the strip's foot outside the scroll (iOS has a toolbar slot, Android's trailing slot holds the star). `people-edit`, `people-merge`, `people-trash` become `people-person-edit|merge|trash`, iOS's spelling; nothing referenced the old ones (grep over `mobile/`). The section-header doors stay: iOS has them too.
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/PlacesScreen.kt`: the rename field is seeded from the tapped row's `current_name`, held from the tap (iOS `typedName`); its page inset reads `KitGeometry.GUTTER`.
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/kit/VaultHeader.kt`: the transfer-rules key follows `HomeVault.originals_withheld > 0`, not the sentence being non-empty. iOS reads only `HomeVault`; the `ShellVault` row closes by name because both fields share it (Rust's `home.rs:841` copies one into the other).
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/photos/PhotosLightboxStage.kt`, `PhotosLightboxScreen.kt`: `rememberLightboxPlayer(mediaType)` hands `original_media_type` to Media3 as `MediaItem.Builder.setMimeType` (iOS: `AVURLAssetOverrideMIMETypeKey`). iOS still decides "is a video" from `tile.kind`; so does Android.
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/backup/PassWork.kt`: `granted` reports `ShellFact(expired = WindowExpired)` under `NonCancellable` when WorkManager cancels the worker (`CoroutineWorker.onStopped` is final, so cancellation is the stop) and rethrows; `CentraidSyncWorker.doWork` no longer turns a cancellation into `Result.retry()`. `granted` takes a fact sink so it can be tested. Rust takes `Fact::Expired` as a no-op today (`crates/screens/src/passes/service.rs:340`) and the proto says it only lets Rust forget the window, so the report cannot be wrong.
+- `mobile/androidApp/src/test/kotlin/dev/centraid/android/backup/PassWorkTest.kt`: new, 2 tests.
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/kit/ReadState.kt`: `KitGeometry.GUTTER = CentraidGeometry.PAGE_MARGIN.dp` (18). All ~170 `GUTTER` uses are page-margin insets or offsets from one; none was a gap. `GUTTER / 2` in the to-do row is a half-margin offset (the box mark now sits at 21 not 20 from the edge; iOS aims at the margin itself, 18 — a pre-existing 3 pt offset, left). `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/AgendaHomeScreen.kt`: its literal `16.dp` page insets (horizontal/start/end/whole-page) read `GUTTER`; its three `top = 16.dp`/`height(16.dp)` gaps stay. Literal page-margin `16.dp` remain in `CivilPickers`, `PairLaptopPage`, `ChatScreen`, `PhotoPickerScreen`, `ProofScreen`, `WordsScreens`, `PairScanner`, `DocsScreens`, `PhotosLightboxScreen`, `PhotosEditorScreen`, `PhotoShelfScreen`: not converted (not `GUTTER` uses; each needs a look at whether it is a margin or a gap) and reported to the root.
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/money/MoneyChart.kt`: `LegendItem` draws its swatch with an empty word, as iOS's `MoneyLegend` does.
+- `crates/xtask/src/native_parity_register.rs`: the nine rows.
+
+**Verification**
+
+- The Android check (`compileDebugKotlin testDebugUnitTest`, through `flock /tmp/centraid-gradle.lock`) → BUILD SUCCESSFUL; 88 tests, 0 failures, 0 errors (86 + `PassWorkTest` 2).
+- `grep -n "16.dp" .../kit/ReadState.kt` → one hit, `Modifier.padding(top = 16.dp)` at the failure view (a gap); no page gutter literal.
+- `cargo xtask rules` (own `CARGO_TARGET_DIR`) → 16 rules, all `ok`; `native-shell-parity` clean with 193 rows in the register (nine fewer than at the umbrella head).
+- `cargo test -p xtask` → 154 + 2 passed, 0 failed.
+
+**Unverified**: no device or emulator; nothing in Swift was touched. The verb strip's scroll, the box shape and the 18 pt margin are source-checked, not seen. Whether the relocated Edit button in the People strip reads well beside four verbs on a 360 dp phone is a screenshot question.
+
+**Falsification**
+
+1. *The expiry is reported and the stop goes on.* `PassWorkTest` (kept, 2 tests). With the report inside the `catch` replaced by `Unit`, `aStoppedWindowIsReportedExpiredAfterItsGrantAndTheStopGoesOn` failed (1 of 2 failed, the other, a window Rust ends, still passed); restored from the index, green.
+2. *Compose really reads the fields (the ratchet bites).* With `TodoViews.kt`'s two `row.subtask` reads replaced by constants, `cargo xtask rules` → `FAIL native-shell-parity … TodoRow.subtask: only SwiftUI reads it`; restored from the index, the rule is green. So the deleted row is held by the Kotlin read and not by a name collision. (The `originals_withheld` rows close by name: `HomeVault` is the field iOS and now Android read; `ShellVault` shares the name.)
