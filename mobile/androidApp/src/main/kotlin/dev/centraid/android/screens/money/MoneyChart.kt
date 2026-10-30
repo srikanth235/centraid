@@ -124,8 +124,9 @@ internal fun MoneyLegend(incoming: String, outgoing: String, partial: String) {
 
 @Composable
 private fun LegendItem(text: String, filled: Boolean, ink: Color) {
-    // A key with no word is no key: a swatch alone would say nothing.
-    if (text.isEmpty()) return
+    // EVERY SWATCH IS DRAWN, as iOS's key draws them: the words are Rust's copy and a blank one is
+    // Rust's to fill, never a reason for this view to drop the item (the key is hidden from
+    // TalkBack either way, so a bare swatch says nothing it should be spoken for).
     val shape = moneyRadius("sm")
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(
