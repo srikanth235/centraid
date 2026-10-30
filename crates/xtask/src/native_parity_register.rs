@@ -143,8 +143,6 @@ pub const REGISTER: &[Entry] = &[
     ("HomeVault.originals_withheld", gap("F", Missing::Android)),
     // LockerSearchField.answered_term: Compose copies it into a kit holder and nothing draws it
     ("LockerSearchField.answered_term", gap("F", Missing::Ios)),
-    // NavEvent.pop_to_root: a second tap on the selected tab; Compose sends it, SwiftUI never does
-    ("NavEvent.pop_to_root", gap("F", Missing::Ios)),
     // PeoplePersonChrome.add_channel: iOS's verb strip names them; Compose opens the same sheets from the section headers and never draws these labels
     ("PeoplePersonChrome.add_channel", gap("F", Missing::Android)),
     // PeoplePersonChrome.add_date: iOS's verb strip names them; Compose opens the same sheets from the section headers and never draws these labels

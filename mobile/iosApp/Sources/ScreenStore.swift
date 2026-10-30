@@ -250,6 +250,13 @@ final class ScreenStore: ObservableObject {
         navigate(.selectTab(select))
     }
 
+    /// Every page above the tab's root goes (the apps' Home control): Rust closes them in one move.
+    func popToRoot(tab: String) {
+        var pop = Centraid_Core_V1_NavPopToRoot()
+        pop.tab = tab
+        navigate(.popToRoot(pop))
+    }
+
     /// A tab's stack, root first, as Rust holds it.
     func entries(of tab: String) -> [Centraid_Core_V1_StackEntry] {
         navigation?.tabs.first { $0.tab == tab }?.entries ?? []
