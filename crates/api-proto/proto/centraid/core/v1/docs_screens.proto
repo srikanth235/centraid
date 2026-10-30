@@ -64,7 +64,9 @@ message DocsDriveState {
   StatusLine status = 13;
   // Trash's confirm, and the document it asks about.
   optional Confirm confirm = 14;
-  string confirm_document_id = 15;
+  // 15 was `confirm_document_id`: nothing read it (#1152).
+  reserved 15;
+  reserved "confirm_document_id";
   // An inline rename, autosaving (#1015 D3). Unset when none is open.
   optional DocsRename rename = 16;
   // THE BAND, computed. EMPTY while denied.
@@ -73,8 +75,9 @@ message DocsDriveState {
   // while one is set, the sort last. EMPTY in search, on Recently changed (a
   // window, not a filter) and while denied.
   repeated DocsPill pills = 18;
-  // Whether any filter is set, and so whether the "Clear filters" chip shows.
-  bool filters_active = 19;
+  // 19 was `filters_active`: nothing read it (#1152).
+  reserved 19;
+  reserved "filters_active";
   DocsDriveChrome chrome = 20;
   // The app bar's subtitle: "24 documents", "Starred · 3".
   string head_meta = 21;
@@ -94,8 +97,9 @@ message DocsQuery {
   // One label, matched exactly; EMPTY is none.
   string label = 3;
   Sort sort = 4;
-  // FALSE is descending: newest changed, Z→A, largest first.
-  bool ascending = 5;
+  // 5 was `ascending`: nothing read it (#1152).
+  reserved 5;
+  reserved "ascending";
 
   enum TypeFilter {
     TYPE_FILTER_UNSPECIFIED = 0;
@@ -154,9 +158,9 @@ message DocsDriveChrome {
   // The grid/list toggle: its label names what a tap switches TO.
   string layout_toggle = 9;
   string layout_icon_key = 10;
-  // "Clear filters". Not `clear_…`: SwiftProtobuf suffixes a field that
-  // begins with `clear`.
-  string filters_clear_label = 11;
+  // 11 was `filters_clear_label`: nothing read it (#1152).
+  reserved 11;
+  reserved "filters_clear_label";
   // The row's overflow button's accessibility label.
   string row_menu = 12;
   // "Starred" / "Not starred", for a view that draws the star glyph.
@@ -212,9 +216,12 @@ enum DocsPermission {
 message DocsFolderNode {
   string folder_id = 1;
   string name = 2;
-  // EMPTY at the top level.
-  string parent_id = 3;
-  uint32 document_count = 4;
+  // 3 was `parent_id`: nothing read it (#1152).
+  reserved 3;
+  reserved "parent_id";
+  // 4 was `document_count`: nothing read it (#1152).
+  reserved 4;
+  reserved "document_count";
   // "3 documents" / "Empty".
   string count_label = 5;
   string accessibility_label = 6;
@@ -594,9 +601,9 @@ message DocsDocumentState {
   optional DocsRename rename = 10;
   DocsSheet sheet = 11;
   DocsDocumentChrome chrome = 12;
-  // WHICH VERB `confirm` ASKS ABOUT: trash on a live document, delete
-  // forever on a trashed one. NONE while no confirm is up.
-  Asking asking = 13;
+  // 13 was `asking`: nothing read it (#1152).
+  reserved 13;
+  reserved "asking";
   // THE SCREEN IS DONE — the document was deleted forever here. The shell pops.
   bool dismissed = 14;
 
@@ -615,7 +622,9 @@ message DocsDocumentChrome {
   string retry = 2;
   string loading = 3;
   string more = 4;
-  string versions_heading = 5;
+  // 5 was `versions_heading`: nothing read it (#1152).
+  reserved 5;
+  reserved "versions_heading";
   // 6 was the heading of the Activity list (#1146).
   reserved 6;
   reserved "activity_heading";

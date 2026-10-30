@@ -135,7 +135,6 @@ pub fn row(locale: Locale, person: &wire::PeopleRosterRow, today: &str) -> wire:
             person.days_since_contact,
         ),
         chips,
-        due: person.due,
         starred: person.starred,
         star_label: fill(
             &if person.starred {

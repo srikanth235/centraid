@@ -67,7 +67,7 @@ enum FilePerformer {
         _ pick: Centraid_Core_V1_PickBytes,
         _ done: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
     ) {
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.commaSeparatedText, .json, .plainText, .item])
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: contentTypes(pick.accept))
         picker.allowsMultipleSelection = false
         let holder = PickerHolder { urls in
             var file = Centraid_Core_V1_BytesPicked()
@@ -86,6 +86,24 @@ enum FilePerformer {
             done(.bytesPicked(file))
         }
         present(picker, holder)
+    }
+
+    /// WHAT `PickBytes.accept` MEANS TO THE PICKER: a media type or an extension (with or without
+    /// its dot) becomes the `UTType` the system knows for it. The member is never locked out of a
+    /// file Rust asked for: an entry the system cannot map, or an empty `accept`, opens the picker
+    /// to every file (`.item`).
+    static func contentTypes(_ accept: [String]) -> [UTType] {
+        var types: [UTType] = []
+        for entry in accept {
+            let named = entry.trimmingCharacters(in: .whitespaces)
+            if named.isEmpty { continue }
+            let type = named.contains("/")
+                ? UTType(mimeType: named)
+                : UTType(filenameExtension: named.hasPrefix(".") ? String(named.dropFirst()) : named)
+            guard let type else { return [.item] }
+            types.append(type)
+        }
+        return types.isEmpty ? [.item] : types
     }
 
     static func save(

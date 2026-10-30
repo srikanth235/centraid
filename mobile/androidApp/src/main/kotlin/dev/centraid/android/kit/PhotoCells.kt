@@ -211,7 +211,7 @@ public fun PhotoTile(
  *
  * A FETCH IS A LINE AND NOT A SPINNER (DESIGN.md: loading is determinate or
  * static, never a spinner). The byte plane reports completion and not progress
- * (`PhotoTile.fetch_percent`), so the honest mark is words on the tile's own
+ * (the tile carries no percentage), so the honest mark is words on the tile's own
  * chip — v0's state slot, which is one quiet mono line on the page colour.
  */
 @Composable

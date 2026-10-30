@@ -240,7 +240,7 @@ private struct AlbumCard: View {
         }
         .buttonStyle(.plain)
         // THE SYSTEM'S LONG-PRESS ON AN ALBUM. Only an album: a standing shelf is
-        // not `member_owned`, and never reaches this card.
+        // carries no `deleteLabel`, and never reaches this card.
         .contextMenu {
             Button(card.deleteLabel, role: .destructive, action: onDelete)
                 .accessibilityIdentifier("photos.collections.delete-album")

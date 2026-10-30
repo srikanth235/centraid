@@ -18,13 +18,9 @@ use crate::kit::trash::{self, TrashCopy, TrashItem, TrashSpec};
 use crate::screen::{Ctx, Screen};
 use crate::strings::notes as words;
 
-/// The days the sweep keeps a trashed note.
-const WINDOW_DAYS: u32 = 30;
-
 /// Notes' trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
     app: act::notes::APP,
-    purge_window_days: WINDOW_DAYS,
     icon_key: "FileText",
     copy: TrashCopy::KIT,
     back_label: words::title,

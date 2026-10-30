@@ -324,7 +324,6 @@ impl Chat {
                     })
                     .collect(),
             }),
-            attach_pick_photo_title: words::attach_pick_photo(locale),
             close_label: words::close(locale),
             copied_label: words::copied(locale),
             scope_all_label: words::scope_all(locale),
@@ -373,7 +372,6 @@ impl Chat {
             text: message.text.clone(),
             cards: message.cards.clone(),
             streaming: message.streaming,
-            stopped: message.stopped,
             accessibility_label: label,
             attachments: message
                 .attachments
@@ -410,10 +408,6 @@ fn attachment(held: &Pending, locale: Locale) -> wire::ChatAttachment {
         } as i32,
         label: attachment_label(held, locale),
         thumbnail_path: held.thumbnail_path.clone(),
-        asset_id: match &held.source {
-            super::model::Source::VaultPhoto(id) => id.clone(),
-            _ => String::new(),
-        },
     }
 }
 

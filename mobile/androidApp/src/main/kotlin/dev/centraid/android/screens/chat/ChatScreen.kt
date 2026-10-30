@@ -931,7 +931,7 @@ private fun ChatDrawer(
             val search = state.drawer_search
             if (search != null && search.open_) {
                 CentraidSearchField(
-                    field = SearchField(open_ = true, term = search.term, corrected = search.corrected),
+                    field = SearchField(open_ = true, term = search.term, corrected = search.corrected, corrected_label = search.corrected_label),
                     placeholder = state.drawer_search_placeholder,
                     onTerm = { onEvent(ChatEvent(drawer_search_term = ChatEvent.DrawerSearchTerm(term = it))) },
                     onClose = { onEvent(ChatEvent(drawer_search_closed = ChatEvent.DrawerSearchClosed())) },

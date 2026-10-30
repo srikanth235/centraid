@@ -119,10 +119,12 @@ message PhotosLightboxPhoto {
   bool trashed = 20;
   // "Deleted · 12 days left" style line for a trashed photograph; empty else.
   string trash_line = 21;
-  // WHY A WRITE IS REFUSED, or empty when every write is live.
-  string write_refusal = 22;
-  // WHY EDIT IS REFUSED, or empty when it is live.
-  string edit_refusal = 23;
+  // 22 was `write_refusal`: nothing read it (#1152).
+  reserved 22;
+  reserved "write_refusal";
+  // 23 was `edit_refusal`: nothing read it (#1152).
+  reserved 23;
+  reserved "edit_refusal";
   // What a stage with nothing to draw says: which of its truthful states it is
   // in ("Preview no longer on this phone"), never a broken image.
   string stage_label = 24;
@@ -227,12 +229,16 @@ message PhotosLightboxWords {
   string copy_location = 18;
   string share_title = 19;
   string place_picker_title = 20;
-  string no_place = 21;
+  // 21 was `no_place`: nothing read it (#1152).
+  reserved 21;
+  reserved "no_place";
   string no_place_detail = 22;
   string place_here = 23;
   string no_places = 24;
   string info_title = 25;
-  string this_photo = 26;
+  // 26 was `this_photo`: nothing read it (#1152).
+  reserved 26;
+  reserved "this_photo";
   string filmstrip = 27;
   string play = 28;
   string pause = 29;

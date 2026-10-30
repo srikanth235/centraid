@@ -1459,10 +1459,15 @@ fn collections_are_pinned_albums_and_utilities_with_the_rows_the_system_sorts() 
         .iter()
         .find(|c| c.title == "Zq Portugal")
         .unwrap();
-    assert!(album.member_owned);
+    assert!(!album.delete_label.is_empty());
     assert_eq!(album.count_label, "Empty");
     // A standing shelf cannot be deleted; a tap is the route in the card.
-    assert!(r.section("pinned").cards.iter().all(|c| !c.member_owned));
+    assert!(
+        r.section("pinned")
+            .cards
+            .iter()
+            .all(|c| c.delete_label.is_empty())
+    );
     let Some(wire::route::Args::PhotosShelf(shelf)) = &album.route.as_ref().unwrap().args else {
         panic!("an album opens a shelf");
     };

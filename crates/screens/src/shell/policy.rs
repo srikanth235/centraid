@@ -88,12 +88,6 @@ fn row(app_ids: Vec<String>) -> wire::HomeTileRow {
     wire::HomeTileRow { app_ids }
 }
 
-/// Every tile unreadable: Home says so instead of drawing eight empties.
-#[must_use]
-pub fn every_tile_unreadable(tiles: &[wire::HomeTile]) -> bool {
-    !tiles.is_empty() && tiles.iter().all(|tile| tile.status() == Status::Unknown)
-}
-
 /// The springboard as a whole.
 ///
 /// Content as soon as one tile has some; loading while any is still reading;
@@ -183,8 +177,5 @@ mod tests {
         tiles[3].status = Status::Unknown as i32;
         assert_eq!(springboard(&tiles), S::FirstRun);
         assert_eq!(springboard(&all(Status::Unknown)), S::Content);
-        assert!(every_tile_unreadable(&all(Status::Unknown)));
-        assert!(!every_tile_unreadable(&tiles));
-        assert!(!every_tile_unreadable(&[]));
     }
 }

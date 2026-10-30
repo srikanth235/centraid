@@ -423,7 +423,6 @@ impl EventPage {
                         .unwrap_or_default(),
                     reply_label: reply.clone(),
                     hue_key: person_hue(&attendee.party_id),
-                    is_you: attendee.is_you,
                     accessibility_label: fill(
                         &event_words::guest_spoken(locale),
                         &[("name", &shown), ("reply", &reply)],

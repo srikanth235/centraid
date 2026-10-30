@@ -1,6 +1,7 @@
 package dev.centraid.android.screens.money
 
 import dev.centraid.android.kit.SearchAskRow
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -195,21 +196,21 @@ private fun LazyListScope.spending(state: MoneyHomeState, onOpen: (Route) -> Uni
     items(spending.heroes.size, key = { "hero-$it" }) { index -> MoneyHeroView(spending.heroes[index]) }
     item(key = "days") { MoneyNote(spending.days_left_label) }
     items(spending.in_out_net.size, key = { "net-$it" }) { index ->
-        spending.in_out_net[index].figures.forEach { MoneyFigureRow(it) }
+        MoneyFigureCard(spending.in_out_net[index].figures)
     }
     spending.tables.forEach { table ->
-        item(key = "table-${table.currency}") { MoneySection(table.heading) }
+        item(key = "table-${table.currency}") {
+            // THE COLUMN HEADS are the table's own words, drawn once above its lines.
+            Column {
+                MoneySection(table.heading)
+                MoneyCategoryHeader(planned = table.planned_label, spent = table.spent_label, left = table.left_label)
+            }
+        }
         items(table.rows, key = { "c-${table.currency}-${it.route?.money_target?.category_id}" }) { line ->
-            CentraidRow(
-                title = line.label,
-                meta = if (line.has_plan) money(line.planned) else "",
-                trailing = money(if (line.has_plan) line.left else line.spent),
-                trailingTone = if (line.over) {
-                    centraid.core.v1.StatusChip.Tone.TONE_NET
-                } else {
-                    centraid.core.v1.StatusChip.Tone.TONE_NEUTRAL
-                },
-                a11y = spoken(line.accessibility_label, if (line.has_plan) line.left else line.spent),
+            // Planned, spent and left across the page; a line with no plan has only what was spent.
+            MoneyCategoryRow(
+                line = line,
+                accessibility = spoken(line.accessibility_label, if (line.has_plan) line.left else line.spent),
                 testTag = "money-category-${line.route?.money_target?.category_id}",
                 onTap = { line.route?.let(onOpen) },
             )
@@ -247,8 +248,10 @@ private fun LazyListScope.activity(
     }
     if (activity.needs_label.isNotEmpty()) {
         item(key = "needs") {
-            MoneyNote(activity.needs_label)
-            activity.needs_category.forEach { MoneyFigureRow(it) }
+            // THE FILTER THAT LISTS THESE ROWS is the state's own `needs_key`.
+            MoneyNeedsRow(label = activity.needs_label, figures = activity.needs_category) {
+                onEvent(MoneyHomeEvent(category_picked = MoneyHomeEvent.CategoryPicked(key = activity.needs_key)))
+            }
         }
     }
     activity.sections.forEach { section ->
@@ -271,19 +274,19 @@ private fun LazyListScope.cashflow(state: MoneyHomeState, addStatement: () -> Un
         return
     }
     flow.series.forEach { series ->
-        item(key = "series-${series.currency}") { MoneySection(series.heading) }
-        items(series.months, key = { "m-${series.currency}-${it.month}" }) { month ->
-            CentraidRow(
-                title = month.label,
-                meta = month.meta,
-                trailing = money(month.net),
-                trailingTone = month.net_tone,
-                dimmed = month.partial,
-                a11y = spoken(month.accessibility_label, month.net),
-                testTag = "money-month-${month.month}",
-            )
-            MoneyFigureRow(centraid.core.v1.MoneyFigure(label = series.in_label, amount = month.incoming))
-            MoneyFigureRow(centraid.core.v1.MoneyFigure(label = series.out_label, amount = month.outgoing))
+        item(key = "series-${series.currency}") {
+            Column {
+                MoneySection(series.heading)
+                MoneyCashflowChart(
+                    months = series.months,
+                    summary = MoneyGeometry.chartSummary(series.months.map { spoken(it.accessibility_label, it.net) }),
+                )
+                MoneyLegend(incoming = series.in_label, outgoing = series.out_label, partial = series.partial_label)
+            }
+        }
+        // NEWEST FIRST under the chart, which runs oldest to newest.
+        items(MoneyGeometry.newestFirst(series.months), key = { "m-${series.currency}-${it.month}" }) { month ->
+            MoneyMonthRow(month, testTag = "money-month-${month.month}")
         }
     }
     flow.definitions.forEach { fact -> item(key = "def-${fact.label}") { FieldRow(key = fact.label, value = fact.detail) } }

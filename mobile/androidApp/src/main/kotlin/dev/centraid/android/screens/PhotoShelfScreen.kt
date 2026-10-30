@@ -83,7 +83,7 @@ public fun PhotoShelfScreen(
     val select = { event: PhotosSelectionEvent -> onEvent(PhotosShelfEvent(selection = event)) }
 
     Column(
-        modifier = Modifier.padding(16.dp),
+        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(
@@ -439,6 +439,12 @@ private fun SelectionBar(
  * RENAME, as one field and a verb in a [SheetRoom]. An empty name is not
  * offered: the vault's `title` is `minLength: 1`, and the reducer drops it
  * besides, so a blank name sends nothing.
+ *
+ * **THE DRAFT IS THIS SHEET'S, and so is the blank guard**: neither
+ * `PhotosRenameSheet` nor `PhotosPlaceNameSheet` carries a can-save flag, as
+ * `PhotosCollections.new_album_can_submit` does for a new album. Until Rust says
+ * so (the iOS shelf trims the same way), the guard here is the old behaviour,
+ * kept and not extended.
  */
 @Composable
 internal fun RenameSheet(
@@ -455,6 +461,7 @@ internal fun RenameSheet(
         fieldLabel = fieldLabel,
         name = name,
         onName = { name = it },
+        canSubmit = name.isNotBlank(),
         primaryLabel = primaryLabel,
         onDismiss = onDismiss,
         onSave = { onSave(name) },
@@ -463,9 +470,10 @@ internal fun RenameSheet(
 
 /**
  * A SHEET WITH ONE NAME FIELD AND ONE VERB — rename, and name a new album. The
- * verb is the sheet's ink button, drawn disabled while the name is blank: a
- * blank name is not a write. [status]
- * is the refusal's sentence, beside the field and never instead of it.
+ * verb is the sheet's ink button, drawn disabled while [canSubmit] is false: a
+ * blank name is not a write, and whether it is blank is the caller's state to
+ * say (a new album's is Rust's `new_album_can_submit`), never this sheet's.
+ * [status] is the refusal's sentence, beside the field and never instead of it.
  */
 @Composable
 internal fun NameSheet(
@@ -473,17 +481,17 @@ internal fun NameSheet(
     fieldLabel: String,
     name: String,
     onName: (String) -> Unit,
+    canSubmit: Boolean,
     primaryLabel: String,
     onDismiss: () -> Unit,
     status: String = "",
     onSave: () -> Unit,
 ) {
-    val ready = name.isNotBlank()
     SheetRoom(
         title = title,
         onDismiss = onDismiss,
         status = status,
-        primary = SheetPrimary(label = primaryLabel, testTag = "rename-save", enabled = ready, onPress = onSave),
+        primary = SheetPrimary(label = primaryLabel, testTag = "rename-save", enabled = canSubmit, onPress = onSave),
     ) {
         NameField(
             value = name,

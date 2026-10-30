@@ -728,7 +728,6 @@ impl Detail {
                 String::new()
             },
             parent_route: (!parent_id.is_empty()).then(|| routes::task(&parent_id)),
-            parent_task_id: parent_id,
             parent_title: answer
                 .detail
                 .parent
@@ -795,7 +794,6 @@ impl Screen for Detail {
                 content: Some(content),
                 autosave: Some(self.autosave.view(locale)),
                 confirm: self.confirm(locale),
-                asking: self.asking as i32,
                 open_field: self.open_field.clone(),
                 chrome: Some(rows::chrome(locale)),
                 status: self.ops.status.clone(),
@@ -1043,7 +1041,6 @@ fn fields(
         },
         choices: repeat_choices,
         // For the picker only; the member reads `value` (#834).
-        raw: task.rrule.clone().unwrap_or_default(),
         enabled: dated || task.repeats,
         ..wire::TodoField::default()
     });

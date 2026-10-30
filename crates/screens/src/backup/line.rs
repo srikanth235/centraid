@@ -52,7 +52,6 @@ pub fn line(
 ) -> wire::BackupLine {
     if frozen {
         return finish(wire::BackupLine {
-            frozen: true,
             sentence: words::backup_line_frozen(locale),
             status: words::backup_status_frozen(locale),
             tone: Tone::Urgent as i32,
@@ -65,8 +64,6 @@ pub fn line(
     let waiting = waiting_rows(locale, reading);
     if reading.destinations.is_empty() {
         return finish(wire::BackupLine {
-            unpaired: true,
-            total: reading.content_total,
             detail: detail(locale, reading),
             sentence: words::backup_line_unpaired(locale),
             status: words::backup_status_unpaired(locale),
@@ -82,13 +79,11 @@ pub fn line(
     if reading.destinations.iter().all(|d| d.pair_again) {
         return finish(wire::BackupLine {
             confirmed: reading.content_confirmed,
-            total: reading.content_total,
             waiting,
             sentence: words::backup_line_pair_again(locale),
             status: words::backup_status_pair_again(locale),
             detail: detail(locale, reading),
             tone: Tone::Attention as i32,
-            pair_again: true,
             ..Default::default()
         });
     }
@@ -96,7 +91,6 @@ pub fn line(
     let Some(acked) = reading.last_ack_ms else {
         return finish(wire::BackupLine {
             confirmed: reading.content_confirmed,
-            total: reading.content_total,
             waiting,
             sentence: words::backup_line_never(locale),
             status: words::backup_status_never(locale),
@@ -118,9 +112,7 @@ pub fn line(
         || reading.waiting_for(wire::WaitReason::Untrusted) > 0
         || reading.destinations.iter().any(|d| d.pair_again);
     finish(wire::BackupLine {
-        records_as_of_ms: acked,
         confirmed: reading.content_confirmed,
-        total: reading.content_total,
         waiting,
         sentence: fill(
             &if whole {

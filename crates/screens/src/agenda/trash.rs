@@ -17,13 +17,9 @@ use crate::kit::trash::{self, TrashCopy, TrashItem, TrashSpec};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, task as words};
 
-/// The days the sweep keeps a trashed task.
-const WINDOW_DAYS: u32 = 30;
-
 /// Agenda's trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
     app: act::agenda::APP,
-    purge_window_days: WINDOW_DAYS,
     icon_key: "Todo",
     copy: TrashCopy {
         purge_body: Some(words::trash_purge_body),

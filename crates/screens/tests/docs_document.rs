@@ -12,7 +12,6 @@ use centraid_screens::testing::Driver;
 use docs_support::*;
 use wire::docs_document_event as dd;
 use wire::docs_document_event::Kind as DD;
-use wire::docs_document_state::Asking;
 use wire::docs_editor_event as ee;
 use wire::docs_editor_event::Kind as EE;
 use wire::docs_sheet::Kind as Sheet;
@@ -198,7 +197,6 @@ fn trashing_asks_first_and_a_trashed_document_offers_restore_and_delete_forever(
     let i = open(&mut d, &id, "Return", "Docs");
     pick_doc(&mut d, i, "trash");
     let state = document_state(d.view(i));
-    assert_eq!(state.asking, Asking::Trash as i32);
     assert_eq!(state.confirm.as_ref().unwrap().title, "Move to trash?");
     document_send(&mut d, i, DD::Dismissed(dd::Dismissed {}));
     assert!(document_state(d.view(i)).confirm.is_none());
@@ -240,7 +238,6 @@ fn delete_forever_on_a_trashed_document_asks_first_purges_it_and_the_page_leaves
     let i = open(&mut d, &id, "Return", "Docs");
     pick_doc(&mut d, i, "purge");
     let state = document_state(d.view(i));
-    assert_eq!(state.asking, Asking::Purge as i32);
     let confirm = state.confirm.as_ref().unwrap();
     assert_eq!(confirm.title, "Delete this forever?");
     assert_eq!(
@@ -533,7 +530,6 @@ fn the_trash_destroys_on_photos_path_delete_forever_and_empty_trash_each_behind_
     let view = trash_view(d.view(i));
     assert_eq!(view.app_id, "docs");
     assert_eq!(view.back_label, "Docs");
-    assert_eq!(view.purge_window_days, 30);
     assert_eq!(trash_ids(d.view(i)).len(), 2);
     let Some(wire::trash_view::Content::Data(data)) = &view.content else {
         panic!();

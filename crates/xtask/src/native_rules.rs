@@ -38,6 +38,7 @@ pub fn all(root: &Path) -> Vec<RuleReport> {
         health_connect_read_only(root),
         walker_platform_law(root),
         first_launch_asks_nothing(root),
+        crate::native_parity::native_shell_parity(root),
     ]
 }
 

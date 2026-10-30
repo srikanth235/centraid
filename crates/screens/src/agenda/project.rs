@@ -283,7 +283,6 @@ impl Screen for Project {
         wire::ViewState {
             kind: Some(wire::view_state::Kind::TodoProject(
                 wire::TodoProjectState {
-                    project_id: self.project_id.clone(),
                     title: self.name.clone(),
                     content: Some(content),
                     chrome: Some(rows::chrome(locale)),
@@ -292,7 +291,6 @@ impl Screen for Project {
                     sheet: self.sheet as i32,
                     new_section_name: self.new_section_name.clone(),
                     new_section_can_submit: !self.new_section_name.trim().is_empty(),
-                    target_section_id: self.target_section_id.clone(),
                     rename_name: self.rename_name.clone(),
                     rename_can_submit: !self.rename_name.trim().is_empty()
                         && self.rename_name.trim() != self.name,

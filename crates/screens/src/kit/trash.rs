@@ -151,8 +151,6 @@ impl TrashCopy {
 pub struct TrashSpec {
     /// `agenda`: the app, and the prefix of the screen name `agenda.trash`.
     pub app: &'static str,
-    /// The days the sweep keeps a deleted row.
-    pub purge_window_days: u32,
     /// The kit's glyph for a row.
     pub icon_key: &'static str,
     pub copy: TrashCopy,
@@ -359,7 +357,6 @@ impl Screen for Trash {
                 content: Some(content),
                 confirm: self.confirm(locale),
                 status: self.status.clone(),
-                purge_window_days: self.spec.purge_window_days,
             })),
             ..wire::ViewState::default()
         }

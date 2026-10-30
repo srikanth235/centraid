@@ -68,7 +68,6 @@ pub fn fold(locale: Locale, held: &Held, limit: u32) -> Option<wire::AgendaHomeD
     }
     Some(wire::AgendaHomeData {
         today: board.today.clone(),
-        now_local: board.now_local.clone(),
         catch_up: Some(routes::catch_up()),
         todo: Some(wire::AgendaTodo {
             groups,

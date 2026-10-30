@@ -101,7 +101,6 @@ fn home_is_the_root_of_the_home_tab_and_reads_every_app_in_the_grid_order() {
             vec!["people", "locker"],
         ]
     );
-    assert!(!data.every_tile_unreadable);
 }
 
 #[test]
@@ -258,7 +257,6 @@ fn the_lockup_is_worded_from_the_vault_the_shell_names() {
     assert_eq!(front.state_line, "On this phone");
     assert_eq!(bar.search_label, "Search everything");
     assert_eq!(bar.search_route, Some(shell::routes::search()));
-    assert_eq!(bar.switch_spoken, "Switch vault");
     // The backup line is shown as given, for a vault that has not moved.
     tell(
         &mut d,
@@ -746,7 +744,7 @@ fn the_lockups_spoken_sentences_are_finished_by_rust() {
     let state_line = bar.vault.as_ref().unwrap().state_line.clone();
     assert_eq!(
         bar.switch_label,
-        format!("Personal, {state_line}. {}", bar.switch_spoken)
+        format!("Personal, {state_line}. Switch vault")
     );
     assert_eq!(bar.backup_open_label, "");
     // A backup line replaces the state line, and is a door of its own.
@@ -762,9 +760,6 @@ fn the_lockups_spoken_sentences_are_finished_by_rust() {
         }),
     );
     let bar = state(&d, i).bar.unwrap();
-    assert_eq!(bar.switch_label, format!("Personal. {}", bar.switch_spoken));
-    assert_eq!(
-        bar.backup_open_label,
-        format!("Backed up today. {}", bar.backup_open_spoken)
-    );
+    assert_eq!(bar.switch_label, "Personal. Switch vault");
+    assert_eq!(bar.backup_open_label, "Backed up today. Open backup");
 }

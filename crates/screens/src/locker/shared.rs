@@ -256,7 +256,6 @@ pub(super) fn row(locale: Locale, item: &wire::LockerItemRow, parent: &str) -> w
         title: item.title.clone(),
         meta,
         type_chip: kind.chip(locale),
-        type_key: kind.icon.to_owned(),
         starred: item.starred,
         chips,
         accessibility_label: spoken,

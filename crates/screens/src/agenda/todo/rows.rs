@@ -392,7 +392,6 @@ pub fn groups(
                 month_heading: month,
                 verb_label,
                 verb_key,
-                section_id: keep_empty.then(|| group.section_id.clone().unwrap_or_default()),
                 rows,
             })
         })

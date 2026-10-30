@@ -111,7 +111,6 @@ fn filters_are_the_requests_and_the_chip_row_follows_them() {
     choose(&mut d, i, "pdf");
     assert_eq!(titles(d.view(i)), ["Lease.pdf"]);
     let drive = state(&d, i);
-    assert!(drive.filters_active);
     let pills: Vec<(&str, bool)> = drive
         .pills
         .iter()
@@ -122,7 +121,7 @@ fn filters_are_the_requests_and_the_chip_row_follows_them() {
     // Clear filters reads the shelf back and keeps the order.
     drive_send(&mut d, i, D::FiltersCleared(de::FiltersCleared {}));
     assert_eq!(titles(d.view(i)).len(), all + 1);
-    assert!(!state(&d, i).filters_active);
+    assert!(!state(&d, i).pills.iter().any(|pill| pill.clears));
     // A filter nothing matches is its own empty state with the one action.
     open_sheet(&mut d, i, Sheet::Type);
     choose(&mut d, i, "video");
@@ -175,7 +174,6 @@ fn recently_added_is_a_window_with_no_filters_and_its_rule_said_once() {
     assert_eq!(drive.destination, wire::DocsDestination::Recent as i32);
     assert_eq!(drive.chrome.as_ref().unwrap().title, "Recently added");
     assert!(drive.pills.is_empty());
-    assert!(!drive.filters_active);
     assert_eq!(
         drive_data(d.view(i)).shelf_note,
         "Most recently added documents."

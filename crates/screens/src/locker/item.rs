@@ -921,7 +921,6 @@ impl Item {
             title: item.title.clone(),
             type_label: (kind.label)(locale),
             type_chip: kind.chip(locale),
-            type_key: kind.icon.to_owned(),
             starred: item.starred,
             chips,
             status_line: if item.secrets.iter().any(|secret| secret.present) {

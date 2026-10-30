@@ -34,7 +34,6 @@ pub(super) fn state(drive: &Drive, ctx: &Ctx) -> wire::ViewState {
     let locale = ctx.locale();
     let is_denied = matches!(drive.phase, Phase::Denied(_));
     let searching = drive.active_term().is_some();
-    let filters_active = drive.filtering() && drive.query.filtering();
     let content = match &drive.phase {
         Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
         Phase::Failed => Content::Failure(read::failure(locale)),
@@ -67,7 +66,6 @@ pub(super) fn state(drive: &Drive, ctx: &Ctx) -> wire::ViewState {
                     confirm_label: words::trash_confirm(locale),
                     destructive: true,
                 }),
-                confirm_document_id: drive.asking.clone().unwrap_or_default(),
                 rename: drive.rename.as_ref().map(|rename| rename.view(locale)),
                 band: if is_denied {
                     Vec::new()
@@ -79,7 +77,6 @@ pub(super) fn state(drive: &Drive, ctx: &Ctx) -> wire::ViewState {
                 } else {
                     pills(drive, locale)
                 },
-                filters_active: filters_active && !searching && !is_denied,
                 chrome: Some(chrome(drive, locale)),
                 head_meta: head_meta(drive, locale),
                 ingest: Some(drive.ingest.view(locale)),
@@ -229,7 +226,6 @@ fn chrome(drive: &Drive, locale: Locale) -> wire::DocsDriveChrome {
             words::layout_to_grid(locale)
         },
         layout_icon_key: if drive.grid { "List" } else { "Grid" }.to_owned(),
-        filters_clear_label: words::clear_filters(locale),
         row_menu: words::more(locale),
         starred: words::starred(locale),
         rename_placeholder: words::rename_placeholder(locale),

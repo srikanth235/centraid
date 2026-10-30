@@ -650,6 +650,10 @@ struct LibraryScrubRail: View {
                 @unknown default: break
                 }
             }
+            // THE SAME TWO STEPS, NAMED (Rust's words): VoiceOver lists them in the rotor beside
+            // the adjustable swipe, as TalkBack lists Android's custom actions.
+            .accessibilityAction(named: data.scrubNextLabel) { step(true) }
+            .accessibilityAction(named: data.scrubPreviousLabel) { step(false) }
     }
 }
 

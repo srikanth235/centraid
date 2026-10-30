@@ -58,7 +58,6 @@ fn a_trashed_person_is_a_row_with_the_days_the_members_zone_reads() {
     assert_eq!(view.app_id, "people");
     assert_eq!(view.title, "Trash");
     assert_eq!(view.back_label, "People");
-    assert_eq!(view.purge_window_days, 30);
     let row = rows(d.view(i))
         .into_iter()
         .find(|row| row.id == id)

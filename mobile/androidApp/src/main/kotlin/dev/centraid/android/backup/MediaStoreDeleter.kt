@@ -39,18 +39,12 @@ import java.util.concurrent.Executors
  * process ([Waiting]), because the result is delivered to the NEW activity's
  * launcher, registered under the same key.
  *
- * Three rules, each with its reason:
- *
- * 1. **The collection is the item's media type** (A20): `video/…` names
- *    `MediaStore.Video`, anything else `MediaStore.Images`. A ref whose walker
- *    prefix (`image:` / `video:`) names the other collection is skipped, never
- *    guessed at.
- * 2. **A row that changed since it was backed up is kept.** The store's `SIZE`
- *    must equal the size the core backed up (`LibraryDeleteItem.size`); an item
- *    edited in place, or a row the store no longer has, is left out of the request.
- * 3. **What is reported is what the request removed.** On a yes each asked row
- *    is looked up again, and only a row the store no longer answers for is
- *    reported deleted. The member's no is `declined`; anything else is `error`.
+ * Three rules, each with its reason, decided by [LibraryDeletion] (the pure
+ * half, unit-tested) and read off the store here: the collection is the item's
+ * media type; a row that changed since it was backed up (its `SIZE` is not
+ * `LibraryDeleteItem.size`) or that the store no longer has is kept; and what is
+ * reported is what the request removed, the member's no being `declined` and
+ * anything else `error`.
  */
 internal class MediaStoreDeleter(private val activity: ComponentActivity) {
     // READ AT FIRST USE, NOT AT CONSTRUCTION: this is built while its activity
@@ -81,7 +75,7 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) {
         val asked = items.mapNotNull { item ->
             val uri = uriOf(item) ?: return@mapNotNull null
             // RULE 2.
-            if (sizeOf(uri) != item.size) null else item to uri
+            if (LibraryDeletion.unchanged(sizeOf(uri), item.size)) item to uri else null
         }
         // NOTHING TO ASK ABOUT asks nothing: no dialog for zero items.
         if (asked.isEmpty()) {
@@ -91,10 +85,10 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) {
         val request = try {
             MediaStore.createDeleteRequest(resolver, asked.map { it.second })
         } catch (refused: IllegalArgumentException) {
-            done(failed(refused))
+            done(LibraryDeletion.failed(refused))
             return
         } catch (refused: SecurityException) {
-            done(failed(refused))
+            done(LibraryDeletion.failed(refused))
             return
         }
         main.post {
@@ -102,10 +96,10 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) {
             try {
                 launcher.launch(IntentSenderRequest.Builder(request.intentSender).build())
             } catch (gone: ActivityNotFoundException) {
-                Waiting.take()?.done?.invoke(failed(gone))
+                Waiting.take()?.done?.invoke(LibraryDeletion.failed(gone))
             } catch (gone: IllegalStateException) {
                 // The launcher's activity is gone: nothing was asked.
-                Waiting.take()?.done?.invoke(failed(gone))
+                Waiting.take()?.done?.invoke(LibraryDeletion.failed(gone))
             }
         }
     }
@@ -113,26 +107,16 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) {
     /** The dialog answered, on the main thread. */
     private fun answered(yes: Boolean) {
         val waiting = Waiting.take() ?: return
-        if (!yes) {
-            waiting.done(LibraryDeleted(declined = true))
-            return
-        }
-        io.execute {
-            // RULE 3.
-            val gone = waiting.asked.filter { (_, uri) -> !exists(uri) }.map { (item, _) -> item.content_hash }
-            waiting.done(LibraryDeleted(deleted_hashes = gone))
-        }
+        // RULE 3.
+        val gone = { LibraryDeletion.deletedHashes(waiting.asked, { it.first.content_hash }, { exists(it.second) }) }
+        if (yes) io.execute { waiting.done(LibraryDeletion.answer(true, gone)) } else waiting.done(LibraryDeletion.answer(false, gone))
     }
 
     /** RULE 1. Null when the ref names no row, or names the other collection. */
     private fun uriOf(item: LibraryDeleteItem): Uri? {
-        val video = item.media_type.startsWith("video/")
-        val ref = item.os_ref
-        if (ref.startsWith(VIDEO_REF) && !video) return null
-        if (ref.startsWith(IMAGE_REF) && video) return null
-        val id = ref.removePrefix(VIDEO_REF).removePrefix(IMAGE_REF).toLongOrNull() ?: return null
-        val base = if (video) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-        return ContentUris.withAppendedId(base, id)
+        val row = LibraryDeletion.target(item.media_type, item.os_ref) ?: return null
+        val base = if (row.video) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        return ContentUris.withAppendedId(base, row.id)
     }
 
     /** The store's own size for a row, or null when it answers nothing for it. */
@@ -150,9 +134,6 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) {
     } catch (refused: SecurityException) {
         true
     }
-
-    private fun failed(error: Exception): LibraryDeleted =
-        LibraryDeleted(error = error.message ?: error.javaClass.simpleName)
 
     /**
      * THE REQUEST IN FLIGHT, kept by the process and touched on the main
@@ -176,10 +157,6 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) {
     }
 
     private companion object {
-        /** The walker's prefixes (`AndroidMediaLibrary`): what a ref says its collection is. */
-        const val IMAGE_REF = "image:"
-        const val VIDEO_REF = "video:"
-
         val NOTHING = LibraryDeleted()
 
         /** One thread for the store's reads, shared by every activity's deleter. */

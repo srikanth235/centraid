@@ -448,7 +448,6 @@ impl Transaction {
             .filter(|p| !p.is_empty())
             .collect::<Vec<_>>()
             .join(", "),
-            is_transfer: answer.transferred_with.is_some(),
         }
     }
 }

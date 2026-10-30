@@ -552,8 +552,11 @@ fn photos_picker_with_the_attach_purpose_hands_its_pick_to_the_chat() {
     };
     assert!(state.finished, "the shell pops it");
     let chips = &chat.state().pending;
-    assert_eq!(chips.len(), 1);
-    assert_eq!(chips[0].asset_id, second);
+    assert_eq!(
+        chips.len(),
+        1,
+        "one photograph: the second choice replaced the first"
+    );
 }
 
 // ---------------------------------------------------------- the Locker unlock --

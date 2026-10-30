@@ -215,7 +215,6 @@ impl Query {
             modified: self.modified as i32,
             label: self.label.clone(),
             sort: self.sort as i32,
-            ascending: self.ascending,
         }
     }
 }

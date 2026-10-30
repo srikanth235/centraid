@@ -73,8 +73,6 @@ pub fn node(locale: Locale, folder: &wire::DocsFolder, parent: &str) -> wire::Do
     };
     wire::DocsFolderNode {
         folder_id: folder.folder_id.clone(),
-        parent_id: folder.parent_id.clone(),
-        document_count: folder.document_count,
         accessibility_label: format!("{name}, {count}"),
         route: Some(routes::folder(&folder.folder_id, &name, parent)),
         count_label: count,

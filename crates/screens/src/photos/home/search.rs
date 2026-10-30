@@ -189,7 +189,6 @@ fn hits(
         empty,
         labels_title: sentences::library_search_labels(locale),
         labels,
-        truncated_label: String::new(),
         matched_label: if matched.is_empty() {
             String::new()
         } else {

@@ -68,7 +68,7 @@ fn a_new_note_reads_nothing_creates_on_first_save_then_edits() {
     clear_notes(&d);
     let i = open_new(&mut d);
     let state = editor_state(d.view(i));
-    assert!(state.is_new && state.note_id.is_empty());
+    assert!(state.note_id.is_empty());
     assert_eq!(state.chrome.as_ref().unwrap().title, "New note");
     assert_eq!(state.chrome.as_ref().unwrap().close, "Cancel");
     assert_eq!(state.chrome.as_ref().unwrap().title_placeholder, "Title");
@@ -95,7 +95,7 @@ fn a_new_note_reads_nothing_creates_on_first_save_then_edits() {
     assert!(titles_in_library(&d).is_empty());
     settle(&mut d);
     let state = editor_state(d.view(i));
-    assert!(!state.is_new && !state.note_id.is_empty());
+    assert!(!state.note_id.is_empty());
     assert_eq!(state.autosave.as_ref().unwrap().label, "Saved");
     assert_eq!(state.chrome.as_ref().unwrap().status, "Saved");
     assert_eq!(state.chrome.as_ref().unwrap().title, "Note");
@@ -155,7 +155,7 @@ fn a_note_with_neither_a_title_nor_a_line_is_not_yet_a_note() {
     );
     // The words stay on screen.
     assert_eq!(draft(d.view(i)).body, "   ");
-    assert!(editor_state(d.view(i)).is_new);
+    assert!(editor_state(d.view(i)).note_id.is_empty());
 }
 
 #[test]

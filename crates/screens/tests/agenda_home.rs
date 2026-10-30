@@ -133,6 +133,20 @@ impl Rig {
         self.data().today.clone()
     }
 
+    /// The core's local clock now, as the upcoming answer states it.
+    fn now_local(&self) -> String {
+        let today = self.today();
+        let wire::app_query_response::Answer::AgendaUpcoming(upcoming) =
+            self.read(load::agenda::Upcoming {
+                from: Some(format!("{today}T00:00:00Z")),
+                to: Some(format!("{}T00:00:00Z", self.day(1))),
+            })
+        else {
+            panic!("upcoming");
+        };
+        upcoming.now_local
+    }
+
     /// `days` from the core's today.
     fn day(&self, days: i64) -> String {
         civil::plus_days(&self.today(), days).expect("a real day")
@@ -647,7 +661,14 @@ fn the_sections_run_in_day_order_with_the_month_named_where_the_list_reaches_a_n
         "Schedule draws no day before the anchor"
     );
     assert!(r.data().days.iter().filter(|d| d.is_today).count() <= 1);
-    let count = r.data().event_count;
+    let count = r
+        .data()
+        .days
+        .iter()
+        .flat_map(events_of)
+        .map(|row| row.instance_key.as_str())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
     assert_eq!(
         r.data().event_count_label,
         if count == 1 {
@@ -670,6 +691,7 @@ fn the_sections_run_in_day_order_with_the_month_named_where_the_list_reaches_a_n
 fn todays_rows_all_day_first_the_now_line_among_what_has_not_started_ended_rows_dimmed() {
     let mut r = rig(Dest::Day);
     let today = r.today();
+    let before = r.now_local();
     r.event(
         "zq-early",
         "Zq Early",
@@ -696,7 +718,16 @@ fn todays_rows_all_day_first_the_now_line_among_what_has_not_started_ended_rows_
             _ => None,
         })
         .unwrap();
-    assert_eq!(now.label, civil::clock(&r.data().now_local));
+    // The label is the core's clock, to the minute: read on both sides of the draw so a
+    // minute that turns in between cannot fail it.
+    let after = civil::clock(&r.now_local());
+    assert!(
+        now.label == after || now.label == civil::clock(&before),
+        "{} is neither {} nor {}",
+        now.label,
+        civil::clock(&before),
+        after
+    );
     assert_eq!(now.accessibility_label, format!("Now, {}", now.label));
     // OPENING LANDS AT NOW.
     assert!(r.data().landing.as_ref().unwrap().now_line);
@@ -707,7 +738,7 @@ fn todays_rows_all_day_first_the_now_line_among_what_has_not_started_ended_rows_
         Some(agenda::routes::event(
             "zq-late",
             &late.instance_key,
-            late.original_start_local.as_deref(),
+            None,
             &today
         ))
     );
@@ -871,7 +902,6 @@ fn waiting_is_your_unanswered_invitations_and_a_birthday_does_not_make_a_day() {
     r.event("zq-mine", "Zq Gym", &format!("{day}T18:00"), None);
     r.settle();
     let data = r.data();
-    assert_eq!(data.waiting_count, 1);
     // ONLY THE OCCURRENCES WAITING ON YOU.
     assert_eq!(
         mine(data, &["Zq Offsite", "Zq Gym"]),
@@ -888,7 +918,6 @@ fn waiting_is_your_unanswered_invitations_and_a_birthday_does_not_make_a_day() {
         mine(r.data(), &["Zq Offsite", "Zq Gym"]),
         [format!("{day}: Zq Offsite"), format!("{day}: Zq Gym")]
     );
-    assert_eq!(r.data().waiting_count, 1);
     r.band("waiting");
     assert_eq!(
         r.state()
@@ -961,16 +990,8 @@ fn a_birthday_is_a_ribbon_on_the_day_and_never_a_row() {
             .as_deref()
             .is_some_and(|name| !name.is_empty())
     );
-    assert_eq!(ribbon.ribbon_names.len(), 1);
-    assert_eq!(
-        ribbon.ribbon.as_deref(),
-        Some(ribbon.ribbon_names[0].as_str())
-    );
-    assert!(
-        events_of(ribbon)
-            .iter()
-            .all(|row| row.title != ribbon.ribbon_names[0])
-    );
+    let name = ribbon.ribbon.clone().unwrap();
+    assert!(events_of(ribbon).iter().all(|row| row.title != name));
 }
 
 // ---------------------------------------------------------------------------
@@ -1548,8 +1569,14 @@ fn a_task_due_today_is_a_row_of_today_untimed_after_the_all_day_rows_timed_among
         Some(agenda::routes::task("zq-untimed"))
     );
     // The events' count is the events' alone.
-    let events = r.data().event_count;
-    assert!(r.data().days.iter().flat_map(events_of).count() as u32 >= events);
+    let events: usize = r
+        .data()
+        .event_count_label
+        .split(' ')
+        .next()
+        .and_then(|count| count.parse().ok())
+        .expect("a count in the label");
+    assert!(r.data().days.iter().flat_map(events_of).count() >= events);
 }
 
 #[test]
@@ -2082,7 +2109,6 @@ fn filing_is_a_sheet_of_inbox_projects_and_sections_and_the_task_leaves_the_inbo
         task_id: "zq-seeds".to_owned(),
     }));
     assert_eq!(r.state().sheet, Sheet::File as i32);
-    assert_eq!(r.state().filing_task_id, "zq-seeds");
     let keys: Vec<&str> = r
         .state()
         .file_choices
@@ -2107,7 +2133,6 @@ fn filing_is_a_sheet_of_inbox_projects_and_sections_and_the_task_leaves_the_inbo
         key: "project:zq-gp".to_owned(),
     }));
     assert_eq!(r.state().sheet, Sheet::None as i32);
-    assert_eq!(r.state().filing_task_id, "");
     assert!(r.state().file_choices.is_empty());
     assert!(
         !inbox_titles(&r).contains(&"Zq Seeds".to_owned()),
@@ -2154,7 +2179,7 @@ fn filing_is_a_sheet_of_inbox_projects_and_sections_and_the_task_leaves_the_inbo
         task_id: "zq-tools".to_owned(),
     }));
     r.send(H::SheetClosed(wire::agenda_home_event::SheetClosed {}));
-    assert_eq!(r.state().filing_task_id, "");
+    assert!(r.state().file_choices.is_empty());
 }
 
 #[test]

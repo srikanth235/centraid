@@ -126,9 +126,12 @@ message Autosave {
   string base_revision_id = 4;
   optional Failure failure = 5;
   bool remote_changed = 6;
-  uint64 saving_seq = 7;
-  // The key the save in flight was submitted under, one per `edit_seq`.
-  string invoke_key = 8;
+  // 7 was `saving_seq`: nothing read it (#1152).
+  reserved 7;
+  reserved "saving_seq";
+  // 8 was `invoke_key`: nothing read it (#1152).
+  reserved 8;
+  reserved "invoke_key";
   // THE STATUS LINE'S WORDS (#1047): "Saved", "Edited", "Saving…", the
   // refusal's own sentence or "Not saved", "Changed on another device" — set
   // by the kit's law with every phase, so no shell spells them. Empty before
@@ -247,7 +250,9 @@ message TrashView {
   optional Confirm confirm = 8;
   // A refusal's sentence, over the list; the list stays.
   StatusLine status = 9;
-  uint32 purge_window_days = 10;
+  // 10 was `purge_window_days`: nothing read it (#1152).
+  reserved 10;
+  reserved "purge_window_days";
 }
 
 message TrashEvent {

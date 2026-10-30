@@ -262,7 +262,6 @@ fn a_live_photos_movie_folds_into_its_still_and_waits_for_a_still_that_has_not_c
     let ids: Vec<&str> = tiles.iter().map(|tile| tile.photo_id.as_str()).collect();
     assert_eq!(ids, ["still", "other"]);
     assert!(tiles[0].live);
-    assert_eq!(tiles[0].live_movie_id, "movie");
     assert_eq!(tiles[0].accessibility_label, "Live photo");
 
     // The still has not arrived: the movie IS a video and stays a cell of its own.
@@ -575,7 +574,6 @@ fn trash_asks_first_in_full_sentences_and_a_library_trash_ends_the_mode() {
     );
     assert_eq!(confirm.confirm_label, "Move to trash");
     assert!(confirm.destructive);
-    assert_eq!(view.confirming, Verb::Trash as i32);
     assert!(
         ids_of(&shelf(&d, load::photos::ShelfView::Live, None)).contains(&gone),
         "nothing happened yet"

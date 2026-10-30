@@ -99,7 +99,9 @@ message LockerRow {
   string meta = 3;
   // The type chip (two letters) and its icon key.
   string type_chip = 4;
-  string type_key = 5;
+  // 5 was `type_key`: nothing read it (#1152).
+  reserved 5;
+  reserved "type_key";
   bool starred = 6;
   repeated StatusChip chips = 7;
   string accessibility_label = 8;
@@ -413,7 +415,9 @@ message LockerItemData {
   string title = 1;
   string type_label = 2;
   string type_chip = 3;
-  string type_key = 4;
+  // 4 was `type_key`: nothing read it (#1152).
+  reserved 4;
+  reserved "type_key";
   bool starred = 5;
   repeated StatusChip chips = 6;
   // "Sealed at rest. A revealed secret conceals itself after 30 seconds."

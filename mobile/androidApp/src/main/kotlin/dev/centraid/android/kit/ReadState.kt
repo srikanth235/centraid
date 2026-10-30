@@ -38,6 +38,7 @@ import centraid.core.v1.EmptyState
 import centraid.core.v1.Loading
 import centraid.core.v1.Failure as ReadFailure
 import dev.centraid.android.theme.centraidColor
+import dev.centraid.design.CentraidGeometry
 import dev.centraid.design.CentraidTokens
 import dev.centraid.android.theme.centraidType
 
@@ -323,8 +324,11 @@ public fun ChoiceStack(
 
 /** The kit's geometry, in one place. */
 public object KitGeometry {
-    /** The page gutter. */
-    public val GUTTER: Dp = 16.dp
+    /**
+     * The page margin: the emitted `CentraidGeometry.PAGE_MARGIN` (DESIGN.md fixes it at 18), the one
+     * definition every kit and screen inset reads. The name stays; the value is no longer typed here.
+     */
+    public val GUTTER: Dp = CentraidGeometry.PAGE_MARGIN.dp
 
     /** A thumb's press: every row and key is at least this tall. */
     public val ROW_MIN: Dp = 44.dp

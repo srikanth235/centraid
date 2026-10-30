@@ -31,6 +31,7 @@ struct AgendaHomeView: View {
 
     var body: some View {
         let content = readContent(state)
+        let eventCountText = eventCountLabel(state)
         AppPlace(
             app: "agenda",
             title: state.chrome.title,
@@ -68,7 +69,7 @@ struct AgendaHomeView: View {
         } content: {
             VStack(spacing: 0) {
                 if state.toolbar.shown {
-                    AgendaToolbarView(toolbar: state.toolbar, chrome: state.chrome, send: send)
+                    AgendaToolbarView(toolbar: state.toolbar, eventCountText: eventCountText, chrome: state.chrome, send: send)
                 }
                 ReadStateView(
                     content: content,
@@ -152,6 +153,14 @@ struct AgendaHomeView: View {
         case let .denied(denied)?: return .gated(denied)
         case let .data(home)?: return .data(home)
         }
+    }
+
+    /// THE APP BAR'S WORDS FOR THE EVENTS DRAWN ("3 events"): Rust's `event_count_label`, which
+    /// the data arm carries and the toolbar above it does not, so it is read here and handed
+    /// down. Empty on every other branch, and while the data holds no events.
+    private func eventCountLabel(_ state: Centraid_Core_V1_AgendaHomeState) -> String {
+        if case let .data(home)? = state.content { return home.eventCountLabel }
+        return ""
     }
 
     /// THE HEADER'S ONE ACTION (R-CHROME-1), per place: the Plus glyph, spoken
@@ -283,6 +292,8 @@ private struct CalendarImportButton: View {
 /// anchor is already today.
 private struct AgendaToolbarView: View {
     let toolbar: Centraid_Core_V1_AgendaToolbar
+    /// Rust's `event_count_label`, drawn with the month ("May 2026 · 3 events").
+    let eventCountText: String
     let chrome: Centraid_Core_V1_AgendaChrome
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
     @Environment(\.colorScheme) private var scheme
@@ -309,7 +320,7 @@ private struct AgendaToolbarView: View {
                     }
                 }
                 Spacer(minLength: 0)
-                Text(toolbar.monthLabel)
+                Text([toolbar.monthLabel, eventCountText].filter { !$0.isEmpty }.joined(separator: " \u{00B7} "))
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color("textFaint", scheme))
             }

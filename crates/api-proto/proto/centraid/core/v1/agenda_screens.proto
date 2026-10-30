@@ -81,8 +81,10 @@ message AgendaHomeState {
   // To-do's quick-add bar (R-CHROME-1: the Plus on To-do opens it). `shown`
   // governs whether the To-do Plus is drawn; the bar itself waits for `drawn`.
   TodoQuickAdd quick_add = 22;
-  // SHEET_FILE: the task being filed, and where it can go.
-  string filing_task_id = 23;
+  // 23 was `filing_task_id`: nothing read it (#1152).
+  reserved 23;
+  reserved "filing_task_id";
+  // SHEET_FILE: where the task being filed can go.
   repeated TodoChoice file_choices = 24;
   // SHEET_NEW_PROJECT's name field.
   string new_project_name = 25;
@@ -179,7 +181,9 @@ message AgendaBandTab {
 message AgendaHomeData {
   // `YYYY-MM-DD` and `YYYY-MM-DDTHH:MM`, from the answer.
   string today = 1;
-  string now_local = 2;
+  // 2 was `now_local`: nothing read it (#1152).
+  reserved 2;
+  reserved "now_local";
   // In day order. Past days are not drawn except as search hits.
   repeated AgendaDaySection days = 3;
   // `AGENDA_EMPTY_NONE` whenever `days` has a section, and under a search
@@ -192,10 +196,12 @@ message AgendaHomeData {
   string empty_action = 7;
   // Every calendar the member has, for the More sheet.
   repeated AgendaCalendarChoice calendars = 8;
-  // Occurrences in the window waiting on your reply.
-  uint32 waiting_count = 9;
-  // Events drawn, and the app bar's words for it: "3 events".
-  uint32 event_count = 10;
+  // 9 was `waiting_count`: nothing read it (#1152).
+  reserved 9;
+  reserved "waiting_count";
+  // 10 was `event_count`: nothing read it (#1152).
+  reserved 10;
+  reserved "event_count";
   string event_count_label = 11;
   // WHERE OPENING LANDS: this section, at its now line when it has one. Empty
   // `day` is the top.
@@ -271,7 +277,9 @@ message AgendaDaySection {
   optional string month_heading = 7;
   // "Dana" / "3 birthdays" — day context, never an event row.
   optional string ribbon = 8;
-  repeated string ribbon_names = 9;
+  // 9 was `ribbon_names`: nothing read it (#1152).
+  reserved 9;
+  reserved "ribbon_names";
   // 10-13 were the due shelf (`due_count`, `due`, `due_label`, `due_open`):
   // an open task due on the day is a row now (`AgendaRowItem.task`, R-1128-2).
   reserved 10, 11, 12, 13;
@@ -301,9 +309,13 @@ message AgendaNowLine {
 }
 
 message AgendaEventRow {
-  string event_id = 1;
+  // 1 was `event_id`: nothing read it (#1152).
+  reserved 1;
+  reserved "event_id";
   string instance_key = 2;
-  optional string original_start_local = 3;
+  // 3 was `original_start_local`: nothing read it (#1152).
+  reserved 3;
+  reserved "original_start_local";
   // `day|instance_key`: a run over three days is three rows.
   string row_key = 4;
   // The summary, or "Untitled event".
@@ -647,7 +659,9 @@ message AgendaGuestRow {
   string initial = 3;
   string reply_label = 4;
   string hue_key = 5;
-  bool is_you = 6;
+  // 6 was `is_you`: nothing read it (#1152).
+  reserved 6;
+  reserved "is_you";
   string accessibility_label = 7;
 }
 
@@ -716,7 +730,9 @@ message AgendaEditorState {
   Sheet sheet = 13;
   // The discard or skip question, while it is asked.
   optional Confirm confirm = 14;
-  Asking asking = 15;
+  // 15 was `asking`: nothing read it (#1152).
+  reserved 15;
+  reserved "asking";
   AgendaEditorChrome chrome = 16;
   // THE EDITOR IS DONE — saved, skipped, or left with nothing to lose. The
   // shell pops.
@@ -760,7 +776,9 @@ message AgendaEditorChrome {
   string link_placeholder = 3;
   string field_title = 4;
   string field_all_day = 5;
-  string field_starts = 6;
+  // 6 was `field_starts`: nothing read it (#1152).
+  reserved 6;
+  reserved "field_starts";
   string field_ends = 7;
   string field_calendar = 8;
   string field_guests = 9;
@@ -1017,8 +1035,9 @@ message TodoRowGroup {
   // Empty for none; `GroupVerb` sends `verb_key` back.
   string verb_label = 5;
   string verb_key = 6;
-  // A project's section this group is (the project screen), else absent.
-  optional string section_id = 7;
+  // 7 was `section_id`: nothing read it (#1152).
+  reserved 7;
+  reserved "section_id";
   repeated TodoRow rows = 8;
 }
 
@@ -1175,7 +1194,9 @@ message TodoListEvent {
 
 // `agenda.project`: one project, its sections and a quick add into them.
 message TodoProjectState {
-  string project_id = 2;
+  // 2 was `project_id`: nothing read it (#1152).
+  reserved 2;
+  reserved "project_id";
   // The name, riding along from the route until the answer names it.
   string title = 3;
   oneof content {
@@ -1191,8 +1212,9 @@ message TodoProjectState {
   // The words typed in the Add section sheet.
   string new_section_name = 12;
   bool new_section_can_submit = 13;
-  // The section a quick add lands in; empty is the project's unsectioned work.
-  string target_section_id = 14;
+  // 14 was `target_section_id`: nothing read it (#1152).
+  reserved 14;
+  reserved "target_section_id";
   // The words typed in the Rename sheet, from the project's own name.
   string rename_name = 15;
   bool rename_can_submit = 16;
@@ -1303,7 +1325,9 @@ message TodoDetailState {
   Autosave autosave = 7;
   // The confirm on screen, and what it asks about.
   optional Confirm confirm = 11;
-  Asking asking = 12;
+  // 12 was `asking`: nothing read it (#1152).
+  reserved 12;
+  reserved "asking";
   // The field whose choice sheet is up; empty for none.
   string open_field = 13;
   TodoChrome chrome = 14;
@@ -1333,8 +1357,10 @@ message TodoDetailData {
   // A top-level task takes subtasks; a subtask does not (one level).
   bool can_add_subtask = 8;
   string subtask_note = 9;
-  // The parent, when this is a subtask: its title, and the page a tap opens.
-  string parent_task_id = 10;
+  // The parent, when this is a subtask: its title. The page a tap opens is
+  // `parent_route`; 10 was `parent_task_id`, a copy of the id inside it (#1152).
+  reserved 10;
+  reserved "parent_task_id";
   string parent_title = 11;
   string title_placeholder = 12;
   string notes_placeholder = 13;
@@ -1364,10 +1390,9 @@ message TodoField {
   // (`TimePicked`) picker beside the choices.
   bool pick_date = 6;
   bool pick_time = 7;
-  // Repeats: the rule as the vault stores it (`TodoTask.rrule`), for the
-  // picker to pre-select from; empty on a one-off. Never drawn (#834): the
-  // member reads `value`, the core's sentence.
-  string raw = 8;
+  // 8 was `raw`: nothing read it (#1152).
+  reserved 8;
+  reserved "raw";
   // The field takes an edit now (a reminder needs a due, for one).
   bool enabled = 9;
   // Tags: the field offers a text entry (`TagAdded`).
@@ -1475,8 +1500,9 @@ message TodoCatchUpState {
   TodoChrome chrome = 6;
   StatusLine status = 7;
   optional Confirm confirm = 8;
-  // The pile the confirm asks about: `dated`, `repeating`, `sitting`.
-  string asking_pile = 9;
+  // 9 was `asking_pile`: nothing read it (#1152).
+  reserved 9;
+  reserved "asking_pile";
 }
 
 message TodoCatchUpData {

@@ -69,7 +69,9 @@ message HomeTileBody {
   message Photos {
     repeated Cell cells = 1;
     message Cell {
-      string asset_id = 1;
+      // 1 was `asset_id`: nothing read it (#1152).
+      reserved 1;
+      reserved "asset_id";
       optional string thumbnail_path = 2;
     }
     // Said under a strip of grey cells: "These photos aren't on this phone yet."
@@ -113,7 +115,9 @@ message HomeTileBody {
   // A state and its words, never a row: a launcher says how many items and
   // whether the Locker is open, nothing a locked Locker holds.
   message Locker {
-    bool locked = 1;
+    // 1 was `locked`: nothing read it (#1152).
+    reserved 1;
+    reserved "locked";
     string state_label = 2;
     string line = 3;
   }
@@ -203,8 +207,9 @@ message HomeData {
   repeated HomeTile tiles = 2;
   // Which tiles share a row (two small ones, or one wide one).
   repeated HomeTileRow grid_rows = 3;
-  // Every readable tile failed: Home says so rather than draw eight empties.
-  bool every_tile_unreadable = 4;
+  // 4 was `every_tile_unreadable`: nothing read it (#1152).
+  reserved 4;
+  reserved "every_tile_unreadable";
   // The day-one page's words, set when `springboard` is `FIRST_RUN`.
   string day_one_title = 5;
   string day_one_body = 6;
@@ -307,8 +312,12 @@ message HomeBar {
   // The appearance key: the glyph and the words of the switch it makes.
   string appearance_icon = 4;
   string appearance_label = 5;
-  string switch_spoken = 6;
-  string backup_open_spoken = 7;
+  // 6 was `switch_spoken`: nothing read it (#1152).
+  reserved 6;
+  reserved "switch_spoken";
+  // 7 was `backup_open_spoken`: nothing read it (#1152).
+  reserved 7;
+  reserved "backup_open_spoken";
   // The finished spoken sentences (the lockup's switch press, the backup line's door):
   // a shell speaks them as given and joins nothing.
   string switch_label = 10;

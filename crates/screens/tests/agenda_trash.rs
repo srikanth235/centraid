@@ -64,7 +64,6 @@ fn the_trash_lists_deleted_tasks_with_the_day_they_were_deleted() {
     assert_eq!(view.app_id, "agenda");
     assert_eq!(view.title, "Trash");
     assert_eq!(view.back_label, "Agenda");
-    assert_eq!(view.purge_window_days, 30);
     let data = trash_data(d.view(i));
     assert_eq!(data.rows.len(), 2);
     let order: Vec<&str> = data.rows.iter().map(|r| r.id.as_str()).collect();
@@ -288,7 +287,6 @@ mod kit {
 
     static FULL: TrashSpec = TrashSpec {
         app: "fake",
-        purge_window_days: 30,
         icon_key: "Note",
         copy: TrashCopy {
             purges_on: Some(erased),
@@ -330,7 +328,6 @@ mod kit {
     const fn clone_of_full() -> TrashSpec {
         TrashSpec {
             app: "fake",
-            purge_window_days: 30,
             icon_key: "Note",
             copy: TrashCopy::KIT,
             back_label: app_name,
@@ -557,7 +554,6 @@ mod kit {
             ),
             ("fake", "Notes", "Trash")
         );
-        assert_eq!(view.purge_window_days, 30);
         assert_eq!(trash_data(d.view(i)).rows[0].icon_key, "Note");
     }
 }

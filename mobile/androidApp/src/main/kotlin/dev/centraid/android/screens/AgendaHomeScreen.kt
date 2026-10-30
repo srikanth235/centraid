@@ -63,6 +63,7 @@ import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.DeniedGate
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.hueColor
+import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitStepper
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RoomSearch
@@ -188,7 +189,7 @@ public fun AgendaHomeScreen(
                     val data = state.data_
                     when {
                         loading != null -> AgendaSkeleton(chrome)
-                        failure != null -> Column(Modifier.padding(16.dp).testTag("agenda-failure")) {
+                        failure != null -> Column(Modifier.padding(KitGeometry.GUTTER).testTag("agenda-failure")) {
                             Text(failure.sentence, style = centraidType("body"), color = centraidColor("text"))
                             if (failure.remedy.isNotEmpty()) {
                                 Text(failure.remedy, style = centraidType("small"), color = centraidColor("textSoft"))
@@ -248,7 +249,7 @@ private fun AgendaToolbarRow(
     onEvent: (AgendaHomeEvent) -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("agenda-toolbar"),
+        Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).testTag("agenda-toolbar"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -282,7 +283,7 @@ private fun AgendaSkeleton(chrome: AgendaChrome) {
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(KitGeometry.GUTTER)
             .testTag("agenda-loading")
             .clearAndSetSemantics { contentDescription = chrome.loading },
     ) {
@@ -367,7 +368,7 @@ private fun AgendaList(
                 OutlineButton(
                     label = importVerb,
                     testTag = "agenda-import",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
                 ) { onEvent(AgendaHomeEvent(import_requested = AgendaHomeEvent.ImportRequested())) }
             }
         }
@@ -462,16 +463,16 @@ private fun LazyListScope.daySection(
                 color = centraidColor("textSoft"),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 4.dp)
+                    .padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 20.dp, bottom = 4.dp)
                     .semantics { heading() },
             )
         }
     }
     item(key = "day-${section.day}") {
         Column(Modifier.fillMaxWidth()) {
-            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp).background(centraidColor("line")))
+            Box(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER).height(1.dp).background(centraidColor("line")))
             Row(
-                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 8.dp),
                 verticalAlignment = Alignment.Top,
             ) {
                 DateColumn(section)
@@ -592,7 +593,7 @@ private fun EventRow(row: AgendaEventRow, onOpen: (Route) -> Unit) {
             .fillMaxWidth()
             .heightIn(min = 40.dp)
             .clickable { row.route?.let(onOpen) }
-            .padding(start = 68.dp, end = 16.dp, top = 6.dp, bottom = 6.dp)
+            .padding(start = 68.dp, end = KitGeometry.GUTTER, top = 6.dp, bottom = 6.dp)
             .testTag("agenda-row-${row.row_key}")
             .clearAndSetSemantics {
                 contentDescription = row.accessibility_label
@@ -653,7 +654,7 @@ private fun NowLine(now: AgendaNowLine) {
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(start = 68.dp, end = 16.dp, top = 2.dp, bottom = 2.dp)
+            .padding(start = 68.dp, end = KitGeometry.GUTTER, top = 2.dp, bottom = 2.dp)
             .testTag("agenda-now-line")
             .clearAndSetSemantics { contentDescription = now.accessibility_label },
         verticalAlignment = Alignment.CenterVertically,
@@ -690,7 +691,7 @@ private fun AgendaMoreSheet(
                         row.section,
                         style = centraidType("smallStrong"),
                         color = centraidColor("textSoft"),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).semantics { heading() },
+                        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).semantics { heading() },
                     )
                 }
                 // A PLACE'S ROW sends its key first (the sheet closes), then its route is pushed.
@@ -722,7 +723,7 @@ private fun AgendaToggleRow(row: AgendaMoreRow, onPick: () -> Unit) {
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             .clickable(onClick = onPick)
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = KitGeometry.GUTTER)
             .testTag("agenda-more-${row.key}")
             .clearAndSetSemantics {
                 contentDescription = row.spoken.ifEmpty { row.label }
@@ -758,7 +759,7 @@ private fun AgendaReadsSheet(chrome: AgendaChrome, onEvent: (AgendaHomeEvent) ->
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
                         .semantics(mergeDescendants = true) { },
                 ) {
                     Text(fact.label, style = centraidType("smallStrong"), color = centraidColor("text"))

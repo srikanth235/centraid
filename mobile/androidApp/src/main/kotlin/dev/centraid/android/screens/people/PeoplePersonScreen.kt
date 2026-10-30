@@ -1,5 +1,8 @@
 package dev.centraid.android.screens.people
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -60,7 +63,7 @@ public fun PeoplePersonScreen(
 ) {
     val chrome = state.chrome
     val data = state.data_
-    fun open(which: Which) = onEvent(PeoplePersonEvent(sheet_opened = PeoplePersonEvent.SheetOpened(which)))
+    fun open(which: Which) = onEvent(PeoplePersonEvent(sheet_opened = PeoplePersonEvent.SheetOpened(which = which)))
     PushedPage(
         title = data?.name ?: state.name_hint,
         parentTitle = chrome?.back.orEmpty(),
@@ -130,10 +133,28 @@ private fun PersonBody(
         }
         if (chrome != null) {
             item(key = "acts") {
-                Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)) {
-                    OutlineButton(chrome.log_touch, testTag = "people-log-touch") { open(Which.WHICH_LOG_TOUCH) }
+                // THE VERB STRIP names the four writes the sheets below open, as iOS's strip does; the
+                // section headers keep their own doors. Edit has no toolbar slot here (the star holds
+                // it), so it stays at the strip's foot, outside the scroll, and is never pushed off.
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(
+                        Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        listOf(
+                            Triple(chrome.log_touch, Which.WHICH_LOG_TOUCH, "people-person-log-touch"),
+                            Triple(chrome.add_note, Which.WHICH_NOTE, "people-person-add-note"),
+                            Triple(chrome.add_date, Which.WHICH_DATE, "people-person-add-date"),
+                            Triple(chrome.add_channel, Which.WHICH_CHANNEL, "people-person-add-channel"),
+                        ).filter { it.first.isNotEmpty() }.forEach { (label, which, tag) ->
+                            OutlineButton(label, testTag = tag) { open(which) }
+                        }
+                    }
                     state.edit?.let { route ->
-                        OutlineButton(chrome.edit, testTag = "people-edit", modifier = Modifier.padding(start = 8.dp)) {
+                        OutlineButton(chrome.edit, testTag = "people-person-edit", modifier = Modifier.padding(start = 8.dp)) {
                             onOpen(route)
                         }
                     }
@@ -238,12 +259,12 @@ private fun PersonBody(
         if (chrome != null) {
             item(key = "foot") {
                 Column(Modifier.padding(top = 16.dp, bottom = 24.dp)) {
-                    SheetRow(chrome.merge, iconKey = "dupe", testTag = "people-merge", onTap = { open(Which.WHICH_MERGE) })
+                    SheetRow(chrome.merge, iconKey = "dupe", testTag = "people-person-merge", onTap = { open(Which.WHICH_MERGE) })
                     SheetRow(
                         chrome.move_to_trash,
                         iconKey = "Trash",
                         destructive = true,
-                        testTag = "people-trash",
+                        testTag = "people-person-trash",
                         onTap = { onEvent(PeoplePersonEvent(trash_tapped = PeoplePersonEvent.TrashTapped())) },
                     )
                 }

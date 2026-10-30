@@ -1,7 +1,6 @@
 package dev.centraid.android.screens.photos
 
 import android.content.Context
-import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -51,6 +50,7 @@ import centraid.core.v1.PhotosLightboxWords
 import centraid.core.v1.Route
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
+import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.PhotosAlbumChoiceSheet
 import dev.centraid.android.kit.ScreenFailure
@@ -59,6 +59,7 @@ import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StageKey
 import dev.centraid.android.kit.StageSpinner
 import dev.centraid.android.kit.StageVerb
+import dev.centraid.android.kit.rememberReducedMotion
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
@@ -88,14 +89,14 @@ public fun PhotosLightboxScreen(
     val denied = state.denied
     val photo = state.photo
     val screenReader = rememberScreenReader(context)
-    val reduceMotion = remember(context) { reducedMotion(context) }
+    val reduceMotion = rememberReducedMotion()
 
     // THE PLAYERS ARE THE SCREEN'S, so the stage draws their surfaces and the
     // chrome draws their transport off the same instance.
     val videoPath = photo?.takeIf {
         it.tile?.kind == PhotoTile.Kind.KIND_VIDEO && it.original_embeddable
     }?.original_path?.takeIf { it.isNotEmpty() }
-    val player = rememberLightboxPlayer(videoPath, once = false)
+    val player = rememberLightboxPlayer(videoPath, once = false, mediaType = photo?.original_media_type.orEmpty())
     val live = rememberLightboxPlayer(photo?.live_path?.takeIf { it.isNotEmpty() }, once = true)
 
     // A SCREEN READER PINS THE CHROME OPEN: a control reachable only by an
@@ -110,19 +111,24 @@ public fun PhotosLightboxScreen(
     ) {
         when {
             // BEFORE THE READ LANDS THE STAGE STILL DRAWS what it has — the
-            // strip frame of the photograph a member swiped to — and a ring
-            // only over a stage with nothing at all.
+            // strip frame of the photograph a member swiped to — and the
+            // opening words only over a stage with nothing at all (never a ring).
             loading != null -> {
                 LightboxStage(state, reduceMotion, player, live, onEvent, onClose)
                 if (state.film.none { it.photo_id == state.photo_id && it.tile != null }) {
-                    StageSpinner(modifier = Modifier.align(Alignment.Center))
+                    Text(
+                        text = words.opening,
+                        color = centraidColor("onStageSoft"),
+                        style = centraidType("small"),
+                        modifier = Modifier.align(Alignment.Center),
+                    )
                 }
             }
 
             failure != null -> ScreenFailure(
                 sentence = failure.sentence,
                 remedy = failure.remedy,
-                modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                modifier = Modifier.align(Alignment.Center).padding(KitGeometry.GUTTER),
             )
 
             denied != null -> ScreenFailure(
@@ -140,7 +146,7 @@ public fun PhotosLightboxScreen(
                         color = centraidColor("onStage"),
                         textAlign = TextAlign.Center,
                         style = centraidType("body"),
-                        modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                        modifier = Modifier.align(Alignment.Center).padding(KitGeometry.GUTTER),
                     )
                 }
                 if (chromeVisible) Chrome(state, photo, words, player, live, onEvent, onOpen, onClose)
@@ -592,10 +598,6 @@ private fun rememberScreenReader(context: Context): Boolean {
     }
     return on
 }
-
-/** Reduced motion, as Android spells it: animations off set the animator scale to zero. */
-private fun reducedMotion(context: Context): Boolean =
-    Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
 
 private fun sheetEvent(sheet: PhotosLightboxState.Sheet): PhotosLightboxEvent =
     PhotosLightboxEvent(sheet = PhotosLightboxEvent.SheetChanged(sheet = sheet))
