@@ -1,7 +1,6 @@
 package dev.centraid.android.screens.photos
 
 import android.content.Context
-import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -59,6 +58,7 @@ import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StageKey
 import dev.centraid.android.kit.StageSpinner
 import dev.centraid.android.kit.StageVerb
+import dev.centraid.android.kit.rememberReducedMotion
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
@@ -88,7 +88,7 @@ public fun PhotosLightboxScreen(
     val denied = state.denied
     val photo = state.photo
     val screenReader = rememberScreenReader(context)
-    val reduceMotion = remember(context) { reducedMotion(context) }
+    val reduceMotion = rememberReducedMotion()
 
     // THE PLAYERS ARE THE SCREEN'S, so the stage draws their surfaces and the
     // chrome draws their transport off the same instance.
@@ -592,10 +592,6 @@ private fun rememberScreenReader(context: Context): Boolean {
     }
     return on
 }
-
-/** Reduced motion, as Android spells it: animations off set the animator scale to zero. */
-private fun reducedMotion(context: Context): Boolean =
-    Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
 
 private fun sheetEvent(sheet: PhotosLightboxState.Sheet): PhotosLightboxEvent =
     PhotosLightboxEvent(sheet = PhotosLightboxEvent.SheetChanged(sheet = sheet))
