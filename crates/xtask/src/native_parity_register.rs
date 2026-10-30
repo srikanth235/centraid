@@ -148,8 +148,6 @@ pub const REGISTER: &[Entry] = &[
     ("UploadsOp.cancel_all", platform(Shell::Ios, OS_UPLOADS)),
     ("UploadsOp.enqueue", platform(Shell::Ios, OS_UPLOADS)),
     // Lane F, one shell reads it and nobody owns the other half yet.
-    // HomeVault.originals_withheld: the vault header's count of originals the phone is holding back
-    ("HomeVault.originals_withheld", gap("F", Missing::Android)),
     // LockerSearchField.answered_term: Compose copies it into a kit holder and nothing draws it
     ("LockerSearchField.answered_term", gap("F", Missing::Ios)),
     // NavEvent.pop_to_root: a second tap on the selected tab; Compose sends it, SwiftUI never does
@@ -160,8 +158,6 @@ pub const REGISTER: &[Entry] = &[
     ),
     // ShellFact.expired: iOS reports a BGTask's expiry; WorkManager's stop is its twin and Android reports none
     ("ShellFact.expired", gap("F", Missing::Android)),
-    // ShellVault.originals_withheld: the vault header's count of originals the phone is holding back
-    ("ShellVault.originals_withheld", gap("F", Missing::Android)),
     // Lane F, one-sided by NAME COLLISION: the census matches field names, and the hit is another symbol. Neither shell reads the field; consume it or delete it.
     // ChatAttachment.asset_id: `found.asset_id` in LibraryRoll.kt is another message
     ("ChatAttachment.asset_id", gap("F", Missing::Ios)),

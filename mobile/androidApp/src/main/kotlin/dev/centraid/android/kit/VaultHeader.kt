@@ -88,6 +88,9 @@ public fun VaultHeader(
     // perfectly current and still be waiting for Wi-Fi to bring the
     // photographs.
     val waiting = vault?.originals_line.orEmpty()
+    // THE DOOR FOLLOWS RUST'S COUNT, as iOS's does: the line is the sentence for the count, so the
+    // key is drawn from the number and never from whether the sentence happens to be empty.
+    val withheld = (vault?.originals_withheld ?: 0) > 0
     val hue = vaultHue(vault?.color)
     Row(
         modifier
@@ -198,7 +201,7 @@ public fun VaultHeader(
             // reports them rather than buried in settings: a member reads
             // "12 originals waiting for Wi-Fi" and the next thing they want is the
             // control that decided it.
-            if (waiting.isNotEmpty()) {
+            if (withheld) {
                 IconKey(
                     iconKey = "Settings",
                     label = bar.transfer_rules_label,
