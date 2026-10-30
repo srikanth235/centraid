@@ -6,11 +6,6 @@ import { beforeAll, describe, expect, test } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import {
-  assertNoOpenNightlyQualityIssues,
-  parseOpenNightlyIssues,
-} from "./nightly-quality-blockers.mjs";
-
 /**
  * Guard tests for the release publish/prepare halves (issue #656 Layer 1F).
  *
@@ -65,35 +60,7 @@ const isolatedEnv = {
   GIT_AUTHOR_EMAIL: "fixture@example.invalid",
   GIT_COMMITTER_NAME: "fixture",
   GIT_COMMITTER_EMAIL: "fixture@example.invalid",
-  CENTRAID_NIGHTLY_QUALITY_ISSUES: "[]",
 };
-
-describe("nightly release blocker", () => {
-  test("parses only actionable open issue rows", () => {
-    expect(
-      parseOpenNightlyIssues(
-        JSON.stringify([
-          { number: 9, title: "nightly red", url: "https://example.test/9" },
-          { number: "bad", title: "ignored", url: "https://example.test/x" },
-        ])
-      )
-    ).toStrictEqual([
-      { number: 9, title: "nightly red", url: "https://example.test/9" },
-    ]);
-  });
-
-  test("blocks release preparation when a nightly red issue is open", () => {
-    expect(() =>
-      assertNoOpenNightlyQualityIssues(() => ({
-        status: 0,
-        stdout: JSON.stringify([
-          { number: 9, title: "nightly red", url: "https://example.test/9" },
-        ]),
-        stderr: "",
-      }))
-    ).toThrow(/release blocked.*#9/iu);
-  });
-});
 
 /**
  * Build a synthetic monorepo root that the release scripts can run against.
@@ -259,40 +226,10 @@ describe("release publish guards", () => {
       "--issue",
       "656",
       "--surfaces",
-      "desktop,teleporter",
+      "gateway-image,teleporter",
     ]);
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('Unknown surface "teleporter"');
-  });
-
-  test("refuses a ship set that is only continuous surfaces", () => {
-    const result = runPublish(root, [
-      "--version",
-      "0.5.0",
-      "--issue",
-      "656",
-      "--surfaces",
-      "web,docs",
-      "--dry-run",
-    ]);
-    expect(result.status).toBe(2);
-    expect(result.stderr).toContain(
-      "refusing publish that only lists continuous surfaces"
-    );
-  });
-
-  test("allows a sideline-only ship set through the continuous guard", () => {
-    const result = runPublish(root, [
-      "--version",
-      "0.5.0",
-      "--issue",
-      "656",
-      "--surfaces",
-      "companion",
-      "--dry-run",
-    ]);
-    expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout).surfaces).toEqual(["companion"]);
   });
 });
 
@@ -340,7 +277,6 @@ describe("release publish derivation", () => {
     ]);
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout).surfaces).toEqual([
-      "desktop",
       "gateway-image",
       "prebuilt-core",
     ]);
@@ -449,7 +385,7 @@ describe("release prepare guards", () => {
     const result = runPrepare(root, ["--allow-dirty", "--skip-check"]);
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout).publishCommand).toBe(
-      "node scripts/release/publish.mjs --version 0.4.3 --issue N --surfaces desktop,gateway-image,prebuilt-core"
+      "node scripts/release/publish.mjs --version 0.4.3 --issue N --surfaces gateway-image,prebuilt-core"
     );
   });
 

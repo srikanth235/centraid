@@ -494,7 +494,7 @@ private struct NotesHomeSheet: View {
         case .notebookMenu:
             let menu = state.menu
             OptionSheet(title: menu.title) {
-                SheetRow(iconKey: "Edit", label: menu.renameLabel, identifier: "notes-notebook-rename") {
+                SheetRow(iconKey: "Pencil", label: menu.renameLabel, identifier: "notes-notebook-rename") {
                     send(NotesEvents.home { $0.formOpened = .with { $0.notebookID = menu.noteID } })
                 }
                 SheetRow(iconKey: "Trash", label: menu.trashLabel, destructive: true, identifier: "notes-notebook-delete") {

@@ -3,9 +3,7 @@
 # One shared policy at the repo root rather than a copy beside each crate root —
 # copies would drift, and a per-crate relaxation would be invisible. There is
 # ONE crate root: the workspace at the repo root (#1020), which is all of
-# `crates/*` behind one Cargo.lock. Two consumers pass this file in:
-# `scripts/security/rust-supply-chain.mjs` walks the tree for lockfiles and
-# hands each crate `--config deny.toml`, and the v1 gate's `deny` step runs
+# `crates/*` behind one Cargo.lock. The gate's `deny` step runs
 # `cargo deny --all-features --config deny.toml check` over the workspace.
 #
 # Nothing was relaxed to admit the new root. In particular the
@@ -25,8 +23,7 @@ all-features = true
 
 [advisories]
 # The advisory database is authoritative; unmaintained and unsound crates are
-# findings, not notes. `cargo audit` covers the same database from the other
-# side — both are kept because `deny` also sees the yanked-crate signal.
+# findings, not notes, and so is a yanked crate.
 yanked = "deny"
 # NO IGNORES. `RUSTSEC-2024-0436` (`paste`, unmaintained) stood here as the one
 # exception, transitive via iroh; iroh left the graph with #1080 and `paste`

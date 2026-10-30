@@ -66,7 +66,7 @@ User-visible or IPC/HTTP-facing work that can fail must expose failure to the UI
 
 ## Prefer existing seams
 
-- Import package **barrels**, not deep internals (governance `no-deep-imports`); in Rust, go through a crate's public API rather than reaching into a sibling crate's modules.
+- Import package **barrels**, not deep internals; in Rust, go through a crate's public API rather than reaching into a sibling crate's modules.
 - Tools and checks: **repo entrypoints only** — `cargo xtask …`, `cargo test -p <crate>`, `mobile/gradlew …`, `bun run …` / workspace scripts, never raw `npx <tool>` so the pinned toolchain always applies (issue #468 B2).
 - Quality ownership and safe-fix policy live in [toolchain.md](toolchain.md). Fix code before suppressing a diagnostic; never weaken policy only to make a gate green.
 
@@ -89,27 +89,15 @@ Two things to know about `useFakeClock`:
 
 **Not** banned: `Date.now()`. oxlint 1.76 has no `no-restricted-syntax`, so the shape that actually hurts — wall clock read inside an assertion's expected value — is not expressible; only a blanket ban is, and the sampled majority of call sites are relative offsets, unique-id suffixes, and elapsed measurement, which a fake clock makes wrong rather than better. Prefer `clock.now()` where a clock is already installed.
 
-## One law, one home (mechanically enforced)
+## One law, one home
 
-A named product law gets a machine-readable tag in its test title:
-
-```ts
-test("[law:backup-no-change] no-change run registers nothing", async () => { … });
-```
-
-`bun run lint:law-registry` (in the `lint:product` bundle that `check:push` runs) fails when the same tag appears in more than one file. Several tests in the **owning** file are fine — that is one home. A second file asserting the same law is a restatement, and Layer 1D of #656 deleted a batch of exactly those; the tag is what stops them coming back.
-
-The registry lives in `tests/claims.json#laws` as `{ [tag]: { statement, owner, flow? } }`. Once a tag is registered the linter also fails an unregistered tag, an owner file that does not exist, and a registered law whose owner carries no such tag.
+A named product law is asserted in one test file, its **owning** file; several tests in that file are fine. A second file asserting the same law is a restatement — delete it rather than keep two homes that drift. Layer 1D of [#656](https://github.com/srikanth235/centraid/issues/656) deleted a batch of exactly those.
 
 ## File length (mechanically enforced)
 
-A source file stops at **625 lines**. `max-lines` in [oxlint.config.ts](../oxlint.config.ts) enforces it, so it fails in `bun run lint` and in the `lint-check` directive — no separate pass, no measurable cost.
+A source file stops at **625 lines**. `max-lines` in [oxlint.config.ts](../oxlint.config.ts) enforces it, so it fails in `bun run lint`, in the pre-commit hook and in the gate's `ts-static` step — no separate pass.
 
-The ceiling lived in governance-kit's `repo-hygiene` directive until audit 0.11.0 retired that pack upstream. It came back under oxlint rather than as a repo-local directive because oxlint already reads every source file: same raw-line count, ~0.4s against the directive's 51.2s.
-
-Files that predate the rule are exempt **by name**, in `tests/inventory.json#fileSize`, not by an inline `oxlint-disable`. That is the whole point of the design: a suppression comment is free to add and invisible in review, whereas a row in that section has to survive its down-only `_budget` in [check-ledgers.mjs](../scripts/check-ledgers.mjs) — splitting a file removes its row and lowers the budget in the same change, and exempting a new file costs a hand edit plus an `approvedDeviation` note. [lint-oversized-files.mjs](../scripts/lint-oversized-files.mjs) reads the section and refuses to build the list at all if the budget and the rows disagree.
-
-A new file gets no row and no door.
+The one exemption is by name, in an `overrides` entry beside the rule: `packages/design/src/roles.ts`, which predates the ceiling and is split before anything is added to it. A new file gets no exemption.
 
 ## Store atomicity
 
@@ -124,7 +112,7 @@ A new file gets no row and no door.
 
 ## Nothing O(vault-size) on the request path
 
-The constitution's performance principle, as a diff rule: work whose cost grows with how much is _in_ the vault does not run synchronously on a request path or on the event loop.
+The performance principle, as a diff rule: work whose cost grows with how much is _in_ the vault does not run synchronously on a request path or on the event loop.
 
 | Shape | Why it bites |
 | --- | --- |
@@ -190,9 +178,9 @@ Code comments are the State layer (AGENTS.md: "code-level facts live in code com
 
 **No tenure.** A comment is a cached judgment whose inputs are the surrounding code. An edit that touches commented code re-runs the deletion test on the adjacent comments as part of the change.
 
-### Mechanical surrogates
+### Review tests
 
-These find _surrogates_ of rot, never verdicts — a green run proves nothing about information content, and the deletion test cannot be regexed. Warn-only: `node scripts/lint-comment-blocks.mjs` flags over-long blocks. The one blocking gate is the density ratchet below (`bun run test:comment-density`). `node scripts/comment-only-diff.mjs [<ref>]` is not a gate at all — it reprints both sides of a diff with comments removed and proves a sweep changed no code, which is the evidence a doctrine-sweep PR cites.
+No tool checks comments: the deletion test cannot be regexed, so these are applied in review.
 
 **The tense test.** A sentence about the past — _was, used to, until #N, replaced, retired, previously_ — either restates a present obligation (rewrite it forward-facing) or it doesn't (delete it, keeping at most a bare `(#N)` on a surviving sentence). Tense is the surrogate: a changelog conjugated into present tense still fails the deletion test.
 
@@ -215,23 +203,21 @@ These find _surrogates_ of rot, never verdicts — a green run proves nothing ab
 
 Doctrine governs what a comment may say; the budget governs how much ([#861](https://github.com/srikanth235/centraid/issues/861)).
 
-- **The metric is character share** — non-whitespace comment characters over non-whitespace file characters, comment ranges taken from the TypeScript parser. The ratchet covers TypeScript files; the doctrine above covers every language. Line counts are gameable: fuse three comment lines into one wrapped sentence and the count falls while the prose is unchanged.
-- **Per-file cap 15%** for files of 40 non-blank lines or more; **global target ≤10%**, printed on every run.
-- **Enforcement is a per-file ratchet** — `tests/inventory.json#commentDensity`, `bun run test:comment-density`, run weekly by `hygiene.yml`. Any rise fails that lane. Downward re-pins are free (`--write` recomputes, and refuses to raise a pin). A deliberate raise is a hand edit to the baseline carrying an approved-deviation note in the receipt.
-- **Blocks over 10 lines warn** — 15 for a file-top orientation header — via `scripts/lint-comment-blocks.mjs`.
-- **The allowlist is by name, with a reason**, for registries where the prose _is_ the payload. Never delete load-bearing rationale to hit a number; the allowlist is that pressure valve.
+- **The metric is character share** — non-whitespace comment characters over non-whitespace file characters, comment ranges as the language's parser sees them. Line counts are gameable: fuse three comment lines into one wrapped sentence and the count falls while the prose is unchanged.
+- **Per-file cap 15%** for files of 40 non-blank lines or more; **global target ≤10%**. Nothing measures it in CI; it is a review target.
+- **A block over 10 lines is a smell** — 15 for a file-top orientation header.
+- **Registries where the prose _is_ the payload are the exception.** Never delete load-bearing rationale to hit a number.
 
 Deliberate non-goal of this rule: **no JSDoc tag vocabulary** — prose JSDoc is house style (`@param`/`@returns` restating types is the canonical zero-information comment).
 
 ## Small invariants
 
 - Behaviour-preserving refactors keep tests green without rewriting assertions to match new private helpers ([TESTING.md](../TESTING.md)).
-- No hardcoded model ids in production source (constitution).
-- A new hot path ships with a measured perceived-latency budget (constitution).
+- No hardcoded model ids in production source.
+- A new hot path ships with a measured perceived-latency budget.
 - Query handlers do not write; what an action wrote is the commit's own census, never a list a manifest declares.
 
 ## Related
 
-- [CONSTITUTION.md](../CONSTITUTION.md) — mechanical directives
 - [protocol.md](protocol.md) — COMPAT tagging, no-fallback features
 - [glossary.md](glossary.md) — vocabulary

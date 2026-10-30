@@ -119,7 +119,6 @@ A write is held to the same budget: `crates/core/tests/write_costs.rs` times the
 ├── copy/              # the chat's copy leaf; every other string is Rust's (crates/screens/src/strings)
 ├── deploy/            # the container image, the OS service units, the installer
 ├── scripts/           # repo tooling, the docs site, the release surface register
-├── centraid-city/     # the static 3D explainer site
 ├── Cargo.toml         # the workspace: crates/* and crates/apps/*
 └── rust-toolchain.toml
 ```

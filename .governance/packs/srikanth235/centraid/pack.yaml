@@ -1,8 +1,0 @@
-id: srikanth235/centraid
-name: Centraid repo-local pack
-version: '0.1'
-description: |
-  Hand-authored governance directives that enforce centraid-specific
-  contracts not covered by `governance-kit/core`. Lives in-tree because
-  these rules reference this monorepo's own gates, ledgers and runtime
-  conventions.

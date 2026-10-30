@@ -7,13 +7,11 @@
 - **Trashing or restoring a notebook of 2,000 notes takes about 1.5 s** ([#1146](https://github.com/srikanth235/centraid/issues/1146), wave 8). A label with many members is bounded for search (50 per commit, the rest owed), but the holder's own trash stamps every member in one commit and is not bounded.
 - **Every `blob::collect` caller but the launch tidy still walks all blobs (about 20 ms)** ([#1146](https://github.com/srikanth235/centraid/issues/1146), wave 8), `thread.save_turn` once per chat turn among them. A collect that took the candidate hashes it just released, instead of scanning, would cost nothing in proportion to the library.
 - **The local gate's warm budget holds only for an edit outside `centraid-core`'s dependency cone** ([#1080](https://github.com/srikanth235/centraid/issues/1080), [#1097](https://github.com/srikanth235/centraid/issues/1097), [hand-off 6.5](docs/release/v1-handoffs.md#6-ci-branch-protection-and-the-inherited-reds))**.** `cargo xtask gate --profile local` scores a warm run against 120 s. Its `test` step now runs only the crates a change touches and their dependents, and runs the `restore_drill` binaries once (the step after it runs them by name), which was the other half of what this item recorded. A one-line edit to `centraid-core-ffi` measured 101.9 s warm; a one-line edit to `centraid-apps-tasks` measured 258.7 s, 210.0 s of it `test`, because `centraid-core` depends on every crate but four and its 369 tests are 176 s of test time (`restore_edges` 8 to 17 s a test, `records_backup` 47 s). So the budget holds for documentation edits and for an edit in the four crates outside core's cone (`centraid`, `centraid-core-ffi`, `centraid-assist-llama` and the runner; measured for `centraid-core-ffi` only), and does not for an edit in an app crate, the vault or anything beneath them. The numbers were taken on a shared 8-core Mac at load 10 to 17; #1097 measured the unnarrowed gate at 1,591 s and 1,658 s on a machine at 74% system CPU with its data volume 98% full. Either the budget is wrong for the edits that matter or `centraid-core`'s slowest tests should leave `local`; neither is changed here.
-- **`.mjs` scripts should be TypeScript.** Hundreds of `.mjs` files under
-  `scripts/` and `.governance/law/` exist because their call sites say
-  `node …`, not because the runtime needs JS: Bun runs `.ts` natively and
-  Node ≥ 22.18 strips types by default. A sweep is a rename plus every call
-  site (workflows, hooks, `package.json`), collides with the file-size ledger
-  and the law estate, and should pick one runner rule (`bun` under `scripts/`,
-  Node type-stripping for the law). Its own issue, not a rider.
+- **`.mjs` scripts should be TypeScript.** The `.mjs` files under
+  `scripts/` exist because their call sites say `node …`, not because the
+  runtime needs JS: Bun runs `.ts` natively and Node ≥ 22.18 strips types by
+  default. A sweep is a rename plus every call site (workflows, `package.json`)
+  and should pick one runner rule. Its own issue, not a rider.
 
 - **The face-cluster thresholds were tuned for SFace and now serve ArcFace.**
   `faces::PARTY_MAX_DISTANCE` / `faces::CLUSTER_MAX_DISTANCE` in
@@ -22,22 +20,6 @@
   splits, not merges), but untuned. The Photos sample corpus is synthetic
   renders that ArcFace collapses, so tuning needs a small labelled fixture set
   of real photographs.
-
-- **The comment-density ratchet does not measure what its header claims.**
-  `scripts/check-comment-density-ratchet.mjs` says its parser walk "catches
-  trailing comments (they lead the NEXT token), JSX comments, and the file-end
-  comments carried by the EOF token". `commentRanges()` calls only
-  `ts.getLeadingCommentRanges` at each leaf token, and TypeScript classifies a
-  comment sharing a line with the preceding token as TRAILING trivia, which that
-  function skips by design. So `const a = 1; // note` and `<div>{/* note */}</div>`
-  both score zero comment characters while counting toward the denominator.
-  The perverse consequence is that unmeasured comments are pure denominator, so
-  *deleting* JSX prose raises a `.tsx` file's measured share. Two remedies: fix
-  the scanner and clean the files that carry real hidden prose, or fix the
-  scanner and re-seed with a recorded deviation. That the down-only pin rule
-  makes a measurement *correction* impossible without a deviation is a design
-  gap in the ratchet worth settling on its own. Found by #883's ceremony
-  against #861's gate.
 
 - **`google-calendar-invite-send` uses wall-clock `new Date()`** (DTSTAMP)
   and `Math.random()` (MIME boundary) inside the published handler —

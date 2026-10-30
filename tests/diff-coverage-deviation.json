@@ -1,3 +1,0 @@
-{
-  "_comment": "Diff-coverage waiver slot for scripts/test-report/diff-coverage.mjs (80% of changed instrumentable lines). NO WAIVER IS IN FORCE: there is deliberately no `approvedDeviation` key here, so the gate is unwaived. The #639 Oxfmt-migration deviation that lived here was scoped to that toolchain-migration PR and said so in its own text; #639 has landed (see the Changed section of CHANGELOG.md), so it was removed under #842 W0.1/W0.2. A waiver here is a constitutional exception: it must be temporary, must name the issue that owns removing it, and must state the condition under which it is deleted. The leading underscore keeps this note invisible to every consumer."
-}

@@ -8,8 +8,7 @@
 //! local loop runs. A fifth profile, `mobile-jvm`, runs the Kotlin/Gradle JVM
 //! suites; it is not a superset of any other and is not charged to `pr`, for
 //! the reason in its ledger row (#1020, D-1020-B2-3). See `crates/xtask/README.md` for the profiles, the budgets,
-//! where failure artifacts land, and the one thing this runner deliberately
-//! does NOT do (governance — it has its own workflow).
+//! and where failure artifacts land.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -176,7 +175,7 @@ impl Profile {
 /// 1. `git rev-parse --show-toplevel` from the current directory. Right for a
 ///    linked worktree, a submodule checkout and a plain clone alike.
 /// 2. Walking up from the current directory for the pair only the root carries
-///    (`CONSTITUTION.md` and `Cargo.toml`). For a tree exported without
+///    (`rust-toolchain.toml` and `Cargo.toml`). For a tree exported without
 ///    `.git`, and for a machine with no `git` on `PATH`.
 /// 3. The baked manifest path, **with a warning on stderr**. `cargo run -p
 ///    xtask` from outside any checkout still works — the case the baked path
@@ -250,7 +249,7 @@ fn baked_root() -> PathBuf {
 
 /// The two files only the repository root carries together.
 fn is_repo_root(dir: &std::path::Path) -> bool {
-    dir.join("CONSTITUTION.md").is_file() && dir.join("Cargo.toml").is_file()
+    dir.join("rust-toolchain.toml").is_file() && dir.join("Cargo.toml").is_file()
 }
 
 fn git_toplevel(cwd: &std::path::Path) -> Option<PathBuf> {
@@ -396,10 +395,10 @@ mod root_tests {
             walk_up_to_root(&nested).is_none(),
             "a directory tree with neither marker is not a repository root"
         );
-        std::fs::write(scratch.join("CONSTITUTION.md"), "x").expect("a constitution");
+        std::fs::write(scratch.join("rust-toolchain.toml"), "x").expect("a toolchain file");
         assert!(
             walk_up_to_root(&nested).is_none(),
-            "CONSTITUTION.md alone is not the root: `Cargo.toml` is the other half"
+            "rust-toolchain.toml alone is not the root: `Cargo.toml` is the other half"
         );
         std::fs::write(scratch.join("Cargo.toml"), "[workspace]\n").expect("a manifest");
         assert_eq!(

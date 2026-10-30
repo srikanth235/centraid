@@ -3,9 +3,6 @@ import core from "ultracite/oxlint/core";
 import react from "ultracite/oxlint/react";
 import vitest from "ultracite/oxlint/vitest";
 
-import { oversizedFiles } from "./scripts/lint-oversized-files.mjs";
-import { typeAwareOnlyRules } from "./scripts/lint-types-rules.mjs";
-
 // ---------------------------------------------------------------------------
 // #656 Layer 4 — test seams as merge blockers.
 //
@@ -123,17 +120,13 @@ export default defineConfig({
   options: {
     denyWarnings: true,
     reportUnusedDisableDirectives: "deny",
-    // The pinned TypeScript compiler owns compiler diagnostics. The separate
-    // compatibility pass in scripts/lint-types.sh admits only proven rules.
+    // The pinned TypeScript compiler owns compiler diagnostics; `tsc` runs as
+    // each package's `typecheck`.
     typeAware: false,
     typeCheck: false,
   },
   ignorePatterns: (core.ignorePatterns ?? []).concat(["**/dist/**"]),
   rules: {
-    // Ultracite's core preset contains type-aware rules. They cannot execute
-    // with options.typeAware=false, so force the complete pinned engine
-    // surface off here; scripts/lint-types.sh admits eight rules explicitly.
-    ...Object.fromEntries(typeAwareOnlyRules.map((rule) => [rule, "off"])),
     // Rules ultracite 7.9's presets newly enable. Issue #210 fixed this
     // repo's profile as correctness + suspicious + perf with explicit
     // opinions, so these are pinned off rather than silently adopted. The
@@ -163,11 +156,8 @@ export default defineConfig({
     "func-names": "off",
     "func-style": "off",
     "import/consistent-type-specifier-style": "error",
-    // The file-length ceiling (#615's 625 lines), back under oxlint after
-    // governance-kit audit 0.11.0 retired the `repo-hygiene` directive that
-    // owned it: same raw-line count, ~0.4s against that directive's 51.2s. The
-    // 131 files predating it are exempt by name in the down-only
-    // tests/inventory.json#fileSize.
+    // The file-length ceiling (#615's 625 lines). The one file predating it is
+    // exempt by name in `overrides` below.
     "max-lines": ["error", { max: 625 }],
     "no-accumulating-spread": "off",
     "no-alert": "off",
@@ -284,20 +274,9 @@ export default defineConfig({
   },
   overrides: [
     {
-      // A ledger row, not an inline `oxlint-disable`: a suppression is free
-      // to add; a row has to survive the budget.
-      files: oversizedFiles,
+      // The role table predates the ceiling; split it before adding to it.
+      files: ["packages/design/src/roles.ts"],
       rules: { "max-lines": "off" },
-    },
-    {
-      // This deliberate negative fixture proves the corresponding type-aware
-      // rules emit. Disable only the ordinary equivalents so the fixture
-      // remains linted by every unrelated rule.
-      files: ["scripts/fixtures/lint-types/invalid.ts"],
-      rules: {
-        "no-throw-literal": "off",
-        "prefer-promise-reject-errors": "off",
-      },
     },
     // The vitest preset applies through `overrides`, and an extended preset's
     // overrides outrank the consumer's — so extending it leaves no way to say

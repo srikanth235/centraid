@@ -6,7 +6,7 @@ How an umbrella issue is executed by one root agent and a set of sub-agents, and
 
 - **One umbrella issue, one branch, one draft PR, one receipt.** No child issues. Work is cut into slices; slices are grouped into lanes; lanes run as worktrees in parallel; the merge order of their commits is the wave plan.
 - **The root is the brain, not a dispatcher.** It holds the plan's intricacies: ordering, shared files, cross-lane invariants, what "done" means for each slice. Nothing else in the system holds those.
-- **Workers own change.** Every edit, commit, gate fix and governance fix is done by a worker in its lane worktree. The root reads, greps, merges lane branches, typechecks, pushes commits that already exist, records rulings.
+- **Workers own change.** Every edit, commit and gate fix is done by a worker in its lane worktree. The root reads, greps, merges lane branches, typechecks, pushes commits that already exist, records rulings.
 - **Model split.** The root runs on the strongest model available; workers run on the model the owner names for change-making. The root never spawns a worker on its own model unless the owner says so.
 
 ## Lane sizing
@@ -83,14 +83,14 @@ Fix: split at a reading-set seam, or, if the reading set cannot be split, commit
 - Commit a worker's uncommitted tree. WIP belongs to the worker that made it.
 - Spawn a second worker on a slice that has a live worker.
 - Read CI logs or triage CI inside a build run, unless the owner opens a CI lane for it.
-- Weaken a gate, budget, ceiling, test or allowlist to get green, or let a worker do so — see [CONSTITUTION.md](../CONSTITUTION.md).
+- Weaken a gate, budget, ceiling, test or allowlist to get green, or let a worker do so.
 
 ### A worker does
 
 - Read its brief's reading set and doctrine digest before touching code.
 - Work only in its lane worktree on its lane branch ([dev-environment.md](dev-environment.md#worktrees), [traps/worktrees.md](traps/worktrees.md)).
-- Commit at seams with the umbrella's trailers, the subject within the byte limit and ending with the issue number, and every changed or deleted file named by full path in the receipt.
-- Run the slice's exit list, including the push gates, before reporting.
+- Commit at seams with the umbrella's trailers, the subject within 100 characters and ending with the issue number (`.githooks/commit-msg`), and every changed or deleted file named by full path in the receipt.
+- Run the slice's exit list, including the gates, before reporting.
 - Keep a milestone note in the worktree (below).
 - Report within its cap: what landed (commit id), the exit list line by line with command and result, what it did not do and why, and what it found that is not its slice.
 
@@ -110,9 +110,9 @@ Every brief carries these sections, in this order.
 
 1. **State, from evidence.** What is true on disk now, each line with the command that proves it and its output. Never from memory, never from the last report. A wrong State line is the commonest reason a worker stops short, and it is always the root's error.
 2. **Reading set.** The files and docs the worker reads before editing, and the traps for the area ([traps/](traps/README.md)).
-3. **Doctrine digest.** The five to ten repo rules that bite in this area, one line each. Workers do not infer these from the codebase. The governance half is **generated, not typed**: `node .governance/law/brief.mjs` prints every rule in force with its door, severity and statute, the doctrine domains with the decisions they answer to, and the exceptions on the docket. Paste it and stamp the digest it prints. A run under `node .governance/law/run.mjs --brief-digest <digest>` (or `GOVERNANCE_BRIEF_DIGEST`) then says on the front page whether the law moved under the work and which paths moved — the worker is held to HEAD, and the stamp is what names the gap between HEAD and what the worker was told.
+3. **Doctrine digest.** The five to ten repo rules that bite in this area, one line each, taken from [AGENTS.md](../AGENTS.md), [decisions.md](decisions.md) and the area's docs and traps. Workers do not infer these from the codebase.
 4. **The slices**, in order, each with an end state a grep can check.
-5. **Exit list.** Numbered; each item a command and its expected result; always ending with the push gates. A slice that cannot be pushed is not done.
+5. **Exit list.** Numbered; each item a command and its expected result; always ending with the gates: `cargo xtask gate --profile pr`, and `bun run check` where TypeScript changed. A slice that cannot pass them is not done.
 6. **Rulings that bind**, by id, one line each.
 7. **Report format** and cap.
 8. **Recovery.** Where the milestone note lives and what to do on resume.
@@ -124,7 +124,7 @@ Every brief carries these sections, in this order.
 - **Trust a sibling's reported green.** Do not re-run another agent's suite to be sure, absent evidence of flake or conflict; re-runs thrash CPU and invalidate their timing.
 - **Never restart a shared long-running service** — a gateway daemon, a `centraid seat` sidecar, a simulator or emulator, a database under a shared `dataDir` — without permission. Stop only what you started, in your own worktree and on your own ports; if you need a port someone else holds, ask or pick another rather than killing by pid.
 - **Merge cadence.** The root merges a lane at its check-ins or on owner request, never per commit. Fast-forward when possible; a merge commit when not; never a rebase of a worker's branch.
-- **Push gates are part of the slice.** Receipt-per-issue, file-length hygiene and governance run on push. A worker that reports green without running them has not finished; the root sends it back rather than fixing.
+- **The gates are part of the slice.** The pre-commit hook checks only staged files and nothing runs on push, so `cargo xtask gate --profile pr` (and `bun run check` for TypeScript) is the worker's to run before it reports. A worker that reports green without running them has not finished; the root sends it back rather than fixing.
 - **Doc updates travel with the change.** A worker that learns something outliving its slice updates the doc in the same commit. The close pass catches what slipped; it does not replace this.
 
 ### Isolation defaults
@@ -134,7 +134,7 @@ Every brief carries these sections, in this order.
 | Git worktree | One agent is the primary owner; no force-push to a shared branch without agreement |
 | `dataDir` / vault | Per-agent directories |
 | Ports | Unique per agent |
-| `main` / shared PR branch | Coordinate merges; one agent runs the final push gate |
+| `main` / shared PR branch | Coordinate merges; one agent runs the final `cargo xtask gate --profile pr` |
 
 ## Handoff and recovery
 
@@ -165,7 +165,7 @@ The container can restart at any time and kill every worker. Uncommitted work on
 Runs once per umbrella, after the last lane lands, and only when the owner opens it. One worker:
 
 1. Doc pass: every touched doc to current state; no text describing the deleted thing; decisions moved from the receipt to the decisions log.
-2. Receipt close: the issue's acceptance boxes reconciled one by one, the inherited-red table, corrections to the plan, and the owner hand-offs. The receipt's front page is **generated** — `node .governance/law/run.mjs --front-page <path>`, pasted between its markers — never typed; the next run overwrites anything hand-edited inside it.
+2. Receipt close: the issue's acceptance boxes reconciled one by one, the inherited-red table, corrections to the plan, and the owner hand-offs.
 3. Dead-code sweep for what the last slice orphaned.
 4. PR readiness: body against the issue checklist; draft off; issue body reconciled to what shipped.
 5. Owner hand-offs as explicit questions.
@@ -197,12 +197,11 @@ Runs once per umbrella, after the last lane lands, and only when the owner opens
 | Milestone note written at start only | Successor re-derives the WIP | Dated milestone lines |
 | Fresh spawn on a resumable worker | Context lost, duplicate risked | Resume first |
 | Inherited red carried unmeasured | Stale count across briefs | Stash and rerun at every merge |
-| Push gates outside the exit list | Push blocked, worker round trip | Gates end the list |
+| Gates outside the exit list | CI red after the push, worker round trip | Gates end the list |
 | Absence claim taken on trust | Wrong deletion or wrong ruling | The root re-checks absence |
 
 ## Related
 
-- [CONSTITUTION.md](../CONSTITUTION.md) — the directives and principles a lane may never weaken to go green
 - [dev-environment.md](dev-environment.md) — worktrees, the local gate loop, and how sibling appends to one receipt merge
 - [traps/worktrees.md](traps/worktrees.md) — the worktree failures agents hit
 - [TESTING.md](../TESTING.md) — the lanes a slice's exit list draws from

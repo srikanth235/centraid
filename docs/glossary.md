@@ -175,8 +175,6 @@ The phone's backup to the gateways it paired. The protocol is [gateway.md](gatew
 | --- | --- | --- |
 | **designed state** | One honest state an app's design calls for — the app's own `states.designed` manifest entry, not a state some other app happens to draw. Its opposite is an `excluded` state: one the design makes structurally unrepresentable, costing a reason and a citation. "Nobody has built it yet" is neither; that is a gap. | `crates/apps/<app>/manifest.json` |
 | **canonical designed states** | The closed seven every app partitions into designed and excluded — `dayone`, `pending`, `offline`, `stale`, `conflict`, `parked`, `denied`. Closed by doctrine, so an eighth arrives by amending the list, never by one app inventing it; a manifest that forgets one fails to parse. | `CANONICAL_DESIGNED_STATES` in `crates/apps/kit/src/manifest.rs` |
-| **engine registry** | The one roster of the shared engines, each row naming its source and whether it takes a column in the app × engine grid. | `tests/claims.json#engineRegistry` |
-| **consent ledger** | The permission layers a member's answer can sit in, each naming where it is enforced, its refusal grammar, which seats it binds, and the proof that it refuses — or the open issue admitting it has none. | `tests/claims.json#consentLedger` |
 
 ## The phone shell ([mobile/README.md](../mobile/README.md), [#1046](https://github.com/srikanth235/centraid/issues/1046), [#1047](https://github.com/srikanth235/centraid/issues/1047))
 
@@ -191,20 +189,16 @@ The phone's backup to the gateways it paired. The protocol is [gateway.md](gatew
 | **registry** | The one list that makes a screen reachable: `Registry::with("<app>.<name>", build)` per screen, merged with `Registry::merge`. The shells hold none: they switch on `ViewState.kind`. | `crates/screens/src/registry.rs` |
 | **trash spec** | One app's trash, as data: its table, its restore and purge commands, its window and copy. A null purge command means the app has no destroy path, and the screen offers restore only. | `TrashSpec` in `crates/screens/src/kit/trash.rs` |
 
-## Gate and evidence (testing, [TESTING.md](../TESTING.md))
+## The gate (testing, [TESTING.md](../TESTING.md))
 
 | Term | Meaning | Code |
 | --- | --- | --- |
 | **step** | One named check inside a gate profile (`fmt`, `clippy`, `test`, `restore-drill`, …). Every step prints one line and a verdict — `ok`, `FAIL` or a loud `SKIP` naming the command that makes it real — and runs even when an earlier one failed. | [`crates/xtask/src/gate.rs`](../crates/xtask/src/gate.rs) |
-| **lane** | A step, or a device cell of the `device-lanes` step, run alone with `cargo xtask gate --profile <p> --lane <name>`; a name that matches nothing is an error. Lanes with a claim are registered in `tests/claims.json#lanes`. | `crates/xtask/src/gate.rs`; `tests/claims.json#lanes` |
+| **lane** | A step, or a device cell of the `device-lanes` step, run alone with `cargo xtask gate --profile <p> --lane <name>`; a name that matches nothing is an error. | `crates/xtask/src/gate.rs` |
 | **simulation** | **Retired** with `crates/sim` and the multi-writer plane it proved ([#1029](https://github.com/srikanth235/centraid/issues/1029)). There is one writer and it is the phone; what replaces the claim is the restore drill and `crates/gateway`'s conformance suite. | — |
-| **evidence** | `target/xtask/<profile>/evidence.json`: the profile, the hardware class and one row per step with its seconds, verdict and detail, written on success and failure alike so a step going quiet is visible ([TESTING.md](../TESTING.md#the-evidence-contract)). | `crates/xtask/src/gate.rs` |
-| **candidate** | A `main` SHA that passed `candidate.yml`. `refs/candidates/latest` points at it and `artifacts/candidate.json` describes it, so a release is cut from a build somebody promoted rather than from the tip of `main`. | `.github/workflows/candidate.yml` |
-| **claim** | A row in `tests/claims.json#claims`: what the product promises, the file that owns the proof, the lane that runs it, its severity `S1`–`S4`, and the date it was last demonstrated red. | `tests/claims.json` |
-| **park** | A lane red long enough to stop being information, given an **expiry** and an issue. A parked lane still runs; it counts as red again once the expiry passes. | `tests/quarantine.json#lanes` |
+| **candidate** | The `main` SHA of the last night on which all three of `nightly.yml`'s jobs passed. `refs/candidates/latest` points at it, and `release.yml` refuses a tag at any other SHA, so a release is cut from a build the nightly proved rather than from the tip of `main`. | [`.github/workflows/nightly.yml`](../.github/workflows/nightly.yml) |
 | **pin** | A characterisation test asserting the current, **wrong** behaviour and naming the ruling or documented sentence it contradicts, so a fix goes red and is revisited deliberately. A defect a lane found but is not chartered to fix is pinned, never tolerated quietly and never deleted ([decisions.md](decisions.md#governance-and-the-pr-gate)). | — |
-| **ledger** | A tighten-only JSON file. The gate's own are under `contracts/ledgers/` (`gate-budgets`, `compile-time`, `library-size`, `call-budget`, `search-budget`, `query-plans`, `advisory`), compared against the merge base by the `ledgers` step and written only by `cargo xtask measure --write`. The repo-wide four are `tests/floors.json` (up-only), `tests/budgets.json`, `tests/inventory.json` and `tests/quarantine.json` (down-only). | [`contracts/ledgers`](../contracts/ledgers); `scripts/check-ledgers.mjs` |
-| **section** (ledger) | A top-level key of a `tests/` ledger — the unit a direction, an `approvedDeviation` and a base-side fallback path all attach to. Cited as `tests/budgets.json#suiteWallClock`. A widen is waived only by a CHANGED note in the section being widened. | `scripts/check-ledgers.mjs` |
+| **ledger** | A tighten-only JSON file under `contracts/ledgers/` (`gate-budgets`, `compile-time`, `library-size`, `call-budget`, `search-budget`, `query-plans`), compared against the merge base by the `ledgers` step and written only by `cargo xtask measure --write`. | [`contracts/ledgers`](../contracts/ledgers) |
 
 ## Projection doctrine (apps, [#834](https://github.com/srikanth235/centraid/issues/834))
 
@@ -273,22 +267,6 @@ Invariants:
 | **placement** | One crossing of a fixed item set between two vaults **one owner holds** — `add` keeps the origin item, `move` releases it. Placement, not sharing: a placement never reaches another person. | `crates/apps/docs/src/origins.rs` |
 
 Retired vocabularies, historical only. **lend** — #726's live edges and borrowed stores were deleted in #731; a member holds their own full resident copy. **give** — the one-time receiver-owned snapshot is retired by [#825](https://github.com/srikanth235/centraid/issues/825), code and all; say **grant**. **closure**, **peer plane** and **route** named the v0 cross-gateway transport, removed with the v0 tree in [#1020](https://github.com/srikanth235/centraid/issues/1020). **seat**, **replica**, **outbox**, **intent**, **subscription**, **share feed**, **mailbox**, **account** and **plan lapse** all named planes [#1029](https://github.com/srikanth235/centraid/issues/1029) deleted rather than parked.
-
-## The law (governance, [#1005](https://github.com/srikanth235/centraid/issues/1005))
-
-The vocabulary of `.governance/` since the kit became a constitution. Detail in [`.governance/law/README.md`](../.governance/law/README.md); the rulings are in [decisions.md](decisions.md#governance-as-a-constitution-1005).
-
-| Term | Meaning |
-| --- | --- |
-| **the law** | The rule catalog under [`.governance/law/`](../.governance/law/README.md) plus [CONSTITUTION.md](../CONSTITUTION.md). A directive is an ESLint rule; the constitution is its config. Never "the audit", which was the retired shell pack |
-| **arrival** | One agent run, materialized as `arrival.json`: the commits, the changed files tagged by estate, the registry rows keyed by issue, the waivers spent, the gates touched, and the law digest at branch point and at HEAD. Generated once per run from git, and the only place the law talks to git — rules read the document, never the repo |
-| **door** | Which rung a rule answers at. **hook** = answerable from the commit being written, fatal at pre-commit whatever its row says; **window** = the whole law at review time, at each rule's declared severity; **owner** = only a person can answer it. A check's rung is set by its door, never by its cost |
-| **estate** | Which jurisdiction a path belongs to. **law** = the packs' declared `lawPaths` (CONSTITUTION.md, `.governance/**`, gate ledgers, the linter configs, CODEOWNERS); **territory** = product code, scripts, workflows; **registry** = evidence (`receipts/**`, `docs/**`, `CHANGELOG.md`, `QUALITY.md`, the docket). One commit edits law or territory, never both; registry may ride with either |
-| **registry** | The one list that makes a screen reachable: `Registry::with("<app>.<name>", build)` per screen, merged with `Registry::merge`. The shells hold none: they switch on `ViewState.kind`. | `crates/screens/src/registry.rs` |
-| **docket** | `.governance/law/docket.json`, the register of standing exceptions. A row carries id, rule, path, reason, authority, filer, issue and expiry; a suppression names it as `-- docket:D-n`. Anyone files, only the owner grants — by merging the row before it is spent |
-| **front page** | The machine-written head of a PR body and of an umbrella receipt: the range, whether the law moved under the run, one line per enabled rule green or red, the registry lines, and the token cost read back from the receipt. Rendered by `node .governance/law/run.mjs --front-page <path>`; hand edits inside its markers are undone by the next run |
-| **law digest** | The hash of the law as published, printed by `node .governance/law/brief.mjs` and stamped into a worker's brief. `run.mjs --brief-digest <hex>` reports whether the law moved under the work; the worker is held to HEAD, and the stamp names the gap |
-| **amendment** | A change to the law: rule, cases, pack row and constitution section in one commit. `amendment-pairing` refuses any subset |
 
 ## Forbidden / discouraged synonyms (broader)
 

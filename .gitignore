@@ -17,21 +17,14 @@ artifacts
 output/playwright/
 target
 .claude
-# Python bytecode created by .governance/ hook scripts (not source).
+# Python bytecode (not source).
 __pycache__
 *.pyc
-
-# The law's own ESLint install and its generated arrival record (#1005). Named
-# in full rather than left to the bare `out` entry above, so deleting that
-# entry cannot silently start committing generated governance state.
-.governance/law/node_modules/
-.governance/law/out/
 
 # CSS-module carve tooling bookkeeping (class -> local-name maps used only by
 # the carve/rewrite scripts, never read by the app or its build).
 *.module.css.map.json
 
-**/.stryker-tmp/
 
 # Design-agent handoff prototypes (#707) are reference-only: read them locally,
 # never commit them. The brief itself is quoted in full in the issue.

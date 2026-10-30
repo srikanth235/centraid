@@ -24,7 +24,8 @@ fn second_checkout(label: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("xtask-second-{}-{label}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("crates/xtask/src")).expect("a second checkout");
-    std::fs::write(dir.join("CONSTITUTION.md"), "a second checkout\n").expect("a constitution");
+    std::fs::write(dir.join("rust-toolchain.toml"), "a second checkout\n")
+        .expect("a toolchain file");
     std::fs::write(dir.join("Cargo.toml"), "[workspace]\nmembers = []\n").expect("a manifest");
     dir
 }

@@ -93,11 +93,11 @@ body:
     id: validation
     attributes:
       label: Validation
-      description: Tests, governance checks, docs, or manual verification that prove completion.
+      description: Tests, gate steps, docs, or manual verification that prove completion.
       placeholder: |
         - Unit / integration tests pass
         - Manual check: <what you clicked / ran to confirm>
-        - Governance / lint suite green
+        - `cargo xtask gate --profile pr` green
     validations:
       required: true
 

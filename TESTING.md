@@ -37,14 +37,14 @@ Each profile is stated in code as a **concatenation of the one before it** (`loc
 | Profile | Budget | Steps it adds | Where it runs |
 | --- | --- | --- | --- |
 | `local` | 120 s **warm** | `fmt`, `clippy`, `test` (the crates the change touches and their dependents), `restore-drill`, `rules`, `doc-links`, `ledgers` | By hand, the edit-run loop |
-| `pr` | 1500 s | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static`, `emitters`, `advisory`, `lockfile`, `call-budget`, `search-budget`, `fault-door` | [`gate.yml`](.github/workflows/gate.yml), every PR and every push to `main` |
-| `nightly` | unbounded | `pr` plus `device-lanes` | [`gate-nightly.yml`](.github/workflows/gate-nightly.yml), 05:30 UTC |
+| `pr` | 1500 s | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static`, `emitters`, `lockfile`, `call-budget`, `search-budget`, `fault-door` | [`gate.yml`](.github/workflows/gate.yml), every PR and every push to `main` |
+| `nightly` | unbounded | `pr` plus `device-lanes` | [`nightly.yml`](.github/workflows/nightly.yml), 05:30 UTC; `device-lanes` skips there |
 | `release` | unbounded | `artifact-identity`, `prebuilt-core-required` | By hand before a tag |
-| `mobile-jvm` | 420 s | `mobile-jvm` — one step, a superset of nothing | `gate-nightly.yml`'s `mobile-jvm` job; on demand |
+| `mobile-jvm` | 420 s | `mobile-jvm` — one step, a superset of nothing | `nightly.yml`'s `mobile-jvm` job; on demand |
 
 `local` is scored **warm or cold**. The runner calls a tree warm only when every workspace member has a linked artifact under the target directory (`CARGO_TARGET_DIR` when set); a cold run is charged to `coldLocalProfileSeconds` in [`compile-time.json`](contracts/ledgers/compile-time.json) and fails where that key states no ceiling. `--cold` forces the cold branch. **The restore drill is in `local`, and so in every profile**: the product's promise is proved on every loop rather than only before a tag.
 
-`gate.yml` also runs an `engine` job on every pull request — clippy and `cargo test` over `centraid-assist-llama` and `centraid-core-ffi` with llama.cpp compiled in, which the gate's `--workspace` steps leave out because the cold build would overrun the `pr` profile's budget ([R-CHAT-10](docs/decisions.md#the-assistant)) — and a `dependency-review` job on pull requests (a GitHub Action over the dependency diff, so it cannot be a gate step). Governance is **not** a step: `.governance/run.sh` runs in [`governance.yml`](.github/workflows/governance.yml) as its own check.
+`gate.yml` also runs an `engine` job on every pull request — clippy and `cargo test` over `centraid-assist-llama` and `centraid-core-ffi` with llama.cpp compiled in, which the gate's `--workspace` steps leave out because the cold build would overrun the `pr` profile's budget ([R-CHAT-10](docs/decisions.md#the-assistant)) — a `native-python` job (the native tool task's CPU suite, [#1044](https://github.com/srikanth235/centraid/issues/1044)), a `dependency-review` job on pull requests (a GitHub Action over the dependency diff, so it cannot be a gate step) and a `pr-title` job that runs `.githooks/commit-msg` over the PR title. When `nightly.yml`'s three jobs all pass, it moves `refs/candidates/latest` to that `main` SHA, the only SHA a release tag may point at ([docs/release.md](docs/release.md)).
 
 ### What the steps prove
 
@@ -53,14 +53,13 @@ Each profile is stated in code as a **concatenation of the one before it** (`loc
 | `fmt`, `clippy` | `cargo fmt --all --check`; `cargo clippy --workspace --all-targets -- -D warnings` |
 | `test` | `cargo nextest run --workspace` then `cargo test --workspace --doc` when nextest is installed (nextest runs no doctests, so the second command keeps the set of tests the same), otherwise `cargo test --workspace`; the step line says which. `gate.yml` installs nextest, so CI runs the first. **On `local` only, the nextest run carries a filter naming the crates the change touches and the crates that depend on them** (`cargo xtask test-plan` prints them), and the step line starts `NARROWED to N of M crates`; the root manifest or lockfile, any crate manifest, the runner's code, or no merge base runs all of them. `pr` and every profile above it always run the whole workspace |
 | `rules` | The structural rules: `sql-confinement` (SQL only under `crates/{ontology,vault,search}` and `crates/apps/kit`), `abi-five-symbols`, `no-listening-socket` (the phone dials and accepts nothing; the one exemption is `crates/gateway/src/server/serve.rs`), `commonmain-no-platform-import`. Also `cargo xtask rules` on its own |
-| `doc-links` | Every relative link and in-repo anchor in the repository's markdown resolves, against the files the repository tracks; no network. Skips only what `doc-integrity` freezes (`receipts/`, `QUALITY.md` § Resolved, `CONSTITUTION.md` § Evolution Log) and the vendored governance kit. Also `cargo xtask doc-links` on its own |
+| `doc-links` | Every relative link and in-repo anchor in the repository's markdown resolves, against the files the repository tracks; no network. Skips only the append-only records: `receipts/` and `QUALITY.md` § Resolved. Also `cargo xtask doc-links` on its own |
 | `ledgers` | Every number in `contracts/ledgers/` against the merge base — see [the ledgers](#the-ledgers-915-wave-4-927) |
 | `buf` | `buf lint`, then `buf breaking` against the PR base **and** every released tag inside the version window |
 | `deny`, `secrets`, `osv`, `lockfile` | `cargo-deny` over [`deny.toml`](deny.toml); gitleaks over the working tree; osv-scanner, CRITICAL only; no `http:` URLs and pinned checksums in `bun.lock` and `Cargo.lock` |
-| `ci-policy` | Workflow pins, egress, path filters ([`tests/path-filter-ledger.json`](tests/path-filter-ledger.json)) and `actionlint` over `.github/**` |
-| `advisory` | Every step whose name declares it advisory has an owner, an issue and an unexpired `revisitBy`, in [`contracts/ledgers/advisory.json`](contracts/ledgers/advisory.json) or `tests/inventory.json#advisory` |
+| `ci-policy` | Every `uses:` under `.github/**` names a local action or a full commit SHA, then `actionlint` |
 | `release-build` | `cargo build --workspace --release`, timed against its ledger ceiling |
-| `ts-static` | `bun run check:push:static` when TypeScript exists under `crates/`, `contracts/` or `mobile/` |
+| `ts-static` | `bun run check`: `format:check`, `lint`, `typecheck`, `test`, `scripts:test` |
 | `emitters` | Regenerates the design corpus and native theme ([`contracts/tools/`](contracts/tools)), formats, and fails on drift in `design/` or `mobile/` — a changed file, or a new file the repository neither tracks nor ignores, which the step names |
 | `call-budget` | `cargo test --workspace --test call_budget -- --nocapture` (the target is `centraid-core`'s; `--workspace` rather than `-p` so it links the binary `test` already built instead of re-resolving features): any bounded read over its ceiling in [`call-budget.json`](contracts/ledgers/call-budget.json) fails, and p50/p95/p99 reach the log |
 | `search-budget` | `cargo test --release --workspace --test search_budget -- --nocapture --include-ignored`: the core's own search answers (an `AppQuery` through `Handle::call`) over the year-3 vault of `centraid_apps_kit::search_corpus` — about 46,000 entities and four million words of Zipf text over 188,000 distinct words — for eleven queries on Home, Notes, Docs, Money and Locker (unlocked). One hundred samples after ten warm-up calls per pair; the p95 of **each pair** is held to [`search-budget.json`](contracts/ledgers/search-budget.json)'s 80 ms, and the p50/p95/p99 table reaches the log. **A release build**, because the promise is the shipped core's and a debug build runs the correction pass three to five times slower; the measurement is `#[ignore]`d so the `test` step does not run it too |
@@ -73,17 +72,11 @@ Each profile is stated in code as a **concatenation of the one before it** (`loc
 
 Three verdicts, no fourth: `ok`, `FAIL`, and a loud `SKIP` naming the command that turns it into a real run. Output is buffered and printed only on failure, every step prints one line whatever it does, and every step runs even when an earlier one failed. `--lane <name>` narrows a run to one step (or one device lane); a name that matches nothing is an error, never an empty green run.
 
-A failing step writes `command.txt`, `stdout.log` and `stderr.log` (or `findings.txt`) under `target/xtask/<profile>/<step>/`, and both gate workflows upload `target/xtask/**` on failure.
-
-### The evidence contract
-
-Every run writes `target/xtask/<profile>/evidence.json` — profile, hardware class, and one row per step with its seconds, verdict and detail — on success as well as failure, so a step going quiet is visible rather than absent. The hardware class defaults to `ci-linux-x64-4c` and is overridden by `CENTRAID_GATE_HARDWARE` (the device runner sets it).
+A failing step writes `command.txt`, `stdout.log` and `stderr.log` (or `findings.txt`) under `target/xtask/<profile>/<step>/`, and `gate.yml` and `nightly.yml` upload `target/xtask/**` on failure.
 
 ### Known reds
 
-One `pr` finding is named rather than hidden, and it was not answered by widening an allowlist — a gate whose first act is to widen its own allowlist has gated nothing:
-
-- `osv` — `astro@7.1.5`, CRITICAL, in `bun.lock`. An owner hand-off (row 6.3 of [docs/release/v1-handoffs.md](docs/release/v1-handoffs.md)).
+None. A red is named here rather than hidden, and never answered by widening an allowlist — a gate whose first act is to widen its own allowlist has gated nothing. The `osv` red (`astro@7.1.5`, CRITICAL) closed when `bun.lock` moved to `astro@7.3.5`.
 
 The `secrets` red is **closed, by deletion rather than by decision** ([#1029](https://github.com/srikanth235/centraid/issues/1029)). It was gitleaks on `contracts/golden/format-golden.json`'s `dataKeyHex`; that fixture went with the TypeScript half of the product and `contracts/golden/` now holds only `issue-1020/` and `issue-929/`. No `.gitleaks.toml` row was ever added for it, and none is needed.
 
@@ -120,10 +113,10 @@ Everything under [`contracts/`](contracts/README.md) is generated and diffed, ne
 
 ### Device lanes and their runner contract
 
-`device-lanes` has four cells — `backup-measurement`, `android-macrobenchmark`, `ios-xctest-metrics`, `battery-per-background-pass` — named once in `gate.rs` so the workflow matrix and the runner cannot disagree. `gate-nightly.yml` runs them as a matrix on `[self-hosted, macos, devices]` **only** when `vars.CENTRAID_DEVICE_RUNNER == 'true'`; each cell runs `cargo xtask gate --profile nightly --lane <name>`, and an owner with a phone on a laptop runs the same command.
+`device-lanes` has four cells — `backup-measurement`, `android-macrobenchmark`, `ios-xctest-metrics`, `battery-per-background-pass` — named once in `gate.rs`. No workflow runs them: an owner with one iPhone and one Android attached runs each cell by hand as `CENTRAID_DEVICE_RUNNER=1 cargo xtask gate --profile nightly --lane <name>`.
 
 - Without `CENTRAID_DEVICE_RUNNER`, the step is a loud `Skipped` — never a pass.
-- With it set, the step **requires** `xcrun devicectl list devices` (a physical iPhone — not `simctl`, which lists simulators) and `adb devices` to list something. A runner that claims the label and has no phone goes **red**.
+- With it set, the step **requires** `xcrun devicectl list devices` (a physical iPhone — not `simctl`, which lists simulators) and `adb devices` to list something. A machine that sets it and has no phone attached goes **red**.
 - `backup-measurement` checks that the evidence under `receipts/experiments/backup/` exists, is complete, is recent and did not come from a simulator; the run itself is the protocol in [`mobile/maestro/backup-measurement.md`](mobile/maestro/backup-measurement.md) — the first evening's backup, the night with the app closed, and the fresh phone's grid ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
 - `battery-per-background-pass` cannot be automated on either platform and always skips with the owner's manual procedure.
 
@@ -131,15 +124,13 @@ What only a device can measure — the absolute mobile targets, the backup measu
 
 ## The ledgers (#915 Wave 4, #927)
 
-**The gate's ledgers** are the seven files under [`contracts/ledgers/`](contracts/ledgers): `gate-budgets`, `compile-time`, `library-size`, `call-budget`, `search-budget`, `query-plans` (the allowlist of reviewed scans and sorts, whose counts only fall) and `advisory` (the advisory register). The `ledgers` step compares every JSON file in that directory against the merge base and refuses any number that rose or vanished. `cargo xtask measure --write` is the only writer and only ever lowers a number; a gate run measures and reports but never writes, because a ratchet that records whatever the last run cost is a log. A raise needs an owner ruling ([D-1020-B2](docs/decisions.md#governance-and-the-pr-gate)).
+**The gate's ledgers** are the six files under [`contracts/ledgers/`](contracts/ledgers): `gate-budgets`, `compile-time`, `library-size`, `call-budget`, `search-budget` and `query-plans` (the allowlist of reviewed scans and sorts, whose counts only fall). The `ledgers` step compares every JSON file in that directory against the merge base and refuses any number that rose or vanished. `cargo xtask measure --write` is the only writer and only ever lowers a number; a gate run measures and reports but never writes, because a ratchet that records whatever the last run cost is a log. A raise needs an owner ruling ([D-1020-B2](docs/decisions.md#governance-and-the-pr-gate)).
 
-**The repo-wide ledgers under `tests/`** are still read:
+Two more ledgers live under `tests/`:
 
 | Ledger | Read by |
 | --- | --- |
-| [`tests/floors.json`](tests/floors.json), [`tests/budgets.json`](tests/budgets.json), [`tests/inventory.json`](tests/inventory.json), [`tests/quarantine.json`](tests/quarantine.json) | Governance law: a change to any of them is a governance event, with the direction table from [`scripts/check-ledgers.mjs`](scripts/check-ledgers.mjs) (`bun run lint:ledgers`). The `advisory` step also reads `tests/inventory.json#advisory`. |
 | [`tests/journeys.json`](tests/journeys.json) | The hardware-class vocabulary the gate ledgers are keyed by, the parked device ceilings, and the year-3 volume rows the `crates/apps` fixtures generate. |
-| [`tests/path-filter-ledger.json`](tests/path-filter-ledger.json) | The `ci-policy` step's path-filter check. |
 | [`tests/design-grammar-matrix.json`](tests/design-grammar-matrix.json) | `packages/design`'s moment-matrix test. |
 
 ## Related

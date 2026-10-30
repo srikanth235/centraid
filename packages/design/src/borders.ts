@@ -17,7 +17,7 @@ export const borders = {
    * few percent off the page by design, so the edge does most of the work of
    * making a plate read as a plate; at a third strength the plate looked
    * missing rather than subtle. Native call sites therefore use this token and
-   * never `StyleSheet.hairlineWidth` — enforced by `scripts/lint-hairline.mjs`.
+   * never `StyleSheet.hairlineWidth`.
    */
   hairline: 1,
 } as const;

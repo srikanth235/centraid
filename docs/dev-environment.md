@@ -50,9 +50,9 @@ More traps: [traps/worktrees.md](traps/worktrees.md). Multi-agent rules: [multi-
 
 ### Receipts are append-only, and sibling appends merge by union
 
-One issue carries one receipt (`receipts/issue-<N>-<slug>.md`), and a slice adds exactly one section at the **end** of it: `doc-integrity` requires the trunk's copy to stay a byte-prefix of yours. Two sibling slices appending to the same receipt therefore conflict on every rebase, always with the same correct resolution — keep both hunks, upstream first. The root `.gitattributes` marks `receipts/*.md merge=union`, and git's built-in union driver concatenates a conflicting hunk ours-then-theirs; during a `git rebase` onto `main` "ours" is `main`, so main's section lands first and the prefix survives. Check the seam afterwards: union factors out the blank line both sides share, so the second section may need one blank line reinserted before its heading — still an append, still prefix-safe.
+One issue carries one receipt (`receipts/issue-<N>-<slug>.md`), and a slice adds exactly one section at the **end** of it, so the trunk's copy stays a byte-prefix of yours. Two sibling slices appending to the same receipt therefore conflict on every rebase, always with the same correct resolution — keep both hunks, upstream first. The root `.gitattributes` marks `receipts/*.md merge=union`, and git's built-in union driver concatenates a conflicting hunk ours-then-theirs; during a `git rebase` onto `main` "ours" is `main`, so main's section lands first and the prefix survives. Check the seam afterwards: union factors out the blank line both sides share, so the second section may need one blank line reinserted before its heading — still an append, still prefix-safe.
 
-Two things the driver does not do. It cannot tell an append from an edit — it resolves _any_ conflicting hunk the same way — so the rule it does not replace still stands: never touch text above your own section, and `doc-integrity` still fails you if you do. And GitHub's own PR mergeability check does not honour `.gitattributes` merge drivers, so this helps local rebases only. Rebase, do not merge: `git merge` resolves union with the **checked-out** branch first, so merging `main` into a slice branch would put your section above main's and break the byte-prefix.
+Two things the driver does not do. It cannot tell an append from an edit — it resolves _any_ conflicting hunk the same way — so the rule it does not replace still stands: never touch text above your own section. And GitHub's own PR mergeability check does not honour `.gitattributes` merge drivers, so this helps local rebases only. Rebase, do not merge: `git merge` resolves union with the **checked-out** branch first, so merging `main` into a slice branch would put your section above main's and break the byte-prefix.
 
 ## `.claude/launch.json`
 
@@ -60,63 +60,41 @@ If a local `.claude/launch.json` exists (may be gitignored), treat it as the **n
 
 ## The local gate loop
 
-One command gates the tree ([#1020](https://github.com/srikanth235/centraid/issues/1020)): `cargo xtask gate --profile <local|pr|nightly|release|mobile-jvm>`. The profiles, their steps and their budgets are in [toolchain.md](toolchain.md#cargo-xtask-gate-1020) and [`crates/xtask/README.md`](../crates/xtask/README.md); this section is the loop.
+One command gates the tree ([#1020](https://github.com/srikanth235/centraid/issues/1020)): `cargo xtask gate --profile <local|pr|nightly|release|mobile-jvm>`. The profiles, their steps and their budgets are in [toolchain.md](toolchain.md#cargo-xtask-gate-1020) and [`crates/xtask/README.md`](../crates/xtask/README.md); this section is the loop: the pre-commit hook on each commit, `bun run check` and `cargo xtask gate --profile local` before a push, and [`gate.yml`](../.github/workflows/gate.yml) on the pull request.
 
 | When | What runs | Where |
 | --- | --- | --- |
+| commit | `.githooks/pre-commit` — `oxfmt --check` and `oxlint` over the **staged** files; `.githooks/commit-msg` — the subject shape | the hooks |
 | after an edit | `cargo xtask gate --profile local` — `fmt`, `clippy`, `test` (**the crates the change touches and the crates that depend on them**, not the workspace), `restore-drill`, `rules`, `doc-links`, `ledgers`. Budget 120 s on a warm tree | by hand |
+| TypeScript changed | `bun run check` — `format:check`, `lint`, `typecheck`, `test`, `scripts:test`; the `pr` profile's `ts-static` step | by hand |
 | which crates `test` would run | `cargo xtask test-plan` (add `--reads` for the table of files each crate reads from outside its own directory) — prints the selection and why, and runs nothing | by hand |
 | a narrower answer | `cargo test -p <crate>`, `cargo xtask rules`, `cargo xtask doc-links`, `cargo xtask gate --profile local --lane restore-drill` for the drill alone | by hand |
-| commit | the pre-commit hook | `.githooks/pre-commit` |
-| push | the pre-push hook | `.githooks/pre-push` |
-| want CI's answer early | `cargo xtask gate --profile pr` — `local` plus supply chain, CI policy, secrets, release build, the TypeScript static tier, emitters, the call budget, the search budget (a release build of the year-3 search vault) and the fault door | [`gate.yml`](../.github/workflows/gate.yml), required on every pull request and push to `main`, beside `dependency-review` |
+| want CI's answer early | `cargo xtask gate --profile pr` — `local` plus supply chain, CI policy, secrets, release build, `bun run check`, emitters, the call budget, the search budget (a release build of the year-3 search vault) and the fault door | [`gate.yml`](../.github/workflows/gate.yml)'s `gate` job, on every pull request and push to `main` |
 | the on-device engine (`crates/assist-llama`, or `crates/core-ffi` with llama.cpp) changed | `cargo clippy -p centraid-assist-llama -p centraid-core-ffi --all-targets --features centraid-core-ffi/llama -- -D warnings`, then `cargo test` over the same packages and feature — the `engine` job's two commands; `cmake` and a C++ compiler required, about five minutes of llama.cpp cold. `cargo xtask gate` compiles none of it | [`gate.yml`](../.github/workflows/gate.yml)'s `engine` job |
-| `mobile/core` changed | `cargo xtask gate --profile mobile-jvm` — builds `centraid-core-ffi`, runs `./gradlew mobileJvm`, regenerates the native theme and screen fixtures and fails on drift. Budget 420 s | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml) |
-| nightly | `cargo xtask gate --profile nightly` — `pr` plus `device-lanes` and the deeper suites. One lane alone: `--lane <name>` | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml), 05:30 UTC |
+| `mobile/core` changed | `cargo xtask gate --profile mobile-jvm` — builds `centraid-core-ffi`, runs `./gradlew mobileJvm`, regenerates the native theme and screen fixtures and fails on drift. Budget 420 s | [`nightly.yml`](../.github/workflows/nightly.yml) |
+| nightly | `cargo xtask gate --profile nightly` — `pr` plus `device-lanes`, which skip loudly without `CENTRAID_DEVICE_RUNNER`. On a machine with devices attached: `CENTRAID_DEVICE_RUNNER=1 cargo xtask gate --profile nightly --lane <name>` | [`nightly.yml`](../.github/workflows/nightly.yml), 05:30 UTC |
 | release | `cargo xtask gate --profile release` — `nightly` plus `artifact-identity` and `prebuilt-core-required` | [`release.yml`](../.github/workflows/release.yml)'s lanes |
 
 **`local` tests what the change touches** (hand-off 6.5, [v1-handoffs.md](release/v1-handoffs.md#6-ci-branch-protection-and-the-inherited-reds)). The files that differ from the merge base with `origin/main` (committed, staged, unstaged and untracked) select the crates they sit in, the crates whose sources read them from outside their own directory (`contracts/`, `copy/`, `design/`, a Swift file the assistant embeds — derived from the sources, not listed), and every crate that depends on either. A documentation edit selects none. The root `Cargo.toml` and `Cargo.lock`, the toolchain pin, `.cargo/`, any crate manifest, `crates/xtask`'s code, or no base at all runs the whole workspace. The step says which, loudly: a banner naming each crate and why, a `NARROWED to N of M crates` prefix on its evidence line, and `target/xtask/local/test/selection.txt`. The narrowing is a nextest filter over `--workspace`, not `-p`, so it builds under the feature set `clippy` and `restore-drill` already built; without `cargo-nextest` the step runs the whole workspace and says why. It is **not** `pr`: CI runs every crate on every pull request, which is where a read the derivation missed is caught. **An edit that reaches `centraid-core` — any app crate, and everything beneath them — still runs its 369-test suite (about three minutes), so the 120 s budget holds for documentation and for the four crates outside core's cone and not for the rest;** the numbers and the owner's options are hand-off 6.5. `CENTRAID_GATE_TESTS=all` widens a local run to the whole workspace; `CENTRAID_GATE_BASE=<commit or tree>` names a different base, which is how a stacked branch is compared against its parent.
 
 A failing step writes its command, stdout and stderr under `target/xtask/<profile>/<step>/` and names that directory on its one line. **Every cargo and xtask command needs its own `CARGO_TARGET_DIR`** when more than one worktree is in flight — see the worktree rules above.
 
-**The hooks.** `.githooks/*` are governance-kit dispatchers: each runs the directives under `.governance/packs/` whose `hook:` field names that hook.
+**The hooks.** There are two, enabled once per clone with `git config core.hooksPath .githooks`:
 
-- **pre-commit** runs `scripts/test.sh` (path-gated to commits that stage shell or governance files), then the nine pre-commit directives — among them `format-check` and `lint-check`, which run `oxfmt` and `oxlint` on **staged files only**, and `law`, which runs the ESLint rule catalog under [`.governance/law/`](../.governance/law/README.md) at its hook door ([#1005](https://github.com/srikanth235/centraid/issues/1005)).
-- **pre-push** runs the `pre-push-gate` directive. The tier is chosen by the destination ([#988](https://github.com/srikanth235/centraid/issues/988)): a push to `main` runs `bun run check:push`, every other ref runs `bun run check:push:static`, and `CENTRAID_PUSH_TIER=full` widens a branch push to the `main` tier. Both are gate lists in the root `package.json`, run concurrently by `scripts/ci/run-gates.mjs`, with every failure reported in one pass. `check:push:static` is also what the gate's `ts-static` step runs.
-- **commit-msg** carries the `law` directive's message checks; **post-commit** can only warn.
+- **pre-commit** runs `oxfmt --check` and `oxlint --deny-warnings` with the root configs over the **staged** files only. It rewrites nothing; fix with `bun run format` and `bun run lint:fix`. Without `bun install` it prints a notice and passes.
+- **commit-msg** requires the subject `type(scope)!: subject (#N)` — a Conventional Commits type (`feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `build`, `ci`, `revert`, `style`), an optional scope and `!`, and the issue the change answers to — in at most 100 characters. Merge, revert, `fixup!`, `squash!` and `amend!` subjects pass. A squash merge's subject is the PR title, so `gate.yml`'s `pr-title` job runs the same file over the title.
 
-Staged-files-only is on purpose: a repo-wide gate at commit time fires on debt in files you never opened, and a gate that fires for someone else's mess is one people learn to bypass.
+Staged-files-only is on purpose: a repo-wide check at commit time fires on debt in files you never opened, and a check that fires for someone else's mess is one people learn to bypass. There is no push hook: `bun run check` and the `local` profile are run by hand, and CI runs the whole tree.
 
 **Format before you commit.** `bun run format` writes oxfmt's output over the tree; `cargo fmt --all` does the same for Rust. Neither hook rewrites a tracked file.
 
-**A tier does not re-run against a tree it already passed.** `scripts/ci/gate-stamp.mjs` keys a pass on the oid of a git tree built from the working copy in a _copy_ of the index, plus `origin/main`. `check:push --stamp` skips the static members on a match, and `bun run governance` — the stamped entry point to the digest-locked `.governance/run.sh` — takes the same treatment. A tier is stamped only when every one of its gates ran and passed; `CI` in the environment disables stamps outright; `CENTRAID_GATE_STAMPS=0` turns them off. Every root script that runs turbo goes through `scripts/ci/turbo.mjs`, which points it at one cache shared by every worktree. Both live outside the repository ([toolchain.md](toolchain.md#where-the-caches-live)).
+`.github/CODEOWNERS` names the owner of the CI surface: `/.github/`, `/.githooks/` and `/crates/xtask/`. What the **host** would enforce — branch protection requiring code-owner review on the default branch, and `gate`, `engine`, `native-python`, `dependency-review` and `pr-title` in the required set — is configured outside this repository and is the owner's to enable ([v1-handoffs.md](release/v1-handoffs.md#6-ci-branch-protection-and-the-inherited-reds)).
 
-**Governance.** `law` generates the change set into `.governance/law/out/arrival.json` and lints it together with the governance documents the change touched. At pre-commit it opens the **hook door** — the rules answerable from the commit being written, all fatal there; everywhere else (`bash .governance/run.sh`, `bun run governance:law`, [`governance.yml`](../.github/workflows/governance.yml)) the **window door** runs the whole catalog at each rule's declared severity. `estate-separation` refuses a commit that edits the law estate and the territory estate together (waive with `governance: allow-estate-separation <reason>` in the commit body); `registry-completeness` asks for the changelog line, the `docs/decisions.md` ruling, the gate authorisation or the docket row a change's own events call for. [CONSTITUTION.md](../CONSTITUTION.md#estate-separation) carries both directives and [docs/decisions.md](decisions.md#governance-as-a-constitution-1005) the rulings behind them.
-
-`.github/CODEOWNERS` is generated, not hand-kept:
-
-```bash
-node .governance/law/codeowners.mjs --check   # exit 1 on drift
-node .governance/law/codeowners.mjs --write   # regenerate from the packs' lawPaths
-```
-
-What the **host** would enforce — branch protection requiring code-owner review on the default branch, and `gate`, `engine`, `dependency-review` and `governance` in the required set — is configured outside this repository and is the owner's to enable. It is **not confirmed enabled**; the rules observe and report either way.
-
-**`governance.yml` cannot be given a `timeout-minutes` by hand.** It is listed in `.governance/install.yaml`'s `managed_digests`, so `managed-tree-integrity` fails on any edit to it, and `scripts/lint-workflow-pins.mjs` skips any file whose first lines carry `# governance-kit:managed`. The supported path to a timeout is a kit update.
-
-### Escape hatches
-
-```sh
-SKIP_CHECK_PR=1 git push     # skip the pre-push gate only
-SKIP_GOVERNANCE=1 git push   # skip every governance hook
-git push --no-verify         # skip all hooks entirely
-```
-
-All three are legitimate for a WIP branch or a spike, and all three leave CI as the enforcing copy. A gate with no exit is a gate people disable permanently.
+**Skipping the hooks.** `git commit --no-verify` skips both. It is legitimate for a WIP branch or a spike; CI is the enforcing copy either way.
 
 ### What deliberately does not run locally
 
-`deny` without `cargo-deny` installed, `ci-policy` without `actionlint`, `secrets` without `gitleaks`, `osv` without `osv-scanner`, and `buf` without `buf` — each prints a loud `SKIP` naming what turns it into a real run, and each is required in CI. `device-lanes` need attached devices and run only on the self-hosted runner.
+`deny` without `cargo-deny` installed, `ci-policy` without `actionlint`, `secrets` without `gitleaks`, `osv` without `osv-scanner`, and `buf` without `buf` — each prints a loud `SKIP` naming what turns it into a real run, and each is required in CI. `device-lanes` need attached devices and `CENTRAID_DEVICE_RUNNER=1`.
 
 ## Tools only via repo scripts
 

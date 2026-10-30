@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -19,6 +18,7 @@ import centraid.core.v1.CounterView
 import centraid.core.v1.NavEvent
 import centraid.core.v1.NavPopped
 import centraid.core.v1.ScreenEvent
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.core.Screens
 import kotlinx.coroutines.launch
 
@@ -57,15 +57,11 @@ private fun Counter(view: CounterView, send: (CounterEvent) -> Unit) {
         view.loading?.let { Text(it.label) }
         view.failed?.let {
             Text(it.sentence)
-            Button(onClick = { send(CounterEvent(retry_tapped = CounterRetryTapped())) }) {
-                Text(it.remedy)
-            }
+            OutlineButton(it.remedy) { send(CounterEvent(retry_tapped = CounterRetryTapped())) }
         }
         view.data_?.let {
             Text(it.count_label)
-            Button(onClick = { send(CounterEvent(copy_tapped = CounterCopyTapped())) }) {
-                Text(it.copy_label)
-            }
+            OutlineButton(it.copy_label) { send(CounterEvent(copy_tapped = CounterCopyTapped())) }
             if (it.notice.isNotEmpty()) Text(it.notice)
         }
     }

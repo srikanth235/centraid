@@ -41,7 +41,7 @@ An appearance preference applied as an **inline style** on `<html>` outranks eve
 2. **Editing a generated artifact** (`design/*.json`, `Tokens.kt`, `Theme.swift`) without rerunning the emitter — the gate's drift check fails, or the next emit overwrites it.
 3. **Skipping `bun run --cwd packages/design build`** after token edits so a consumer of `dist/` still sees old values.
 4. **Using shell tokens inside an app surface** (or vice versa) without going through the `toBlueprintCss()` path.
-5. **Deep imports** like `@centraid/design/src/themes/centraid` — use the package exports (governance no-deep-imports).
+5. **Deep imports** like `@centraid/design/src/themes/centraid` — use the package exports.
 6. **Font-family overrides** in app CSS — token stacks own type.
 
 ## There is ONE page, and an app does not retune it
@@ -71,7 +71,7 @@ An app does not declare a reading or scanning register, and its prose does not c
 - [ ] Setting a number? `font: var(--t-mono); font-variant-numeric: var(--t-mono-numeric);` — not `font-family: var(--font-code)`.
 - [ ] Reaching for `--font-code`? Only for code, an inline literal, or a file path.
 
-The CSS debt ledger is empty. `scripts/lint-design-tokens.mjs` (`bun run lint:design-tokens`) reads **one** target, `packages/design/src/elements` — `extension/static` stood beside it until the extension went with the v0 tree in [#1029](https://github.com/srikanth235/centraid/issues/1029), and a named target that does not exist made the gate throw rather than check. It accepts only a current `--t-*` role or `--t-*-size` rung; arbitrary `var()` sizing does not count as token adoption. Radius declarations are closed over `--r-*`, the registry-emitted tile shape, the per-instance icon-chip radius, and the 26% app-mark geometry. Literal fallbacks, longhand literals, circles spelled as `50%`, and arithmetic over a radius token all fail. Do not repopulate the CSS debt ledger — `tests/budgets.json#designTokenCss` is intentionally empty.
+In `packages/design/src/elements`, a size takes a current `--t-*` role or `--t-*-size` rung; arbitrary `var()` sizing does not count as token adoption. Radius declarations are closed over `--r-*`, the registry-emitted tile shape, the per-instance icon-chip radius, and the 26% app-mark geometry. Literal fallbacks, longhand literals, circles spelled as `50%`, and arithmetic over a radius token are all a second scale. No linter checks these rules; review does.
 
 ## Three values live under the 4px base, and they are named
 
@@ -93,7 +93,7 @@ A loose `gap: 2px` is indistinguishable from someone eyeballing a rung; `var(--s
 - [ ] Rerun `bun contracts/tools/export-native-theme.ts` and `bun run format`, and commit the regenerated artifacts
 - [ ] New theme? Its registry key equals its `kind`, or the literal `[data-theme='dark']` rules moved to the resolved kind first
 - [ ] New appearance pref applied inline on `<html>`? It only writes when the owner set it, and clears when they did not
-- [ ] Run `bun run --cwd packages/design test` and `bun run lint:design-tokens`; do not add an allowance or a raw consumer value
+- [ ] Run `bun run --cwd packages/design test`; do not add a raw consumer value
 
 ## Related
 

@@ -23,18 +23,16 @@ updates:
       timezone: Etc/UTC
     open-pull-requests-limit: 5
     commit-message:
-      # Conventional Commits + mandatory issue suffix are enforced by
-      # .governance/packs/.../commit-message-format. Dependabot cannot append
-      # the "(#N)" suffix, so these land as `ci(deps): …` and the hook's
-      # dependabot exemption (or a manual reword) applies — see the receipt.
+      # Dependabot cannot append the "(#N)" suffix `.githooks/commit-msg`
+      # asks for; `gate.yml`'s PR-title check exempts its PRs.
       prefix: "ci(deps)"
     groups:
       actions:
         patterns: ["*"]
 
   # ------------------------------------------------------------ javascript --
-  # Bun workspaces: the root manifest + bun.lock cover every packages/* and
-  # apps/* workspace, so one entry is enough.
+  # Bun workspaces: the root manifest + bun.lock cover every packages/*
+  # workspace, so one entry is enough.
   - package-ecosystem: bun
     directory: /
     schedule:
@@ -49,19 +47,11 @@ updates:
     # split below already separates the two streams.
     commit-message:
       prefix: "chore(deps)"
-    # The monthly toolchain-upgrade issue owns these coupled exact pins. A
-    # grouped weekly bump would bypass the rule/catalog/formatter review in
-    # docs/toolchain.md.
-    ignore:
-      - dependency-name: ultracite
-      - dependency-name: oxlint
-      - dependency-name: oxlint-tsgolint
-      - dependency-name: oxfmt
-      - dependency-name: typescript
-      - dependency-name: knip
-      - dependency-name: vitest
-      - dependency-name: turbo
     groups:
+      # The coupled exact pins move together, in a PR of their own: a lint
+      # or format engine bump can change what the gate reports.
+      lint-format:
+        patterns: ["ultracite", "oxlint", "oxfmt", "typescript", "vitest"]
       # Toolchain churn (lint/format/test/build) is noisy and low-risk to batch.
       dev-toolchain:
         dependency-type: development

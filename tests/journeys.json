@@ -599,32 +599,6 @@
         }
       }
     },
-    "gateway/own-echo/none/ci-linux-x64-4c": {
-      "surface": "gateway",
-      "journey": "own-echo",
-      "volume": "none",
-      "hardware": "ci-linux-x64-4c",
-      "spans": ["gateway.turn.dispatch"],
-      "consumers": ["scripts/perf/send-to-first-token.mjs"],
-      "tolerancePercent": 20,
-      "metrics": {
-        "sendToFirstToken": {
-          "status": "measured",
-          "probe": "scripts/perf/send-to-first-token.mjs — drives a real runAcpTurn against the scripted packages/server/src/acp/backends/acp/fake-acp-harness.mjs (--mode=normal) and times t0 (send) → first `assistant.delta`. PARTIAL BY CONSTRUCTION, and this entry says so rather than implying the whole interval is fenced. IN the span: harness process spawn, the ACP initialize handshake, session/new, session/prompt dispatch, and the stream translation in packages/server/src/acp/backends/acp/backend.ts. OUT of it: the HTTP/SSE conversation route in front of runAcpTurn, every client (no renderer, no frame, no composer), and a real provider's own time to first token — that last one is deliberately excluded, because it is the provider's number and not a regression this repo can fix. STILL UNMEASURED: the route + client half, which needs the desktop/web e2e mock gateway to serve a fixed-delay SSE turn plus a client-side first-token marker to observe; the `sendToFirstToken` entries in desktop.json and web.json remain unmeasured for exactly that reason.",
-          "ceilingP95Ms": 400,
-          "_provenance": {
-            "at": "2026-08-21",
-            "host": "linux x64, 4 cpus, shared container under concurrent sibling load (load average 3.3-4.5 of 4 during the noisiest runs); @centraid/server consumed from its built dist",
-            "observedP95Ms": 123,
-            "observedMedianMs": 69.5,
-            "observedMinMs": 38.4,
-            "observedMaxMs": 197.9,
-            "note": "MEASURED — and what it replaces is NO NUMBER AT ALL. Before this the product's most-felt latency had no rig: registry-dispatch throughput against a stubbed runTurn never spawns a harness, never speaks ACP, and could not see this interval. The stub is fake-acp-harness.mjs, the ACP backend suite's fixture; the missing piece was a rig pointing at it. Thirteen independent runs of 25-30 samples put per-run p95 between 53.4 ms on an idle container and 123.0 ms under concurrent load, while the per-run MEDIAN barely moved (47.9-69.5 ms) — so the spread is host contention on the process spawn, not variance in the path itself. Every observed* value above records the WORST run seen, never the friendliest. The number is dominated by node process spawn plus the JSON-RPC handshake, which is the honest shape of a first turn. READ IT AS A LOWER BOUND on what the vault owner feels: it fences a gateway-side regression — a slower spawn, an added handshake round trip, a blocking step inserted before the prompt goes out — not the whole perceived interval.",
-            "headroom": "~3.3x worst observed p95 (~2x the worst single sample), in the same grammar as requestToFirstByte above. Sized against the CONTENDED measurement on purpose, because a shared CI runner IS the contended case: a ceiling seeded from the idle 53 ms p95 would fence runner jitter rather than a regression, and a gate that flakes is a gate that gets widened. The ratchet is tighten-only, so this can only come DOWN — re-seed it from a real distribution on the lane that runs it."
-          }
-        }
-      }
-    },
     "gateway/own-echo/seeded-demo/ci-linux-x64-4c": {
       "surface": "gateway",
       "journey": "own-echo",
@@ -1333,7 +1307,7 @@
       "hardware": "device-android-mid",
       "spans": ["core.call", "client.interaction"],
       "consumers": [],
-      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
+      "lane": "cargo xtask gate --profile nightly --lane ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "interactionP95": {
@@ -1355,7 +1329,7 @@
       "hardware": "device-android-mid",
       "spans": ["client.frame", "seat.apply"],
       "consumers": [],
-      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
+      "lane": "cargo xtask gate --profile nightly --lane ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "frameMissesDuringSync": {
@@ -1377,7 +1351,7 @@
       "hardware": "device-android-mid",
       "spans": ["core.call", "client.interaction"],
       "consumers": [],
-      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
+      "lane": "cargo xtask gate --profile nightly --lane ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "keystrokeP95": {
@@ -1399,7 +1373,7 @@
       "hardware": "device-android-mid",
       "spans": ["core.call"],
       "consumers": [],
-      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
+      "lane": "cargo xtask gate --profile nightly --lane ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "residentMemory": {
@@ -1421,7 +1395,7 @@
       "hardware": "device-android-mid",
       "spans": ["core.call", "seat.apply"],
       "consumers": [],
-      "lane": "gate-nightly.yml / battery-per-background-pass (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
+      "lane": "cargo xtask gate --profile nightly --lane battery-per-background-pass (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "batteryPerPass": {
@@ -1443,7 +1417,7 @@
       "hardware": "device-android-mid",
       "spans": ["core.call", "client.interaction"],
       "consumers": [],
-      "lane": "gate-nightly.yml / android-macrobenchmark / ios-xctest-metrics (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
+      "lane": "cargo xtask gate --profile nightly --lane android-macrobenchmark / ios-xctest-metrics (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "coldStartAtYear3": {
@@ -1465,7 +1439,7 @@
       "hardware": "device-iphone-oldest",
       "spans": ["core.call", "client.interaction"],
       "consumers": [],
-      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
+      "lane": "cargo xtask gate --profile nightly --lane ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "interactionP95": {
@@ -1487,7 +1461,7 @@
       "hardware": "device-iphone-oldest",
       "spans": ["client.frame", "seat.apply"],
       "consumers": [],
-      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
+      "lane": "cargo xtask gate --profile nightly --lane ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "frameMissesDuringSync": {
@@ -1509,7 +1483,7 @@
       "hardware": "device-iphone-oldest",
       "spans": ["core.call", "client.interaction"],
       "consumers": [],
-      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
+      "lane": "cargo xtask gate --profile nightly --lane ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "keystrokeP95": {
@@ -1531,7 +1505,7 @@
       "hardware": "device-iphone-oldest",
       "spans": ["core.call"],
       "consumers": [],
-      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
+      "lane": "cargo xtask gate --profile nightly --lane ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "residentMemory": {
@@ -1553,7 +1527,7 @@
       "hardware": "device-iphone-oldest",
       "spans": ["core.call", "seat.apply"],
       "consumers": [],
-      "lane": "gate-nightly.yml / battery-per-background-pass (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
+      "lane": "cargo xtask gate --profile nightly --lane battery-per-background-pass (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "batteryPerPass": {
@@ -1575,7 +1549,7 @@
       "hardware": "device-iphone-oldest",
       "spans": ["core.call", "client.interaction"],
       "consumers": [],
-      "lane": "gate-nightly.yml / android-macrobenchmark / ios-xctest-metrics (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
+      "lane": "cargo xtask gate --profile nightly --lane android-macrobenchmark / ios-xctest-metrics (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
       "tolerancePercent": 20,
       "metrics": {
         "coldStartAtYear3": {
@@ -1684,12 +1658,12 @@
       "volume": "year3-tasks",
       "hardware": "ci-linux-x64-4c",
       "spans": [],
-      "consumers": ["crates/apps/tasks/tests/year3.rs"],
+      "consumers": ["crates/apps/agenda/tests/task_year3.rs"],
       "tolerancePercent": 20,
       "metrics": {
         "boardWindow": {
           "status": "projected",
-          "probe": "cargo test -p centraid-apps-tasks --test year3 -- --ignored --nocapture",
+          "probe": "cargo test -p centraid-apps-agenda --test task_year3 -- --ignored --nocapture",
           "_observedMs": 56,
           "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_tasks`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
           "_provenance": {

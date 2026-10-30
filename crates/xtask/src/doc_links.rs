@@ -1,12 +1,8 @@
 //! `doc-links` — every relative link and in-repo anchor in the repository's
 //! markdown resolves (Q-1005-1, the owner's ruling of 2026-10-15).
 //!
-//! The docs doctrine is "docs are load-bearing: stale docs are bugs, broken
-//! internal links are bugs". Until this step it had no statute: the link half
-//! lost its enforcing directive when the vendored `governance-kit/docs` pack
-//! went, and the first sweep found forty-five links into code that was deleted
-//! (`packages/server`, `crates/automations`, a Tally crate) from documents that
-//! still describe it.
+//! "Docs are load-bearing: stale docs are bugs, broken internal links are
+//! bugs" — and the second half is decidable, so it is a gate.
 //!
 //! **What it checks.** For each tracked markdown file, outside the two trees
 //! below: every inline link, image and reference definition, and every `href`
@@ -28,20 +24,10 @@
 //! cannot be decided by a scanner, and a scanner that tries trains authors to
 //! phrase around it. It stays a reviewer's principle.
 //!
-//! **What it skips, and why.** Only what the repository already declares
-//! uneditable, so a finding there could never be fixed:
-//!
-//! - what `doc-integrity` freezes, **read from its pack row**
-//!   (`.governance/law/packs/governance-kit-audit.json`) rather than copied
-//!   here: `receipts/*.md` (append-only evidence — 196 of the links in them
-//!   point at code that has since gone, which is what a record of past work
-//!   looks like), and the frozen sections `QUALITY.md` "Resolved" and
-//!   `CONSTITUTION.md` "Evolution Log", whose lines may not be rewritten. A
-//!   second list would drift from the first, and the direction of that drift is
-//!   a link check that skips a document the freeze has since released or
-//!   fails one it has since frozen;
-//! - `.governance/packs/`, the vendored governance kit, which
-//!   `managed-tree-integrity` refuses any edit to.
+//! **What it skips, and why.** Only the append-only records, where a finding
+//! could never be fixed: `receipts/*.md` (evidence of past work — many of its
+//! links point at code that has since gone, which is what such a record looks
+//! like) and `QUALITY.md`'s "Resolved" section.
 //!
 //! None of this is an allowlist of findings. Links *into* a frozen section are
 //! still checked, and every skip is named in the step's own line so it is not
@@ -58,12 +44,6 @@ use anyhow::{Context as _, Result, anyhow};
 /// A path component that marks a build or dependency tree, never documentation.
 const SKIPPED_COMPONENTS: [&str; 4] = ["node_modules", "target", ".git", "dist"];
 
-/// The vendored governance kit: `managed-tree-integrity` refuses edits to it.
-const VENDORED: &str = ".governance/packs/";
-
-/// Where `doc-integrity`'s frozen set is declared.
-const DOC_INTEGRITY_PACK: &str = ".governance/law/packs/governance-kit-audit.json";
-
 /// What the check does not read, because the repository forbids editing it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Exclusions {
@@ -75,60 +55,18 @@ pub struct Exclusions {
 }
 
 impl Exclusions {
-    /// The set `doc-integrity` declares today, for a tree where its pack row
-    /// cannot be read.
+    /// The append-only records.
     pub fn builtin() -> Self {
         Self {
             frozen_files: vec!["receipts/*.md".to_owned()],
-            frozen_sections: vec![
-                ("CONSTITUTION.md".to_owned(), "Evolution Log".to_owned()),
-                ("QUALITY.md".to_owned(), "Resolved".to_owned()),
-            ],
+            frozen_sections: vec![("QUALITY.md".to_owned(), "Resolved".to_owned())],
         }
-    }
-
-    /// `doc-integrity`'s rows from the pack, or [`Exclusions::builtin`] when the
-    /// pack is missing or has no such rows.
-    pub fn from_repo(root: &Path) -> Self {
-        fs::read_to_string(root.join(DOC_INTEGRITY_PACK))
-            .ok()
-            .and_then(|text| Self::parse(&text))
-            .unwrap_or_else(Self::builtin)
-    }
-
-    /// Parse the pack's `options["doc-integrity"].rules`:
-    /// `frozen-files <glob>` and `frozen-section <file> <heading…>`.
-    pub fn parse(pack: &str) -> Option<Self> {
-        let document: serde_json::Value = serde_json::from_str(pack).ok()?;
-        let rules = document["options"]["doc-integrity"]["rules"].as_array()?;
-        let mut parsed = Self {
-            frozen_files: Vec::new(),
-            frozen_sections: Vec::new(),
-        };
-        for rule in rules.iter().filter_map(serde_json::Value::as_str) {
-            let mut words = rule.split_whitespace();
-            match words.next() {
-                Some("frozen-files") => parsed.frozen_files.extend(words.map(str::to_owned)),
-                Some("frozen-section") => {
-                    if let Some(file) = words.next() {
-                        let heading = words.collect::<Vec<_>>().join(" ");
-                        if !heading.is_empty() {
-                            parsed.frozen_sections.push((file.to_owned(), heading));
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-        (!parsed.frozen_files.is_empty() || !parsed.frozen_sections.is_empty()).then_some(parsed)
     }
 
     fn skips_file(&self, path: &str) -> bool {
-        path.starts_with(VENDORED)
-            || self
-                .frozen_files
-                .iter()
-                .any(|glob| glob_matches(glob, path))
+        self.frozen_files
+            .iter()
+            .any(|glob| glob_matches(glob, path))
     }
 
     /// The 1-based line ranges of `file`'s frozen sections: from the heading to
@@ -168,7 +106,6 @@ impl Exclusions {
     /// What the step's line says it did not read.
     pub fn describe(&self) -> String {
         let mut parts: Vec<String> = self.frozen_files.clone();
-        parts.push(VENDORED.to_owned());
         parts.extend(
             self.frozen_sections
                 .iter()
@@ -252,7 +189,7 @@ impl Report {
 /// Check the repository at `root`.
 pub fn check(root: &Path) -> Result<Report> {
     let files = repository_files(root)?;
-    let exclusions = Exclusions::from_repo(root);
+    let exclusions = Exclusions::builtin();
     let scan: Vec<String> = files
         .iter()
         .filter(|path| is_scanned(path, &exclusions))
@@ -1244,44 +1181,9 @@ mod tests {
         assert!(is_scanned("README.md", &skip));
         assert!(is_scanned("crates/xtask/README.md", &skip));
         assert!(!is_scanned("receipts/issue-1-x.md", &skip));
-        assert!(!is_scanned(".governance/packs/a/b.md", &skip));
-        assert!(is_scanned(".governance/law/README.md", &skip));
         assert!(!is_scanned("docs/notes.txt", &skip));
         assert!(!is_scanned("web/node_modules/x/README.md", &skip));
         assert!(!is_scanned("target/doc/x.md", &skip));
-    }
-
-    #[test]
-    fn the_frozen_set_is_read_from_the_doc_integrity_pack_row() {
-        let pack = r#"{"options": {"doc-integrity": {"rules": [
-            "frozen-files receipts/*.md",
-            "frozen-files notes/**/*.md",
-            "frozen-section QUALITY.md Resolved",
-            "frozen-section CONSTITUTION.md Evolution Log",
-            "something-else x"
-        ]}}}"#;
-        let parsed = Exclusions::parse(pack).expect("the pack row parses");
-        assert_eq!(parsed.frozen_files, ["receipts/*.md", "notes/**/*.md"]);
-        assert_eq!(
-            parsed.frozen_sections,
-            [
-                ("QUALITY.md".to_owned(), "Resolved".to_owned()),
-                ("CONSTITUTION.md".to_owned(), "Evolution Log".to_owned())
-            ]
-        );
-        assert!(is_scanned("docs/a.md", &parsed));
-        assert!(!is_scanned("receipts/x.md", &parsed));
-        assert!(!is_scanned("notes/2026/09/x.md", &parsed));
-        assert_eq!(Exclusions::parse("{}"), None);
-        assert_eq!(Exclusions::parse("not json"), None);
-    }
-
-    /// The row the repository actually has, so a change to `doc-integrity`'s
-    /// frozen set moves this check with it instead of drifting from it.
-    #[test]
-    fn the_real_pack_row_and_the_builtin_fallback_agree() {
-        let root = crate::repo_root();
-        assert_eq!(Exclusions::from_repo(&root), Exclusions::builtin());
     }
 
     #[test]

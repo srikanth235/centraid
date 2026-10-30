@@ -5,7 +5,7 @@
  * Agent runs this to *prepare* — never publish. Steps:
  *   0. assert HEAD is a promoted candidate (optional --allow-uncandidated)
  *   1. assert working tree clean (optional --allow-dirty)
- *   2. run `bun run check:pr` unless --skip-check
+ *   2. run `cargo xtask gate --profile pr` unless --skip-check
  *   3. classify bump from CHANGELOG Unreleased (D4)
  *   4. print next version + surface matrix + publish command
  *
@@ -18,7 +18,6 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { assertHeadIsCandidate } from "./candidate-guard.mjs";
-import { assertNoOpenNightlyQualityIssues } from "./nightly-quality-blockers.mjs";
 import { buildSurfaceMatrix, defaultShipSurfaceIds } from "./surfaces.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
@@ -33,8 +32,6 @@ const skipCheck = args.has("--skip-check");
 // exists, but being told here means never cutting the tag at all.
 assertHeadIsCandidate({ argv: process.argv.slice(2) });
 
-assertNoOpenNightlyQualityIssues();
-
 function sh(cmd) {
   return execSync(cmd, { cwd: root, encoding: "utf8" });
 }
@@ -48,11 +45,11 @@ if (!allowDirty) {
 }
 
 if (!skipCheck) {
-  console.error("running bun run check:pr …");
+  console.error("running cargo xtask gate --profile pr …");
   try {
-    execSync("bun run check:pr", { cwd: root, stdio: "inherit" });
+    execSync("cargo xtask gate --profile pr", { cwd: root, stdio: "inherit" });
   } catch {
-    console.error("check:pr failed — fix before preparing a release");
+    console.error("the pr gate failed — fix before preparing a release");
     process.exit(1);
   }
 }

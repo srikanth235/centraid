@@ -381,7 +381,7 @@ private fun HomeSheets(state: NotesHomeState, onEvent: (NotesHomeEvent) -> Unit,
             }
             NotesSheet.NOTES_SHEET_NOTEBOOK_MENU -> state.menu?.let { menu ->
                 SheetRoom(title = menu.title, onDismiss = close) {
-                    SheetRow(menu.rename_label, iconKey = "Edit", testTag = "notes-notebook-rename", onTap = {
+                    SheetRow(menu.rename_label, iconKey = "Pencil", testTag = "notes-notebook-rename", onTap = {
                         onEvent(NotesHomeEvent(form_opened = NotesHomeEvent.FormOpened(notebook_id = menu.note_id)))
                     })
                     SheetRow(menu.trash_label, iconKey = "Trash", destructive = true, testTag = "notes-notebook-delete", onTap = {

@@ -177,7 +177,7 @@ catalog! {
     plain keeps_list = ("The list", "The list");
     plain keeps_list_detail = ("Titles, usernames, addresses and tags. Searchable.", "Titles, usernames, addresses and tags. Searchable.");
     plain keeps_use = ("Use", "Use");
-    plain keeps_use_detail = ("When each item was last opened, and the unlocks that failed. Nothing else is logged.", "When each item was last opened, and the unlocks that failed. Nothing else is logged.");
+    plain keeps_use_detail = ("Each item's last use, and failed unlocks. Nothing else is logged.", "Each item's last use, and failed unlocks. Nothing else is logged.");
     plain keeps_secret = ("Secrets", "Secrets");
     plain keeps_secret_detail = ("Encrypted. Never searched.", "Encrypted. Never searched.");
     plain kept_sealed = ("Stored. Type to replace it.", "Stored. Type to replace it.");

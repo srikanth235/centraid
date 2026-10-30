@@ -442,8 +442,7 @@ describe("DESIGN.md body", () => {
 
   test("names the deeper docs and machine checks", () => {
     expect(body).toContain("google-labs-code/design.md");
-    expect(body).toContain("bun run lint:design-md");
-    expect(body).toContain("bun run check:pr");
+    expect(body).toContain("bun run check");
     expect(body).toContain("centraid/issues/707");
   });
 });
