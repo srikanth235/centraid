@@ -174,9 +174,6 @@ pub const REGISTER: &[Entry] = &[
     // Lane F, one shell reads it and nobody owns the other half yet.
     // LockerSearchField.answered_term: Compose copies it into a kit holder and nothing draws it
     ("LockerSearchField.answered_term", gap("F", Missing::Ios)),
-    // Lane F, read by neither shell, and a decision is owed: draw it or delete it.
-    // ChatAttachment.asset_id: `found.asset_id` in LibraryRoll.kt is another message
-    ("ChatAttachment.asset_id", gap("F", Missing::Ios)),
     // HeldFrozen.since: `fetchPersistentChanges(since:)`; `strings::vault::frozen_line` is called only by tests, so the frozen vault's line is never shown. Owner decides: wire it into Home's frozen vault row, or delete both fields
     ("HeldFrozen.since", gap("F", Missing::Android)),
     ("HeldFrozen.unacked", gap("F", Missing::Both)),

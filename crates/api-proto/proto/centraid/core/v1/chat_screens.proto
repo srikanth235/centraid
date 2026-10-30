@@ -225,10 +225,10 @@ message ChatAttachment {
   uint64 id = 1;
   Kind kind = 2;
   string label = 3;
-  // A file the shell draws as the chip's thumbnail (a library photo), or empty.
+  // A file the shell draws as the chip's thumbnail (a library or a vault photo), or empty.
   string thumbnail_path = 4;
-  // A vault photo's id, so the chip draws the vault's own thumbnail; empty otherwise.
-  string asset_id = 5;
+  reserved 5;
+  reserved "asset_id";
 
   enum Kind {
     KIND_UNSPECIFIED = 0;

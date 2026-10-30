@@ -408,10 +408,6 @@ fn attachment(held: &Pending, locale: Locale) -> wire::ChatAttachment {
         } as i32,
         label: attachment_label(held, locale),
         thumbnail_path: held.thumbnail_path.clone(),
-        asset_id: match &held.source {
-            super::model::Source::VaultPhoto(id) => id.clone(),
-            _ => String::new(),
-        },
     }
 }
 
