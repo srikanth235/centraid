@@ -48,6 +48,7 @@ struct DocsDriveView: View {
         field.open = state.search.open
         field.term = state.search.term
         field.corrected = state.search.corrected
+        field.correctedLabel = state.search.correctedLabel
         return field
     }
 

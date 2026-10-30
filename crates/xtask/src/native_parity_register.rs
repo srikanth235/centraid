@@ -160,11 +160,6 @@ pub const REGISTER: &[Entry] = &[
     // ImportsFilesEvent.requested: `HealthRationale.requested` is a Kotlin flag
     ("ImportsFilesEvent.requested", gap("F", Missing::Ios)),
     // PeopleChannelRow.intent: `CGColorSpace` conversion's `intent:`
-    // PeoplePersonEvent.SheetOpened.which: Compose passes it positionally (`SheetOpened(which)`), so the name never appears
-    (
-        "PeoplePersonEvent.SheetOpened.which",
-        gap("F", Missing::Android),
-    ),
     // PeopleRow.due: `PhoneReminder.due`, which is the iOS Reminders read
     // RollReported.BytesFed.landed: `landed =` is a photo grid argument; the message is runtime-originated
     ("RollReported.BytesFed.landed", gap("F", Missing::Ios)),
@@ -198,12 +193,10 @@ pub const REGISTER: &[Entry] = &[
     ),
     ("Autosave.remote_changed", gap("F", Missing::Both)),
     ("ChatCard.qualifier", gap("F", Missing::Both)),
-    ("ChatDrawerSearch.corrected_label", gap("F", Missing::Both)),
     ("ChatEvent.Attached.library_photo", gap("F", Missing::Both)),
     ("ChatEvent.Attached.vault_photo", gap("F", Missing::Both)),
     ("DocsFollowed.documents", gap("F", Missing::Both)),
     ("DocsFollowed.origin_id", gap("F", Missing::Both)),
-    ("DocsSearchField.corrected_label", gap("F", Missing::Both)),
     ("FreeUpFacts.counted", gap("F", Missing::Both)),
     ("FreeUpFacts.freed_bytes", gap("F", Missing::Both)),
     ("FreeUpFacts.kept_count", gap("F", Missing::Both)),
@@ -267,7 +260,6 @@ pub const REGISTER: &[Entry] = &[
         "PhotosSelectionEvent.SelectRange.to_photo_id",
         gap("F", Missing::Both),
     ),
-    ("PickBytes.accept", gap("F", Missing::Both)),
     ("ScreenEvent.appeared", gap("F", Missing::Both)),
     ("ScreenEvent.imports_files", gap("F", Missing::Both)),
     ("VaultCommand.switch_to", gap("F", Missing::Both)),

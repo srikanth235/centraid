@@ -83,7 +83,7 @@ public fun PhotoShelfScreen(
     val select = { event: PhotosSelectionEvent -> onEvent(PhotosShelfEvent(selection = event)) }
 
     Column(
-        modifier = Modifier.padding(16.dp),
+        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(

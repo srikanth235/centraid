@@ -198,27 +198,24 @@ impl Picker {
         }
     }
 
+    /// THE CHIP DRAWS THE PHOTOGRAPH, not a generic icon: the thumbnail path rides with the pick,
+    /// from the same cell the grid drew it from (empty when no thumbnail is here, and the chip
+    /// then falls back to its icon).
+    fn thumbnail_of(&self, photo_id: &str) -> String {
+        self.cells
+            .iter()
+            .find(|cell| cell.photo_id == photo_id)
+            .and_then(|cell| cell.thumbnail_path.clone())
+            .unwrap_or_default()
+    }
+
     /// Hand the chosen photograph to the chat that asked for it, and finish.
     fn attach_pick(&mut self, ctx: &Ctx) {
         let Some(photo_id) = self.picked.first().cloned() else {
             return;
         };
-        ctx.post(
-            crate::chat::HOME,
-            wire::ScreenEvent {
-                kind: Some(S::Chat(wire::ChatEvent {
-                    kind: Some(wire::chat_event::Kind::Attached(
-                        wire::chat_event::Attached {
-                            source: Some(wire::chat_event::attached::Source::VaultPhoto(
-                                wire::chat_event::VaultPhoto { asset_id: photo_id },
-                            )),
-                            label: String::new(),
-                            thumbnail_path: String::new(),
-                        },
-                    )),
-                })),
-            },
-        );
+        let thumbnail_path = self.thumbnail_of(&photo_id);
+        ctx.post(crate::chat::HOME, attached(photo_id, thumbnail_path));
         self.finished = true;
     }
 
@@ -346,5 +343,77 @@ impl Screen for Picker {
             ))),
             ..wire::ViewState::default()
         }
+    }
+}
+
+/// The chat event that attaches one vault photograph, with the thumbnail its chip draws.
+fn attached(photo_id: String, thumbnail_path: String) -> wire::ScreenEvent {
+    wire::ScreenEvent {
+        kind: Some(S::Chat(wire::ChatEvent {
+            kind: Some(wire::chat_event::Kind::Attached(
+                wire::chat_event::Attached {
+                    source: Some(wire::chat_event::attached::Source::VaultPhoto(
+                        wire::chat_event::VaultPhoto { asset_id: photo_id },
+                    )),
+                    label: String::new(),
+                    thumbnail_path,
+                },
+            )),
+        })),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn picker(cells: Vec<wire::PhotosCell>, picked: &str) -> Picker {
+        Picker {
+            attach: true,
+            album_id: String::new(),
+            album_name: String::new(),
+            phase: Phase::Ready,
+            cells,
+            next: None,
+            picked: vec![picked.to_owned()],
+            taken: BTreeSet::new(),
+            status: None,
+            finished: false,
+        }
+    }
+
+    fn cell(id: &str, thumbnail: Option<&str>) -> wire::PhotosCell {
+        wire::PhotosCell {
+            photo_id: id.to_owned(),
+            thumbnail_path: thumbnail.map(str::to_owned),
+            ..wire::PhotosCell::default()
+        }
+    }
+
+    #[test]
+    fn a_vault_pick_carries_the_thumbnail_its_cell_was_drawn_from() {
+        let held = picker(
+            vec![cell("p1", Some("/t/p1")), cell("p2", Some("/t/p2"))],
+            "p2",
+        );
+        assert_eq!(held.thumbnail_of("p2"), "/t/p2");
+        let Some(S::Chat(chat)) = attached("p2".to_owned(), held.thumbnail_of("p2")).kind else {
+            panic!("not a chat event");
+        };
+        let Some(wire::chat_event::Kind::Attached(event)) = chat.kind else {
+            panic!("not an attach");
+        };
+        assert_eq!(event.thumbnail_path, "/t/p2");
+        assert!(matches!(
+            event.source,
+            Some(wire::chat_event::attached::Source::VaultPhoto(photo)) if photo.asset_id == "p2"
+        ));
+    }
+
+    #[test]
+    fn a_photo_with_no_thumbnail_attaches_with_an_empty_path() {
+        let held = picker(vec![cell("p1", None)], "p1");
+        assert_eq!(held.thumbnail_of("p1"), "");
+        assert_eq!(held.thumbnail_of("gone"), "");
     }
 }

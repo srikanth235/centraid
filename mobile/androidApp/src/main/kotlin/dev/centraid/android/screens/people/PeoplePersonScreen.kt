@@ -63,7 +63,7 @@ public fun PeoplePersonScreen(
 ) {
     val chrome = state.chrome
     val data = state.data_
-    fun open(which: Which) = onEvent(PeoplePersonEvent(sheet_opened = PeoplePersonEvent.SheetOpened(which)))
+    fun open(which: Which) = onEvent(PeoplePersonEvent(sheet_opened = PeoplePersonEvent.SheetOpened(which = which)))
     PushedPage(
         title = data?.name ?: state.name_hint,
         parentTitle = chrome?.back.orEmpty(),

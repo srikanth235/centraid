@@ -16,12 +16,17 @@ public data class SectionHead(
     val verb_label: String = "",
 )
 
-/** A search field's state: open, the term typed, the term answered, a correction, the answer's containers. */
+/**
+ * A search field's state: open, the term typed, the term answered, a correction, the answer's containers.
+ * [corrected_label] is Rust's finished "Including results for ..." sentence where the screen's state
+ * carries one (Chat's drawer, Docs); the other screens' states carry the bare [corrected] term only.
+ */
 public data class SearchField(
     val open_: Boolean = false,
     val term: String = "",
     val answered_term: String = "",
     val corrected: String = "",
+    val corrected_label: String = "",
     val containers: List<SearchContainer> = emptyList(),
     val ask_row: SearchAsk? = null,
 )

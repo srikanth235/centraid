@@ -120,12 +120,14 @@ struct BareSearchField: UIViewRepresentable {
     }
 }
 /// WHAT THE SEARCH FIELD DRAWS OF A SCREEN'S SEARCH: whether it is open, the term
-/// Rust holds, and the correction it searched instead (empty for none). Every value
-/// is the state's; the page copies them in.
+/// Rust holds, and the correction it searched instead (empty for none), with Rust's
+/// finished "Including results for ..." sentence where the screen's state carries one
+/// (Chat's drawer, Docs). Every value is the state's; the page copies them in.
 struct KitSearchField {
     var open = false
     var term = ""
     var corrected = ""
+    var correctedLabel = ""
 }
 
 /// THE SEARCH FIELD AN APP PLACE OPENS UNDER ITS HEADER (K5).
@@ -212,7 +214,9 @@ struct CentraidSearchField: View {
                 }
             }
             if !field.corrected.isEmpty {
-                Text(KitWords.searchCorrected(corrected: field.corrected))
+                // Rust's sentence where the state carries it; the other screens' states carry the bare
+                // term (a Rust gap), so the generated words compose it for them.
+                Text(field.correctedLabel.isEmpty ? KitWords.searchCorrected(corrected: field.corrected) : field.correctedLabel)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
                     .lineLimit(2)

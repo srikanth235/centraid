@@ -1428,6 +1428,7 @@ extension Centraid_Core_V1_ChatDrawerSearch {
         field.open = open
         field.term = term
         field.corrected = corrected
+        field.correctedLabel = correctedLabel
         return field
     }
 }

@@ -50,6 +50,7 @@ import centraid.core.v1.PhotosLightboxWords
 import centraid.core.v1.Route
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
+import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.PhotosAlbumChoiceSheet
 import dev.centraid.android.kit.ScreenFailure
@@ -127,7 +128,7 @@ public fun PhotosLightboxScreen(
             failure != null -> ScreenFailure(
                 sentence = failure.sentence,
                 remedy = failure.remedy,
-                modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                modifier = Modifier.align(Alignment.Center).padding(KitGeometry.GUTTER),
             )
 
             denied != null -> ScreenFailure(
@@ -145,7 +146,7 @@ public fun PhotosLightboxScreen(
                         color = centraidColor("onStage"),
                         textAlign = TextAlign.Center,
                         style = centraidType("body"),
-                        modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                        modifier = Modifier.align(Alignment.Center).padding(KitGeometry.GUTTER),
                     )
                 }
                 if (chromeVisible) Chrome(state, photo, words, player, live, onEvent, onOpen, onClose)

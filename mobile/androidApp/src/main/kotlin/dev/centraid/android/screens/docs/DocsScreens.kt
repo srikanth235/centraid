@@ -306,7 +306,7 @@ internal fun DocsDriveScreen(
         }
     }
     val search = RoomSearch(
-        field = SearchField(open_ = state.search?.open_ ?: false, term = state.search?.term.orEmpty(), corrected = state.search?.corrected.orEmpty()),
+        field = SearchField(open_ = state.search?.open_ ?: false, term = state.search?.term.orEmpty(), corrected = state.search?.corrected.orEmpty(), corrected_label = state.search?.corrected_label.orEmpty()),
         placeholder = chrome?.search_placeholder.orEmpty(),
         onTerm = { onEvent(DocsDriveEvent(search_term = DocsDriveEvent.SearchTermChanged(term = it))) },
         onClose = { onEvent(DocsDriveEvent(search_closed = DocsDriveEvent.SearchClosed())) },
@@ -860,7 +860,7 @@ private fun StageFacts(stage: DocsStage) {
             .padding(KitGeometry.GUTTER)
             .clip(shape)
             .border(KitGeometry.HAIRLINE, centraidColor("line"), shape)
-            .padding(16.dp)
+            .padding(KitGeometry.GUTTER)
             .testTag("docs-stage")
             .clearAndSetSemantics {
                 contentDescription = listOf(stage.accessibility_label, stage.absent_reason).filter { it.isNotEmpty() }.joinToString(". ")

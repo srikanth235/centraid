@@ -111,7 +111,7 @@ internal fun HostScreenEffects(
                     effect.export_originals != null ->
                         runCatching { performExportOriginals(context, session.core, effect.export_originals!!) }
                             .getOrElse { failed("the originals could not be handed off") }
-                    effect.pick_bytes != null -> pickBytes(context, picking.ask { picker.launch(arrayOf("*/*")) })
+                    effect.pick_bytes != null -> pickBytes(context, picking.ask { picker.launch(pickerTypes(effect.pick_bytes!!.accept)) })
                     effect.save_file != null -> {
                         val file = effect.save_file!!
                         saveFile(context, file, saving.ask { saver.launch(file.name) })
