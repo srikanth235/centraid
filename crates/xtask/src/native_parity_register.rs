@@ -164,11 +164,6 @@ pub const REGISTER: &[Entry] = &[
     ("ImportsFilesEvent.requested", gap("F", Missing::Ios)),
     // PeopleChannelRow.intent: `CGColorSpace` conversion's `intent:`
     ("PeopleChannelRow.intent", gap("F", Missing::Android)),
-    // PeoplePersonEvent.SheetOpened.which: Compose passes it positionally (`SheetOpened(which)`), so the name never appears
-    (
-        "PeoplePersonEvent.SheetOpened.which",
-        gap("F", Missing::Android),
-    ),
     // PeopleRow.due: `PhoneReminder.due`, which is the iOS Reminders read
     ("PeopleRow.due", gap("F", Missing::Android)),
     // RollReported.BytesFed.landed: `landed =` is a photo grid argument; the message is runtime-originated
