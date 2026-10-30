@@ -1,6 +1,5 @@
 import { defineConfig } from "oxlint";
 import core from "ultracite/oxlint/core";
-import react from "ultracite/oxlint/react";
 import vitest from "ultracite/oxlint/vitest";
 
 // ---------------------------------------------------------------------------
@@ -94,8 +93,7 @@ const TEST_SEAM_IMPORTS = {
   ],
 };
 
-// The vitest-owned test files. The Playwright specs under `desktop/e2e` and
-// `extension/e2e` are named `*.e2e.ts`, so no glob here reaches them.
+// The vitest-owned test files.
 const VITEST_TEST_FILES = [
   "**/*.{test,spec}.{ts,tsx}",
   // #781 — `.test.mjs` was invisible to the seam rules (11 files carried raw
@@ -109,14 +107,14 @@ const VITEST_TEST_FILES = [
 
 // Ultracite is the reviewed policy seed; Oxlint is the only routine lint
 // command and this file is the repository's only lint configuration.
-// core + react are extended, while vitest is NOT: it applies
+// core is extended, while vitest is NOT: it applies
 // entirely through "overrides", and an extended preset's overrides outrank the
 // consumer's, so `extends: [vitest]` would leave no way to order the repo's
 // own vitest corrections after it. Its override is therefore spliced into
 // `overrides` below verbatim — same rules, same glob — which makes ordering
 // ours. See TESTING.md, "ultracite vitest preset (#573)".
 export default defineConfig({
-  extends: [core, react],
+  extends: [core],
   options: {
     denyWarnings: true,
     reportUnusedDisableDirectives: "deny",
@@ -201,19 +199,6 @@ export default defineConfig({
     "promise/no-promise-in-callback": "off",
     "promise/prefer-await-to-callbacks": "off",
     "promise/prefer-await-to-then": "off",
-    // react/react-compiler already validates referential stability across the
-    // repository. Enabling these older heuristic rules as well would duplicate
-    // that owner and flag constructions the compiler proves safe.
-    "react-perf/jsx-no-new-function-as-prop": "off",
-    "react/exhaustive-deps": "error",
-    "react/jsx-curly-brace-presence": "off",
-    "react/jsx-no-constructed-context-values": "off",
-    "react/jsx-no-useless-fragment": "off",
-    "react/no-array-index-key": "off",
-    "react/no-danger": "error",
-    "react/no-unescaped-entities": "off",
-    "react/rules-of-hooks": "error",
-    "react/style-prop-object": "off",
     "require-await": "off",
     "sort-keys": "off",
     "typescript/array-type": "off",
