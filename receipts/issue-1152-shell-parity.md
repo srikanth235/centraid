@@ -310,3 +310,78 @@ Owner ruling on #1152: a field no consumer needs is deleted from the proto, not 
 
 1. *A reserved number cannot be reused.* A throwaway `bool zz_reuse = 6;` in `ChatMessage` (6 was `stopped`): `cargo check -p centraid-api-proto` → `chat_screens.proto:182:19: field number '6' conflicts with reserved range '6 to 6'`; reverted from the index. This is the same rule `buf breaking` enforces for the wire.
 2. *A `RustOnly`/`Runtime` row goes stale when a shell reads the field.* A throwaway `fun spoof(e: ScreenEvent) = e.data_changed` appended to `kit/PhotoCells.kt`: `cargo xtask rules` → `FAIL native-shell-parity — 1 finding(s)`: `ScreenEvent.data_changed: registered as runtime-originated (neither shell reads it), but only Compose reads it (Kotlin `data_changed`, Swift `dataChanged`); a shell reads it, so it is a shell's field now…`; reverted from the index, 16 rules `ok`. The same check ran green over all 57 moved rows as they stand, which is also the evidence that the census's reasons match the by-name reading (the six name collisions are the `_named` rows).
+
+## Close — the last field, the doc pass, and the plan reconciled
+
+The close pass ran once, after lanes A, B, R, D, E, Ci, Ca, G and F had landed (umbrella head `a7236d67`). Two commits of its own before this section: `7dc68c4f` (`ChatAttachment.asset_id`) and `82316102` (the docs).
+
+**What changed**
+
+- `crates/api-proto/proto/centraid/core/v1/chat_screens.proto`: `ChatAttachment.asset_id` (5) deleted with `reserved 5;` and `reserved "asset_id";`; the comment on `thumbnail_path` now says a library or a vault photo.
+- `crates/screens/src/chat/view.rs`: `attachment()` no longer writes it. `crates/screens/tests/chat_history.rs`: the one assertion on it (`chips[0].asset_id == second`) is gone; the test keeps `finished`, `chosen_label == "1 chosen"` and one chip. The test door has no thumbnails (`crates/apps/kit/src/testdoor.rs` writes `thumbnail_path` as null), so the pick cannot be re-asserted on the surviving field there; lane G's unit tests in `crates/screens/src/photos/picker.rs` hold that a pick carries its cell's thumbnail. `crates/xtask/src/native_parity_register.rs`: the row leaves.
+- `docs/decisions.md`: R-1152-1 to R-1152-4 in "The mobile shell". `docs/release/v1-handoffs.md`: section 9 (rows 9.1 to 9.6) and the owner questions S1 to S10 under "The shells at parity". `mobile/README.md`: three rows in "The other hand-offs", and the Maestro row says the flows carry the iOS bundle id. `QUALITY.md`: six observations. `docs/screens.md`: the effects list no longer names pick photos, camera or notification.
+- Stale-name sweep: the 68 names lane F and this pass reserved (read off the proto diff, `reserved "…"`), the 52 with an underscore grepped as whole words over `*.md`, `*.json`, `*.yaml`, `*.swift` outside `receipts/` and `node_modules`: every hit is another thing of the same name (an app query's `invoke_key`, `original_start_local`, `parent_id`, `cadence_days`, `purge_in_days`, `asset_id` of the app protocol and manifests, a database column). No doc, contract or shell names a deleted screen-proto field; `docs/protocol.md`, `crates/xtask/README.md` and `contracts/screens/` name none.
+
+**The plan, box by box** (issue #1152; commit ranges from `c7eb4845`)
+
+- [x] **W0, the `native_shell_parity` rule**: lane R, `6df7dd4b`, `46938e83`, `9fc85e6d`, `5e69b91e`; extended by lane F (`605d59ac`: `RustOnly` and `Runtime` statuses). Red-first, as lane R's section ran it.
+- [x] **A, Android first launch**: lane A, `0735539a`, receipt `e15a129b`. The KDoc says what the screen is.
+- [x] **B, Android Money home**: lane B, `37527004`, `471ec591`, `173573df`, `670b094a`, receipt `c63f3d3b`.
+- [x] **C, small fields, both shells**, in three parts: the Android fields the plan named (`new_album_can_submit`, `opening`, `make_spoken`) in lane A (`96cf6791`, `485cc74f`, `5e81b248`); iOS's reads and Android's one-sided reads, lanes Ci (`d0f034a7` to `21515e84`, `38872881`) and Ca (`fb18a6c7` to `fbc14ffc`, `61b332c3`); fields both shells should consume but hard-coded, lane G (`f62c1c64` to `071a6f0e`, `d9f0ac03`).
+- [x] **D, Android gateway browse**: `5a3881ff`, `626f8033`, `d868dd1f`, `e0389c33`; its register rows left in `344587e2`.
+- [x] **E, Android unit-test counterparts**: `ff447bc4`, `89a760eb`, `0c4aa906`, `fc94b4e9`.
+- [x] **Fields neither shell reads get a consumer or are deleted** (the issue's body): lane F, `0846cdf7`, `605d59ac`, `c8447c30`, `a7236d67`. `PhotoTile.fetch_percent` was deleted there; `ChatAttachment.asset_id` here. The test-only fields and the four feature clusters are owner questions below.
+- [x] **Close**: the docs and this section. Not done by this pass, by design: the draft PR off, the issue body reconciled, `cargo xtask gate --profile pr` (the root's). The register is not "platform differences only": 18 `Gap` rows stay, each an owner question below, so the ratchet holds them.
+
+**Numbers**
+
+| | Plan / base | Close |
+| --- | --- | --- |
+| Android unit tests (`testDebugUnitTest`) | 32 | 92, 0 failures |
+| Parity register rows | 202 (when lane R closed) | 104: Platform 29, Gap 18 (all lane `F`), RustOnly 41, Runtime 16 |
+| Items the rule counts | 4531 in 23 proto files | 4447 |
+| Screen-proto fields deleted, name and number reserved | 0 | 75 from messages that survive (74 in lane F, `ChatAttachment.asset_id` here) |
+| Messages and enums deleted | 0 | `PickPhotos`, `CapturePhoto`, `ScheduleNotification`, `PhotosPicked`, `ImportsFollowedFolder`, `HealthTrendRow.Direction`; the `EffectResult.photos` arm is reserved |
+| Files changed, `c7eb4845..HEAD` | | 164 files, +5344 −706 (`git diff --shortstat` before this section) |
+
+The 202 became 104 by 98 rows: lane Ci 6, lane Ca 9, lane G 4, lane F 78 (the rows that went with their fields; 57 more moved to `RustOnly` or `Runtime` and are among the 104), and this pass 1.
+
+**Inherited red**: none measured at the base. The base was green on the commands the umbrella uses, as the lane workers recorded at their first run: the Android check (32 tests) and `cargo xtask rules` (15 rules, all `ok`). This pass's own results, on the umbrella head plus its two commits:
+
+- `cargo test -p centraid-screens -p xtask` (own `CARGO_TARGET_DIR`, deleted at the end) → 69 result lines, all `ok`, 1429 passed, 0 failed.
+- `cargo xtask rules` → 16 rules `ok`; `ok native-shell-parity — 252 file(s) scanned, clean (4447 item(s) in 23 proto file(s), 104 in the register)`.
+- `cargo fmt --all -- --check` clean; `cargo clippy -p centraid-screens -p xtask --all-targets -- -D warnings` clean.
+- The Android check (`flock /tmp/centraid-gradle.lock ./gradlew … :androidApp:compileDebugKotlin :androidApp:testDebugUnitTest`) → `BUILD SUCCESSFUL`, 92 tests, 0 failures, 0 errors (Wire regenerated `ChatAttachment` without `asset_id`; nothing in Kotlin named it).
+- `cargo xtask doc-links` → `0 finding(s) over 110 markdown file(s), 1205 relative link(s), 506 anchor(s)`.
+- `buf` 1.50.0 from npm `@bufbuild/buf` (the lane workers had none): `buf lint` → no findings; `buf breaking --against <the proto tree and buf.yaml of c7eb4845>` → exit 0, no findings, for the whole umbrella's deletions.
+- Swift: a grep of `assetID`/`assetId` and `ChatAttachment` over `mobile/iosApp` → no read of the field; `ChatAttachmentChip` draws the thumbnail path and the kind. Not compiled.
+
+**Owner hand-offs, as questions** (full text with options in `docs/release/v1-handoffs.md`, "The shells at parity", S1 to S10; the checks are rows 9.1 to 9.6 and 8.7)
+
+1. Calendar visibility (S1): expose or delete? Recommendation: expose.
+2. Notes' pinned-only filter (S2): recommendation delete.
+3. Photos range select (S3): recommendation delete.
+4. The folder follower's trigger `ImportsFilesEvent.requested` (S4): recommendation delete.
+5. The fields only tests read, `PhotoTile.favorite`, `ImportsCameraRollState.*`, `HeldVault.*` (S5): keep as the test surface or delete? Recommendation: delete, as its own change.
+6. Home's status ribbon (S6): wire a producer or delete? Recommendation: wire it.
+7. A frozen vault's "N changes since" line (S7): draw or delete? Recommendation: draw it.
+8. `ViewState.imports_files`, the headless arm (S8): recommendation remove the arm.
+9. `LockerSearchField.answered_term` (S9; found in lane F, not in the close brief): recommendation delete.
+10. A Rust `clean` flag for autosave (S10): it would end Compose's `edit_seq == saved_seq` and four `Platform` rows. Recommendation: add it.
+11. Every simulator and device check: rows 9.1 to 9.6 (the Swift compile and `CentraidTests`; the five lane Ci checks; the two lane G checks; the first-launch and onboarding flows on both platforms; Money's home on both; the Android phone checks) and row 8.7 (the gateway browse on a phone).
+
+**Corrections to the plan**
+
+- The lane worktrees were not cut from the umbrella branch: each began with a merge of it (`9e95f074`, `2ba32d3f`, `35acd1e5`, `7a50ef6a`), so "32 tests at base" held for the first lane only (lane E found 38 once A and B had landed).
+- The `pop_to_root` premise (lane Ci): Compose's one sender is the apps' Home control, not a re-tap on the selected tab; lane F corrected the proto's comment.
+- The plan's register was "platform differences and known gaps"; it has four statuses (`RustOnly` and `Runtime` added in lane F), because a field Rust writes and reads back is neither.
+- The rule matches by field name, not message (lane G: a field two messages share stayed green on one read); QUALITY.md holds it.
+- `buf` was not installed in the lane workers' container; it ran here through npm `@bufbuild/buf` (above). The close brief's "six search screens carry no finished `corrected_label`" is five: Home's search carries a finished `corrected` sentence and both shells draw it as is (`ShellSearchView.swift:70`, `HomeSearchScreen.kt:121`); QUALITY.md says five.
+- `mobile/maestro/flows/first-launch.yaml` names iOS's bundle id (`dev.centraid.Centraid`); Android's application id is `dev.centraid`, so the Android run uses a copy (hand-off 9.4).
+
+**Unverified**: no emulator, simulator or device; every Swift line of lanes Ci and G. The hand-off rows are the way.
+
+**Falsification**
+
+1. *A deleted field's number cannot come back, and the reservation is what keeps `buf breaking` clean.* A throwaway `string zz_reuse = 5;` in `ChatAttachment`: `cargo check -p centraid-api-proto` → `chat_screens.proto:231:21: field number '5' conflicts with reserved range '5 to 5'`; removed. Then both `reserved` lines deleted: `buf breaking` → `deleted without reserving the name "asset_id"` and `… the number "5"`; restored with `git checkout --`, exit 0 again.
+2. *Nothing consumed the field.* Not taken from the register comment: the Android check regenerated Wire's `ChatAttachment` without `asset_id` and compiled and passed, so no Kotlin read it; the Swift grep shows no read. Result: holds for Kotlin by compiler, for Swift by grep only.
