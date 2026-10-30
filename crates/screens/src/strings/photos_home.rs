@@ -58,7 +58,6 @@ catalog! {
     plain library_standing_videos = ("Videos", "Videos");
     plain library_standing_library = ("Library", "Library");
     plain library_door_places = ("Places", "Places");
-    plain library_door_duplicates = ("Duplicates", "Duplicates");
     plain library_search_albums = ("Albums", "Albums");
     plain library_search_places = ("Places", "Places");
     plain library_search_labels = ("Labels", "Labels");

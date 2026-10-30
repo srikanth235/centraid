@@ -738,7 +738,7 @@ impl Lightbox {
             facts.push(wire::PhotosLightboxFact {
                 label: words::photos_fact_size(locale),
                 text: fill(
-                    &own::duplicate_pixels(locale),
+                    &own::pixel_box(locale),
                     &[("width", &w.to_string()), ("height", &h.to_string())],
                 ),
             });

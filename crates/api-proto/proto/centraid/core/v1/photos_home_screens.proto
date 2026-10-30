@@ -275,7 +275,9 @@ message PhotosCollectionCard {
     KIND_SHELF = 1;
     KIND_ALBUM = 2;
     KIND_PLACES = 3;
-    KIND_DUPLICATES = 4;
+    // 4 was KIND_DUPLICATES, retired with the Duplicates screen (#1146 D5).
+    reserved 4;
+    reserved "KIND_DUPLICATES";
     // An album in the trash: its verb is Restore.
     KIND_DELETED_ALBUM = 5;
   }

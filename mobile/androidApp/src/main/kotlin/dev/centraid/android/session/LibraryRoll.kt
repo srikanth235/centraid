@@ -132,6 +132,7 @@ internal object LibraryRoll {
         // DATE_TAKEN is the camera's; an item that never had one falls back to when it was added.
         val taken = cursor.getLong(3).takeIf { it > 0L } ?: (cursor.getLong(4) * 1_000L)
         val ref = (if (video) VIDEO_REF else IMAGE_REF) + id
+        val location = if (video) null else locationOf(context, id)
         return RollAsset(
             after = after,
             kind = if (video) RollAsset.Kind.KIND_VIDEO else RollAsset.Kind.KIND_PHOTO,
@@ -142,7 +143,36 @@ internal object LibraryRoll {
             capture_group = if (changed) ref else "",
             changed_in_place = changed,
             resources = listOf(RollResource(ref = ref, role = RollResource.Role.ROLE_ORIGINAL)),
+            // WHAT THE LIBRARY KNOWS (#1146 D5): the pixel box and a movie's length, 0 when the row
+            // has none; where it was taken, only when the file's own EXIF says (a pair or nothing).
+            width = cursor.getInt(6).coerceAtLeast(0),
+            height = cursor.getInt(7).coerceAtLeast(0),
+            duration_s = if (video) cursor.getLong(8).coerceAtLeast(0L) / 1_000.0 else 0.0,
+            latitude = location?.first,
+            longitude = location?.second,
         )
+    }
+
+    /**
+     * WHERE AN IMAGE WAS TAKEN, from its own EXIF (a pair or nothing). Android 10+ redacts the
+     * location unless the original is asked for (and `ACCESS_MEDIA_LOCATION` granted); a refusal,
+     * a missing tag or a file that will not open is no location, never a guess.
+     */
+    private fun locationOf(context: Context, id: Long): Pair<Double, Double>? {
+        val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+        return try {
+            val original = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) MediaStore.setRequireOriginal(uri) else uri
+            context.contentResolver.openInputStream(original)?.use { stream ->
+                val found = FloatArray(2)
+                if (android.media.ExifInterface(stream).getLatLong(found)) found[0].toDouble() to found[1].toDouble() else null
+            }
+        } catch (refused: SecurityException) {
+            null
+        } catch (unsupported: UnsupportedOperationException) {
+            null
+        } catch (failed: IOException) {
+            null
+        }
     }
 
     /**
@@ -342,6 +372,10 @@ internal object LibraryRoll {
         "datetaken",
         MediaStore.MediaColumns.DATE_ADDED,
         MediaStore.MediaColumns.DATE_MODIFIED,
+        MediaStore.MediaColumns.WIDTH,
+        MediaStore.MediaColumns.HEIGHT,
+        // `MediaStore.MediaColumns.DURATION` (milliseconds; a movie's), spelled out: API 29's.
+        "duration",
     )
     private val TYPED = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN " +
         "(${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE}, ${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO})"

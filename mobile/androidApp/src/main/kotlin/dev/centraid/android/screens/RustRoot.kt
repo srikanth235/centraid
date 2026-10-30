@@ -83,8 +83,6 @@ import dev.centraid.android.screens.notes.NotesHomeScreen
 import dev.centraid.android.screens.people.PeopleEditorScreen
 import dev.centraid.android.screens.people.PeopleHomeScreen
 import dev.centraid.android.screens.people.PeoplePersonScreen
-import dev.centraid.android.screens.photos.PhotosDuplicateReviewScreen
-import dev.centraid.android.screens.photos.PhotosDuplicatesScreen
 import dev.centraid.android.screens.photos.PhotosEditorScreen
 import dev.centraid.android.screens.photos.PhotosHomeScreen
 import dev.centraid.android.screens.photos.PhotosLightboxScreen
@@ -471,8 +469,6 @@ internal class RustRoot(
         val photosHome = view.photos_home
         val photosLightbox = view.photos_lightbox
         val photosEditor = view.photos_editor
-        val photosDuplicates = view.photos_duplicates
-        val photosReview = view.photos_duplicate_review
         val homeSearch = view.home_search
         val chat = view.chat
 
@@ -710,7 +706,7 @@ internal class RustRoot(
                 onEvent = { send(ScreenEvent(health_connect = it)) },
                 onBack = back,
             )
-            // PHOTOS (#1135): its home, the lightbox, the editor and the duplicates. The shelf
+            // PHOTOS (#1135): its home, the lightbox and the editor. The shelf
             // family (a shelf, the picker, places) drew itself above.
             photosHome != null -> PhotosHomeScreen(
                 state = photosHome,
@@ -739,17 +735,6 @@ internal class RustRoot(
                         runtime.navigate(NavEvent(push = NavPush(tab = TAB, route = route)))
                     }
                 },
-            )
-            photosDuplicates != null -> PhotosDuplicatesScreen(
-                state = photosDuplicates,
-                onEvent = { send(ScreenEvent(photos_duplicates = it)) },
-                onOpen = open,
-                onBack = back,
-            )
-            photosReview != null -> PhotosDuplicateReviewScreen(
-                state = photosReview,
-                onEvent = { send(ScreenEvent(photos_duplicate_review = it)) },
-                onBack = back,
             )
             // HOME'S SEARCH (R-CHROME-6): a Rust screen like the rest.
             homeSearch != null -> HomeSearchScreen(

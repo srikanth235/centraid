@@ -424,6 +424,32 @@ pub(crate) fn decorate(door: &dyn PageDoor, events: &mut [EventRow]) -> KitResul
     Ok(())
 }
 
+/// A day of a series that names a place of its own has no name for it yet: the series' rows were
+/// decorated before the days were folded in ([#1146](https://github.com/srikanth235/centraid/issues/1146)).
+pub(crate) fn name_places(door: &dyn PageDoor, events: &mut [EventRow]) -> KitResult<()> {
+    let unnamed: Vec<String> = events
+        .iter()
+        .filter(|event| event.location_name.is_none())
+        .filter_map(|event| event.location_place_id.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    if unnamed.is_empty() {
+        return Ok(());
+    }
+    let names = names_of(door, &unnamed)?;
+    for event in events
+        .iter_mut()
+        .filter(|event| event.location_name.is_none())
+    {
+        event.location_name = event
+            .location_place_id
+            .as_ref()
+            .and_then(|place| names.get(place).cloned());
+    }
+    Ok(())
+}
+
 /// The titles of the entities among `ids` (a person's name, a place's name).
 fn names_of(door: &dyn PageDoor, ids: &[String]) -> KitResult<BTreeMap<String, String>> {
     if ids.is_empty() {
@@ -463,7 +489,8 @@ pub(crate) fn read_exceptions(
     Ok(by_ids(
         "agenda.events.occurrences",
         "occurrence",
-        "series_id, original_start, scope, cancelled, starts, ends, title, description",
+        "series_id, original_start, scope, cancelled, starts, ends, timing, zone, title, \
+         description, url, place_id",
         "series_id",
     )
     .within(WIDE, door, &ids, None)?
@@ -480,6 +507,10 @@ pub(crate) fn exception_of(row: &Row, timing: &BTreeMap<&str, &str>) -> StoredEx
         ("end", "ends"),
         ("summary", "title"),
         ("description", "description"),
+        ("timing", "timing"),
+        ("zone", "zone"),
+        ("url", "url"),
+        ("place_id", "place_id"),
     ]
     .into_iter()
     .filter_map(|(key, column)| Some((key.to_owned(), text_of(row, column)?.into())))
@@ -633,7 +664,8 @@ pub fn load_upcoming(
         Some(upper) => upper.to_owned(),
         None => from_ms.map_or_else(|| from.clone(), |millis| iso_of(millis + DEFAULT_EXPAND_MS)),
     };
-    let expanded = expand_recurring_events(events, &from_lower, &expand_to, &exceptions)?;
+    let mut expanded = expand_recurring_events(events, &from_lower, &expand_to, &exceptions)?;
+    name_places(door, &mut expanded)?;
     // THE TRUE LOWER BOUND, on EVERY row: the expansion ran from the reach-back,
     // so an occurrence of a series is no more in range by construction than a
     // one-off is.

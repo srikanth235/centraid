@@ -119,6 +119,9 @@ pub struct ImportRow {
     pub bank_type: Option<String>,
     /// Set by the rules (post-rules); `None` out of a parser.
     pub category_concept_id: Option<String>,
+    /// The payee a rule names for the line (post-rules); `None` out of a parser. The bank's words
+    /// stay in `description`.
+    pub display_name: Option<String>,
 }
 
 impl ImportRow {

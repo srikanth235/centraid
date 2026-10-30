@@ -142,7 +142,7 @@ fn the_roster_carries_the_star_the_list_the_reminders_and_when_they_were_last_to
     assert_eq!(
         reminders,
         ["Anniversary", "Birthday"],
-        "by day of the year: the birthday always has one, the quiet day none"
+        "by day of the year: the birthday has one by default, the quiet day none"
     );
     assert_eq!(roster.people[0].last_contacted_at, None);
     assert_eq!(

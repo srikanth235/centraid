@@ -95,8 +95,11 @@ pub struct AccountRow {
     /// `checking` | `savings` | `credit_card` | `cash`.
     pub kind: String,
     pub on_budget: bool,
-    /// Where the account stood before its first line.
+    /// Where the account stood on [`Self::opening_on`].
     pub opening_minor: i64,
+    /// The day `opening_minor` is as of: lines on or before it are already in it. `None` counts
+    /// every line.
+    pub opening_on: Option<String>,
     /// The day the account was closed (the `archived` flag's), if it was.
     pub closed_on: Option<String>,
     pub currency: String,
@@ -317,7 +320,7 @@ pub fn trashed_statement() -> PageQuery {
 pub fn accounts_statement() -> PageQuery {
     query(
         "money.accounts",
-        "id, type, currency, opening_minor, on_budget",
+        "id, type, currency, opening_minor, opening_on, on_budget",
         "account",
         PageOrder::asc("id", "id"),
     )
@@ -411,7 +414,7 @@ pub fn targets_statement(from_month: &str, to_month: &str) -> PageQuery {
 pub fn rules_statement() -> PageQuery {
     query(
         "money.rules",
-        "id, pattern, category_id, position",
+        "id, pattern, category_id, display_name, position",
         "rule",
         PageOrder::asc("position", "id"),
     )
@@ -840,6 +843,7 @@ pub fn load_accounts(door: &dyn PageDoor) -> KitResult<Vec<AccountRow>> {
                 kind: text_of(row, "type").unwrap_or_default(),
                 on_budget: integer_or_zero(row, "on_budget") != 0,
                 opening_minor: integer_or_zero(row, "opening_minor"),
+                opening_on: text_of(row, "opening_on"),
                 closed_on: closed.get(&id).cloned(),
                 currency: text_of(row, "currency").unwrap_or_default(),
                 external_ref,
@@ -912,6 +916,7 @@ fn rule_of(row: &Row) -> Rule {
         amount_max_minor: bound("max"),
         account_id: stated_text(&pattern, &["account"]),
         category_concept_id: text_of(row, "category_id"),
+        display_name: text_of(row, "display_name"),
         position,
     }
 }

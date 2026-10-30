@@ -264,6 +264,8 @@ catalog! {
     plain rule_offer_body = ("{support} of the last {of} {name} rows are {category}.", "{support} of the last {of} {name} rows are {category}.");
     plain rule_offer_title = ("Rule suggestion", "Rule suggestion");
     plain rule_only_in = ("only in {account}", "only in {account}");
+    plain rule_rename = ("Show as", "Show as");
+    plain rule_renames_to = ("shown as {name}", "shown as {name}");
     plain rule_pattern = ("Words", "Words");
     plain rule_pattern_long = ("Use 200 characters or fewer.", "Use 200 characters or fewer.");
     plain rule_pattern_missing = ("Type the words to match.", "Type the words to match.");

@@ -253,6 +253,9 @@ struct MoneyRulesView: View {
                     send(event { $0.pattern = .with { $0.text = text } })
                 }
                 MoneyNote(text: editor.patternNote)
+                MoneyTextField(key: editor.renameLabel, value: editor.renameText, identifier: "money-rule-rename") { text in
+                    send(event { $0.rename = .with { $0.text = text } })
+                }
                 MoneyChoiceField(
                     key: editor.categoryRowLabel,
                     value: editor.categoryLabel.isEmpty ? editor.clearCategoryLabel_p : editor.categoryLabel,

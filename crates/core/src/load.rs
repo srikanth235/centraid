@@ -610,7 +610,6 @@ fn read(
                 correct: p.flag("correct")?,
             },
         )?,
-        ("photos", "duplicates") => app_query::photos::duplicates(door, now)?,
         // The screens' reads: one shelf, one photograph, the collections, the places.
         ("photos", "shelf") => app_query::photos::shelf(
             door,

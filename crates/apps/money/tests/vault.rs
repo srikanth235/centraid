@@ -102,7 +102,8 @@ fn an_account_reads_with_its_bank_number_its_close_and_nothing_from_the_trash() 
     world.ok(
         "account.add",
         json!({ "id": "acct-2", "title": "Card", "type": "credit_card", "currency": "EUR",
-                "external_ref": "1234-5678", "opening_minor": -2_000, "on_budget": false }),
+                "external_ref": "1234-5678", "opening_minor": -2_000, "opening_on": "2024-02-01",
+                "on_budget": false }),
     );
     world.ok("flag.set", json!({ "id": "acct-2", "flag": "archived" }));
     let accounts = read(&world, |door| load_accounts(door).expect("accounts"));
@@ -117,6 +118,7 @@ fn an_account_reads_with_its_bank_number_its_close_and_nothing_from_the_trash() 
             card.currency.as_str(),
             card.external_ref.as_deref(),
             card.opening_minor,
+            card.opening_on.as_deref(),
             card.on_budget
         ),
         (
@@ -125,6 +127,7 @@ fn an_account_reads_with_its_bank_number_its_close_and_nothing_from_the_trash() 
             "EUR",
             Some("1234-5678"),
             -2_000,
+            Some("2024-02-01"),
             false
         )
     );
@@ -404,6 +407,7 @@ fn seam_s2_the_crate_and_the_vault_agree_on_every_row_of_the_shared_cases() {
             amount_max_minor: *max,
             account_id: None,
             category_concept_id: Some((*category).to_owned()),
+            display_name: None,
             position: *position,
         })
         .collect();
@@ -467,4 +471,81 @@ fn seam_s2_the_crate_and_the_vault_agree_on_every_row_of_the_shared_cases() {
             "vault: {why}"
         );
     }
+}
+
+#[test]
+fn a_balance_counts_the_lines_after_the_opening_day_and_no_line_twice() {
+    let world = World::founded("opening");
+    world.ok(
+        "account.add",
+        json!({ "id": "acct-1", "title": "Everyday", "type": "checking", "currency": "USD",
+                "opening_minor": 100_000, "opening_on": "2024-03-05" }),
+    );
+    world.import(
+        "acct-1",
+        &[
+            // On and before the opening day: already in the 100,000.
+            ("csv:aaaaa", "2024-03-04", -4_000, "BEFORE"),
+            ("csv:bbbbb", "2024-03-05", -1_000, "ON THE DAY"),
+            ("csv:ccccc", "2024-03-06", -250, "AFTER"),
+            ("csv:ddddd", "2024-03-07", 5_000, "PAYDAY"),
+        ],
+    );
+    let (account, ledger) = read(&world, |door| {
+        let account = load_accounts(door).expect("accounts").remove(0);
+        let ledger = load_ledger(door, "acct-1").expect("ledger").value;
+        (account, ledger)
+    });
+    assert_eq!(account.opening_on.as_deref(), Some("2024-03-05"));
+    assert_eq!(
+        centraid_apps_money::engine::balance_on(&account, &ledger, "2024-03-31"),
+        100_000 - 250 + 5_000
+    );
+    assert_eq!(
+        centraid_apps_money::engine::balance_on(&account, &ledger, "2024-03-05"),
+        100_000,
+        "the opening day itself is the opening balance"
+    );
+}
+
+#[test]
+fn a_rule_that_names_a_payee_reads_back_and_applies_in_the_app_as_in_the_vault() {
+    let world = World::founded("payee");
+    world.account("acct-1", "Everyday", "checking", "USD");
+    world.ok(
+        "rule.add",
+        json!({ "id": "r1", "match": "contains", "text": "whole foods",
+                "category_id": "category:food.groceries", "display_name": "Whole Foods" }),
+    );
+    world.ok(
+        "rule.add",
+        json!({ "id": "r2", "match": "contains", "text": "coffee",
+                "category_id": "category:food.dining" }),
+    );
+    let rules = read(&world, |door| load_rules(door).expect("rules")).value;
+    let named = rules.iter().find(|rule| rule.rule_id == "r1").unwrap();
+    assert_eq!(named.display_name.as_deref(), Some("Whole Foods"));
+    assert_eq!(
+        rules
+            .iter()
+            .find(|rule| rule.rule_id == "r2")
+            .unwrap()
+            .display_name,
+        None
+    );
+    let candidate = |description| Candidate {
+        description,
+        amount_minor: 4_250,
+        account_id: "acct-1",
+    };
+    assert_eq!(
+        rules::apply(&rules, &candidate("WHOLE FOODS MKT 123"))
+            .display_name
+            .as_deref(),
+        Some("Whole Foods")
+    );
+    assert_eq!(
+        rules::apply(&rules, &candidate("BLUE COFFEE CO")).display_name,
+        None
+    );
 }

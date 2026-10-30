@@ -99,8 +99,10 @@ pub(crate) fn require(connection: &Connection, id: &str) -> Result<Found> {
     })
 }
 
-/// Whether the vault's self person is this entity.
-fn is_self(connection: &Connection, id: &str) -> Result<bool> {
+/// Whether the vault's self person is this entity: the one person nothing may
+/// follow, trash, merge away or purge. Every path that could take the owner
+/// asks here, so there is one answer ([#1146](https://github.com/srikanth235/centraid/issues/1146)).
+pub(crate) fn is_self(connection: &Connection, id: &str) -> Result<bool> {
     Ok(connection
         .query_row("SELECT self_id = ?1 FROM vault", [id], |row| row.get(0))
         .optional()?
@@ -173,6 +175,7 @@ const DETACH: &[(Kind, &str, &str, &str)] = &[
     (Kind::Category, "txn", "category_id = NULL", "category_id"),
     (Kind::Category, "concept", "parent_id = NULL", "parent_id"),
     (Kind::Place, "event", "place_id = NULL", "place_id"),
+    (Kind::Place, "occurrence", "place_id = NULL", "place_id"),
     (Kind::Place, "activity", "place_id = NULL", "place_id"),
     (Kind::Place, "photo", "place_id = NULL", "place_id"),
     (Kind::Task, "task", "parent_id = NULL", "parent_id"),
@@ -213,6 +216,7 @@ pub const PURGE_RULES: &[(&str, &str, PurgeRule)] = &[
     ("event", "calendar_id,calendar_kind", PurgeRule::Refuse),
     ("event", "place_id", PurgeRule::Detach),
     ("note", "notebook_id,notebook_kind", PurgeRule::Detach),
+    ("occurrence", "place_id", PurgeRule::Detach),
     ("origin", "fills", PurgeRule::Forget),
     ("photo", "place_id", PurgeRule::Detach),
     ("photo", "edited_from", PurgeRule::Detach),
@@ -280,12 +284,22 @@ pub(crate) fn trash_stamp(ctx: &CommandCtx<'_, '_>) -> Result<(String, String)> 
 }
 
 /// Trash one entity at `(deleted_at, purge_at)`; its live members follow it.
+///
+/// **The owner's person is refused by every path** (a follower's absence, a
+/// merge, a member's trash): this is the one place that takes anything to the
+/// trash. A member of a holder that is the owner is left where it is.
 pub(crate) fn trash_one(
     ctx: &CommandCtx<'_, '_>,
     id: &str,
     stamp: &(String, String),
     trashed: &mut Vec<String>,
 ) -> Result<()> {
+    if is_self(ctx.connection(), id)? {
+        return Err(VaultError::InvalidInput {
+            name: "id".to_owned(),
+            detail: "this is you; a vault cannot do without its owner".to_owned(),
+        });
+    }
     let found = require(ctx.connection(), id)?;
     ctx.connection().execute(
         "UPDATE entity SET deleted_at = ?2, purge_at = ?3 WHERE id = ?1",
@@ -294,7 +308,9 @@ pub(crate) fn trash_one(
     ctx.touch(id)?;
     trashed.push(id.to_owned());
     for member in members(ctx.connection(), &found)? {
-        if find(ctx.connection(), &member)?.is_some_and(|m| m.deleted_at.is_none()) {
+        if !is_self(ctx.connection(), &member)?
+            && find(ctx.connection(), &member)?.is_some_and(|m| m.deleted_at.is_none())
+        {
             trash_one(ctx, &member, stamp, trashed)?;
         }
     }
@@ -331,9 +347,15 @@ pub(crate) fn purge_one(
         if *holder != found.kind {
             continue;
         }
+        // A day of a series is named by its series, which is what is touched.
+        let named = if *table == "occurrence" {
+            "series_id"
+        } else {
+            "id"
+        };
         let referrers = ids(
             connection,
-            &format!("SELECT id FROM {table} WHERE {column} = ?1"),
+            &format!("SELECT {named} FROM {table} WHERE {column} = ?1"),
             id,
         )?;
         connection.execute(
@@ -499,8 +521,8 @@ fn went_with(connection: &Connection, holder: &Found) -> Result<Vec<String>> {
     Ok(found)
 }
 
-fn restore(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
+/// Bring one entity back from the trash, and what went to the trash with it.
+pub(crate) fn restore_one(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Vec<String>> {
     let holder = require(ctx.connection(), id)?;
     let mut restored = Vec::new();
     // What went to the trash WITH the holder (its members, and theirs in turn)
@@ -514,6 +536,11 @@ fn restore(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         ctx.touch(&target)?;
         restored.push(target);
     }
+    Ok(restored)
+}
+
+fn restore(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let restored = restore_one(ctx, ctx.required_str("id")?)?;
     Ok(serde_json::json!({ "restored": restored }))
 }
 

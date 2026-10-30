@@ -481,6 +481,7 @@ pub(crate) fn rules(door: &VaultDoor<'_>) -> Result<Answer> {
                     amount_max: r.amount_max,
                     account_label: r.account_label,
                     category_label: r.category_label,
+                    rename_to: r.rename_to,
                     specificity: r.specificity,
                 })
                 .collect(),

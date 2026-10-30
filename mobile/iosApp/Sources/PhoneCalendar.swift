@@ -64,6 +64,7 @@ enum PhoneCalendar {
             entry.key = calendar.calendarIdentifier
             entry.sourceTitle = calendar.source?.title ?? ""
             entry.title = calendar.title
+            entry.color = hex(calendar.cgColor)
             return entry
         }
         out.events = events(store, own, now, read)
@@ -108,6 +109,8 @@ enum PhoneCalendar {
             out.moved = master != nil && event.isDetached
             out.phoneID = phoneId(event, fallback: event.eventIdentifier ?? event.calendarItemIdentifier)
             out.calendarKey = event.calendar?.calendarIdentifier ?? ""
+            out.url = event.url?.absoluteString ?? ""
+            out.location = event.location ?? ""
             if event.isAllDay {
                 // EventKit ends an all-day event at the next midnight (or
                 // 23:59:59); the all-day end is the LAST day, inclusive.
@@ -123,6 +126,16 @@ enum PhoneCalendar {
             }
             return out
         }
+    }
+
+    /// `#RRGGBB` of a calendar's colour as the sRGB it paints with; empty when it has none.
+    private static func hex(_ color: CGColor?) -> String {
+        guard let color,
+              let srgb = color.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil),
+              let parts = srgb.components, parts.count >= 3
+        else { return "" }
+        let byte = { (value: CGFloat) in Int((min(max(value, 0), 1) * 255).rounded()) }
+        return String(format: "#%02X%02X%02X", byte(parts[0]), byte(parts[1]), byte(parts[2]))
     }
 
     /// A series' master, and the zone its wall clocks are read in.

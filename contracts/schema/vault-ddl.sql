@@ -106,6 +106,12 @@ CREATE INDEX message_attachment_by_thumb  ON message_attachment(thumb) WHERE thu
 -- index note_by_notebook on note
 CREATE INDEX note_by_notebook ON note(notebook_id) WHERE notebook_id IS NOT NULL;
 
+-- index occurrence_by_place on occurrence
+CREATE INDEX occurrence_by_place ON occurrence(place_id) WHERE place_id IS NOT NULL;
+
+-- index origin_one_statement_per_account on origin
+CREATE UNIQUE INDEX origin_one_statement_per_account ON origin(fills) WHERE system = 'statement';
+
 -- index photo_by_burst on photo
 CREATE INDEX photo_by_burst       ON photo(burst) WHERE burst IS NOT NULL;
 
@@ -157,7 +163,12 @@ CREATE TABLE account (
   kind          TEXT GENERATED ALWAYS AS ('account') VIRTUAL,
   type          TEXT NOT NULL CHECK (type IN ('checking','savings','credit_card','cash')),
   currency      TEXT NOT NULL CHECK (length(currency) = 3 AND currency = upper(currency)),
+  -- Where the account stood on `opening_on`, SIGNED (a card owes: negative). The balance on any
+  -- day is this plus the posted lines AFTER `opening_on`, derived at read time; an account with no
+  -- opening day counts every line. A day, so a statement imported from before it does not count
+  -- twice.
   opening_minor INTEGER NOT NULL DEFAULT 0,
+  opening_on    TEXT CHECK (opening_on IS NULL OR date(opening_on) = opening_on),
   on_budget     INTEGER NOT NULL DEFAULT 1 CHECK (on_budget IN (0,1)),
   UNIQUE (id, currency),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
@@ -503,8 +514,17 @@ CREATE TABLE occurrence (
   cancelled      INTEGER NOT NULL DEFAULT 0 CHECK (cancelled IN (0,1)),
   starts         TEXT,
   ends           TEXT,
+  -- How `starts`/`ends` of THIS day read, when they are not the series' own way (an all-day
+  -- series' day moved to 15:00, a zoned series' day made all-day); NULL is the series' timing.
+  -- A zoned day of another timing names its zone; one that is zoned like its series keeps the
+  -- series' (#1146).
+  timing         TEXT CHECK (timing IS NULL OR timing IN ('zoned','floating','all-day')),
+  zone           TEXT CHECK (zone IS NULL OR timing IS 'zoned'),
   title          TEXT,
   description    TEXT,
+  -- This day's own link and place; NULL is the series'. Guests and reminders stay the series' (#1146).
+  url            TEXT,
+  place_id       TEXT REFERENCES place(id),
   PRIMARY KEY (series_id, original_start, scope)
 ) STRICT, WITHOUT ROWID;
 
@@ -519,7 +539,9 @@ CREATE TABLE origin (
   config     TEXT CHECK (config IS NULL OR json_valid(config)),
   created_at TEXT NOT NULL,
   UNIQUE (system, ref),
-  UNIQUE (id, system)
+  UNIQUE (id, system),
+  -- A statement is an account's, not a phone's store (#1146).
+  CHECK (system <> 'statement' OR device_id IS NULL)
 ) STRICT;
 
 -- table person on person
@@ -536,6 +558,9 @@ CREATE TABLE person (
                  OR (length(birthday) = 10 AND date(birthday) = birthday)),
   avatar       TEXT REFERENCES blob(hash),
   cadence_days INTEGER CHECK (cadence_days IS NULL OR cadence_days > 0),
+  -- The member's switch for this person's birthday reminder: the birthday is this row's column,
+  -- not an event, so it has no `reminders` of its own.
+  birthday_reminder INTEGER NOT NULL DEFAULT 1 CHECK (birthday_reminder IN (0,1)),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
 
@@ -588,6 +613,9 @@ CREATE TABLE revision (
 CREATE TABLE rule (
   id            TEXT PRIMARY KEY,
   pattern       TEXT NOT NULL CHECK (json_valid(pattern)),
+  -- The name the line shows once the rule has run: the payee, not the bank's words (which stay in
+  -- `source.stated`). NULL leaves the line's name alone.
+  display_name  TEXT CHECK (display_name IS NULL OR length(trim(display_name)) > 0),
   category_id   TEXT NOT NULL,
   category_kind TEXT GENERATED ALWAYS AS ('category') VIRTUAL,
   position      REAL NOT NULL,
@@ -632,9 +660,13 @@ CREATE TABLE source (
   entity_kind TEXT,
   stated      TEXT NOT NULL CHECK (json_valid(stated)),
   seen_at     TEXT NOT NULL,
+  -- When the follower trashed the row because its record left a complete read: the trash it may
+  -- undo if the record returns and the member has not touched the row since (#1146).
+  gone_at     TEXT,
   FOREIGN KEY (origin_id, system) REFERENCES origin(id, system),
   FOREIGN KEY (entity_id, entity_kind) REFERENCES entity(id, kind) ON DELETE SET NULL,
   CHECK ((entity_id IS NULL) = (entity_kind IS NULL)),
+  CHECK (system <> 'statement' OR device_id IS NULL),
   CHECK (entity_kind IS NULL OR system || '/' || entity_kind IN
     ('contacts/person','calendar/event','files/document','health/activity','statement/txn'))
 ) STRICT;

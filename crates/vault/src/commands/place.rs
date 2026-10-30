@@ -73,6 +73,27 @@ fn found(
     Ok(id)
 }
 
+/// The live place a phone's words name (its title, without regard to case), else a new one titled
+/// by them: a location a phone states is a string, and the same words are the same place.
+pub(crate) fn find_or_found_named(ctx: &CommandCtx<'_, '_>, name: &str) -> Result<String> {
+    use rusqlite::OptionalExtension;
+    let name = name.trim();
+    let known: Option<String> = ctx
+        .connection()
+        .query_row(
+            "SELECT p.id FROM place p JOIN entity e ON e.id = p.id
+              WHERE e.deleted_at IS NULL AND lower(e.title) = lower(?1)
+              ORDER BY p.id LIMIT 1",
+            [name],
+            |row| row.get(0),
+        )
+        .optional()?;
+    match known {
+        Some(id) => Ok(id),
+        None => found(ctx, None, name, None, None, None),
+    }
+}
+
 /// The place at these coordinates: the member's own named place nearby, else
 /// the one at the same rounding, else a new one.
 pub(crate) fn find_or_found(ctx: &CommandCtx<'_, '_>, lat: f64, lon: f64) -> Result<String> {

@@ -141,6 +141,11 @@
       },
       {
         "schema": "person",
+        "table": "set_birthday_reminder",
+        "verbs": "act"
+      },
+      {
+        "schema": "person",
         "table": "add_gift",
         "verbs": "act"
       },
@@ -923,6 +928,49 @@
       }
     },
     {
+      "name": "set-birthday-reminder",
+      "verb": "edit",
+      "kind": "person",
+      "inverse": null,
+      "sealed": [],
+      "command": "person.set_birthday_reminder",
+      "phrasings": [
+        "stop reminding me of Maria's birthday",
+        "turn off the birthday reminder for Sam",
+        "remind me of Priya's birthday again"
+      ],
+      "description": "Turn a person's birthday reminder on or off through person.set_birthday_reminder: the birthday is the person's own column, so the switch is theirs and event.edit does not reach it. The date stays on their sheet.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": ["id", "on"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "add-relationship",
       "verb": "link",
       "kind": "person",
@@ -1372,6 +1420,11 @@
           "origin": {
             "additionalProperties": false,
             "properties": {
+              "color": {
+                "description": "The colour the phone paints the store with, as the design wheel names it.",
+                "maxLength": 64,
+                "type": ["string", "null"]
+              },
               "config": {
                 "type": ["object", "null"]
               },
@@ -1403,6 +1456,11 @@
                 },
                 "fields": {
                   "type": "object"
+                },
+                "size": {
+                  "description": "How large the bytes a record names are, counted by the phone; the command claims them.",
+                  "minimum": 0,
+                  "type": ["integer", "null"]
                 }
               },
               "required": ["external_id", "fields"],

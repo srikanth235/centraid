@@ -289,15 +289,23 @@ pub fn cashflow(
 // Balances.
 // ---------------------------------------------------------------------------
 
-/// The balance of an account on `day`: where it opened plus every signed posted
-/// row on or before `day`. The opening balance is what the account held before
-/// its first line, so every line counts.
+/// The balance of an account on `day`: where it stood on its opening day plus every
+/// signed posted row after that day and on or before `day`. A line on or before the
+/// opening day is already in the opening balance, so it does not count twice; an
+/// account with no opening day counts every line.
 #[must_use]
 pub fn balance_on(account: &AccountRow, ledger: &[TxnRow], day: &str) -> i64 {
     account.opening_minor
         + ledger
             .iter()
-            .filter(|row| row.status == "posted" && row.posted_on.as_str() <= day)
+            .filter(|row| {
+                row.status == "posted"
+                    && row.posted_on.as_str() <= day
+                    && account
+                        .opening_on
+                        .as_deref()
+                        .is_none_or(|opening| row.posted_on.as_str() > opening)
+            })
             .map(TxnRow::signed_minor)
             .sum::<i64>()
 }

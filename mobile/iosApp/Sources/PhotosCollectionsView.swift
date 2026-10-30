@@ -285,7 +285,7 @@ private struct EmptySectionCard: View {
 
 /// UTILITIES, AS A GROUPED LIST: one rounded card, a row per shelf or door,
 /// hairlines between them inset past the icon — the system's inset-grouped list,
-/// which is how it draws Duplicates and Recently Deleted.
+/// which is how it draws Archive and Recently Deleted.
 private struct UtilitiesGroup: View {
     let cards: [Centraid_Core_V1_PhotosCollectionCard]
     let open: (Centraid_Core_V1_Route) -> Void

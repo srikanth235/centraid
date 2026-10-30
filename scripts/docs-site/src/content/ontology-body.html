@@ -216,6 +216,7 @@
 <div class="colrow"><span class="cn">birthday</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">avatar</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ blob.hash</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">cadence_days</span><span class="ct">integer</span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">birthday_reminder</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 1</span></div>
 </div></div>
 <div class="tbl rv in" data-group="kinds" data-table="contact_point"><header><h4>contact_point</h4><p class="tp">A phone number, email address or handle of a person, with its normalised form for matching.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
@@ -265,8 +266,12 @@
 <div class="colrow"><span class="cn">cancelled</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">starts</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">ends</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">timing</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">zone</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">title</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">description</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">url</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">place_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ place.id</span><span class="cnote"></span></div>
 </div></div>
 <div class="tbl rv in" data-group="kinds" data-table="task"><header><h4>task</h4><p class="tp">Something to do: status, priority, due, repeat, and the project, section and parent it sits under.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
@@ -342,6 +347,7 @@
 <div class="colrow"><span class="cn">type</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">currency</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">opening_minor</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
+<div class="colrow"><span class="cn">opening_on</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">on_budget</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 1</span></div>
 </div></div>
 <div class="tbl rv in" data-group="kinds" data-table="txn"><header><h4>txn</h4><p class="tp">A line on an account: a signed amount in minor units, the day it posted and its category. It enters by following a statement.</p></header>
@@ -376,6 +382,7 @@
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">pattern</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">display_name</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">category_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">category_kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ entity.kind</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">position</span><span class="ct">real</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -466,6 +473,7 @@
 <div class="colrow"><span class="cn">entity_kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.kind</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">stated</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">seen_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">gone_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="schemahdr" data-group="locker"><span class="sid">locker</span><h3>Locker</h3><p class="sdesc">An entity kind whose secrets stay in sealed cells nothing entity-wide reads: items, their custom fields, passkeys, aliases and addresses. Each item remembers when it was last used. Its tags, star and archive are the vault's; a generic page read passes it by, and the assistant reads its plain rows as the owner does, never a sealed value.</p></div>
 <div class="tbl rv in" data-group="locker" data-table="locker_item"><header><h4>locker_item</h4><p class="tp">A sealed item: a login, card, note, wifi network or other type. Its title, stamps and trash are its entity's; its secrets are sealed cells.</p></header>
@@ -545,7 +553,7 @@
 <div class="colrow"><span class="cn">failed_unlocks</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">failed_unlock_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<p class="note" data-tables="41" data-columns="304">41 tables and 304 columns, read off a vault this build founded.</p>
+<p class="note" data-tables="41" data-columns="312">41 tables and 312 columns, read off a vault this build founded.</p>
 <!-- schema:end -->
     </div>
     <div class="physcard rv">

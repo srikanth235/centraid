@@ -7,7 +7,7 @@
   },
   "scanFloorRows": 1000,
   "pages": {
-    "allowed": 10,
+    "allowed": 9,
     "entries": [
       {
         "home": "agenda.upcoming.calendars",
@@ -40,10 +40,6 @@
       {
         "home": "notes.notebooks.filed",
         "reason": "reads (id, notebook_id) of every note filed in a notebook, to count per notebook, and sorts them for a 500-row page; about 2,000 rows in the year-3 corpus. A GROUP BY is the fix if it grows, not an index (a multi-value IN cannot stream in id order)"
-      },
-      {
-        "home": "photos.duplicates.phashes",
-        "reason": "the clustering needs every perceptual hash by design: the first page is a primary-key-order walk of derivative and each later page resumes at its cursor, so a whole pass reads derivative once"
       },
       {
         "home": "agenda.task.board.logbook",

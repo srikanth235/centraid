@@ -32,7 +32,7 @@ pub fn manifest() -> &'static Manifest {
 }
 
 /// Which vault command each shell action runs.
-pub const ACTIONS: [ActionRow; 6] = [
+pub const ACTIONS: [ActionRow; 5] = [
     // ---- chat (lane I) ----
     act("rename-chat", "entity.retitle"),
     // a chat has no trash (R-CHAT-8): its delete is the shared permanent one
@@ -40,7 +40,6 @@ pub const ACTIONS: [ActionRow; 6] = [
     confirmed("clear-chats", "thread.clear"),
     // ---- imports (lane I) ----
     act("follow-files", "follow.files"),
-    act("claim-bytes", "blob.stage"),
     act("stop-following-files", "follow.stop"),
 ];
 

@@ -148,6 +148,18 @@ private struct PeoplePersonBody: View {
                     }
                 }
 
+                if !person.relations.isEmpty {
+                    SectionHeader(title: person.relationsHead.title, count: person.relationsHead.count)
+                    ForEach(Array(person.relations.enumerated()), id: \.offset) { _, relation in
+                        CentraidRow(
+                            title: relation.name,
+                            meta: relation.meta,
+                            accessibility: relation.accessibilityLabel,
+                            identifier: "people-relation-\(relation.partyID)"
+                        )
+                    }
+                }
+
                 SectionHeader(
                     title: person.notesHead.title,
                     count: person.notesHead.count,

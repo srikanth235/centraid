@@ -57,6 +57,7 @@ pub mod measurement;
 pub mod money;
 pub mod note;
 pub mod person;
+pub mod person_reminder;
 pub mod photo;
 pub mod place;
 pub mod rule;
@@ -296,7 +297,7 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 21] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 22] = [
             blob::definitions,
             contact_point::definitions,
             container::definitions,
@@ -311,6 +312,7 @@ impl Registry {
             money::definitions,
             note::definitions,
             person::definitions,
+            person_reminder::definitions,
             photo::definitions,
             place::definitions,
             rule::definitions,

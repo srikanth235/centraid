@@ -1398,6 +1398,81 @@ fn an_import_plans_then_seals_in_and_the_vault_wins() {
     );
 }
 
+/// A SECURE NOTE IN A CSV IS A NOTE (D2c, #1146): LastPass marks one with the address
+/// `http://sn`, Bitwarden with `type = note`. Its body is the note's sealed `content`, and
+/// nothing of it lands in the plain `notes` column a login keeps.
+#[test]
+fn a_csv_secure_note_imports_as_a_note_with_its_body_sealed() {
+    let scratch = Scratch::founded();
+    scratch.unlock();
+    let lastpass = "url,username,password,extra,name,grouping,fav\n\
+                    http://sn,,,the safe code is 4417,Safe code,,0\n";
+    let bitwarden = "folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,login_password,login_totp\n\
+                     ,0,note,Door code,gate opens at 9921,,0,,,,\n\
+                     ,0,login,Forum,a login note,,0,https://forum.example,maya,forum-pw,\n";
+    for file in [lastpass, bitwarden] {
+        let plan = scratch.import(file, false).import_plan.expect("a plan");
+        assert_eq!(plan.new_count as usize, plan.rows.len(), "{plan:?}");
+        assert!(
+            !contains(&plan.encode_to_vec(), "4417") && !contains(&plan.encode_to_vec(), "9921"),
+            "a plan carried a note's body"
+        );
+        let published = scratch.import(file, true).import_plan.expect("published");
+        assert_eq!(published.failed, 0);
+    }
+    let note_of = |title: &str, body: &str| {
+        let item = scratch
+            .search(title)
+            .items
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| panic!("{title} was not imported"));
+        let detail = scratch.item(&item.item_id).expect("the item");
+        assert_eq!(detail.r#type, "note", "{title} is a note");
+        assert_eq!(
+            detail.notes, "",
+            "{title}: nothing of the body in plain notes"
+        );
+        assert_eq!(
+            detail.url, "",
+            "{title}: the marker address is not an address"
+        );
+        let sealed = scratch
+            .handle
+            .with_vault(|vault| Ok(vault.locker_sealed_item_cell(&item.item_id, "content")?))
+            .expect("the cell reads")
+            .and_then(|cell| cell.ciphertext);
+        assert!(
+            sealed
+                .as_deref()
+                .is_some_and(|stored| stored.starts_with("lk1:")),
+            "{title}: content is sealed"
+        );
+        assert_eq!(
+            scratch
+                .reveal(&item.item_id, "content")
+                .revealed
+                .expect("the body")
+                .value,
+            body
+        );
+    };
+    note_of("Safe code", "the safe code is 4417");
+    note_of("Door code", "gate opens at 9921");
+    // A login row of the same file stays a login, its note in plain notes.
+    let forum = scratch
+        .search("Forum")
+        .items
+        .into_iter()
+        .next()
+        .expect("forum");
+    let forum = scratch.item(&forum.item_id).expect("the forum");
+    assert_eq!(
+        (forum.r#type.as_str(), forum.notes.as_str()),
+        ("login", "a login note")
+    );
+}
+
 /// CENTRAID'S OWN JSON COMES BACK WHOLE: fields, tags, star and memo.
 #[test]
 fn a_json_export_imports_back_whole() {

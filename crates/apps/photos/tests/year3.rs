@@ -2,13 +2,11 @@
 //! them (#1020, D-1020-P11; rebuilt on the new model, #1135).
 //!
 //! `centraid_apps_kit::fixtures::year3_photos` writes the profile [`YEAR3_PHOTOS`]
-//! declares: 90,000 photographs and 3,000 near-duplicate families of three, with
-//! every 250th trashed, every 500th archived, every 50th starred, 400 places, 40
+//! declares: 90,000 photographs, with every 250th trashed, every 500th archived, every 50th starred, 400 places, 40
 //! albums of 50, and a burst every hundredth pair. Each number is a bound a read
 //! was built to trip: the library shelf walked by a cursor over capture times that
 //! tie in pairs, the trash shelf, the collections and the places over the whole
-//! library, and the duplicates read's 4,000-fingerprint cap against 9,000
-//! fingerprints.
+//! library.
 //!
 //! **The numbers are PROJECTED PROVENANCE** (D-1020-D3-7's pattern). They were
 //! taken on `ci-linux-x64-4c` against a file-backed vault in a debug build with
@@ -23,10 +21,9 @@ use std::time::Instant;
 
 use centraid_apps_kit::fixtures::{
     YEAR3_50K_ASSETS, YEAR3_PHOTOS, Year3PhotosCounts, Year3PhotosShape, live_photo_count,
-    photo_fingerprints, year3_photos,
+    year3_photos,
 };
 use centraid_apps_kit::testdoor::TestDoor;
-use centraid_apps_photos::duplicates::{CLUSTER_ROWS, Fingerprint, duplicate_clusters};
 use centraid_apps_photos::overview::load_albums;
 use centraid_apps_photos::places::load_places;
 use centraid_apps_photos::shelf::{Shelf, ShelfCursor, ShelfData, ShelfInput, load_shelf};
@@ -88,23 +85,6 @@ fn read<T>(world: &Seeded, body: impl FnOnce(&TestDoor<'_>) -> T) -> T {
         .vault
         .read(|connection| Ok(body(&TestDoor::new(connection))))
         .expect("a read")
-}
-
-/// The clustering the product runs: `centraid_media::duplicates::cluster`, so the
-/// fixture is evidence for the code it is supposed to exercise.
-fn media_cluster(prints: &[Fingerprint]) -> std::collections::BTreeMap<String, String> {
-    let rows: Vec<centraid_media::duplicates::Fingerprint> = prints
-        .iter()
-        .map(|print| centraid_media::duplicates::Fingerprint {
-            asset_id: print.photo_id.clone(),
-            phash: print.phash.clone(),
-            cluster_id: None,
-        })
-        .collect();
-    centraid_media::duplicates::cluster(
-        &rows,
-        centraid_media::duplicates::DUPLICATE_HAMMING_THRESHOLD,
-    )
 }
 
 #[test]
@@ -270,46 +250,6 @@ fn a_cursor_walk_over_tied_capture_times_repeats_no_row_and_loses_none() {
     assert!(pages <= 12, "{pages} pages for 1,000 photographs");
 }
 
-/// THE CLUSTERS ARE THE FAMILIES, and nothing else: every cluster is one family,
-/// and every family is one cluster.
-#[test]
-fn the_duplicates_are_the_seeded_families_and_no_photograph_crosses_one() {
-    let world = seeded(SMALL);
-    let clusters = read(&world, |door| {
-        duplicate_clusters(door, 0, media_cluster).expect("the duplicates read")
-    });
-    assert_eq!(clusters.len(), SMALL.near_duplicate_families);
-    for cluster in &clusters {
-        assert!(
-            cluster.photos.len() >= 2,
-            "a cluster of one is a photograph"
-        );
-        let families: std::collections::BTreeSet<usize> = cluster
-            .photos
-            .iter()
-            .map(|photo| {
-                let number: usize = photo
-                    .photo_id
-                    .strip_prefix("asset-")
-                    .and_then(|n| n.parse().ok())
-                    .expect("a seeded id");
-                number / SMALL.family_size
-            })
-            .collect();
-        assert_eq!(families.len(), 1, "{} crosses families", cluster.key);
-    }
-    // Only live photographs ride a card: a trashed member leaves a pair.
-    let fingerprints = world
-        .vault
-        .read(|connection| Ok(photo_fingerprints(connection).expect("reads")))
-        .expect("a read");
-    assert_eq!(
-        fingerprints.len(),
-        world.counts.assets - world.counts.trashed,
-        "a fingerprint is read for every live photograph"
-    );
-}
-
 /// The measured numbers at one declared volume.
 fn measure(label: &str, shape: Year3PhotosShape) {
     let started = Instant::now();
@@ -359,32 +299,6 @@ fn measure(label: &str, shape: Year3PhotosShape) {
         started.elapsed()
     );
     assert_eq!(places.places.len(), shape.places);
-
-    let started = Instant::now();
-    let clusters = read(&world, |door| {
-        duplicate_clusters(door, 0, media_cluster).expect("the duplicates read")
-    });
-    eprintln!(
-        "{label}: duplicates clustered {} families from the first {CLUSTER_ROWS} fingerprints in {:?}",
-        clusters.len(),
-        started.elapsed()
-    );
-    // More fingerprints stand behind the families than the read takes (4,000), so
-    // the review surface is cut at its cap rather than reporting every family.
-    // (The live photographs among the first 4,000 fingerprints: the archived and the
-    // trashed ones among them are not offered, so a family or two is a pair.)
-    assert!(clusters.len() <= CLUSTER_ROWS / shape.family_size);
-    assert!(clusters.len() > CLUSTER_ROWS / shape.family_size - CLUSTER_ROWS / 100);
-    assert!(clusters.len() < shape.near_duplicate_families);
-    let started = Instant::now();
-    let counted = read(&world, |door| {
-        centraid_apps_photos::duplicate_cluster_count(door, media_cluster).expect("counts")
-    });
-    eprintln!(
-        "{label}: the clusters counted without reading a member: {counted} in {:?}",
-        started.elapsed()
-    );
-    assert_eq!(counted, clusters.len());
 }
 
 /// THE `year3-photos` VOLUME: 90,000 photographs, 3,000 families. Ignored by

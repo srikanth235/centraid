@@ -173,18 +173,45 @@ fn occurrence_row(
     let field = |name: &str| -> Option<&Value> { override_value?.get(name) };
     let text =
         |name: &str| -> Option<String> { field(name).and_then(Value::as_str).map(str::to_owned) };
+    // A DAY THAT READS UNDER ANOTHER TIMING than its series (an all-day series' day moved to
+    // 15:00, a zoned series' day made all-day) is placed by its own: the row's semantics and
+    // zone are the day's, and the series' length is not borrowed across timings (#1146).
+    let own_timing = text("timing");
+    let other_kind = own_timing
+        .as_deref()
+        .is_some_and(|timing| Some(timing) != event.recurrence_semantics.as_deref());
     let dtend = match field("end").and_then(Value::as_str) {
         Some(end) => Some(end.to_owned()),
+        None if other_kind => None,
         None => event
             .dtend
             .as_ref()
             .map(|_| shift_temporal(&instance.start, duration_ms)),
     };
+    let (start_tz, end_tz) = match own_timing.as_deref() {
+        Some("zoned") => {
+            let zone = text("zone").or_else(|| event.start_tz.clone());
+            (zone.clone(), zone)
+        }
+        Some(_) => (None, None),
+        None => (event.start_tz.clone(), event.end_tz.clone()),
+    };
+    let own_place = text("place_id");
     EventRow {
         summary: text("summary").or_else(|| event.summary.clone()),
         description: text("description").or_else(|| event.description.clone()),
         dtstart: instance.start.clone(),
         dtend,
+        recurrence_semantics: own_timing.or_else(|| event.recurrence_semantics.clone()),
+        start_tz,
+        end_tz,
+        conferencing_uri: text("url").or_else(|| event.conferencing_uri.clone()),
+        location_name: if own_place.is_some() {
+            None
+        } else {
+            event.location_name.clone()
+        },
+        location_place_id: own_place.or_else(|| event.location_place_id.clone()),
         is_recurrence_instance: !is_anchor,
         instance_key: format!("{}:{key}", event.event_id),
         original_start_local: Some(key),

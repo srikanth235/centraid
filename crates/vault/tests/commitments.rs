@@ -1474,6 +1474,12 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("event", "zone", Reach::Not("a time zone name, not prose")),
     ("event", "rule", Reach::Not("an RFC 5545 rule")),
     ("event", "url", Reach::Not("a link, not prose")),
+    (
+        "occurrence",
+        "zone",
+        Reach::Not("a time zone name, not prose"),
+    ),
+    ("occurrence", "url", Reach::Not("a link, not prose")),
     ("occurrence", "title", Reach::Own),
     ("occurrence", "description", Reach::Own),
     ("task", "description", Reach::Own),
@@ -1552,6 +1558,13 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         Reach::Not("a digest of what an act asked, not prose"),
     ),
     ("account", "currency", Reach::Not("an ISO code")),
+    (
+        "rule",
+        "display_name",
+        Reach::Not(
+            "a rule is not an entity; the name it gives lands on the line's title, which is indexed",
+        ),
+    ),
     ("txn", "currency", Reach::Not("an ISO code")),
     ("budget", "currency", Reach::Not("an ISO code")),
     ("budget", "month", Reach::Not("a month")),
