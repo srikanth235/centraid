@@ -287,7 +287,6 @@ mod kit {
 
     static FULL: TrashSpec = TrashSpec {
         app: "fake",
-        purge_window_days: 30,
         icon_key: "Note",
         copy: TrashCopy {
             purges_on: Some(erased),
@@ -329,7 +328,6 @@ mod kit {
     const fn clone_of_full() -> TrashSpec {
         TrashSpec {
             app: "fake",
-            purge_window_days: 30,
             icon_key: "Note",
             copy: TrashCopy::KIT,
             back_label: app_name,

@@ -20,13 +20,9 @@ use crate::kit::trash::{self, TrashCopy, TrashItem, TrashSpec};
 use crate::screen::{Ctx, Screen};
 use crate::strings::people as words;
 
-/// The days the sweep keeps a trashed person.
-const WINDOW_DAYS: u32 = 30;
-
 /// People's trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
     app: act::people::APP,
-    purge_window_days: WINDOW_DAYS,
     icon_key: "User",
     copy: TrashCopy {
         purge_body: Some(words::trash_purge_body),

@@ -16,13 +16,9 @@ use crate::kit::trash::{self, TrashCopy, TrashItem, TrashSpec};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, docs as words};
 
-/// The days a trashed document can be restored.
-const WINDOW_DAYS: u32 = 30;
-
 /// Docs' trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
     app: act::docs::APP,
-    purge_window_days: WINDOW_DAYS,
     icon_key: "FileText",
     copy: TrashCopy {
         empty_state_body: Some(words::trash_empty_state_body),

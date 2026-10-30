@@ -151,8 +151,6 @@ impl TrashCopy {
 pub struct TrashSpec {
     /// `agenda`: the app, and the prefix of the screen name `agenda.trash`.
     pub app: &'static str,
-    /// The days the sweep keeps a deleted row.
-    pub purge_window_days: u32,
     /// The kit's glyph for a row.
     pub icon_key: &'static str,
     pub copy: TrashCopy,

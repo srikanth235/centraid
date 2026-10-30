@@ -173,7 +173,7 @@ struct PhotoTile: View {
 ///
 /// A FETCH IS A LINE AND NOT A SPINNER (DESIGN.md: loading is determinate or
 /// static, never a spinner). The byte plane reports completion and not
-/// progress (`PhotoCell.fetch_percent`), so the honest mark is words on the
+/// progress (the tile carries no percentage), so the honest mark is words on the
 /// tile's own chip — v0's state slot, one quiet mono line on the page colour.
 struct PhotoHeldMark: View {
     @Environment(\.colorScheme) private var scheme
