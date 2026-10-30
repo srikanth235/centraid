@@ -343,21 +343,6 @@ Added: `receipts/issue-1146-rebuild-gaps.md` (this section).
 - Native files changed: `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/money/MoneyPages.kt`, `.../screens/RustRoot.kt`, `.../session/LibraryRoll.kt`, `.../screens/people/PeoplePersonScreen.kt`; deleted `.../screens/photos/PhotosDuplicatesScreens.kt`; `mobile/iosApp/Sources/Money/MoneyManageViews.swift`, `.../PhoneLibrary.swift`, `.../PhotosCollectionsView.swift`, `.../RustScreenHost.swift`, `.../People/PeoplePersonView.swift`; deleted `.../PhotosDuplicatesViews.swift`.
 - The on-device model's retrain (the export changed, above).
 
-#### Changelog line
-
-Money remembers the day an opening balance is as of, so a statement from before it no longer counts twice, and a rule can give a payee a name of your own; the Photos Duplicates screen is gone, and photos you import now keep their size, length and place; a secure note exported from LastPass or Bitwarden imports as a Locker note with its body sealed; a person's sheet shows their relationships from both sides, a touch in the trash no longer counts as the last time you were in touch, and a birthday reminder can be turned off.
-
-#### Decision rows
-
-| **R-1146-6-1** | An account's opening balance is as of a day (`account.opening_on`, required with a non-zero amount); a balance counts the lines after that day, and an account with no day counts every line. _Why:_ a statement imported from before the opening day was counted twice. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-6-2** | A rule may carry a display name (`rule.display_name`); `rule.apply` and a newly followed statement line take it, a line the member named keeps its name unless `overwrite`, and the bank's words in `source.stated` are never written. _Why:_ the payee is the member's name for the line; the bank's words are evidence. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-6-3** | Photos has no Duplicates screen, query or clustering; the wire numbers are reserved. Supersedes R-1135-5-15 and the `duplicates` query of R-1135-5-12. _Why:_ owner ruling D5. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-6-4** | The camera roll writes the library's pixel box, a movie's length and a coordinate pair (as a place) when the asset has them, and nothing when it does not; an edit inherits its place from its original. _Why:_ `photo.add` already took them (M20). [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-6-5** | A CSV row whose address is `http://sn` (LastPass) or whose type is `note` (Bitwarden) imports as a Locker `note` with the body sealed as `content` and nothing in plain `notes`. _Why:_ owner ruling D2c. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-6-6** | A person's sheet shows the `related` edges that start and end at them, live relatives only, each read from its own side. _Why:_ owner ruling D8; the vault stores one label per edge and no inverse. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-6-7** | A touch in the trash does not count toward the log, last contacted or the cadence, in the one read every figure shares. _Why:_ M21. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-6-8** | The birthday reminder is a per-person switch (`person.birthday_reminder`, `person.set_birthday_reminder`), on by default. _Why:_ the birthday is the person's column and has no event to carry a reminder. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-
 ### Wave 5 — Search
 
 Four search gaps, each red-first in `crates/search/tests/door.rs` (and `matching.rs`).
@@ -383,17 +368,6 @@ Four search gaps, each red-first in `crates/search/tests/door.rs` (and `matching
 **Exit list.** Red-first tests: failing on the base (quoted above), passing now. `cargo test -p centraid-search -p centraid-vault -p centraid-core` green. No schema change: `contracts/schema` untouched. `cargo xtask gate --profile pr`: fmt, clippy, test, restore-drill, rules, doc-links, ledgers, release-build, ts-static, emitters, advisory, lockfile, call-budget, search-budget, fault-door ok; buf, deny, ci-policy, secrets, osv SKIP (tools absent); the run took 1689.5 s against its 1500 s budget on this cold tree, every step green — a time overrun of the environment, not a step failure. `search-budget`: worst p95 50.5 ms (notes, in-word fragment) and 49.8 ms (home), ceiling 80 ms, ledger untouched; no base measurement taken (the base was not rebuilt in release), so no before/after delta is claimed. `mobile-jvm` not run: no `mobile/` change. The pre-push hook passed after `git fetch origin main` (its `origin/main` ref was missing).
 
 **Changed files.** `crates/search/src/sqlite.rs`, `crates/search/src/matching.rs`, `crates/search/tests/door.rs`, `crates/search/README.md`, `crates/vault/src/index.rs`, `crates/vault/src/index/text.rs`, `docs/vault-ontology.md`, `receipts/issue-1146-rebuild-gaps.md`. Deleted: none. Owner hand-offs: none.
-
-#### Changelog line
-
-Search now finds photos that have no title (shown by the day they were taken), reaches older matches by scrolling past the first 500, stops finding things through a label you moved to the trash, and finds phone numbers typed without punctuation.
-
-#### Decision rows
-
-| **R-1146-5-1** | An untitled photo is indexed with a date label (`Photo · 12 Mar 2026`, from `taken_at`) that the door also answers it under; other kinds with no title stay non-targets. _Why:_ the row needs words to show, and the label is built once in the door so every reader gets it. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-5-2** | The search tail pages in slabs of 500 (`OFFSET`), the cursor's tier being the slab; the first page reads slab 1 only. _Why:_ a match older than the newest 500 was unreachable, and the first-page cost is the budget's. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-5-3** | A trashed label lends no words to its members; trash and restore re-index the members in their own commit. _Why:_ the label is already touched and `DEPENDENTS` already re-indexes members, so a liveness join costs nothing more than a rename. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-5-4** | A phone number is also indexed as its digits (and the national part after a `+` country code), and a number-shaped query also asks for its joined digits. _Why:_ the index matches word starts, so punctuation hid the number; Locker search is otherwise unchanged. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
 
 ### Wave 6 — Apps
 
@@ -636,16 +610,6 @@ Owner hand-offs: none (no native file changed).
 
 Not done: a member-facing "ask" for a doubted read (no surface; R-1127-9). Outside the wave: the `format-check` pre-commit hook exits 2 when the only staged oxfmt-owned file is an ignored generated one (`ontology-body.html`).
 
-#### Changelog line
-
-A phone that loses most of a calendar, address book or folder at once no longer clears it from the vault, a contact that comes back is restored, and merging two people keeps everything that pointed at either.
-
-#### Decision rows
-
-| **R-1146-2-1** | One vanish guard in the follow engine for every system: a complete read that loses at least five followed rows and more than half of them trashes nothing and reports `doubted`; the member is not asked. _Why:_ one mechanism, not a copy per screen. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-2-2** | The follower remembers the trash it made (`source.gone_at`); the record's return restores an untouched row, and a member's trash stands. _Why:_ the two trashes are otherwise indistinguishable. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-2-5** | A statement is an account's: one origin per account, no `device_id`, never stopped, and `source.stated` keeps the bank's first words. _Why:_ it is not a phone store. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-2-7** | `person.merge` is confirmed like a purge and re-points every foreign key into an entity derived from the file. _Why:_ it ends a person and a hand list drifts. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
 ### Wave 3 — Trash and bytes
 
 Decision T and findings M8, M10, M11, M14.
@@ -709,18 +673,6 @@ Decision T and findings M8, M10, M11, M14.
 Changed: `crates/blobs/src/store.rs`, `crates/core/src/app_query/docs_tests.rs`, `crates/core/src/handle.rs`, `crates/core-ffi/CONTRACT.md`, `crates/api-proto/proto/centraid/core/v1/docs.proto`, `crates/api-proto/proto/centraid/core/v1/docs_screens.proto`, `crates/assist/src/native/park.rs`, `crates/screens/src/docs/fold.rs`, `crates/screens/src/strings/docs.rs`, `crates/vault/src/backup/files.rs`, `crates/vault/src/commands/{blob,container,entity,mod,thread}.rs`, `crates/vault/src/lib.rs`, `crates/vault/tests/{commitments,docs_photos,locker_commands,shared_verbs}.rs`, `docs/vault-ontology.md`.
 Added: `crates/vault/src/tidy.rs`, `crates/vault/tests/trash_and_bytes.rs`.
 Deleted: none. Native files: none (the proto change is comments and a string the screens render).
-
-#### Changelog line
-
-A trashed item stays restorable until Centraid next opens; then items past their 30 days are emptied in the background, and the files of anything deleted are always freed, including leftovers from interrupted saves.
-
-#### Decision rows
-
-| **R-1146-3-1** | A purge ends the follow of any origin that fills the purged entity, for every kind, as `follow.stop` does. _Why:_ the rows stay the member's; `origin.fills` has no delete action. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-3-2** | `purge_at` says when the launch pass may empty a row, not when it stops being restorable. _Why:_ nothing swept the phone, and a refused restore of a row still present lost data for no reason. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-3-3** | Every command that can drop the last reference to a blob collects and answers `released`; the gate deletes those files after the commit, never for a replayed answer. _Why:_ `thread.save_turn` answered a count and leaked files. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-3-4** | The launch sweep deletes only store files with no row and older than the core's launch. _Why:_ the stage door stores bytes before any command names them. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-3-5** | The backup lists no blob that only entities past `purge_at` rent. _Why:_ the next launch deletes them. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
 
 ### Integration — waves 6, 2 and 3
 
@@ -828,17 +780,6 @@ Passing on the base too, kept as guards: `a_change_of_timing_needs_the_time_it_i
 
 Changed: `contracts/migrations/001_baseline.sql`, `contracts/schema/vault-ddl.sql`, `crates/api-proto/proto/centraid/core/v1/screens.proto`, `crates/apps/agenda/{README.md,manifest.json}`, `crates/apps/agenda/src/{detail,expansion,queries}.rs`, `crates/apps/{health,money,people}/manifest.json`, `crates/design/src/lib.rs`, `crates/screens/src/agenda/calendar.rs`, `crates/screens/tests/{agenda_calendar,imports_made}.rs`, `crates/vault/src/commands/{container,entity,event,follow,place}.rs`, `crates/vault/src/format.rs` (`SCHEMA_DIGEST`), `crates/vault/tests/commitments.rs` (census rows for `occurrence.zone` and `.url`), `docs/glossary.md`, `docs/vault-ontology.md`, `scripts/docs-site/src/content/ontology-body.html` (generated), `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/agenda/CalendarImporter.kt`, `mobile/iosApp/Sources/PhoneCalendar.swift`, `receipts/issue-1146-rebuild-gaps.md`. Added: `crates/vault/tests/agenda_days.rs`, `crates/apps/agenda/tests/day_overrides.rs`. Deleted: none. `contracts/schema/vault-commands.txt` is unchanged (no command added or removed).
 
-#### Changelog line
-
-A moved day of a repeating event can be a different kind of day from its series (a timed meeting on an all-day day, or the reverse) and can carry its own link and place, and each calendar you follow from your phone is its own calendar in Agenda, in the phone's colour.
-
-#### Decision rows
-
-| **R-1146-4-1** | A change of timing is for one day: an override of the days after is refused when it changes the day's timing. _Why:_ a `future` override moves later days by a wall-clock delta that has no meaning across timings. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-4-3** | A day that states its series' own timing stores none (`occurrence.timing` NULL is the series'). _Why:_ one canonical form, so the follower's three-way comparison sees no difference where there is none. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-4-4** | A day's place is found by its words or founded; the series' own location is not followed. _Why:_ the series has no location field to follow into; a separate decision. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-4-5** | A followed calendar's colour is the design wheel's hue nearest the phone's, stored as `var(--c-<hue>)`. _Why:_ a stored hex reads as no colour to the party-hue rule and would paint the id's own hue. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-4-6** | A calendar that leaves the phone is not judged; one that stays and loses most of its events goes through the follow engine's guard, per calendar. _Why:_ the shell's read has no "left" signal. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
 ### Wave 8 — Indexes and snappiness
 
 Owner-added to [#1146](https://github.com/srikanth235/centraid/issues/1146) on 2026-10-29 ("make the app snappy"). Worked on `claude/zen-darwin-fuharm-w8` from `191f0e4e`.
@@ -914,17 +855,3 @@ Changed: `contracts/ledgers/query-plans.json`, `contracts/migrations/001_baselin
 - The corpus's own 1,295 purgeable rows beyond the 2,000 the test moves are why the pass counts 3,295.
 - Wave 4's new foreign keys are not in this branch; commitment 9 holds them at merge.
 
-#### Changelog line
-
-Emptying a big trash, trashing a very large album or list, and the launch clean-up now work in small pieces in the background, so the app stays responsive while they run; deleting or replacing photos, contacts' pictures and note history no longer scans whole tables to check what still points at them.
-
-#### Decision rows
-
-| **R-1146-8-1** | Every foreign key's first child column leads an index (the primary key counts); only a one-row table is exempt, with a reason; a mostly-NULL column gets a partial index. _Why:_ a parent delete looks up its children once per deleted row, and `EXPLAIN QUERY PLAN` never shows it. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-8-2** | One partial index `entity_by_title_nocase (kind, title COLLATE NOCASE, created_at, id) WHERE deleted_at IS NULL` serves the contact import and the follow match key. _Why:_ both match a title case-insensitively within a kind and order by `created_at, id`. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-8-3** | `notes.notebooks.filed` walks `note` in `(notebook_id, id)` order; the paged door gets no aggregate shape. _Why:_ it streams without a sort and the count stays in the app. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-8-4** | The assistant's attachable documents break ties by `id`, not `n`. _Why:_ `entity_by_updated` ends in `id`, and the order within one `updated_at` carries no meaning. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-8-5** | The plan sweep plans hand-written `UPDATE … SET` and `DELETE FROM` statements under the same ledger. _Why:_ a write scans a table the way a read does. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-8-6** | A commit re-indexes the first 50 members of a trashed or restored label; the rest are owed in `search_owed` and written in batches of 50 when the vault is idle. _Why:_ the label's trash held the vault 1.3 s at 5,000 members, and what cannot fit in the commit must survive the process. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-8-7** | The launch pass reads the trash in chunks, keeps bytes in its batches and collects once after the last, in pieces of 300; its batch is 3 roots. _Why:_ every batch walked every blob and the whole trash. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
-| **R-1146-8-8** | Write paths are held to the call budget's own statistic and 50 ms ceiling (a label's trash by the fastest of three round trips, a launch batch by p95). _Why:_ the worst step is SQLite's WAL checkpoint, which no batch bounds. [#1146](https://github.com/srikanth235/centraid/issues/1146) |
