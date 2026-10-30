@@ -70,8 +70,9 @@
 **Verification**
 
 - `cargo test -p xtask` → 154 passed + 2 passed, 0 failed (20 are the new fixtures).
-- `cargo xtask rules` → 16 rules, all `ok`, including `ok native-shell-parity — 250 file(s) scanned, clean (4531 item(s) in 23 proto file(s), 202 in the register)`.
+- `cargo xtask rules` → 16 rules, all `ok`, including `ok native-shell-parity — 251 file(s) scanned, clean (4531 item(s) in 23 proto file(s), 202 in the register)`.
 - `cargo clippy -p xtask --all-targets -- -D warnings` → clean. `cargo fmt --all -- --check` → clean.
+- `cargo xtask gate --profile local` (own `CARGO_TARGET_DIR`, cold, after the last umbrella merge incl. lanes A, B, D, E) → `gate local: PASS`: fmt 5.2s, clippy 1.9s (541.7s on the first cold run), test 1014.5s, restore-drill 29.6s, rules 1.7s (16 applied, 0 pending), doc-links 1.0s, ledgers 0.0s; TOTAL 1054.0s of the 3200s cold ceiling.
 - Red-first, throwaway (not committed): in `MoneyScreens.kt` renamed the two Android reads `spending.in_out_net` to `spending.in_out_nets`; `cargo xtask rules` →
   `FAIL native-shell-parity — 1 finding(s) in 247 file(s) scanned (4531 item(s) in 23 proto file(s), 211 in the register)` / `MoneySpendingData.in_out_net: only SwiftUI reads it (Kotlin `in_out_net`, Swift `inOutNet`); read it in the other shell, or register it in native_parity_register.rs`. Reverted; the rule is `ok` again.
 - Cross-check: an independent Python census of the same 4531 items (written for the classification, not committed) agreed with the rule on all but one row (`BackupLine.total`, where Python counted an unrelated Swift `total`); the register was made to the rule's verdict.
