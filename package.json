@@ -8,7 +8,7 @@
       "packages/*"
     ],
     "catalog": {
-      "typescript": "5.9.3"
+      "typescript": "7.0.2"
     }
   },
   "type": "module",
@@ -41,12 +41,12 @@
   "devDependencies": {
     "astro": "^7.3.5",
     "jsdom": "30.0.0",
-    "oxfmt": "0.61.0",
-    "oxlint": "1.76.0",
+    "oxfmt": "0.75.0",
+    "oxlint": "1.90.0",
     "pagefind": "^1.5.2",
     "typescript": "catalog:",
-    "ultracite": "7.9.4",
-    "vitest": "4.1.10"
+    "ultracite": "8.1.0",
+    "vitest": "5.0.5"
   },
   "overrides": {
     "shell-quote": "1.8.4",
