@@ -30,13 +30,13 @@
     <div class="hero-kv">
       <div><b data-count="kinds">26</b>kinds</div>
       <div><b data-count="relations">8</b>edge relations</div>
-      <div><b data-count="tables">41</b>tables</div>
+      <div><b data-count="tables">42</b>tables</div>
       <div><b>1</b>file, on the phone</div>
       <div><b>0</b>silos</div>
     </div>
 
     <div class="stackscroll rv">
-      <div class="stack" role="img" aria-label="Stacked system map: app screens project over kind tables, which extend the entity kernel; the command gate and its journal sit across every write, and the assistant acts through the same commands.">
+      <div class="stack" role="img" aria-label="Stacked system map: app screens project over kind tables, which extend the entity kernel; the command gate sits across every write, and the assistant acts through the same commands.">
         <div class="band surface">
           <div class="bt"><h3>Screens</h3><span class="tag">projections: rebuildable, replaceable</span></div>
           <div class="row">
@@ -58,14 +58,14 @@
           <div class="bt"><h3>The kernel</h3><span class="tag">identity, joins and history: the owned asset</span></div>
           <div class="row">
             <span class="pill">entity</span><span class="pill">edge</span><span class="pill">blob</span><span class="pill">derivative</span>
-            <span class="pill">origin · source</span><span class="pill">revision</span><span class="pill">search</span><span class="pill">journal</span>
+            <span class="pill">origin · source</span><span class="pill">revision</span><span class="pill">search</span><span class="pill">action key</span>
           </div>
         </div>
         <div class="band plane">
           <div class="bt"><h3>The gate</h3><span class="tag">every write is a typed command</span></div>
           <div class="row">
             <span class="pill">input schema</span><span class="pill">authority</span><span class="pill">preconditions</span>
-            <span class="pill">handler</span><span class="pill">postconditions</span><span class="pill">one journal row, same transaction</span>
+            <span class="pill">handler</span><span class="pill">postconditions</span><span class="pill">action key, same transaction</span>
           </div>
         </div>
         <div class="band plane">
@@ -185,6 +185,11 @@
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">n</span><span class="ct">integer</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">word</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
+</div></div>
+<div class="tbl rv in" data-group="kernel" data-table="search_owed"><header><h4>search_owed</h4><p class="tp">The labels whose members a commit left owed a search row, because the label it trashed or restored has too many to write in one commit.</p></header>
+<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
+<div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">after</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="schemahdr" data-group="words"><span class="sid">words</span><h3>words and holders</h3><p class="sdesc">Concepts are the words a member names (tags, categories, relations); containers are the things that hold things (notebooks, folders, albums, projects, calendars).</p></div>
 <div class="tbl rv in" data-group="words" data-table="concept"><header><h4>concept</h4><p class="tp">A word the member names: a tag, a flag, a category, a workout kind, an activity kind or a relation.</p></header>
@@ -553,7 +558,7 @@
 <div class="colrow"><span class="cn">failed_unlocks</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">failed_unlock_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<p class="note" data-tables="41" data-columns="312">41 tables and 312 columns, read off a vault this build founded.</p>
+<p class="note" data-tables="42" data-columns="314">42 tables and 314 columns, read off a vault this build founded.</p>
 <!-- schema:end -->
     </div>
     <div class="physcard rv">
@@ -573,7 +578,7 @@
       <article class="pcard rv"><span class="pn">P1</span><h3>One shape for what is shared, a column for what is not</h3><p>A title, a trash and an id are on <span class="k">entity</span> and nowhere else; every kind has exactly one host; a typed pointer into a shared host carries a generated constant. A second table for “a thing with a title” is the defect this model exists to prevent.</p></article>
       <article class="pcard rv"><span class="pn">P2</span><h3>Own the meaning, claim the bytes</h3><p>The durable asset is the graph. Bytes are named by hash in <span class="k">blob</span>; every column that holds a hash is a foreign key into it, and garbage collection asks SQLite which columns those are rather than keeping a list.</p></article>
       <article class="pcard rv"><span class="pn">P3</span><h3>Words are data until the code must read them</h3><p>A word the code interprets is a <span class="k">CHECK</span> and an enum, held equal by a test. A word the member names is a <span class="k">concept</span> row. No app roster, no per-app decoration table and no stored aggregate is in the file.</p></article>
-      <article class="pcard rv"><span class="pn">P4</span><h3>Writes are commands, and commands leave evidence</h3><p>The gate validates the input, checks authority, runs preconditions, the handler and postconditions, and writes one <span class="k">journal</span> row in the same transaction. The journal is evidence: it cannot be updated and nothing reads it to learn a fact. The assistant acts through the same commands.</p></article>
+      <article class="pcard rv"><span class="pn">P4</span><h3>Writes are commands, and a retry runs once</h3><p>The gate validates the input, checks authority, runs preconditions, the handler and postconditions, and, for a keyed act, writes its <span class="k">action key</span> in the same transaction, so a delivery repeated after a restart runs nothing. The vault keeps no record of what a member asked for. The assistant acts through the same commands.</p></article>
       <article class="pcard rv"><span class="pn">P5</span><h3>Following is a merge, never an overwrite</h3><p>A followed system's record is merged with the row per field against what it last stated: the member's edit wins on that field, the system's change lands on the rest, and an absence in a complete read trashes only an untouched row.</p></article>
     </div>
   </div>

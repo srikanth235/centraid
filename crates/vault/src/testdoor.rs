@@ -150,6 +150,55 @@ pub fn add_trashed_note(vault: &crate::Vault, id: &str, overdue: bool) -> crate:
     Ok(())
 }
 
+/// An album that holds the first `members` live photographs (by arrival), written in one commit:
+/// the label a measurement trashes. Returns how many photographs it holds.
+///
+/// # Errors
+/// The commit's.
+pub fn add_album_of_photos(vault: &crate::Vault, id: &str, members: usize) -> crate::Result<usize> {
+    let limit = i64::try_from(members).unwrap_or(i64::MAX);
+    Ok(vault
+        .commit(|tx| {
+            tx.insert_entity(
+                id,
+                crate::model::Kind::Album,
+                id,
+                "2020-01-01T00:00:00.000Z",
+            )?;
+            tx.connection().execute(
+                "INSERT INTO container (id, kind) VALUES (?1, 'album')",
+                [id],
+            )?;
+            Ok(tx.connection().execute(
+                "INSERT INTO edge (from_id, rel, to_id, created_at)
+                 SELECT ?1, 'contains', id, '2020-01-01T00:00:00.000Z' FROM entity
+                  WHERE kind = 'photo' AND deleted_at IS NULL ORDER BY n LIMIT ?2",
+                rusqlite::params![id, limit],
+            )?)
+        })?
+        .value)
+}
+
+/// The first `count` live photographs, in the trash and past their `purge_at`: the trash a launch
+/// pass finds after a long holiday. Returns how many it moved.
+///
+/// # Errors
+/// The commit's.
+pub fn trash_photos_overdue(vault: &crate::Vault, count: usize) -> crate::Result<usize> {
+    let limit = i64::try_from(count).unwrap_or(i64::MAX);
+    Ok(vault
+        .commit(|tx| {
+            Ok(tx.connection().execute(
+                "UPDATE entity SET deleted_at = '2020-01-02T00:00:00.000Z',
+                                   purge_at = '2020-02-01T00:00:00.000Z'
+                  WHERE id IN (SELECT id FROM entity WHERE kind = 'photo' AND deleted_at IS NULL
+                                ORDER BY n LIMIT ?1)",
+                [limit],
+            )?)
+        })?
+        .value)
+}
+
 fn pairs(connection: &Connection, sql: &str) -> Vec<(String, String)> {
     let Ok(mut statement) = connection.prepare(sql) else {
         return Vec::new();

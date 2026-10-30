@@ -48,6 +48,9 @@ CREATE TABLE entity (
 ) STRICT;
 CREATE INDEX entity_by_title   ON entity(kind, deleted_at, title, id);
 CREATE INDEX entity_by_updated ON entity(kind, deleted_at, updated_at, id);
+-- The case-insensitive title match a contact import and a followed record's match key make, once
+-- per record: `e.kind = ? AND e.deleted_at IS NULL AND e.title = ? COLLATE NOCASE ORDER BY e.created_at, e.id`.
+CREATE INDEX entity_by_title_nocase ON entity(kind, title COLLATE NOCASE, created_at, id) WHERE deleted_at IS NULL;
 -- A window of one kind, newest made first (the People roster, the Docs drive and
 -- its recent shelf, the Tasks board): `kind = ? [AND deleted_at IS NULL] ORDER BY
 -- created_at DESC, id DESC` streams from here and stops at its limit, where the
@@ -119,6 +122,7 @@ CREATE TABLE container (
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX container_by_parent ON container(parent_id) WHERE parent_id IS NOT NULL;
+CREATE INDEX container_by_cover  ON container(cover) WHERE cover IS NOT NULL;
 CREATE TRIGGER container_parent_shape BEFORE INSERT ON container
   WHEN new.parent_id IS NOT NULL AND NOT EXISTS (
     SELECT 1 FROM container p WHERE p.id = new.parent_id AND
@@ -219,6 +223,8 @@ CREATE TABLE revision (
   CHECK ((blob IS NULL) = (media_type IS NULL)),
   PRIMARY KEY (entity_id, seq)
 ) STRICT, WITHOUT ROWID;
+-- Dropping a blob's last holder looks for the revisions that name it; most revisions are text.
+CREATE INDEX revision_by_blob ON revision(blob) WHERE blob IS NOT NULL;
 CREATE TRIGGER revision_is_history BEFORE UPDATE ON revision
   BEGIN SELECT RAISE(ABORT, 'a revision is history'); END;
 -- Nothing deletes a revision by hand: it goes only with its entity (the foreign key's cascade runs
@@ -264,6 +270,16 @@ CREATE TABLE search_word (
   word TEXT NOT NULL UNIQUE
 ) STRICT;
 
+-- The labels whose members are owed a search row. A label's trash or restore re-indexes what its
+-- title is part of the text of, and a label of thousands would hold the vault for seconds, so a
+-- commit writes the first piece itself and leaves the label here with the last member done (`after`,
+-- in id order); the phone writes the rest a batch at a time when it is idle (`index::reindex_owed`,
+-- #1146). A rebuild empties it.
+CREATE TABLE search_owed (
+  id    TEXT PRIMARY KEY,
+  after TEXT NOT NULL
+) STRICT;
+
 -- ---------------------------------------------------------------------------------------------
 -- The kinds. Every kind row is its entity's own: kind is a generated constant, and the
 -- composite foreign key is what keeps a person row from naming a note.
@@ -287,6 +303,7 @@ CREATE TABLE person (
   birthday_reminder INTEGER NOT NULL DEFAULT 1 CHECK (birthday_reminder IN (0,1)),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
+CREATE INDEX person_by_avatar ON person(avatar) WHERE avatar IS NOT NULL;
 
 CREATE TABLE contact_point (
   id         TEXT PRIMARY KEY,
@@ -387,6 +404,7 @@ CREATE TABLE task (
   CHECK (remind_before_min IS NULL OR due IS NOT NULL)
 ) STRICT;
 CREATE INDEX task_by_due     ON task(status, due, id);
+CREATE INDEX task_by_done    ON task(status, done_at, id);
 CREATE INDEX task_by_project ON task(project_id) WHERE project_id IS NOT NULL;
 CREATE INDEX task_by_section ON task(section_id) WHERE section_id IS NOT NULL;
 CREATE INDEX task_by_parent  ON task(parent_id) WHERE parent_id IS NOT NULL;
@@ -454,7 +472,7 @@ CREATE TABLE note (
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   FOREIGN KEY (notebook_id, notebook_kind) REFERENCES entity(id, kind)
 ) STRICT;
-CREATE INDEX note_by_notebook ON note(notebook_id) WHERE notebook_id IS NOT NULL;
+CREATE INDEX note_by_notebook ON note(notebook_id, id) WHERE notebook_id IS NOT NULL;
 
 CREATE TABLE document (
   id          TEXT PRIMARY KEY,
@@ -563,6 +581,7 @@ CREATE TABLE rule (
   created_at    TEXT NOT NULL,
   FOREIGN KEY (category_id, category_kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
+CREATE INDEX rule_by_category ON rule(category_id);
 
 CREATE TABLE thread (
   id    TEXT PRIMARY KEY,

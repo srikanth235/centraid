@@ -255,6 +255,13 @@ pub struct BlobReference {
 /// with it (the reference cascades), and those derivatives' own bytes are then
 /// unreferenced in their turn.
 pub fn collect(connection: &Connection) -> Result<Vec<String>> {
+    collect_up_to(connection, usize::MAX)
+}
+
+/// [`collect`], stopping once `limit` blobs are collected (a chunk may take it a little over):
+/// the launch pass collects what it released a bounded piece at a time, holding the vault for a
+/// piece and not for a library's worth. Fewer than `limit` collected means nothing is left.
+pub fn collect_up_to(connection: &Connection, limit: usize) -> Result<Vec<String>> {
     let keeping: Vec<BlobReference> = references(connection)?
         .into_iter()
         .filter(|reference| reference.keeps_alive)
@@ -270,12 +277,18 @@ pub fn collect(connection: &Connection) -> Result<Vec<String>> {
         })
         .collect::<Vec<_>>()
         .join(" AND ");
-    let sql = format!("SELECT hash FROM blob b WHERE {unclaimed} ORDER BY hash");
+    let sql = format!("SELECT hash FROM blob b WHERE {unclaimed} ORDER BY hash LIMIT ?1");
     let mut collected = Vec::new();
     loop {
+        let room = limit.saturating_sub(collected.len());
+        if room == 0 {
+            return Ok(collected);
+        }
         let doomed: Vec<String> = connection
             .prepare(&sql)?
-            .query_map([], |row| row.get::<_, String>(0))?
+            .query_map([i64::try_from(room).unwrap_or(i64::MAX)], |row| {
+                row.get::<_, String>(0)
+            })?
             .collect::<rusqlite::Result<_>>()?;
         if doomed.is_empty() {
             return Ok(collected);

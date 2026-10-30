@@ -649,7 +649,8 @@ fn relative(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         .connection()
         .query_row(
             "SELECT e.id FROM entity e JOIN person p ON p.id = e.id
-              WHERE e.deleted_at IS NULL AND p.form = ?1 AND e.title = ?2 COLLATE NOCASE
+              WHERE e.kind = 'person' AND e.deleted_at IS NULL AND p.form = ?1
+                AND e.title = ?2 COLLATE NOCASE
               ORDER BY e.created_at, e.id LIMIT 1",
             [form, ctx.required_str("name")?.trim()],
             |row| row.get(0),

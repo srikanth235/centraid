@@ -225,6 +225,8 @@ pub struct HandleState {
     /// The launch sweep of files has been started, so a store attached again
     /// (a restore re-attaches) does not start it twice.
     files_tidied: AtomicBool,
+    /// Whether a thread is writing the search rows a commit left owed.
+    index_draining: AtomicBool,
 }
 
 /// THE CLOCK AND ID SOURCE A CORE WAS OPENED WITH, kept for the life of the
@@ -352,8 +354,10 @@ impl Core {
             launched,
             last_used: AtomicU64::new(0),
             files_tidied: AtomicBool::new(false),
+            index_draining: AtomicBool::new(false),
         });
         handle.start_trash_tidy();
+        handle.start_index_drain();
         Ok(handle)
     }
 
@@ -423,7 +427,10 @@ impl Core {
 
 /// How many trashed roots one batch of the launch pass purges. A batch holds the
 /// vault, so it is small: the first screen's reads wait behind at most one.
-const TRASH_BATCH: usize = 5;
+const TRASH_BATCH: usize = 3;
+
+/// What the trash pass's `after` says once it has purged everything and is collecting the bytes.
+const COLLECTING: &str = "collecting";
 
 /// How many files one batch of the launch sweep looks at (deleting or not).
 const FILE_BATCH: usize = 100;
@@ -441,6 +448,8 @@ const TIDY_IDLE: Duration = Duration::from_millis(300);
 enum Tidy {
     Trash,
     Files,
+    /// The search rows a commit left owed (a label of thousands, trashed or restored).
+    Index,
 }
 
 impl HandleState {
@@ -502,12 +511,25 @@ impl HandleState {
         };
         Ok(Some(match which {
             Tidy::Trash => {
-                let batch = vault.empty_overdue_trash(&self.registry, TRASH_BATCH)?;
-                (batch.purged, batch.more.then(String::new))
+                let batch = vault.empty_overdue_trash_step(
+                    &self.registry,
+                    TRASH_BATCH,
+                    after == COLLECTING,
+                )?;
+                (
+                    batch.purged,
+                    batch
+                        .more
+                        .then(|| if batch.collecting { COLLECTING } else { "" }.to_owned()),
+                )
             }
             Tidy::Files => {
                 let batch = vault.sweep_unclaimed_files(self.launched, after, FILE_BATCH)?;
                 (batch.removed.len(), batch.next)
+            }
+            Tidy::Index => {
+                let left = vault.reindex_owed()?;
+                (1, (left > 0).then(String::new))
             }
         }))
     }
@@ -566,24 +588,37 @@ impl HandleState {
                             total += done;
                             drop(state);
                             let Some(next) = next else {
-                                if total > 0 {
+                                if total > 0 && !matches!(which, Tidy::Index) {
                                     tracing::info!(total, "the launch tidy finished");
                                 }
-                                return;
+                                break;
                             };
                             after = next;
                             std::thread::sleep(TIDY_PAUSE);
                         }
-                        Err(CoreError::Unpaired | CoreError::Closed) => return,
+                        Err(CoreError::Unpaired | CoreError::Closed) => break,
                         Err(error) => {
                             tracing::warn!("the launch tidy stopped: {error}");
-                            return;
+                            break;
                         }
                     }
+                }
+                if matches!(which, Tidy::Index)
+                    && let Some(state) = weak.upgrade()
+                {
+                    state.index_draining.store(false, Ordering::SeqCst);
                 }
             });
         if let Err(error) = spawned {
             tracing::warn!("the launch tidy could not start: {error}");
+        }
+    }
+
+    /// Write the search rows a commit left owed, a batch at a time while the vault is idle, on a
+    /// thread of its own that ends when none are owed. At most one runs.
+    fn start_index_drain(&self) {
+        if !self.index_draining.swap(true, Ordering::SeqCst) {
+            self.tidy_in_background("centraid-tidy-index", Tidy::Index);
         }
     }
 
@@ -1126,7 +1161,15 @@ impl HandleState {
         let Some(vault) = held.as_ref() else {
             return Err(CoreError::Unpaired);
         };
-        body(vault)
+        let answer = body(vault);
+        // A commit that trashed or restored a big label left search rows owed.
+        let owed =
+            !self.index_draining.load(Ordering::Relaxed) && vault.index_owed().unwrap_or(false);
+        drop(held);
+        if owed {
+            self.start_index_drain();
+        }
+        answer
     }
 
     /// Run a body with the vault when there is one, and with `None` when this

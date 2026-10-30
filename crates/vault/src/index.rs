@@ -51,13 +51,7 @@ pub fn reindex(connection: &Connection, touched: &BTreeSet<String>) -> Result<()
     )?;
     let mut with = connection
         .prepare_cached("SELECT w.to_id FROM edge w WHERE w.from_id = ?1 AND w.rel = 'with'")?;
-    let mut dependents = connection.prepare_cached(DEPENDENTS)?;
     for id in touched {
-        work.extend(
-            dependents
-                .query_map([id], |row| row.get::<_, String>(0))?
-                .collect::<rusqlite::Result<Vec<_>>>()?,
-        );
         let targets = about
             .query_map([id], |row| row.get::<_, String>(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -69,10 +63,103 @@ pub fn reindex(connection: &Connection, touched: &BTreeSet<String>) -> Result<()
         }
         work.extend(targets);
     }
+    // What a title is part of the text of is written a bounded piece at a time: a label of
+    // thousands (an album trashed) would hold the vault for seconds. The first piece lands in
+    // this commit; the rest is owed (`search_owed`), and `reindex_owed` writes it a batch at a
+    // time. A reader sees the label's old words on the members still owed until then.
+    for id in touched {
+        let mut piece = dependents_after(connection, id, "", INLINE_DEPENDENTS + 1)?;
+        if piece.len() > INLINE_DEPENDENTS {
+            piece.truncate(INLINE_DEPENDENTS);
+            connection.execute(
+                "INSERT INTO search_owed (id, after) VALUES (?1, ?2)
+                 ON CONFLICT (id) DO UPDATE SET after = excluded.after",
+                rusqlite::params![id, piece.last().map_or("", String::as_str)],
+            )?;
+        }
+        work.extend(piece);
+    }
     for id in &work {
         reindex_one(connection, id)?;
     }
     Ok(())
+}
+
+/// How many entities a label's title feeds that one commit re-indexes itself: about 20 ms of the
+/// vault, inside the call budget (`crates/core/tests/write_costs.rs` measures it).
+pub const INLINE_DEPENDENTS: usize = 50;
+
+/// How many an owed label's batch re-indexes.
+pub const OWED_BATCH: usize = INLINE_DEPENDENTS;
+
+/// The ids [`DEPENDENTS`] names for `id` after `after`, in id order, at most `limit`.
+fn dependents_after(
+    connection: &Connection,
+    id: &str,
+    after: &str,
+    limit: usize,
+) -> Result<Vec<String>> {
+    // `?1` is the touched id in every arm of the union; `?2` and `?3` bound the piece.
+    let sql =
+        format!("SELECT DISTINCT dep FROM ({DEPENDENTS}) WHERE dep > ?2 ORDER BY dep LIMIT ?3");
+    Ok(connection
+        .prepare_cached(&sql)?
+        .query_map(
+            rusqlite::params![id, after, i64::try_from(limit).unwrap_or(i64::MAX)],
+            |row| row.get::<_, String>(0),
+        )?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Write the next batch of the search rows a commit left owed; returns how many labels still
+/// have members owed.
+///
+/// # Errors
+/// SQLite's refusal.
+pub fn reindex_owed(connection: &Connection, limit: usize) -> Result<usize> {
+    let next: Option<(String, String)> = connection
+        .query_row(
+            "SELECT id, after FROM search_owed ORDER BY id LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    if let Some((id, after)) = next {
+        let mut piece = dependents_after(connection, &id, &after, limit + 1)?;
+        let finished = piece.len() <= limit;
+        piece.truncate(limit);
+        for member in &piece {
+            reindex_one(connection, member)?;
+        }
+        match (finished, piece.last()) {
+            (false, Some(last)) => {
+                connection.execute(
+                    "UPDATE search_owed SET after = ?2 WHERE id = ?1",
+                    rusqlite::params![id, last],
+                )?;
+            }
+            _ => {
+                connection.execute("DELETE FROM search_owed WHERE id = ?1", [&id])?;
+            }
+        }
+    }
+    Ok(
+        connection.query_row("SELECT count(*) FROM search_owed", [], |row| {
+            row.get::<_, i64>(0)
+        })? as usize,
+    )
+}
+
+/// How many labels still have members owed a search row.
+///
+/// # Errors
+/// SQLite's refusal.
+pub fn owed(connection: &Connection) -> Result<usize> {
+    Ok(
+        connection.query_row("SELECT EXISTS (SELECT 1 FROM search_owed)", [], |row| {
+            row.get::<_, i64>(0)
+        })? as usize,
+    )
 }
 
 /// Whatever a touched entity's title is part of the text of: one parameter, the
@@ -84,7 +171,7 @@ pub fn reindex(connection: &Connection, touched: &BTreeSet<String>) -> Result<()
 /// is not a touch of the label, so the command that writes the link marks the
 /// labelled end for the index itself.
 const DEPENDENTS: &str = "\
-    SELECT id FROM task WHERE project_id = ?1
+    SELECT id AS dep FROM task WHERE project_id = ?1
     UNION ALL SELECT id FROM task WHERE section_id = ?1
     UNION ALL SELECT id FROM event WHERE place_id = ?1
     UNION ALL SELECT id FROM event WHERE calendar_id = ?1
@@ -110,6 +197,7 @@ pub fn rebuild(connection: &Connection) -> Result<()> {
     // The word list is rewritten from the rows too: this is where a word an edit
     // dropped finally goes.
     connection.execute("DELETE FROM search_word", [])?;
+    connection.execute("DELETE FROM search_owed", [])?;
     let ids = connection
         .prepare("SELECT id FROM entity ORDER BY n")?
         .query_map([], |row| row.get::<_, String>(0))?
