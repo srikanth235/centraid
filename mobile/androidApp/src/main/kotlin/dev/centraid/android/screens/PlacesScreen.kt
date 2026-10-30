@@ -43,6 +43,7 @@ import centraid.core.v1.PhotosPlacesState
 import centraid.core.v1.Route
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ContentImage
+import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.KitSegmented
 import dev.centraid.android.kit.RowSkeleton
@@ -74,7 +75,7 @@ public fun PlacesScreen(
     // THE RENAME FIELD STARTS FROM THE TAPPED CARD: Rust's `current_name` on the row, held from the
     // tap until the sheet is shown, as iOS's `typedName` is seeded in `onName`.
     var seed by remember { mutableStateOf("") }
-    Column(modifier = Modifier.padding(16.dp)) {
+    Column(modifier = Modifier.padding(KitGeometry.GUTTER)) {
         KitSegmented(
             options = listOf(PRESENT_CARDS to state.cards_label, PRESENT_MAP to state.map_label),
             selected = if (map) PRESENT_MAP else PRESENT_CARDS,
