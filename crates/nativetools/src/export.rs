@@ -511,9 +511,7 @@ fn classify(source: &str, template: &str) -> &'static str {
         "repeat"
     } else if has(&["step cap", "turn has ended"]) {
         "step"
-    } else if template.starts_with("refused:")
-        || has(&["was refused", "this seat cannot", "past the vault"])
-    {
+    } else if template.starts_with("refused:") || has(&["was refused", "this seat cannot"]) {
         "vault"
     } else if template.starts_with("already:") {
         "applicability"
