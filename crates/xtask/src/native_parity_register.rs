@@ -32,8 +32,6 @@ const REMINDERS: &str = "iOS reads the phone's Reminders (EventKit); Android has
 const OS_UPLOADS: &str = "the OS-owned background uploads are iOS's `URLSession`; Android's mover runs inside its WorkManager pass";
 
 pub const REGISTER: &[Entry] = &[
-    // Lane C: reads SwiftUI does not make yet (iOS missing).
-    ("WordsShowState.check_now", gap("C", Missing::Ios)),
     // Platform, Android only: iOS has no such thing.
     (
         "AgendaEditorData.dirty",
