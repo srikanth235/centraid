@@ -155,14 +155,18 @@ internal object PassWork {
      * lets Rust forget the window. It is sent under [NonCancellable], or the cancelled coroutine
      * would never get to say it, and the cancellation then goes on.
      */
-    suspend fun granted(screens: Screens, window: String, budgetMs: Long): Boolean {
+    suspend fun granted(screens: Screens, window: String, budgetMs: Long): Boolean =
+        granted(window, budgetMs) { screens.shellFact(it) }
+
+    /** [granted] over any sink for the facts, which is what lets a test hear the order they come in. */
+    internal suspend fun granted(window: String, budgetMs: Long, report: suspend (ShellFact) -> Unit): Boolean {
         val done = CompletableDeferred<Boolean>()
         waiting.put(window, done)?.complete(false)
-        screens.shellFact(ShellFact(window = WindowGranted(window = window, deadline_ms = budgetMs)))
+        report(ShellFact(window = WindowGranted(window = window, deadline_ms = budgetMs)))
         return try {
             withTimeoutOrNull(budgetMs + GRACE_MS) { done.await() } ?: false
         } catch (stopped: CancellationException) {
-            withContext(NonCancellable) { screens.shellFact(ShellFact(expired = WindowExpired(window = window))) }
+            withContext(NonCancellable) { report(ShellFact(expired = WindowExpired(window = window))) }
             throw stopped
         } finally {
             waiting.remove(window, done)
