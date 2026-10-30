@@ -196,7 +196,10 @@ pub fn action_pins(root: &Path) -> Result<Verdict> {
             }
         }
     }
-    let line = format!("{} workflow file(s), every action SHA-pinned", files.len());
+    let line = format!(
+        "{} YAML file(s) under .github, every action SHA-pinned",
+        files.len()
+    );
     Ok(Verdict {
         ok: findings.is_empty(),
         line: if findings.is_empty() {

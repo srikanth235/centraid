@@ -1688,11 +1688,6 @@ fn git_says_tracked(root: &Path, file: &str) -> bool {
 
 /// The full lockfile advisory inventory (#671), through the repo's own script so
 /// the CRITICAL-only threshold and the report stay in one place.
-///
-/// INHERITED RED, named rather than hidden (D-1020-B1): `astro@7.1.5` in `bun.lock`
-/// carries a CRITICAL (score 9.8). The fix is a dependency bump, which is a
-/// change outside #1020's scope and is the second owner hand-off. Nothing was
-/// added to `osv-scanner.toml`.
 fn run_osv(ctx: &Ctx) -> Result<Outcome> {
     if !binary_available("osv-scanner") {
         return external(

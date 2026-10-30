@@ -104,9 +104,9 @@ Standing checks over `.github/**`, the working tree and the lockfiles, run on ev
 | `ci-policy` | every third-party `uses:` under `.github/` pinned to a 40-hex commit SHA (`ci::action_pins`), then `actionlint` | green, under a second |
 | `lockfile` | `bun.lock`: no `http:` package URL, integrity markers present; `Cargo.lock`: every registry `[[package]]` pinned by `checksum` and sourced over TLS (`ci::lockfile`) | green |
 | `secrets` | `gitleaks detect` over the working tree with `.gitleaks.toml` (#671); findings in files git does not track are reported and dropped | no inherited finding recorded |
-| `osv` | `scripts/ci/osv-lockfile-scan.mjs`, CRITICAL-only (#671) | **inherited red** |
+| `osv` | `scripts/ci/osv-lockfile-scan.mjs`, CRITICAL-only (#671) | green |
 
-**Inherited red is named, never hidden** (D-1020-B1). `osv` fails on tree state that predates #1020: `astro@7.1.5` in `bun.lock` carries a CRITICAL scored 9.8. It is not fixed from here and nothing was added to `osv-scanner.toml` — a gate whose first act is to widen its own allowlist has gated nothing. The `astro` bump is an **owner hand-off**, a dependency change outside #1020's scope. The step is here and red rather than absent, because a pull-request gate that stops reporting because its target is red today is a weakening.
+**Inherited red is named, never hidden** (D-1020-B1): a step whose target is red today stays on the gate and red, rather than leaving it, and a red is never answered by widening `osv-scanner.toml` or `.gitleaks.toml`.
 
 `engine` is its own job in `gate.yml` for the opposite reason: it is a command over the tree, but a cold llama.cpp build (about five minutes) does not fit inside the `pr` profile's budget, so `centraid-core-ffi`'s `llama` feature is off in every step above and the job checks the engine with it on: `cargo clippy -p centraid-assist-llama -p centraid-core-ffi --all-targets --features centraid-core-ffi/llama -- -D warnings` and `cargo test` over the same ([R-CHAT-10](../../docs/decisions.md#the-assistant)). The `mobile-jvm` step builds the cdylib without the feature too.
 

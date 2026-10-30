@@ -76,9 +76,7 @@ A failing step writes `command.txt`, `stdout.log` and `stderr.log` (or `findings
 
 ### Known reds
 
-One `pr` finding is named rather than hidden, and it was not answered by widening an allowlist — a gate whose first act is to widen its own allowlist has gated nothing:
-
-- `osv` — `astro@7.1.5`, CRITICAL, in `bun.lock`. An owner hand-off (row 6.3 of [docs/release/v1-handoffs.md](docs/release/v1-handoffs.md)).
+None. A red is named here rather than hidden, and never answered by widening an allowlist — a gate whose first act is to widen its own allowlist has gated nothing. The `osv` red (`astro@7.1.5`, CRITICAL) closed when `bun.lock` moved to `astro@7.3.5`.
 
 The `secrets` red is **closed, by deletion rather than by decision** ([#1029](https://github.com/srikanth235/centraid/issues/1029)). It was gitleaks on `contracts/golden/format-golden.json`'s `dataKeyHex`; that fixture went with the TypeScript half of the product and `contracts/golden/` now holds only `issue-1020/` and `issue-929/`. No `.gitleaks.toml` row was ever added for it, and none is needed.
 
