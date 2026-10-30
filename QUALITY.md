@@ -26,6 +26,18 @@
   nondeterminism the connector lane's lint doesn't catch; its tests
   deliberately don't assert those bytes.
 
+- **Home's status ribbon can never show** ([#1152](https://github.com/srikanth235/centraid/issues/1152))**.** `HomeEvent.status_told` has no production sender (`crates/screens/src/shell/home.rs` handles it, only `crates/screens/tests/shell_home.rs` sends it), so `HomeState.status` is always unset and a stranded write or a low disk never reaches the ribbon both shells draw. Wire a producer, or delete `HomeStatus` and the ribbon; the register row `HomeEvent.status_told` is the marker.
+
+- **A frozen vault's "N changes since" line is never shown** ([#1152](https://github.com/srikanth235/centraid/issues/1152))**.** `strings::vault::frozen_line` is called only by tests (`crates/screens/tests/vault_shelf.rs`, its own unit test), so `HeldFrozen.since` and `HeldFrozen.unacked` reach no `ViewState`. Wire the line into Home's frozen vault row, or delete both fields with the string.
+
+- **Five search screens compose "Including results for …" in the shell** ([#1152](https://github.com/srikanth235/centraid/issues/1152))**.** Only Chat's drawer and Docs carry a finished `corrected_label`; Notes, People, Agenda, Locker and Photos carry the bare `corrected` term through the kit's `SearchField`, so both shells build the sentence from the generated `KitWords.searchCorrected`. Each needs a `corrected_label` in its search message and a Rust writer; Home's search already carries a finished sentence.
+
+- **The parity rule matches by field name, so a collision can hide an unread field** ([#1152](https://github.com/srikanth235/centraid/issues/1152))**.** `native-shell-parity` cannot tell `TodoDetailData.parent_title` from SwiftUI's `PushedPage(parentTitle:)`, or one `corrected_label` from another, and a call that passes a field positionally never spells it: deleting a Swift read of a field that two messages share left the rule green. The register comments name each known collision. Matching by message (the receiver's type) would end this and needs the generated Swift and Wire types, which the gate does not build.
+
+- **Five screen-proto enums have no field and serve Rust as state types** ([#1152](https://github.com/srikanth235/centraid/issues/1152))**.** `Asking` (in `DocsDocumentState`, `AgendaEditorState`, `TodoDetailState`), `HealthHomeState.TrendRange` and `PeopleChannelIntent` are on the wire schema and carried by nothing. Rust enums in the screens crate would let the protos drop them.
+
+- **Android has no screen-closed signal on `Screens`** ([#1152](https://github.com/srikanth235/centraid/issues/1152))**.** `ScreenUpdate.closed` is consumed inside `Screens.apply` (`mobile/core/src/jnaMain/kotlin/dev/centraid/core/Screens.kt`), so the gateway browse ends a closed screen's window by diffing `Screens.views` (`session/GatewayBrowsing.kt`), where iOS is told. A `closed` flow beside `views` would make the browse, and any later per-screen effect, event-driven.
+
 ## Resolved
 
 - #1047 — **A vault that stayed with the old phone had no way back on its
