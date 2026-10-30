@@ -22,6 +22,7 @@ import androidx.work.WorkerParameters
 import centraid.core.v1.LinkChanged
 import centraid.core.v1.ShellFact
 import centraid.core.v1.Window
+import centraid.core.v1.WindowExpired
 import centraid.core.v1.WindowGranted
 import centraid.core.v1.WindowLink
 import centraid.core.v1.WindowsScheduled
@@ -30,10 +31,13 @@ import dev.centraid.core.Screens
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -141,13 +145,25 @@ internal object PassWork {
         .setRequiresCharging(window.requires_charging)
         .build()
 
-    /** A window opened: report it and wait for Rust to say the pass it ran ended. */
+    /**
+     * A window opened: report it and wait for Rust to say the pass it ran ended.
+     *
+     * WORKMANAGER'S STOP IS THIS COROUTINE'S CANCELLATION (a `CoroutineWorker` cancels `doWork` when
+     * the OS takes the window back, and its own `onStopped` is final), so the cancellation is where
+     * the window's expiry is reported: BGTask's expiration handler on iOS, said the same way
+     * (`ShellFact.expired`). The pass stops at its own part boundary regardless; the report only
+     * lets Rust forget the window. It is sent under [NonCancellable], or the cancelled coroutine
+     * would never get to say it, and the cancellation then goes on.
+     */
     suspend fun granted(screens: Screens, window: String, budgetMs: Long): Boolean {
         val done = CompletableDeferred<Boolean>()
         waiting.put(window, done)?.complete(false)
         screens.shellFact(ShellFact(window = WindowGranted(window = window, deadline_ms = budgetMs)))
         return try {
             withTimeoutOrNull(budgetMs + GRACE_MS) { done.await() } ?: false
+        } catch (stopped: CancellationException) {
+            withContext(NonCancellable) { screens.shellFact(ShellFact(expired = WindowExpired(window = window))) }
+            throw stopped
         } finally {
             waiting.remove(window, done)
         }
@@ -180,6 +196,9 @@ public class CentraidSyncWorker(
         val window = inputData.getString(PassWork.WINDOW) ?: "centraid-sync-pass"
         return try {
             if (PassHost.run(applicationContext, window, PassWork.BUDGET_MS)) Result.success() else Result.retry()
+        } catch (stopped: CancellationException) {
+            // THE OS TOOK THE WINDOW BACK: `granted` has reported it, and a cancellation goes on up.
+            throw stopped
         } catch (error: Exception) {
             Result.retry()
         }
