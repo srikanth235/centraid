@@ -200,9 +200,9 @@ internal fun MoneyCategoryRow(line: MoneyCategoryLine, accessibility: String, te
                 maxLines = 2,
                 modifier = Modifier.weight(1f),
             )
-            MoneyColumnFigure(figures.planned, ink = "textSoft")
-            MoneyColumnFigure(figures.spent, ink = "text")
-            MoneyColumnFigure(figures.left, ink = if (line.over) "net" else "textSoft", strong = line.over)
+            MoneyColumnFigure(figures.planned, ink = centraidColor("textSoft"))
+            MoneyColumnFigure(figures.spent, ink = centraidColor("text"))
+            MoneyColumnFigure(figures.left, ink = centraidColor(if (line.over) "net" else "textSoft"), strong = line.over)
         }
     }
 }
@@ -246,11 +246,11 @@ internal fun MoneyNeedsRow(label: String, figures: List<MoneyFigure>, onTap: () 
 
 /** One right-aligned figure in a fixed column. */
 @Composable
-internal fun MoneyColumnFigure(text: String, ink: String, strong: Boolean = false) {
+internal fun MoneyColumnFigure(text: String, ink: Color, strong: Boolean = false) {
     FitText(
         text,
         role = if (strong) "annotLabelOn" else "annotLabel",
-        ink = centraidColor(ink),
+        ink = ink,
         minScale = COLUMN_MIN_SCALE,
         modifier = Modifier.width(MoneyGeometry.COLUMN_WIDTH.dp),
         align = TextAlign.End,

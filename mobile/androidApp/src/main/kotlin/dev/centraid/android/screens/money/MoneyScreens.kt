@@ -274,19 +274,19 @@ private fun LazyListScope.cashflow(state: MoneyHomeState, addStatement: () -> Un
         return
     }
     flow.series.forEach { series ->
-        item(key = "series-${series.currency}") { MoneySection(series.heading) }
-        items(series.months, key = { "m-${series.currency}-${it.month}" }) { month ->
-            CentraidRow(
-                title = month.label,
-                meta = month.meta,
-                trailing = money(month.net),
-                trailingTone = month.net_tone,
-                dimmed = month.partial,
-                a11y = spoken(month.accessibility_label, month.net),
-                testTag = "money-month-${month.month}",
-            )
-            MoneyFigureRow(centraid.core.v1.MoneyFigure(label = series.in_label, amount = month.incoming))
-            MoneyFigureRow(centraid.core.v1.MoneyFigure(label = series.out_label, amount = month.outgoing))
+        item(key = "series-${series.currency}") {
+            Column {
+                MoneySection(series.heading)
+                MoneyCashflowChart(
+                    months = series.months,
+                    summary = MoneyGeometry.chartSummary(series.months.map { spoken(it.accessibility_label, it.net) }),
+                )
+                MoneyLegend(incoming = series.in_label, outgoing = series.out_label, partial = series.partial_label)
+            }
+        }
+        // NEWEST FIRST under the chart, which runs oldest to newest.
+        items(MoneyGeometry.newestFirst(series.months), key = { "m-${series.currency}-${it.month}" }) { month ->
+            MoneyMonthRow(month, testTag = "money-month-${month.month}")
         }
     }
     flow.definitions.forEach { fact -> item(key = "def-${fact.label}") { FieldRow(key = fact.label, value = fact.detail) } }
