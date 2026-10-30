@@ -163,3 +163,40 @@
 
 1. *The extraction changed nothing.* Throwaway `ThrowawayDifferentialTest` (deleted, not committed) held the verbatim pre-extraction `MediaStoreDeleter.uriOf` and `LibraryRoll.uriOf` logic and compared it with `LibraryDeletion.target` / `LibraryRefs.row` over 14 refs (empty, bare id, negative, prefix-only, doubled prefixes, `#r` suffix, overflow) times 6 media types → 84 pairs, all equal.
 2. *Each new test fails when its subject is broken.* `ChatMarkdown`: bullet marker changed to `-` and link regex keeping the address → `bulletsAndNumbersBecomeItems` and `aLinkKeepsItsWordsAndIsNotTappable` failed (2 of 8). `SleepNights`: the day taken from the earliest end and touching sessions merged → my first tests did NOT catch it (BUILD SUCCESSFUL under the break), so I replaced two tests with ones where a night spans midnight and where touching sessions end on different days; rerun → both failed (2 of 7), restored → green. `LibraryDeletion`: dropped the image-prefix/video-type check, treated a missing size as unchanged, inverted the gone filter → three tests failed (3 of 8). All breaks reverted; the tree matches the commits.
+
+## Lane Ci — iOS: the reads SwiftUI did not make yet
+
+Six register rows closed, all Swift, none compiled (no Xcode here). Each commit deletes the rows it closes, so the `native-shell-parity` ratchet held at every commit: 202 rows at the start, 196 now, and no "Lane C" gap remains.
+
+**What changed**
+
+- `mobile/iosApp/Sources/AgendaHomeView.swift`: `eventCountLabel(_:)` reads the data arm's `AgendaHomeData.event_count_label`; `AgendaToolbarView` takes it as `eventCountText` and draws `monthLabel · eventCountText` (middle dot, empty parts dropped) in the month's own type role. The parameter is not called `eventCount`: that spelling would count as a read of `AgendaHomeData.event_count`, a lane F row nobody reads.
+- `mobile/iosApp/Sources/ScreenStore.swift`: `@Published shielded: Set<UInt64>`; `perform` answers `Effect.screenshot_shield` by inserting or removing the instance and answering `done` (it was `failed("not performed by this shell")`); a closed screen is dropped from the set. `popToRoot(tab:)` sends `NavPopToRoot`.
+- `mobile/iosApp/Sources/RustScreenHost.swift`: `RustScreenView.body` is now `WordsShield(secure: store.shielded.contains(instance)) { screen }`, the old switch being `screen`; the eight `onHome:` sites call `shell.popToRoot()`.
+- `mobile/iosApp/Sources/PhotosLibraryView.swift`: two `.accessibilityAction(named:)` on the scrub thumb, Rust's next and previous labels, calling `step(true)` and `step(false)`; the adjustable action stays.
+- `mobile/iosApp/Sources/WordsViews.swift`: `WordsShowView.body` draws `BarePaper()` while `state.checkNow`, else the old body (renamed `shown`).
+- `mobile/iosApp/Sources/ShellModel.swift`: `popToRoot()` empties `path` and sends `NavPopToRoot` for the home tab.
+- `crates/xtask/src/native_parity_register.rs`: the six rows leave; the now-empty "Lane C" comment goes with them.
+
+**The brief's premise for `pop_to_root` was off.** Compose's only sender is the apps' Home control (`RustRoot.popToRoot`, reached through `onHome = toHome`), not a re-tap on the selected tab. On iOS every page is on the home tab's path and the band is drawn only at its root, so a re-tap has nothing to pop; the Home control is the one real parity site. `path.removeAll()` still runs (SwiftUI's stack is what is drawn, and `rustPopped` still reports `NavPopped` for the lowest entry and releases its claim), then `NavPopToRoot` follows. The two overlap harmlessly: `NavPopped` for an instance already gone returns early, and `PopToRoot` splits off nothing from a stack of one. The proto comment on `NavPopToRoot` ("a second tap on the selected tab") is wrong about who sends it; it is `screens.proto`, not mine to edit here.
+
+**Verification**
+
+- `cargo xtask rules` (own `CARGO_TARGET_DIR`) → 16 rules `ok`, `native-shell-parity` clean with 196 register rows (202 at the start).
+- `cargo test -p xtask` → 154 + 2 passed, 0 failed.
+- The disk filled (0 bytes free, shared by the lanes) while I tried to build `centraid-screens` tests; I cleared my own incremental dir and did not retry.
+
+**Unverified: every Swift line above. Simulator checks (owner hand-off)**
+
+1. Agenda, Day place with events: the bar under the title reads `May 2026 · 3 events` (the same line on Android); with none, the month alone.
+2. Shield: no screen emits `ScreenshotShield` today. Check by compiling a build where a debug screen asks for it: the screenshot is blank, the cover shows while recording, and the screen keeps its scroll position when the shield goes off. Also check that a plain screen is unchanged by the always-on `WordsShield` wrapper: scroll, keyboard, sheets, and any screen using `GeometryReader` or `safeArea`.
+3. Photos library, VoiceOver on the scrub thumb: the rotor lists the two named actions, each moves one month; swipe up and down still adjusts.
+4. Settings, Backup, More, then "Show recovery key": nothing but the page colour shows while the owner check is up; the words appear after it passes; a failed check shows ASK.
+5. Open an app page two or three deep, tap Home: the stack empties to Home and a second open of the same app gets a fresh screen (no stale instance); no Rust error in the log.
+
+**Rust and proto gaps**: none found for these fields. Outside the lane: the `NavPopToRoot` proto comment above.
+
+**Falsification**
+
+1. *Each of the six reads is what the rule sees, not a name collision.* I renamed all six spellings (`home.eventCountLabelX`, the `.screenshotShieldX(let` arm, `.popToRootX(pop)` and its two receivers, `data.scrubNextLabelX`, `data.scrubPreviousLabelX`, `state.checkNowX`) in place and ran the rule. It failed with exactly six findings, one per row, each "only Compose reads it". Restored with `git checkout`, rule green. This check also found a real collision earlier in the lane: my first label `eventCount:` read `AgendaHomeData.event_count`, so I renamed it.
+2. *`NavPopped` and `NavPopToRoot` are safe in either order.* The check I wanted was a throwaway runtime test (push two pages, send both events in both orders, expect depth 1 and each instance closed once); it did not run because the disk filled. The evidence is `crates/screens/src/runtime.rs` (`N::Popped` returns early when the instance is gone or at index 0; `N::PopToRoot` calls `split_off(1)`, which on a stack of length 1 is empty). This claim is read, not run.
