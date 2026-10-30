@@ -32,7 +32,7 @@ Both shells have been seen running over the real core: the iOS shell compiles, l
 cd mobile && ./gradlew mobileJvm
 ```
 
-`:core:jvmTest` and nothing else. It is the `mobile-jvm` step of `cargo xtask gate --profile mobile-jvm`, which `gate-nightly.yml` runs; the step also regenerates the emitted design artifacts and screen fixtures and fails on drift.
+`:core:jvmTest` and nothing else. It is the `mobile-jvm` step of `cargo xtask gate --profile mobile-jvm`, which `nightly.yml` runs; the step also regenerates the emitted design artifacts and screen fixtures and fails on drift.
 
 **`:core:jvmTest` builds two Rust things first** and fails loudly if `cargo` is not there, because a binding test that skipped would read green on a machine where the ABI does not work at all:
 

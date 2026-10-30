@@ -59,7 +59,7 @@ A tag produces **one** run ([#557](https://github.com/srikanth235/centraid/issue
 Happy path:
 
 0. **HEAD must be a promoted candidate.** `release:prepare` refuses otherwise, before anything else runs ([#915](https://github.com/srikanth235/centraid/issues/915)).
-1. `bun run release:prepare` — asserts green (`check:pr` unless `--skip-check`), classifies D4, writes `artifacts/release-prepare.json` (includes surface matrix + secret groups).
+1. `bun run release:prepare` — asserts green (`cargo xtask gate --profile pr` unless `--skip-check`), classifies D4, writes `artifacts/release-prepare.json` (includes surface matrix + secret groups).
 2. Maintainer "go ahead" **including ship set** (default: desktop, gateway-image).
 3. `bun run release:publish -- --version X.Y.Z --issue N --surfaces desktop,gateway-image` — requires real issue number (no `#0`); stamps the monorepo version via `scripts/release/sync-versions.mjs`; folds CHANGELOG; writes `artifacts/release-ship.json`; annotated tag.
 4. `git push origin HEAD && git push origin vX.Y.Z` (or `publish` with `--push`) → tag workflows fan out.
@@ -73,21 +73,20 @@ Supporting scripts:
 | `bun run release:sync-versions` | Re-stamp every workspace package to the root version |
 | `bun run release:verify-secrets` | Report secret _names_ present/absent (never values) |
 | `bun run release:restamp` | I8 rewrite `releaseDate` / rollout on `latest*.yml` |
-| `bun run boot:smoke` | Structural desktop package surface |
 
 ### The candidate precondition (#915)
 
-We ship builds somebody promoted. Rung 3 (`candidate.yml`) moves the git ref `refs/candidates/latest` on every green push to `main` and appends `{sha, promotedAt}` to `test-report/candidates.json` on gh-pages (kept 200 deep); rungs 4 and 5 then test that SHA. Every release lane **builds** the tree rather than testing it, so without this rule a tag could be cut on a commit no deep rung had exercised and the release would still be green.
+We ship builds a green nightly proved. When [`nightly.yml`](../.github/workflows/nightly.yml)'s scheduled run passes all three jobs — `gate --profile nightly`, `mobile-jvm` and the `prebuilt-core` binaries — its `promote-candidate` job force-pushes `refs/candidates/latest` to that `main` SHA. Every release lane **builds** the tree rather than testing it, so without this rule a tag could be cut on a commit the nightly never exercised and the release would still be green.
 
 Enforced in three places, earliest first:
 
 | Where | What it checks |
 | --- | --- |
-| `bun run release:prepare` | `git rev-parse HEAD` equals `git ls-remote origin refs/candidates/latest`. Runs first, before the clean-tree and `check:pr` gates, because its remedy (wait for a promotion) takes the longest |
+| `bun run release:prepare` | `git rev-parse HEAD` equals `git ls-remote origin refs/candidates/latest`. Runs first, before the clean-tree check and the `pr` gate, because its remedy (wait for a promotion) takes the longest |
 | `bun run release:classify -- --require-candidate [--sha <40hex>]` | the same rule, for a caller that only classifies. Classification is a pure read of `CHANGELOG.md` and has no SHA of its own, so here it is opt-in |
-| `release.yml` job `require-candidate` | the backstop, after the tag exists: the tagged SHA is the current pointer **or** appears in the gh-pages promotion history. Both are accepted because cutting a release takes minutes while `main` keeps moving — a tag on yesterday's promoted candidate is exactly right |
+| `release.yml` job `require-candidate` | the backstop, after the tag exists: the tagged SHA equals the current pointer. The pointer moves once a night, so a tag cut on the day's candidate stays valid until the next green nightly |
 
-The escape is `--allow-uncandidated`, which passes and **prints the reason it was used** (or `(none given — say why in the receipt)`). A hatch that leaves no trace is a hatch nobody can audit. Never widen the rule to make a release green; promote the build instead.
+The escape, for `release:prepare` and `release:classify` only, is `--allow-uncandidated`, which passes and **prints the reason it was used** (or `(none given — say why in the receipt)`). A hatch that leaves no trace is a hatch nobody can audit. Never widen the rule to make a release green; promote the build instead.
 
 ## D3 — Changelog → GitHub release + what's-new
 
@@ -148,9 +147,9 @@ Do not fork process text into skills.
 | `release.yml` | `v*` tags, dispatch | **the only tag listener**; fans out to the lanes below, `release-check` is the one verdict |
 | `lane-release-mobile.yml` | `workflow_call` (dispatch only, never a tag) | Environment `mobile-release`; Gradle (Android) and XcodeGen + Xcode (iOS) builds of `mobile/` |
 | `lane-release-gateway-image.yml` | `workflow_call` | GHCR optional gateway image ([deploy/README.md](../deploy/README.md)) |
-| `lane-prebuilt-core.yml` | `workflow_call` | **the prebuilt core** ([#1020](https://github.com/srikanth235/centraid/issues/1020)): six binary triples, the four Android ABIs, the iOS XCFramework, a symbol file beside each, and `prebuilt-core-required` as the one verdict. Also invoked by `gate.yml` on pushes to `main` with `binary-only: true` |
-| `gate.yml` | PR / main push | `cargo xtask gate --profile pr`, plus `engine` (the on-device chat's llama.cpp build, outside the gate's budget) and `dependency-review` |
-| `candidate.yml` | main push / dispatch | rung 3 — the promotion lanes; on green its `promote` job moves `refs/candidates/latest`, publishes `test-report/candidate.json` and appends to `test-report/candidates.json`. `release.yml`'s `require-candidate` reads both |
+| `lane-prebuilt-core.yml` | `workflow_call` | **the prebuilt core** ([#1020](https://github.com/srikanth235/centraid/issues/1020)): six binary triples, the four Android ABIs, the iOS XCFramework, a symbol file beside each, and `prebuilt-core-required` as the one verdict. Also invoked by `nightly.yml` with `binary-only: true` |
+| `gate.yml` | PR / main push | `cargo xtask gate --profile pr`, plus `engine` (the on-device chat's llama.cpp build, outside the gate's budget), `native-python`, `dependency-review` and `pr-title` |
+| `nightly.yml` | schedule (05:30 UTC) / dispatch | `cargo xtask gate --profile nightly`, `mobile-jvm` and `lane-prebuilt-core.yml` (`binary-only`); when all three pass on the schedule, `promote-candidate` moves `refs/candidates/latest`, which `release.yml`'s `require-candidate` reads |
 
 Each lane declares the secrets it accepts via `on.workflow_call.secrets`, so the mobile store credentials and GHCR push never reach a lane that has no business with them. The desktop and Companion lanes were deleted with their surfaces ([#1029](https://github.com/srikanth235/centraid/issues/1029)); `scripts/release/surfaces.mjs` is the catalog, and its test refuses a row naming a workflow that is not on disk.
 
@@ -195,16 +194,6 @@ sudo reboot                                             # then `health` again: t
 ```
 
 What the tests cannot prove and this run must: that the unit starts under a real systemd and survives a reboot, that a phone on another network pairs with the VPS's public address and pins its certificate, and that a pass uploads across a real network and a restore reads it back. Record the transcript in the issue.
-
-## What a release workflow owes the egress ratchet
-
-A release lane is where the interesting secrets live — GHCR push, Apple and Azure signing, store credentials, Cloudflare deploy — and a build step, a test, a codegen plugin or a dependency the installer decided to trust can all open a socket. Identity gates cannot see any of that. `node scripts/security/lint-ci-egress.mjs` (`bun run lint:ci-egress`, and the `ci-policy` step of `cargo xtask gate --profile pr`) is the control, and it is a **tighten-only ratchet**:
-
-- **A workflow that ever executes third-party code carries `step-security/harden-runner` as the FIRST step of the job**, with `egress-policy: block`, or `audit` while an allowlist is being learned — and an `audit` policy must carry a ledger note saying so. A workflow that only calls other workflows, or runs a vendored shell script, executes nothing it did not already have and needs no step.
-- **Every workflow that has no harden-runner today is pinned in `scripts/security/egress-ledger.json` with a reason.** The ledger is the historical allowance, not a place to put new work: a **new** workflow, or a new job in an unledgered one, must carry the step.
-- **A stale ledger entry fails.** An entry for a workflow that has since been hardened, or that no longer exists, is a failure — which is what stops the allowlist growing back.
-
-The failure mode this buys: an exfiltration attempt becomes a failed DNS lookup with a named destination in the run log, instead of a successful upload nobody sees.
 
 ## Enrollment / signing secrets
 

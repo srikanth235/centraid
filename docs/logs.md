@@ -51,9 +51,8 @@ CI uploads, from the gate workflows:
 | Workflow | Artifact | Contents | When |
 | --- | --- | --- | --- |
 | [`gate.yml`](../.github/workflows/gate.yml) | `gate-pr-artifacts` | `target/xtask/**` | on failure, kept 7 days |
-| [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml) | `gate-nightly-artifacts` | `target/xtask/**` | on failure, kept 7 days |
-| `gate-nightly.yml` | `gate-mobile-jvm-artifacts` | `target/xtask/**` and `mobile/**/build/reports/**` | on failure, kept 7 days |
-| `gate-nightly.yml` | `device-lane-<lane>` | `target/xtask/**` | always, kept 14 days |
+| [`nightly.yml`](../.github/workflows/nightly.yml) | `nightly-gate-artifacts` | `target/xtask/**` | on failure, kept 7 days |
+| `nightly.yml` | `nightly-mobile-jvm-artifacts` | `target/xtask/**` and `mobile/**/build/reports/**` | on failure, kept 7 days |
 
 The job log itself is on GitHub Actions; every gate step prints exactly one line unless it fails.
 

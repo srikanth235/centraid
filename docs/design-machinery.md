@@ -26,7 +26,7 @@ The direction is one-way:
 
 A screen must not generate a token, a component must not invent a scale, and a lowering must not keep a second editable registry.
 
-Copy is not a design artifact. Every sentence a screen shows is a finished string in its Rust `ViewState`, from the catalogue in [`crates/screens/src/strings`](../crates/screens/src/strings/mod.rs); native views write none, and the only copy a shell holds is the emitted `KitWords` above ([#1135](https://github.com/srikanth235/centraid/issues/1135)). `copy/chat.json` is the assistant's own turn sentences (`SAID_*`), compiled into `crates/assist`. `bun run lint:copy` holds both to DESIGN.md's Copy rules.
+Copy is not a design artifact. Every sentence a screen shows is a finished string in its Rust `ViewState`, from the catalogue in [`crates/screens/src/strings`](../crates/screens/src/strings/mod.rs); native views write none, and the only copy a shell holds is the emitted `KitWords` above ([#1135](https://github.com/srikanth235/centraid/issues/1135)). `copy/chat.json` is the assistant's own turn sentences (`SAID_*`), compiled into `crates/assist`. Both are written to DESIGN.md's Copy rules; no linter checks them.
 
 The values under the 4px base are the registry's `subBase` seams — `hair` (1), `gutter` (2), `chip` (3). A shell holds no sub-4px constant of its own ([#1015](https://github.com/srikanth235/centraid/issues/1015), R-NY-15).
 
@@ -48,7 +48,7 @@ Two blocks read records, and the difference is the question being asked. **Doc t
 | --- | --- | --- | --- |
 | Mobile (Compose, SwiftUI) | the emitted native table and catalogue | Compose and SwiftUI read the emitted tables; neither holds a literal | the drift gate below; `packages/design/src/native-emission.test.ts` over the emitted token table in both schemes, the catalogue and the kit words; `crates/screens/tests/icon_keys.rs` over every icon key a screen names; and `cargo xtask rules`' `native-accessibility` over both view trees |
 | Rust | `crates/design` | none | `crates/design/tests/corpus.rs` asserts every corpus row ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-T1) |
-| Public site (`centraid.dev`, `/docs/`) | the generated `centraid-tokens.css` — `toCss()` verbatim, plus `toFontFaceCss()` | `scripts/home-site/public/index.html`'s inline sheet and `scripts/docs-site/public/assets/docs.css` | `lint:site-tokens` — emitter freshness by bytes, unresolvable `var()`s, literal font families, font-CDN references, retired theme names. **Not** `lint:design-tokens`: see [the public web surfaces](#the-public-web-surfaces) |
+| Public site (`centraid.dev`, `/docs/`) | the generated `centraid-tokens.css` — `toCss()` verbatim, plus `toFontFaceCss()` | `scripts/home-site/public/index.html`'s inline sheet and `scripts/docs-site/public/assets/docs.css` | `lint:site-tokens` — emitter freshness by bytes, unresolvable `var()`s, literal font families, font-CDN references, retired theme names |
 
 The phone draws the touch values; the registry's pointer values are read only by the public site. Host names and viewport width do not create more design modes.
 
@@ -67,8 +67,6 @@ The phone draws the touch values; the registry's pointer values are read only by
 
 ```sh
 bun run --cwd packages/design test          # the registry and its lowerings
-bun run lint:design-md                      # DESIGN.md itself
-bun run lint:design-tokens                  # zero-debt CSS gate
 bun run lint:site-tokens                    # the public-site sheets
 bun contracts/tools/export-native-theme.ts && bun run format && git diff --exit-code design mobile
 cargo test -p centraid-design               # the Rust lowering against the corpus
@@ -88,4 +86,3 @@ The drift line is the gate: `emitters` in `cargo xtask gate --profile pr` and th
 | `--sp-band` / `--sp-band-lg` / `--sp-band-xl` set the section rhythm above `--sp-6` (32px). | Keep. | 32px is the largest rhythm step _inside_ a screen — the top rung of the spacing scale. A page that scrolls through twelve sections needs a step between them, and these stack the top rung (`calc(var(--sp-6) * 2 … * 4)`) rather than introducing a rung the product does not have. |
 | A docs chapter's full-bleed `.dark` band paints on `--stage` / `--on-stage`, a ground that does not follow the theme. | Keep for chapter pages; **not** for the ontology. | `--stage` is the product's opaque media ground, and the closest honest token for a band that reads dark in both themes. It carries exactly two ink rungs, so a band gets two and no third is invented. The ontology page is excluded because its whole vocabulary is hue: a hue solved against the page reads wrong on near-black, so its bands take `--bg-app` and follow the theme. `docs.css` scopes every `section.dark` rule with `body:not(.ontology-page)`. |
 | The ontology page colour-codes "the kernel" and "a kind table" with two of the app identity hues (`--c-indigo`, `--c-ochre`). | Keep. | That axis exists to mark CONTENT at one lightness and one chroma per theme, and is never permitted on a control — which is exactly what a schema legend is. Type takes the solved `--c-*-text` rungs; the fill rungs stay on washes and borders. The page has no control. |
-| `bun run lint:design-tokens` is not pointed at `scripts/*-site`. | Open, and deliberately not closed by widening a budget. | The gate's checked-in budget is empty and must stay empty. `src/content/ontology-style.css` still sizes in rem and carries per-diagram literals, so adding the directory today would mean recording debt. `lint:site-tokens` fences what this pass actually closed — the face, the CDN, the theme names, and unresolvable `var()`s — and the ontology sheet's sizes are the remaining work. |

@@ -199,10 +199,8 @@ Complementary controls on top of manual review and the threat model above. The P
 | **dependency-review** | `gate.yml` job `dependency-review` (PR only) | _New_ high-severity advisories and banned copyleft licenses introduced by the PR | Latent vulnerabilities already in the lockfiles |
 | **OSV-Scanner** | gate step `osv` → [`scripts/ci/osv-lockfile-scan.mjs`](scripts/ci/osv-lockfile-scan.mjs) | Full `bun.lock` inventory; **fails on CRITICAL** only; HIGH is logged | Typosquat/malware behavioral signals |
 | **cargo-deny** | gate step `deny` (`cargo deny --all-features --config deny.toml check`) | Rust advisories, licences, banned and duplicate crates | The JS lockfile, which OSV and dependency-review own |
-| **Advisory register** | gate step `advisory` | An accepted advisory past its expiry | Deciding whether an advisory should be accepted |
-| **CI policy** | gate step `ci-policy` (`lint:workflow-pins`, `lint:ci-egress`, `lint:path-filters`) | Unpinned actions, and a workflow that installs dependency code without `harden-runner` beyond the shrink-only [`egress-ledger.json`](scripts/security/egress-ledger.json) | Enforcement inside the ledgered workflows |
-| **CodeQL** `security-extended` | [`candidate.yml`](.github/workflows/candidate.yml) job `codeql`, on every push to `main` | SAST for TS/JS, Actions YAML, Rust | Per-PR wall-clock budget |
-| **Rust supply chain** | [`candidate.yml`](.github/workflows/candidate.yml) job `rust-supply-chain`, on every push to `main` | `cargo-audit` and `cargo-deny` findings, plus [`scripts/security/unsafe-edge-audit.mjs`](scripts/security/unsafe-edge-audit.mjs): a new `unsafe` block, or one without a `// SAFETY:` justification | Whether an existing justification is _correct_ |
+| **CI policy** | gate step `ci-policy` | A `uses:` under `.github/**` pinned to anything but a full commit SHA; actionlint's workflow syntax and expression checks | What a pinned action does once it runs |
+| **CodeQL** `security-extended` | [`codeql.yml`](.github/workflows/codeql.yml), on every push to `main` and weekly | SAST for TS/JS, Actions YAML, Rust | Per-PR wall-clock budget |
 | **Trivy** | [`lane-release-gateway-image.yml`](.github/workflows/lane-release-gateway-image.yml) after image push | CRITICAL/HIGH OS and package CVEs in the gateway image; exceptions in [`.trivyignore`](.trivyignore) with reason + review date | Scanning every app surface |
 
 **Roles (lockfile):** dependency-review = “don’t _add_ a known-bad dep on this PR.” OSV = “what is _already_ in the lockfile?” so inventory debt cannot hide behind an unrelated change.
@@ -215,5 +213,3 @@ cargo xtask gate --profile pr
 gitleaks detect --source . --no-git --config .gitleaks.toml
 node scripts/ci/osv-lockfile-scan.mjs   # with osv-scanner on PATH
 ```
-
-SonarCloud Autoscan remains a second-opinion maintainability/security check on PRs; it is not one of these gates, and it is **token-gated**: analysis is SonarCloud-side Automatic Analysis on the `srikanth235_centraid` project, and the project's configuration — scope exclusions, silenced noise rules, quality profiles and gate — is applied by `scripts/ci/configure-sonarcloud.mjs`, run from [`.github/workflows/sonarcloud.yml`](.github/workflows/sonarcloud.yml) on pushes that touch the configurator, weekly, and on manual dispatch. That lane runs only when the optional `SONAR_TOKEN` secret is present (a personal token with project administer); without it every step is skipped and the run logs an explicit skip notice, so a clone or fork with no token gets no SonarCloud coverage rather than a silent half-configured one. Policy detail lives in [the toolchain contract](docs/toolchain.md#sonarcloud-autoscan).

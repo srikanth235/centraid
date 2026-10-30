@@ -6,12 +6,12 @@ This is the durable command and ownership contract for quality work. Rust, Kotli
 
 | Toolchain | Pin | Read by |
 | --- | --- | --- |
-| Rust | `rust-toolchain.toml` (`channel`) | rustup, the gate workflows (which read the channel out of it), and [`flake.nix`](../flake.nix)'s `devShells.default` through `rust-overlay` |
+| Rust | `rust-toolchain.toml` (`channel`) | rustup, `.github/actions/setup` (`rustup toolchain install` with no argument), and [`flake.nix`](../flake.nix)'s `devShells.default` through `rust-overlay` |
 | Gradle, Kotlin, AGP, Wire and the Kotlin test stack (`:core`) | `mobile/gradle/libs.versions.toml`, plus the committed `mobile/gradlew` wrapper with `distributionSha256Sum` | Gradle; `org.gradle.warning.mode=fail` makes a deprecation a red ([mobile/README.md](../mobile/README.md#the-toolchain)) |
 | Xcode | `.xcode-version` | the iOS hand-off; nix cannot install Xcode |
 | `cmake` and a C++17 compiler | `flake.nix` (`cmake`); the ubuntu-latest image; Xcode's toolchain and the Android NDK on a phone build | llama.cpp (`llama-cpp-sys-2`), the on-device chat's engine, and only where it is compiled: `centraid-core-ffi`'s `llama` feature, i.e. a phone's core, `mobile/scripts/android-core.sh`, the prebuilt-core lane's Android and iOS legs and the `engine` job in `gate.yml`. `cargo xtask gate` compiles none of it ([R-CHAT-10](decisions.md#the-assistant)) |
 | llama.cpp's converter and `llama-quantize`, at upstream commit `26394b4e6749a41c3633db040e0987500a5f7013` | `experiments/toolchat/native/train/to_gguf.py` (`LLAMA_CPP_COMMIT`), from a checkout of that commit | turning a checkpoint into the GGUF the phone loads. It is the commit `llama-cpp-sys-2` 0.1.158 vendors, so a file it writes is one the engine reads: a bump of the binding moves `LLAMA_CPP_COMMIT` with it ([R-1088-18](decisions.md#the-assistant)) |
-| Node | `.node-version` and `package.json#engines.node` | `.github/actions/setup`; `bun run lint:node-version` fails if the two drift |
+| Node | `.node-version`, mirrored in `package.json#engines.node` | `.github/actions/setup` reads `.node-version`; a bump moves both |
 | Bun | `package.json#packageManager` | `.github/actions/setup` |
 | TypeScript and the TS tools | exact versions in the root `package.json` (`typescript` via the workspace catalog) | every Bun script below |
 
@@ -25,19 +25,12 @@ The flake pins every toolchain except the Android SDK and Xcode, and says so in 
 | Formatting, import sorting, and package metadata sorting | Oxfmt |
 | Static correctness and repository lint policy | Oxlint |
 | Compiler diagnostics and type correctness | pinned TypeScript |
-| Task graph execution | pinned Turbo |
-| Dead code and dependency hygiene | Knip |
 | Runtime behaviour | Vitest, and the Rust suites the gate runs |
-| DESIGN.md spec conformance | `@google/design.md` (pinned exact) — see `lint:design-md` |
-| Second-opinion security / reliability (PR check) | SonarCloud Autoscan — see [SonarCloud Autoscan](#sonarcloud-autoscan) |
+| Whether `DESIGN.md`'s front matter is Centraid's real tokens | `packages/design/src/design-md.test.ts`, which compares it against `packages/design/src` |
 
-Ultracite seeds `core`, `react`, and `vitest` policy. It is not the routine command runner. `toolchain:doctor` is its non-mutating drift check. Optional GitHub, Sonar, and react-doctor JavaScript-plugin presets remain declined as bundles; a future issue may admit one rule at a time through the rubric below.
+Ultracite seeds `core`, `react`, and `vitest` policy through `oxlint.config.ts`. It is not a command runner. Optional GitHub, Sonar, and react-doctor JavaScript-plugin presets remain declined as bundles; a future issue may admit one rule at a time through the rubric below.
 
-`@google/design.md` owns _format_ conformance of the root `DESIGN.md` only; it has no view on whether the values are Centraid's real tokens. That truth check is `packages/design/src/design-md.test.ts`, which compares the front matter against `packages/design/src`.
-
-Oxfmt is the sole style owner. Oxlint rules that only restate formatting are off. The pinned TypeScript compiler is the sole owner of compiler diagnostics; Oxlint `--type-check` is not part of any command.
-
-**There is a second linter, and it lints no product source.** ESLint is installed under [`.governance/law/`](../.governance/law/README.md) with its own private, exact-pinned `package.json`, and it is scoped to the governance documents — the generated arrival record and the markdown the constitution governs (`receipts/*.md`, `CONSTITUTION.md`, `docs/decisions.md`, `CHANGELOG.md`). **`bun run lint` never invokes it and it never sees a `.ts` file**; oxlint remains the sole owner of the product's lint policy, and oxlint's own `ignorePatterns` excludes `.governance/**` in the other direction. It exists because a governance directive written as a lint rule gets a rule catalog, severities, per-line suppression with a reason, a machine-readable report and `RuleTester` for free — machinery that would otherwise be hand-rolled in bash. It is reached through `bash .governance/run.sh` (the `law` directive) or `bun run governance:law`, and it carries its own install because the managed `governance.yml` runs no `bun install`.
+Oxfmt is the sole style owner. Oxlint rules that only restate formatting are off. The pinned TypeScript compiler is the sole owner of compiler diagnostics; Oxlint `--type-check` is not part of any command. Oxlint is the only linter.
 
 ## TypeScript: stable command API
 
@@ -49,65 +42,17 @@ All callers use repository-pinned binaries through these Bun scripts:
 | `format:check` | check Oxfmt output without mutation |
 | `lint` | ordinary Oxlint pass, warnings denied |
 | `lint:fix` | Oxlint safe fixes only |
-| `lint:types` | compiler-compatible type-aware allowlist plus policy fixtures |
+| `lint:site-tokens` | the site's generated token CSS matches `packages/design` (`site:tokens` rewrites it) |
 | `typecheck` | pinned TypeScript compiler across the workspaces |
-| `test:affected` | Vitest for workspaces changed from `origin/main` |
-| `check:fast` | format check, ordinary lint, and affected typecheck |
-| `check:push:static` | the branch push tier: `format:check`, `lint`, `turbo:lint`, `typecheck:affected`. Also the gate's `ts-static` step |
-| `check:push` | the `main` push tier: the gate list in `package.json`, run concurrently, with the static tier gate-stamped |
-| `check:pr` | frozen install, `check:push`, full `typecheck`, `lint:types`, `lint:workflow-pins`, diff coverage |
-| `lint:design-md` | official DESIGN.md linter over the root `DESIGN.md`: schema, `{token.refs}`, WCAG pairs, canonical section order. Errors fail; warnings are advisory |
-| `toolchain:doctor` | non-mutating Ultracite/config drift diagnosis |
-| `governance` | the stamped entry point to `.governance/run.sh`, which is itself digest-locked |
-| `governance:law` | the law's ESLint pass over the arrival record and the governance documents a change touched |
-| `governance:law:test` | the law's rule and generator tests, under `node --test` |
+| `test` | every workspace's Vitest suite |
+| `scripts:test` | the release scripts' Vitest suite and the `node --test` suites under `scripts/` |
+| `check` | `format:check`, `lint`, `typecheck`, `test`, `scripts:test`, in that order. Also the gate's `ts-static` step |
 
-The workspaces with their own `build`, `test` and `typecheck` scripts are `packages/*`; run one with `bun run --cwd <dir> <script>`.
-
-### Where the caches live
-
-Nothing a gate or a build caches belongs in the repository. Both directories default under the user's cache home and are overridable by environment, so a container, a CI runner and a laptop can each put them where they belong:
-
-| What | Default | Override | Owner |
-| --- | --- | --- | --- |
-| Gate stamps (`static`, `governance`) | `${XDG_CACHE_HOME:-~/.cache}/centraid/gate-stamps` | `CENTRAID_GATE_STAMP_DIR`; `CENTRAID_GATE_STAMPS=0` disables stamping | `scripts/ci/gate-stamp.mjs` |
-| Turbo filesystem cache, shared by every worktree | `${XDG_CACHE_HOME:-~/.cache}/centraid/turbo` | `TURBO_CACHE_DIR`, then `CENTRAID_TURBO_CACHE_DIR` | `scripts/ci/turbo.mjs` |
-
-Turbo's per-run summaries stay in each checkout's `.turbo/runs`. How the tiers and stamps are used: [dev-environment.md](dev-environment.md#the-local-gate-loop).
-
-## SonarCloud Autoscan
-
-SonarCloud is the second-opinion security and reliability check for product code. It runs Automatic Analysis (Autoscan) on GitHub push/PR through project `srikanth235_centraid`; no CI scanner is used. The PR gate is Sonar way because the Free plan cannot assign a custom gate. Sonar does not use `sonar-project.properties` for scope.
-
-### Ownership and scope
-
-Sonar complements, rather than replaces, Oxfmt, Oxlint, TypeScript, Knip, Vitest, clippy, cargo-deny, Gitleaks, OSV, actionlint, and CodeQL. Do not weaken local policy to satisfy a Sonar style finding.
-
-The analysis-scope exclusions, the duplication-metric exclusions and the coverage exclusions are the `SOURCE_EXCLUSIONS`, `CPD_EXCLUSIONS` and `COVERAGE_EXCLUSIONS` lists in [`scripts/ci/configure-sonarcloud.mjs`](../scripts/ci/configure-sonarcloud.mjs). Scripts, workflows, tests, fixtures, docs, receipts and generated output stay out of product scope. So does `experiments/`, the training and evaluation estate of the native tool task ([#1044](https://github.com/srikanth235/centraid/issues/1044)): its Python harness, synthetic worlds and recorded runs ship in no artifact, and its tests are the check ([D-1044-21](decisions.md#governance-and-the-pr-gate)). So does every `.sql` file: Autoscan reads SQL with the Oracle PL/SQL analyzer, whose rules (`''` as NULL, quoted identifiers, `CREATE OR REPLACE`) are false positives on SQLite, and the three DDL snapshots [TESTING.md](../TESTING.md) describes are by design copies of one schema, which would otherwise dominate duplication. SQL is owned by the ladder and baseline tests and by the `sql-confinement` rule of `cargo xtask rules`. The duplication metric excludes `packages/design/src/roles.ts` because its repeated profile-lowering record shape keeps each role's meaning, contrast obligation, and totality reviewable inline.
-
-### Noise policy
-
-The `NOISE_RULES` list in [`scripts/ci/configure-sonarcloud.mjs`](../scripts/ci/configure-sonarcloud.mjs) silences rules already owned elsewhere or known to be false positives in this repository: style preferences, React prop/index-key pedantry, intentional path inheritance and loopback URLs, locale sorting, and workflow/CLI logging false positives. ReDoS (`S5852`), postMessage origin (`S2819`), download-then-exec (`S8482`), empty tests (`S2187`), real control-flow bugs, and CSP review remain active.
-
-`SCOPED_IGNORES` in the same file silences a rule on one path only. It has one entry. `text:S8569` (missing dependency lockfile) is skipped on `mobile/build.gradle.kts` only: the Gradle root project resolves no configurations, so Gradle writes no lockfile there, while every project that resolves dependencies (`core`, `shared`, `androidApp`, and settings as `settings-gradle.lockfile`) commits a lockfile. S8569 stays active everywhere else.
-
-On the Free plan, the custom Centraid profile and gate can be created but cannot be assigned. Keep those copies (without a coverage condition) for a future paid assignment; until then, exclusions and multicriteria protect hygiene/tooling PRs while product PRs fail closed on new BUG/VULNERABILITY findings.
-
-### Re-apply after policy changes
-
-CI applies this on every push to `main` that touches the configurator, weekly, and on manual dispatch — [`.github/workflows/sonarcloud.yml`](../.github/workflows/sonarcloud.yml), gated on the optional `SONAR_TOKEN` secret (skipped with an explicit notice when absent). Analysis itself stays Autoscan; no CI scanner runs. Locally:
-
-```sh
-export SONAR_TOKEN=$(security find-generic-password -s sonarqube-cli -w)
-bun run scripts/ci/configure-sonarcloud.mjs
-bun run scripts/ci/configure-sonarcloud.mjs --resolve-noise
-```
-
-The settings apply on the next Autoscan analysis. Dashboard: <https://sonarcloud.io/project/overview?id=srikanth235_centraid>.
+The workspaces with their own `build`, `test` and `typecheck` scripts are `packages/*`; run one with `bun run --cwd <dir> <script>`. `docs:*` build and serve the documentation site, `release:*` are the release scripts ([release.md](release.md)) and `gateway:install` is the gateway installer.
 
 ## Hooks and suppressions
 
-Do not invoke raw `npx`, global tools, `bunx` guesses, or implicit config discovery. Editors, hooks, local commands, and CI all name the root configs. Pre-commit checks staged files and does not rewrite source files; pre-push runs `check:push:static` on a branch and `check:push` on `main` ([dev-environment.md](dev-environment.md#the-local-gate-loop)). No hook mutates a tracked file: token cost per arrival is not appended to anything, it is read back out of the touched receipt's `## Accounting` section and printed on the generated front page, or printed as `token cost: not recorded` when the author recorded none ([#1005](https://github.com/srikanth235/centraid/issues/1005), [decisions.md](decisions.md#governance-as-a-constitution-1005)).
+Do not invoke raw `npx`, global tools, `bunx` guesses, or implicit config discovery. Editors, hooks, local commands, and CI all name the root configs. The `pre-commit` hook runs `oxfmt --check` and `oxlint` over the staged files and rewrites nothing; `commit-msg` checks the subject shape ([dev-environment.md](dev-environment.md#the-local-gate-loop)).
 
 `lint:fix` never enables suggestions or dangerous fixes. The strings `--fix-suggestions` and `--fix-dangerously` do not belong in scripts, hooks, or CI. Oxfmt writes are the only routine style mutation.
 
@@ -125,25 +70,22 @@ A rule is enabled only when every answer is yes:
 
 Standing declines are filename conventions, `github/no-then`-style syntax preferences, blanket cognitive-complexity thresholds, mandatory function-expression styles, formatter duplicates, and optional JavaScript-plugin presets as bundles. File length is not a decline: `max-lines` is enforced at 625 ([coding-standards.md](coding-standards.md#file-length-mechanically-enforced)).
 
-All diagnostics are errors or off; warning debt is not a supported state. Fix code before suppressing a diagnostic. A local suppression stays narrow, references its owning issue as required by the constitution, and explains why the rule is wrong for that site. Never weaken policy merely to make a PR green. The same holds for Rust: `clippy -D warnings` is the gate, and an `#[allow]` carries its reason.
+All diagnostics are errors or off; warning debt is not a supported state. Fix code before suppressing a diagnostic. A local suppression stays narrow, references its owning issue, and explains why the rule is wrong for that site. Never weaken policy merely to make a PR green. The same holds for Rust: `clippy -D warnings` is the gate, and an `#[allow]` carries its reason.
 
 ## Runtime profiles and exclusions
 
 The root Oxlint config owns the production TypeScript, Vitest and the Node/Bun scripts that remain.
 
-Generated output, vendored code, build trees, immutable snapshots, negative lint fixtures, and governance-managed files may be excluded with a concrete owner in the config. Scripts, tests, and e2e code are source and remain in scope. Generated files are regenerated, never hand-edited.
-
-The type-aware compatibility pass is an explicit allowlist. It proves each target opens a non-empty TypeScript program, rejects type-aware-only rules from the resolved ordinary config (including overrides), and runs live negative fixtures for every admitted rule (`scripts/fixtures/lint-types/invalid.ts`). `typescript/no-floating-promises` is source-only because Vitest/Playwright registration calls are intentionally unawaited. `typescript/no-unnecessary-type-assertion` remains off because tsgolint fixes conflict with TypeScript 5.9 under `noUncheckedIndexedAccess` and typed mocks.
+Generated output, vendored code, build trees, immutable snapshots and negative lint fixtures may be excluded with a concrete owner in the config. Scripts, tests, and e2e code are source and remain in scope. Generated files are regenerated, never hand-edited.
 
 ## Upgrade policy
 
-Node, Turbo, Ultracite, Oxlint, oxlint-tsgolint, Oxfmt, TypeScript, Knip, and Vitest are exact-pinned. The JavaScript Dependabot stream ignores the coupled toolchain pins. On the first day of every month, `toolchain-upgrade.yml` opens the owned review issue that decides whether to upgrade them. Accepted upgrades land only in a dedicated PR. The PR records:
+Node, Ultracite, Oxlint, Oxfmt, TypeScript, and Vitest are exact-pinned. Dependabot ([`.github/dependabot.yml`](../.github/dependabot.yml)) groups the coupled lint, format and test engines (`ultracite`, `oxlint`, `oxfmt`, `typescript`, `vitest`) into one PR of their own, because an engine bump can change what the gate reports. That PR records:
 
 - versions before and after;
 - rules added, removed, or semantically changed;
 - whether formatter output changes;
-- whether compiler or type-aware semantics change;
-- the regenerated `typeAwareOnlyRules` catalog when oxlint-tsgolint changes;
+- whether compiler semantics change;
 - the full validation result.
 
 Formatter churn is an isolated formatting-only commit. Safe lint fixes are a separate mechanical commit. Behavioural corrections are reviewed per site and never mixed into either sweep.
@@ -159,22 +101,22 @@ The repository is three languages, so its cross-cutting layer cannot live in any
 | Profile | Steps it adds | Budget | Where it runs |
 | --- | --- | --- | --- |
 | `local` | `fmt`, `clippy`, `test` (**the crates the change touches and their dependents**, selected by `crates/xtask/src/select.rs` and run as `cargo nextest run --workspace -E 'package(=…) \| …'` plus `cargo test --doc` where nextest is installed; the whole workspace when the change touches a workspace-wide input or no base is found, and under plain `cargo test` without nextest), `restore-drill` (the product's promise, on every loop), `rules` (the structural rules), `doc-links` (every relative markdown link and in-repo anchor resolves), `ledgers` (the down-only check) | < 120 s **warm**, < 3200 s **cold** | by hand, on the edit-run loop |
-| `pr` | `buf`, `deny` (cargo-deny), `ci-policy` (the workflow and path-filter linters plus actionlint), `secrets` (gitleaks), `osv` (the `bun.lock` advisory inventory), `release-build`, `ts-static` (`bun run check:push:static`), `emitters` (regenerates `design/`, the native theme and the kit's words and fails on drift, including a new untracked file under them), `advisory` (every step that announces it will never fail carries an owner, an issue and an unexpired date), `lockfile` (**both** lockfiles: TLS-only sources, every registry package pinned by content), `call-budget` (p95 over 200 calls of one bounded read), `search-budget` (p95 per query of eleven, on five surfaces, over the year-3 search vault, in a release build), `fault-door` (ABI clause 9 against a real panic, the one place the tree is compiled with `debug-fault`) | < 1500 s | [`gate.yml`](../.github/workflows/gate.yml) on every pull request and every push to `main` |
-| `nightly` | `pr` plus `device-lanes` (real attached devices on the self-hosted runner) | unbounded | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml) at 05:30 UTC |
+| `pr` | `buf`, `deny` (cargo-deny), `ci-policy` (every `uses:` under `.github/**` pinned to a full commit SHA, then actionlint), `secrets` (gitleaks), `osv` (the `bun.lock` advisory inventory), `release-build`, `ts-static` (`bun run check`), `emitters` (regenerates `design/`, the native theme and the kit's words and fails on drift, including a new untracked file under them), `lockfile` (**both** lockfiles: TLS-only sources, every registry package pinned by content), `call-budget` (p95 over 200 calls of one bounded read), `search-budget` (p95 per query of eleven, on five surfaces, over the year-3 search vault, in a release build), `fault-door` (ABI clause 9 against a real panic, the one place the tree is compiled with `debug-fault`) | < 1500 s | [`gate.yml`](../.github/workflows/gate.yml) on every pull request and every push to `main` |
+| `nightly` | `pr` plus `device-lanes` (real attached devices) | unbounded | [`nightly.yml`](../.github/workflows/nightly.yml) at 05:30 UTC, where `device-lanes` skips loudly |
 | `release` | `artifact-identity`, `prebuilt-core-required` | unbounded | [`release.yml`](../.github/workflows/release.yml)'s lanes |
-| `mobile-jvm` | `mobile-jvm` — `cargo build -p centraid-core-ffi` (no `llama` feature: the JVM tests load no model), then `mobile/gradlew mobileJvm` (`:core:jvmTest` over the real cdylib), then the generated-artifact drift check | < 420 s | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml); on demand from `mobile/`. **Not** a superset of any other profile and not folded into `pr`: a different toolchain with a different cold cost ([D-1020-B2-3](decisions.md#governance-and-the-pr-gate)). A missing `mobile/gradlew` FAILS rather than skips |
+| `mobile-jvm` | `mobile-jvm` — `cargo build -p centraid-core-ffi` (no `llama` feature: the JVM tests load no model), then `mobile/gradlew mobileJvm` (`:core:jvmTest` over the real cdylib), then the generated-artifact drift check | < 420 s | [`nightly.yml`](../.github/workflows/nightly.yml); on demand from `mobile/`. **Not** a superset of any other profile and not folded into `pr`: a different toolchain with a different cold cost ([D-1020-B2-3](decisions.md#governance-and-the-pr-gate)). A missing `mobile/gradlew` FAILS rather than skips |
 
 **The on-device engine is checked outside the gate.** `gate.yml`'s `engine` job runs beside `gate`, unfiltered, with no budget of its own: `cargo clippy -p centraid-assist-llama -p centraid-core-ffi --all-targets --features centraid-core-ffi/llama -- -D warnings`, then `cargo test` over the same packages and feature. It exists because llama.cpp is a cold `cmake` build of about five minutes that the `pr` profile's 1,500 s ceiling has no room for, so `centraid-assist-llama`'s `engine` and `centraid-core-ffi`'s `llama` features are off in the profile's `--workspace` builds and on here ([R-CHAT-10](decisions.md#the-assistant)). The profile still compiles, lints and tests the engine-free half of `centraid-assist-llama` and the ABI's `NO_ENGINE` behaviour; `cargo deny --all-features` still sees `llama-cpp-2` in the graph.
 
-`device-lanes` runs `backup-measurement`, `android-macrobenchmark`, `ios-xctest-metrics` and `battery-per-background-pass`. `gate-nightly.yml` runs them as a matrix (`cargo xtask gate --profile nightly --lane <name>`) on a `[self-hosted, macos, devices]` runner only when `vars.CENTRAID_DEVICE_RUNNER == 'true'`; anywhere else the step is a loud `SKIP`.
+`device-lanes` runs `backup-measurement`, `android-macrobenchmark`, `ios-xctest-metrics` and `battery-per-background-pass`. No workflow runs them: they are run by hand on a machine with one iPhone and one Android attached, one lane at a time, as `CENTRAID_DEVICE_RUNNER=1 cargo xtask gate --profile nightly --lane <name>`. Without `CENTRAID_DEVICE_RUNNER` the step is a loud `SKIP`.
 
-The budgets are **enforced, not aspirational**: a profile whose steps together overran its `budgetSeconds` fails, prints the per-step timing table, and says so on its last line as well as in its `BUDGET` line. They live in `contracts/ledgers/gate-budgets.json` alongside `compile-time.json` (clean check, incremental check, single-crate test, release build, the cold `local` profile, and `kotlinNativeLinkSeconds`, still null because no machine in CI links Kotlin/Native and a JVM number in that key is the one thing it exists to prevent), `library-size.json` (the prebuilt core's stripped size per ABI; a triple no machine has built stays null), `call-budget.json`, `search-budget.json`, `query-plans.json` and `advisory.json`. The size and time ledgers are down-only, checked against `git show <merge-base>:<path>`, and written only by `cargo xtask measure --write`, which only ever lowers a ceiling. There is no waiver, deviation or override path, and the one time these numbers rose — the 2026-09-12 re-base for the Rust workspace — it was an owner ruling ([D-1020-B2](decisions.md#governance-and-the-pr-gate)), recorded per key with its measurement and multiplier.
+The budgets are **enforced, not aspirational**: a profile whose steps together overran its `budgetSeconds` fails, prints the per-step timing table, and says so on its last line as well as in its `BUDGET` line. They live in `contracts/ledgers/gate-budgets.json` alongside `compile-time.json` (clean check, incremental check, single-crate test, release build, the cold `local` profile, and `kotlinNativeLinkSeconds`, still null because no machine in CI links Kotlin/Native and a JVM number in that key is the one thing it exists to prevent), `library-size.json` (the prebuilt core's stripped size per ABI; a triple no machine has built stays null), `call-budget.json`, `search-budget.json` and `query-plans.json`. The size and time ledgers are down-only, checked against `git show <merge-base>:<path>`, and written only by `cargo xtask measure --write`, which only ever lowers a ceiling. There is no waiver, deviation or override path, and the one time these numbers rose — the 2026-09-12 re-base for the Rust workspace — it was an owner ruling ([D-1020-B2](decisions.md#governance-and-the-pr-gate)), recorded per key with its measurement and multiplier.
 
 **`local`'s `test` step is narrowed; `pr`'s is not** (hand-off 6.5). The whole-workspace run was almost all of a loop that took 290 to 500 s against a 120 s budget, and the owner ruled that the loop tests the crates a change touches plus their reverse dependents while `pr` keeps the workspace. The rule, its fallbacks and what it deliberately does not do are the module doc of [`crates/xtask/src/select.rs`](../crates/xtask/src/select.rs); `cargo xtask test-plan` prints the selection for the current change. The budget in `gate-budgets.json` did not move.
 
 **`local` is scored on the tree the edit-run loop runs on: a warm one** ([D-1020-B2-1](decisions.md#governance-and-the-pr-gate)). The 120 s promise is the developer's feedback time after an edit, not the first build after a clone, and on the measuring container the two differ by fifty times: 41.6 s warm against 1562.4 s cold at ten crates. `cargo xtask gate` tells them apart by asking whether **every** workspace member has a _linked_ artifact in `target/debug/deps` — an `.rmeta` from a previous `cargo check` does not count, so a checked-only tree cannot buy a warm budget — prints `tree warm`/`tree cold` with the reason, and charges a cold `local` run against `coldLocalProfileSeconds` instead. A cold run for which that key states no ceiling **fails**: cold is never the answer that makes a slow gate green. `--cold` forces the cold branch without deleting `target/`. Only `local` has a cold ceiling; every other profile runs in CI on a runner that has never seen the workspace, so its budget has to hold cold or it is not a budget — which is why `pr`'s number is the cold measurement (1420.1 s; the warm run is 575.8 s and a Cargo-cache hit is CI's normal case).
 
-Every step prints one line whatever it does — `ok`, a loud `SKIP` naming the command that turns it into a real run, or `FAIL` — and output is buffered and printed only on failure. **A failing step writes its whole output under `target/xtask/<profile>/<step>/`** (`command.txt`, `stdout.log`, `stderr.log`, or `findings.txt` for the internal steps) and names the directory in its line; both gate workflows upload `target/xtask/**` on failure. A step whose tool is missing (`buf`, `cargo-deny`, `actionlint`, `gitleaks`, `osv-scanner`) is a `SKIP` locally and a `FAIL` under `CI`, where the workflow installs it.
+Every step prints one line whatever it does — `ok`, a loud `SKIP` naming the command that turns it into a real run, or `FAIL` — and output is buffered and printed only on failure. **A failing step writes its whole output under `target/xtask/<profile>/<step>/`** (`command.txt`, `stdout.log`, `stderr.log`, or `findings.txt` for the internal steps) and names the directory in its line; `gate.yml` and `nightly.yml` upload `target/xtask/**` on failure. A step whose tool is missing (`buf`, `cargo-deny`, `actionlint`, `gitleaks`, `osv-scanner`) is a `SKIP` locally and a `FAIL` under `CI`, where the workflow installs it.
 
 **The `secrets` step scans the repository, not its build output** ([D-1020-B2-5](decisions.md#governance-and-the-pr-gate)). `gitleaks detect --no-git` is what gives the step its working-tree coverage, and it also walks `target/`, where a built Rust workspace carries PEM headers in `pem-rfc7468`/`pkcs8` doc strings inside `.rmeta` files. gitleaks 8.30 has no `--exclude-path` and no `.gitignore` support, so the step keeps ONE unfiltered scan and classifies its JSON report afterwards: a finding is dropped only where `git check-ignore` matches the file and `git ls-files` does not track it. Both counts are printed, `.gitleaks.toml` is untouched, and a tracked file is never dropped.
 
@@ -184,4 +126,4 @@ Every step prints one line whatever it does — `ok`, a loud `SKIP` naming the c
 
 **The edit-run loop carries line tables, not full DWARF (D-1020-G7).** `[profile.dev]` and `[profile.test]` are `debug = "line-tables-only"` with `split-debuginfo = "unpacked"`, and dependencies carry `debug = false` beside their `opt-level = 2`. A backtrace still names the file and the line, which is what a red test is read with; what is gone is the type and variable tables for tokio, rustls and SQLite. Measured: a shared `target/` held 16 GB under `debug/`, of which 7.7 GB was 144 test and bin executables; under this profile the same set is 0.50 GB over 39 executables. **A developer who needs full debuginfo for one session sets `CARGO_PROFILE_DEV_DEBUG=2`** for that one command; it is written in [`crates/xtask/README.md`](../crates/xtask/README.md) too. `[profile.release]` takes the same `debug = "line-tables-only"` with `split-debuginfo = "packed"`, so the published symbol file is one file per platform (`centraid.dwp`, `centraid.dSYM`, the `.pdb`) rather than debuginfo welded into the shipped binary.
 
-**OWNER HAND-OFF — the required checks.** `gate`, `engine` and `dependency-review` — the three jobs in `gate.yml` that run on every pull request, none path-filtered, so all always report — plus `governance` must be the required checks on `main`. A required check that never reports blocks a pull request forever. Branch protection is configured outside this repository, like the code-owner review requirement.
+**OWNER HAND-OFF — the required checks.** `gate`, `engine`, `native-python`, `dependency-review` and `pr-title` — the jobs in `gate.yml` that run on every pull request, none path-filtered, so all always report — must be the required checks on `main`. A required check that never reports blocks a pull request forever. Branch protection is configured outside this repository, like the code-owner review requirement ([v1-handoffs.md](release/v1-handoffs.md)).

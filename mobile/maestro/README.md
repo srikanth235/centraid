@@ -4,7 +4,7 @@ The flows under `flows/` — Home, search, onboarding and Agenda's three (`agend
 
 ## The flow has not run under Maestro
 
-There is no Android SDK, no Xcode, no emulator and no device on the machines that run `cargo xtask gate`. The flows are an **owner hand-off** (`flows/home.yaml` first among them): the flow is written, the CLI version is pinned, and the run is the owner's. `cargo xtask gate --profile nightly` reports its device lanes as a loud `Skipped` with the self-hosted-runner contract rather than as a pass (the `device-lanes` step), and that is the only honest status this directory can carry.
+There is no Android SDK, no Xcode, no emulator and no device on the machines that run `cargo xtask gate`. The flows are an **owner hand-off** (`flows/home.yaml` first among them): the flow is written, the CLI version is pinned, and the run is the owner's. `cargo xtask gate --profile nightly` reports its device lanes as a loud `Skipped` unless `CENTRAID_DEVICE_RUNNER` is set on a machine with phones attached, rather than as a pass (the `device-lanes` step), and that is the only honest status this directory can carry.
 
 ## The CLI is pinned
 

@@ -74,7 +74,6 @@ Scan the QR from a phone build, then compare the safety number the phone shows w
 | `packages/design`, `packages/test-kit` | The design tokens every surface lowers, and shared TypeScript test helpers. |
 | `design/`, `copy/` | Emitted artifacts — the native theme and one copy leaf per app — written by one command and gated against drift. |
 | `deploy/` | The container images, the OS service units and the installer. |
-| `centraid-city/` | A static, explorable 3D model of how Centraid works. |
 
 ## Gateway install
 
@@ -93,8 +92,8 @@ The tree is gated by **one command**, and it is the entrypoint CI runs:
 ```sh
 cargo xtask gate --profile local      # the edit-run loop, warm, under 2 minutes
 cargo xtask gate --profile pr         # what every pull request satisfies
-cargo xtask gate --profile nightly    # pr + the device lanes and the deeper suites
-cargo xtask gate --profile release    # nightly + the restore drill + the VPS smoke
+cargo xtask gate --profile nightly    # pr + the device lanes, which need attached phones
+cargo xtask gate --profile release    # nightly + the artifact-identity checks
 cargo xtask gate --profile mobile-jvm # the Kotlin JVM suites and the generated-artifact drift check
 cargo xtask rules                     # the structural rules alone
 cargo xtask repo-root                 # which tree the path-based rules will scan
@@ -132,7 +131,7 @@ bun install
 
 iOS needs an Apple toolchain and is an owner hand-off — the exact commands are in [`mobile/README.md`](mobile/README.md) and in [docs/release/v1-handoffs.md](docs/release/v1-handoffs.md).
 
-Formatting, linting and the TypeScript that remains (`packages/design`, `packages/test-kit` and the tooling under `scripts/`) run through the root scripts: `bun run format`, `bun run lint`, `bun run typecheck`. Governance runs as `bun run governance`. See [docs/toolchain.md](docs/toolchain.md) and [docs/dev-environment.md](docs/dev-environment.md).
+Formatting, linting and the TypeScript that remains (`packages/design`, `packages/test-kit` and the tooling under `scripts/`) run through the root scripts: `bun run format`, `bun run lint`, `bun run typecheck`, and `bun run check` for all of them plus the tests. Enable the commit hooks once per clone with `git config core.hooksPath .githooks`. See [docs/toolchain.md](docs/toolchain.md) and [docs/dev-environment.md](docs/dev-environment.md).
 
 ## Documentation
 
