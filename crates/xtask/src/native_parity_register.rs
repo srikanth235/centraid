@@ -348,7 +348,6 @@ pub const REGISTER: &[Entry] = &[
         "PhotosSelectionEvent.SelectRange.to_photo_id",
         gap("F", Missing::Both),
     ),
-    ("PickBytes.accept", gap("F", Missing::Both)),
     ("PickPhotos.max_count", gap("F", Missing::Both)),
     ("ScheduleNotification.at_ms", gap("F", Missing::Both)),
     ("ScreenEvent.appeared", gap("F", Missing::Both)),
