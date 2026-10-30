@@ -99,6 +99,9 @@ dependencies {
     // wrong half. Invisible until a machine with an Android SDK compiled it.
     debugImplementation(libs.androidx.compose.ui.tooling)
 
+    // VIRTUAL TIME for the gateway browse's window and cadence (`GatewayBrowseTest`).
+    testImplementation(libs.kotlinx.coroutines.test)
+
     // ROBORAZZI FOR COMPOSE SNAPSHOTS (D-1020-E7). Compile-gated with the rest
     // of this module: a snapshot suite needs an Android runtime, and Robolectric
     // needs an SDK jar to download.
