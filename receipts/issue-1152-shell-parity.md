@@ -112,3 +112,53 @@
 
 1. *A result whose TXT carries no `gw` is never reported.* Throwaway: `claimsGateway` made `true` → `onlyARecordWithAGatewayIdIsWorthReporting` and `aResultWithNoGatewayIdIsNeverReported` failed; reverted.
 2. *A closed screen's browse ends, and only its.* Throwaway: `GatewayBrowsing.retain`'s `closed.forEach(::stop)` commented out → `aClosedScreenEndsItsBrowseAndOnlyItsBrowse` failed (3 failures of 56 in all); reverted, 56 green.
+
+## Lane E — Android: the unit tests iOS has and Android lacked
+
+**What changed** (Android only; no Swift, Rust or proto edits):
+
+- `mobile/androidApp/src/test/kotlin/dev/centraid/android/screens/chat/ChatMarkdownTest.kt` (new, 8 tests).
+- `mobile/androidApp/src/test/kotlin/dev/centraid/android/kit/SleepNightsTest.kt` (new, 7 tests) and `mobile/androidApp/src/test/kotlin/dev/centraid/android/kit/ExerciseNamesTest.kt` (new, 1 test). `SleepNights` and `ExerciseNames` were already pure; no production edit.
+- `mobile/androidApp/src/test/kotlin/dev/centraid/android/backup/LibraryDeletionTest.kt` (new, 8 tests).
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/backup/LibraryDeletion.kt` (new): the smallest extraction. `LibraryRefs` (`of`/`row`: the one spelling of `image:<_ID>` / `video:<_ID>`, as iOS's `LibraryRefs`) and `LibraryDeletion` (`target`, `unchanged`, `deletedHashes`, `answer`, `failed`): the deleter's three rules lifted out of the `ContentResolver` code, unchanged.
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/backup/MediaStoreDeleter.kt`: calls the above; its KDoc points at them; the private `IMAGE_REF`/`VIDEO_REF` copies are gone.
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/session/LibraryRoll.kt`: mints refs with `LibraryRefs.of` and reads them with `LibraryRefs.row`, so the walker and the deleter share one spelling (its private constants are gone).
+
+**Per-case table** (iOS case → Android):
+
+| iOS test | Android |
+| --- | --- |
+| `ChatMarkdownTests.testBoldItalicAndCodeLoseTheirMarkers` | ported: `boldItalicAndCodeLoseTheirMarkers` (+ `theMarkersBecomeStyleAndNotCharacters`, the weight/slant/mono each marker becomes) |
+| `testBulletsAndNumbersBecomeItems` | ported: `bulletsAndNumbersBecomeItems` (also `2)` numbers as `2.`) |
+| `testAStarThatOpensBoldIsNotAListItem` | ported: `aStarThatOpensBoldIsNotAListItem` |
+| `testHeadingsKeepTheirWordsAndDropTheHash` | ported: `headingsKeepTheirWordsAndDropTheHash` (+ the strong weight) |
+| `testALinkKeepsItsWordsAndIsNotTappable` | ported: `aLinkKeepsItsWordsAndIsNotTappable` (no link or string annotation) |
+| `testAnUnclosedMarkerWhileStreamingShowsNoAsterisks` | ported: `anUnclosedMarkerWhileStreamingShowsNoAsterisks`; its `withoutMarkers` half has no Android counterpart: that is iOS's fallback when `AttributedString(markdown:)` refuses, and Android has no parser to refuse |
+| `testTheSpokenTextHasNoMarkers` | ported: `theSpokenTextHasNoMarkers` |
+| `HealthSleepMergeTests.testOverlappingSourcesAreOneRun` | ported: `SleepNightsTest.overlappingSourcesAreOneNight` |
+| `testAGapAwakeIsTwoRunsAndUnsortedInputIsSorted` | ported: `aGapAwakeIsTwoRunsAndUnsortedSpansAreSortedAndAnEmptyOneCountsForNothing` (asleep is the union, so 200 + 100 = 300, not two returned runs) |
+| `testKindNamesFallBackToOther` (in the same iOS file) | ported: `ExerciseNamesTest` (known type is the constant's name, unknown is `EXERCISE_TYPE_OTHER_WORKOUT`) |
+| (Android's own rule, no iOS case) | `SleepNightsTest`: a night counts on the day its last session ends; touching sessions are two nights; unsorted sessions fold alike; an awake-only night is none |
+| `LibraryDeletionTests.testAPhotoTheCoreOfferedMayGo` | ported: `anImageTheCoreOfferedNamesItsRowInTheImageCollection` (the row is the rule on Android; bare id and video too) |
+| `testAnEditedAssetGoesOnlyWhenTheGatewayHasTheVersionTheLibraryHoldsNow` | ported to Android's one witness: `aRowGoesOnlyWhileItIsTheSizeThatWasBackedUp` (the store's `SIZE` equals the backed-up size; changed or unanswered is kept). MediaStore has no `modificationDate` revision refs |
+| `testTheLatestOfSeveralRenditionsIsTheOneThatCounts` | no Android counterpart: a MediaStore row has one resource and no renditions |
+| `testAnEditRevertedGoesOnTheCamerasOwnRowOnly` | no Android counterpart: no `#camera` original row; an edit in place changes the row's size (the size case above) |
+| `testALivePhotoGoesOnlyWithItsMovie` | no Android counterpart: no Live Photo pairing (motion photos pass through as one original) |
+| `testAMovieRowAloneNeverDeletesItsAsset` | no direct counterpart (no pair); its Android shape is a ref that names the other collection being skipped: `theCollectionIsTheMediaTypesAndARefNamingTheOtherOneIsSkipped`, `aRefThatNamesNoRowNamesNone` |
+| `testARefNamesItsAssetItsPartAndItsVersion` | ported to Android's grammar: `aRefNamesItsCollectionAndItsRow` (no part or version suffix exists) |
+| `testTheVersionIsSpelledTheWayTheWalkerSpellsIt` | ported: `aRefIsSpelledTheWayTheWalkerSpellsIt` (`LibraryRoll` mints with `LibraryRefs.of`; round trip) |
+| `testAYesIsDeletedANoIsDeclinedAndAnythingElseFails` | ported: `aYesIsDeletedANoIsDeclinedAndAnythingElseFails` and `onlyRowsTheStoreNoLongerAnswersForAreReportedDeletedInTheOrderAsked` (rule 3's "reported is what was removed") |
+
+**Brief corrected**: the lane brief listed "kind names fall back" under `LibraryDeletionTests`; it is in `HealthSleepMergeTests.swift` (`HealthKitReader.kind`). `SleepNights` is at `HealthConnectReader.kt:445`, not 441. The base had 38 Android tests once lanes A and B landed, not 32. The brief named `MediaStoreDeleterTest.kt`; the subject of the test is the extracted `LibraryDeletion`, so it is `LibraryDeletionTest.kt`, as iOS's is.
+
+**Verification**
+
+- The Android check (`compileDebugKotlin testDebugUnitTest`, through `flock /tmp/centraid-gradle.lock`) → BUILD SUCCESSFUL; 62 tests, 0 failures, 0 errors (38 before this lane + 24 new). Per class: `ChatMarkdownTest` 8, `SleepNightsTest` 7, `ExerciseNamesTest` 1, `LibraryDeletionTest` 8; the other nine classes unchanged (6, 2, 5, 10, 3, 2, 6, 2, 2).
+- `cargo xtask rules` (own `CARGO_TARGET_DIR`) → 15 rules, all `ok` (incl. `native-accessibility`, `health-connect-read-only`, `walker-platform-law`).
+
+**Unverified**: no device; the dialog, the real `ContentResolver` queries and the deletion itself remain the device hand-offs (`docs/release/v1-handoffs.md` 8.20). Nothing in Swift was touched.
+
+**Falsification**
+
+1. *The extraction changed nothing.* Throwaway `ThrowawayDifferentialTest` (deleted, not committed) held the verbatim pre-extraction `MediaStoreDeleter.uriOf` and `LibraryRoll.uriOf` logic and compared it with `LibraryDeletion.target` / `LibraryRefs.row` over 14 refs (empty, bare id, negative, prefix-only, doubled prefixes, `#r` suffix, overflow) times 6 media types → 84 pairs, all equal.
+2. *Each new test fails when its subject is broken.* `ChatMarkdown`: bullet marker changed to `-` and link regex keeping the address → `bulletsAndNumbersBecomeItems` and `aLinkKeepsItsWordsAndIsNotTappable` failed (2 of 8). `SleepNights`: the day taken from the earliest end and touching sessions merged → my first tests did NOT catch it (BUILD SUCCESSFUL under the break), so I replaced two tests with ones where a night spans midnight and where touching sessions end on different days; rerun → both failed (2 of 7), restored → green. `LibraryDeletion`: dropped the image-prefix/video-type check, treated a missing size as unchanged, inverted the gone filter → three tests failed (3 of 8). All breaks reverted; the tree matches the commits.
