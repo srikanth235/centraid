@@ -49,6 +49,7 @@ import centraid.core.v1.TodoQuickAdd
 import centraid.core.v1.TodoRow
 import centraid.core.v1.TodoRowGroup
 import dev.centraid.android.kit.SectionHead
+import dev.centraid.design.CentraidTokens
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.KitGeometry
@@ -92,7 +93,7 @@ internal fun TodoRowView(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(2.dp).height(28.dp))
-        TodoCheckBox(row.check, row.check_label, tag = "$idPrefix-check-${row.task_id}") { onCheck(row.task_id) }
+        TodoCheckBox(row.check, row.check_label, tag = "$idPrefix-check-${row.task_id}", round = !row.subtask) { onCheck(row.task_id) }
         val file = if (row.can_file && onFile != null && fileVerb.isNotEmpty()) ({ onFile(row.task_id) }) else null
         Column(
             Modifier
@@ -108,7 +109,7 @@ internal fun TodoRowView(
         ) {
             Text(
                 row.title,
-                style = centraidType("body"),
+                style = centraidType(if (row.subtask) "small" else "body"),
                 color = centraidColor(if (row.check == TodoCheck.TODO_CHECK_OPEN) "text" else "textFaint"),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -159,9 +160,13 @@ internal fun TodoRowView(
     }
 }
 
-/** THE BOX: open is a ring, done a check, released a dash. */
+/**
+ * THE BOX: open is a ring, done a check, released a dash. A TASK IS A CIRCLE,
+ * a subtask a box (`round = false`, the `sm` radius token): the shape every
+ * task list teaches, drawn from `TodoRow.subtask` as iOS's `KitCheckBox` does.
+ */
 @Composable
-internal fun TodoCheckBox(check: TodoCheck, label: String, tag: String = "tasks-check", onTap: () -> Unit) {
+internal fun TodoCheckBox(check: TodoCheck, label: String, tag: String = "tasks-check", round: Boolean = true, onTap: () -> Unit) {
     Box(
         Modifier
             .size(KitGeometry.ROW_MIN)
@@ -174,11 +179,12 @@ internal fun TodoCheckBox(check: TodoCheck, label: String, tag: String = "tasks-
         contentAlignment = Alignment.Center,
     ) {
         val done = check == TodoCheck.TODO_CHECK_DONE
+        val shape = if (round) CircleShape else RoundedCornerShape((CentraidTokens.light.radii["sm"] ?: 0).dp)
         Box(
             Modifier
                 .size(20.dp)
-                .clip(CircleShape)
-                .border(KitGeometry.HAIRLINE, centraidColor("textSoft"), CircleShape)
+                .clip(shape)
+                .border(KitGeometry.HAIRLINE, centraidColor("textSoft"), shape)
                 .background(if (done) centraidColor("text") else centraidColor("bg")),
             contentAlignment = Alignment.Center,
         ) {

@@ -169,8 +169,6 @@ pub const REGISTER: &[Entry] = &[
     ("ShellFact.expired", gap("F", Missing::Android)),
     // ShellVault.originals_withheld: the vault header's count of originals the phone is holding back
     ("ShellVault.originals_withheld", gap("F", Missing::Android)),
-    // TodoRow.subtask: Compose draws a subtask as a top-level to-do (iOS rounds the box and sets the type small)
-    ("TodoRow.subtask", gap("F", Missing::Android)),
     // Lane F, one-sided by NAME COLLISION: the census matches field names, and the hit is another symbol. Neither shell reads the field; consume it or delete it.
     // ChatAttachment.asset_id: `found.asset_id` in LibraryRoll.kt is another message
     ("ChatAttachment.asset_id", gap("F", Missing::Ios)),
