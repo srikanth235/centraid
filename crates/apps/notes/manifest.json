@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "notes",
   "name": "Notes",
-  "description": "Your notebooks as a projection of the vault: a note is an entity with its words on the note row, a notebook is a container, a pin or a tag is an edge, a past version is a revision. Creating, editing, filing, pinning and deleting all run through typed commands — the note's own (note.*) and the shared ones every app uses (entity.*, flag.*, tag.*, edge.*, container.*) — contract-checked and journalled, with act consent granted per command.",
+  "description": "Your notebooks as a projection of the vault: a note is an entity with its words on the note row, a notebook is a container, a pin or a tag is an edge, a past version is a revision. Creating, editing, filing, pinning and deleting all run through typed commands — the note's own (note.*) and the shared ones every app uses (entity.*, flag.*, tag.*, edge.*, container.*) — contract-checked, with act consent granted per command.",
   "version": "0.9.0",
   "iconKey": "Book",
   "colorKey": "slate",

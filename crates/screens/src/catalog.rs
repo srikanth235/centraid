@@ -1797,7 +1797,7 @@ pub mod act {
             }
         }
 
-        /// Create or rewrite ONE owner-defined field on an item through locker.set_field. A field is (section, label, kind, value); a sealed field's value is sealed by the phone core against the field's own id before the vault sees it, so it is ciphertext at rest. Sending «sealed» back leaves the stored secret alone. One field per call so a secret is always a top-level input the journal redaction can reach.
+        /// Create or rewrite ONE owner-defined field on an item through locker.set_field. A field is (section, label, kind, value); a sealed field's value is sealed by the phone core against the field's own id before the vault sees it, so it is ciphertext at rest. Sending «sealed» back leaves the stored secret alone. One field per call so a secret is always a top-level input the sealing can reach.
         #[derive(Clone, Debug, Default)]
         pub struct SetField {
             pub item_id: String,
