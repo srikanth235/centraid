@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.dp
 import centraid.core.v1.PhotosPickerEvent
 import centraid.core.v1.PhotosPickerState
 import dev.centraid.android.kit.InkButton
+import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.PhotoCellsGrid
 import dev.centraid.android.kit.RowSkeleton
@@ -39,7 +40,7 @@ public fun PhotoPickerScreen(
 ) {
     LaunchedEffect(state.finished) { if (state.finished) onFinished() }
     Column(
-        modifier = Modifier.padding(16.dp),
+        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column {

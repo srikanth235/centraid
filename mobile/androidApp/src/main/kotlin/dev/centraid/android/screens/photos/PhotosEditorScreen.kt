@@ -59,6 +59,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
+import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.StageSpinner
@@ -126,7 +127,7 @@ public fun PhotosEditorScreen(
             loading != null -> StageSpinner(modifier = Modifier.align(Alignment.Center))
 
             failure != null -> Column(
-                modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                modifier = Modifier.align(Alignment.Center).padding(KitGeometry.GUTTER),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 ScreenFailure(sentence = failure.sentence, remedy = failure.remedy)
@@ -179,7 +180,7 @@ private fun Editor(
             Text(text = data.meta, color = soft, style = centraidType("small"))
         }
         BoxWithConstraints(
-            modifier = Modifier.fillMaxWidth().weight(1f).padding(16.dp),
+            modifier = Modifier.fillMaxWidth().weight(1f).padding(KitGeometry.GUTTER),
             contentAlignment = Alignment.Center,
         ) {
             val image = preview
@@ -376,7 +377,7 @@ private fun EditBar(
     val line = centraidColor("stageLine")
     val plan = state.plan ?: PhotosEditPlan()
     Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(

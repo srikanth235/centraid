@@ -860,7 +860,7 @@ private fun StageFacts(stage: DocsStage) {
             .padding(KitGeometry.GUTTER)
             .clip(shape)
             .border(KitGeometry.HAIRLINE, centraidColor("line"), shape)
-            .padding(16.dp)
+            .padding(KitGeometry.GUTTER)
             .testTag("docs-stage")
             .clearAndSetSemantics {
                 contentDescription = listOf(stage.accessibility_label, stage.absent_reason).filter { it.isNotEmpty() }.joinToString(". ")
