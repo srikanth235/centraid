@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { beforeAll, describe, expect, test } from "vitest";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
+import { tempDirSync } from "./temp-dir.mjs";
 
 /**
  * Guard tests for the release publish/prepare halves (issue #656 Layer 1F).

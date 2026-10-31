@@ -4,8 +4,7 @@
 // of these assertions are about what does NOT accumulate.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useFakeClock } from "@centraid/test-kit/fake-clock";
-
+import { useFakeClock } from "./fake-clock.test-support.js";
 import {
   armConfirm,
   outcomeMessage,

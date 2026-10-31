@@ -12,5 +12,10 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"]
   },
   "include": ["src/elements/**/*.ts"],
-  "exclude": ["dist", "node_modules", "src/elements/**/*.test.ts"]
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/elements/**/*.test.ts",
+    "src/elements/**/*.test-support.ts"
+  ]
 }

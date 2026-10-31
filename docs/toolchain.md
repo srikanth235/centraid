@@ -1,6 +1,6 @@
 # Toolchain contract
 
-This is the durable command and ownership contract for quality work. Rust, Kotlin and TypeScript are gated by one entrypoint, `cargo xtask gate` ([below](#cargo-xtask-gate-1020)); the TypeScript that remains — `packages/design`, `packages/test-kit` and the repo tooling scripts — additionally has the Bun-script contract in the first half of this page. Its executable sources of truth are the root `package.json`, `oxlint.config.ts`, and `oxfmt.config.ts`; this document explains the policy without duplicating their rule catalog.
+This is the durable command and ownership contract for quality work. Rust, Kotlin and TypeScript are gated by one entrypoint, `cargo xtask gate` ([below](#cargo-xtask-gate-1020)); the TypeScript that remains — `packages/design` and the repo tooling scripts — additionally has the Bun-script contract in the first half of this page. Its executable sources of truth are the root `package.json`, `oxlint.config.ts`, and `oxfmt.config.ts`; this document explains the policy without duplicating their rule catalog.
 
 ## Toolchain pins
 

@@ -54,7 +54,7 @@ Scattered branches for the same axis are how behavior drifts between call sites.
 | `*-utils.ts` / `*-helpers.ts` | Grab-bag with no ownership | Name the **domain** (`consent-parse.ts`, `wal-segment-key.ts`) |
 | `*-manager.ts` / `*-service.ts` without a seam | God object that grows forever | Narrow verbs (`openVault`, `fireAutomation`) or a real port interface |
 
-The same holds for Rust modules (`utils.rs`, `helpers.rs`) and Kotlin files. Shared TypeScript test helpers live in `@centraid/test-kit`, not another `test-utils.ts` per package.
+The same holds for Rust modules (`utils.rs`, `helpers.rs`) and Kotlin files. A TypeScript test helper lives beside the tests that use it, named `*.test-support.ts` so no build program ships it.
 
 ## Fallible-action contract
 
@@ -72,20 +72,18 @@ User-visible or IPC/HTTP-facing work that can fail must expose failure to the UI
 
 ## Test seams (mechanically enforced)
 
-Three hand-rolled test constructs are **oxlint errors** inside vitest test files. Each one leaked something when a test failed, and each has a shorter kit replacement — see the `TEST_SEAM_PROPERTIES` block in [oxlint.config.ts](../oxlint.config.ts) for the rule and its message.
+Three hand-rolled test constructs are **oxlint errors** inside vitest test files. Each one leaked something when a test failed, and each has a shorter replacement — see the `TEST_SEAM_PROPERTIES` block in [oxlint.config.ts](../oxlint.config.ts) for the rule and its message.
 
 | Banned in tests | Use | Why it is a rule and not advice |
 | --- | --- | --- |
-| `mkdtemp` / `mkdtempSync` (called or imported from `node:fs*`) | `tempDir()` / `tempDirSync()` from `@centraid/test-kit/temp-dir` | The kit registers removal at creation, so a throwing test cannot leak the directory. A leak from module top level recurs on every run. |
-| `vi.useFakeTimers` / `vi.useRealTimers` / `vi.setSystemTime` | `useFakeClock()` from `@centraid/test-kit/fake-clock` | A fake clock installed by a test that then throws stays installed for the rest of the file, and the later failures report as timeouts, not as the leak. `useFakeClock` registers the restore at install time. |
-| `Math.random()` | `seededRandom(<literal>)` from `@centraid/test-kit/random` | A failure found from an unseeded draw is not reproducible from the failing run's own output. |
+| `mkdtemp` / `mkdtempSync` (called or imported from `node:fs*`) | `tempDir()` / `tempDirSync()` from `scripts/release/temp-dir.mjs` | It registers removal at creation, so a throwing test cannot leak the directory. A leak from module top level recurs on every run. |
+| `vi.useFakeTimers` / `vi.useRealTimers` / `vi.setSystemTime` | `useFakeClock()` from `packages/design/src/elements/fake-clock.test-support.ts` | A fake clock installed by a test that then throws stays installed for the rest of the file, and the later failures report as timeouts, not as the leak. `useFakeClock` registers the restore at install time. |
+| `Math.random()` | a seeded generator (the LCG in `packages/design/src/tile-properties.test.ts`) | A failure found from an unseeded draw is not reproducible from the failing run's own output. |
 
 Two things to know about `useFakeClock`:
 
 - It uses `onTestFinished`, so it is callable from a test body or `beforeEach` — **not** from `beforeAll` or a bare `describe` body. A file-lifetime clock is out of scope by design; if you think you need one, the fixture probably belongs in `beforeEach`.
-- The `use` prefix makes `react-hooks/rules-of-hooks` treat it as a React hook, so it must be called directly in the test body, never from a lowercase-named local helper. Inline the helper rather than renaming the kit export.
-
-`bootstrappedVault()` from `@centraid/test-kit/vault` is the same idea for vault fixtures: it opens, bootstraps, and registers the close in one call, and it takes `{ openVaultDb, bootstrapVault }` by injection so a caller supplies its own opener without a package cycle.
+- The `use` prefix makes `react-hooks/rules-of-hooks` treat it as a React hook, so it must be called directly in the test body, never from a lowercase-named local helper. Inline the helper rather than renaming the export.
 
 **Not** banned: `Date.now()`. oxlint 1.76 has no `no-restricted-syntax`, so the shape that actually hurts — wall clock read inside an assertion's expected value — is not expressible; only a blanket ban is, and the sampled majority of call sites are relative offsets, unique-id suffixes, and elapsed measurement, which a fake clock makes wrong rather than better. Prefer `clock.now()` where a clock is already installed.
 

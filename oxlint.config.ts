@@ -5,10 +5,10 @@ import vitest from "ultracite/oxlint/vitest";
 // ---------------------------------------------------------------------------
 // #656 Layer 4 — test seams as merge blockers.
 //
-// TESTING.md says "prefer the kit". Prose does not survive contact with an
+// Prose does not survive contact with an
 // agent writing the twentieth test file of a session, so the three seams whose
 // hand-rolled forms actually caused defects are mechanical here. Each entry
-// names the kit helper that replaces it; a ban with no shorter alternative is
+// names the helper that replaces it; a ban with no shorter alternative is
 // just friction, so the helper landed first.
 //
 // `Date.now()` is deliberately NOT on this list. oxlint 1.76 has no
@@ -22,41 +22,41 @@ const TEST_SEAM_PROPERTIES = [
   {
     property: "mkdtemp",
     message:
-      "Use tempDir() from @centraid/test-kit/temp-dir — it registers the removal at creation, so a failing test cannot leak the directory. See docs/coding-standards.md, test seams.",
+      "Use tempDir() from scripts/release/temp-dir.mjs — it registers the removal at creation, so a failing test cannot leak the directory. See docs/coding-standards.md, test seams.",
   },
   {
     property: "mkdtempSync",
     message:
-      "Use tempDirSync() from @centraid/test-kit/temp-dir — it registers the removal at creation, so a failing test cannot leak the directory. See docs/coding-standards.md, test seams.",
+      "Use tempDirSync() from scripts/release/temp-dir.mjs — it registers the removal at creation, so a failing test cannot leak the directory. See docs/coding-standards.md, test seams.",
   },
   {
     object: "vi",
     property: "useFakeTimers",
     message:
-      "Use useFakeClock() from @centraid/test-kit/fake-clock — it restores real timers even when the test throws, so a fake clock cannot leak into later tests as a hang. See docs/coding-standards.md, test seams.",
+      "Use useFakeClock() from packages/design/src/elements/fake-clock.test-support.ts — it restores real timers even when the test throws, so a fake clock cannot leak into later tests as a hang. See docs/coding-standards.md, test seams.",
   },
   {
     object: "vi",
     property: "useRealTimers",
     message:
-      "useFakeClock() from @centraid/test-kit/fake-clock already restores real timers; call clock.restore() if a test needs it early. See docs/coding-standards.md, test seams.",
+      "useFakeClock() (packages/design/src/elements/fake-clock.test-support.ts) already restores real timers; call clock.restore() if a test needs it early. See docs/coding-standards.md, test seams.",
   },
   {
     object: "vi",
     property: "setSystemTime",
     message:
-      "Use clock.set() from useFakeClock() (@centraid/test-kit/fake-clock) — setting the system time without owning its restore is what leaks. See docs/coding-standards.md, test seams.",
+      "Use clock.set() from useFakeClock() (packages/design/src/elements/fake-clock.test-support.ts) — setting the system time without owning its restore is what leaks. See docs/coding-standards.md, test seams.",
   },
   {
     object: "Math",
     property: "random",
     message:
-      "Use seededRandom() from @centraid/test-kit/random — a failure found from an unseeded draw is not reproducible from the failing run's own output. See docs/coding-standards.md, test seams.",
+      "Use a seeded generator (e.g. the LCG in packages/design/src/tile-properties.test.ts) — a failure found from an unseeded draw is not reproducible from the failing run's own output. See docs/coding-standards.md, test seams.",
   },
 ] as const;
 
 const TEMP_DIR_IMPORT_MESSAGE =
-  "Import tempDir()/tempDirSync() from @centraid/test-kit/temp-dir instead — the kit owns the removal. See docs/coding-standards.md, test seams.";
+  "Import tempDir()/tempDirSync() from scripts/release/temp-dir.mjs instead — it owns the removal. See docs/coding-standards.md, test seams.";
 
 const TEST_SEAM_IMPORTS = {
   paths: [
@@ -98,7 +98,7 @@ const VITEST_TEST_FILES = [
   "**/*.{test,spec}.{ts,tsx}",
   // #781 — `.test.mjs` was invisible to the seam rules (11 files carried raw
   // mkdtemp*). Widened, not carved: node:test-runner files that genuinely
-  // cannot import the kit (tempDir() registers a vitest afterAll at import
+  // cannot import the helper (tempDir() registers a vitest afterAll at import
   // time) suppress per-line with a justification instead of being excluded
   // here wholesale.
   "**/*.test.mjs",

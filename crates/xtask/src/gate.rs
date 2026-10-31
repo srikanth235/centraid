@@ -1747,7 +1747,7 @@ fn run_release_build(ctx: &Ctx) -> Result<Outcome> {
     Ok(outcome)
 }
 
-/// The TypeScript workspaces (`packages/design`, `packages/test-kit`) and the
+/// The TypeScript workspace (`packages/design`) and the
 /// release scripts: format, lint, typecheck and tests, through `bun run check`.
 fn run_ts_static(ctx: &Ctx) -> Result<Outcome> {
     process(ctx, "ts-static", "bun", &["run", "check"])

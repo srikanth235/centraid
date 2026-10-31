@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
+import { tempDirSync } from "./temp-dir.mjs";
 
 const CLASSIFY = path.resolve(import.meta.dirname, "classify.mjs");
 

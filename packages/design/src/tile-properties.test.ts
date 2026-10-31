@@ -10,10 +10,7 @@
  * These assert the laws: channel order, clamping at both ends, per-variant
  * alpha, and glyph contrast — never a literal box-shadow string.
  *
- * NOTE: swept with a seeded generator rather than `@centraid/test-kit
- * /fast-check` — design-tokens has no `"type": "module"`, so importing the
- * ESM-only fast-check re-export fails `tsc` (TS1479). The sweep is
- * deterministic either way.
+ * Swept with a seeded generator, so a failure always reproduces.
  */
 import { describe, expect, test } from "vitest";
 

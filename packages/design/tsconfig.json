@@ -16,5 +16,11 @@
   // tsconfig.elements.json instead: `lib: ["ES2023"]` above is the token
   // layer's Expo-safety gate, and it only means anything while this program
   // holds nothing that needs a `document`.
-  "exclude": ["dist", "node_modules", "src/**/*.test.ts", "src/elements/**"]
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/**/*.test.ts",
+    "src/**/*.test-support.ts",
+    "src/elements/**"
+  ]
 }

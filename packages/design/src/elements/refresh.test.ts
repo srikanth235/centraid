@@ -5,8 +5,7 @@
 // mostly about the reads that must NOT happen.
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { useFakeClock } from "@centraid/test-kit/fake-clock";
-
+import { useFakeClock } from "./fake-clock.test-support.js";
 import type { CentraidChangeDetail, CentraidHost } from "./host.js";
 import {
   debounce,

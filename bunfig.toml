@@ -1,7 +1,0 @@
-# The hoisted node_modules layout: every workspace package is linked at the
-# root, so the root's own scripts resolve `@centraid/test-kit` (the release
-# and lint tests under `scripts/` import it) without the root package.json
-# declaring it. Bun's default "isolated" layout links only declared
-# dependencies, and `bun run scripts:test` then fails to find the package.
-[install]
-linker = "hoisted"

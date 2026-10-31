@@ -3,9 +3,8 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
-
 import { runSyncVersions } from "./sync-versions.mjs";
+import { tempDirSync } from "./temp-dir.mjs";
 
 // The contract: every workspace package that tracked the root version moves
 // with it, and the build number is reported rather than written.
