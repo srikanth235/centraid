@@ -7,8 +7,7 @@
 // pins that the stylesheet carries no host rules for any.
 import { describe, expect, it, vi } from "vitest";
 
-import { useFakeClock } from "@centraid/test-kit/fake-clock";
-
+import { useFakeClock } from "./fake-clock.test-support.js";
 import type { CentraidHost } from "./host.js";
 import {
   closePopover,

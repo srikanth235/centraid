@@ -71,7 +71,7 @@ Scan the QR from a phone build, then compare the safety number the phone shows w
 | `crates/` | The Rust core: the identity model, the vault and its backup plane, the ontology, the gateway protocol and its one deployment, the byte plane, one crate per app, the five-symbol C ABI, the protobuf schema workspace and the `xtask` gate. A line per crate is in [ARCHITECTURE.md](ARCHITECTURE.md#the-crates). |
 | `contracts/` | The layer every language reads: the DDL of a new vault and the list of its commands, the migration ladder, the screen fixtures, the crypto vectors and the down-only ledgers. |
 | `mobile/` | The C ABI binding, the Jetpack Compose shell, the SwiftUI shell, and the Maestro flows. **The only shell.** |
-| `packages/design`, `packages/test-kit` | The design tokens every surface lowers, and shared TypeScript test helpers. |
+| `packages/design` | The design tokens every surface lowers. |
 | `design/`, `copy/` | Emitted artifacts — the native theme and one copy leaf per app — written by one command and gated against drift. |
 | `deploy/` | The container images, the OS service units and the installer. |
 
@@ -131,7 +131,7 @@ bun install
 
 iOS needs an Apple toolchain and is an owner hand-off — the exact commands are in [`mobile/README.md`](mobile/README.md) and in [docs/release/v1-handoffs.md](docs/release/v1-handoffs.md).
 
-Formatting, linting and the TypeScript that remains (`packages/design`, `packages/test-kit` and the tooling under `scripts/`) run through the root scripts: `bun run format`, `bun run lint`, `bun run typecheck`, and `bun run check` for all of them plus the tests. Enable the commit hooks once per clone with `git config core.hooksPath .githooks`. See [docs/toolchain.md](docs/toolchain.md) and [docs/dev-environment.md](docs/dev-environment.md).
+Formatting, linting and the TypeScript that remains (`packages/design` and the tooling under `scripts/`) run through the root scripts: `bun run format`, `bun run lint`, `bun run typecheck`, and `bun run check` for all of them plus the tests. Enable the commit hooks once per clone with `git config core.hooksPath .githooks`. See [docs/toolchain.md](docs/toolchain.md) and [docs/dev-environment.md](docs/dev-environment.md).
 
 ## Documentation
 

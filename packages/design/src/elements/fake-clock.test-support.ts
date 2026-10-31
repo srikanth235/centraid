@@ -1,3 +1,10 @@
+/*
+ * THE ELEMENT SUITES' FAKE CLOCK. `vi.useFakeTimers` is banned in tests
+ * (oxlint's test seams): a clock faked by a test that then throws stays faked
+ * for the rest of the file. This installs it and registers the restore in one
+ * call. Test support, not package surface: both build programs exclude
+ * `*.test-support.ts`.
+ */
 import { onTestFinished, vi } from "vitest";
 
 export interface FakeClock {

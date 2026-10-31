@@ -1,21 +1,19 @@
 # Toolchain contract
 
-This is the durable command and ownership contract for quality work. Rust, Kotlin and TypeScript are gated by one entrypoint, `cargo xtask gate` ([below](#cargo-xtask-gate-1020)); the TypeScript that remains — `packages/design`, `packages/test-kit` and the repo tooling scripts — additionally has the Bun-script contract in the first half of this page. Its executable sources of truth are the root `package.json`, `oxlint.config.ts`, and `oxfmt.config.ts`; this document explains the policy without duplicating their rule catalog.
+This is the durable command and ownership contract for quality work. Rust, Kotlin and TypeScript are gated by one entrypoint, `cargo xtask gate` ([below](#cargo-xtask-gate-1020)); the TypeScript that remains — `packages/design` and the repo tooling scripts — additionally has the Bun-script contract in the first half of this page. Its executable sources of truth are the root `package.json`, `oxlint.config.ts`, and `oxfmt.config.ts`; this document explains the policy without duplicating their rule catalog.
 
 ## Toolchain pins
 
 | Toolchain | Pin | Read by |
 | --- | --- | --- |
-| Rust | `rust-toolchain.toml` (`channel`) | rustup, `.github/actions/setup` (`rustup toolchain install` with no argument), and [`flake.nix`](../flake.nix)'s `devShells.default` through `rust-overlay` |
+| Rust | `rust-toolchain.toml` (`channel`) | rustup, `.github/actions/setup` (`rustup toolchain install` with no argument) |
 | Gradle, Kotlin, AGP, Wire and the Kotlin test stack (`:core`) | `mobile/gradle/libs.versions.toml`, plus the committed `mobile/gradlew` wrapper with `distributionSha256Sum` | Gradle; `org.gradle.warning.mode=fail` makes a deprecation a red ([mobile/README.md](../mobile/README.md#the-toolchain)) |
-| Xcode | `.xcode-version` | the iOS hand-off; nix cannot install Xcode |
-| `cmake` and a C++17 compiler | `flake.nix` (`cmake`); the ubuntu-latest image; Xcode's toolchain and the Android NDK on a phone build | llama.cpp (`llama-cpp-sys-2`), the on-device chat's engine, and only where it is compiled: `centraid-core-ffi`'s `llama` feature, i.e. a phone's core, `mobile/scripts/android-core.sh`, the prebuilt-core lane's Android and iOS legs and the `engine` job in `gate.yml`. `cargo xtask gate` compiles none of it ([R-CHAT-10](decisions.md#the-assistant)) |
+| Xcode | `.xcode-version` | the iOS hand-off |
+| `cmake` and a C++17 compiler | the host's package manager; the ubuntu-latest image; Xcode's toolchain and the Android NDK on a phone build | llama.cpp (`llama-cpp-sys-2`), the on-device chat's engine, and only where it is compiled: `centraid-core-ffi`'s `llama` feature, i.e. a phone's core, `mobile/scripts/android-core.sh`, the prebuilt-core lane's Android and iOS legs and the `engine` job in `gate.yml`. `cargo xtask gate` compiles none of it ([R-CHAT-10](decisions.md#the-assistant)) |
 | llama.cpp's converter and `llama-quantize`, at upstream commit `26394b4e6749a41c3633db040e0987500a5f7013` | `experiments/toolchat/native/train/to_gguf.py` (`LLAMA_CPP_COMMIT`), from a checkout of that commit | turning a checkpoint into the GGUF the phone loads. It is the commit `llama-cpp-sys-2` 0.1.158 vendors, so a file it writes is one the engine reads: a bump of the binding moves `LLAMA_CPP_COMMIT` with it ([R-1088-18](decisions.md#the-assistant)) |
 | Node | `.node-version`, mirrored in `package.json#engines.node` | `.github/actions/setup` reads `.node-version`; a bump moves both |
 | Bun | `package.json#packageManager` | `.github/actions/setup` |
 | TypeScript and the TS tools | exact versions in the root `package.json` (`typescript` via the workspace catalog) | every Bun script below |
-
-The flake pins every toolchain except the Android SDK and Xcode, and says so in its header.
 
 ## TypeScript: one owner per concern
 

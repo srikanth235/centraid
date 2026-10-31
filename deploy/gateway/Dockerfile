@@ -65,7 +65,7 @@ RUN set -eu; \
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY crates ./crates
 COPY contracts ./contracts
-COPY buf.yaml buf.gen.yaml ./
+COPY buf.yaml ./
 
 # `--locked`: the image is the dependency graph the conformance suite passed
 # against, never one resolved that morning.

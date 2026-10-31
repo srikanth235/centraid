@@ -49,8 +49,6 @@
     "vitest": "4.1.10"
   },
   "overrides": {
-    "shell-quote": "1.8.4",
-    "tar": "7.5.22",
     "tinypool": "2.1.2"
   },
   "engines": {
