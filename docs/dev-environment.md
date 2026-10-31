@@ -4,7 +4,7 @@ Stand up Centraid development without tribal knowledge. **Do not invent a new ma
 
 ## Prerequisites
 
-- Rust at the channel pinned in `rust-toolchain.toml` (rustup reads it; [`flake.nix`](../flake.nix)'s dev shell reads it through `rust-overlay`)
+- Rust at the channel pinned in `rust-toolchain.toml` (rustup reads it)
 - [Bun](https://bun.sh) matching root `packageManager` (pinned in `package.json`) — for `packages/design` and the repo tooling scripts
 - Node 24.4.1 — `.node-version` and `package.json#engines.node` must agree, and CI runs exactly this version. Locally a different Node only **warns** (#668); match it with `nvm use` if you hit a toolchain difference
 - For mobile: a JDK for the committed Gradle wrapper (`mobile/gradlew`); the Android SDK for `:androidApp`; Xcode at `.xcode-version` plus `xcodegen` for the iOS shell ([mobile/README.md](../mobile/README.md#the-toolchain))

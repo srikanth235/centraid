@@ -10,9 +10,8 @@
 # a deleted field, value or enum value whose NAME and NUMBER are not both
 # reserved.
 #
-# `buf.gen.yaml` beside this file is DOCUMENTATION. The Rust codegen is
-# `crates/api-proto/build.rs` (prost-build over protox), because there is no
-# `protoc` binary on the build machines.
+# Nothing runs `buf generate`: each language generates with its own tool
+# (`crates/api-proto/README.md`, "How the Rust types are generated").
 version: v2
 modules:
   - path: crates/api-proto/proto

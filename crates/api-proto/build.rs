@@ -6,9 +6,8 @@
 //! table records that this machine has none, and a build that shells out to a
 //! binary nobody installed is a build that works on one laptop.
 //!
-//! `buf` is NOT in this path either. `buf.gen.yaml` at the repository root is
-//! documentation of what the other languages generate; the Rust codegen is this
-//! file, so a contributor without `buf` can still build the workspace while
+//! `buf` is NOT in this path either (the other languages' generators are in
+//! this crate's README); the Rust codegen is this file, so a contributor without `buf` can still build the workspace while
 //! `buf lint` / `buf breaking` stay gate steps rather than build steps.
 
 use std::path::PathBuf;

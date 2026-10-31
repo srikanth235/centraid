@@ -40,3 +40,21 @@ rm -rf node_modules packages/*/node_modules && bun install
 bun run check     # exit 0: design 34 files / 410 tests (402 + 8 clock), scripts 7 / 51 (49 + 2 temp-dir)
 cargo xtask rules # every rule ok;  cargo xtask doc-links → 0 findings
 ```
+
+## Third slice: more of the root (owner, same PR)
+
+- `flake.nix` deleted (owner). Nothing evaluated it: `v1-handoffs.md` 3.3, "the first `nix flake check`", had never been done. Each toolchain keeps its own version file. `docs/decisions.md` R-1020-10 now says so and D-1020-G6 is marked superseded. Hand-off 3.3 is withdrawn, and `docs/toolchain.md`, `docs/dev-environment.md` and `rust-toolchain.toml`'s header drop the flake. The header also drops the v0 `apps/web/iroh-wasm` note, whose tree is gone.
+- `assets/` deleted: 13 icons (`.icns`, `.ico`, tray template, Expo adaptive icon and splash) from the retired Electron and Expo shells. A grep of every file name finds no reference outside the directory; the phone apps carry their own icons under `mobile/`.
+- `buf.gen.yaml` deleted. It was "DOCUMENTATION ONLY" with `plugins: []`, so nothing ran `buf generate`. Its consumer table moved into `crates/api-proto/README.md`, and `buf.yaml`, `build.rs`'s doc comment, the gateway `Dockerfile` (`COPY buf.yaml ./`) and `v1-handoffs.md` 1.2 no longer name it.
+
+### Verification
+
+```sh
+bun run check                     # exit 0
+cargo xtask rules                 # every rule ok
+cargo xtask doc-links             # 0 findings
+cargo test -p centraid-api-proto  # pass
+buf lint                          # clean (buf 1.75.0 via npm)
+```
+
+Not run: `docker build` (no Docker here). The Dockerfile change only drops a COPY of a deleted documentation file.

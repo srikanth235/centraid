@@ -31,7 +31,13 @@ Each file carries its own reasoning in comments.
 
 `build.rs`: [`protox`](https://docs.rs/protox) parses the tree in pure Rust and produces a `FileDescriptorSet`; [`prost-build`](https://docs.rs/prost-build) emits the Rust. **There is no `protoc` binary** on the build machines, and a codegen step that shells out to one is a step that works on one laptop.
 
-`buf` is not in the build path. `buf.gen.yaml` documents what the other consumers (Swift, Kotlin) generate, and `buf lint` / `buf breaking` are steps of `cargo xtask gate --profile pr`.
+`buf` is not in the build path; `buf lint` / `buf breaking` are steps of `cargo xtask gate --profile pr`. Each consumer generates from this tree with its own tool, and nothing runs `buf generate`:
+
+| Consumer | Generator |
+| --- | --- |
+| Rust (`crates/`) | `build.rs`: prost-build over protox |
+| Kotlin (`mobile/core`) | Wire's `generateCommonMainProtos`, over `crates/api-proto/proto` in place |
+| Swift (iOS) | `protoc-gen-swift` via `mobile/scripts/generate-swift-protos.sh`, the app's pre-build phase |
 
 `build.rs` names every file rather than globbing. `tests/tree.rs` asserts the list and the directory agree, and that there is exactly one package, declaring the package its directory implies.
 
