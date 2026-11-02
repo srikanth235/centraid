@@ -58,7 +58,7 @@ impl Exclusions {
     pub fn builtin() -> Self {
         Self {
             frozen_files: Vec::new(),
-            frozen_sections: vec![("QUALITY.md".to_owned(), "Resolved".to_owned())],
+            frozen_sections: Vec::new(),
         }
     }
 

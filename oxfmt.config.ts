@@ -39,9 +39,6 @@ export default defineConfig({
     ...base.ignorePatterns,
     // Xcode owns asset catalog metadata.
     "**/*.xcassets/**/Contents.json",
-    // The quality ledger is an append-only record; a reformat would rewrite
-    // history.
-    "QUALITY.md",
     // Generator-owned outputs with regeneration checks elsewhere in the repo.
     // The public site's token sheet is lowered from @centraid/design by
     // scripts/site-tokens.mjs; `lint:site-tokens` asserts it byte-for-byte.
