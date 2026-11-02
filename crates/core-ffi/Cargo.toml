@@ -26,7 +26,7 @@ crate-type = ["cdylib", "rlib", "staticlib"]
 # `llama` is the on-device chat's engine, and a PHONE'S library needs it: without
 # it a model file is reported NO_ENGINE with nothing to read it. It is OFF by
 # default so that `cargo build|clippy|test --workspace` — the PR gate — compiles
-# no llama.cpp, a cmake build of ~5 minutes cold (R-CHAT-10, docs/decisions.md).
+# no llama.cpp, a cmake build of ~5 minutes cold.
 # Every build of the library a phone ships therefore says `--features llama`:
 # the prebuilt-core lane's Android and iOS legs, `mobile/scripts/android-core.sh`
 # and the iOS hand-off in `mobile/README.md`. The JVM tests build the library

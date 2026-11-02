@@ -90,8 +90,7 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 # on `hmac` save `crates/core` for RFC 6238 (the `sha1` note below). The object
 # store's SHA-256 checksum that once made `crates/gateway-core` a third left
 # with that crate (#1080). W0.5-R1 is a ruling put to the owner with a
-# recommendation, not yet a `docs/decisions.md` supersession of D-1025-S4-5
-# (that entry is W9's).
+# recommendation.
 hmac = "0.13"
 sha2 = "0.11"
 # SHA-1 SURVIVES IN ONE PLACE, AND FOR THE SAME REASON (#1047, Q-1047-16):

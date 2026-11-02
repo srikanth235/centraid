@@ -1,5 +1,4 @@
-//! CONTACTS → PEOPLE, IMPORTED AND FOLLOWED (docs/decisions.md, "Onboarding
-//! without sample data"; #1127; #1135).
+//! CONTACTS → PEOPLE, IMPORTED AND FOLLOWED (#1127; #1135).
 //!
 //! The phone is read by the shell (iOS `CNContactStore`, Android
 //! `ContactsContract`), which performs a [`wire::ContactsRead`] effect and

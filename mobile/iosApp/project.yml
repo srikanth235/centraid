@@ -220,7 +220,7 @@ targets:
         #
         # `InstrumentSans_470Book.ttf` IS THE 400 REGISTER'S FACE HERE, and is
         # not a third weight: the ramp still says 400, the file is a derived
-        # instance at `usWeightClass` 470, and `docs/decisions.md` says why a
+        # instance at `usWeightClass` 470, because a
         # touch surface needs it where a desktop pane does not.
         UIAppFonts:
           - InstrumentSans_470Book.ttf
@@ -258,8 +258,7 @@ targets:
         # or `centraid-gateway pair` prints (#1080). One key, so the sentence
         # names both; Upload runs out of process and needs none.
         NSCameraUsageDescription: Centraid uses the camera to scan paper documents into Docs, and to read the square your laptop shows when you pair it.
-        # WHY PEOPLE ASKS FOR CONTACTS (docs/decisions.md, "Onboarding without
-        # sample data"): asked when the member taps "Import contacts" on
+        # WHY PEOPLE ASKS FOR CONTACTS: asked when the member taps "Import contacts" on
         # People's day-one empty state, never at launch, and read once into
         # their own vault on this phone.
         NSContactsUsageDescription: Centraid copies the contacts you choose into People, in your own vault on this phone.
@@ -275,8 +274,7 @@ targets:
         # WHY CENTRAID ASKS FOR THE LOCAL NETWORK (#1047 E5; #1080). A gateway
         # is dialled at the addresses its pairing record keeps, which are
         # usually on the member's own Wi-Fi; iOS asks before an app reaches a
-        # device on the local network. THE IOS SHELL BROWSES (Q-1080-D3 in
-        # `docs/decisions.md`): `serve` advertises `_centraid-gateway._tcp`,
+        # device on the local network. THE IOS SHELL BROWSES: `serve` advertises `_centraid-gateway._tcp`,
         # and `GatewayBrowser.swift` browses it with `NWBrowser` in the
         # foreground, only after a pass found no paired gateway reachable, at
         # most once every 30 s. iOS refuses to browse a type the bundle does

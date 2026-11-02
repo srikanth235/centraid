@@ -59,7 +59,7 @@ message EmptyState {
 }
 
 // A SOURCE ON THE PHONE ITSELF that an app's day-one empty state can import
-// from in one tap (docs/decisions.md, "Onboarding without sample data"). The
+// from in one tap. The
 // OS asks its own permission when the member taps it, never before.
 enum ImportSource {
   IMPORT_SOURCE_UNSPECIFIED = 0;

@@ -73,7 +73,7 @@ enum FoundContent {
   // starter row leaves the vault founded rather than refusing it.
   FOUND_CONTENT_STARTERS = 1;
   // `FOUND_CONTENT_SAMPLE`, the separate sample vault on the member's shelf,
-  // retired with it (docs/decisions.md, "Onboarding without sample data").
+  // retired with it.
   reserved 2;
   reserved "FOUND_CONTENT_SAMPLE";
   // `FOUND_CONTENT_EXAMPLE`, the Tahoe scenario founded into an ephemeral

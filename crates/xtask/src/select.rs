@@ -617,9 +617,9 @@ const UNSCANNED: &str = "xtask";
 /// Over-approximating by design: a path that merely appears in a message
 /// literal selects its reader, which costs a few seconds of tests. A missed
 /// read would skip tests that should have run, so each ambiguity resolves to
-/// "read". Comments are skipped — this repository cites `docs/decisions.md`
-/// from nearly every module, and counting those would make every documentation
-/// edit select every crate.
+/// "read". Comments are skipped — modules cite documentation paths in
+/// their comments, and counting those would make every documentation edit
+/// select every crate.
 pub fn scan_reads(root: &Path, workspace: &Workspace) -> Reads {
     let mut reads = Reads::default();
     for member in &workspace.members {

@@ -214,8 +214,8 @@ public fun centraidType(role: String, scales: Boolean = true): TextStyle {
  * WHOLE POINT. It is a lowering and not a third weight: the ramp says 400, this
  * shell's `FontWeight` says `W400`, and only the bytes behind that rung differ
  * from the web's. The touch step [NativeTheme] already carries scales the glyph
- * without scaling the stroke, so a true 400 reads thin in the hand — see
- * `docs/decisions.md`. Declaring the file at `W400` rather than at some
+ * without scaling the stroke, so a true 400 reads thin in the hand.
+ * Declaring the file at `W400` rather than at some
  * invented `W470` is also what stops Compose from synthesising anything: the
  * resolver is asked for the weight it is handed, and it finds an exact face.
  */

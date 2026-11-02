@@ -36,7 +36,7 @@
 // purge takes: the row, its star, labels and versions go, and its bytes are
 // released when nothing else holds them — and `entity.empty_trash` does that to
 // every trashed document
-// (the 2026-09-25 ruling D-1 in `docs/decisions.md`). A document whose window
+// (the 2026-09-25 ruling). A document whose window
 // ran out is emptied by the pass the core runs when it opens (#1146); until
 // that pass runs it is a trashed document like any other and
 // `entity.restore` brings it back, so `purge_in_days` can be zero or negative

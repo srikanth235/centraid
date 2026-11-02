@@ -22,8 +22,7 @@
 //! `the_same_key_sent_twice_runs_the_command_twice` is deliberately the OPPOSITE
 //! of what a ledger would do. If a later change makes the second send answer the
 //! first outcome, this test flips — on purpose, in the same change as the ruling
-//! that restores the ledger, the docs that say there is none (`docs/decisions.md`
-//! R-1088-12, `crates/vault/src/commands/mod.rs`, `Handle::command`) and the callers that were relying on their own idempotence.
+//! that restores the ledger, the docs that say there is none (`crates/vault/src/commands/mod.rs`, `Handle::command`) and the callers that were relying on their own idempotence.
 //! It is not a test to delete to go green.
 
 mod common;

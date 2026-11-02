@@ -13,8 +13,7 @@ import centraid.core.v1.PhoneContactContainer
 import dev.centraid.android.kit.PhoneOrigins
 
 /**
- * THE PHONE'S ADDRESS BOOK, READ FOR THE SCREEN RUNTIME (#1135; docs/decisions.md,
- * "Onboarding without sample data"): the platform half of Contacts → People.
+ * THE PHONE'S ADDRESS BOOK, READ FOR THE SCREEN RUNTIME: the platform half of Contacts → People.
  *
  * Rust asks with a `ContactsRead` effect (`kit/ScreenEffects.kt` performs it and has
  * already settled the permission, which is asked only at the member's Import tap, never

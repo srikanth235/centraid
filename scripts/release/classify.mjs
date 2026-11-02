@@ -5,7 +5,7 @@
  * A release is a **patch** only if every non-empty bullet under the target
  * version sits under a *Fixed* heading. Anything under Added / Changed /
  * Removed / Deprecated / Security (non-fix) → **minor**.
- * Agents never propose **major** before 1.0 (see docs/decisions.md F1/D4).
+ * Agents never propose **major** before 1.0.
  *
  * Usage:
  *   node scripts/release/classify.mjs [path/to/CHANGELOG.md] [--version 0.2.0]

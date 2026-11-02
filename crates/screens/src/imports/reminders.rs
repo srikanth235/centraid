@@ -1,5 +1,4 @@
-//! REMINDERS → AGENDA'S TO-DO, IN ONE TAP (docs/decisions.md, "Onboarding without sample
-//! data", R-ONBOARD-4; the import lane C3 dropped, #1135).
+//! REMINDERS → AGENDA'S TO-DO, IN ONE TAP (the import lane C3 dropped, #1135).
 //!
 //! The shell reads the open reminders (iOS EventKit; Android has no system source) and
 //! answers a [`wire::RemindersSnapshot`]; everything else is decided here. Each open

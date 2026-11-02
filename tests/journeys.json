@@ -527,7 +527,7 @@
           "ceilingMs": 750,
           "ceilingRssDeltaBytes": 134217728,
           "ceilingEventLoopBlockMs": 750,
-          "_ruling": "docs/decisions.md Q12 — the vector engine for photo similarity is decided by this rig's numbers, not by a preference. The SQL sqlite-vec floor ranks 90,000 embeddings in 166-243 ms, comfortably inside an interactive ceiling, so a `vec0` ANN index is NOT adopted: it has not been earned. The day either engine goes red here, it has been.",
+          "_ruling": "The vector engine for photo similarity is decided by this rig's numbers, not by a preference. The SQL sqlite-vec floor ranks 90,000 embeddings in 166-243 ms, comfortably inside an interactive ceiling, so a `vec0` ANN index is NOT adopted: it has not been earned. The day either engine goes red here, it has been.",
           "_provenance": {
             "at": "2026-08-28",
             "host": "linux x64, 4 vCPU, 15.7 GiB RAM, shared dev container; node v22.22.2; sqlite-vec v0.1.9 loaded through the gateway's loadExtensions seam",

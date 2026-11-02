@@ -15,8 +15,7 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * THE PHONE'S CALENDARS, READ FOR THE SCREEN RUNTIME (#1135; docs/decisions.md,
- * "Onboarding without sample data"): the platform half of Calendar → Agenda.
+ * THE PHONE'S CALENDARS, READ FOR THE SCREEN RUNTIME: the platform half of Calendar → Agenda.
  *
  * Rust asks with a `CalendarRead` effect (`kit/ScreenEffects.kt` performs it and
  * has already settled the permission, which is asked only at the member's

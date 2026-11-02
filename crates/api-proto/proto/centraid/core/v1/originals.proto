@@ -22,7 +22,7 @@
 // would be releasing the only copy. The verb and the total arrive together,
 // with the plane that uploads originals and records the gateway's ack for each
 // object; until then there is nothing to put in either that would not be a
-// guess or an always-zero. See `docs/decisions.md` (R-1029-PH-1).
+// guess or an always-zero.
 
 syntax = "proto3";
 
