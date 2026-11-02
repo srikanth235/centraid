@@ -95,7 +95,7 @@ final class ScreenStore: ObservableObject {
     /// tabs' roots. Call once.
     func start() async {
         Task { [core] in
-            for await update in core.updates { await self.apply(update) }
+            for await update in core.updates { self.apply(update) }
         }
         await request(.snapshot(Centraid_Core_V1_SnapshotRequest()))
     }

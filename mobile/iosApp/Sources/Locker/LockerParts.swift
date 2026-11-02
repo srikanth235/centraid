@@ -77,6 +77,30 @@ struct LockerWallView: View {
     }
 }
 
+/// The existing `locker.lock` state rendered as the wall in a pushed page,
+/// matching Android's LockerLockPage. Rust owns the wall, labels and completion.
+struct LockerLockPageView: View {
+    let state: Centraid_Core_V1_LockerLockState
+    let sendWall: (Centraid_Core_V1_LockerWallEvent) -> Void
+    let onWords: () -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        LockerShield(secure: state.secure) {
+            PushedPage(title: "", parentTitle: state.closeLabel, onBack: onClose) {
+                EmptyView()
+            } content: {
+                if state.hasWall {
+                    LockerWallView(wall: state.wall, send: sendWall, onWords: onWords)
+                }
+            }
+        }
+        .onChange(of: state.finished, initial: true) { _, finished in
+            if finished { onClose() }
+        }
+    }
+}
+
 /// A PUSHED LOCKER PAGE, COVERED while the Locker is locked: the wall in a page
 /// whose back returns to where the member came from. Unlocked, the page.
 struct LockerCovered<Content: View>: View {
