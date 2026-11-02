@@ -1,6 +1,6 @@
 # Dev environment (G1)
 
-Stand up Centraid development without tribal knowledge. **Do not invent a new manifest format** — promote `.claude/launch.json` when present; otherwise use the patterns below ([decisions.md](decisions.md)).
+Stand up Centraid development without tribal knowledge. **Do not invent a new manifest format** — promote `.claude/launch.json` when present; otherwise use the patterns below.
 
 ## Prerequisites
 
@@ -45,8 +45,6 @@ Agents often work in git worktrees (including under `.claude/worktrees/`).
 2. **One `CARGO_TARGET_DIR` per worktree** — sharing one is not only lock contention. A build script's `OUT_DIR` is keyed by package identity, which is the same in every worktree, so a lane that edits a `.proto` hands its generated Rust to every other lane; and a gate verdict taken from a shared directory is worth nothing. Export `CARGO_TARGET_DIR=<something unique>` and `touch crates/api-proto/build.rs` before the first build in a fresh one (`.claude/skills/rust/SKILL.md`, Pitfalls).
 3. **Do not share** writable `--data-dir` trees across concurrent agents, and give each worktree its own `CARGO_TARGET_DIR` (`.claude/skills/rust/SKILL.md`, Pitfalls).
 4. **Seed data** — use a dedicated `--data-dir` and `seed-demo-vault` rather than copying a live vault (see `.claude/skills/sqlite/SKILL.md`).
-
-More worktree pitfalls: `.claude/skills/rust/SKILL.md`. Multi-agent rules: [multi-agent.md](multi-agent.md).
 
 ## `.claude/launch.json`
 
@@ -105,6 +103,5 @@ Pinned toolchains live in `rust-toolchain.toml`, `mobile/gradle/libs.versions.to
 
 ## Related
 
-- [multi-agent.md](multi-agent.md)
 - [logs.md](logs.md)
 - [README.md](../README.md)

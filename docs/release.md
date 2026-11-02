@@ -205,7 +205,6 @@ Mid-flight stranding: [recovery/release.md](recovery/release.md).
 
 ## Related
 
-- [decisions.md](decisions.md) — D4, D5, R1–R5, I12, F1, J1, J7
 - [protocol.md](protocol.md) — C1 + protocol floor
 - [CHANGELOG.md](../CHANGELOG.md)
 - [enrollment.md](enrollment.md)
