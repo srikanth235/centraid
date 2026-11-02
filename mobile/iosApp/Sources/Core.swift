@@ -1,6 +1,7 @@
 import CentraidCoreC
 import Foundation
 import SwiftProtobuf
+import os
 
 /// THE SWIFT SIDE OF THE C ABI (#1135, lane C2): `centraid_open`, `centraid_call`,
 /// `centraid_next_event`, `centraid_free` and `centraid_close`, wrapped once.
@@ -53,6 +54,7 @@ actor Core {
     private let bulk = DispatchQueue(label: "dev.centraid.core.bulk")
     private var closed = false
     private let pendingCalls = DispatchGroup()
+    private let stoppingPump = OSAllocatedUnfairLock(initialState: false)
 
     /// Which queue a call waits on.
     enum Lane {
@@ -112,14 +114,17 @@ actor Core {
         }
     }
 
-    /// Close the core. Unblocks the event pump, which ends `updates`.
+    /// Stop the bounded event pump and drain queued calls, then close the core.
     func close() async {
         guard !closed else { return }
         closed = true
+        stoppingPump.withLock { $0 = true }
         let raw = self.raw
         // Actor reentrancy lets close arrive while a queued call is awaiting
-        // its answer. Wait for both lanes before releasing the C handle, and
-        // keep the blocking close off the actor executor/UI thread.
+        // its answer. Wait for both lanes and the event pump before releasing
+        // the C handle. The pump checks stopping between bounded polls: close
+        // cannot free its pointer in the gap before the next event call.
+        // Keep the blocking close off the actor executor/UI thread.
         await withCheckedContinuation { continuation in
             pendingCalls.notify(queue: calls) {
                 _ = centraid_close(raw.pointer)
@@ -158,8 +163,12 @@ actor Core {
     private nonisolated func startPump() {
         let raw = self.raw
         let sink = updateSink
+        let stopping = stoppingPump
+        let pending = pendingCalls
+        pending.enter()
         let thread = Thread {
-            while true {
+            defer { pending.leave() }
+            while !stopping.withLock({ $0 }) {
                 var out: UnsafeMutablePointer<UInt8>?
                 var outLength = 0
                 let status = centraid_next_event(raw.pointer, 1000, &out, &outLength)

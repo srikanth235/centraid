@@ -112,6 +112,9 @@ fn record(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             written += 1;
         }
     }
+    if written > 0 {
+        ctx.touch(&person)?;
+    }
     Ok(json!({ "written": written, "unchanged": unchanged }))
 }
 

@@ -1,5 +1,6 @@
 package dev.centraid.android.screens.docs
 
+import dev.centraid.android.kit.effectAttempt
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -143,27 +144,30 @@ internal class DocsPickers(
         scope.launch {
             val core = files.core()
             val size = file.length()
-            val outcome = if (core == null) {
-                Stage.Outcome.Refused("")
-            } else {
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        file.inputStream().use { input ->
-                            var sent = 0L
-                            val slices = Stage.slices(input)
-                            Stage.stage(core, mediaType, size) { max ->
-                                slices(max).also {
-                                    sent += it.size
-                                    answer?.invoke(
-                                        EffectResult(file_progress = FileProgress(staged_bytes = sent, total_bytes = size, name = name)),
-                                    )
+            val outcome = try {
+                if (core == null) {
+                    Stage.Outcome.Refused("")
+                } else {
+                    effectAttempt {
+                        withContext(Dispatchers.IO) {
+                            file.inputStream().use { input ->
+                                var sent = 0L
+                                val slices = Stage.slices(input)
+                                Stage.stage(core, mediaType, size) { max ->
+                                    slices(max).also {
+                                        sent += it.size
+                                        answer?.invoke(
+                                            EffectResult(file_progress = FileProgress(staged_bytes = sent, total_bytes = size, name = name)),
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
-                }.getOrElse { Stage.Outcome.Refused("") }
+                    }.getOrElse { Stage.Outcome.Refused("") }
+                }
+            } finally {
+                DocsIngestFiles.discard(file)
             }
-            DocsIngestFiles.discard(file)
             when (outcome) {
                 is Stage.Outcome.Staged -> answer?.invoke(
                     EffectResult(

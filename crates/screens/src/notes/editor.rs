@@ -2,8 +2,8 @@
 //! the link powerbox as a sheet it owns.
 //!
 //! The editor is the screen where the read law and the WRITE law differ, and
-//! keeping them apart is most of this file: a failed READ replaces the editor,
-//! a failed SAVE does not. A member whose save was refused still has their
+//! keeping them apart is most of this file: a failed first READ replaces the editor,
+//! while a failed reread or SAVE preserves the member's words. A member whose save was refused still has their
 //! words on the screen, and an editor that swapped them for an error message
 //! would have thrown away the only copy.
 //!
@@ -140,6 +140,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         note_id: Some(args.note_id.clone()).filter(|id| !id.is_empty()),
         auto: Autosave::new(),
         blocked: None,
+        read_failure: None,
         denied: None,
         pinned: false,
         tags: Vec::new(),
@@ -165,6 +166,8 @@ struct Editor {
     auto: Autosave<NoteDraft>,
     /// The read that replaced the editor: the note is gone, trashed or unreadable.
     blocked: Option<wire::Failure>,
+    /// A failed reread is said over the existing draft, never in its place.
+    read_failure: Option<String>,
     denied: Option<wire::AppQueryDenial>,
     pinned: bool,
     /// The tags the vault holds for the note: `(concept id, label)`.
@@ -198,6 +201,7 @@ impl Editor {
                 self.refuse(words::note_trashed(locale));
             }
             Reading::Data(note) => {
+                self.read_failure = None;
                 self.blocked = None;
                 self.denied = None;
                 self.pinned = note.pinned;
@@ -222,6 +226,9 @@ impl Editor {
                 self.auto = Autosave::new();
                 self.denied = Some(denial);
             }
+            Reading::Failed if self.auto.draft().is_some() => {
+                self.read_failure = Some(read::failure(locale).sentence);
+            }
             Reading::Failed => {
                 self.auto = Autosave::new();
                 self.blocked = Some(read::failure(locale));
@@ -241,6 +248,9 @@ impl Editor {
     /// The note was created by a save: it has an id now, and a pin chosen
     /// before it existed lands.
     fn after_save(&mut self, ctx: &Ctx) {
+        if self.auto.saved() {
+            self.read_failure = None;
+        }
         if self.note_id.is_some() {
             return;
         }
@@ -630,7 +640,14 @@ impl Screen for Editor {
                 history_label: words::history_title(locale),
                 send_to_agenda_label: words::send_to_agenda(locale),
                 link_label: words::link_label(locale),
-                status: self.status.clone().unwrap_or(save_status),
+                status: if autosave.refused {
+                    save_status
+                } else {
+                    self.read_failure
+                        .clone()
+                        .or_else(|| self.status.clone())
+                        .unwrap_or(save_status)
+                },
                 title: if exists {
                     words::note_title(locale)
                 } else {
@@ -681,6 +698,111 @@ impl Screen for Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::field::Keyed;
+
+    /// The Driver supplies a real vault; only its read/write failure seam is replaced.
+    struct Flaky<'a> {
+        core: &'a centraid_core::Handle,
+        fail_reads: std::cell::Cell<bool>,
+        fail_writes: std::cell::Cell<bool>,
+    }
+
+    impl centraid_core::screens::ScreenCtx for Flaky<'_> {
+        fn load(&self, request: &wire::LoadRequest) -> centraid_core::Result<wire::LoadResponse> {
+            if self.fail_reads.get() {
+                Err(centraid_core::CoreError::Unavailable {
+                    reason: "test read failure".into(),
+                })
+            } else {
+                self.core.load(request)
+            }
+        }
+
+        fn act(&self, request: &wire::ActRequest) -> centraid_core::Result<wire::ActResponse> {
+            if self.fail_writes.get() {
+                Err(centraid_core::CoreError::Unavailable {
+                    reason: "test write failure".into(),
+                })
+            } else {
+                self.core.act(request)
+            }
+        }
+
+        fn push(&self, _update: wire::ScreenUpdate) {}
+        fn wake_after(&self, _after: std::time::Duration) {}
+    }
+
+    #[test]
+    fn a_failed_reread_preserves_dirty_words_and_a_refused_save_can_be_retried() {
+        let driver = crate::testing::Driver::with_runtime(super::super::runtime());
+        let created = driver.act(act::notes::CreateNote {
+            title: "Keep".into(),
+            body: "before".into(),
+            ..Default::default()
+        });
+        let output: serde_json::Value =
+            serde_json::from_slice(&created.output).expect("create output");
+        let id = output["id"].as_str().expect("created id");
+        let core = Flaky {
+            core: &driver.handle,
+            fail_reads: false.into(),
+            fail_writes: false.into(),
+        };
+        let env = crate::screen::Environment::default();
+        let ctx = Ctx::new(&core, &env);
+        let mut screen = build(&routes::editor(id)).expect("editor");
+        let send = |screen: &mut Box<dyn Screen>, kind| {
+            screen.update(wire::ScreenEvent { kind: Some(kind) }, &ctx);
+        };
+        send(&mut screen, E::Appeared(wire::Appeared {}));
+        send(
+            &mut screen,
+            E::NotesEditor(wire::NotesEditorEvent {
+                kind: Some(N::Body(wire::notes_editor_event::BodyEdited {
+                    body: "only copy".into(),
+                })),
+            }),
+        );
+        core.fail_reads.set(true);
+        send(&mut screen, E::DataChanged(wire::DataChanged::default()));
+        let state = screen.view(&ctx);
+        let Some(wire::view_state::Kind::NotesEditor(state)) = state.kind else {
+            panic!("editor state")
+        };
+        assert!(
+            matches!(state.content, Some(wire::notes_editor_state::Content::Draft(ref draft)) if draft.body == "only copy")
+        );
+        assert_eq!(
+            state.chrome.expect("chrome").status,
+            "Couldn't read this. Try again."
+        );
+        core.fail_writes.set(true);
+        send(
+            &mut screen,
+            E::TimerFired(wire::TimerFired {
+                timer: crate::kit::autosave::TIMER.into(),
+            }),
+        );
+        let state = screen.view(&ctx);
+        let Some(wire::view_state::Kind::NotesEditor(state)) = state.kind else {
+            panic!("editor state")
+        };
+        assert!(state.autosave.expect("autosave").refused);
+        assert!(
+            matches!(state.content, Some(wire::notes_editor_state::Content::Draft(ref draft)) if draft.body == "only copy")
+        );
+        core.fail_writes.set(false);
+        send(&mut screen, E::Left(wire::Left {}));
+        core.fail_reads.set(false);
+        let stored = driver
+            .handle
+            .load(&load::notes::Note { note_id: id.into() }.into())
+            .expect("stored note");
+        let Some(Answer::NotesNote(note)) = stored.answer.and_then(|answer| answer.answer) else {
+            panic!("note answer")
+        };
+        assert_eq!(note.body, "only copy");
+    }
 
     #[test]
     fn a_link_is_its_own_word() {

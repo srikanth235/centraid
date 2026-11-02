@@ -390,38 +390,6 @@ impl Vault {
         outcome
     }
 
-    /// THE CONNECTION A REPLICA'S APPLIER WRITES THROUGH (#1025 S5).
-    ///
-    /// A seat's sync pass is not a read and it is not a command: it applies the
-    /// gateway's log to the mirror, one transaction per commit, with its own
-    /// rules (`centraid_seat::applier`) — so it needs the file's ONE connection
-    /// and it needs it writable.
-    ///
-    /// **The defect this closes.** `centraid_core::Handle::sync_now` handed the
-    /// pass `Vault::read`'s connection, which sets `PRAGMA query_only = ON` for
-    /// the duration. Every apply therefore failed, the failure landed in
-    /// `PassReport::stale`, and `SyncOutcome` has no field for it — so a pass
-    /// through the core reported a reached gateway, zero rows and no error, on
-    /// every window, forever. Every test that ever saw a row arrive drove
-    /// `SeatLink` over a connection of its own.
-    ///
-    /// Why the one connection rather than a second: SQLite allows one writer
-    /// and this object holds it. A connection opened alongside would contend
-    /// with its owner and the loser would be whichever asked second.
-    ///
-    /// **Refused inside a read or a commit**, which is the whole of its safety:
-    /// a write under an outer `read` would be the escape hatch `query_only`
-    /// exists to prevent, and one inside a commit guard would put a mirror's
-    /// rows in an author's transaction.
-    pub fn apply_replica<T>(&self, body: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
-        if self.depth.get() > 0 || self.read_depth.get() > 0 {
-            return Err(VaultError::Invariant {
-                context: "a replica apply was attempted inside a read or a commit".to_owned(),
-            });
-        }
-        body(&self.connection)
-    }
-
     /// The words the index holds, as a list kept in memory and checked against
     /// the table on every use. Read it inside [`Self::read`]:
     /// `vault.read(|connection| Ok(vault.words().current(connection)?.to_vec()))`.

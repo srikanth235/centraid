@@ -336,3 +336,41 @@ fn a_guessed_sign_is_said_and_the_answer_plans_the_file_again() {
     assert!(again.warnings.is_empty() && again.sign_options.is_empty());
     assert_eq!(data(d.view(i)).publish_label, "Import 5 rows");
 }
+
+#[test]
+fn a_picker_read_failure_is_said_and_can_be_retried() {
+    let (mut d, i) = opened();
+    event(&mut d, i, iev(ie::Kind::Choose(ie::ChooseTapped {})));
+    d.answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
+        reason: "provider failure with private details".to_owned(),
+        ..Default::default()
+    }));
+    let status = imp(d.view(i))
+        .status
+        .as_ref()
+        .expect("the failed file read is said");
+    assert!(status.refused);
+    assert_eq!(status.sentence, "Couldn’t import this file. Try again.");
+    assert_eq!(
+        imp(d.view(i)).phase,
+        wire::money_import_state::Phase::Idle as i32
+    );
+    pick(&mut d, i, "Statement.csv", CSV);
+    assert!(
+        imp(d.view(i))
+            .status
+            .as_ref()
+            .is_none_or(|status| !status.refused)
+    );
+}
+
+#[test]
+fn dismissing_the_file_picker_does_not_claim_a_read_failed() {
+    let (mut d, i) = opened();
+    event(&mut d, i, iev(ie::Kind::Choose(ie::ChooseTapped {})));
+    d.answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
+        cancelled: true,
+        ..Default::default()
+    }));
+    assert!(imp(d.view(i)).status.is_none());
+}

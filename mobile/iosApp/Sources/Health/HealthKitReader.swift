@@ -93,7 +93,7 @@ enum HealthKitReader {
     // MARK: - Daily totals
 
     /// One daily quantity: its key, its type, how a day folds and the unit its value is stated in.
-    struct DailyMetric {
+    struct DailyMetric: Sendable {
         let key: String
         let type: HKQuantityTypeIdentifier
         let option: HKStatisticsOptions

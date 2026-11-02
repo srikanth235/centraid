@@ -129,6 +129,9 @@ export function readCatalog(
       );
     }
     const [, kind, key, one] = match;
+    if (key === undefined || one === undefined) {
+      throw new Error("export-native-words: catalogue row has no key or text");
+    }
     if (kind === "plain") words.set(key, unescapeRust(one, key));
   }
   return words;
@@ -186,7 +189,7 @@ export function emitNativeWords(repositoryRoot: string): { words: number } {
   );
   const constants = Object.entries(CONSTANTS).map(([name, key]) => {
     const [module, own] = key.includes("::") ? key.split("::") : ["", key];
-    const table = module === "" ? words : others.get(module);
+    const table = module === "" ? words : others.get(module ?? "");
     if (table === undefined) {
       throw new Error(`export-native-words: no catalogue named ${module}`);
     }

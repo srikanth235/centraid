@@ -147,7 +147,7 @@ struct RoomTrailing: View {
 /// THE SHELL'S STATUS LINE, handed down to whichever place draws it above its
 /// band (`ShellLineHost`); nil where the shell has none to give.
 private struct ShellStatusLineKey: EnvironmentKey {
-    static let defaultValue: AnyView? = nil
+    static var defaultValue: AnyView? { nil }
 }
 
 extension EnvironmentValues {

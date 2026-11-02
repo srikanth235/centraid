@@ -57,7 +57,8 @@ final class GatewayBrowseTests: XCTestCase {
         }
         run.start()
         finder.show([service("centraid-gateway-abababab", txt: ["gw": id], interface: "lan")])
-        await fulfillment(of: [answer], timeout: 2)
+        let result = await XCTWaiter.fulfillment(of: [answer], timeout: 2)
+        XCTAssertEqual(result, .completed)
         // A late sighting and a second window end change nothing.
         finder.show([service("centraid-gateway-late", txt: ["gw": id], interface: "late")])
         try await Task.sleep(for: .milliseconds(200))
@@ -82,7 +83,8 @@ final class GatewayBrowseTests: XCTestCase {
         }
         run.start()
         finder.show([service("centraid-gateway-abababab", txt: ["v": "2"], interface: "decoy")])
-        await fulfillment(of: [answer], timeout: 2)
+        let result = await XCTWaiter.fulfillment(of: [answer], timeout: 2)
+        XCTAssertEqual(result, .completed)
         XCTAssertEqual(found, [])
         XCTAssertEqual(resolver.asked, [])
     }
@@ -106,7 +108,8 @@ final class GatewayBrowseTests: XCTestCase {
         ])
         // The same result shown again is not resolved again.
         finder.show([service("centraid-gateway-abababab", txt: ["gw": id], interface: "en0")])
-        await fulfillment(of: [answer], timeout: 2)
+        let result = await XCTWaiter.fulfillment(of: [answer], timeout: 2)
+        XCTAssertEqual(result, .completed)
         XCTAssertEqual(found.count, 1)
         XCTAssertEqual(found[0].addresses, ["192.168.1.44:7443", "[fd00::5]:7443"])
         XCTAssertEqual(resolver.asked.sorted(), ["en0", "en1"])
@@ -124,7 +127,8 @@ final class GatewayBrowseTests: XCTestCase {
         }
         run.start()
         finder.show([service("centraid-gateway-gone", txt: ["gw": id], interface: "stale")])
-        await fulfillment(of: [answer], timeout: 2)
+        let result = await XCTWaiter.fulfillment(of: [answer], timeout: 2)
+        XCTAssertEqual(result, .completed)
         XCTAssertEqual(found, [])
         XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(started), 0.25)
     }
@@ -140,7 +144,8 @@ final class GatewayBrowseTests: XCTestCase {
         }
         run.start()
         finder.fail()
-        await fulfillment(of: [answer], timeout: 2)
+        let result = await XCTWaiter.fulfillment(of: [answer], timeout: 2)
+        XCTAssertEqual(result, .completed)
         XCTAssertEqual(answers, 1)
     }
 

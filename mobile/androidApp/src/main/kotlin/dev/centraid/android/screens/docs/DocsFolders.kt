@@ -1,5 +1,6 @@
 package dev.centraid.android.screens.docs
 
+import dev.centraid.android.kit.effectAttempt
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -101,13 +102,11 @@ internal object FolderReader {
         var found: Pair<Uri, Long>? = null
         walk(context, tree) { at, uri, size, _, _ -> if (at == path && found == null) found = uri to size }
         val (uri, size) = found ?: return FolderFileStaged(ok = false)
-        val outcome = try {
+        val outcome = effectAttempt {
             context.contentResolver.openInputStream(uri)?.use { input ->
                 Stage.stage(core, mediaType.ifEmpty { OCTET_STREAM }, size, read = Stage.slices(input))
             }
-        } catch (why: Exception) {
-            null
-        }
+        }.getOrNull()
         return when (outcome) {
             is Stage.Outcome.Staged ->
                 FolderFileStaged(ok = true, content_hash = outcome.handle.content_hash, byte_size = outcome.handle.byte_size)

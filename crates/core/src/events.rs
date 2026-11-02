@@ -405,6 +405,13 @@ fn coalesce_into(queue: &mut VecDeque<Event>, change: &ChangeEvent) -> bool {
         if existing.table != change.table {
             continue;
         }
+        // An empty set invalidates the whole table. It must dominate keyed
+        // invalidations in either arrival order, rather than becoming a
+        // narrower redraw when a later blob lands.
+        if existing.pk_set.is_empty() || change.pk_set.is_empty() {
+            existing.pk_set.clear();
+            return true;
+        }
         for key in &change.pk_set {
             if !existing.pk_set.iter().any(|seen| same_key(seen, key)) {
                 existing.pk_set.push(key.clone());
@@ -517,6 +524,27 @@ mod tests {
             panic!("a change event");
         };
         assert_eq!(merged.pk_set.len(), 1);
+    }
+
+    #[test]
+    fn a_whole_table_change_dominates_keys_in_either_arrival_order() {
+        for keyed_first in [false, true] {
+            let queue = EventQueue::new();
+            let keyed = change("photo", &["p1"]);
+            let whole_table = change("photo", &[]);
+            let (first, second) = if keyed_first {
+                (keyed, whole_table)
+            } else {
+                (whole_table, keyed)
+            };
+            assert!(queue.push(first));
+            assert!(queue.push(second));
+            assert_eq!(queue.depth(), 1);
+            assert_eq!(
+                queue.next(Duration::from_millis(10)),
+                Next::Event(change("photo", &[]))
+            );
+        }
     }
 
     #[test]

@@ -10,7 +10,7 @@ description: >-
 
 Run `bun run check` for changes. It covers format, oxlint with warnings denied, product lints, configured TypeScript checks, vitest, and release-script tests. Run tools through `bun run`; do not use `npx`.
 
-The compiler uses `strict`, `noUncheckedIndexedAccess`, and ES2023. The configured typecheck does **not** include `contracts/tools` or `scripts`; treat them as type-check coverage gaps and write them to the same standards. Do not imply `bun run check` typechecks those trees.
+The compiler uses `strict`, `noUncheckedIndexedAccess`, and ES2023. The configured typecheck includes packages plus TypeScript in `contracts/tools` and `scripts` through `tsconfig.tooling.json`. JavaScript scripts are linted and tested but are not checked with `checkJs`.
 
 **Done** when `bun run check` is green. Follow the generated-output instructions below whenever an emitter or generated file changes.
 

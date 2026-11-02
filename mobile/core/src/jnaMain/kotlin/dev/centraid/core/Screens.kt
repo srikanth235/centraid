@@ -132,6 +132,9 @@ public class Screens(
             }
         }
 
+    // Responses and the event reader can arrive on different dispatchers. Keep each
+    // revision check and the corresponding write in the same critical section.
+    @Synchronized
     private fun apply(update: ScreenUpdate) {
         update.navigation?.let { incoming ->
             navigationState.value = navigationState.value

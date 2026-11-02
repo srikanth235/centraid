@@ -216,7 +216,7 @@ struct EmptyStateView: View {
 }
 
 private struct AskChatKey: EnvironmentKey {
-    static let defaultValue: ((Centraid_Core_V1_Route) -> Void)? = nil
+    static var defaultValue: ((Centraid_Core_V1_Route) -> Void)? { nil }
 }
 
 extension EnvironmentValues {

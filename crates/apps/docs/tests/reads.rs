@@ -305,3 +305,41 @@ fn search_is_the_indexs_rank_order_over_documents() {
     assert_eq!(titles(&found.documents), ["Lease agreement"]);
     assert!(found.documents[0].snippet.is_some());
 }
+
+#[test]
+fn a_history_longer_than_its_bound_is_reported_instead_of_silently_cut_off() {
+    use centraid_apps_docs::queries::MAX_VERSIONS;
+    use centraid_apps_kit::error::KitError;
+
+    let w = World::new();
+    let id = w.ok(
+        "document.create_text",
+        json!({"title": "Draft", "body_text": "first"}),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    for revision in 0..MAX_VERSIONS {
+        w.ok(
+            "document.edit",
+            json!({"id": id, "body_text": format!("draft {revision}")}),
+        );
+    }
+    let (history, denial) = w.read(|door| load_history(door, &id).expect("the full bound reads"));
+    assert!(denial.is_none());
+    assert_eq!(history.versions.len(), MAX_VERSIONS + 1);
+    w.ok(
+        "document.edit",
+        json!({"id": id, "body_text": "beyond the bound"}),
+    );
+    let error = w
+        .read(|door| load_history(door, &id))
+        .expect_err("a partial history is refused");
+    assert!(matches!(
+        error,
+        KitError::FanOutExceeded {
+            cap: MAX_VERSIONS,
+            ..
+        }
+    ));
+}

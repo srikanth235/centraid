@@ -833,7 +833,7 @@ struct WordField: UIViewRepresentable {
     /// The word the machine keeps in this cell when `text` runs on past it:
     /// everything before the first space, newline or tab, split exactly as
     /// `WordsEntry`'s `spread` splits. Nil when `text` is one word.
-    static func keptWord(of text: String) -> String? {
+    nonisolated static func keptWord(of text: String) -> String? {
         let parts = text.split(
             omittingEmptySubsequences: false,
             whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" }

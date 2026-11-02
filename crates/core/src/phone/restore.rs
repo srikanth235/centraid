@@ -141,6 +141,43 @@ pub fn run_observed(
     runtime: &tokio::runtime::Handle,
     before_claim: &mut dyn FnMut(u32),
 ) -> Result<wire::RestoreResponse> {
+    run_controlled(
+        vault_file,
+        request,
+        runtime,
+        before_claim,
+        &mut |_| {},
+        None,
+    )
+}
+
+pub(crate) fn run_cancellable(
+    vault_file: &Path,
+    request: &wire::RestoreRequest,
+    runtime: &tokio::runtime::Handle,
+    cancellation: crate::handle::Cancellation,
+) -> Result<wire::RestoreResponse> {
+    run_controlled(
+        vault_file,
+        request,
+        runtime,
+        &mut |_| {},
+        &mut |_| {},
+        Some(cancellation),
+    )
+}
+
+fn run_controlled(
+    vault_file: &Path,
+    request: &wire::RestoreRequest,
+    runtime: &tokio::runtime::Handle,
+    before_claim: &mut dyn FnMut(u32),
+    after_claim: &mut dyn FnMut(u32),
+    cancellation: Option<crate::handle::Cancellation>,
+) -> Result<wire::RestoreResponse> {
+    if let Some(stop) = &cancellation {
+        stop.check()?;
+    }
     let seed = seed_of(request)?;
     if request.payload.trim().is_empty() {
         return Err(CoreError::InvalidRequest {
@@ -162,6 +199,7 @@ pub fn run_observed(
         payload: &payload,
         cert_der: &cert_der,
         runtime,
+        cancellation,
     };
 
     // FIRST, EVERY VAULT IS FETCHED, LAID DOWN AND CHECKED — and no writer
@@ -175,6 +213,7 @@ pub fn run_observed(
                 detail: format!("index {index} will not derive: {error}"),
             });
         let found = keyring.and_then(|keyring| {
+            scan.checkpoint()?;
             // A VAULT THIS PHONE ALREADY HOLDS IS NEVER TOUCHED (R-1047-R6),
             // and for the gap it is a hit.
             if vault_dir(&root, &keyring).join(HELD).exists() {
@@ -183,7 +222,9 @@ pub fn run_observed(
             scan.check(keyring, &root, index)
                 .map(|checked| checked.map(|one| staged.push(one)).is_some())
         });
-        found.inspect_err(|_| staged.iter().for_each(Staged::forget))
+        found
+            .map_err(|error| scan.checkpoint().err().unwrap_or(error))
+            .inspect_err(|_| staged.iter().for_each(Staged::forget))
     };
     let mut gap_scanned = 0_u32;
     if request.indices.is_empty() {
@@ -213,9 +254,10 @@ pub fn run_observed(
     let mut unclaimed = Vec::new();
     let mut first_refusal = None;
     for mut one in staged {
-        match scan.claim(&mut one, before_claim) {
+        match scan.claim(&mut one, before_claim, after_claim) {
             Ok(restored) => vaults.push(restored),
             Err(error) => {
+                let error = scan.checkpoint().err().unwrap_or(error);
                 one.forget();
                 unclaimed.push(wire::UnclaimedVault {
                     index: one.index,
@@ -282,6 +324,7 @@ struct Scan<'a> {
     payload: &'a PairPayload,
     cert_der: &'a [u8],
     runtime: &'a tokio::runtime::Handle,
+    cancellation: Option<crate::handle::Cancellation>,
 }
 
 /// One vault fetched, laid down and checked, and not yet claimed.
@@ -337,6 +380,12 @@ fn restore_error(error: RestoreError, index: u32) -> CoreError {
 }
 
 impl Scan<'_> {
+    fn checkpoint(&self) -> Result<()> {
+        self.cancellation
+            .as_ref()
+            .map_or(Ok(()), crate::handle::Cancellation::check)
+    }
+
     fn client(&self) -> Client {
         Client::trusting(self.payload.addrs.clone(), self.cert_der.to_vec())
     }
@@ -365,12 +414,13 @@ impl Scan<'_> {
             context: format!("making {}: {error}", dir.display()),
         })?;
         let file = dir.join(RESTORING);
-        let store = GatewayStore::over(
+        let mut store = GatewayStore::over(
             client,
             keyring.vault_id(),
             self.payload.gw.hex(),
             self.runtime,
         );
+        store.set_cancellation(self.cancellation.clone());
         match lay_down(&store, &keyring, &head.name, &file, index) {
             Ok(restored) => Ok(Some(Staged {
                 keyring,
@@ -397,9 +447,12 @@ impl Scan<'_> {
         &self,
         staged: &mut Staged,
         before_claim: &mut dyn FnMut(u32),
+        after_claim: &mut dyn FnMut(u32),
     ) -> Result<wire::RestoredVault> {
         for _ in 0..CLAIM_ATTEMPTS {
+            self.checkpoint()?;
             before_claim(staged.index);
+            self.checkpoint()?;
             match pair::try_claim(
                 staged.store.client(),
                 &staged.keyring,
@@ -408,7 +461,13 @@ impl Scan<'_> {
                 Some(staged.head),
                 self.runtime,
             )? {
-                ClaimAnswer::Claimed(paired) => return self.adopt(staged, &paired),
+                ClaimAnswer::Claimed(paired) => {
+                    after_claim(staged.index);
+                    // Once writer authority moved, finish keeping the vault and
+                    // its token before honoring a stop at the next vault.
+                    staged.store.set_cancellation(None);
+                    return self.adopt(staged, &paired);
+                }
                 ClaimAnswer::Conflict { epoch, head } => {
                     staged.epoch = epoch;
                     let Some(head) = head else {
@@ -569,4 +628,137 @@ fn lay_down(
         discard(file);
     }
     outcome
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::*;
+    use crate::{Core, CoreConfig};
+
+    const WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+
+    fn ask(handle: &crate::Handle, kind: wire::request::Kind) -> wire::response::Kind {
+        handle
+            .call(&wire::Request { kind: Some(kind) })
+            .expect("the request succeeds")
+            .kind
+            .expect("an answer")
+    }
+
+    #[test]
+    fn cancellation_before_claim_preserves_writer_and_after_claim_finishes_adoption() {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .expect("a runtime");
+        let gateway_dir = tempfile::tempdir().expect("a directory");
+        let gateway = runtime
+            .block_on(centraid_gateway::server::harness::spawn(gateway_dir.path()))
+            .expect("the gateway starts");
+        let old_dir = tempfile::tempdir().expect("a directory");
+        for index in 0..2 {
+            let seed = centraid_identity::RecoveryPhrase::parse(WORDS)
+                .expect("words")
+                .seed();
+            let old = Core::open(
+                CoreConfig::new(old_dir.path().join(format!("{index}.db"))).with_seed(seed, index),
+            )
+            .expect("the old phone opens");
+            old.with_vault(|vault| Ok(vault.found("Test", "Owner")?))
+                .expect("it founds");
+            ask(
+                &old,
+                wire::request::Kind::PairPhone(wire::PairRequest {
+                    payload: gateway.payload().to_json(),
+                }),
+            );
+            ask(
+                &old,
+                wire::request::Kind::Drain(wire::DrainRequest {
+                    wants_snapshot: true,
+                    ..wire::DrainRequest::default()
+                }),
+            );
+            old.close();
+        }
+        for after_claim in [false, true] {
+            let restored_dir = tempfile::tempdir().expect("a directory");
+            let mut config = CoreConfig::new(restored_dir.path().join("custody.db"));
+            config.create = false;
+            let front = Core::open(config).expect("the restore door opens");
+            let cancellation = front.registered_cancellation(42);
+            let request = wire::RestoreRequest {
+                phrase: WORDS.to_owned(),
+                payload: gateway.payload().to_json(),
+                indices: vec![0, 1],
+                ..wire::RestoreRequest::default()
+            };
+            let mut before = |index| {
+                if !after_claim && index == 0 {
+                    front.cancel(42).expect("cancels");
+                }
+            };
+            let mut after = |index| {
+                if after_claim && index == 0 {
+                    front.cancel(42).expect("cancels");
+                }
+            };
+            let result = run_controlled(
+                front.path(),
+                &request,
+                runtime.handle(),
+                &mut before,
+                &mut after,
+                Some(cancellation),
+            );
+            let pairings = gateway
+                .shared()
+                .rules(|rules| rules.pairings())
+                .expect("pairings");
+            let seed = centraid_identity::RecoveryPhrase::parse(WORDS)
+                .expect("words")
+                .seed();
+            let keyring = Keyring::derive(&seed, 0).expect("keys");
+            let epoch = pairings
+                .iter()
+                .find(|pairing| pairing.vault.vault == keyring.vault_id())
+                .expect("the first vault")
+                .vault
+                .writer_epoch;
+            if after_claim {
+                let restored = result.expect("a landed claim is kept and answered");
+                assert_eq!(restored.vaults.len(), 1);
+                assert_eq!(restored.unclaimed.len(), 1);
+                assert_eq!(restored.unclaimed[0].index, 1);
+                let file = PathBuf::from(&restored.vaults[0].path);
+                let vault = Vault::open(&file).expect("the adopted vault opens");
+                vault.close().expect("closes");
+                let destinations = Plane::of(&file)
+                    .ledger()
+                    .expect("ledger")
+                    .destinations()
+                    .expect("destinations");
+                assert_eq!(
+                    destinations.len(),
+                    1,
+                    "the landed token survives cancellation"
+                );
+                assert_eq!(destinations[0].epoch, epoch);
+                assert_eq!(epoch, 2);
+            } else {
+                assert!(matches!(
+                    result,
+                    Err(CoreError::Cancelled { request_id: 42 })
+                ));
+                assert_eq!(epoch, 1, "no claim crossed the cancellation boundary");
+                assert!(
+                    !vault_dir(restored_dir.path(), &keyring).exists(),
+                    "staging was discarded"
+                );
+            }
+            front.close();
+        }
+        runtime.block_on(gateway.shutdown());
+    }
 }

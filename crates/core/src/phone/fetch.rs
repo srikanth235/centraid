@@ -247,6 +247,19 @@ pub fn fetch_original(
     request: &wire::FetchOriginalRequest,
     runtime: &tokio::runtime::Handle,
 ) -> Result<wire::FetchOriginalResponse> {
+    fetch_original_cancellable(handle, keyring, request, runtime, None)
+}
+
+pub(crate) fn fetch_original_cancellable(
+    handle: &Handle,
+    keyring: &Keyring,
+    request: &wire::FetchOriginalRequest,
+    runtime: &tokio::runtime::Handle,
+    cancellation: Option<crate::handle::Cancellation>,
+) -> Result<wire::FetchOriginalResponse> {
+    if let Some(stop) = &cancellation {
+        stop.check()?;
+    }
     let h = hash_of(&request.content_hash)?;
     let Some(door) = handle.bytes() else {
         return Err(CoreError::Unavailable {
@@ -295,8 +308,13 @@ pub fn fetch_original(
         _ => 0,
     };
     for destination in ledger.destinations().map_err(plane_error)? {
-        let store = GatewayStore::for_destination(&destination, keyring.vault_id(), runtime)?;
-        let heard = match assemble_into(&store, &keyring.backup, &h, file.len, bytes)? {
+        let mut store = GatewayStore::for_destination(&destination, keyring.vault_id(), runtime)?;
+        store.set_cancellation(cancellation.clone());
+        let assembled = assemble_into(&store, &keyring.backup, &h, file.len, bytes);
+        if assembled.is_err() {
+            store.checkpoint()?;
+        }
+        let heard = match assembled? {
             Assembled::Landed(path) => {
                 let assets = handle.with_vault(|vault| {
                     centraid_vault::originals::assets_for_hashes(vault, &[h.to_hex()])
@@ -315,4 +333,107 @@ pub fn fetch_original(
         }
     }
     Ok(answer(outcome, None))
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::*;
+    use centraid_vault::backup::naming::Digest;
+    use centraid_vault::backup::store::{Deleted, Head, ObjectEntry, Put, SnapshotEntry};
+    use std::io::{Read, Write};
+
+    struct StopAfterFirstPart {
+        handle: crate::Handle,
+        stop: crate::handle::Cancellation,
+        sealed: Vec<u8>,
+    }
+
+    impl Store for StopAfterFirstPart {
+        fn gateway_id(&self) -> &str {
+            "test"
+        }
+        fn get(&self, _name: &Name, sink: &mut dyn Write) -> std::result::Result<u64, StoreError> {
+            self.stop.check().map_err(|error| {
+                StoreError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Interrupted,
+                    error.to_string(),
+                ))
+            })?;
+            sink.write_all(&self.sealed)?;
+            self.handle
+                .cancel(42)
+                .expect("cancels before the next part");
+            Ok(self.sealed.len() as u64)
+        }
+        fn exists(&self, _: &[Name]) -> std::result::Result<Vec<Name>, StoreError> {
+            unreachable!("fetch only")
+        }
+        fn put(
+            &self,
+            _: &Name,
+            _: &Digest,
+            _: u64,
+            _: &mut dyn Read,
+        ) -> std::result::Result<Put, StoreError> {
+            unreachable!("fetch only")
+        }
+        fn head(&self) -> std::result::Result<Option<Head>, StoreError> {
+            unreachable!("fetch only")
+        }
+        fn set_head(
+            &self,
+            _: &Name,
+            _: Option<&Name>,
+            _: u64,
+        ) -> std::result::Result<Head, StoreError> {
+            unreachable!("fetch only")
+        }
+        fn snapshots(&self) -> std::result::Result<Vec<SnapshotEntry>, StoreError> {
+            unreachable!("fetch only")
+        }
+        fn list(
+            &self,
+            _: Option<&Name>,
+            _: usize,
+        ) -> std::result::Result<Vec<ObjectEntry>, StoreError> {
+            unreachable!("fetch only")
+        }
+        fn delete(&self, _: &[Name]) -> std::result::Result<Deleted, StoreError> {
+            unreachable!("fetch only")
+        }
+    }
+
+    #[test]
+    fn cancelling_after_a_part_discards_the_partial_plaintext_file() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let handle =
+            crate::Core::open(crate::CoreConfig::new(dir.path().join("vault.db"))).expect("opens");
+        let stop = handle.registered_cancellation(42);
+        let keys = centraid_vault::backup::naming::keys_from_root(&[7; 32]);
+        let plaintext = vec![9; usize::try_from(sealed::PART_BYTES).expect("fits") + 1];
+        let hash = PlaintextHash::of(&plaintext);
+        let first =
+            sealed::seal_part(&keys, 0, &plaintext[..plaintext.len() - 1], true).expect("sealed");
+        let store = StopAfterFirstPart {
+            handle,
+            stop,
+            sealed: first,
+        };
+        let bytes = ByteStore::open(dir.path().join("bytes")).expect("a byte store");
+        assert!(assemble_into(&store, &keys, &hash, plaintext.len() as u64, &bytes).is_err());
+        assert!(
+            bytes.hashes().expect("hashes").is_empty(),
+            "no incomplete content is published"
+        );
+        let staging = bytes.root().join("incoming");
+        assert!(staging.is_dir());
+        {
+            assert_eq!(
+                std::fs::read_dir(staging).expect("staging").count(),
+                0,
+                "the partial writer is discarded"
+            );
+        }
+        store.handle.close();
+    }
 }

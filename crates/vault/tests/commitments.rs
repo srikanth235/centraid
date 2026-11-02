@@ -2149,6 +2149,58 @@ fn a_title_that_labels_is_part_of_the_text_of_what_it_labels() {
     is_found(vault, &call, "call", "an activity's kind");
 }
 
+#[test]
+fn interaction_notes_follow_changes_to_the_people_and_about_edges() {
+    let scratch = founded("interaction-index");
+    let vault = &scratch.vault;
+    let registry = Registry::with_system_commands().expect("a registry");
+    let go = |name: &str, input: serde_json::Value| run(vault, &registry, name, input);
+    go("person.add", json!({"id": "ada", "title": "Ada"}));
+    go("person.add", json!({"id": "bob", "title": "Bob"}));
+    go(
+        "person.log_interaction",
+        json!({"id": "ada", "kind": "call", "text": "quartz"}),
+    );
+    let activity: String = read(vault, |c| {
+        Ok(c.query_row("SELECT id FROM activity LIMIT 1", [], |r| r.get(0))?)
+    });
+    let note: String = read(vault, |c| {
+        Ok(c.query_row(
+            "SELECT from_id FROM edge WHERE to_id = ?1 AND rel = 'about'",
+            [&activity],
+            |r| r.get(0),
+        )?)
+    });
+    is_found(vault, "ada", "quartz", "interaction created");
+    go(
+        "edge.add",
+        json!({"from": activity, "rel": "with", "to": "bob"}),
+    );
+    is_found(vault, "bob", "quartz", "another participant added");
+    go(
+        "edge.remove",
+        json!({"from": activity, "rel": "with", "to": "bob"}),
+    );
+    is_not_found(vault, "bob", "quartz", "participant removed");
+    go(
+        "edge.remove",
+        json!({"from": note, "rel": "about", "to": activity}),
+    );
+    is_not_found(vault, "ada", "quartz", "interaction note unlinked");
+    go(
+        "edge.add",
+        json!({"from": note, "rel": "about", "to": activity}),
+    );
+    is_found(vault, "ada", "quartz", "interaction note relinked");
+    go("entity.trash", json!({"id": note}));
+    is_not_found(vault, "ada", "quartz", "interaction note trashed");
+    go("entity.restore", json!({"id": note}));
+    is_found(vault, "ada", "quartz", "interaction note restored");
+    go("entity.trash", json!({"id": note}));
+    go("entity.purge", json!({"id": note}));
+    is_not_found(vault, "ada", "quartz", "interaction note purged");
+}
+
 // ---------------------------------------------------------------------------
 // 11. The index is tuned for the reads it serves
 // ---------------------------------------------------------------------------

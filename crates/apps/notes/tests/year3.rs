@@ -191,3 +191,43 @@ fn the_declared_profile_seeds_and_the_numbers_are_printed() {
     );
     assert!(note.body.len() >= YEAR3_NOTES.long_body_bytes - 100);
 }
+
+#[test]
+fn a_history_window_dates_its_oldest_version_from_the_preceding_revision() {
+    use centraid_apps_kit::page::PageRequest;
+    use centraid_apps_kit::reads::PageDoor;
+    use centraid_apps_kit::row::text_of;
+    use centraid_apps_notes::queries::{HISTORY_ROWS, load_history, revisions_statement};
+
+    let world = seeded(Year3NotesShape {
+        notes: 1,
+        trashed: 0,
+        pinned: 0,
+        memos: 0,
+        notebooks: 0,
+        filed: 0,
+        tags: 0,
+        tagged: 0,
+        revisions: HISTORY_ROWS + 2,
+        links: 0,
+        anchored: 0,
+        long_body_bytes: 0,
+        long_bodies: 0,
+    });
+    let (library, _) = read(&world, |door| load_library(door, None).expect("a library"));
+    let id = &library.notes[0].note_id;
+    let expected = read(&world, |door| {
+        let all = door
+            .page(&revisions_statement(id), &PageRequest::first(500))
+            .expect("revisions");
+        text_of(&all.rows[HISTORY_ROWS], "at").expect("the predecessor's stamp")
+    });
+    let (history, denial) = read(&world, |door| load_history(door, id).expect("history"));
+    assert!(denial.is_none());
+    assert!(history.truncated);
+    assert_eq!(history.versions.len(), HISTORY_ROWS + 1);
+    assert_eq!(
+        history.versions.last().expect("a version").asserted_at,
+        expected
+    );
+}

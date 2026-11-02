@@ -531,6 +531,19 @@ pub fn run(
     request: &wire::DrainRequest,
     runtime: &tokio::runtime::Handle,
 ) -> Result<wire::DrainResponse> {
+    run_cancellable(handle, keyring, request, runtime, None)
+}
+
+pub(crate) fn run_cancellable(
+    handle: &Handle,
+    keyring: &Keyring,
+    request: &wire::DrainRequest,
+    runtime: &tokio::runtime::Handle,
+    cancellation: Option<crate::handle::Cancellation>,
+) -> Result<wire::DrainResponse> {
+    if let Some(stop) = &cancellation {
+        stop.check()?;
+    }
     // THE LAST PASS'S PLAN IS SPENT: a pass that answers early asks for
     // nothing, and a stream with no plan seals the way a first read does.
     handle.plan_library(BTreeMap::new());
@@ -559,6 +572,9 @@ pub fn run(
     } else {
         link::reach(&destinations, &ledger, keyring.vault_id(), runtime)?
     };
+    if let Some(stop) = &cancellation {
+        stop.check()?;
+    }
     ledger
         .set_meta(
             REACHABLE_KEY,
@@ -571,7 +587,7 @@ pub fn run(
             },
         )
         .map_err(plane_error)?;
-    let reached = match reached {
+    let mut reached = match reached {
         Ok(reached) => reached,
         Err(unreached) => {
             // NOTHING PAIRED, NOTHING ANSWERED, OR NOT THE PINNED GATEWAY:
@@ -584,6 +600,8 @@ pub fn run(
             return answer(&spool, pass);
         }
     };
+    reached.store.set_cancellation(cancellation);
+    reached.store.checkpoint()?;
     let outcome = pass_over(
         handle,
         keyring,
@@ -595,6 +613,7 @@ pub fn run(
         deadline,
         &mut pass,
     );
+    reached.store.checkpoint()?;
     match outcome {
         Ok(()) => {
             handle.plan_library(std::mem::take(&mut pass.planned));
@@ -1363,6 +1382,7 @@ fn prepare(
     let mut sealed = 0_usize;
     let mut library: Vec<LibraryAsk<'_>> = Vec::new();
     for file in candidates {
+        store.checkpoint()?;
         if Instant::now() >= deadline {
             break;
         }
@@ -1385,6 +1405,7 @@ fn prepare(
             let indices: BTreeSet<u32> = parts.iter().map(|(index, _)| *index).collect();
             sealed += seal_store_file(
                 &path,
+                store,
                 file,
                 &indices,
                 keys,
@@ -1478,6 +1499,7 @@ fn plan_library(
 #[allow(clippy::too_many_arguments)]
 fn seal_store_file(
     path: &std::path::Path,
+    store: &GatewayStore,
     file: &ContentFile,
     indices: &BTreeSet<u32>,
     keys: &BackupKeys,
@@ -1512,6 +1534,7 @@ fn seal_store_file(
     let mut buffer = vec![0_u8; READ_CHUNK];
     let mut sealed = 0;
     for index in 0..part_count(file.len) {
+        store.checkpoint()?;
         let len = sealed::part_len(file.len, index).map_err(|error| invariant("cut", &error))?;
         if !indices.contains(&index) {
             reader
@@ -1532,6 +1555,7 @@ fn seal_store_file(
             .map_err(|error| invariant("begin", &error))?;
         let mut left = len;
         while left > 0 {
+            store.checkpoint()?;
             let take = usize::try_from(left.min(READ_CHUNK as u64)).unwrap_or(READ_CHUNK);
             reader
                 .read_exact(&mut buffer[..take])

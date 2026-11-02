@@ -50,17 +50,19 @@ const SCHEMES: readonly NativeScheme[] = ["light", "dark"];
 
 // --- the token table -------------------------------------------------------
 
-const themes = Object.fromEntries(
-  SCHEMES.map((scheme) => {
-    const theme = toNativeTheme(scheme);
-    // THE ROLE CONTRACT IS RE-ASSERTED over the emitted table, not only inside
-    // the lowering. `assertNativeColorRoleContract` is the fixture that keeps
-    // an emitted table honest (census §E seam 11); asserting only at lowering
-    // time would leave the emitted artifact unchecked.
-    assertNativeColorRoleContract(theme.colors);
-    return [scheme, theme];
-  })
-);
+function themeFor(scheme: NativeScheme): ReturnType<typeof toNativeTheme> {
+  const theme = toNativeTheme(scheme);
+  assertNativeColorRoleContract(theme.colors);
+  return theme;
+}
+
+const themes = { light: themeFor("light"), dark: themeFor("dark") };
+
+function required<T>(table: ReadonlyMap<string, T>, name: string): T {
+  const value = table.get(name);
+  if (value === undefined) throw new Error(`native theme is missing ${name}`);
+  return value;
+}
 
 /**
  * NOT EVERY `NativeColors` ENTRY IS A COLOUR — a FINDING, handled rather than
@@ -97,7 +99,7 @@ const parseColor = (
   const hex = /^#(?<body>[0-9a-f]{6})(?<opacity>[0-9a-f]{2})?$/iu.exec(
     value.trim()
   );
-  if (hex?.groups) {
+  if (hex?.groups?.body !== undefined) {
     const { body, opacity } = hex.groups;
     return {
       red: Number.parseInt(body.slice(0, 2), 16),
@@ -301,36 +303,40 @@ const kotlinLines: string[] = [
 
 for (const scheme of SCHEMES) {
   const theme = themes[scheme];
+  const colors = new Map(Object.entries(theme.colors));
+  const spacing = new Map(Object.entries(theme.spacing));
+  const radii = new Map(Object.entries(theme.radii));
+  const types = new Map(Object.entries(theme.type));
   kotlinLines.push(
     `    public val ${scheme}: NativeTheme = NativeTheme(`,
     `        scheme = "${scheme}",`,
     "        colors = mapOf(",
     ...colorNames.map(
       (name) =>
-        `            "${name}" to ${kotlinColor(String(theme.colors[name]))},`
+        `            "${name}" to ${kotlinColor(String(required(colors, name)))},`
     ),
     "        ),",
     "        effects = mapOf(",
     ...effectNames.map(
       (name) =>
-        `            "${name}" to ${JSON.stringify(String(theme.colors[name]))},`
+        `            "${name}" to ${JSON.stringify(String(required(colors, name)))},`
     ),
     "        ),",
     "        spacing = mapOf(",
     ...spacingNames.map(
       (name) =>
-        `            "${name}" to ${Math.round(Number(theme.spacing[name]))},`
+        `            "${name}" to ${Math.round(Number(required(spacing, name)))},`
     ),
     "        ),",
     "        radii = mapOf(",
     ...radiiNames.map(
       (name) =>
-        `            "${name}" to ${Math.round(Number(theme.radii[name]))},`
+        `            "${name}" to ${Math.round(Number(required(radii, name)))},`
     ),
     "        ),",
     "        type = mapOf(",
     ...typeNames.map((name) => {
-      const style = theme.type[name] as Record<string, unknown>;
+      const style = required(types, name);
       return (
         `            "${name}" to NativeTypeStyle(` +
         `family = "${String(style.family)}", ` +
@@ -426,36 +432,40 @@ const swiftColor = (value: string): string => {
 
 for (const scheme of SCHEMES) {
   const theme = themes[scheme];
+  const colors = new Map(Object.entries(theme.colors));
+  const spacing = new Map(Object.entries(theme.spacing));
+  const radii = new Map(Object.entries(theme.radii));
+  const types = new Map(Object.entries(theme.type));
   swiftLines.push(
     `    public static let ${scheme} = CentraidTheme(`,
     `        scheme: "${scheme}",`,
     "        colors: [",
     ...colorNames.map(
       (name) =>
-        `            "${name}": ${swiftColor(String(theme.colors[name]))},`
+        `            "${name}": ${swiftColor(String(required(colors, name)))},`
     ),
     "        ],",
     "        effects: [",
     ...effectNames.map(
       (name) =>
-        `            "${name}": ${JSON.stringify(String(theme.colors[name]))},`
+        `            "${name}": ${JSON.stringify(String(required(colors, name)))},`
     ),
     "        ],",
     "        spacing: [",
     ...spacingNames.map(
       (name) =>
-        `            "${name}": ${Math.round(Number(theme.spacing[name]))},`
+        `            "${name}": ${Math.round(Number(required(spacing, name)))},`
     ),
     "        ],",
     "        radii: [",
     ...radiiNames.map(
       (name) =>
-        `            "${name}": ${Math.round(Number(theme.radii[name]))},`
+        `            "${name}": ${Math.round(Number(required(radii, name)))},`
     ),
     "        ],",
     "        type: [",
     ...typeNames.map((name) => {
-      const style = theme.type[name] as Record<string, unknown>;
+      const style = required(types, name);
       return (
         `            "${name}": CentraidTypeStyle(` +
         `family: "${String(style.family)}", ` +

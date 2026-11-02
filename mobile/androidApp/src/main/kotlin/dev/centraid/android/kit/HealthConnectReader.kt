@@ -111,8 +111,16 @@ internal class AndroidHealth(context: Context) {
             answer.await()
         }
         return withContext(Dispatchers.IO) {
-            runCatching { HealthConnectReader(context).read(read) }.getOrNull()
-        }?.let { EffectResult(health = it) } ?: denied("health connect has granted nothing")
+            effectAttempt { HealthConnectReader(context).read(read) }.fold(
+                onSuccess = { snapshot ->
+                    snapshot?.let { EffectResult(health = it) } ?: denied("health connect has granted nothing")
+                },
+                onFailure = { failure ->
+                    if (failure is SecurityException) denied("health access is off")
+                    else EffectResult(failed = EffectFailed(reason = "health could not be read"))
+                },
+            )
+        }
     }
 
     private fun denied(reason: String) = EffectResult(failed = EffectFailed(reason = reason, denied = true))
@@ -175,7 +183,7 @@ internal object HealthConnectAccess {
 
     fun status(context: Context): Status {
         if (!apiSupported) return Status.UNAVAILABLE
-        return when (runCatching { HealthConnectClient.getSdkStatus(context) }.getOrNull()) {
+        return when (effectAttempt { HealthConnectClient.getSdkStatus(context) }.getOrNull()) {
             HealthConnectClient.SDK_AVAILABLE -> Status.AVAILABLE
             HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> Status.INSTALL
             else -> Status.UNAVAILABLE
@@ -203,7 +211,7 @@ internal object HealthConnectAccess {
     /** What Health Connect has granted this app, or null when it cannot be asked. */
     suspend fun granted(context: Context): Set<String>? {
         if (!apiSupported || status(context) != Status.AVAILABLE) return null
-        return runCatching { HealthConnectClient.getOrCreate(context).permissionController.getGrantedPermissions() }.getOrNull()
+        return effectAttempt { HealthConnectClient.getOrCreate(context).permissionController.getGrantedPermissions() }.getOrNull()
     }
 
     fun contract(): ActivityResultContract<Set<String>, Set<String>> =
@@ -211,7 +219,7 @@ internal object HealthConnectAccess {
 
     private fun historyOffered(context: Context): Boolean {
         if (!apiSupported || status(context) != Status.AVAILABLE) return false
-        return runCatching {
+        return effectAttempt {
             HealthConnectClient.getOrCreate(context).features
                 .getFeatureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY) == HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
         }.getOrDefault(false)
@@ -261,20 +269,20 @@ internal class HealthConnectReader(private val context: Context) {
         val days = buildList {
             dailyReads().forEach { (key, read) ->
                 if (key in allowed) {
-                    runCatching { daily(client, from, today, read) }.getOrNull()?.forEach { (day, value) ->
+                    effectAttempt { daily(client, from, today, read) }.getOrNull()?.forEach { (day, value) ->
                         add(HealthDayTotal(day = day, metric = key, value_ = value))
                     }
                 }
             }
             if (HealthConnectAccess.Key.SLEEP in allowed) {
-                runCatching { sleep(client, zone, from, today) }.getOrNull()?.let { addAll(it) }
+                effectAttempt { sleep(client, zone, from, today) }.getOrNull()?.let { addAll(it) }
             }
             if (HealthConnectAccess.Key.WEIGHT in allowed) {
-                runCatching { weight(client, zone, from, today) }.getOrNull()?.let { addAll(it) }
+                effectAttempt { weight(client, zone, from, today) }.getOrNull()?.let { addAll(it) }
             }
         }
         val sessions = if (HealthConnectAccess.Key.WORKOUTS in allowed) {
-            runCatching { workouts(client, granted, request.workouts_since_ms) }.getOrNull()
+            effectAttempt { workouts(client, granted, request.workouts_since_ms) }.getOrNull()
                 ?: (emptyList<HealthPhoneWorkout>() to false)
         } else {
             emptyList<HealthPhoneWorkout>() to true
@@ -360,7 +368,7 @@ internal class HealthConnectReader(private val context: Context) {
         val labels = mutableMapOf<String, String>()
         var complete = true
         val read = sessions.mapNotNull { session ->
-            val figures = runCatching {
+            val figures = effectAttempt {
                 client.aggregate(AggregateRequest(metrics = metrics, timeRangeFilter = TimeRangeFilter.between(session.startTime, session.endTime)))
             }.getOrNull()
             if (figures == null) {
@@ -385,7 +393,7 @@ internal class HealthConnectReader(private val context: Context) {
     }
 
     /** The app's own name for [packageName] when the phone will say it, else the package name. */
-    private fun label(packageName: String): String = runCatching {
+    private fun label(packageName: String): String = effectAttempt {
         val pm = context.packageManager
         pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
     }.getOrNull()?.takeIf { it.isNotBlank() } ?: packageName

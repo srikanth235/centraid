@@ -35,7 +35,7 @@ enum PhoneLibrary {
         let status = await withCheckedContinuation { continuation in
             PHPhotoLibrary.requestAuthorization(for: .readWrite) { continuation.resume(returning: $0) }
         }
-        LibraryWatcher.shared.registerIfAllowed()
+        await LibraryWatcher.shared.registerIfAllowed()
         return permission(of: status)
     }
 

@@ -15,8 +15,7 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
  * `package.json` and a git history of commit subjects. Nothing here can touch
  * the real repo, its git history, or npm.
  *
- * Every publish case either aborts before the first mutation or runs with
- * `--dry-run`, which returns before `git commit` / `git tag`.
+ * Publish mutations run only in the isolated fixture repository.
  */
 
 const realRoot = path.resolve(import.meta.dirname, "../..");
@@ -225,6 +224,43 @@ describe("release publish guards", () => {
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('Unknown surface "teleporter"');
   });
+});
+
+describe("release publish execution", () => {
+  test("stages the current workspace manifests and creates the local release tag", () => {
+    const root = makeFixtureRoot();
+    const result = runPublish(root, ["--version", "0.5.0", "--issue", "656"]);
+    expect(result.status, result.stderr).toBe(0);
+    const tag = spawnSync("git", ["show", "v0.5.0:package.json"], {
+      cwd: root,
+      encoding: "utf8",
+      env: isolatedEnv,
+    });
+    expect(tag.status).toBe(0);
+    expect(JSON.parse(tag.stdout).version).toBe("0.5.0");
+  });
+
+  test.each(["0", "-1", "1.5", "NaN", "9007199254740992"])(
+    "refuses invalid beta sequence %s before stamping files",
+    (sequence) => {
+      const root = makeFixtureRoot();
+      const result = runPublish(root, [
+        "--version",
+        "0.5.0",
+        "--issue",
+        "656",
+        "--beta",
+        "--beta-n",
+        sequence,
+      ]);
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain("positive safe integer");
+      expect(
+        JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"))
+          .version
+      ).toBe(FIXTURE_VERSION);
+    }
+  );
 });
 
 describe("release publish derivation", () => {

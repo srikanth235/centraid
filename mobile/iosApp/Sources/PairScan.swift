@@ -5,6 +5,7 @@ import PhotosUI
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
+import os
 
 // THE PERFORMER OF `ScanCode` (#1135): read one QR code.
 //
@@ -170,7 +171,7 @@ final class PairScannerController: UIViewController, AVCaptureMetadataOutputObje
     var onUnread: (() -> Void)?
     var onCancel: (() -> Void)?
 
-    private let session = AVCaptureSession()
+    private let camera = PairCameraSession()
     private var preview: AVCaptureVideoPreviewLayer?
     private var answered = false
 
@@ -218,42 +219,39 @@ final class PairScannerController: UIViewController, AVCaptureMetadataOutputObje
         preview?.frame = view.bounds
     }
 
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        if preview != nil, !answered { camera.setRunning(true) }
+    }
+
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        let session = session
-        DispatchQueue.global(qos: .userInitiated).async { session.stopRunning() }
+        camera.setRunning(false)
     }
 
     private func start() {
-        guard let camera = AVCaptureDevice.default(for: .video),
-              let input = try? AVCaptureDeviceInput(device: camera),
-              session.canAddInput(input)
-        else { return cancel() }
-        session.addInput(input)
-        let output = AVCaptureMetadataOutput()
-        guard session.canAddOutput(output) else { return cancel() }
-        session.addOutput(output)
-        output.setMetadataObjectsDelegate(self, queue: .main)
-        output.metadataObjectTypes = [.qr]
-        let layer = AVCaptureVideoPreviewLayer(session: session)
+        guard view.window != nil, !answered else { return }
+        guard let layer = camera.configure(delegate: self) else { return cancel() }
         layer.videoGravity = .resizeAspectFill
         layer.frame = view.bounds
         view.layer.insertSublayer(layer, at: 0)
         preview = layer
-        let session = session
-        DispatchQueue.global(qos: .userInitiated).async { session.startRunning() }
+        camera.setRunning(true)
     }
 
-    func metadataOutput(
+    nonisolated func metadataOutput(
         _ output: AVCaptureMetadataOutput,
         didOutput objects: [AVMetadataObject],
         from connection: AVCaptureConnection
     ) {
-        guard !answered,
-              let code = objects.compactMap({ ($0 as? AVMetadataMachineReadableCodeObject)?.stringValue }).first
-        else { return }
-        answered = true
-        onRead?(code)
+        // Metadata delivery was explicitly installed on .main.
+        MainActor.assumeIsolated {
+            guard !answered,
+                  let code = objects.compactMap({ ($0 as? AVMetadataMachineReadableCodeObject)?.stringValue }).first
+            else { return }
+            answered = true
+            onRead?(code)
+        }
     }
 
     private func choosePhoto() {
@@ -285,4 +283,47 @@ final class PairScannerController: UIViewController, AVCaptureMetadataOutputObje
         onCancel?()
     }
 }
+/// AVFoundation's session has no Sendable conformance. This narrow adapter
+/// owns it, serializes every configuration/start/stop with one lock, and only
+/// exposes the preview layer to UIKit. A separate checked lock records the
+/// latest lifecycle intent so delayed background work cannot restart a hidden
+/// camera. Framework preview rendering remains AVFoundation's responsibility.
+private final class PairCameraSession: @unchecked Sendable {
+    private let session = AVCaptureSession()
+    private let lock = NSLock()
+    private let wantsRunning = OSAllocatedUnfairLock(initialState: false)
+
+    @MainActor
+    func configure(delegate: PairScannerController) -> AVCaptureVideoPreviewLayer? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let device = AVCaptureDevice.default(for: .video),
+              let input = try? AVCaptureDeviceInput(device: device),
+              session.canAddInput(input)
+        else { return nil }
+        session.addInput(input)
+        let output = AVCaptureMetadataOutput()
+        guard session.canAddOutput(output) else { return nil }
+        session.addOutput(output)
+        output.setMetadataObjectsDelegate(delegate, queue: .main)
+        output.metadataObjectTypes = [.qr]
+        return AVCaptureVideoPreviewLayer(session: session)
+    }
+
+    func setRunning(_ running: Bool) {
+        wantsRunning.withLock { $0 = running }
+        DispatchQueue.global(qos: .userInitiated).async { self.reconcileRunning() }
+    }
+
+    private func reconcileRunning() {
+        lock.lock()
+        defer { lock.unlock() }
+        if wantsRunning.withLock({ $0 }) {
+            if !session.isRunning { session.startRunning() }
+        } else if session.isRunning {
+            session.stopRunning()
+        }
+    }
+}
+
 #endif

@@ -396,6 +396,21 @@ fn every_request_carries_a_request_id_and_cancel_names_one() {
         "the core answers under the id the caller minted, not one of its own"
     );
 
+    // A TYPED REFUSAL is also an answer to the caller's request.
+    let invalid = wire::Envelope {
+        request_id: 4_243,
+        body: Some(wire::envelope::Body::Request(wire::Request { kind: None })),
+    }
+    .encode_to_vec();
+    let (code, bytes) = call(opened.handle, &invalid);
+    assert_eq!(
+        code, CENTRAID_OK,
+        "an unsupported request is a typed refusal"
+    );
+    let refusal = wire::Envelope::decode(&bytes[..]).expect("the refusal decodes");
+    assert_eq!(refusal.request_id, 4_243);
+    assert!(matches!(refusal.body, Some(wire::envelope::Body::Error(_))));
+
     // A CANCEL NAMING NOBODY is a no-op: ids are monotonic and never reused.
     let cancel = wire::Envelope {
         request_id: 9_999,
@@ -690,6 +705,7 @@ fn a_real_panic_inside_call_poisons_the_handle_through_the_abi() {
     let (code, bytes) = call(opened.handle, &fault);
     assert_eq!(code, CENTRAID_PANICKED);
     let refusal = wire::Envelope::decode(&bytes[..]).expect("a refusal decodes");
+    assert_eq!(refusal.request_id, 1, "a panic still answers its request");
     let Some(wire::envelope::Body::Error(error)) = refusal.body else {
         panic!("a caught panic answers with an Error body, not a partial answer");
     };

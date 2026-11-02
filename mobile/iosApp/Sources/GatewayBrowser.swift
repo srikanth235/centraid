@@ -127,7 +127,7 @@ final class GatewayBrowseRun {
     private let finder: ServiceFinder
     private let resolver: AddressResolver
     private let window: TimeInterval
-    private let deliver: ([ResolvedService]) -> Void
+    private let deliver: @MainActor ([ResolvedService]) -> Void
 
     private var finished = false
     private var started = false
@@ -140,7 +140,7 @@ final class GatewayBrowseRun {
         finder: ServiceFinder,
         resolver: AddressResolver,
         window: TimeInterval,
-        deliver: @escaping ([ResolvedService]) -> Void
+        deliver: @escaping @MainActor ([ResolvedService]) -> Void
     ) {
         self.finder = finder
         self.resolver = resolver
@@ -298,7 +298,7 @@ final class GatewayBrowsing {
     static let shared = GatewayBrowsing()
 
     /// One screen's browse; `ended` stops its next window.
-    private final class Session {
+    @MainActor private final class Session {
         var ended = false
     }
 
@@ -307,7 +307,7 @@ final class GatewayBrowsing {
     func perform(
         _ instance: UInt64,
         _ browse: Centraid_Core_V1_BrowseGateways,
-        answer: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
+        answer: @escaping @MainActor (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
     ) {
         stop(instance)
         guard browse.on else {
@@ -326,29 +326,27 @@ final class GatewayBrowsing {
     private func window(
         _ session: Session,
         _ browse: Centraid_Core_V1_BrowseGateways,
-        _ answer: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
+        _ answer: @escaping @MainActor (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
     ) {
         let run = GatewayBrowseRun(
             finder: NWServiceFinder(),
             resolver: ConnectionResolver(),
             window: TimeInterval(browse.windowMs) / 1000
         ) { found in
-            DispatchQueue.main.async {
+            guard !session.ended else { return }
+            var sighted = Centraid_Core_V1_GatewaysSighted()
+            sighted.sightings = found.map { service in
+                var sighting = Centraid_Core_V1_GatewaySighting()
+                sighting.serviceName = service.serviceName
+                sighting.txt = service.txt
+                sighting.addresses = service.addresses
+                return sighting
+            }
+            answer(.gatewaysSighted(sighted))
+            guard browse.repeatMs > 0 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(browse.repeatMs))) {
                 guard !session.ended else { return }
-                var sighted = Centraid_Core_V1_GatewaysSighted()
-                sighted.sightings = found.map { service in
-                    var sighting = Centraid_Core_V1_GatewaySighting()
-                    sighting.serviceName = service.serviceName
-                    sighting.txt = service.txt
-                    sighting.addresses = service.addresses
-                    return sighting
-                }
-                answer(.gatewaysSighted(sighted))
-                guard browse.repeatMs > 0 else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(browse.repeatMs))) {
-                    guard !session.ended else { return }
-                    GatewayBrowsing.shared.window(session, browse, answer)
-                }
+                GatewayBrowsing.shared.window(session, browse, answer)
             }
         }
         run.start()

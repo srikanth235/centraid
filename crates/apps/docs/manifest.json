@@ -1073,7 +1073,7 @@
       "name": "history",
       "kind": "document",
       "figures": ["versions"],
-      "description": "A document's versions, newest first: the current bytes, then each revision a replace put down. A version's instant is when it became current — when the one before it was replaced, or the document was made for the oldest — so restoring an old version reads as the newest entry even though its bytes are old. A revision's seq is the version's number.",
+      "description": "A document's versions, newest first: the current bytes, then each revision a replace put down. A version's instant is when it became current — when the one before it was replaced, or the document was made for the oldest — so restoring an old version reads as the newest entry even though its bytes are old. A revision's seq is the version's number. More than 500 revisions reports a reached read bound instead of returning an incomplete history.",
       "input": {
         "type": "object",
         "properties": {

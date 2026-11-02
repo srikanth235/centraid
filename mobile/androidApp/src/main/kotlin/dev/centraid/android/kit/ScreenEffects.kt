@@ -109,7 +109,7 @@ internal fun HostScreenEffects(
                         photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                     }
                     effect.export_originals != null ->
-                        runCatching { performExportOriginals(context, session.core, effect.export_originals!!) }
+                        effectAttempt { performExportOriginals(context, session.core, effect.export_originals!!) }
                             .getOrElse { failed("the originals could not be handed off") }
                     effect.pick_bytes != null -> pickBytes(context, picking.ask { picker.launch(pickerTypes(effect.pick_bytes!!.accept)) })
                     effect.save_file != null -> {

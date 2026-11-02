@@ -17,7 +17,7 @@
  * Never bump version only to fix a failed build — rebuild / retry tag instead.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
@@ -61,10 +61,15 @@ if (!version || !/^\d+\.\d+\.\d+$/u.test(version)) {
   );
   process.exit(2);
 }
-if (!issue || !/^\d+$/u.test(issue) || issue === "0") {
+if (!issue || !/^\d+$/u.test(issue) || !/[1-9]/u.test(issue)) {
   console.error(
     "publish requires --issue N (real GitHub issue; #0 is forbidden)"
   );
+  process.exit(2);
+}
+
+if (beta && (!Number.isSafeInteger(betaN) || betaN < 1)) {
+  console.error("publish requires --beta-n to be a positive safe integer");
   process.exit(2);
 }
 
@@ -139,22 +144,25 @@ if (dryRun) {
 }
 
 const commitMsg = `chore(release): ${version} (#${issue})`;
-execSync(
-  "git add package.json packages/*/package.json desktop/electron/package.json extension/package.json",
-  { cwd: root, stdio: "inherit", shell: true }
-);
-execSync(`git commit -m ${JSON.stringify(commitMsg)}`, {
+execFileSync("git", ["add", "--", ...syncReport.workspaces], {
   cwd: root,
   stdio: "inherit",
 });
-execSync(`git tag -a ${tag} -m "Centraid ${tag}"`, {
+execFileSync("git", ["commit", "-m", commitMsg], {
+  cwd: root,
+  stdio: "inherit",
+});
+execFileSync("git", ["tag", "-a", tag, "-m", `Centraid ${tag}`], {
   cwd: root,
   stdio: "inherit",
 });
 
 if (doPush) {
-  execSync("git push origin HEAD", { cwd: root, stdio: "inherit" });
-  execSync(`git push origin ${tag}`, { cwd: root, stdio: "inherit" });
+  execFileSync("git", ["push", "origin", "HEAD"], {
+    cwd: root,
+    stdio: "inherit",
+  });
+  execFileSync("git", ["push", "origin", tag], { cwd: root, stdio: "inherit" });
 } else {
   console.error(
     `tag ${tag} created locally. Push with: git push origin HEAD && git push origin ${tag}`

@@ -106,7 +106,7 @@ def run_all(modules: list[str], jobs: int) -> dict[str, tuple[int, float]]:
             env = {**{var: threads for var in THREAD_VARS}, **os.environ}
             t0 = time.monotonic()
             try:
-                proc = subprocess.run([sys.executable, __file__, "--module", rel, name], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                proc = subprocess.run([sys.executable, "-I", __file__, "--module", rel, name], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                       text=True, errors="replace", check=False, env=env)
                 code, output = proc.returncode, proc.stdout
             except OSError as err:  # the interpreter did not start: the module failed, and the others still run
@@ -128,7 +128,7 @@ def main(argv: list[str]) -> int:
         return run_module(argv[2], argv[3])
     ap = argparse.ArgumentParser(description="Run the native harness's CPU tests, one interpreter per module.")
     ap.add_argument("--jobs", type=int, default=JOBS, metavar="N", help=f"modules to run at once (default {JOBS})")
-    ap.add_argument("dirs", nargs="*", metavar="DIR", help=f"{', '.join(DIRS)} (default: all four)")
+    ap.add_argument("dirs", nargs="*", metavar="DIR", help=f"{', '.join(DIRS)} (default: all five)")
     args = ap.parse_args(argv[1:])
     jobs, dirs = args.jobs, args.dirs or list(DIRS)
     if jobs < 1:
