@@ -105,7 +105,62 @@ Where common advice disagrees, this file says which to follow and why. The diges
 - Nothing slow on the main thread: disk, database and native calls belong on a background dispatcher, or the app gets ANRs.
 - Respect the minimum SDK: gate newer APIs with a version check.
 
-## 12. Final checklist
+## 12. Performance
+
+Fast means the first frame after a tap shows at once and no frame or main-thread task takes long enough to drop frames (16 ms at 60 Hz) or trip an ANR. Every change starts and ends with a **measurement**.
+
+```text
+reproduce -> measure (release build) -> find the line -> fix -> measure again -> commit with the numbers
+```
+
+1. **Reproduce** with written steps, a UI test, or a Macrobenchmark that runs the slow action.
+2. **Measure a release-like build, on a real device.** Debug builds disable R8 and optimizations, and Compose in debug is far slower; an emulator shares the host's CPU and disk, so its numbers bound the experience from below and are never a budget. Profile the `release` build type (R8 on), or a `profileable` copy of it, so tracing works without debug overhead.
+3. **Find the line** with the tool for the symptom:
+
+   | Symptom | Tool |
+   | --- | --- |
+   | Janky scroll or animation | Perfetto system trace (`ui.perfetto.dev`, or Android Studio's System Trace); look for long `Choreographer#doFrame` and `Recomposer` slices |
+   | A composable redraws too often | Layout Inspector's recomposition counts; Compose compiler reports for unstable parameters |
+   | Slow action, high CPU | Android Studio CPU profiler (Callstack Sample or Java/Kotlin Method Recording) |
+   | Memory grows | Android Studio Memory profiler: heap dump, then look for retained activities and scopes |
+   | ANR or startup stall | Perfetto trace plus the main thread's stack in the ANR trace; check for disk, database or core calls on `Main` |
+   | Battery, wakeups | Energy profiler in Android Studio; look at wake locks, alarms and polling |
+   | A repeatable number | Macrobenchmark (`StartupTimingMetric`, `FrameTimingMetric`) |
+
+   Repeatable numbers come from Macrobenchmark: `./gradlew -Pcentraid.android=true :androidApp:connectedBenchmarkAndroidTest`, which is how the `android-macrobenchmark` device lane (`nightly` profile) runs it, on a named physical device only, never an emulator.
+
+4. **Fix**, then **measure again** with the same steps. Put before and after in the commit message: "Library opens in 40 ms, was 600 ms".
+
+**Delete every Perfetto trace, heap dump and profiler export after reading it, and never commit or share one.** A trace or dump can contain the process's environment and memory, and an app started from an agent's shell inherits that shell's tokens.
+
+Rules that fix most problems:
+
+- **Show first, work after.** Render the screen state in the same frame as the tap, then load.
+- **Main thread for UI only.** Disk, database, native core calls and decoding go to a background dispatcher.
+- **Decode images at display size** (Coil/ImageDecoder size hints, `inSampleSize`) and cache them.
+- **Stable keys, stable parameters, late reads** (section 7): the three fixes behind most recomposition problems.
+- **No polling without a reason.** Timers and `delay` loops stop when the screen leaves composition.
+
+This repo's own budget checks: `cargo xtask gate --profile pr` runs `call-budget` and `search-budget` against the core (ledgers in `contracts/ledgers/`), and the ceilings for on-device journeys sit in `tests/journeys.json`, promoted only from a named physical device. The `:androidApp:connectedBenchmarkAndroidTest` task is named by the gate and `mobile/README.md`, but no benchmark module is in the Gradle build yet; confirm it exists before relying on it.
+
+## 13. Compiler and lint errors
+
+Fix the first error first; later ones often come from it. Kotlin warnings are errors where the build says so; do not suppress to go green.
+
+| Error | Fix |
+| --- | --- |
+| `Smart cast to 'T' is impossible, because 'x' is a mutable property` | Copy to a local `val` first (`val x = x ?: return`), or make the property a `val` |
+| `Suspend function 'f' should be called only from a coroutine or another suspend function` | Make the caller `suspend`, or launch from a lifecycle-bound scope; never `runBlocking` to get around it |
+| `@Composable invocations can only happen from the context of a @Composable function` | Move the call into a composable, or compute the value there and pass it into the lambda |
+| `'when' expression must be exhaustive` | Add the missing branches; do not add `else` over a sealed type |
+| `Type mismatch: inferred type is T? but T was expected` | Handle null where it enters (`?: return`, `requireNotNull(x) { "why" }`); avoid `!!` |
+| `Call requires API level 26 (current min is 24)` (`NewApi`) | Gate with `Build.VERSION.SDK_INT >= …` or `@RequiresApi`; never raise `minSdk` to make it compile |
+| `Unresolved reference` in `commonMain` for an Android or JVM class | `commonMain` takes no platform imports; use an `expect`/`actual` or an interface the shell supplies |
+| Compose lint `ModifierParameter` | Move `modifier: Modifier = Modifier` first among the optional parameters and apply it to the root |
+| Gradle lockfile mismatch after a version change | Rewrite the locks with `--write-locks` as `mobile/README.md` lays out (both modes); commit the lockfiles with the change |
+| Compose "unstable parameter" skipped-restart in the compiler report | Use an immutable type or a lambda that reads late; see section 7 |
+
+## 14. Final checklist
 
 - No warnings; no `!!`, `GlobalScope` or `runBlocking` in product code.
 - `CancellationException` is never swallowed.
@@ -115,7 +170,9 @@ Where common advice disagrees, this file says which to follow and why. The diges
 - Every interactive element is accessible.
 - `commonMain` has no platform imports.
 
-## 13. In this repo
+**Done when** the build has no warnings, `cargo xtask gate --profile mobile-jvm` is green (it runs `:core:jvmTest` against the real cdylib and fails on generated-table drift; the Android shell's own unit tests run separately, see `mobile/README.md`). The gate does not compile Compose or run a device; say so if you could not.
+
+## 15. In this repo
 
 The Android shell is `mobile/androidApp` (Compose, minSdk 24, targetSdk 36); the shared Kotlin Multiplatform binding of the Rust core is `mobile/core`.
 
@@ -134,4 +191,4 @@ Read when the task touches the area:
 - `references/compose.md`: state, composition, effects, performance and crash patterns.
 - `references/testing.md`: what to test where, coroutine tests, Compose tests.
 
-The references are from [android-skills](https://github.com/rcosteira79/android-skills) by Ricardo Costeira (MIT, [license](licenses/rcosteira79-android-skills-LICENSE)). Where they assume ViewModels or a DI framework, section 13 wins.
+The error table and measuring loop (sections 12 and 13) are adapted from [Bama](https://github.com/daveebbelaar/bama) (MIT, Dave Ebbelaar, [license](licenses/Bama-LICENSE)). The references are from [android-skills](https://github.com/rcosteira79/android-skills) by Ricardo Costeira (MIT, [license](licenses/rcosteira79-android-skills-LICENSE)). Where they assume ViewModels or a DI framework, section 13 wins.
