@@ -662,6 +662,6 @@ Do not hardcode colours, font stacks, type sizes, spacing, radii, icon dictionar
 - [issue #707](https://github.com/srikanth235/centraid/issues/707) — the Binding Layer brief this constitution implements, quoted in full in the issue; the design-agent prototypes are reference-only and are not kept in the repo
 - [issue #805](https://github.com/srikanth235/centraid/issues/805) — the copy rulebook this constitution's [Copy](#copy) section states
 - [crates/screens/src/strings](crates/screens/src/strings) — the copy catalogue; [copy/](copy) — the assistant's turn sentences
-- [docs/traps/design-tokens.md](docs/traps/design-tokens.md) — source-of-truth trap
+- [.claude/skills/typescript/SKILL.md](.claude/skills/typescript/SKILL.md) — the token source-of-truth pitfalls
 - [issue #690](https://github.com/srikanth235/centraid/issues/690) — product-grammar migration intent and review closure
 - `bun run check` — format, lint, typecheck and the TypeScript tests; `cargo xtask gate --profile pr` is the full CI gate

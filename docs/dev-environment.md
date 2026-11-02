@@ -28,25 +28,25 @@ cargo build --workspace               # the core, the gateway and the two CLI bi
 | **demo data** | `mobile/scripts/demo-vault.sh [ios\|android]` | Runs `seed-demo-vault` twice through the real command plane, places `demo-vault.sqlite3` and `work-vault.sqlite3` in the running simulator's or emulator's vault directory as `demo-vault/vault.db` and `work-vault/vault.db` (one directory per vault), and relaunches the **debug** app with the demo seed so both open keyed and the demo Locker unlocks and reveals ([mobile/README.md](../mobile/README.md#the-demo-vault-opens-keyed)). The seeder prints `CENTRAID_DEMO_WORDS` (the public all-`abandon` BIP-39 words) and `CENTRAID_DEMO_SEED` (their seed, hex) |
 | **mobile (JVM)** | `cd mobile && ./gradlew mobileJvm` | `:core:jvmTest` over the real `centraid-core-ffi` cdylib — the gate's `mobile-jvm` step |
 | **mobile (Android)** | `cd mobile && ./gradlew -Pcentraid.android=true :androidApp:assembleDebug` | Needs `ANDROID_HOME`; `mobile/scripts/android-core.sh` cross-compiles the core into `jniLibs` first |
-| **mobile (iOS)** | the numbered steps in [mobile/README.md](../mobile/README.md#the-ios-hand-off) | Rust slice (`mobile/scripts/ios-core.sh`, which the app links by path) → `xcodegen generate` (which also generates the Swift protobuf types, and needs `brew install protobuf swift-protobuf`; Xcode regenerates them when a `.proto` changes) → `xcodebuild … test` on a simulator (there is no `swift test`: `Sources/` imports UIKit, which the macOS host does not have). Skipping the first links stale code with no error ([traps/stale-core-slice.md](traps/stale-core-slice.md)) |
+| **mobile (iOS)** | the numbered steps in [mobile/README.md](../mobile/README.md#the-ios-hand-off) | Rust slice (`mobile/scripts/ios-core.sh`, which the app links by path) → `xcodegen generate` (which also generates the Swift protobuf types, and needs `brew install protobuf swift-protobuf`; Xcode regenerates them when a `.proto` changes) → `xcodebuild … test` on a simulator (there is no `swift test`: `Sources/` imports UIKit, which the macOS host does not have). Skipping the first links stale code with no error (`.claude/skills/mobile-verify/SKILL.md`) |
 | **mobile flows** | `maestro test mobile/maestro/flows` | Needs a running simulator or emulator with the app installed |
 | **service unit** | `centraid-gateway install --data-dir <dir>` (or `centraid gateway install`) | Writes a launchd or systemd unit and prints the enable command; never enables it ([deploy/README.md](../deploy/README.md)) |
 | **docs site** | `bun run docs:build` then `bun run docs:serve` | **4173** on 127.0.0.1 |
 
 Every verb logs through `tracing` to stderr, filtered by `--log` / `CENTRAID_LOG` — where those lines end up per host is [logs.md](logs.md).
 
-Do not point two processes at one vault directory: the core holds the one writable connection and the whole pragma set depends on being the only opener ([traps/wal-checkpoint.md](traps/wal-checkpoint.md)). Two `centraid-gateway` processes over one data directory is fine and expected — `serve` and `pair` share it through `state.db` — but never two `serve`s.
+Do not point two processes at one vault directory: the core holds the one writable connection and the whole pragma set depends on being the only opener (`.claude/skills/sqlite/SKILL.md`). Two `centraid-gateway` processes over one data directory is fine and expected — `serve` and `pair` share it through `state.db` — but never two `serve`s.
 
 ## Worktrees
 
 Agents often work in git worktrees (including under `.claude/worktrees/`).
 
 1. **Install** — each worktree needs its own `bun install` (do not assume root `node_modules` is visible unless you deliberately symlink — prefer install).
-2. **One `CARGO_TARGET_DIR` per worktree** — sharing one is not only lock contention. A build script's `OUT_DIR` is keyed by package identity, which is the same in every worktree, so a lane that edits a `.proto` hands its generated Rust to every other lane; and a gate verdict taken from a shared directory is worth nothing. Export `CARGO_TARGET_DIR=<something unique>` and `touch crates/api-proto/build.rs` before the first build in a fresh one ([traps/shared-cargo-target.md](traps/shared-cargo-target.md)).
-3. **Do not share** writable `--data-dir` trees across concurrent agents, and give each worktree its own `CARGO_TARGET_DIR` ([traps/shared-cargo-target.md](traps/shared-cargo-target.md)).
-4. **Seed data** — use a dedicated `--data-dir` and `seed-demo-vault` rather than copying a live vault (see [traps/wal-checkpoint.md](traps/wal-checkpoint.md)).
+2. **One `CARGO_TARGET_DIR` per worktree** — sharing one is not only lock contention. A build script's `OUT_DIR` is keyed by package identity, which is the same in every worktree, so a lane that edits a `.proto` hands its generated Rust to every other lane; and a gate verdict taken from a shared directory is worth nothing. Export `CARGO_TARGET_DIR=<something unique>` and `touch crates/api-proto/build.rs` before the first build in a fresh one (`.claude/skills/rust/SKILL.md`, Pitfalls).
+3. **Do not share** writable `--data-dir` trees across concurrent agents, and give each worktree its own `CARGO_TARGET_DIR` (`.claude/skills/rust/SKILL.md`, Pitfalls).
+4. **Seed data** — use a dedicated `--data-dir` and `seed-demo-vault` rather than copying a live vault (see `.claude/skills/sqlite/SKILL.md`).
 
-More traps: [traps/worktrees.md](traps/worktrees.md). Multi-agent rules: [multi-agent.md](multi-agent.md).
+More worktree pitfalls: `.claude/skills/rust/SKILL.md`. Multi-agent rules: [multi-agent.md](multi-agent.md).
 
 ## `.claude/launch.json`
 

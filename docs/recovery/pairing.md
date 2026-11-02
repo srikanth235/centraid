@@ -74,7 +74,7 @@ Stop `serve`, copy the whole data directory, and start `serve` from the copy. Th
 
 ## Do not
 
-- Hand-edit the phone's `vault.db`, or copy it anywhere. See [../traps/wal-checkpoint.md](../traps/wal-checkpoint.md).
+- Hand-edit the phone's `vault.db`, or copy it anywhere. See the pitfall in `.claude/skills/sqlite/SKILL.md`.
 - Persist a pairing payload anywhere, or commit one: its secret admits a vault for a day.
 - Delete `tls.key`, `tls.crt` or `gateway.id` to "reset" a gateway — every paired phone refuses what it mints instead.
 - Put a proxy that terminates TLS in front of a gateway. The phone pins the gateway's own certificate, so it refuses the proxy's.

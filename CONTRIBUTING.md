@@ -42,7 +42,7 @@ There is no guaranteed commit bit. Response cadence: see [README.md](README.md).
 
 The product is one Rust core under `crates/`, with `contracts/`, `mobile/`, `design/`, `copy/` and `deploy/` around it ([ARCHITECTURE.md](ARCHITECTURE.md)). Two rules bite hardest on a first change:
 
-- **The gate is one command.** `cargo xtask gate --profile <local|pr|nightly|release|mobile-jvm>`, each profile a concatenation of the one before. Budgets live in `contracts/ledgers/` and **only fall**; `cargo xtask measure --write` is the only writer and only ever lowers a number. A raise needs an owner ruling, not a flag. Give every worktree its own `CARGO_TARGET_DIR` ([docs/traps/shared-cargo-target.md](docs/traps/shared-cargo-target.md)).
+- **The gate is one command.** `cargo xtask gate --profile <local|pr|nightly|release|mobile-jvm>`, each profile a concatenation of the one before. Budgets live in `contracts/ledgers/` and **only fall**; `cargo xtask measure --write` is the only writer and only ever lowers a number. A raise needs an owner ruling, not a flag. Give every worktree its own `CARGO_TARGET_DIR` (`.claude/skills/rust/SKILL.md`, Pitfalls).
 - **`sql-confinement`.** SQL string literals appear only under `crates/{ontology,vault,seat,search}` and `crates/apps/kit` — an app crate holds no SQL and never sees a `Connection`. The rule has moved real APIs rather than being widened for them, and widening it to go green is weakening a gate.
 
 Every user-facing gate lands with a **demonstrated red** recorded in the PR description, and a claim of absence names the grep that establishes it.
@@ -50,7 +50,7 @@ Every user-facing gate lands with a **demonstrated red** recorded in the PR desc
 ## House rules pointers
 
 - Conventional Commits + issue suffix: `type(scope): subject (#123)`, checked by `.githooks/commit-msg` on each commit and on the PR title (enable the hooks once with `git config core.hooksPath .githooks`)
-- Docs write-back: if you learn a gotcha, update `docs/` ([AGENTS.md](AGENTS.md)) — and a footgun that cost you an hour earns a doc under [docs/traps/](docs/traps/README.md)
+- Docs write-back: if you learn a gotcha, update `docs/` ([AGENTS.md](AGENTS.md)) — and a footgun that cost you an hour earns a Pitfalls entry in the skill under `.claude/skills/` for that area
 - Tools via repo entrypoints only — `cargo xtask` for the gate and repo scripts for the TypeScript toolchain; never raw `npx <tool>`
 
 ## Security

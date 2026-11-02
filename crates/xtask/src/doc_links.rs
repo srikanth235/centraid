@@ -954,16 +954,16 @@ mod tests {
         let report = run(&[
             (
                 "docs/a.md",
-                "# A\n\nSee [the trap](traps/missing.md) and [real](b.md).\n",
+                "# A\n\nSee [the trap](guides/missing.md) and [real](b.md).\n",
             ),
             ("docs/b.md", "# B\n"),
         ]);
         assert_eq!(
             broken(&report),
-            [("docs/a.md".to_owned(), 3, "traps/missing.md".to_owned())]
+            [("docs/a.md".to_owned(), 3, "guides/missing.md".to_owned())]
         );
         assert!(
-            report.findings[0].why.contains("docs/traps/missing.md"),
+            report.findings[0].why.contains("docs/guides/missing.md"),
             "{}",
             report.findings[0].why
         );

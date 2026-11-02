@@ -18,7 +18,7 @@ A lane is the unit that carries a worker, a worktree, a brief and a merge. Its s
 Every lane pays a **fixed ceremony cost** whatever its size:
 
 - the root writes the brief and its evidenced State section;
-- the worker warms up — the reading set, the traps, the doctrine digest, its first typecheck: tens of thousands of tokens before the first edit;
+- the worker warms up — the reading set, the skills, the doctrine digest, its first typecheck: tens of thousands of tokens before the first edit;
 - the exit list runs at least once end to end, and heavy suites are serialised, so that is wall clock nobody else can use;
 - the worker reports, the root reads, verifies, merges, typechecks, pushes.
 
@@ -88,7 +88,7 @@ Fix: split at a reading-set seam, or, if the reading set cannot be split, commit
 ### A worker does
 
 - Read its brief's reading set and doctrine digest before touching code.
-- Work only in its lane worktree on its lane branch ([dev-environment.md](dev-environment.md#worktrees), [traps/worktrees.md](traps/worktrees.md)).
+- Work only in its lane worktree on its lane branch ([dev-environment.md](dev-environment.md#worktrees), `.claude/skills/rust/SKILL.md`).
 - Commit at seams with the umbrella's trailers, the subject within 100 characters and ending with the issue number (`.githooks/commit-msg`).
 - Run the slice's exit list, including the gates, before reporting.
 - Keep a milestone note in the worktree (below).
@@ -109,8 +109,8 @@ A slice starts only when its inputs exist on disk in the umbrella branch. A slic
 Every brief carries these sections, in this order.
 
 1. **State, from evidence.** What is true on disk now, each line with the command that proves it and its output. Never from memory, never from the last report. A wrong State line is the commonest reason a worker stops short, and it is always the root's error.
-2. **Reading set.** The files and docs the worker reads before editing, and the traps for the area ([traps/](traps/README.md)).
-3. **Doctrine digest.** The five to ten repo rules that bite in this area, one line each, taken from [AGENTS.md](../AGENTS.md), [decisions.md](decisions.md) and the area's docs and traps. Workers do not infer these from the codebase.
+2. **Reading set.** The files and docs the worker reads before editing, and the skill for the area (`.claude/skills/`, whose Pitfalls hold its footguns).
+3. **Doctrine digest.** The five to ten repo rules that bite in this area, one line each, taken from [AGENTS.md](../AGENTS.md), [decisions.md](decisions.md) and the area's docs and skills. Workers do not infer these from the codebase.
 4. **The slices**, in order, each with an end state a grep can check.
 5. **Exit list.** Numbered; each item a command and its expected result; always ending with the gates: `cargo xtask gate --profile pr`, and `bun run check` where TypeScript changed. A slice that cannot pass them is not done.
 6. **Rulings that bind**, by id, one line each.
@@ -203,5 +203,5 @@ Runs once per umbrella, after the last lane lands, and only when the owner opens
 ## Related
 
 - [dev-environment.md](dev-environment.md) — worktrees and the local gate loop
-- [traps/worktrees.md](traps/worktrees.md) — the worktree failures agents hit
+- `.claude/skills/rust/SKILL.md` — the worktree failures agents hit (Pitfalls)
 - [TESTING.md](../TESTING.md) — the lanes a slice's exit list draws from

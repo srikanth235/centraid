@@ -34,7 +34,7 @@ fn pair() -> Pair {
     let copy = dir.join("harness.db");
     // Found a vault into `dir` and seed the scenario the way the shared helper
     // does, then end the file so the log is in it
-    // (`docs/traps/wal-checkpoint.md`) and copy it.
+    // (`.claude/skills/sqlite/SKILL.md`) and copy it.
     let core = Core::open(CoreConfig::new(&path)).expect("a core opens");
     core.open_own_bytes(path.with_extension("bytes"))
         .expect("the byte store opens");

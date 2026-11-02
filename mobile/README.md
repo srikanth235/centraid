@@ -88,7 +88,7 @@ mobile/scripts/android-core.sh                                   # the Rust core
 cd mobile && ./gradlew -Pcentraid.android=true :androidApp:assembleDebug
 ```
 
-Without the flag, `:androidApp` **is not in the build at all** and `mobile/settings.gradle.kts` says so once, on every configuration. With the flag and no `ANDROID_HOME`, it refuses with the sentence that names this section. It never skips silently. The `.so` in `jniLibs` is a copied file: nothing in Gradle knows it is stale ([docs/traps/stale-core-slice.md](../docs/traps/stale-core-slice.md)).
+Without the flag, `:androidApp` **is not in the build at all** and `mobile/settings.gradle.kts` says so once, on every configuration. With the flag and no `ANDROID_HOME`, it refuses with the sentence that names this section. It never skips silently. The `.so` in `jniLibs` is a copied file: nothing in Gradle knows it is stale (`.claude/skills/mobile-verify/SKILL.md`).
 
 **A JDK 21 Gradle can find.** `:core` compiles with `jvmToolchain(21)`, and `:androidApp`'s unit tests run on JDK 21 for the same reason. Gradle looks for one where it is installed system-wide; a Homebrew `openjdk@21` is not there, and the build stops with "Cannot find a Java installation … matching languageVersion=21". Point `JAVA_HOME` at it (`export JAVA_HOME=$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home`), which the `mobile-jvm` gate needs as well, or pass `-Dorg.gradle.java.installations.paths=<that path>` to `./gradlew`.
 
@@ -110,7 +110,7 @@ Everything on iOS needs a macOS host. In order:
 ```sh
 # 0. THE RUST CORE, FIRST AND EVERY TIME IT CHANGES. The app links this archive
 #    by PATH (iosApp/project.yml), so nothing but this step builds it, and a
-#    stale one links with no error at all — see docs/traps/stale-core-slice.md,
+#    stale one links with no error at all — see .claude/skills/mobile-verify/SKILL.md,
 #    written after a byte door that compiled on every layer and ran as the
 #    version from five hours earlier.
 #    The core carries llama.cpp (the on-device chat's engine) when it is built
@@ -158,7 +158,7 @@ cd mobile/iosApp && xcodebuild -project Centraid.xcodeproj -scheme Centraid \
 
 | You changed | Re-run | Why it is silent otherwise |
 | --- | --- | --- |
-| anything under `crates/` the core links — a screen, a command, a query, a proto | 0 | the app links the Rust archive by path; a stale slice answers the old arm and nothing says so ([stale-core-slice](../docs/traps/stale-core-slice.md)) |
+| anything under `crates/` the core links — a screen, a command, a query, a proto | 0 | the app links the Rust archive by path; a stale slice answers the old arm and nothing says so (`.claude/skills/mobile-verify/SKILL.md`) |
 | `crates/api-proto/proto/**` — an edited message | 0; nothing for Swift | Xcode's pre-build phase regenerates `Sources/Generated` when a `.proto` is newer than its output |
 | a NEW `crates/api-proto/proto/**/*.proto` file | 2 | the phase's input and output lists are written by `xcodegen generate`; a proto the project does not list is a type Swift does not have |
 | a new `Sources/**.swift` file | 2 | the target globs a directory, and the project is generated |
@@ -288,7 +288,7 @@ The screens are Rust's (`words.make`, `words.enter`, `words.show`, `pair.laptop`
 The core answers a byte-door request with a **path**, never bytes: the platform opens the file, so decoding and caching stay where they belong (`ContentImage` on both shells). Two things will waste an afternoon if you do not know them:
 
 - **`UIImage(contentsOfFile:)` leans on the path extension.** A content-addressed file is named by its digest and has none, so that initializer returns nil for every photograph in the store — silently. `UIImage(data:)` sniffs the bytes, and is the only thing that can be right when the name is a hash.
-- **The Rust archive is linked by path** and nothing rebuilds it. See [docs/traps/stale-core-slice.md](../docs/traps/stale-core-slice.md) and step 0 above.
+- **The Rust archive is linked by path** and nothing rebuilds it. See `.claude/skills/mobile-verify/SKILL.md` and step 0 above.
 
 A cell stays a placeholder when the door says the bytes are not here, when it refuses to call them embeddable (`image/svg+xml` is executed by a renderer in the embedding page's origin), or when they are **not a still image** — a video's thumbnail is its poster derivative, and handing a mosaic an MP4 draws a blank that reads as a failed render.
 
