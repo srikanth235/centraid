@@ -136,9 +136,10 @@ pub(crate) fn put(
 /// A list or an album is part of the text of what it holds, and a relation's
 /// label of both people it joins ([`crate::index::text_of`]): putting such an
 /// edge in place or taking it away changes their text without changing them.
+/// A participant is also found by the notes about the activity they were with.
 fn mark_labelled(ctx: &CommandCtx<'_, '_>, from: &str, rel: Rel, to: &str) {
     match rel {
-        Rel::Contains => ctx.mark_for_index(to),
+        Rel::Contains | Rel::With => ctx.mark_for_index(to),
         Rel::Related => {
             ctx.mark_for_index(from);
             ctx.mark_for_index(to);

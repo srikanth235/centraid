@@ -706,7 +706,13 @@ fn days_are_recorded_once_and_only_a_changed_value_is_written() {
         { "day": "2026-03-01", "metric": "weight_kg", "value": 71.5 },
         { "day": "2026-03-02", "metric": "steps", "value": 9100 },
     ]});
+    let person = common::self_person(&world.scratch.vault).expect("the owner");
+    let before = world.stamp(&person);
+    world.scratch.clock.advance_ms(60_000);
     let first = world.ok("measurement.record", days.clone());
+    let stamped = world.stamp(&person);
+    assert_ne!(stamped, before, "recording days touches their person");
+    world.scratch.clock.advance_ms(60_000);
     assert_eq!(
         (first["written"].as_i64(), first["unchanged"].as_i64()),
         (Some(3), Some(0))
@@ -716,12 +722,23 @@ fn days_are_recorded_once_and_only_a_changed_value_is_written() {
         (second["written"].as_i64(), second["unchanged"].as_i64()),
         (Some(0), Some(3))
     );
+    assert_eq!(
+        world.stamp(&person),
+        stamped,
+        "unchanged days touch nothing"
+    );
+    world.scratch.clock.advance_ms(60_000);
     let changed = world.ok(
         "measurement.record",
         json!({ "days": [
             { "day": "2026-03-01", "metric": "steps", "value": 0 },
             { "day": "2026-03-02", "metric": "steps", "value": 9100 },
         ]}),
+    );
+    assert_ne!(
+        world.stamp(&person),
+        stamped,
+        "changed days touch their person"
     );
     assert_eq!(
         (changed["written"].as_i64(), changed["unchanged"].as_i64()),

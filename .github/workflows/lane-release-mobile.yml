@@ -54,6 +54,11 @@ jobs:
       android_signed: ${{ steps.enroll.outputs.android_signed }}
       ios_signed: ${{ steps.enroll.outputs.ios_signed }}
     steps:
+      - name: Reject unavailable store submission
+        if: inputs.submit
+        run: |
+          echo "::error::Store submission is not implemented. No Play or TestFlight upload will occur. Use submit=false for build verification; configure signing and a real uploader before requesting delivery."
+          exit 1
       - name: Enrolment probe (no secret values)
         id: enroll
         env:
@@ -103,10 +108,8 @@ jobs:
       # shell's `ArtifactIdentity` check exists to refuse exactly that.
       - name: Fetch the prebuilt core AAR
         run: |
-          echo "OWNER HAND-OFF: lane-prebuilt-core.yml publishes the AAR; this step"
-          echo "downloads it with its SHA256SUMS and refuses on a mismatch. It is a"
-          echo "placeholder until the first prebuilt-core release exists"
-          echo "(mobile/README.md -> The other hand-offs)."
+          echo "::error::Android release prerequisite is unavailable: this lane has no implemented, checksum-verified download of the matching Rust JNI libraries into androidApp/src/main/jniLibs. lane-prebuilt-core publishes raw JNI slices, not an AAR. Refusing to build an APK without its native core."
+          exit 1
 
       - name: Build
         working-directory: mobile
@@ -119,12 +122,13 @@ jobs:
           fi
 
       - name: Submit to Play internal
-        if: inputs.submit && needs.probe.outputs.android_signed == 'true'
+        if: inputs.submit
         env:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
           echo "OWNER HAND-OFF: the Play upload needs a service account and one"
           echo "successful manual upload first."
+          exit 1
 
   ios:
     if: inputs.platform == 'all' || inputs.platform == 'ios'
@@ -141,22 +145,22 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      # The Xcode pin nix cannot carry; this is the only place it is written.
-      - name: Select Xcode
-        env:
-          XCODE_VERSION: "26.6"
-        run: |
-          version="${XCODE_VERSION}"
-          echo "Selecting Xcode ${version}"
-          sudo xcode-select --switch "/Applications/Xcode_${version}.app" ||
-            echo "OWNER HAND-OFF: ${version} is not on this runner image."
+      - name: Select pinned Xcode (fail if unavailable)
+        run: bash mobile/scripts/select-xcode.sh
+      - uses: ./.github/actions/setup
+        with:
+          bun: "false"
+          rust: "true"
+          rust-targets: aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+          cargo-cache: release-ios
 
       # THE CORE'S STATIC LIBRARY, built for the iOS slices the project links
       # (`iosApp/CoreBridge` maps its header to `CentraidCoreC`). There is no
       # Kotlin framework in the app any more (#1135).
       - name: Build the core's iOS slices
         run: |
-          rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+          IPHONEOS_DEPLOYMENT_TARGET="$(cat mobile/ios-deployment-target)"
+          export IPHONEOS_DEPLOYMENT_TARGET
           mobile/scripts/ios-core.sh
 
       # `protobuf` and `swift-protobuf` are `protoc` and `protoc-gen-swift`.
@@ -186,17 +190,25 @@ jobs:
       - name: The fixture test - one fixture, two languages
         working-directory: mobile/iosApp
         run: |
-          # The SwiftUI shell's unit tests, the first machine in the pipeline
-          # that can run them.
-          # A SIMULATOR BUNDLE, NOT `swift test`: `Sources/` imports UIKit.
-          xcodebuild -scheme Centraid \
-            -destination 'platform=iOS Simulator,name=iPhone 16' test
+          bash ../scripts/verify-ios.sh
+
+      - name: Upload iOS compiler and test evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-ios-verification
+          path: |
+            target/ios-verification/*.log
+            target/ios-verification/*.xcresult
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: Submit to TestFlight
-        if: inputs.submit && needs.probe.outputs.ios_signed == 'true'
+        if: inputs.submit
         env:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
         run: |
           echo "OWNER HAND-OFF: the TestFlight upload needs an App Store Connect"
           echo "key and one successful manual upload first."
+          exit 1

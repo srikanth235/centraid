@@ -262,8 +262,9 @@ pub unsafe extern "C" fn centraid_call(
         return CENTRAID_BAD_ARGUMENT;
     }
     // SAFETY: the caller's promise. `handle_of` refuses a null pointer, so the
-    // reference below is to storage the caller said is live.
-    let Some(core) = (unsafe { marshal::handle_of(handle) }) else {
+    // reference below is to storage the caller said is live. Keep our own
+    // state owner through dispatch and panic reporting.
+    let Some(core) = (unsafe { marshal::handle_of(handle) }).cloned() else {
         return CENTRAID_BAD_ARGUMENT;
     };
     // SAFETY: as above, for `req`/`len`.
@@ -271,8 +272,10 @@ pub unsafe extern "C" fn centraid_call(
         return CENTRAID_BAD_ARGUMENT;
     };
 
+    let mut answer_id = 0;
     let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
         let (request_id, request) = marshal::request_from_envelope(bytes)?;
+        answer_id = request_id.unwrap_or(0);
         // A `Cancel` body is not a request: it names one. Answering it through
         // the same entry point is what keeps the ABI at five symbols.
         if let Some(cancel_id) = request_id.filter(|_| request.is_none()) {
@@ -304,12 +307,12 @@ pub unsafe extern "C" fn centraid_call(
             // `ErrorCode` the shell branches on; the status code says only that
             // the call itself ran.
             let code = code_for(&error);
-            let encoded = marshal::encode_error(0, &error);
+            let encoded = marshal::encode_error(answer_id, &error);
             // SAFETY: as above.
             unsafe { marshal::hand_over(encoded, out_buf, out_len) };
             code
         }
-        Err(_) => unsafe { poison(core, "call", out_buf, out_len) },
+        Err(_) => unsafe { poison(&core, "call", answer_id, out_buf, out_len) },
     }
 }
 
@@ -336,8 +339,12 @@ pub unsafe extern "C" fn centraid_next_event(
     if out_buf.is_null() || out_len.is_null() {
         return CENTRAID_BAD_ARGUMENT;
     }
-    // SAFETY: the caller's promise; `handle_of` refuses null.
-    let Some(core) = (unsafe { marshal::handle_of(handle) }) else {
+    // Own the shared state before waiting. `centraid_close` may release the
+    // caller's boxed Handle while this entered event read is still running;
+    // a reference borrowed from that box cannot survive the wait.
+    // SAFETY: the caller's promise; `handle_of` refuses null. The raw borrow
+    // ends after this clone, before any wait or screen callback runs.
+    let Some(core) = (unsafe { marshal::handle_of(handle) }).cloned() else {
         return CENTRAID_BAD_ARGUMENT;
     };
     let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
@@ -356,7 +363,7 @@ pub unsafe extern "C" fn centraid_next_event(
         Ok(Ok(None)) => CENTRAID_TIMEOUT,
         Ok(Err(error)) => code_for(&error),
         // SAFETY: both out-pointers were checked non-null on entry.
-        Err(_) => unsafe { poison(core, "next_event", out_buf, out_len) },
+        Err(_) => unsafe { poison(&core, "next_event", 0, out_buf, out_len) },
     }
 }
 
@@ -432,9 +439,15 @@ pub unsafe extern "C" fn centraid_close(handle: *mut Handle) -> i32 {
 /// `out_buf` and `out_len` must be non-null and point to writable storage.
 // SAFETY: `unsafe` because the caller must uphold the `# Safety` contract
 // above; the one unsafe operation in the body carries its own note.
-unsafe fn poison(core: &Handle, what: &str, out_buf: *mut *mut u8, out_len: *mut usize) -> i32 {
+unsafe fn poison(
+    core: &Handle,
+    what: &str,
+    request_id: u64,
+    out_buf: *mut *mut u8,
+    out_len: *mut usize,
+) -> i32 {
     let diagnostic_id = core.poison(what);
-    let encoded = marshal::encode_error(0, &CoreError::Poisoned { diagnostic_id });
+    let encoded = marshal::encode_error(request_id, &CoreError::Poisoned { diagnostic_id });
     // SAFETY: the caller's promise, checked by every entry point before it can
     // reach here.
     unsafe { marshal::hand_over(encoded, out_buf, out_len) };

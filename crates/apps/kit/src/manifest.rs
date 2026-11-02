@@ -450,8 +450,8 @@ impl Manifest {
     /// disagree, as sentences; empty when they agree. `commands` are the
     /// qualified names (`schema.name`) of the app's action table.
     ///
-    /// A narrow `act` scope is a command's name, and a consent screen lists it
-    /// as a command the app reaches, so the two directions are one rule:
+    /// A narrow `act` scope is a command's name, and the build checks it against
+    /// the app's action table, so the two directions are one rule:
     ///
     /// 1. every narrow `act` scope (a `schema` and a `table` naming a command)
     ///    names a command some action invokes; a scope no action uses misleads

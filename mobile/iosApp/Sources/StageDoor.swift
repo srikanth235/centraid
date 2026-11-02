@@ -83,7 +83,7 @@ enum StageDoor {
         _ core: any ScreenCore,
         file path: String,
         mediaType: String,
-        progress: ((UInt64, UInt64) -> Void)? = nil
+        progress: (@MainActor @Sendable (UInt64, UInt64) -> Void)? = nil
     ) async -> Outcome {
         guard let handle = FileHandle(forReadingAtPath: path) else { return .refused(nil) }
         defer { try? handle.close() }
@@ -92,7 +92,7 @@ enum StageDoor {
         return await stage(core, Begin(mediaType: mediaType, byteSize: size)) { max in
             let slice = try handle.read(upToCount: max) ?? Data()
             sent += UInt64(slice.count)
-            progress?(sent, size)
+            await progress?(sent, size)
             return slice
         }
     }

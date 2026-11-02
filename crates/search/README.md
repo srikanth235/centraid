@@ -21,6 +21,6 @@ match answer {
 - **The snippet is cut in Rust.** The index is contentless and cannot say which words matched, so `snippet_of` runs the vault's own `text_of` over the row and excerpts around the first matching token.
 - **Correction is a lookup in the word list.** The vault keeps its words in memory (`Vault::words()`, checked against the table on every use); a misspelt word is replaced by ONE whole word of it: one edit anywhere, else a first-letter change, else the fragment inside a longer word, ranked by the documents that hold each (`SELECT doc FROM search_vocab WHERE term = ?`). A word some word starts with is kept.The list is one list for every reader.
 
-It is not the consent pipeline: it answers the owner's view of the vault it is handed. A stub that looked like a consent check would be worse than an absence written down here.
+Search answers the personal vault's contents. First-party apps share the vault's trust boundary; their declared read and command reach is checked at build time.
 
 `tests/door.rs` drives it against a founded vault: ranking, the trash filter, keyset continuation, correction, the snippet, and every refusal.

@@ -123,6 +123,7 @@ pub struct GatewayStore {
     vault: VaultId,
     gateway_id: String,
     runtime: tokio::runtime::Handle,
+    cancellation: Option<crate::handle::Cancellation>,
 }
 
 impl GatewayStore {
@@ -172,7 +173,27 @@ impl GatewayStore {
             vault,
             gateway_id,
             runtime: runtime.clone(),
+            cancellation: None,
         }
+    }
+
+    pub(crate) fn set_cancellation(&mut self, cancellation: Option<crate::handle::Cancellation>) {
+        self.cancellation = cancellation;
+    }
+
+    pub(crate) fn checkpoint(&self) -> Result<()> {
+        self.cancellation
+            .as_ref()
+            .map_or(Ok(()), crate::handle::Cancellation::check)
+    }
+
+    fn check_transfer(&self) -> std::result::Result<(), StoreError> {
+        self.checkpoint().map_err(|error| {
+            StoreError::Io(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                error.to_string(),
+            ))
+        })
     }
 
     /// The client underneath, for the routes the plane's trait does not name:
@@ -195,6 +216,7 @@ impl GatewayStore {
     /// [`StoreError::Untrusted`] when the machine that answered is not the
     /// pinned one, or answers as another gateway than the one paired.
     pub fn info(&self) -> std::result::Result<Info, StoreError> {
+        self.check_transfer()?;
         let info = self
             .runtime
             .block_on(self.client.info())
@@ -215,6 +237,7 @@ impl GatewayStore {
     /// # Errors
     /// As [`Self::info`], and a refusal by its code.
     pub fn writer_epoch(&self) -> std::result::Result<u64, StoreError> {
+        self.check_transfer()?;
         self.runtime
             .block_on(self.client.head_state(&self.vault))
             .map(|state| state.epoch)
@@ -228,6 +251,7 @@ impl Store for GatewayStore {
     }
 
     fn exists(&self, names: &[Name]) -> std::result::Result<Vec<Name>, StoreError> {
+        self.check_transfer()?;
         let asked: Vec<WireName> = names.iter().map(wire_name).collect();
         let missing = self
             .runtime
@@ -243,6 +267,7 @@ impl Store for GatewayStore {
         len: u64,
         body: &mut dyn Read,
     ) -> std::result::Result<Put, StoreError> {
+        self.check_transfer()?;
         if len > MAX_OBJECT_BYTES {
             return Err(StoreError::Refused(Refusal::TooLarge));
         }
@@ -274,6 +299,7 @@ impl Store for GatewayStore {
         &self,
         parts: &[Outgoing],
     ) -> std::result::Result<Vec<(Name, PartAnswer)>, StoreError> {
+        self.check_transfer()?;
         let sent: Vec<Part> = parts
             .iter()
             .map(|part| Part {
@@ -317,10 +343,12 @@ impl Store for GatewayStore {
     }
 
     fn get(&self, name: &Name, sink: &mut dyn Write) -> std::result::Result<u64, StoreError> {
+        self.check_transfer()?;
         let bytes = self
             .runtime
             .block_on(self.client.get(&self.vault, &wire_name(name), None))
             .map_err(missing_or(name))?;
+        self.check_transfer()?;
         sink.write_all(&bytes)?;
         Ok(bytes.len() as u64)
     }
@@ -330,15 +358,18 @@ impl Store for GatewayStore {
         names: &[Name],
         each: &mut dyn FnMut(&Name, &[u8]) -> std::io::Result<()>,
     ) -> std::result::Result<usize, StoreError> {
+        self.check_transfer()?;
         let asked: Vec<WireName> = names.iter().map(wire_name).collect();
         self.runtime
             .block_on(self.client.fetch_each(&self.vault, &asked, |frame| {
+                self.checkpoint().map_err(std::io::Error::other)?;
                 each(&plane_name(&frame.name), &frame.bytes)
             }))
             .map_err(store_error)
     }
 
     fn head(&self) -> std::result::Result<Option<Head>, StoreError> {
+        self.check_transfer()?;
         let state = self
             .runtime
             .block_on(self.client.head_state(&self.vault))
@@ -352,6 +383,7 @@ impl Store for GatewayStore {
         prev: Option<&Name>,
         taken_at_ms: u64,
     ) -> std::result::Result<Head, StoreError> {
+        self.check_transfer()?;
         let request = SetHead {
             name: wire_name(name),
             prev: prev.map(wire_name),
@@ -365,6 +397,7 @@ impl Store for GatewayStore {
     }
 
     fn snapshots(&self) -> std::result::Result<Vec<SnapshotEntry>, StoreError> {
+        self.check_transfer()?;
         let views = self
             .runtime
             .block_on(self.client.snapshots(&self.vault))
@@ -384,6 +417,7 @@ impl Store for GatewayStore {
         after: Option<&Name>,
         limit: usize,
     ) -> std::result::Result<Vec<ObjectEntry>, StoreError> {
+        self.check_transfer()?;
         let after = after.map(wire_name);
         let entries = self
             .runtime
@@ -401,6 +435,7 @@ impl Store for GatewayStore {
     }
 
     fn delete(&self, names: &[Name]) -> std::result::Result<Deleted, StoreError> {
+        self.check_transfer()?;
         let asked: Vec<WireName> = names.iter().map(wire_name).collect();
         let answer = self
             .runtime

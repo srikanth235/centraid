@@ -11,8 +11,8 @@
 //!
 //! The scope list is **explicit, one `act` scope per distinct command**: the
 //! manifest declares `{schema: "<verb's family>", table: "<verb>", verbs: "act"}`
-//! for each command an action names, so the consent a member grants is the
-//! commands Docs sends and no wider.
+//! for each command an action names, so the build checks the commands Docs
+//! sends against exactly what it declares.
 //!
 //! **`invoke_key` is mandatory** (D-1020-D3-5); v0's falls back to the call's
 //! ordinal, which is stable only for a handler that makes the same call
@@ -37,8 +37,7 @@ pub struct Invocation {
     pub input: BTreeMap<String, Value>,
     /// Which of this handler's calls this is. Mandatory; see the module note.
     pub invoke_key: String,
-    /// "This decorates the answer": a seat with no gateway settles an optional
-    /// invocation as failed rather than refusing the whole run. Docs has none —
+    /// Whether a failed invocation may leave the rest of the run usable. Docs has none —
     /// every action here is the member's own gesture.
     pub optional: bool,
 }

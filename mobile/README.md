@@ -13,20 +13,20 @@ mobile/
 
 ## What runs here, and what is a hand-off
 
-This is the most important table in this file. **Nothing in the right-hand column reads green in CI**: there is no Android SDK, no Xcode, no simulator and no device on the machines that run `cargo xtask gate`, and every claim that needs one is an owner hand-off with a command below.
+The Linux `cargo xtask gate` proves Rust and JVM behavior. The separate `ios` job in `.github/workflows/gate.yml` builds the real Rust simulator archive with llama, generates protobuf sources and both Xcode projects, compiles HealthSeeder in Swift 6 mode, and runs the Centraid app’s XCTest bundle in Swift 6 mode on a hosted macOS simulator. It uploads compiler logs and `.xcresult` bundles even on failure. Simulator results do not establish physical-device behavior or performance; the remaining hand-offs are below.
 
 | Provable on this machine (JVM and Rust) | An owner hand-off |
 | --- | --- |
 | the **real ABI round trip**: `open → call → next_event → free → close` from Kotlin over JNA against `libcentraid_core_ffi.so`, on a vault the Rust fixture binary founded (`:core:jvmTest`) | the same round trip through cinterop on iOS, and through JNA on a device |
 | the UI-thread assertion, the buffer accounting, the poison handling, the bounded-queue behaviour | a panic injected by the real library (it has no fault-injection point — see `contracts/handoff/E/proposed-patches.md`) |
 | every screen's behaviour: `centraid_screens::testing::Driver` over the real core (`cargo test -p centraid-screens`) | the Compose screens and the SwiftUI views rendering |
-| the emitted token table, catalogue and kit words match `packages/design` (`packages/design`'s `native-emission.test.ts`, and the drift check of the `mobile-jvm` step) | every emitted silhouette parsing in the Swift path reader (`IconSilhouetteTests`); Roborazzi and swift-snapshot-testing snapshots |
+| the emitted token table, catalogue and kit words match `packages/design` (`packages/design`'s `native-emission.test.ts`, and the drift check of the `mobile-jvm` step) | Roborazzi and swift-snapshot-testing snapshots (`IconSilhouetteTests` now runs in the iOS CI job) |
 | the pass service, the phone imports and the vault shelf's decisions (Rust tests in `crates/screens`) | the windows firing, the background `URLSession` carrying parts with the app suspended, the PhotoKit and MediaStore walkers, the derivatives, the deletions — `maestro/backup-measurement.md` |
 | `cargo xtask rules` over the shells' sources (no copy in a view, controls from the kit) | the device numbers that promote `tests/journeys.json`'s parked ceilings |
 
 Both shells have been seen running over the real core: the iOS shell compiles, links and runs its test bundle on a simulator ([#1080](https://github.com/srikanth235/centraid/issues/1080)'s device hand-off results), and the Android shell runs on an emulator against a seeded vault.
 
-## The one command the gate runs
+## The JVM gate
 
 ```sh
 cd mobile && ./gradlew mobileJvm
@@ -171,7 +171,9 @@ The simulator bundle is the one route, and it is the right one: `FontRegistratio
 
 **A decode that fails renders the screen's loading state**, never an empty one: an empty `.data` case would be a screen claiming an empty vault before it had read one.
 
-**Xcode is pinned to `26.6`** (`XCODE_VERSION` in `.github/workflows/lane-release-mobile.yml`), confirmed by the first real iOS compile.
+**Xcode is pinned to `26.3`** in the root `.xcode-version`, shared by the PR simulator job and the mobile/prebuilt iOS release lanes. `mobile/scripts/select-xcode.sh` fails if that Xcode is unavailable; it never silently uses the runner default. The [macOS 15 ARM64 runner image manifest](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md) (image `20261028.0489.1`, checked 2026-11-02) lists Xcode 26.3 (`17C529`) and the iOS 26.2 SDK/runtime. The previous 26.6 pin was unavailable and its selector silently continued. Both XcodeGen projects use Swift 6 language mode.
+
+To reproduce the CI verification after installing the tools and rebuilding the simulator Rust archive, run `bash mobile/scripts/verify-ios.sh` from the repository root. It creates its own simulator using an installed runtime supported by the selected SDK and writes logs/results under `target/ios-verification`. It requires a supported runtime and fails when none is installed.
 
 ### What iOS performs
 
@@ -210,7 +212,7 @@ It writes a deterministic year: 365 days of steps, active energy, resting heart 
 | The backup measurement | [`maestro/backup-measurement.md`](maestro/backup-measurement.md) — three claims on named reference devices: a first backup in an evening, a night's photos confirmed with the app closed, a restored grid in minutes | each claim's numbers and its pass or fail, recorded where that document says |
 | The Maestro flow | `maestro test mobile/maestro/flows` (`home.yaml` first; the flows are written against the iOS bundle id, so an Android run uses a copy with `appId: dev.centraid`) with `MAESTRO_VERSION=2.6.1` — see [`maestro/README.md`](maestro/README.md) | a run ledger. **Add the `testTag`/`accessibilityIdentifier` values from `flows/selectors.md` first**, paired with the run that proves each selects exactly one thing |
 | Android Macrobenchmark | `./gradlew -Pcentraid.android=true :androidApp:connectedBenchmarkAndroidTest` | the numbers that promote `tests/journeys.json`'s parked Android ceilings (R-1020-20: a named device, never an emulator) |
-| Store enrolment | `.github/workflows/lane-release-mobile.yml` | an App Store Connect key and a Play service account |
+| Store delivery | `.github/workflows/lane-release-mobile.yml` | Submission is not implemented: `submit=true` fails explicitly before building. Store signing/provisioning and a real uploader must be configured before delivery can succeed. Android builds also fail until the lane downloads and verifies matching native JNI libraries; the prebuilt lane publishes raw JNI slices, not an AAR. |
 | The gateway browse (#1080, Q-1080-D3, #1152) | on a Mac and a simulator, then on an Android phone, each with a paired gateway: stop the gateway, start it on another port or address on the same network, open the app (or tap Back up now) and watch Backup read the gateway reachable again within one pass with no re-pair; `GatewayBrowseTests` (iOS) and `GatewayBrowseTest` / `GatewayBrowsingTest` (Android) cover the browse's decisions over fakes, and `dns-sd -R x _centraid-gateway._tcp local 17443 gw=<id>` plus a TCP listener on that port is a stand-in advertisement. On Android check an Android 14 or newer phone and an Android 13 or older one, because the resolve differs between them | a reached gateway after a move with no re-pair, on each platform |
 | The first-launch deck on both phones (#1152) | `maestro test mobile/maestro/flows/first-launch.yaml` then `onboarding.yaml` with `MAESTRO_VERSION=2.6.1`, on an Android emulator with a cleared app (the `appId: dev.centraid` copy) and on a simulator; swipe, Skip and TalkBack's order by hand on Android | both flows green on each platform, or the failing step with a recording |
 | Money's home, the People verb strip, the 18 pt margins, the file picker's types and the lightbox's media type on an Android phone (#1152) | open each by hand on an Android 13 and an Android 14+ phone | a screenshot per screen; Money's three tabs beside the simulator's |

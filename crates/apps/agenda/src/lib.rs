@@ -29,7 +29,7 @@
 //!   Which local days an occurrence occupies, its wall clock, today and now
 //!   are answered in the zone the request states ([`local`], #1046), because a
 //!   shell's shared layer has no calendar to compute them with.
-//! - **NO DATA OF ITS OWN** — revoke the grant and the app goes dark.
+//! - **NO DATA OF ITS OWN** — the app reads and writes the personal vault.
 //!
 //! ## What this crate is allowed to contain, and what stops the rest
 //!
@@ -65,7 +65,7 @@ pub use queries::{
 };
 pub use window::{Occurrence, occurrences};
 
-/// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by
+/// A read refusal, as the payload carries it: the kit's one type, shared by
 /// every app so the core settles all of them through one door.
 pub use centraid_apps_kit::Denial;
 

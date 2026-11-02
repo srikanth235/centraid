@@ -154,12 +154,13 @@ extension ScreenContent {
 
 /// READ from the state, WRITTEN as an event: a swiped-away sheet tells the
 /// machine, and the machine closes it.
-func moneySheetBinding(_ open: Bool, close: @escaping () -> Void) -> Binding<Bool> {
+@MainActor
+func moneySheetBinding(_ open: Bool, close: @escaping @MainActor @Sendable () -> Void) -> Binding<Bool> {
     Binding(
         get: { open },
         set: { now in
             guard !now, open else { return }
-            close()
+            MainActor.assumeIsolated { close() }
         }
     )
 }

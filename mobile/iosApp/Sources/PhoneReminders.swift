@@ -17,17 +17,22 @@ enum PhoneReminders {
         let predicate = store.predicateForIncompleteReminders(
             withDueDateStarting: nil, ending: nil, calendars: nil
         )
-        let reminders: [EKReminder] = await withCheckedContinuation { continuation in
-            store.fetchReminders(matching: predicate) { continuation.resume(returning: $0 ?? []) }
+        let reminders: [Centraid_Core_V1_PhoneReminder] = await withCheckedContinuation { continuation in
+            store.fetchReminders(matching: predicate) { found in
+                // EventKit retains its model objects. Read them on the callback's
+                // executor and transfer only immutable protobuf values.
+                let reminders = (found ?? []).filter { !$0.isCompleted }.map { reminder in
+                    var phone = Centraid_Core_V1_PhoneReminder()
+                    phone.title = reminder.title ?? ""
+                    phone.notes = reminder.notes ?? ""
+                    phone.due = day(of: reminder.dueDateComponents)
+                    return phone
+                }
+                continuation.resume(returning: reminders)
+            }
         }
         var snapshot = Centraid_Core_V1_RemindersSnapshot()
-        snapshot.reminders = reminders.filter { !$0.isCompleted }.map { reminder in
-            var phone = Centraid_Core_V1_PhoneReminder()
-            phone.title = reminder.title ?? ""
-            phone.notes = reminder.notes ?? ""
-            phone.due = day(of: reminder.dueDateComponents)
-            return phone
-        }
+        snapshot.reminders = reminders
         return .remindersSnapshot(snapshot)
     }
 

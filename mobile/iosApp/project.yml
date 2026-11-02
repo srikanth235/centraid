@@ -32,7 +32,7 @@ options:
 
 settings:
   base:
-    SWIFT_VERSION: "5.9"
+    SWIFT_VERSION: "6.0"
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     # THE DIGEST THIS BUILD EXPECTS OF THE CORE (#1020 Artifacts). Stamped by
     # `lane-prebuilt-core.yml`; `dev` in a development build, which routes
@@ -313,7 +313,11 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+        # @testable import CentraidApp also loads its CentraidCoreC module
+        # dependency. Import paths on the app target do not reach this target.
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/CoreBridge
     sources:
       - path: Tests
     dependencies:
       - target: Centraid
+      - package: SwiftProtobuf

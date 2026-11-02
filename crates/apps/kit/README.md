@@ -10,7 +10,7 @@ It is the read vocabulary — pages, money, paged reads, the statement grammar a
 | --- | --- |
 | **Every read is a window.** `PageRequest` has a required `limit`; there is no unpaged variant and no default, because "a default is how an unbounded read gets written by accident" | `page.rs` |
 | **Every window continues by keyset**, `(sort_key, pk)` compared as a SQLite row value, with the pk in the key because the sort key is not unique | `page.rs`, `statement.rs` |
-| **One assembler.** `page_statement` is the only thing in the workspace that turns an app's statement into SQL, so the seat, the shell and the gateway cannot drift into three keyset dialects | `statement.rs` |
+| **One assembler.** `page_statement` is the only thing in the workspace that turns an app's statement into SQL, so app reads and their tests use the same keyset dialect | `statement.rs` |
 | **One grammar.** Subqueries, second statements, comments and unlisted functions are refused by construction — `parse` returns a shape or an error, and there is no path that returns a shape for a statement it rejected | `grammar.rs` |
 | **A stated window is walked, not clamped.** `read_window` reads a window to its stated size and says whether it filled | `reads.rs` |
 | **A ceiling errors.** `read_pages` past its bound and `in_list` over an empty set are errors, never short answers — returning what a walk had would be the truncation flag again | `reads.rs` |

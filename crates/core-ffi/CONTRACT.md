@@ -113,8 +113,6 @@ Tests: `the_vault_seed_crosses_the_abi_and_a_malformed_one_is_refused`
 
 _Why this is a clause and not a schema note:_ clause 10 says five symbols and means it, and "backing up" is exactly the kind of flow that grows a symbol — it has a background half, a foreground half and a status. All three are arms on `call`. A shell adds a flow by encoding a different message, never by resolving a new name, and `buf breaking` governs the churn.
 
-**A restore takes the 24 words or the 64-byte seed, exactly one** (`RestoreRequest.phrase` or `.seed`, #1047 Q-1047-18): the seed is what a phone the synchronised keychain handed no words restores with. Both is `INVALID_REQUEST`, and so is a seed that is not 64 bytes; no refusal quotes a word or a byte. **A restore never touches a vault this phone already holds**, and `RestoreRequest.indices` asks for only the indices an earlier restore answered as `unclaimed` (R-1047-R6): no gap is scanned, and the answer mints a device secret for the vaults it brings back. **A pair redeems the ticket's invite before it claims the lease** (#1047), because every signed call is `UnknownVault` until the laptop knows the vault.
-
 **A drain and a restore are cancellable; the other two are not**, and that follows from clause 4 rather than from a preference: `Cancel` names an unbounded operation, and a status read is a spool measurement. A drain has _two_ stops — `Cancel` is the member leaving the screen and `deadline_ms` is the operating system taking the window back — and they are different facts, which is why the deadline is not spelled as a cancellation the shell has to schedule.
 
 Test: `the_phones_four_flows_round_trip_through_call`
@@ -194,11 +192,11 @@ _Why:_ a dropped change event is a screen that stays wrong until something else 
 
 `behind` is a distance in **log positions**, not rows and not seconds.
 
-**What pushes.** A sync pass that applies a page of rows to this replica pushes one `ChangeEvent { table, pk_set, commit_seq }` per table it wrote, as it writes it — `crates/core`'s `ChangeFeed` over the seam `centraid_seat::sync::ChangeSink` declares. Until [#1025](https://github.com/srikanth235/centraid/issues/1025) S5 **nothing in the repository pushed one at all**: the queue was built, bounded, coalescing and tested to its cap, and a shell that waited for a row to arrive waited forever. `commit_seq` is a COMMIT position and never a `LogRow.seq`, because a seat's overlay clears against a commit. A page that applied nothing — a duplicate delivery — pushes nothing, because a change event with an empty key set is a redraw of nothing.
+**What pushes.** A successful command offers one `ChangeEvent { table, pk_set }` per table its commit changed, through `crates/core`'s `ChangeFeed`. The commit hook reports table names, so these events carry an empty `pk_set`, meaning **re-read the whole table**. A fetched photograph's bytes offer its photograph ids instead. Coalescing preserves a whole-table invalidation in either arrival order: keyed events cannot narrow it. Backup-ledger requests also offer a `backup` table invalidation, including requests carrying an explicit caller id and passes that stop partway through.
 
 When the queue is full the producer WAITS and retries rather than dropping, which is the stall this clause names; a closed handle ends the wait, because a core being closed under a running pass is what `centraid_close` does.
 
-Test: `next_event_surfaces_bounded_queue_backpressure_as_a_health_event`, and `crates/centraid/tests/seat_bootstrap.rs`'s `a_row_applied_by_a_pass_comes_out_of_next_event_naming_its_key` over real QUIC against the shipped gateway
+Test: `next_event_surfaces_bounded_queue_backpressure_as_a_health_event`; `crates/core/src/events.rs` and `crates/core/src/handle.rs` cover coalescing and command/ledger producers.
 
 ## 6. A timeout allocates nothing
 
@@ -212,9 +210,11 @@ Test: `a_timeout_allocates_nothing`
 
 `centraid_close` releases every thread parked in `centraid_next_event`, which returns `CLOSED` (-3) once the events already accepted have been handed out. A close is **not** a discard: accepted events come out first.
 
+An entered event read keeps its own shared-state owner through waiting and screen callbacks. Releasing the caller's boxed handle does not free state an entered read is still using.
+
 After `close` the handle pointer is **dangling**. A shell must null its own copy; no ABI can make a use-after-free safe. `close` on a null pointer is `BAD_ARGUMENT`, and `close` twice on the same pointer is undefined — that is a statement about C and not a gap in this library.
 
-Test: `close_unblocks_next_event_with_a_terminal_answer`
+Tests: `close_unblocks_next_event_with_a_terminal_answer`, `an_entered_event_read_keeps_its_state_after_close_releases_the_box`
 
 ## 8. Calls after close return a typed error
 

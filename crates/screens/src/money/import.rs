@@ -852,8 +852,15 @@ impl Screen for Import {
             }
             Some(E::MoneyImport(event)) => self.event(event, ctx),
             Some(E::EffectResult(result)) => {
-                if let Some(wire::effect_result::Outcome::BytesPicked(file)) = result.outcome {
-                    self.picked(ctx, file);
+                match result.outcome {
+                    Some(wire::effect_result::Outcome::BytesPicked(file)) => self.picked(ctx, file),
+                    Some(wire::effect_result::Outcome::Failed(failure)) if !failure.cancelled => {
+                        self.status = Some(fold::refusal(
+                            ctx.locale(),
+                            &words::import_failed(ctx.locale()),
+                        ));
+                    }
+                    _ => {}
                 }
                 Vec::new()
             }

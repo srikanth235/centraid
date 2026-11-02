@@ -30,12 +30,8 @@
 //! | A sealed value is never indexed | The index holds a Locker item's plain fields only (`crates/vault/tests/locker_plaintext_gate.rs`); the assistant searches it as the owner does, and `crates/nativetools/tests/locker_parity.rs` holds that no planted sealed word is findable or returned |
 //! | A correction is a lookup, not a guess | [`Search::correct`] replaces a word by one whole word of the vault's word list, ranked by the documents that hold it |
 //!
-//! ## What this crate is NOT
-//!
-//! It is not the consent pipeline: it takes the [`Principal`] it is given and
-//! answers the OWNER's view. Wiring a consented search is `crates/vault`'s
-//! paged-door work, written down here rather than stubbed, because a stub that
-//! *looks* like a consent check is worse than an absence that is written down.
+//! Search answers the personal vault's contents. First-party apps share its
+//! trust boundary; their declared reach is checked at build time.
 
 pub mod matching;
 pub mod snippet;
@@ -171,12 +167,8 @@ impl EachRequest {
     }
 }
 
-/// A CONSENT DENIAL, as a search carries it.
-///
-/// The same shape every app's payload carries: a code, a sentence and the
-/// instant the grant was revoked — which comes from the HOST, because an app
-/// whose grant was revoked cannot read the consent tables to date its own
-/// revocation.
+/// A search refusal, using the same payload shape as app read refusals.
+/// `revoked_at` is retained in the payload shape; personal-vault reads leave it absent.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Denial {
     pub code: Option<String>,

@@ -35,7 +35,7 @@ enum PhoneLibrary {
         let status = await withCheckedContinuation { continuation in
             PHPhotoLibrary.requestAuthorization(for: .readWrite) { continuation.resume(returning: $0) }
         }
-        LibraryWatcher.shared.registerIfAllowed()
+        await LibraryWatcher.shared.registerIfAllowed()
         return permission(of: status)
     }
 
@@ -628,8 +628,9 @@ private final class LibraryStream: @unchecked Sendable {
         let wasClosed = closed
         closed = true
         condition.broadcast()
+        let shouldCancel = !wasClosed && !ended
         condition.unlock()
-        if !wasClosed, !ended { cancel() }
+        if shouldCancel { cancel() }
     }
 }
 
@@ -641,7 +642,8 @@ private final class LibraryStream: @unchecked Sendable {
 /// `register` presents the system's photo prompt itself, which is how a phone with no vault once
 /// asked for the camera roll at first launch. So the observer waits for an answer that lets the
 /// app read: it is registered when one is held, and again after the member grants one.
-final class LibraryWatcher: NSObject, PHPhotoLibraryChangeObserver, @unchecked Sendable {
+@MainActor
+final class LibraryWatcher: NSObject, PHPhotoLibraryChangeObserver {
     static let shared = LibraryWatcher()
 
     /// What a change is told to; set by the session.
@@ -655,7 +657,7 @@ final class LibraryWatcher: NSObject, PHPhotoLibraryChangeObserver, @unchecked S
         PHPhotoLibrary.shared().register(self)
     }
 
-    func photoLibraryDidChange(_ changeInstance: PHChange) {
+    nonisolated func photoLibraryDidChange(_ changeInstance: PHChange) {
         DispatchQueue.main.async { self.onChange?() }
     }
 }

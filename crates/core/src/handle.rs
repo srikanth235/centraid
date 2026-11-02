@@ -82,6 +82,27 @@ pub struct Handle {
     state: Arc<HandleState>,
 }
 
+/// A cooperative stop checked between durable steps, never by abandoning a
+/// thread or dropping a transaction while it is running.
+#[derive(Clone)]
+pub(crate) struct Cancellation {
+    state: std::sync::Weak<HandleState>,
+    request_id: u64,
+}
+
+impl Cancellation {
+    pub(crate) fn check(&self) -> Result<()> {
+        let state = self.state.upgrade().ok_or(CoreError::Closed)?;
+        state.check_open()?;
+        if state.lock_cancelled().contains(&self.request_id) {
+            return Err(CoreError::Cancelled {
+                request_id: self.request_id,
+            });
+        }
+        Ok(())
+    }
+}
+
 impl std::ops::Deref for Handle {
     type Target = HandleState;
 
@@ -130,6 +151,9 @@ pub struct HandleState {
     poison: Mutex<Option<String>>,
     /// The request-id minter and the in-flight registry.
     session: Mutex<Session>,
+    /// The actual destination of an explicit-id request forwarded by a shelf.
+    /// A vault switch must not redirect its later cancellation.
+    forwarded: Mutex<std::collections::BTreeMap<u64, Handle>>,
     /// Ids a `Cancel` has named. Read by the running request at its next
     /// checkpoint; an unbounded operation polls this, and a bounded one never
     /// does because a bounded read is not cancellable.
@@ -339,6 +363,7 @@ impl Core {
             closed: AtomicBool::new(false),
             poison: Mutex::new(None),
             session: Mutex::new(Session::new()),
+            forwarded: Mutex::new(std::collections::BTreeMap::new()),
             cancelled: Mutex::new(Vec::new()),
             diagnostics: AtomicU64::new(0),
             bytes: Mutex::new(None),
@@ -798,6 +823,22 @@ impl HandleState {
             session.settle(request_id);
         }
         self.forget_cancel(request_id);
+        self.notify_ledger_changed(request);
+        answer
+    }
+
+    #[cfg(test)]
+    pub(crate) fn registered_cancellation(&self, request_id: u64) -> Cancellation {
+        self.lock_session()
+            .accept(request_id, RequestKind::Unbounded)
+            .expect("a fresh request id");
+        Cancellation {
+            state: self.me.clone(),
+            request_id,
+        }
+    }
+
+    fn notify_ledger_changed(&self, request: &wire::Request) {
         // THE LEDGER MOVED, WHETHER OR NOT THE DOOR SUCCEEDED: a pass that
         // stopped on an unreachable gateway still recorded what it did. A
         // screen reading `backup-status` hears it as a change to
@@ -806,7 +847,6 @@ impl HandleState {
             crate::events::ChangeFeed::new(self.events())
                 .tables_changed(&[crate::phone::backup_reads::TABLE.to_owned()]);
         }
-        answer
     }
 
     /// Answer one request under a request id the PEER minted.
@@ -818,20 +858,51 @@ impl HandleState {
     pub fn call_with_id(&self, request: &wire::Request, request_id: u64) -> Result<wire::Response> {
         self.assert_not_on_the_ui_thread();
         self.check_open()?;
-        if let Some(front) = self.foreground_for(request) {
-            return front.call_with_id(request, request_id);
-        }
         let kind = request_kind(request);
+        if let Some(front) = self.foreground_for(request) {
+            {
+                let mut forwarded = self.lock_forwarded();
+                front.check_open()?;
+                self.lock_session().accept(request_id, kind)?;
+                if let Err(error) = front.lock_session().accept(request_id, kind) {
+                    self.lock_session().settle(request_id);
+                    return Err(error.into());
+                }
+                forwarded.insert(request_id, front.clone());
+            }
+            let answer = front.call_registered(request, request_id, kind);
+            self.finish_forwarded(request_id);
+            return answer;
+        }
         {
             let mut session = self.lock_session();
             session.accept(request_id, kind)?;
         }
+        self.call_registered(request, request_id, kind)
+    }
+
+    fn finish_forwarded(&self, request_id: u64) {
+        // Match registration and cancellation's lock order. A cancellation
+        // must not see an active parent session after its route disappears,
+        // nor may a reused id replace the route before this cleanup ends.
+        let mut forwarded = self.lock_forwarded();
+        self.lock_session().settle(request_id);
+        forwarded.remove(&request_id);
+    }
+
+    fn call_registered(
+        &self,
+        request: &wire::Request,
+        request_id: u64,
+        kind: RequestKind,
+    ) -> Result<wire::Response> {
         let answer = self.dispatch(request, request_id, kind);
         {
             let mut session = self.lock_session();
             session.settle(request_id);
         }
         self.forget_cancel(request_id);
+        self.notify_ledger_changed(request);
         answer
     }
 
@@ -942,8 +1013,10 @@ impl HandleState {
     /// read finishing.
     pub fn cancel(&self, request_id: u64) -> Result<()> {
         self.check_open()?;
-        if let Some(front) = self.foreground_if_shelved() {
-            return front.cancel(request_id);
+        let forwarded = self.lock_forwarded();
+        if let Some(target) = forwarded.get(&request_id).cloned() {
+            drop(forwarded);
+            return target.cancel(request_id);
         }
         // `Session::cancel` already holds the three answers: `Ok(false)` for an
         // id nobody is waiting for, `Err(NotCancellable)` for a bounded read,
@@ -1335,6 +1408,10 @@ impl HandleState {
             });
         };
         use wire::request::Kind as K;
+        let cancellation = Cancellation {
+            state: self.me.clone(),
+            request_id,
+        };
 
         // THE FAULT-INJECTION DOOR, behind a feature that is never on in a
         // release (#1020 wave 3, lane E finding 4).
@@ -1384,7 +1461,9 @@ impl HandleState {
             // the vault is held for the snapshot's copy and the reads a pass
             // makes, never across the network, so a screen's reads go on while
             // a backup runs.
-            K::Drain(request) => Ok(response(wire::response::Kind::Drain(self.drain(request)?))),
+            K::Drain(request) => Ok(response(wire::response::Kind::Drain(
+                self.drain(request, cancellation)?,
+            ))),
             // PAIRING NEEDS NO VAULT TO BE OPEN: it needs the vault's keys,
             // and keeps the gateway in the ledger beside the file.
             K::PairPhone(request) => {
@@ -1416,7 +1495,12 @@ impl HandleState {
             K::Restore(request) => {
                 let runtime = self.runtime_handle()?;
                 Ok(response(wire::response::Kind::Restore(
-                    crate::phone::restore::run(&self.path, request, &runtime)?,
+                    crate::phone::restore::run_cancellable(
+                        &self.path,
+                        request,
+                        &runtime,
+                        cancellation,
+                    )?,
                 )))
             }
             // A STATUS READ ANSWERS WITH OR WITHOUT A VAULT: the ledger is
@@ -1520,7 +1604,13 @@ impl HandleState {
             K::FetchOriginal(request) => {
                 let runtime = self.runtime_handle()?;
                 Ok(response(wire::response::Kind::FetchOriginal(
-                    crate::phone::fetch::fetch_original(self, self.keyring()?, request, &runtime)?,
+                    crate::phone::fetch::fetch_original_cancellable(
+                        self,
+                        self.keyring()?,
+                        request,
+                        &runtime,
+                        Some(cancellation),
+                    )?,
                 )))
             }
             K::Pins(_) => Ok(response(wire::response::Kind::Pins(crate::phone::pins(
@@ -1594,7 +1684,11 @@ impl HandleState {
     }
 
     /// One pass, one at a time.
-    fn drain(&self, request: &wire::DrainRequest) -> Result<wire::DrainResponse> {
+    fn drain(
+        &self,
+        request: &wire::DrainRequest,
+        cancellation: Cancellation,
+    ) -> Result<wire::DrainResponse> {
         let keyring = self.keyring()?;
         if !self.holds_a_replica() {
             return Err(CoreError::Unpaired);
@@ -1610,8 +1704,15 @@ impl HandleState {
         }
         let runtime = self.runtime_handle();
         let asked = request.asked.then(|| self.plane.ask());
-        let answer =
-            runtime.and_then(|runtime| crate::phone::drain::run(self, keyring, request, &runtime));
+        let answer = runtime.and_then(|runtime| {
+            crate::phone::drain::run_cancellable(
+                self,
+                keyring,
+                request,
+                &runtime,
+                Some(cancellation),
+            )
+        });
         drop(asked);
         self.draining.store(false, Ordering::SeqCst);
         answer
@@ -1821,6 +1922,12 @@ impl HandleState {
 
     fn lock_session(&self) -> std::sync::MutexGuard<'_, Session> {
         self.session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn lock_forwarded(&self) -> std::sync::MutexGuard<'_, std::collections::BTreeMap<u64, Handle>> {
+        self.forwarded
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
@@ -2384,15 +2491,168 @@ mod tests {
     #[test]
     fn a_bounded_read_refuses_to_be_cancelled_and_says_so() {
         let scratch = Scratch::founded();
-        let mut session = Session::new();
-        let id = session.begin(RequestKind::Bounded);
-        // The handle's own registry is what `cancel` consults; an id it never
-        // minted is a LATE cancel and a no-op.
+        let id = scratch.handle.lock_session().begin(RequestKind::Bounded);
+        assert!(matches!(
+            scratch.handle.cancel(id),
+            Err(CoreError::NotCancellable { request_id }) if request_id == id
+        ));
+        assert!(scratch.handle.lock_session().settle(id));
         assert!(scratch.handle.cancel(id).is_ok());
         assert!(
             scratch.handle.cancel(9_999).is_ok(),
             "a cancel for an id nobody is waiting for is a no-op, not an error"
         );
+    }
+
+    struct Foreground(Handle);
+    impl crate::vaults::Vaults for Foreground {
+        fn foreground_id(&self) -> Option<String> {
+            Some("new".to_owned())
+        }
+        fn foreground_core(&self) -> Option<Handle> {
+            Some(self.0.clone())
+        }
+        fn held(&self) -> Vec<crate::vaults::HeldVault> {
+            Vec::new()
+        }
+        fn core_of(&self, _: &str) -> Option<Handle> {
+            None
+        }
+        fn awake(&self) -> Vec<Handle> {
+            vec![self.0.clone()]
+        }
+        fn holdings(&self) -> wire::Holdings {
+            wire::Holdings::default()
+        }
+        fn bring_to_front(&self, _: &str) -> bool {
+            false
+        }
+        fn freeze(&self, _: &str, _: &str, _: u64) {}
+        fn close_all(&self) {}
+    }
+
+    #[test]
+    fn forwarded_completion_and_a_reused_id_keep_registration_and_cancellation_together() {
+        let shelf = Scratch::founded();
+        let original = Scratch::founded();
+        let next = Scratch::founded();
+        shelf
+            .handle
+            .attach_vaults(Arc::new(Foreground(next.handle.clone())));
+        shelf
+            .handle
+            .lock_forwarded()
+            .insert(42, original.handle.clone());
+        let mut session = shelf.handle.lock_session();
+        session
+            .accept(42, RequestKind::Bounded)
+            .expect("the original request");
+        // Hold the next read in the vault after its registration, so its
+        // route can be checked before it completes.
+        let vault = next.handle.vault.lock().expect("the next vault lock");
+        let completing = shelf.handle.clone();
+        let completion = std::thread::spawn(move || completing.finish_forwarded(42));
+        let until = |condition: &dyn Fn() -> bool, message: &str| {
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            while !condition() {
+                assert!(std::time::Instant::now() < deadline, "{message}");
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        };
+        // Cleanup must hold the route lock while waiting to settle the
+        // session. Removing the route first exposes a cancellation gap.
+        until(
+            &|| {
+                matches!(
+                    shelf.handle.forwarded.try_lock(),
+                    Err(std::sync::TryLockError::WouldBlock)
+                )
+            },
+            "completion did not hold the route through settlement",
+        );
+        let registering = shelf.handle.clone();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let request = std::thread::spawn(move || {
+            started_tx.send(()).expect("the registrar is observed");
+            registering.call_with_id(
+                &wire::Request {
+                    kind: Some(wire::request::Kind::Page(wire::PageRequest::default())),
+                },
+                42,
+            )
+        });
+        started_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the next request started");
+        drop(session);
+        completion
+            .join()
+            .expect("completion finishes before registration proceeds");
+        until(
+            &|| next.handle.lock_session().is_in_flight(42),
+            "the next request was not registered",
+        );
+        assert_eq!(
+            shelf
+                .handle
+                .lock_forwarded()
+                .get(&42)
+                .expect("the next route is retained")
+                .path(),
+            next.handle.path()
+        );
+        assert!(matches!(
+            shelf.handle.cancel(42),
+            Err(CoreError::NotCancellable { request_id: 42 })
+        ));
+        assert!(
+            shelf.handle.lock_cancelled().is_empty(),
+            "no cancellation was stranded on the shelf"
+        );
+        drop(vault);
+        assert!(
+            request.join().expect("the next request completes").is_err(),
+            "the deliberately empty page is refused after taking the vault"
+        );
+        assert!(!shelf.handle.lock_session().is_in_flight(42));
+        assert!(shelf.handle.lock_forwarded().is_empty());
+    }
+
+    #[test]
+    fn cancellation_keeps_its_original_vault_and_shelf_requests_stay_on_the_shelf() {
+        let shelf = Scratch::founded();
+        let original = Scratch::founded();
+        let current = Scratch::founded();
+        let original_stop = original.handle.registered_cancellation(42);
+        let current_stop = current.handle.registered_cancellation(42);
+        let shelf_stop = shelf.handle.registered_cancellation(43);
+        shelf
+            .handle
+            .lock_forwarded()
+            .insert(42, original.handle.clone());
+        shelf
+            .handle
+            .attach_vaults(Arc::new(Foreground(current.handle.clone())));
+        shelf
+            .handle
+            .cancel(42)
+            .expect("the original request cancels");
+        assert!(matches!(
+            original_stop.check(),
+            Err(CoreError::Cancelled { request_id: 42 })
+        ));
+        current_stop
+            .check()
+            .expect("the current vault's unrelated request is untouched");
+        shelf
+            .handle
+            .cancel(43)
+            .expect("the shelf's restore cancels");
+        assert!(matches!(
+            shelf_stop.check(),
+            Err(CoreError::Cancelled { request_id: 43 })
+        ));
+        shelf.handle.lock_forwarded().remove(&42);
     }
 
     #[test]
@@ -2474,6 +2734,27 @@ mod tests {
         assert_eq!(
             request_kind(&wire::Request { kind: None }),
             RequestKind::Bounded
+        );
+    }
+
+    #[test]
+    fn a_peer_id_request_announces_backup_changes_even_when_refused() {
+        let scratch = Scratch::founded();
+        let request = wire::Request {
+            kind: Some(wire::request::Kind::Drain(wire::DrainRequest::default())),
+        };
+        assert!(scratch.handle.call_with_id(&request, 4_242).is_err());
+        assert_eq!(
+            scratch
+                .handle
+                .next_event(Duration::from_millis(10))
+                .expect("an event"),
+            Some(wire::Event {
+                kind: Some(wire::event::Kind::Change(wire::ChangeEvent {
+                    table: crate::phone::backup_reads::TABLE.to_owned(),
+                    pk_set: Vec::new(),
+                })),
+            })
         );
     }
 

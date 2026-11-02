@@ -24,7 +24,7 @@
 //!   the core cuts the shelf, applies the filters and the order, classifies each
 //!   row and reads its dates in the device's zone.
 //! - **BYTES RIDE THE DOOR, NEVER THE PAYLOAD** ([`bytes`], D-1020-DC4).
-//! - **NO DATA OF ITS OWN** — revoke the grant and the app goes dark.
+//! - **NO DATA OF ITS OWN** — the app reads and writes the personal vault.
 //!
 //! ## What this crate is allowed to contain, and what stops the rest
 //!
@@ -59,7 +59,7 @@ pub use queries::{
     folder_path, load_document, load_drive, load_history, load_search_term,
 };
 
-/// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by
+/// A read refusal, as the payload carries it: the kit's one type, shared by
 /// every app so the core settles all of them through one door.
 pub use centraid_apps_kit::Denial;
 

@@ -1,10 +1,6 @@
-# The single version file for the v1 Rust tree (#1020). `flake.nix`'s dev shell
-# reads it through `rust-bin.fromRustupToolchainFile`, and CI's
-# `dtolnay/rust-toolchain` step installs from it, so the channel is stated once.
-#
-# NOT read by the v0 byte plane: `apps/web/iroh-wasm/rust-toolchain.toml` pins
-# its own channel and the wasm32 target, and the root `Cargo.toml` excludes all
-# three v0 crates from this workspace. Two trees, two pins, until wave 6.
+# The workspace's single Rust toolchain pin. `flake.nix` reads it through
+# `rust-bin.fromRustupToolchainFile`; CI's `.github/actions/setup` installs it
+# with `rustup toolchain install`, including the components below.
 [toolchain]
 channel = "1.94.1"
 components = ["rustfmt", "clippy"]

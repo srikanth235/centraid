@@ -55,7 +55,9 @@ pub fn reindex(connection: &Connection, touched: &BTreeSet<String>) -> Result<()
         let targets = about
             .query_map([id], |row| row.get::<_, String>(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
-        for target in &targets {
+        // An activity can be marked directly when an about edge is removed or
+        // its note is purged; the note no longer names that target then.
+        for target in std::iter::once(id).chain(targets.iter()) {
             work.extend(
                 with.query_map([target], |row| row.get::<_, String>(0))?
                     .collect::<rusqlite::Result<Vec<_>>>()?,

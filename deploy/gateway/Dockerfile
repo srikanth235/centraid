@@ -35,11 +35,14 @@ FROM rust:1.94.1-slim-trixie@sha256:cf09adf8c3ebaba10779e5c23ff7fe4df4cccdab8a91
 WORKDIR /src
 
 # `rusqlite` is built with `bundled`, so the SQLite amalgamation is compiled
-# here, and `ring` builds its assembly: both need a C toolchain.
+# here, and `ring` builds its assembly: both need a C toolchain. SQLite's
+# session feature generates its bindings with libclang and Clang's headers.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
+    clang \
+    libclang-dev \
     perl \
     pkg-config \
   && rm -rf /var/lib/apt/lists/*

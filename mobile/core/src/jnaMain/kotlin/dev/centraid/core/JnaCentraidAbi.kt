@@ -7,6 +7,9 @@ import com.sun.jna.Native
 import com.sun.jna.Pointer
 import com.sun.jna.ptr.LongByReference
 import com.sun.jna.ptr.PointerByReference
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicLong
 
@@ -84,16 +87,23 @@ internal class JnaCentraidAbi(
 ) : CentraidAbi {
     private val counters = JnaAccounting()
     private val closed = AtomicBoolean(false)
+    private val lifetime = ReentrantReadWriteLock(true)
 
     override val accounting: AbiAccounting get() = counters
 
-    override fun call(request: ByteArray): AbiAnswer = harvest { buffer, length ->
-        library.centraid_call(handle, request, request.size.toLong(), buffer, length)
+    override fun call(request: ByteArray): AbiAnswer = lifetime.read {
+        if (closed.load()) return@read closedAnswer()
+        harvest { buffer, length ->
+            library.centraid_call(handle, request, request.size.toLong(), buffer, length)
+        }
     }
 
-    override fun nextEvent(timeoutMs: Int): AbiAnswer = harvest { buffer, length ->
-        library.centraid_next_event(handle, timeoutMs, buffer, length)
+    override fun nextEvent(timeoutMs: Int): AbiAnswer = lifetime.read {
+        if (closed.load()) return@read closedAnswer()
+        harvest { buffer, length -> library.centraid_next_event(handle, timeoutMs, buffer, length) }
     }
+
+    private fun closedAnswer(): AbiAnswer = AbiAnswer(CoreStatus.CLOSED, CoreStatus.CLOSED.code, null)
 
     override fun close(): CoreStatus {
         if (!closed.compareAndSet(expectedValue = false, newValue = true)) {
@@ -104,9 +114,13 @@ internal class JnaCentraidAbi(
             // in those words.
             return CoreStatus.CLOSED
         }
-        val code = library.centraid_close(handle)
-        handle = null
-        return CoreStatus.of(code) ?: CoreStatus.CLOSED
+        // Block new entries before waiting for calls already borrowing the handle. A reader
+        // between two TIMEOUTs must never enter C after its handle has been freed.
+        return lifetime.write {
+            val code = library.centraid_close(handle)
+            handle = null
+            CoreStatus.of(code) ?: CoreStatus.CLOSED
+        }
     }
 
     /**

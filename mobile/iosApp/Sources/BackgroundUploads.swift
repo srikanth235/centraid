@@ -254,8 +254,10 @@ final class UploadPins: @unchecked Sendable {
     /// Replace the whole table with what the core answered, and keep it.
     func replace(with fresh: [String: Pin]) {
         lock.lock()
+        defer { lock.unlock() }
         table = fresh
-        lock.unlock()
+        // Serialize disk writes with the in-memory replacement: an older
+        // caller must never overwrite newer pins after releasing the lock.
         persist(fresh)
     }
 

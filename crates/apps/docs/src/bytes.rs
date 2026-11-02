@@ -226,7 +226,7 @@ pub trait ByteDoor {
     fn stage(&self, request: &ByteRequest, bytes: &[u8]) -> Reading<StagedBlob>;
 }
 
-/// The door is not there — a thin seat with no gateway, a shell with no handler.
+/// The byte door is unavailable.
 ///
 /// A [`Reading::Denied`] rather than an `Err`, because "we cannot reach the
 /// bytes" is a state a viewer renders and not a screen that fails.

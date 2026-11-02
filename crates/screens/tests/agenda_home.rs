@@ -243,6 +243,27 @@ impl Rig {
         (me, other)
     }
 
+    /// An empty-day assertion also needs no birthday ribbon on that civil day.
+    /// Birthdays live on people, so clearing events and tasks alone is not enough.
+    fn clear_day(&mut self) {
+        self.clear();
+        let today = self.today();
+        let wire::app_query_response::Answer::AgendaDayContext(context) =
+            self.read(load::agenda::DayContext {
+                from: Some(today.clone()),
+                to: Some(today),
+            })
+        else {
+            panic!("day context");
+        };
+        for birthday in context.birthdays {
+            self.write(act::people::TrashPerson {
+                person_id: birthday.party_id,
+            });
+        }
+        self.settle();
+    }
+
     /// Trash every event and delete every task the scenario seeded.
     fn clear(&mut self) {
         let far = format!(
@@ -1462,7 +1483,7 @@ fn the_empties_are_four_different_screens() {
     assert_eq!(r.data().import_label, "");
 
     let mut d = rig(Dest::Day);
-    d.clear();
+    d.clear_day();
     assert_eq!(d.data().empty, wire::AgendaEmpty::NothingOnDay as i32);
     assert_eq!(d.data().empty_title, "Nothing on this day.");
     assert_eq!(d.data().empty_action, "");
@@ -1602,7 +1623,7 @@ fn schedule_gives_a_day_of_only_tasks_its_own_section_and_waiting_draws_none() {
 #[test]
 fn an_empty_day_counts_its_tasks_a_day_with_only_a_task_is_not_nothing() {
     let mut r = rig(Dest::Day);
-    r.clear();
+    r.clear_day();
     assert_eq!(r.data().empty, wire::AgendaEmpty::NothingOnDay as i32);
     r.task("zq-only", "Zq Buy milk", Some(&r.today()));
     r.settle();
@@ -1663,7 +1684,7 @@ fn day_on_today_draws_the_overdue_group_with_its_verb_and_the_notice_an_absence_
 #[test]
 fn day_says_nothing_is_on_it_only_when_nothing_is_overdue_alone_is_something() {
     let mut r = rig(Dest::Day);
-    r.clear();
+    r.clear_day();
     r.task("zq-owed", "Zq Pay rent", Some(&r.day(-2)));
     r.settle();
     let data = r.data();

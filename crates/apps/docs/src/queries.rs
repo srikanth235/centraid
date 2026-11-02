@@ -804,7 +804,8 @@ pub fn load_document(
 // ---------------------------------------------------------------------------
 
 /// `history`: the head's bytes, then each version a replace put down, newest
-/// first.
+/// first. More than [`MAX_VERSIONS`] revisions returns a bound error, so a
+/// partial history is never presented as the complete set.
 pub fn load_history(
     door: &dyn PageDoor,
     document_id: &str,
@@ -838,7 +839,11 @@ pub fn load_history(
         let Some(head) = head.first() else {
             return Ok(HistoryData::default());
         };
-        let revisions = read_window(door, &revisions_statement(document_id), MAX_VERSIONS)?.rows;
+        let revisions = read_pages(
+            door,
+            &revisions_statement(document_id),
+            FanOutBound::new(MAX_VERSIONS, 1),
+        )?;
         let mut hashes = ids_of(&revisions, "blob");
         hashes.extend(text_of(head, "blob"));
         hashes.sort_unstable();

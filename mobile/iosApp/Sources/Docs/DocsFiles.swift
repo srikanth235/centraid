@@ -31,13 +31,13 @@ final class DocsFiles: ObservableObject {
     private var core: (any ScreenCore)?
 
     private var kind: Centraid_Core_V1_PickFile.Kind = .upload
-    private var answer: ((Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void)?
+    private var answer: (@MainActor (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void)?
 
     /// Rust asked for a file: raise the picker or the scanner.
     func pick(
         _ kind: Centraid_Core_V1_PickFile.Kind,
         core: any ScreenCore,
-        answer: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
+        answer: @escaping @MainActor (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
     ) {
         self.core = core
         self.kind = kind
@@ -109,7 +109,7 @@ final class DocsFiles: ObservableObject {
                 progress.stagedBytes = sent
                 progress.totalBytes = total
                 progress.name = name
-                Task { @MainActor in answer?(.fileProgress(progress)) }
+                answer?(.fileProgress(progress))
             }
             DocsFileCopies.discard(path)
             switch outcome {
@@ -198,10 +198,10 @@ enum DocsFileCopies {
     }
 
     /// A scan's pages as ONE PDF, at the page's own size.
-    static func pdf(_ scan: VNDocumentCameraScan) -> String? {
+    static func pdf(_ images: [UIImage]) -> String? {
         let document = PDFDocument()
-        for index in 0 ..< scan.pageCount {
-            if let page = PDFPage(image: scan.imageOfPage(at: index)) {
+        for image in images {
+            if let page = PDFPage(image: image) {
                 document.insert(page, at: document.pageCount)
             }
         }
@@ -227,27 +227,31 @@ struct DocsScanner: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: VNDocumentCameraViewController, context: Context) {}
 
+    @MainActor
     final class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
         let parent: DocsScanner
 
         init(_ parent: DocsScanner) { self.parent = parent }
 
-        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
-            let parent = parent
-            DispatchQueue.global(qos: .userInitiated).async {
-                let path = DocsFileCopies.pdf(scan)
-                DispatchQueue.main.async {
-                    if let path { parent.onScanned(path) } else { parent.onFailed() }
-                }
+        nonisolated func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
+            // VisionKit owns the scan object. Copy its immutable image values
+            // within the callback before transferring work to another executor.
+            let images = (0 ..< scan.pageCount).map { scan.imageOfPage(at: $0) }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let path = await Task.detached(priority: .userInitiated) {
+                    DocsFileCopies.pdf(images)
+                }.value
+                if let path { parent.onScanned(path) } else { parent.onFailed() }
             }
         }
 
-        func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
-            parent.onCancelled()
+        nonisolated func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
+            Task { @MainActor [weak self] in self?.parent.onCancelled() }
         }
 
-        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Swift.Error) {
-            parent.onFailed()
+        nonisolated func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Swift.Error) {
+            Task { @MainActor [weak self] in self?.parent.onFailed() }
         }
     }
 }

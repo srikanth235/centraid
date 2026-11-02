@@ -145,32 +145,11 @@ struct PhotosEditorView: View {
                 rotation: rotation,
                 space: space
             )
-            Color.clear
-                .frame(width: geometry.frame.width, height: geometry.frame.height)
-                .overlay {
-                    Image(uiImage: preview)
-                        .resizable()
-                        .frame(width: geometry.image.width, height: geometry.image.height)
-                        .scaleEffect(x: plan.flip == .horizontal ? -1 : 1, y: plan.flip == .vertical ? -1 : 1)
-                        .rotationEffect(.degrees(Double(rotation)))
-                        .accessibilityHidden(true)
-                }
-                .overlay { cropOverlay }
-                .contentShape(Rectangle())
-                .gesture(cropGesture(frame: geometry.frame), including: isEditing ? .all : .none)
-                .accessibilityElement()
-                .accessibilityLabel(state.words.cropArea)
-                .accessibilityHint(state.words.cropHint)
-                // NOTHING IS REACHABLE BY GESTURE ALONE. The drag and the pinch
-                // have spoken equivalents, one step at a time.
-                .accessibilityAction(named: state.words.cropLeft) { moved(-step, 0) }
-                .accessibilityAction(named: state.words.cropRight) { moved(step, 0) }
-                .accessibilityAction(named: state.words.cropUp) { moved(0, -step) }
-                .accessibilityAction(named: state.words.cropDown) { moved(0, step) }
-                .accessibilityAction(named: state.words.cropLarger) { scaled(grow) }
-                .accessibilityAction(named: state.words.cropSmaller) { scaled(1 / grow) }
-                .accessibilityIdentifier("photos.editor.stage")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            cropAccessibility(
+                cropStage(preview, geometry: geometry)
+            )
+            .accessibilityIdentifier("photos.editor.stage")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             Text(state.saveRefusal.isEmpty ? state.words.loading : state.saveRefusal)
                 .centraidType("small")
@@ -181,6 +160,43 @@ struct PhotosEditorView: View {
         #else
         EmptyView()
         #endif
+    }
+
+    #if canImport(UIKit)
+    private func stageImage(_ preview: UIImage, geometry: PhotoEditGeometry) -> some View {
+        let flipX: CGFloat = plan.flip == .horizontal ? -1 : 1
+        let flipY: CGFloat = plan.flip == .vertical ? -1 : 1
+        return Image(uiImage: preview)
+            .resizable()
+            .frame(width: geometry.image.width, height: geometry.image.height)
+            .scaleEffect(x: flipX, y: flipY)
+            .rotationEffect(.degrees(Double(rotation)))
+            .accessibilityHidden(true)
+    }
+
+    private func cropStage(_ preview: UIImage, geometry: PhotoEditGeometry) -> some View {
+        Color.clear
+            .frame(width: geometry.frame.width, height: geometry.frame.height)
+            .overlay { stageImage(preview, geometry: geometry) }
+            .overlay { cropOverlay }
+            .contentShape(Rectangle())
+            .gesture(cropGesture(frame: geometry.frame), including: isEditing ? .all : .none)
+    }
+    #endif
+
+    /// The spoken equivalents preserve every drag and pinch action while
+    /// keeping accessibility and image layout as separately checked expressions.
+    private func cropAccessibility<Content: View>(_ content: Content) -> some View {
+        content
+            .accessibilityElement()
+            .accessibilityLabel(state.words.cropArea)
+            .accessibilityHint(state.words.cropHint)
+            .accessibilityAction(named: Text(state.words.cropLeft)) { moved(-step, 0) }
+            .accessibilityAction(named: Text(state.words.cropRight)) { moved(step, 0) }
+            .accessibilityAction(named: Text(state.words.cropUp)) { moved(0, -step) }
+            .accessibilityAction(named: Text(state.words.cropDown)) { moved(0, step) }
+            .accessibilityAction(named: Text(state.words.cropLarger)) { scaled(grow) }
+            .accessibilityAction(named: Text(state.words.cropSmaller)) { scaled(1 / grow) }
     }
 
     private var cropOverlay: some View {

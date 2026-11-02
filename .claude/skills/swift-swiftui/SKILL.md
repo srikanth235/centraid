@@ -8,7 +8,7 @@ description: >-
 
 ## Repository constraints and completion
 
-- The iOS shell lives in `mobile/iosApp`, uses Swift 5.9 language mode, and targets iOS 17.5. Check API availability before using newer APIs.
+- The iOS shell lives in `mobile/iosApp`, uses Swift 6 language mode, and targets iOS 17.5. Check API availability before using newer APIs.
 - Rust owns screens, navigation, copy, and business state. Swift renders `ViewState` and performs requested platform effects; do not add product rules or user-facing strings in the shell.
 - Do not edit generated design or protobuf files. Read `crates/core-ffi/CONTRACT.md` before changing the ABI bridge. `Core.swift` owns the existing serial queues; do not add GCD queues.
 - After adding a Swift source file, run `xcodegen generate` from `mobile/iosApp`.
@@ -19,7 +19,7 @@ description: >-
     -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
   ```
 
-  This is the required check, with the project's own build settings. For concurrency work you may also add `SWIFT_STRICT_CONCURRENCY=complete` to the same command as a diagnostic pass. The project does not set it, and the existing tree is not held to it, so report only the diagnostics in code you touched; do not treat pre-existing warnings as failures of your change, add `SWIFT_TREAT_WARNINGS_AS_ERRORS=YES`, or change project-wide build settings without checking with the owner. Complete checking in Swift 5.9 language mode is not Swift 6 mode.
+  This is the required check, with the project's own Swift 6 language mode. Swift 6 enforces complete concurrency checking; fix actor isolation and ownership errors rather than suppressing checks or using blanket unsafe annotations. Preserve the iOS 17.5 deployment floor.
 
 - Run `cargo xtask gate --profile mobile-jvm` when the change affects the Rust core or generated tables the shell consumes. Use the simulator command for iOS changes when macOS and a simulator are available; otherwise report that it could not run.
 - Done means the required simulator test (when it can run) and the other applicable checks pass, your change adds no warnings or fallible force unwraps under the project's own settings, and relevant user-triggered failures reach the user.

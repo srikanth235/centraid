@@ -212,7 +212,7 @@ enum SVGPath {
 
         // `addArc` draws on a unit circle; the ellipse, its rotation and its
         // centre are the transform.
-        var transform = CGAffineTransform(translationX: cx, y: cy)
+        let transform = CGAffineTransform(translationX: cx, y: cy)
             .rotated(by: phi)
             .scaledBy(x: rx, y: ry)
         path.addArc(

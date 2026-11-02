@@ -75,6 +75,31 @@ function kotlinMap(block: string, name: string): Map<string, string> {
 const ROLES = kotlinList("NATIVE_COLOR_ROLES");
 const EFFECTS = kotlinList("NATIVE_EFFECT_ROLES");
 
+describe("Swift concurrency contracts", () => {
+  test("shared Swift value tables declare checked Sendable in their emitters and outputs", () => {
+    for (const [emitter, output, names] of [
+      [
+        "export-native-theme.ts",
+        "Theme.swift",
+        ["CentraidTypeStyle", "CentraidTheme"],
+      ],
+      [
+        "export-native-catalog.ts",
+        "Catalog.swift",
+        ["CentraidAppMeta", "CentraidAppMark", "CentraidIconPath"],
+      ],
+    ] as const) {
+      const source = read(`contracts/tools/${emitter}`);
+      const generated = read(`mobile/iosApp/Design/${output}`);
+      for (const name of names) {
+        const declaration = `public struct ${name}: Sendable {`;
+        expect(source, `${emitter}: ${name}`).toContain(declaration);
+        expect(generated, `${output}: ${name}`).toContain(declaration);
+      }
+    }
+  });
+});
+
 describe("the emitted token table", () => {
   test("both schemes carry every colour role the contract names, none transparent", () => {
     // 52 since Health's identity hue, `olive` (#1129, R-1129-10).

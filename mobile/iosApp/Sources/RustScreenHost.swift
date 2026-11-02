@@ -32,12 +32,9 @@ struct RustEntry: Hashable {
     let token: Int
     let route: Centraid_Core_V1_Route
 
-    private static let lock = NSLock()
-    private static var last = 0
+    @MainActor private static var last = 0
 
-    static func make(_ route: Centraid_Core_V1_Route) -> RustEntry {
-        lock.lock()
-        defer { lock.unlock() }
+    @MainActor static func make(_ route: Centraid_Core_V1_Route) -> RustEntry {
         last += 1
         return RustEntry(token: last, route: route)
     }

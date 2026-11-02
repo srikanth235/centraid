@@ -896,9 +896,11 @@ fn history_body(door: &dyn PageDoor, note_id: &str) -> KitResult<HistoryData> {
     let Some(note) = read_note(door, note_id)? else {
         return Ok(HistoryData::default());
     };
+    // One extra predecessor dates the oldest version shown when history is longer
+    // than the window; its creation time belongs only to the first revision.
     let page = door.page(
         &revisions_statement(note_id),
-        &PageRequest::first(HISTORY_ROWS),
+        &PageRequest::first(HISTORY_ROWS + 1),
     )?;
     // A revision is stamped when its words were REPLACED, so words became the
     // note's when the version before them was: the next older revision's stamp,
@@ -917,7 +919,7 @@ fn history_body(door: &dyn PageDoor, note_id: &str) -> KitResult<HistoryData> {
             .cloned()
             .unwrap_or_else(|| note.created_at.clone()),
     }];
-    for (index, row) in page.rows.iter().enumerate() {
+    for (index, row) in page.rows.iter().take(HISTORY_ROWS).enumerate() {
         versions.push(Version {
             seq: integer_or_zero(row, "seq"),
             body: text_of(row, "body").unwrap_or_default(),
@@ -930,7 +932,7 @@ fn history_body(door: &dyn PageDoor, note_id: &str) -> KitResult<HistoryData> {
     }
     Ok(HistoryData {
         versions,
-        truncated: page.next.is_some(),
+        truncated: page.rows.len() > HISTORY_ROWS || page.next.is_some(),
     })
 }
 

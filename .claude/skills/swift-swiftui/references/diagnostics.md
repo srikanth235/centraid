@@ -1,6 +1,6 @@
 # Swift compiler and concurrency diagnostics
 
-Fix the first diagnostic first; later errors can be consequences of it. The project uses Swift 5.9 language mode. Complete strict-concurrency checking is useful verification in that mode, but is not Swift 6 language mode and is not enabled by the project by default. The explicit `xcodebuild` invocation is in the [main skill](../SKILL.md#repository-constraints-and-completion).
+Fix the first diagnostic first; later errors can be consequences of it. The app, tests, and HealthSeeder use Swift 6 language mode, which enforces complete concurrency checking. Preserve actor isolation and Sendable ownership; do not weaken language mode or suppress diagnostics to get a build. The explicit `xcodebuild` invocation is in the [main skill](../SKILL.md#repository-constraints-and-completion).
 
 ## Compiler errors
 

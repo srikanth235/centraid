@@ -32,6 +32,7 @@ import centraid.core.v1.PhoneChanged
 import dev.centraid.android.backup.BackupNow
 import dev.centraid.android.backup.LinkFacts
 import dev.centraid.android.backup.PassWork
+import dev.centraid.android.kit.effectAttempt
 import dev.centraid.android.kit.ClipboardDeadline
 import dev.centraid.android.kit.SecretStores
 import dev.centraid.android.screens.PhotoHandOff
@@ -42,6 +43,9 @@ import dev.centraid.android.screens.photos.PhotosEditRender
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.Screens
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -125,9 +129,13 @@ internal class ShellEffects(
     private suspend fun run(request: EffectRequest) {
         val answer: (EffectResult) -> Unit = { result -> scope.launch { screens.answer(request, result) } }
         val result = try {
-            perform(request, answer)
-        } catch (error: Exception) {
-            failed(error.message ?: "the effect failed")
+            effectAttempt { perform(request, answer) }
+                .getOrElse { failed("the effect could not be completed") }
+        } catch (cancelled: CancellationException) {
+            // A replaced system prompt cancels its deferred answer, not the session.
+            // Only that local dismissal is an effect answer; session cancellation escapes.
+            currentCoroutineContext().ensureActive()
+            EffectResult(failed = EffectFailed(reason = "the prompt was cancelled", cancelled = true))
         }
         if (result != null) screens.answer(request, result)
     }
@@ -188,7 +196,7 @@ internal class ShellEffects(
                 if (!allowed(Manifest.permission.READ_CALENDAR, read.ask_permission)) {
                     EffectResult(failed = EffectFailed(reason = "calendar access is off", denied = true))
                 } else {
-                    runCatching {
+                    effectAttempt {
                         withContext(Dispatchers.IO) { readCalendarSnapshot(context, read.days_back, read.days_on, InstallId.of(context)) }
                     }.fold({ EffectResult(calendar = it) }, { failed("the calendar could not be read") })
                 }
@@ -198,7 +206,7 @@ internal class ShellEffects(
                 if (!allowed(Manifest.permission.READ_CONTACTS, read.ask_permission)) {
                     EffectResult(failed = EffectFailed(reason = "contacts access is off", denied = true))
                 } else {
-                    runCatching {
+                    effectAttempt {
                         withContext(Dispatchers.IO) { readContactsSnapshot(context, InstallId.of(context)) }
                     }.fold({ EffectResult(contacts = it) }, { failed("the address book could not be read") })
                 }

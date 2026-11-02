@@ -89,6 +89,23 @@ const EVENT_COLUMNS: &str = "id, starts, ends, timing, zone, rule, rule_supporte
      calendar_id, place_id, url, reminders, description";
 const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at";
 
+/// These answers carry no continuation or partial flag, so their stated bounds
+/// must refuse a partial read before an agenda or birthday list is folded.
+fn complete_window(
+    door: &dyn PageDoor,
+    query: &PageQuery,
+    cap: usize,
+) -> KitResult<centraid_apps_kit::reads::Window> {
+    let window = read_window(door, query, cap)?;
+    if window.filled {
+        return Err(KitError::FanOutExceeded {
+            query: query.name.clone(),
+            cap,
+        });
+    }
+    Ok(window)
+}
+
 fn text(word: &str) -> PageBindValue {
     PageBindValue::Text(word.to_owned())
 }
@@ -624,7 +641,7 @@ pub fn load_upcoming(
     let from_ms = parse_instant_ms(&from);
     // Reach back past `from` so a still-running multi-day event is not cut off.
     let from_lower = from_ms.map_or_else(|| from.clone(), |millis| iso_of(millis - SPAN_BUFFER_MS));
-    let window = match read_window(
+    let window = match complete_window(
         door,
         &event_window_statement(&from_lower, to.filter(|value| !value.is_empty())),
         EVENT_WINDOW_CAP,
@@ -635,7 +652,7 @@ pub fn load_upcoming(
         }
         Err(other) => return Err(other),
     };
-    let anchors = read_window(door, &recurring_anchors_statement(), RECURRING_ANCHOR_CAP)?;
+    let anchors = complete_window(door, &recurring_anchors_statement(), RECURRING_ANCHOR_CAP)?;
     let calendars = read_calendars(door)?;
     // THE TWO WINDOWS ARE MERGED BY ID, the anchor read last so its row wins.
     let mut rows: Vec<Row> = Vec::new();
@@ -881,7 +898,7 @@ pub fn load_day_context(
     zone: &FireZone,
 ) -> KitResult<(DayContextData, Option<Denial>)> {
     let (from, to) = range_of(from, to, now, zone);
-    let born = match read_window(
+    let born = match complete_window(
         door,
         &PageQuery::new(
             "agenda.dayContext.birthdays",
@@ -979,7 +996,7 @@ pub fn load_parties(door: &dyn PageDoor) -> KitResult<(PartiesData, Option<Denia
         }
         Err(other) => return Err(other),
     };
-    let named = read_window(
+    let named = complete_window(
         door,
         &PageQuery::new(
             "agenda.parties.people",

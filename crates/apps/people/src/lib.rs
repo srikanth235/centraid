@@ -9,8 +9,7 @@
 //!   idea are a `note` or a `task` with an `about` edge; an important date other
 //!   than the birthday is a yearly all-day `event` about them; a relationship is
 //!   a `related` edge; a list is a `container` holding people with `contains`
-//!   edges; the star is the shared `flag:starred`. Revoke the grant and the app
-//!   goes dark while the people remain the owner's.
+//!   edges; the star is the shared `flag:starred`. People live in the personal vault.
 //! - **LAST CONTACTED IS COMPUTED, NEVER STORED.** It is the newest activity
 //!   `with` the person ([`queries::touch_stubs`]); a person with no touch is
 //!   measured from when they were added, and one with no cadence is never due.
@@ -57,6 +56,6 @@ pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use dates::{DAYS_UNSET, days_until_month_day};
 pub use manifest::{APP_ID, manifest};
 
-/// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by
+/// A read refusal, as the payload carries it: the kit's one type, shared by
 /// every app so the core settles all of them through one door.
 pub use centraid_apps_kit::Denial;

@@ -12,7 +12,7 @@ import SwiftUI
 ///
 /// `…Meta`, not `CentraidApp`: the shell's `@main` entry point is a SwiftUI
 /// `App` named `CentraidApp`, and the two would collide.
-public struct CentraidAppMeta {
+public struct CentraidAppMeta: Sendable {
     public let id: String
     public let name: String
     public let desc: String
@@ -21,14 +21,14 @@ public struct CentraidAppMeta {
 }
 
 /// An app's icon chip, already composited. See the Kotlin table.
-public struct CentraidAppMark {
+public struct CentraidAppMark: Sendable {
     public let hue: Color
     public let chipBackground: Color
     public let markColor: Color
 }
 
 /// One `<path>` of a silhouette: SVG path data in a 24x24 viewBox.
-public struct CentraidIconPath {
+public struct CentraidIconPath: Sendable {
     public let d: String
     public let filled: Bool
     public let evenOdd: Bool

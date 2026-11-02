@@ -299,7 +299,7 @@ struct StageImage: View {
             image = StageImageCache.cached(path, maxPixel)
             if image != nil { return }
             let loaded = await Task.detached(priority: .userInitiated) {
-                StageImageCache.decode(path, maxPixel)
+                await StageImageCache.decode(path, maxPixel)
             }.value
             image = loaded
         }
@@ -307,21 +307,23 @@ struct StageImage: View {
 }
 
 /// The decoded stills, by path and size. Small: a lightbox holds three pages
-/// and a strip, and anything older is cheap to decode again.
+/// and a strip, and anything older is cheap to decode again. Cache lookup and
+/// insertion stay on the main actor; ImageIO decoding stays in the caller's
+/// detached worker and only the finished UIImage crosses back.
 enum StageImageCache {
-    private static let cache: NSCache<NSString, UIImage> = {
+    @MainActor private static let cache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 48
         return cache
     }()
 
-    static func cached(_ path: String, _ maxPixel: Int) -> UIImage? {
+    @MainActor static func cached(_ path: String, _ maxPixel: Int) -> UIImage? {
         cache.object(forKey: "\(path)|\(maxPixel)" as NSString)
     }
 
     /// `kCGImageSourceCreateThumbnailWithTransform` is what makes it upright:
     /// the EXIF orientation is applied, and a sideways photograph is not.
-    static func decode(_ path: String, _ maxPixel: Int) -> UIImage? {
+    static func decode(_ path: String, _ maxPixel: Int) async -> UIImage? {
         guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil)
         else { return nil }
         let options: [CFString: Any] = [
@@ -333,7 +335,9 @@ enum StageImageCache {
         guard let decoded = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
         else { return nil }
         let image = UIImage(cgImage: decoded)
-        cache.setObject(image, forKey: "\(path)|\(maxPixel)" as NSString)
+        await MainActor.run {
+            cache.setObject(image, forKey: "\(path)|\(maxPixel)" as NSString)
+        }
         return image
     }
 }
@@ -350,8 +354,8 @@ enum StageImageCache {
 final class LightboxPlayer: ObservableObject {
     let player: AVPlayer
     private let once: Bool
-    private var observer: Any?
-    private var ended: NSObjectProtocol?
+    private var playbackLifetime: PlayerPlaybackLifetime?
+    private var ended: NotificationObservation?
 
     @Published var playing = false
     @Published var position: Double = 0
@@ -365,7 +369,7 @@ final class LightboxPlayer: ObservableObject {
         let asset = AVURLAsset(url: URL(fileURLWithPath: path), options: options)
         player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
         self.once = once
-        observer = player.addPeriodicTimeObserver(
+        let observer = player.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 0.2, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
@@ -377,7 +381,8 @@ final class LightboxPlayer: ObservableObject {
                 self.playing = self.player.timeControlStatus == .playing
             }
         }
-        ended = NotificationCenter.default.addObserver(
+        playbackLifetime = PlayerPlaybackLifetime(player: player, observer: observer)
+        ended = NotificationObservation(NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: player.currentItem,
             queue: .main
@@ -387,13 +392,7 @@ final class LightboxPlayer: ObservableObject {
                 self.playing = false
                 if self.once { self.showing = false }
             }
-        }
-    }
-
-    deinit {
-        if let observer { player.removeTimeObserver(observer) }
-        if let ended { NotificationCenter.default.removeObserver(ended) }
-        player.pause()
+        })
     }
 
     func toggle() {
@@ -420,6 +419,26 @@ final class LightboxPlayer: ObservableObject {
     }
 
     func pause() { player.pause() }
+}
+
+/// Keep the player's opaque observer on the main actor through teardown. ARC
+/// may release the UI owner on another thread, so this short cleanup task owns
+/// the player and token until the main actor removes the observer and pauses.
+private final class PlayerPlaybackLifetime {
+    private let cleanup: @MainActor @Sendable () -> Void
+
+    @MainActor
+    init(player: AVPlayer, observer: Any) {
+        cleanup = {
+            player.removeTimeObserver(observer)
+            player.pause()
+        }
+    }
+
+    deinit {
+        let cleanup = cleanup
+        Task { @MainActor in cleanup() }
+    }
 }
 
 /// A LIVE PHOTO'S MOVIE, over its still, only while it plays.
@@ -621,7 +640,7 @@ private struct StageFrame: View {
         .task(id: path) {
             image = StageImageCache.cached(path, 160)
             if image != nil { return }
-            image = await Task.detached(priority: .utility) { StageImageCache.decode(path, 160) }.value
+            image = await Task.detached(priority: .utility) { await StageImageCache.decode(path, 160) }.value
         }
     }
 }
