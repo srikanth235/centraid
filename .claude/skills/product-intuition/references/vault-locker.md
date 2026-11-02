@@ -1,0 +1,29 @@
+# Vault and Locker
+
+## 4. The vault
+
+- **A first-party app is the owner's own screen, not a principal.** It declares what it reads and invokes at build time and a tripwire fails the build when it strays. Do not add grants, scopes a member can revoke, or an "app permissions" plane.
+- **Every writer goes through the same domain operations.** Commands, imports, the assistant, a phone follower: one door, one set of invariants. If a rule lives only in one screen, it is not a rule.
+- **A mechanism with no producer and no consumer leaves the schema.** Intent belongs in an issue, not in dormant DDL, a reserved column or a flag nothing reads. A wire field no table can fill is reserved or deleted.
+- **Identity is never taken from a value.** Two documents with identical bytes are two documents with independent histories. A drive row is the document wrapper, never the content hash. A merchant is not a person.
+- **Time is the member's.** Civil time is the vault's zone and the device's stated zone, never the host's and never UTC by default. A date-only task or reminder stays a date and never gains an invented time. A line on a statement keeps the printed day, so a trip across time zones moves nothing between months.
+- **Money keeps its currency.** An amount has no meaning without one. A base-currency total is an explicit valuation with a rate and a source, and says "unavailable" when the rate is missing.
+- **Deleting has a model.** Trash first, restorable until the launch pass empties it, then purged. A holder (notebook, folder, project, account, person, list) takes its members with it and brings back only the ones it took. A person's purge never destroys other people's records. A purge that cannot proceed refuses with a sentence naming why.
+- **Edits are one move, not a toggle.** Complete and reopen are separate commands. An editor autosaves when typing stops; Cancel exists only before the first keystroke. A save that fails after the member left is told on Home, never logged and lost.
+- **The vault keeps no record of what the member asked for.** No activity feed, no journal of typed words that survives "Delete forever". It keeps only what it needs to avoid doing a thing twice and to tell which copy is ahead.
+
+## 5. Locker
+
+Locker is the one place where reading is itself the sensitive act. It is deliberately austere.
+
+- **Nothing inside Locker is read while it is locked, and a relock is a wipe.** Every Locker machine reads only while the gate is open, answers that land after a relock are dropped, and closing drops every revealed value and typed draft. The core's metadata list is plaintext by design (listing is not unlocking), so the wall is the shell's and it must hold.
+- **The list is metadata; the secret is not.** Sealed values (password, one-time seed, card number, CVV, secure-note content, sealed custom fields, passkey keys) are sealed at rest and never enter a search index, a log, a queue, a backup in the clear, or the assistant's reach. They reach the screen only through an authorised reveal.
+- **Search finds a Locker item by its plain fields whether or not Locker is locked; opening the result goes behind the wall.** The Home tile counts items and shows none, and reads "Locked" or "Open".
+- **The assistant works on Locker like the owner, except it never reveals or writes a sealed value.** Such a request ends in a decline. It may help with what a login is called and where it is filed, and has no business with the secret.
+- **The phone is the unlock boundary.** Biometric with the passcode as fallback, relock when Centraid leaves the foreground, no separate Locker passphrase. Only the phone refusing the member counts as a failed unlock; a cancel does not. The wall says how many failed and when.
+- **The key lives only in memory.** It derives from the 24 words, is zeroed on relock and is written nowhere. No gateway holds, mints or hands out a member key, and a "reveal" request is unrepresentable on that path rather than checked.
+- **No history of reads, no recently-used shelf.** The only trace is each item's "Last used" stamp. A shelf of recent items would publish reading habits on the screen where reading is sensitive.
+- **Never an invented all-clear.** Review shows what is known from metadata (flagged compromised, `http://` addresses, cards expired or expiring) and says what it did not check. Compromised is a flag the member sets.
+- **Nothing leaves silently.** Export is plaintext to the OS save sheet only, after a confirm and a fresh owner check, receipted before any secret opens. A copied secret is cleared when the member locks. An open Locker is shielded from capture.
+- **A secret saved mid-typing is a wrong secret.** Locker's editor saves on an explicit Save, and leaving with changes asks first. A password generator is unbiased and uses no look-alike characters.
+- **The passkey slot is storage.** It is shown, renamed and removed; its key is never revealed, copied or exported.

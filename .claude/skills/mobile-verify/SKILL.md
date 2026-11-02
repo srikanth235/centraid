@@ -1,150 +1,29 @@
 ---
 name: mobile-verify
-description: How to prove a change to the mobile shells or the Rust core they link actually works, and what a Linux cloud session cannot prove. Use when you change anything under mobile/ (Compose, SwiftUI, the JNA/cinterop binding, Gradle, project.yml, Maestro flows), crates/core, crates/screens or crates/core-ffi, when a rebuilt app does not show your change, when asked to "verify on the simulator or emulator", run Maestro, record or verify screenshots, run cargo xtask gate --profile mobile-jvm, or hand a device check to the owner.
+description: Prove changes to the mobile shells or the Rust core they link; use for mobile/, crates/core, crates/screens, crates/core-ffi, the mobile-jvm gate, emulator/simulator runs, Maestro, screenshots, or honest device-check hand-offs.
 ---
 
 # Verifying a mobile change
 
-Centraid's only shell is mobile: a Compose app and a SwiftUI app that draw the `ViewState` the Rust core pushes and perform the `Effect`s it asks for. Behaviour lives in Rust; the shells are thin. So most of what you can prove, you prove in Rust and on the JVM, and the rest is a device check you hand off honestly.
+Centraid's shells are Compose on Android and SwiftUI on iOS. They draw the `ViewState` from the Rust core and perform its `Effect`s. Behaviour is proved in Rust first, then through the JVM binding where relevant, and finally in a platform build or device run when that evidence is needed.
 
-## 1. What a mobile change touches
+Use [the mobile command and capability reference](references/mobile-commands.md) as the canonical source for what this environment can run, exact commands, prerequisites, and working directories. Other skills should link there rather than maintain their own platform command lists. Consult [mobile pitfalls](references/pitfalls.md) when the relevant build or test failure occurs.
 
-In order, from the bottom:
+## Verification order
 
-1. **The Rust core** (`crates/core`, `crates/screens`, `crates/core-ffi`): screens, commands, queries. `crates/core-ffi` exposes a five-symbol C ABI (`open`, `call`, `next_event`, `free`, `close`); `CONTRACT.md` there is the ABI's rules and `include/centraid.h` its committed header.
-2. **The built core file**: `libcentraid_core_ffi.a` per iOS triple under `target/<triple>/debug/`, `libcentraid_core_ffi.so` per ABI under `mobile/androidApp/src/main/jniLibs/<abi>/`. Both shells take the core as a built file by path.
-3. **The binding** (`mobile/core`): JNA on JVM and Android, cinterop on iOS. Its JVM tests do a real round trip against the real library.
-4. **The shells**: `mobile/androidApp` (Compose, only in the build with `-Pcentraid.android=true` and `ANDROID_HOME`) and `mobile/iosApp` (SwiftUI, XcodeGen project, macOS only).
-5. **Emitted artifacts**: the native theme (`Tokens.kt`, `Theme.swift`, `design/native-theme.json`) and the kit words are generated from `packages/design` and `crates/screens/src/strings`, then committed.
-6. **Device flows**: Maestro YAML in `mobile/maestro/flows`, selectors listed in `flows/selectors.md`.
+1. Prove behavior in Rust: `cargo test -p centraid-screens` and `cargo xtask rules` where relevant.
+2. Run `cargo xtask gate --profile mobile-jvm` for the real ABI round trip and emitted-artifact drift check when the binding or linked core changes.
+3. If Rust changed, rebuild the core for the target platform before building or running that shell. The app links a file by path; it will happily load an older archive or copied library.
+4. Build and run the shell, then use the Maestro flow nearest the change when a device or emulator is available.
+5. State exactly which layers ran. A build, a simulator, an emulator, and a physical device prove different things; do not call an unrun layer verified.
 
-## 2. The steps, in order
+## Invariants and common traps
 
-1. **Prove the behaviour in Rust first.** `cargo test -p centraid-screens` drives every screen through `centraid_screens::testing::Driver` over the real core. If a person-visible decision changed, this is where its test lives. `cargo xtask rules` checks the shells' sources (no copy in a view, controls from the kit).
-2. **Run the JVM gate.** `cargo xtask gate --profile mobile-jvm` (section 5) proves the ABI round trip and that the emitted artifacts match their source.
-3. **Rebuild the core for the platform you will run, every time Rust changed** (section 4). Skipping this is the single most common way to debug the wrong code.
-4. **Build and run the shell** on a simulator or emulator, and drive it with the Maestro flow nearest your change.
-5. **If you cannot reach a simulator or device, say so and hand it off** (section 6). Do not write "verified" for a shell you did not run.
+- Generated theme, catalogue, and kit-word files come from their source. Re-emit them with `bun contracts/tools/export-native-theme.ts`, format, and commit generated results; never edit outputs by hand.
+- The iOS Xcode project is generated from `mobile/iosApp/project.yml`. Regenerate it after adding a Swift source or proto file. Swift protobuf sources themselves are generated in the Xcode build.
+- `mobile-jvm` loads the built real cdylib and fails if it is absent. It tests the JVM binding, not Compose, Kotlin/Native, SwiftUI, or a device.
+- Android's application module is included only with `-Pcentraid.android=true`; that build needs the Android SDK and JDK 21. Apple builds and simulator runs need macOS and Xcode.
+- Physical-device performance evidence must name the reference device. An emulator or simulator does not establish those performance ceilings.
+- Use the demo vault for app checks. Never seed a test from a live vault copy.
 
-## 3. What must stay true
-
-- **Emitted files are never hand-edited.** Change `packages/design` or the strings, rerun `bun contracts/tools/export-native-theme.ts` then `bun run format`, and commit the result. Both `mobile-jvm` and the `emitters` step fail on drift in `design/` and `mobile/`.
-- **A new file needs the project regenerated on iOS.** The Xcode project is generated by XcodeGen from `mobile/iosApp/project.yml` and is not committed. The app target globs `Sources/`, so a new `.swift` file, and a new `.proto` (whose input/output lists XcodeGen writes), are invisible until `xcodegen generate` runs again.
-- **Swift protobuf types are built, not carried.** `Sources/Generated` is protoc output, produced by `mobile/scripts/generate-swift-protos.sh` as a pre-build phase; it needs `protoc` and `protoc-gen-swift` (`brew install protobuf swift-protobuf`). An edited `.proto` regenerates itself on the next build.
-- **The JVM tests load the real cdylib** and fail loudly when it is missing, because a test that skipped would read green where the ABI is broken. The library is found from `-Pcentraid.coreLibDir`, then `$CARGO_TARGET_DIR/debug`, then `<repo>/target/debug`, and never from the ambient loader path.
-- **The Maestro CLI is pinned** (`MAESTRO_VERSION=2.6.1`). Compose `testTag` and SwiftUI `accessibilityIdentifier` use the same string so one flow drives both; a flow may only name ids that `flows/selectors.md` lists, and nothing checks that mechanically.
-- **A device is not an emulator.** Performance ceilings (`tests/journeys.json`) are promoted only by a run on a named physical reference device. A simulator's background scheduler is not iOS's.
-
-## 4. Pitfalls
-
-### The shell links a core nothing rebuilt
-
-You edit `crates/core` or `crates/screens`, rebuild the app, run it, and the change is not there. No error, no warning. iOS links `libcentraid_core_ffi.a` by a path into `target/<triple>/<profile>/`, which is not a dependency Xcode can compare, so a five-hour-old archive links happily. Android loads a copied `.so` from `jniLibs`, staler still. Once, a byte door compiled on every layer and the Photos mosaic drew four empty cells because the app ran an older archive. The JVM tests cannot go stale, since the gate builds the cdylib first.
-
-Build the core for the platform first, every time Rust changes, then the app:
-
-```sh
-mobile/scripts/ios-core.sh                       # all three iOS slices (needs a Mac)
-mobile/scripts/ios-core.sh aarch64-apple-ios-sim # the simulator only
-mobile/scripts/android-core.sh                   # arm64-v8a into jniLibs; pass x86_64 for an Intel emulator
-```
-
-To tell in one command, compare mtimes: `ls -l target/aarch64-apple-ios-sim/debug/libcentraid_core_ffi.a` and `ls -l mobile/androidApp/src/main/jniLibs/arm64-v8a/libcentraid_core_ffi.so`. If the file predates your Rust change, the app cannot contain it; stop debugging Swift and Kotlin.
-
-**Both scripts build with `--features llama`, and leaving it off fails the same silent way.** The on-device chat engine is off by default so the PR gate compiles none of llama.cpp. A core built without it links and runs, and the chat reports every model file as `NO_ENGINE`. Check with `nm <archive> | grep -c llama_` (zero means no engine). llama.cpp builds with CMake, so `cmake` must be on `PATH`, and `IPHONEOS_DEPLOYMENT_TARGET=$(cat mobile/ios-deployment-target)` must be exported or the device link fails on `___chkstk_darwin`. Cargo does not rerun that build when the variable changes: `cargo clean -p llama-cpp-sys-2 --target <triple>` first. The `mobile-jvm` gate deliberately builds without the feature (llama's cold build would blow its 420 s budget), and accepts `NO_ENGINE`.
-
-Nothing builds the core for you on purpose: `lane-prebuilt-core.yml` builds the slices in CI so Mac runners do not pay for Rust on every app build.
-
-### Android emulator settings that a restored snapshot ignores
-
-No workflow here restores a cached AVD RAM snapshot today, but the next emulator lane might (`reactivecircus/android-emulator-runner` with an AVD cache and `force-avd-creation: false`). The snapshot resumes memory captured in another run, so `adb shell settings put global ...` for a setting `system_server` reads once and caches updates a row nobody re-reads, exits 0, and changes nothing. The case that cost a lane: `hide_error_dialogs` is latched into `mShowDialogs` only on boot or a configuration change, so ANR dialogs came back, covered the app, and a Maestro flow failed its first visibility assertion having run zero assertions, which looked like a product regression. The fix is a night-mode round trip after the write (the cheapest configuration change that forces the re-latch, read then restored so it is a net no-op). Before adding another `settings put global`, ask whether the framework observes it or caches it; a setting that works on a locally booted emulator but not on the lane is this trap. Such a lane should also classify a system error dialog as infrastructure, as a backstop that makes the failure legible. A guard nobody has watched fail is untested.
-
-### Other ways this goes wrong
-
-- **Running the iOS tests with `swift test`.** There is none and no SwiftPM package: `Sources/` imports UIKit and links the core's C archive. The simulator `xcodebuild ... test` is the one route.
-- **Two builds in one DerivedData.** Give each concurrent `xcodebuild` its own `-derivedDataPath`.
-- **A JDK that Gradle cannot find.** `:core` compiles with `jvmToolchain(21)`, and Android unit tests run on JDK 21. Point `JAVA_HOME` at a JDK 21 (or pass `-Dorg.gradle.java.installations.paths=<path>`).
-- **A jar where an aar belongs.** JNA must be the `@aar` on Android: the app builds and installs, then the first `centraid_open` dies with `dlopen failed: library "libjnidispatch.so" not found`. `unzip -l` the APK; `com/sun/jna/win32-x86-64/jnidispatch.dll` and no `lib/arm64-v8a/libjnidispatch.so` is the tell. Both packages at once fails `checkDebugDuplicateClasses`.
-- **Release builds are shrunk by R8**, debug builds are not. A class reached by name (JNA's dispatcher, `CentraidLibrary`'s method names, which are the C symbols) that debug exercises and release crashes on needs a keep rule in `androidApp/proguard-rules.pro`.
-- **Gradle warnings are errors** (`org.gradle.warning.mode=fail`), and dependencies are locked (`settings-gradle.lockfile`, per-project `gradle.lockfile`). After changing a version or dependency, rewrite the locks with `--write-locks`, once without and once with `-Pcentraid.android=true`, as `mobile/README.md` shows. Versions live only in `mobile/gradle/libs.versions.toml`.
-- **A decode failure must render the loading state**, never an empty one: an empty state claims an empty vault before it was read.
-- **A test seeded with a live vault copy.** Use the demo vault: `mobile/scripts/demo-vault.sh ios` (or `android`) seeds both vaults and relaunches the app with `CENTRAID_DEMO_SEED`. Never copy a live `vault.db`.
-
-## 5. How to check it
-
-### What the `mobile-jvm` gate covers
-
-```sh
-cargo xtask gate --profile mobile-jvm
-```
-
-One step, in order (`run_mobile_jvm` in `crates/xtask/src/gate.rs`):
-
-1. `cargo build -p centraid-core-ffi` (the cdylib, without `--features llama`), so a missing library fails with a cargo error rather than a JNA `UnsatisfiedLinkError` in a Kotlin test.
-2. `mobile/gradlew -p mobile mobileJvm --no-daemon`, which is `:core:jvmTest` and nothing else: the real ABI round trip (`open`, `call`, `next_event`, `free`, `close`) over JNA against the cdylib on a vault the Rust fixture founded, the UI-thread assertion, buffer accounting (`buffersHandedOver == buffersFreed` after two hundred calls), poison handling, the bounded queue.
-3. The drift check: rerun `bun contracts/tools/export-native-theme.ts` and `bun run format`, then fail if `design/` or `mobile/` has a diff.
-
-It does **not** compile Compose, link Kotlin/Native, run a simulator or touch a device. Nightly runs it in the `mobile-jvm` job. To iterate faster: `cd mobile && ./gradlew mobileJvm` once the cdylib is built.
-
-### Android
-
-```sh
-export ANDROID_HOME=/path/to/Android/sdk
-mobile/scripts/android-core.sh                                 # core into jniLibs, first and on every core change
-cd mobile && ./gradlew -Pcentraid.android=true :androidApp:assembleDebug
-./gradlew -Pcentraid.android=true :androidApp:installDebug     # to a running emulator
-```
-
-Without the flag `:androidApp` is not in the build at all; with the flag and no `ANDROID_HOME` it refuses by name. `android-core.sh` expects an NDK (`CENTRAID_NDK`, default 27.0.12077973) under the SDK and its toolchain path is the macOS one (`darwin-x86_64`), so it is a Mac script.
-
-### Roborazzi screenshots (Compose)
-
-`androidApp` has Robolectric and Roborazzi on its unit-test classpath (`libs.roborazzi`, `libs.roborazzi.compose`), compile-gated with the module. State plainly what that means today: the Roborazzi Gradle plugin is not applied and no `captureRoboImage` test is committed, so there are no `record` or `verify` tasks and no reference images yet. The convention to follow when you add a suite is Roborazzi's: **record** writes reference images and is for a deliberate visual change, reviewed in the diff; **verify** compares against the committed references and fails on a difference, and is what a check runs. Never record to make a failing verify pass without looking at the image. The same holds for Swift: swift-snapshot-testing is not yet a dependency, and snapshot tests (`-only-testing:CentraidTests/Snapshot*`) are an owner hand-off until added. Snapshots need an Android runtime, so they run only where the Android SDK is.
-
-### iOS simulator
-
-Needs a Mac with Xcode (`XCODE_VERSION` in `lane-release-mobile.yml` pins it) and XcodeGen:
-
-```sh
-IPHONEOS_DEPLOYMENT_TARGET=$(cat mobile/ios-deployment-target) mobile/scripts/ios-core.sh aarch64-apple-ios-sim
-cd mobile/iosApp && export CENTRAID_IOS_DEPLOYMENT_TARGET=$(cat ../ios-deployment-target)
-xcodegen generate
-xcodebuild -project Centraid.xcodeproj -scheme Centraid \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
-```
-
-Which steps a change needs, by what changed: anything the core links, rebuild the core; an edited `.proto`, nothing for Swift; a new `.proto` or new Swift file, `xcodegen generate`. The test bundle covers fixtures decoded by SwiftProtobuf, icon silhouettes and font registration (which only means anything inside a real app bundle). A simulator's Apple Health is empty and Centraid never writes to it; seed it with the separate debug app `iosApp/HealthSeeder` (its own XcodeGen spec) and `flows/health-seed.yaml`.
-
-### Maestro flows
-
-```sh
-# Android: install the app, then
-maestro test mobile/maestro/flows
-# iOS: build and install on the simulator, then
-maestro test mobile/maestro/flows
-```
-
-The flows are written against the iOS bundle id, so an Android run uses a copy with `appId: dev.centraid`. Start with `home.yaml`; `first-launch.yaml` then `onboarding.yaml` for a cleared app; Agenda has three flows; `health-seed.yaml` seeds the simulator. Use the pinned `MAESTRO_VERSION=2.6.1`; a different CLI is how a flow passes on one machine and fails on another. When you add a screen, give both platforms the same identifier and list it in `flows/selectors.md`.
-
-### Nightly device lanes
-
-`cargo xtask gate --profile nightly` has a `device-lanes` step: `backup-measurement`, `android-macrobenchmark`, `ios-xctest-metrics`, `battery-per-background-pass`. Without `CENTRAID_DEVICE_RUNNER` it reports a loud `Skipped`, never a pass. With it set on a runner labelled `[self-hosted, macos, devices]` and no phone attached, it fails (an infrastructure fault). `--lane <name>` runs one. Macrobenchmark is `./gradlew -Pcentraid.android=true :androidApp:connectedBenchmarkAndroidTest` on a physical Android (an emulator is skipped); the iOS lane needs `CENTRAID_REFERENCE_DEVICE` naming the device. The backup measurement's protocol is `mobile/maestro/backup-measurement.md`.
-
-### What a Linux cloud session can and cannot run
-
-- **Can** (if cargo, bun and JDK 21 are present and Gradle can download its distribution): `cargo test -p centraid-screens`, `cargo xtask rules`, `cargo build -p centraid-core-ffi`, `cargo xtask gate --profile mobile-jvm`, `bun run check` for the design package and emitters, `cargo xtask doc-links`.
-- **Cannot:** Xcode, XcodeGen, the iOS simulator, `ios-core.sh` (needs Apple SDKs), Swift tests, an Android emulator or device, Roborazzi (no SDK), Maestro against any app, the nightly device lanes. Unless the cloud image carries an Android SDK, even `assembleDebug` is out; do not assume it does.
-
-## 6. Handing off what you could not run
-
-Say which layers you proved and which you did not, in the PR description. For the unproven rest, give the owner the exact commands from this section in order (core rebuild first), the flow or test to run (`maestro test mobile/maestro/flows/<flow>.yaml`, the `xcodebuild ... test` line, `:androidApp:installDebug`), and what a pass looks like. `mobile/README.md` carries the full hand-off table. Claim "verified" only for what ran.
-
-## 7. Final checklist
-
-- [ ] Behaviour proven in Rust (`cargo test -p centraid-screens`, `cargo xtask rules`) where it lives there
-- [ ] `cargo xtask gate --profile mobile-jvm` green
-- [ ] Core rebuilt for each platform you ran (`ios-core.sh`, `android-core.sh`), with the mtime or `nm` check if the change does not show
-- [ ] Emitted design and word files regenerated and committed, not edited by hand
-- [ ] New iOS source or `.proto` file: `xcodegen generate` re-run
-- [ ] Same selector id on both platforms and listed in `flows/selectors.md`
-- [ ] Anything not run (simulator, emulator, device, snapshots) named as such, with the commands to hand off
+For the C ABI's normative rules and boundary invariants, see [core-ffi](../core-ffi/SKILL.md) and [its contract](../../../crates/core-ffi/CONTRACT.md).

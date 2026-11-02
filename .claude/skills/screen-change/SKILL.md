@@ -45,7 +45,7 @@ The product decision lives in Rust. The shells only draw. Most "UI" work is ther
 
 ## 4. Pitfalls
 
-- **A stale core.** iOS links `libcentraid_core_ffi.a` by path and Android loads a copied `.so` from `jniLibs`; nothing rebuilds either when Rust changes. The app compiles, installs and shows the OLD behaviour with no error. After any Rust change run `mobile/scripts/ios-core.sh` (all slices, or one triple) and `mobile/scripts/android-core.sh`, and compare the file's mtime with your last edit before debugging Swift or Kotlin. Both scripts build `--features llama`; without it every model file reads `NO_ENGINE`.
+- **A stale core.** iOS links `libcentraid_core_ffi.a` by path and Android loads a copied `.so` from `jniLibs`; nothing rebuilds either when Rust changes. The app can show old behavior without an error. Rebuild the core for the target platform before running the shell; see [mobile-verify](../mobile-verify/SKILL.md) for the canonical commands and platform requirements. The Android core script currently uses a macOS NDK toolchain.
 - **Hand-edited generated files** are overwritten by the next emit, and the gate fails on a diff over `design` and `mobile`. Fix the source (emitter, `packages/design`, `strings/shared.rs`), not the output. A guard belongs on the source too.
 - **Tokens.** Never write a hex colour or a parallel colour table in a view; a value that is not a token belongs in `packages/design`, then re-emit.
 - **A view that works on one platform.** Add the field to the other shell the same day; the parity rule counts spellings, not rendering.
@@ -54,22 +54,9 @@ The product decision lives in Rust. The shells only draw. Most "UI" work is ther
 
 ## 5. How to check it
 
-What a Linux cloud session can run:
+Write the Rust test with `centraid_screens::testing::Driver`: `start()`, `send(instance, event)`, `nav(..)`, `answer_effect(..)`, `pump(wait)`, then assert on `driver.views`, `driver.effects`, and `driver.navigation`. [crates/screens/tests/proof.rs](../../../crates/screens/tests/proof.rs) is the model. Cover loading, data, a failed read, empty, a refusal sentence, `Left`, and each effect answer.
 
-```sh
-cargo test -p centraid-screens          # Driver tests: the screen's behaviour through the shell's own door
-cargo xtask rules                       # native-shell-parity, no-screen-id, accessibility, per-app layout
-cargo xtask screens-catalog --check     # only if a manifest changed
-bun run lint:product                    # copy, native controls, journey ledger
-bun contracts/tools/export-native-theme.ts && bun run format && git diff --exit-code -- design mobile
-buf lint                                # and buf breaking against the PR base, when buf is installed
-cargo xtask gate --profile pr           # the PR gate
-cargo xtask gate --profile mobile-jvm   # :core:jvmTest plus the generated-artifact drift check (needs JDK 21)
-```
-
-Write the Rust test with `centraid_screens::testing::Driver`: `start()`, `send(instance, event)`, `nav(..)`, `answer_effect(..)`, `pump(wait)`, then assert on `driver.views`, `driver.effects`, `driver.navigation`. `crates/screens/tests/proof.rs` is the model. Cover loading, data, a failed read, empty, a refusal sentence, `Left`, and each effect answer.
-
-A Linux session cannot compile Compose without the Android SDK, cannot compile SwiftUI (UIKit; no Xcode), and cannot run an emulator, a simulator or Maestro, so it cannot show that a view renders. Android builds with `ANDROID_HOME` set and `./gradlew -Pcentraid.android=true :androidApp:assembleDebug` from `mobile/`; iOS needs a Mac (`xcodegen generate`, then the `xcodebuild ... test` command in `mobile/README.md`). To see a screen on a device or emulator, use the `mobile-verify` skill. Say plainly which of these you did not run.
+Use [mobile-verify](../mobile-verify/SKILL.md) for the canonical check commands, prerequisites, platform capabilities, and device hand-off. Linux can run Compose builds when an Android SDK is installed; an emulator or device is a separate requirement. iOS builds and simulator checks need a Mac. The parity rule checks field spellings in both shells, not whether the views render correctly.
 
 ## 6. Final checklist
 

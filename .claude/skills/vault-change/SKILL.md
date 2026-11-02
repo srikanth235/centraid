@@ -1,6 +1,7 @@
 ---
 name: vault-change
-description: How to change the Centraid vault model: add or change a kind, table, column, edge relation, typed command, or read, and keep the schema digest, generated contracts, search index, backup census and app manifests in step. Use when touching contracts/migrations/001_baseline.sql, crates/vault (commands/, migrations.rs, format.rs, log/guard.rs), crates/ontology, crates/search indexing, an app's manifest.json or queries, or when asked to "add a table", "add a column", "add a command", "new kind", "new edge", or "change the schema". For SQL craft itself use the sqlite skill.
+description: >-
+  How to change the Centraid vault model: add or change a kind, table, column, edge relation, typed command, or read, and keep the schema digest, generated contracts, search index, backup census and app manifests in step. Use when touching contracts/migrations/001_baseline.sql, crates/vault (commands/, migrations.rs, format.rs, log/guard.rs), crates/ontology, crates/search indexing, an app's manifest.json or queries, or when asked to "add a table", "add a column", "add a command", "new kind", "new edge", or "change the schema". For SQL craft itself use the sqlite skill.
 ---
 
 # Changing the vault model
@@ -9,14 +10,14 @@ The vault is one SQLite file on the phone. The Rust core is its only writer. Eve
 
 ## 1. What a change touches, in order
 
-1. **The model**: `crates/vault/src/model.rs` (`Kind`, `Rel`, `Flag`, `Kind::host()`, `Kind::CONCEPTS`, `Kind::CONTAINERS`) and `crates/ontology` (the `Vault` type, DDL helpers, the text tokenizer `text::index_words`).
-2. **The baseline DDL**: `contracts/migrations/001_baseline.sql`, a hand-written file that founds a new vault and seeds its rows. It is reached with `include_str!` by `crates/vault/src/migrations.rs`.
-3. **The format identity**: `crates/vault/src/format.rs` `SCHEMA_DIGEST`, a BLAKE3 over `sqlite_schema`. Open and restore refuse a file whose digest differs.
-4. **Generated contracts**: `contracts/schema/vault-ddl.sql` (`export-ladder-ddl`), `contracts/schema/vault-commands.txt` (`export-commands`), and the published ontology page's schema section (`export-ontology-page`, with a sentence per table in `ontology_doc::TABLES`).
-5. **Commands**: `crates/vault/src/commands/<area>.rs`, registered in `commands/mod.rs`. A command runs inside `Vault::execute`, which runs the commit guard in `crates/vault/src/log/guard.rs`.
-6. **Search**: `crates/vault/src/index.rs` (re-indexing at commit, `DEPENDENTS`), `crates/search` (reading, matching).
-7. **Apps**: `crates/apps/<app>/` (queries, actions, `manifest.json`) over `crates/apps/kit`, which owns the read vocabulary.
-8. **Backup**: the snapshot census in `crates/vault/src/backup/snapshot.rs`. It is derived from the file, so it rarely needs editing, but a restore compares it table by table.
+1. **The model**: [crates/vault/src/model.rs](../../../crates/vault/src/model.rs) (`Kind`, `Rel`, `Flag`, `Kind::host()`, `Kind::CONCEPTS`, `Kind::CONTAINERS`) and [crates/ontology](../../../crates/ontology) (the `Vault` type, DDL helpers, the text tokenizer `text::index_words`).
+2. **The baseline DDL**: [contracts/migrations/001_baseline.sql](../../../contracts/migrations/001_baseline.sql), a hand-written file that founds a new vault and seeds its rows. It is reached with `include_str!` by [crates/vault/src/migrations.rs](../../../crates/vault/src/migrations.rs).
+3. **The format identity**: [crates/vault/src/format.rs](../../../crates/vault/src/format.rs) `SCHEMA_DIGEST`, a BLAKE3 over `sqlite_schema`. Open and restore refuse a file whose digest differs.
+4. **Generated contracts**: [contracts/schema/vault-ddl.sql](../../../contracts/schema/vault-ddl.sql) (`export-ladder-ddl`), [contracts/schema/vault-commands.txt](../../../contracts/schema/vault-commands.txt) (`export-commands`), and the published ontology page's schema section (`export-ontology-page`, with a sentence per table in `ontology_doc::TABLES`).
+5. **Commands**: [`crates/vault/src/commands/`](../../../crates/vault/src/commands/), registered in [crates/vault/src/commands/mod.rs](../../../crates/vault/src/commands/mod.rs). A command runs inside `Vault::execute`, which runs the commit guard in [crates/vault/src/log/guard.rs](../../../crates/vault/src/log/guard.rs).
+6. **Search**: [crates/vault/src/index.rs](../../../crates/vault/src/index.rs) (re-indexing at commit, `DEPENDENTS`), [crates/search](../../../crates/search) (reading, matching).
+7. **Apps**: [`crates/apps/`](../../../crates/apps/) (queries, actions, `manifest.json`) over [crates/apps/kit](../../../crates/apps/kit), which owns the read vocabulary.
+8. **Backup**: the snapshot census in [crates/vault/src/backup/snapshot.rs](../../../crates/vault/src/backup/snapshot.rs). It is derived from the file, so it rarely needs editing, but a restore compares it table by table.
 
 ## 2. The steps, in order
 
@@ -24,11 +25,11 @@ The vault is one SQLite file on the phone. The Rust core is its only writer. Eve
 2. **Edit the baseline.** `001_baseline.sql` is the schema a new vault founds and the only rung; change it directly.
 3. **Write the DDL to the doctrine** (section 3): generated `kind` column and composite `(id, kind)` foreign key for a kind row, an explicit `ON DELETE` on every foreign key, every FK's first child column leading an index (a partial index `WHERE col IS NOT NULL` when mostly NULL), CHECK values that match the Rust enum, `STRICT` where the neighbours are.
 4. **Run the digest test and paste the value.** `cargo test -p centraid-vault the_schema_digest_is_the_founded_files` fails printing `found: <hex>`; put it in `SCHEMA_DIGEST`. Any baseline change, even a column comment that changes a statement, needs this. Comments and whitespace do not change the digest; statements do.
-5. **Regenerate the generated files.** `cargo run -p centraid-vault --bin export-ladder-ddl` for `vault-ddl.sql`, `export-commands` for `vault-commands.txt` (when commands change), `export-ontology-page` for the page after adding a sentence for the table in `ontology_doc::TABLES`. Never hand-edit them. Add the new table to the list in the "no table outside the spec" commitment test (`crates/vault/tests/commitments.rs`).
+5. **Regenerate the generated files.** Run `cargo run -p centraid-vault --bin export-ladder-ddl > contracts/schema/vault-ddl.sql` and, when commands change, `cargo run -p centraid-vault --bin export-commands > contracts/schema/vault-commands.txt`. Run `cargo run -p centraid-vault --bin export-ontology-page` for the page after adding a sentence for the table in `ontology_doc::TABLES`. Never hand-edit them. Add the new table to the list in the "no table outside the spec" commitment test ([crates/vault/tests/commitments.rs](../../../crates/vault/tests/commitments.rs)).
 6. **Write the commands.** One typed command per verb, named `<kind>.<verb>`, in the owning app's file. A per-kind verb that duplicates a shared verb (`entity.*`, `tag.*`, `flag.*`, `edge.*`, `container.*`, `blob.*`, `derivative.*`) is not written. Every command that changes an entity's row, its kind row or its child rows calls `ctx.touch(id)` (stamps `updated_at` and queues the re-index); a create uses `insert_entity` and `born`. Refuse with a sentence, not a SQL error. Add or remove of an `about` or `links` edge touches the note at the edge's start.
 7. **Make search see it.** Text a member searches goes in `text_of`; a link written without touching either end calls `mark_for_index` on the labelled end; a title that labels other things (a tag, list, project, calendar, account) belongs in `DEPENDENTS`. The incremental-index-equals-rebuild commitment must stay green for your command.
 8. **Teach the apps.** Add the read to the app's queries (paged, keyset, bounded) and to its `manifest.json` (section 4). Add a year-3 scale test if the read is hot (section 5).
-9. **Update the shell contracts if the wire changes** (commands the shell quotes, `app_query` numbers, proto fields). Read `crates/core-ffi/CONTRACT.md` before touching an ABI or wire field; removed wire fields are `reserved` by number and name, never reused.
+9. **Update the shell contracts if the wire changes** (commands the shell quotes, `app_query` numbers, proto fields). Read [crates/core-ffi/CONTRACT.md](../../../crates/core-ffi/CONTRACT.md) before touching an ABI or wire field; removed wire fields are `reserved` by number and name, never reused.
 
 ## 3. What must stay true
 
@@ -54,14 +55,14 @@ An app is a first-party screen, not a principal. It holds no credential and decl
 - `vault.scopes`: one entry per table it reads (`"verbs": "read"`, schema `vault`) and one per command it invokes (`"schema": "<area>"`, `"table": "<verb>"`, `"verbs": "act"`, e.g. `note` / `create`). A tripwire fails the build when an app touches an entity or command it did not declare. Add the table or command here in the same change, with a `why` a member would accept.
 - `actions` (each naming its `command`, an `inverse` where one exists, `sealed` cells, and a `confirmation` level) and `queries` (each with an input and output schema and `figures`). A new read is a query entry; a new write is an action whose command exists in the registry.
 - `states.designed` plus `excluded`: a closed partition of the seven canonical states. Forgetting one fails to parse.
-- Apps hold no SQL and no connection: statements are data run by the kit's one assembler. The `sql-confinement` rule keeps SQL under `crates/{ontology,vault,search}` and `crates/apps/kit`, tests included.
+- Apps hold no SQL and no connection: statements are data run by the kit's one assembler. The `sql-confinement` rule keeps SQL under [`crates/ontology`](../../../crates/ontology), [`crates/vault`](../../../crates/vault), and [`crates/search`](../../../crates/search) and [crates/apps/kit](../../../crates/apps/kit), tests included.
 - Every app invocation carries an `invoke_key`. A denial is a value in the payload, not an error.
 
 ## 5. Pitfalls
 
 - **Editing `001_baseline.sql` and forgetting the digest.** Four tests go red at once (digest, `ladder_ddl`, `ontology_page`, commitments); fix the digest first, then regenerate.
 - **A foreign key with no index on its child column.** Deleting a parent then scans the child once per deleted row. A purge or an emptied trash turns quadratic. The commitment test catches it; the query-plan test catches the read-side twin.
-- **A new read that scans or sorts a big table.** `crates/core/tests/query_plans.rs` plans every page and every hand-written statement over the year-3 corpus. The fix is an index in the baseline, not a row in `contracts/ledgers/query-plans.json`.
+- **A new read that scans or sorts a big table.** [crates/core/tests/query_plans.rs](../../../crates/core/tests/query_plans.rs) plans every page and every hand-written statement over the year-3 corpus. The fix is an index in the baseline, not a row in [contracts/ledgers/query-plans.json](../../../contracts/ledgers/query-plans.json).
 - **Touching a row without `ctx.touch`.** The row changes but search and `updated_at` do not; the index-equals-rebuild commitment fails, or worse, silently does not for a path no test covers.
 - **A command that works on the wrong kind.** Notes and Photos both hold containers; every command states its kind and refuses the other's id with a sentence, and every reader filters on kind.
 - **Adding a CHECK value without its writers.** Sweep mechanically (below); a CHECK value nothing writes is dormant schema.
@@ -84,15 +85,15 @@ Every app has `crates/apps/<app>/tests/year3.rs` (agenda, docs, health, money, n
 
 ```sh
 cargo test -p centraid-vault the_schema_digest_is_the_founded_files   # prints the new SCHEMA_DIGEST
-cargo run -p centraid-vault --bin export-ladder-ddl
-cargo run -p centraid-vault --bin export-commands
+cargo run -p centraid-vault --bin export-ladder-ddl > contracts/schema/vault-ddl.sql
+cargo run -p centraid-vault --bin export-commands > contracts/schema/vault-commands.txt
 cargo run -p centraid-vault --bin export-ontology-page
 cargo test -p centraid-vault            # commitments, ladder_ddl, command_list, ontology_page, format_identity, restore_drill, backup_snapshot
 cargo test -p centraid-apps-<app>       # the app's tests, year3 included
 cargo xtask gate --profile pr           # the real gate; one crate green is not enough
 ```
 
-`export-ddl` in `crates/ontology` prints a vault file's schema; point it at a copy, never a live file. The gate's `mobile-jvm` profile and any Kotlin or Swift build need the Android SDK or Xcode and cannot run in a Linux cloud session. Say so in the PR rather than claiming them green. The search budget and restore drill run in the gate; if you cannot run the full gate, name which profile steps you ran.
+`export-ddl` in [crates/ontology](../../../crates/ontology) prints a vault file's schema; point it at a copy, never a live file. The `mobile-jvm` profile runs on Linux with the repository's Cargo and Bun tooling plus JDK 21; it does not need the Android SDK. CI runs it on Ubuntu. Android and iOS device or native framework builds have separate platform requirements. The search budget and restore drill run in the gate; if you cannot run the full gate, name which profile steps you ran.
 
 ## 8. Final checklist
 

@@ -1,10 +1,38 @@
 # Performance
 
+Use this workflow for performance work, not as a required step for every Swift change. Reproduce the slow action, measure an optimized build, find the cause, fix it, then repeat the same measurement. Prefer a physical device: debug Swift is substantially slower, and a simulator shares the host's CPU and disk, so its measurements do not set a device budget.
+
+For a reproducible action, write down the steps or use a UI test. Record with Instruments using `xcrun xctrace record --template '<name>' --output <file>.trace --time-limit 10s`. It accepts `--attach <process>`, `--launch -- <app>`, and `--device <name or UDID>` for a device; omit `--device` for the simulator. Run `xcrun xctrace list templates` to see the installed templates.
+
+| Symptom | Instruments template or tool |
+| --- | --- |
+| Slow action or high CPU | `Time Profiler` |
+| Taps or scrolls freeze briefly | `Hangs` |
+| Scroll or animation stutters | `Animation Hitches` |
+| Memory grows | `Allocations`; `Leaks` for retained cycles |
+| Battery, heat, or background work | `Energy Log`; inspect timers and polling |
+| A view redraws too often | Instruments' SwiftUI template; temporarily use `let _ = Self._printChanges()` in `body` and remove it afterwards |
+
+Read a trace as text with `xcrun xctrace export --input <file>.trace --toc`, then use `--xpath` for the table you need instead of screenshotting Instruments. Delete each trace after reading it; do not commit or share it. A trace can contain details about the profiled process's environment, including inherited shell state.
+
+After the change, repeat the same action and compare measurements. Record meaningful before-and-after numbers with the change, for example: “Library opens in 40 ms, was 600 ms.”
+
+Rules that often help once a measurement identifies the cause:
+
+- Show the screen immediately, then do the work; do not make the UI wait unnecessarily.
+- Keep UI work on the main actor and move decoding, file, database, and core work elsewhere.
+- Decode images at display size with ImageIO and cache the result when measurement supports it.
+- Give timers a tolerance and stop them when nothing visible needs them; prefer no polling.
+- Narrow what a view reads. With `@Observable`, fewer stored properties read means fewer changes invalidate it.
+- Avoid `AnyView` and deep conditional trees in lists; prefer `@ViewBuilder` and stable structure.
+
+Centraid's Rust-side `call-budget` and `search-budget` checks run with `cargo xtask gate --profile pr`; the ledgers are under `contracts/ledgers/`. On-device journey ceilings live in `tests/journeys.json` and are promoted only from a named physical device. The `ios-xctest-metrics` device lane in the nightly profile runs `-only-testing:CentraidTests/BackgroundTransferMetrics`.
+
 - Keep conditional modifier values inside the modifier, for example `.opacity(isUnavailable ? 0.4 : 1)`, rather than branching the view with `if`/`else`. Branching produces `_ConditionalContent`, which changes structural identity and recreates the underlying platform views each time the condition flips. Never introduce a `View.if()` helper that conditionally transforms its receiver: it changes structural identity, resets state, and disrupts animations when the condition flips. Report existing helpers with this explanation, but leave their removal to a requested change because they may have many callers.
 - If a style ternary fails because its branches have different types, erase each style with `AnyShapeStyle`, for example `.background(isHighlighted ? AnyShapeStyle(.thinMaterial) : AnyShapeStyle(.clear))`. Keep the same view instead of introducing branches. Unlike `AnyView`, `AnyShapeStyle` is not a performance concern; use it only when ordinary type inference cannot handle the ternary.
 - Avoid `AnyView` unless absolutely required. Use generics, `Group`, an extracted `View` struct, or a `@ContentBuilder` closure parameter instead.
 - If a `ScrollView` has an opaque, static, and solid background, prefer to use `scrollContentBackground(.visible)` to improve scroll-edge rendering efficiency.
-- For view extraction, follow the guidance and exceptions in `views.md`.
+- For view extraction, follow the guidance and exceptions in [views](views.md).
 - Always ensure view initializers are kept as small and simple as possible, avoiding any non-trivial work. Flag any work that can be moved into a `task()` modifier to be run when the view is shown.
 - Similarly, assume each view's `body` property is called frequently – if logic such as sorting or filtering can be moved out of there easily, it should be.
 - Avoid creating properties to store formatters such as `DateFormatter` unless they are required. A more natural approach is to use `Text` with a format, like this: `Text(Date.now, format: .dateTime.day().month().year())` or `Text(100, format: .currency(code: "USD"))`.

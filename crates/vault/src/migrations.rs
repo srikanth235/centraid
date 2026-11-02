@@ -19,12 +19,11 @@
 //!
 //! `contracts/migrations/001_baseline.sql` is the whole schema a new vault is
 //! founded with and the rows that founding seeds: the vault model of #1135, one
-//! file. It is FROZEN like any rung once released, and **the next schema change
-//! appends rung two** (`002_<name>.sql`, an `include_str!` constant and a
-//! [`Migration`] in [`LADDER`]), never an edit to rung one. A rung two is proved
-//! the way a climb is: found a vault, wind its file back to `user_version = 1`
-//! by undoing the rung's own statements, write the rows the old shape let
-//! through, and open it.
+//! file. Under the current vault house policy, this is the only rung and schema
+//! changes edit the baseline directly. General deployed-database guidance about
+//! immutable applied migrations does not itself change that policy or promise
+//! any release compatibility. Revisit the policy only through an explicit
+//! product decision; do not infer a new rung from generic SQLite advice.
 //!
 //! The file is BOTH the migration and the fixture (D-1020-D1-13): one copy,
 //! where the language-neutral fixtures live, reached with `include_str!` so a
@@ -48,11 +47,9 @@ pub struct Migration {
 /// order, and the rows founding seeds. Rung one.
 pub const BASELINE_SQL: &str = include_str!("../../../contracts/migrations/001_baseline.sql");
 
-/// The ladder, in order. Rung one is the baseline.
-///
-/// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
-/// file in the field has already run the old text, so an edit changes what a
-/// fresh file gets and nothing else, which is two schemas with one number.
+/// The ladder, in order. The current house policy holds the baseline as its
+/// only rung and edits it directly. Synthetic ladders in tests exercise the
+/// forward-running machinery; they do not decide the vault's release policy.
 pub const LADDER: &[Migration] = &[Migration {
     version: 1,
     name: "baseline",

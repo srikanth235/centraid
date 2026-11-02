@@ -62,7 +62,7 @@ A composable's contract is "render state, emit callbacks" — test exactly that;
 | Proving | Shape |
 | --- | --- |
 | Text rendered, conditional content, loading/error branches, callback wiring | Plain UI Compose test (state + callbacks, no graph) |
-| Focus navigation, keyboard, TV/D-pad | Compose test with `performKeyInput` + `assertIsFocused()` (see `compose/references/focus-navigation.md`) |
+| Focus navigation, keyboard, TV/D-pad | Compose test with `performKeyInput` + `assertIsFocused()` |
 | Visual contract semantics can't prove — spacing, themed colour, typography, elevation, gradients, skeletons | Screenshot test, one per meaningful state |
 | State holder updates UI correctly | State-holder unit test + ONE wiring smoke test |
 | Lifecycle, navigation, or DI integration itself | Integration test (`createAndroidComposeRule`, Hilt rule, real graph) |

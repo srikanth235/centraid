@@ -19,7 +19,7 @@ This reference covers the Flow traps and semantic edge cases — Channel vs Shar
 
 **`Channel.receiveAsFlow()` is fan-out, NOT broadcast.** With multiple collectors, each event reaches **one** collector (the framework picks which), not all of them. If every collector must see every event, you need `SharedFlow`. This is the trap that's easy to fall into when reaching for `Channel` to multicast.
 
-For single-consumer one-shot events, `Channel(BUFFERED).receiveAsFlow()` is the default because `send` suspends until consumed (the event is queued, never dropped), whereas `SharedFlow(replay = 0)` drops the emission if no collector is active at the instant of emission. Expose the `Flow`, never the `Channel`, and collect with `collect` inside `LaunchedEffect` — **not** `collectAsStateWithLifecycle`, which retains the last event as state and re-fires it on every recomposition / config change.
+For single-consumer one-shot events, `Channel(BUFFERED).receiveAsFlow()` can provide an in-memory queue while its buffer has room. `send` suspends when the buffer is full until capacity becomes available; it does **not** wait for the receiver to process the item, and a channel is not durable across process death. A `SharedFlow(replay = 0)` loses emissions when there are no subscribers. With subscribers, `emit` may suspend depending on buffer and overflow policy; `tryEmit` can fail or drop according to that policy. Neither primitive guarantees delivery to a future collector without replay or durable state. Expose the `Flow`, never the `Channel`, and collect transient effects with `collect` inside `LaunchedEffect` — not as UI state.
 
 ```kotlin
 private val _events = Channel<UiEvent>(Channel.BUFFERED)
@@ -31,11 +31,11 @@ LaunchedEffect(Unit) {
 }
 ```
 
-**Exactly-once is really at-most-once-with-very-high-probability.** A `receiveAsFlow()` collector cancelled _after_ `receive()` succeeds but _before_ its block processes the element loses that element. Rare (most cancellations land between receives), but for payment/persistence-critical signals, store the outcome in durable state (a `pendingResult` field on `UiState`, cleared by the UI after consumption) — see `compose/references/state-management.md` "Durable state + acknowledgement".
+An in-memory event channel cannot provide exactly-once processing: a collector cancelled after receiving an element but before completing its work can lose it, and process death loses the queue. For payment, persistence, navigation restoration, or other important outcomes, store the outcome in durable state and acknowledge it after handling. Transient UI effects may use channels or shared flows when loss during the absence of a collector is acceptable.
 
 ### SharedFlow: `launch { emit() }` over `tryEmit`
 
-Default to `launch { _events.emit(e) }` — it suspends until the collector is ready, so the effect is never silently lost. `tryEmit()` on a default `MutableSharedFlow()` (no buffer) **silently drops** when no subscriber is ready; adding `extraBufferCapacity = 1` only moves the cliff (a second rapid emission while the buffer is full returns `false` and is dropped with no error). Use `tryEmit` only for miss-tolerable effects (tooltip, sound).
+`emit` is not a delivery guarantee. A `MutableSharedFlow(replay = 0)` with no subscribers drops the value immediately, even when `extraBufferCapacity` is configured; with active subscribers, `emit` follows the configured buffer and overflow policy. `tryEmit` reports whether emission was accepted under those semantics. Use shared flow only when its loss and replay behavior fits the event. Durable outcomes belong in persisted/domain state.
 
 ## Exposing a read-only flow — explicit backing fields (Kotlin 2.4+)
 
@@ -113,4 +113,4 @@ Expose `Flow` from shared code; collect per-platform (iOS: SKIE or a `CoroutineS
 
 ## Testing
 
-Flow testing lives in `android-skills:android-testing` — read the two-schedulers trap (`runTest` + `MainDispatcherRule` must share one scheduler) before asserting on hot flows.
+For flow tests, use the coroutine test scheduler and assert the intended subscription, buffering, replay, and cancellation behavior. See [testing guidance](testing.md).
