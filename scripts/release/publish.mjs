@@ -9,7 +9,7 @@
  * - Bumps the monorepo version via sync-versions.mjs (every workspace package
  *   that tracked it; the store build number is derived, never written)
  * - Records ship surface set (does not invent surface-local versions)
- * - Moves CHANGELOG Unreleased into the versioned section
+ * - Builds the release notes from the commits since the last tag
  * - Creates annotated tag vX.Y.Z (or vX.Y.Z-beta.N with --beta)
  * - Does NOT push unless --push is passed
  *
@@ -18,10 +18,10 @@
  */
 
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
-import { changelogSectionBody } from "./changelog-section.mjs";
+import { commitsSinceLastTag, releaseNotes } from "./release-commits.mjs";
 import {
   buildSurfaceMatrix,
   defaultShipSurfaceIds,
@@ -88,26 +88,12 @@ const shipManifest = {
   note: "Monorepo stamps all packages; ship set is intent for which workflows must go green.",
 };
 
-function foldChangelog() {
-  const clPath = path.join(root, "CHANGELOG.md");
-  if (!existsSync(clPath)) return;
-  let text = readFileSync(clPath, "utf8");
-  const date = new Date().toISOString().slice(0, 10);
-  if (!text.includes("## [Unreleased]")) return;
-  text = text.replace(
-    "## [Unreleased]",
-    `## [Unreleased]\n\n## [${version}] - ${date}`
-  );
-  if (!dryRun) writeFileSync(clPath, text);
-}
-
 function extractReleaseBody() {
-  const clPath = path.join(root, "CHANGELOG.md");
-  if (!existsSync(clPath)) return `Centraid ${version}`;
-  const text = readFileSync(clPath, "utf8");
-  return (
-    (changelogSectionBody(text, version) ?? "").trim() || `Centraid ${version}`
-  );
+  try {
+    return releaseNotes(commitsSinceLastTag(root), version).trim();
+  } catch {
+    return `Centraid ${version}`;
+  }
 }
 
 console.error(
@@ -115,7 +101,6 @@ console.error(
 );
 
 const syncReport = runSyncVersions({ rootDir: root, version, dryRun });
-foldChangelog();
 const body = extractReleaseBody();
 const bodyPath = path.join(root, "artifacts", "release-body.md");
 const shipPath = path.join(root, "artifacts", "release-ship.json");
@@ -155,7 +140,7 @@ if (dryRun) {
 
 const commitMsg = `chore(release): ${version} (#${issue})`;
 execSync(
-  "git add package.json packages/*/package.json desktop/electron/package.json extension/package.json CHANGELOG.md",
+  "git add package.json packages/*/package.json desktop/electron/package.json extension/package.json",
   { cwd: root, stdio: "inherit", shell: true }
 );
 execSync(`git commit -m ${JSON.stringify(commitMsg)}`, {

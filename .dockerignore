@@ -49,7 +49,6 @@ dist
 # Large / non-runtime docs and ledgers
 *.md
 !packages/server/README.md
-CHANGELOG.md
 CONTRIBUTING.md
 AGENTS.md
 CLAUDE.md
