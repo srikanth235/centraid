@@ -3,7 +3,7 @@ name: lane-release-mobile
 # A `release.yml` lane (dispatch with `surfaces: mobile`): the native projects
 # under `mobile/`, a Gradle build for Android and an XcodeGen + Xcode build for
 # iOS — the same builds a contributor runs locally. Without the signing secrets
-# it builds unsigned and submits nothing (docs/enrollment.md).
+# it builds unsigned and submits nothing.
 
 on:
   workflow_call:
@@ -22,7 +22,7 @@ on:
         type: boolean
     secrets:
       # THE NATIVE PATH'S OWN SECRETS. One set per lane, declared here rather
-      # than inherited, per `docs/release.md`'s rule. Absent means
+      # than inherited. Absent means
       # scaffold-only: the build runs, nothing is signed, nothing is submitted.
       ANDROID_KEYSTORE_BASE64:
         required: false
@@ -65,14 +65,14 @@ jobs:
             echo "Android upload key present - release signing enabled"
           else
             echo "android_signed=false" >> "$GITHUB_OUTPUT"
-            echo "Android upload key absent - assembleDebug only (docs/enrollment.md)"
+            echo "Android upload key absent - assembleDebug only"
           fi
           if [ -n "${APPLE_API_KEY_ID:-}" ]; then
             echo "ios_signed=true" >> "$GITHUB_OUTPUT"
             echo "App Store Connect key present - archive enabled"
           else
             echo "ios_signed=false" >> "$GITHUB_OUTPUT"
-            echo "App Store Connect key absent - simulator build only (docs/enrollment.md)"
+            echo "App Store Connect key absent - simulator build only"
           fi
 
   android:
@@ -124,7 +124,7 @@ jobs:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
           echo "OWNER HAND-OFF: the Play upload needs a service account and one"
-          echo "successful manual upload first (docs/enrollment.md)."
+          echo "successful manual upload first."
 
   ios:
     if: inputs.platform == 'all' || inputs.platform == 'ios'
@@ -198,4 +198,4 @@ jobs:
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
         run: |
           echo "OWNER HAND-OFF: the TestFlight upload needs an App Store Connect"
-          echo "key and one successful manual upload first (docs/enrollment.md)."
+          echo "key and one successful manual upload first."

@@ -28,7 +28,7 @@
 //! | `thumb`   | 360 px    | JPEG q80 |
 //! | `preview` | 2048 px   | JPEG q80 |
 //!
-//! `thumb` is a grid cell and 360 px is v0's own number (`docs/photos/`), which
+//! `thumb` is a grid cell and 360 px is v0's own number, which
 //! covers a 3× 120 pt cell. `preview` is a full-screen view on a phone or a
 //! laptop without the original's weight.
 //!

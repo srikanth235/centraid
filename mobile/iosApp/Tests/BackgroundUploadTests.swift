@@ -14,7 +14,7 @@ import XCTest
 /// cellular never gets it — because a gate shown only green is a gate nobody
 /// saw refuse. The
 /// session itself, the relaunch and the OS carrying the files are device
-/// hand-offs (`docs/release/v1-handoffs.md`, section 8).
+/// hand-offs.
 final class BackgroundUploadTests: XCTestCase {
     private let vault = String(repeating: "ab", count: 32)
     private let part = String(repeating: "0f", count: 32)

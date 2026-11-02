@@ -6,8 +6,7 @@
 //! holds is the one of [#1135](https://github.com/srikanth235/centraid/issues/1135):
 //! an `entity` for everything with a title and a trash, a `kind` row for what it
 //! is, typed `edge`s for how things are joined, `blob`s and `derivative`s for
-//! bytes, an `origin` and a `source` for what is followed. `docs/vault-ontology.md`
-//! says what each table means; this crate is the writer.
+//! bytes, an `origin` and a `source` for what is followed. This crate is the writer.
 //!
 //! ## The interface its consumers use
 //!

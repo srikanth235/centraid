@@ -130,8 +130,8 @@ public class MainActivity : FragmentActivity() {
 
     /**
      * A PLACED DEMO VAULT (`mobile/scripts/demo-vault.sh`): every `<name>.sqlite3` asset lands as
-     * `filesDir/<name>/vault.db`, one directory per vault, which is where the Rust shelf looks
-     * (`docs/mobile-offline.md`). A vault is never founded in its place; an empty directory is the
+     * `filesDir/<name>/vault.db`, one directory per vault, which is where the Rust shelf looks.
+     * A vault is never founded in its place; an empty directory is the
      * ordinary first run. Off the main thread is not needed: it runs once, before the core opens.
      */
     private fun placeDemoVaults() {

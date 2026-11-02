@@ -27,9 +27,5 @@ __pycache__
 *.module.css.map.json
 
 
-# Design-agent handoff prototypes (#707) are reference-only: read them locally,
-# never commit them. The brief itself is quoted in full in the issue.
-docs/design/handoff-binding-layer/
-
 # The v1 Rust workspace build directory (#1020).
 /target/

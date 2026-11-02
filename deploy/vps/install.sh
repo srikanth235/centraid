@@ -68,12 +68,12 @@ done
 case "$(uname -s)" in
   Linux) os="unknown-linux-gnu" ;;
   Darwin) os="apple-darwin" ;;
-  *) die "$(uname -s) is not a supported host. The published triples are in docs/release.md." ;;
+  *) die "$(uname -s) is not a supported host." ;;
 esac
 case "$(uname -m)" in
   x86_64|amd64) arch="x86_64" ;;
   aarch64|arm64) arch="aarch64" ;;
-  *) die "$(uname -m) is not a supported architecture. The published triples are in docs/release.md." ;;
+  *) die "$(uname -m) is not a supported architecture." ;;
 esac
 triple="${arch}-${os}"
 say "host triple ${triple}"
@@ -171,7 +171,7 @@ if [ -n "$identity_expected" ]; then
   say "identity ok (gitSha, digest, schemaVersion all match the release)"
 else
   say "NO IDENTITY FILE was published beside this artifact, so the stamp was NOT checked."
-  say "  This is the check that catches a stale or swapped core. See docs/release.md."
+  say "  This is the check that catches a stale or swapped core."
 fi
 
 install -d "${prefix}/bin"
@@ -204,7 +204,7 @@ say "data directory ${data_dir} (back it up: it is the gateway's identity and ev
 if [ -z "$gateway" ]; then
   say ""
   say "THIS TARBALL CARRIES NO centraid-gateway BINARY, so no gateway was installed."
-  [ "$with_service" -eq 0 ] || die "--with-service needs centraid-gateway in the release tarball; see docs/release.md"
+  [ "$with_service" -eq 0 ] || die "--with-service needs centraid-gateway in the release tarball"
   exit 0
 fi
 

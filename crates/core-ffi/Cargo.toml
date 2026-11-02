@@ -32,7 +32,7 @@ crate-type = ["cdylib", "rlib", "staticlib"]
 # and the iOS hand-off in `mobile/README.md`. The JVM tests build the library
 # without it (no Kotlin spec loads a model), and the `engine` job in
 # `.github/workflows/gate.yml` checks this crate with it on. Building it needs
-# `cmake` and a C++ toolchain (docs/toolchain.md).
+# `cmake` and a C++ toolchain.
 default = []
 llama = ["dep:centraid-assist-llama", "centraid-assist-llama/engine"]
 # Forwarded to `centraid-core`, where the panic is. See its `debug-fault`.
@@ -47,7 +47,7 @@ centraid-screens = { path = "../screens" }
 # behind this crate's `llama` feature. `centraid_open` hands every handle its
 # process-wide model slot, so with `llama` the engine is compiled into the one
 # library a shell loads and `AssistRequest` can report a model file as PRESENT
-# rather than NO_ENGINE. Building it needs `cmake` on `PATH` (docs/toolchain.md).
+# rather than NO_ENGINE. Building it needs `cmake` on `PATH`.
 centraid-assist-llama = { path = "../assist-llama", optional = true }
 # THE NETWORK, ATTACHED HERE AND NOWHERE ELSE (#1020, D-1020-B7). `centraid-core`
 # declares the `SeatNetwork` seam and cannot depend on the implementation — the

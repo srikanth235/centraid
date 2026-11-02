@@ -14,8 +14,7 @@
 //!    zone**. That is the one the VPS breaks: a gateway in UTC and a member in
 //!    UTC−07:00 disagree about what day it is for seven hours of every day, so
 //!    a birthday reminder fires a day early or a day late depending on which
-//!    machine answered the query (`docs/cron-timezone.md:21`, census §A6 —
-//!    "a VPS runs UTC"). The automations lane's rule is that civil time is the
+//!    machine answered the query ("a VPS runs UTC"). The automations lane's rule is that civil time is the
 //!    **vault's** zone; this module takes the civil date as an argument so
 //!    there is no clock in this crate to read the wrong one from.
 //!

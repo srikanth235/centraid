@@ -71,15 +71,14 @@ const EMITTED_SHEET = "centraid-tokens.css";
  * The site layer that sits between the product tokens and the two
  * stylesheets. It carries only what a long-form PAGE needs and the product
  * shell does not: the reading measure, the section rhythm, and the one
- * sanctioned marketing display step (docs/design-machinery.md). Every value
+ * sanctioned marketing display step. Every value
  * composes from a product token — nothing here introduces a colour, a face, a
  * radius, or a duration of its own.
  */
 const SITE_LAYER = `
 /* ---------------------------------------------------------------------------
    Site layer — page-scale values the product shell has no use for. Every one
-   composes from a token above; see docs/design-machinery.md for the one
-   sanctioned step beyond the ramp.
+   composes from a token above, bar the one sanctioned step beyond the ramp.
    --------------------------------------------------------------------------- */
 
 /* The theme is the product's, resolved the product's way: no \`data-theme\`

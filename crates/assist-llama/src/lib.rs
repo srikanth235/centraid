@@ -48,7 +48,7 @@
 //! # BUILD REQUIREMENT
 //!
 //! With `engine`: `cmake` on `PATH` and a C++17 toolchain (Xcode's, or the
-//! Android NDK's): see `docs/toolchain.md`. Without it, nothing beyond Rust.
+//! Android NDK's). Without it, nothing beyond Rust.
 
 #[cfg(feature = "engine")]
 pub mod engine;

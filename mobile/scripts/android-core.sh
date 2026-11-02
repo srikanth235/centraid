@@ -48,7 +48,7 @@ export "AR_${triple//-/_}=$toolchain/llvm-ar"
 # llama.cpp (the on-device chat's engine, `--features llama` below) is built by
 # CMake against the NDK's own toolchain file, and its build script finds the NDK
 # and the API level from these two — the linker/CC variables above are not what
-# it reads. `cmake` must be on PATH (docs/toolchain.md).
+# it reads. `cmake` must be on PATH.
 export ANDROID_NDK="$sdk/ndk/$ndk_version"
 export ANDROID_PLATFORM="android-$api"
 # `--features llama`: a phone's library carries the engine, and the feature is off

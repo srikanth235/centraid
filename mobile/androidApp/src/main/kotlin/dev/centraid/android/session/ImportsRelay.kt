@@ -13,7 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
- * WHAT THE SHELL TELLS THE PHONE IMPORTS (#1135; `docs/screens.md` "Phone imports").
+ * WHAT THE SHELL TELLS THE PHONE IMPORTS (#1135).
  *
  * `imports.camera_roll`, `imports.files` and `imports.made` are headless screens, each the root of
  * a hidden tab (`imports-camera-roll`, `imports-files`, `imports-made`) the band leaves out. They

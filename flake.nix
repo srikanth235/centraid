@@ -22,7 +22,7 @@
 #     from `deploy/gateway/Dockerfile`; a Nix package for it is nobody's
 #     request yet. The OS unit writer stays single-writer: a host service
 #     module must call `centraid-gateway install` rather than invent a second
-#     unit path (docs/config-ownership.md).
+#     unit path.
 #
 # THIS FILE HAS NOT BEEN EVALUATED. `nix` is not installed on the container wave
 # 1 was built on, so `nix flake check` has not run and the wave 1 receipt says

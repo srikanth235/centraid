@@ -282,7 +282,7 @@ jobs:
             if [ -f "artifacts/prebuilt-core-${triple}/centraid-${triple}.tar.gz" ]; then
               echo "ok       ${triple}"
             else
-              echo "::error title=Required triple missing::${triple} produced no artifact (docs/release.md)."
+              echo "::error title=Required triple missing::${triple} produced no artifact."
               missing=$((missing + 1))
             fi
           done

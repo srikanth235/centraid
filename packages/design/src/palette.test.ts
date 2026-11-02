@@ -1,5 +1,4 @@
-// The Binding Layer's "reserve a band" promise (docs/design/handoff-binding-
-// layer/README.md, "App identity hues"): a third-party app hue is clamped to
+// The Binding Layer's "reserve a band" promise ("App identity hues"): a third-party app hue is clamped to
 // `C ≤ .09` and the built-in lightness rung, so no vendor can out-shout the
 // system. `IDENTITY_CHROMA` already held the eight BUILT-IN hues to that
 // ceiling; `clampIdentityHue` is the function a SUBMITTED (arbitrary,

@@ -1014,7 +1014,7 @@ fn run_tests(ctx: &Ctx) -> Result<Outcome> {
     // integration test of `centraid-vault` and `centraid`, so a narrowed run
     // that selects either one would run both drills here and then again as the
     // `restore-drill` step that follows — about a minute and a half of CPU, and
-    // the cost QUALITY.md recorded as "the drills run twice per loop". The step
+    // the cost recorded as "the drills run twice per loop". The step
     // still runs them, by name, in this same gate run, so the promise is proved
     // on every loop exactly as before; only the duplicate goes. Asked for
     // alone (`--lane test`) the step keeps them, because nothing else will run

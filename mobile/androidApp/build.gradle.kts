@@ -49,9 +49,8 @@ android {
         }
     }
 
-    // ALL APP DATA IS EXCLUDED FROM AUTO BACKUP AND DEVICE-TO-DEVICE TRANSFER
-    // (`docs/mobile-offline.md:240-247`). In v0 this was written by
-    // `plugins/withCentraidAndroidPrivacy.cjs` into a generated project; here
+    // ALL APP DATA IS EXCLUDED FROM AUTO BACKUP AND DEVICE-TO-DEVICE TRANSFER.
+    // In v0 this was written by `plugins/withCentraidAndroidPrivacy.cjs` into a generated project; here
     // it is source, which is the whole point of retiring the prebuild.
     packaging {
         resources.excludes.add("META-INF/*")

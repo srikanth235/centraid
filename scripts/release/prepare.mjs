@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * D2 prepare half of the release chain (see docs/release.md).
+ * D2 prepare half of the release chain.
  *
  * Agent runs this to *prepare* — never publish. Steps:
  *   0. assert HEAD is a promoted candidate (optional --allow-uncandidated)

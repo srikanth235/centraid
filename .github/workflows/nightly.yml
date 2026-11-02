@@ -11,7 +11,7 @@ name: nightly
 #                  cross-compilation break surfaces before a tag does.
 #
 # All three green moves `refs/candidates/latest`, which is what `release.yml`
-# requires a tag to point at (docs/release.md).
+# requires a tag to point at.
 
 on:
   schedule:

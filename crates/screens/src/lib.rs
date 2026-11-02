@@ -1,8 +1,7 @@
 //! The screen runtime (#1135, lane C2): every decision a person sees is made in
 //! Rust. Screen state, finished strings, counts, navigation and timers live
 //! here; SwiftUI and Compose draw `ViewState`, send `ScreenEvent`s and perform
-//! `Effect`s (`screens.proto`). `docs/screens.md` is
-//! the contract and the porting recipe.
+//! `Effect`s (`screens.proto`).
 
 pub mod agenda;
 pub mod backup;
@@ -76,8 +75,7 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
             .merge(passes::registry(&secrets))
             .merge(vault::registry(&shelf, &secrets)),
         // THE PHONE IMPORTS ARE HIDDEN TAB ROOTS, NOT SERVICES: the shell sends
-        // them its events and forwards their views (docs/screens.md, "Phone
-        // imports"), so it must see their instances and their views, which a
+        // them its events and forwards their views, so it must see their instances and their views, which a
         // service never shows it. The band words only the places it knows, so
         // they stay out of it; a vault switch reopens them for the vault in front.
         [

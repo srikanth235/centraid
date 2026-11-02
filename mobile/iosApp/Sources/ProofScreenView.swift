@@ -5,7 +5,7 @@ import SwiftUI
 ///
 /// Every string below comes out of the view state; this file writes no copy. It
 /// draws the stack Rust holds for a tab with `NavigationStack` and reports a
-/// back-swipe as an event. A ported screen follows this shape: `docs/screens.md`.
+/// back-swipe as an event. A ported screen follows this shape.
 struct ProofStackView: View {
     @ObservedObject var store: ScreenStore
     let tab: String
