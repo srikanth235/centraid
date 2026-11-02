@@ -66,7 +66,6 @@ An app is a first-party screen, not a principal. It holds no credential and decl
 - **A command that works on the wrong kind.** Notes and Photos both hold containers; every command states its kind and refuses the other's id with a sentence, and every reader filters on kind.
 - **Adding a CHECK value without its writers.** Sweep mechanically (below); a CHECK value nothing writes is dormant schema.
 - **Never weaken a test, budget, ledger or allowlist to go green.** Fix the code.
-- **The existing parity fixtures in `contracts/apps/` are frozen.** If a schema change makes a bundle name a missing table or column, map it with `FrozenRowMapping` in the test; do not edit the fixture.
 
 ### The mechanical sweeps (part of the review, not extras)
 
@@ -91,7 +90,7 @@ cargo run -p centraid-vault --bin export-ladder-ddl
 cargo run -p centraid-vault --bin export-commands
 cargo run -p centraid-vault --bin export-ontology-page
 cargo test -p centraid-vault            # commitments, ladder_ddl, command_list, ontology_page, format_identity, restore_drill, backup_snapshot
-cargo test -p centraid-apps-<app>       # the app's parity and year3 tests
+cargo test -p centraid-apps-<app>       # the app's tests, year3 included
 cargo xtask gate --profile pr           # the real gate; one crate green is not enough
 ```
 
