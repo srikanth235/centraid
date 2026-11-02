@@ -249,11 +249,12 @@ final class PairScannerController: UIViewController, AVCaptureMetadataOutputObje
         didOutput objects: [AVMetadataObject],
         from connection: AVCaptureConnection
     ) {
-        // Metadata delivery was explicitly installed on .main.
+        // Keep AVFoundation's model objects inside its callback. Only the
+        // decoded String crosses into the UI actor; delivery is installed on .main.
+        guard let code = objects.compactMap({ ($0 as? AVMetadataMachineReadableCodeObject)?.stringValue }).first
+        else { return }
         MainActor.assumeIsolated {
-            guard !answered,
-                  let code = objects.compactMap({ ($0 as? AVMetadataMachineReadableCodeObject)?.stringValue }).first
-            else { return }
+            guard !answered else { return }
             answered = true
             onRead?(code)
         }
