@@ -385,12 +385,13 @@ struct HealthFactRow: View {
 }
 
 /// THE SHEET'S BINDING, read from the state and written as an event (Money's shape).
-func healthSheetBinding(_ open: Bool, close: @escaping () -> Void) -> Binding<Bool> {
+@MainActor
+func healthSheetBinding(_ open: Bool, close: @escaping @MainActor @Sendable () -> Void) -> Binding<Bool> {
     Binding(
         get: { open },
         set: { now in
             guard !now, open else { return }
-            close()
+            MainActor.assumeIsolated { close() }
         }
     )
 }
