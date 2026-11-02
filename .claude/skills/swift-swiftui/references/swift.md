@@ -50,7 +50,7 @@ var tileColor: Color {
 - Never use Grand Central Dispatch (`DispatchQueue.main.async()`, `DispatchQueue.global()`, etc.). Always use modern Swift concurrency (`async`/`await`, actors, `Task`).
 - Never use `Task.sleep(nanoseconds:)`; use `Task.sleep(for:)` instead.
 - Flag any mutable shared state that isn't protected by an actor or `@MainActor`, unless the project is configured to use MainActor default actor isolation.
-- Assume strict concurrency rules are being applied; flag `@Sendable` violations and data races.
+- Treat complete strict-concurrency checking as a verification target, not an existing project setting. This repository uses Swift 5.9 language mode; complete checking in that mode does not mean the code has been compiled in Swift 6 mode. Use the optional strict-concurrency diagnostic pass described in [the main skill](../SKILL.md#repository-constraints-and-completion) when available, and flag `@Sendable` violations and data races.
 - When evaluating `MainActor.run()`, check whether the project has its default actor isolation set to Main Actor first, because `MainActor.run()` might not be needed.
 - `Task.detached()` is often a bad idea. Wherever it is used, check that it is the best approach.
 
