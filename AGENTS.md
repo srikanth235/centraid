@@ -16,4 +16,4 @@ Guidance lives in [`.claude/skills/`](.claude/skills): `product-intuition` for w
 
 - **Docs describe current state.** When a change makes a doc wrong, fix the doc in the same change.
 - **Product calls go to the owner.** When a choice is about what the product should be and the `product-intuition` skill does not settle it, ask rather than guess.
-- **Vocabulary**: a machine running `centraid-gateway` is a _gateway_, not a server or host. See [docs/glossary.md](docs/glossary.md).
+- **Vocabulary**: a machine running `centraid-gateway` is a _gateway_, not a server or host.

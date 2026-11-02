@@ -82,7 +82,7 @@ mobile/maestro/evidence/backup/<device>-<osVersion>-restore.json
 
 | Result | Destination |
 | --- | --- |
-| claims 1–3 pass | the device rows of [`docs/release/v1-handoffs.md`](../../docs/release/v1-handoffs.md) section 8 move to done, with the files above named; #1080's Validation device hand-offs are met |
+| claims 1–3 pass | the device hand-offs move to done, with the files above named; #1080's Validation device hand-offs are met |
 | claim 2 fails with few `sessionRelaunches` | the background session is being throttled: record the counts and the gateway's reachability, and the batch size (`handoff`'s ≤ 64 parts / ≤ 1 GiB) is the first thing re-judged |
 | claim 1 or 3 misses its time | the hours and the samples are the evidence for re-judging the spool budget and the bundle size; neither threshold is lowered to pass |
 

@@ -1,6 +1,6 @@
 # Running a Centraid gateway on a box you own
 
-A gateway is any machine the member controls that runs `centraid-gateway` — the laptop at home, a VPS, a NAS ([#1080](https://github.com/srikanth235/centraid/issues/1080)). It holds a sealed copy of the phone's vaults and can read none of it. One binary, one data directory, one port; the protocol, the commands and the data directory are [docs/gateway.md](../../docs/gateway.md).
+A gateway is any machine the member controls that runs `centraid-gateway` — the laptop at home, a VPS, a NAS ([#1080](https://github.com/srikanth235/centraid/issues/1080)). It holds a sealed copy of the phone's vaults and can read none of it. One binary, one data directory, one port.
 
 ## The shortest path
 

@@ -1,6 +1,6 @@
 # `deploy/` — every way a gateway gets onto a machine
 
-One home for the artifacts that put `centraid-gateway` on a host — the container image, the OS service units and the VPS installer ([#1080][issue]). The protocol the gateway serves, its commands and its data directory are [docs/gateway.md](../docs/gateway.md).
+One home for the artifacts that put `centraid-gateway` on a host — the container image, the OS service units and the VPS installer ([#1080][issue]).
 
 **There is one gateway, and a phone reaches it one way**: HTTPS, straight to the machine, pinning the certificate the gateway minted at its first `serve`. A gateway is any machine the member controls — the laptop at home, a VPS, a NAS — and everything in this directory follows from that shape:
 

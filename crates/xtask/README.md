@@ -51,7 +51,7 @@ The step says so in three places: a banner before its line naming every crate an
 
 **The narrowing is a nextest filter over `--workspace`, not `-p`.** `cargo nextest run --workspace -E 'package(=a) | package(=b)'` builds the same units `clippy` and `restore-drill` build; `-p a -p b` resolves features for those packages alone, which is a different feature set, and alternating the two is the 162 to 186 s each way measured in [Where the numbers came from](#where-the-numbers-came-from). So the saving is in what runs, not in what compiles, and without `cargo-nextest` the step runs the whole workspace and says why.
 
-**The drills run once per loop.** `restore_drill` is an ordinary integration test of `centraid-vault` and `centraid`, so a narrowed selection that reaches either would run both drills in `test` and again in the `restore-drill` step that follows (about a minute and a half of CPU each time; QUALITY.md had recorded it as "the drills run twice per loop"). A narrowed `test` therefore filters the `restore_drill` binaries out and says so in its line, and `restore-drill` still runs both by name in the same gate run, so the promise is proved on every loop as before. `--lane test` keeps them, and `pr` and the whole-workspace fallback are unchanged.
+**The drills run once per loop.** `restore_drill` is an ordinary integration test of `centraid-vault` and `centraid`, so a narrowed selection that reaches either would run both drills in `test` and again in the `restore-drill` step that follows (about a minute and a half of CPU each time). A narrowed `test` therefore filters the `restore_drill` binaries out and says so in its line, and `restore-drill` still runs both by name in the same gate run, so the promise is proved on every loop as before. `--lane test` keeps them, and `pr` and the whole-workspace fallback are unchanged.
 
 **What narrowing does not prove.** A change to a crate runs that crate's tests and its dependents', not the other crates'. A read the derivation did not see — a path assembled at run time from pieces no literal names — is caught only by `pr`, which CI runs over every crate on every pull request. The budget in `gate-budgets.json` did not move, and it is not raised by this.
 
@@ -116,7 +116,7 @@ Standing checks over `.github/**`, the working tree and the lockfiles, run on ev
 
 Every relative link and in-repo anchor in the repository's markdown resolves — the statute for "broken internal links are bugs" (Q-1005-1). It is a `local` step, so every profile carries it, and it costs about a third of a second: no network, so `http:`, `https:`, `mailto:` and every other scheme are skipped. It checks inline links and images, reference definitions, and `href`/`src` in embedded HTML, outside fenced code, inline code and HTML comments; the file part must be a file or directory **git knows about** (a file git ignores resolves here and 404s everywhere else, and a case difference resolves on macOS and breaks on Linux), and a `#fragment` into a markdown file must be a heading's GitHub slug or an explicit `id`/`name`. Line anchors (`#L10`) and fragments into other file types are skipped.
 
-What it does not read is only the append-only record, where a finding could never be fixed: `QUALITY.md` § Resolved. Links _into_ a frozen section are still checked, and the step's line names every skip. There is no allowlist of findings and no narration tripwire: "history is cited, never narrated" is a judgement a scanner cannot make, and one that tried would teach authors to phrase around it. The rule is the module doc of [`src/doc_links.rs`](src/doc_links.rs); `cargo xtask doc-links` runs it alone.
+What it does not read is only the append-only record, where a finding could never be fixed. Links _into_ a frozen section are still checked, and the step's line names every skip. There is no allowlist of findings and no narration tripwire: "history is cited, never narrated" is a judgement a scanner cannot make, and one that tried would teach authors to phrase around it. The rule is the module doc of [`src/doc_links.rs`](src/doc_links.rs); `cargo xtask doc-links` runs it alone.
 
 ### The `ts-static` step
 
@@ -124,15 +124,15 @@ What it does not read is only the append-only record, where a finding could neve
 
 ## Required checks
 
-Branch protection's required checks are **`gate`**, **`engine`**, **`native-python`**, **`dependency-review`** and **`pr-title`**, the jobs in [`gate.yml`](../../.github/workflows/gate.yml). Branch protection is configured outside the repository, the same way the code-owner review requirement is ([docs/dev-environment.md](../../docs/dev-environment.md#the-local-gate-loop)); a required check that never reports blocks every pull request, which is the failure #557 was written about, so renaming any of them is an owner change to branch protection in the same breath.
+Branch protection's required checks are **`gate`**, **`engine`**, **`native-python`**, **`dependency-review`** and **`pr-title`**, the jobs in [`gate.yml`](../../.github/workflows/gate.yml). Branch protection is configured outside the repository, the same way the code-owner review requirement is; a required check that never reports blocks every pull request, which is the failure #557 was written about, so renaming any of them is an owner change to branch protection in the same breath.
 
 ## `cargo xtask artifact-key` (#1020, D-1020-G2)
 
-The prebuilt core's cache key. `--triple` is required; `--features`, `--profile` and `--explain` are optional. The exact rule — what is in the key, what is deliberately not, and both halves of the `Cargo.lock` case — is the module doc of [`src/artifact.rs`](src/artifact.rs) and the operator-facing half is in [`docs/release.md`](../../docs/release.md).
+The prebuilt core's cache key. `--triple` is required; `--features`, `--profile` and `--explain` are optional. The exact rule — what is in the key, what is deliberately not, and both halves of the `Cargo.lock` case — is the module doc of [`src/artifact.rs`](src/artifact.rs).
 
 ## Debuginfo, and the one-command escape hatch (#1020, D-1020-G7)
 
-`[profile.dev]` and `[profile.test]` carry `debug = "line-tables-only"` with `split-debuginfo = "unpacked"`, and dependencies carry `debug = false`. A backtrace still names the file and the line. The measurement that decided it is in the root `Cargo.toml`'s comment and in [`docs/toolchain.md`](../../docs/toolchain.md): 7.7 GB of test executables became 0.50 GB, and the biggest single one went from 387 MB to 43 MB.
+`[profile.dev]` and `[profile.test]` carry `debug = "line-tables-only"` with `split-debuginfo = "unpacked"`, and dependencies carry `debug = false`. A backtrace still names the file and the line. The measurement that decided it is in the root `Cargo.toml`'s comment: 7.7 GB of test executables became 0.50 GB, and the biggest single one went from 387 MB to 43 MB.
 
 **When you need the full type and variable tables for one debugging session:**
 

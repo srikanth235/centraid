@@ -1,6 +1,6 @@
 # `centraid-ontology`
 
-The schema authority's narrow end: **open a vault file, render its shape, check it is sound** ([#1020](https://github.com/srikanth235/centraid/issues/1020), [#1135](https://github.com/srikanth235/centraid/issues/1135)). The model itself — kinds, relations, seeds — is `crates/vault`'s baseline (`contracts/migrations/001_baseline.sql`) and [`docs/vault-ontology.md`](../../docs/vault-ontology.md); this crate keeps no copy of it, no registry and no corpus.
+The schema authority's narrow end: **open a vault file, render its shape, check it is sound** ([#1020](https://github.com/srikanth235/centraid/issues/1020), [#1135](https://github.com/srikanth235/centraid/issues/1135)). The model itself — kinds, relations, seeds — is `crates/vault`'s baseline (`contracts/migrations/001_baseline.sql`); this crate keeps no copy of it, no registry and no corpus.
 
 | Module | What it holds |
 | --- | --- |

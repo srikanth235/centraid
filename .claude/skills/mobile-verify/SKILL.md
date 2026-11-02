@@ -137,7 +137,7 @@ The flows are written against the iOS bundle id, so an Android run uses a copy w
 
 ## 6. Handing off what you could not run
 
-Say which layers you proved and which you did not, in the PR description. For the unproven rest, give the owner the exact commands from this section in order (core rebuild first), the flow or test to run (`maestro test mobile/maestro/flows/<flow>.yaml`, the `xcodebuild ... test` line, `:androidApp:installDebug`), and what a pass looks like. `mobile/README.md` carries the full hand-off table; the screens contract is `docs/screens.md`. Claim "verified" only for what ran.
+Say which layers you proved and which you did not, in the PR description. For the unproven rest, give the owner the exact commands from this section in order (core rebuild first), the flow or test to run (`maestro test mobile/maestro/flows/<flow>.yaml`, the `xcodebuild ... test` line, `:androidApp:installDebug`), and what a pass looks like. `mobile/README.md` carries the full hand-off table. Claim "verified" only for what ran.
 
 ## 7. Final checklist
 
