@@ -32,5 +32,4 @@ This binary opens **nothing**. The one listener in the workspace is `crates/gate
 ## Related
 
 - [`crates/gateway`](../gateway/README.md) — the gateway a member runs on their own machine
-- [`docs/gateway.md`](../../docs/gateway.md) — the protocol, self-hosting and versioning
 - [`deploy/README.md`](../../deploy/README.md) — the gateway image, its service unit and the VPS installer

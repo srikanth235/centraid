@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * D2 prepare half of the release chain (see docs/release.md).
+ * D2 prepare half of the release chain.
  *
  * Agent runs this to *prepare* — never publish. Steps:
  *   0. assert HEAD is a promoted candidate (optional --allow-uncandidated)
  *   1. assert working tree clean (optional --allow-dirty)
  *   2. run `cargo xtask gate --profile pr` unless --skip-check
- *   3. classify bump from CHANGELOG Unreleased (D4)
+ *   3. classify bump from commits since the last tag (D4)
  *   4. print next version + surface matrix + publish command
  *
  * Authorization boundary: running this script is intent, not permission to
@@ -56,9 +56,11 @@ if (!skipCheck) {
 
 const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
 const current = pkg.version;
-const classOut = JSON.parse(
-  sh("node scripts/release/classify.mjs CHANGELOG.md")
-);
+const classOut = JSON.parse(sh("node scripts/release/classify.mjs"));
+if (!classOut.candidate) {
+  console.error(classOut.rationale);
+  process.exit(1);
+}
 
 function bumpSemver(v, kind) {
   const m = /^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)(?:-.*)?$/u.exec(v);

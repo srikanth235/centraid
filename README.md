@@ -4,7 +4,7 @@
 
 Centraid is a personal, local-first **superapp**: one shell wrapping many first-party apps over one **vault** — a shared personal ontology where your people, money, documents and plans live once. In v0 that vault lives on your **phone**, which is its sole authority and sole writer, and a machine you control — your laptop, a VPS, a NAS — runs a **gateway** that holds an encrypted backup it cannot read. Recovery is 24 words. There is no account, no subscription and no Centraid-operated service ([#1029](https://github.com/srikanth235/centraid/issues/1029), [scope amendment 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795), [#1080](https://github.com/srikanth235/centraid/issues/1080)).
 
-[Docs](https://centraid.dev/docs/) · [Get started](https://centraid.dev/docs/start/) · [Architecture](ARCHITECTURE.md) · [Agents map](AGENTS.md) · [Contributing](CONTRIBUTING.md)
+[Docs](https://centraid.dev/docs/) · [Get started](https://centraid.dev/docs/start/) · [Agents map](AGENTS.md) · [Contributing](CONTRIBUTING.md)
 
 ## Maintainer and support (F4)
 
@@ -14,12 +14,12 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
 | --- | --- |
 | Issue response | Best-effort; no SLA. Bugs with clear repro and security reports jump the queue. |
 | Feature requests | Prefer a focused [proposal](.github/ISSUE_TEMPLATE/proposal.yml); large unsolicited PRs may close. |
-| Fastest support | Search [docs](https://centraid.dev/docs/), then file a **bug** with logs from [docs/logs.md](docs/logs.md). Security: [SECURITY.md](SECURITY.md) only. |
+| Fastest support | Search [docs](https://centraid.dev/docs/), then file a **bug**. Report security issues privately, not as public issues. |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) — one focused change, linked issue, test evidence. |
 
 ## What it does
 
-- **First-party apps** — Docs, Photos, Notes, People, Locker, Agenda, Tasks, Money and Health, one crate each under [`crates/apps`](crates/apps). Tasks has no tile of its own: Agenda draws its screens, and `tasks` is the vault domain the member opens in Agenda ([R-1128-7](docs/decisions.md#agenda)). They ship in the release and update with it; an app holds no database of its own and reads and writes the vault through typed commands.
+- **First-party apps** — Docs, Photos, Notes, People, Locker, Agenda, Tasks, Money and Health, one crate each under [`crates/apps`](crates/apps). Tasks has no tile of its own: Agenda draws its screens, and `tasks` is the vault domain the member opens in Agenda. They ship in the release and update with it; an app holds no database of its own and reads and writes the vault through typed commands.
 - **The phone is the vault** — the Rust core on your phone holds `vault.db` and is its only writer. It works fully offline because there is nothing to be offline _from_.
 - **Backed up to hardware you own** — every gateway you pair holds a sealed copy of the vault and of every photograph, video and file in it, and can open none of it: no key, no plaintext, no schema. The phone reaches it over HTTPS straight to the machine, pinning the certificate the gateway's QR names; on an iPhone the system keeps uploading while Centraid is closed. Pair by scanning a QR the gateway prints.
 - **Recoverable from 24 words** — every key derives from one BIP39 phrase. A fresh install plus the phrase brings the vault back. There is no kit file, no password and no escrow.
@@ -47,7 +47,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
 ```
 
 - **Apps are crates**: a read plane of queries as pure folds over paged reads, and an action table whose writes are the vault's typed commands. An app crate holds no SQL and no connection; SQL is confined to the vault, ontology and search crates and the app kit by a gate rule.
-- **The gateway is a protocol, not a program**: [`crates/gateway`](crates/gateway)'s `rules` hold every decision with no I/O, with a conformance suite that runs in memory and over the wire, and the server is one adapter over them. See [docs/gateway.md](docs/gateway.md).
+- **The gateway is a protocol, not a program**: [`crates/gateway`](crates/gateway)'s `rules` hold every decision with no I/O, with a conformance suite that runs in memory and over the wire, and the server is one adapter over them.
 - **The phone opens nothing**: `no-listening-socket` is a structural gate rule, and it refuses a listener or an accept anywhere but the gateway's one serve file.
 
 ## Get started
@@ -62,13 +62,13 @@ cargo run -p centraid-gateway --bin centraid-gateway -- serve --data-dir ./gw-da
 cargo run -p centraid-gateway --bin centraid-gateway -- pair --data-dir ./gw-data
 ```
 
-Scan the QR from a phone build, then compare the safety number the phone shows with the `safety` line `serve` prints once it pairs. A QR admits one phone's vault, once, within a day, so a second phone needs a second `pair`. Recovery from a bad pairing: [docs/recovery/pairing.md](docs/recovery/pairing.md).
+Scan the QR from a phone build, then compare the safety number the phone shows with the `safety` line `serve` prints once it pairs. A QR admits one phone's vault, once, within a day, so a second phone needs a second `pair`.
 
 ## Layout
 
 | Path | What it is |
 | --- | --- |
-| `crates/` | The Rust core: the identity model, the vault and its backup plane, the ontology, the gateway protocol and its one deployment, the byte plane, one crate per app, the five-symbol C ABI, the protobuf schema workspace and the `xtask` gate. A line per crate is in [ARCHITECTURE.md](ARCHITECTURE.md#the-crates). |
+| `crates/` | The Rust core: the identity model, the vault and its backup plane, the ontology, the gateway protocol and its one deployment, the byte plane, one crate per app, the five-symbol C ABI, the protobuf schema workspace and the `xtask` gate. |
 | `contracts/` | The layer every language reads: the DDL of a new vault and the list of its commands, the migration ladder, the screen fixtures, the crypto vectors and the down-only ledgers. |
 | `mobile/` | The C ABI binding, the Jetpack Compose shell, the SwiftUI shell, and the Maestro flows. **The only shell.** |
 | `packages/design`, `packages/test-kit` | The design tokens every surface lowers, and shared TypeScript test helpers. |
@@ -77,13 +77,13 @@ Scan the QR from a phone build, then compare the safety number the phone shows w
 
 ## Gateway install
 
-The gateway is the `centraid-gateway` binary, on any machine you control; [deploy/README.md](deploy/README.md) is the whole story, and the protocol it serves is [docs/gateway.md](docs/gateway.md).
+The gateway is the `centraid-gateway` binary, on any machine you control; [deploy/README.md](deploy/README.md) is the whole story.
 
 - **VPS / Linux:** [`deploy/vps/install.sh`](deploy/vps/install.sh) verifies the release's `SHA256SUMS` and the binary's identity stamp before installing, and never installs an OS service silently (`--with-service` prints the commands; `--yes` writes the unit; enabling is left to you).
 - **Service units:** `centraid-gateway install` writes a systemd user unit or a macOS LaunchAgent and never enables it (`--dry-run` writes nothing). No credential goes in any unit: the gateway is blind, and its data directory holds nothing that opens a vault.
 - **Docker:** run on the host's network and mount durable storage at the data directory — a bare run loses the gateway's identity with the container, and every paired phone then refuses its replacement. The phone dials the addresses the pairing QR lists, which a container's own network would not make reachable.
 
-**Nothing goes in front of it.** The phone opens HTTPS straight to the gateway and pins the certificate the gateway minted, so there is no reverse proxy, no TLS termination, no domain and no certificate authority; a port forward or a VPN is how a gateway away from home is reached ([docs/gateway.md](docs/gateway.md#self-hosting)).
+**Nothing goes in front of it.** The phone opens HTTPS straight to the gateway and pins the certificate the gateway minted, so there is no reverse proxy, no TLS termination, no domain and no certificate authority; a port forward or a VPN is how a gateway away from home is reached.
 
 ## Build / check
 
@@ -100,7 +100,7 @@ cargo xtask repo-root                 # which tree the path-based rules will sca
 cargo xtask measure --write           # the edit-run loop, into the compile-time ledger
 ```
 
-Budgets and what each profile proves: [TESTING.md](TESTING.md#the-v1-gate-profiles-1020) and [docs/toolchain.md](docs/toolchain.md#v1-cargo-xtask-gate-1020). **Give every worktree its own `CARGO_TARGET_DIR`** — sharing one silently hands generated Rust between them ([docs/traps/shared-cargo-target.md](docs/traps/shared-cargo-target.md)).
+**Give every worktree its own `CARGO_TARGET_DIR`** — sharing one silently hands generated Rust between them (`.claude/skills/rust/SKILL.md`, Pitfalls).
 
 The product's binaries:
 
@@ -129,9 +129,9 @@ cd mobile && ANDROID_HOME=… ./gradlew -Pcentraid.android=true :androidApp:asse
 bun install
 ```
 
-iOS needs an Apple toolchain and is an owner hand-off — the exact commands are in [`mobile/README.md`](mobile/README.md) and in [docs/release/v1-handoffs.md](docs/release/v1-handoffs.md).
+iOS needs an Apple toolchain and is an owner hand-off — the exact commands are in [`mobile/README.md`](mobile/README.md).
 
-Formatting, linting and the TypeScript that remains (`packages/design`, `packages/test-kit` and the tooling under `scripts/`) run through the root scripts: `bun run format`, `bun run lint`, `bun run typecheck`, and `bun run check` for all of them plus the tests. Enable the commit hooks once per clone with `git config core.hooksPath .githooks`. See [docs/toolchain.md](docs/toolchain.md) and [docs/dev-environment.md](docs/dev-environment.md).
+Formatting, linting and the TypeScript that remains (`packages/design`, `packages/test-kit` and the tooling under `scripts/`) run through the root scripts: `bun run format`, `bun run lint`, `bun run typecheck`, and `bun run check` for all of them plus the tests. Enable the commit hooks once per clone with `git config core.hooksPath .githooks`.
 
 ## Documentation
 

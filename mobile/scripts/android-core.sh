@@ -17,7 +17,7 @@
 # RE-RUN THIS EVERY TIME `crates/core` CHANGES. The `.so` below is a COPIED
 # file, so nothing in the Gradle build knows it is stale and nothing will tell
 # you: the app builds, installs, runs, and answers with the core from whenever
-# this script last ran. See `docs/traps/stale-core-slice.md`.
+# this script last ran. See `.claude/skills/mobile-verify/SKILL.md`.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -48,7 +48,7 @@ export "AR_${triple//-/_}=$toolchain/llvm-ar"
 # llama.cpp (the on-device chat's engine, `--features llama` below) is built by
 # CMake against the NDK's own toolchain file, and its build script finds the NDK
 # and the API level from these two — the linker/CC variables above are not what
-# it reads. `cmake` must be on PATH (docs/toolchain.md).
+# it reads. `cmake` must be on PATH.
 export ANDROID_NDK="$sdk/ndk/$ndk_version"
 export ANDROID_PLATFORM="android-$api"
 # `--features llama`: a phone's library carries the engine, and the feature is off

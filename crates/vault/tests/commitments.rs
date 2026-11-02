@@ -4,8 +4,7 @@
 //! compares the answer with the Rust enums in `model.rs`, so a table added
 //! without a decision, a delete rule changed on one side only, or an index a
 //! command forgot to keep is red here before it ships
-//! ([#1135](https://github.com/srikanth235/centraid/issues/1135),
-//! `docs/vault-ontology.md`).
+//! ([#1135](https://github.com/srikanth235/centraid/issues/1135)).
 
 mod common;
 

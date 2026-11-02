@@ -12,8 +12,8 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
  * Both scripts are top-level `main`s that derive their repo root from
  * `import.meta.dirname`, so each test runs them inside a **synthetic root**:
  * a temp directory holding a copy of `scripts/release/` and a fixture
- * `package.json` / `CHANGELOG.md`. Nothing here can touch the real repo, its
- * git history, or npm.
+ * `package.json` and a git history of commit subjects. Nothing here can touch
+ * the real repo, its git history, or npm.
  *
  * Every publish case either aborts before the first mutation or runs with
  * `--dry-run`, which returns before `git commit` / `git tag`.
@@ -64,7 +64,7 @@ const isolatedEnv = {
 
 /**
  * Build a synthetic monorepo root that the release scripts can run against.
- * @param {{ changelog?: string, version?: string }} [options] Fixture overrides.
+ * @param {{ subjects?: string[], version?: string }} [options] Fixture overrides.
  */
 function makeFixtureRoot(options = {}) {
   const root = tempDirSync("centraid-release-");
@@ -85,20 +85,14 @@ function makeFixtureRoot(options = {}) {
       2
     )}\n`
   );
-  writeFileSync(
-    path.join(root, "CHANGELOG.md"),
-    options.changelog ??
-      [
-        "# Changelog",
-        "",
-        "## [Unreleased]",
-        "",
-        "### Fixed",
-        "",
-        "- a fix",
-        "",
-      ].join("\n")
-  );
+  // The bump is read from commit subjects, so the fixture is a real repo.
+  const git = (/** @type {string[]} */ ...gitArgs) =>
+    spawnSync("git", gitArgs, { cwd: root, env: isolatedEnv });
+  git("init", "-q");
+  git("add", ".");
+  for (const subject of options.subjects ?? ["fix(release): a fix (#1)"]) {
+    git("commit", "-q", "--allow-empty", "-m", subject);
+  }
   return root;
 }
 
@@ -295,12 +289,25 @@ describe("release publish derivation", () => {
     expect(JSON.parse(result.stdout).syncReport.build).toBe(1_002_003);
   });
 
-  test("a dry run leaves the version stamp and CHANGELOG untouched", () => {
-    const root = makeFixtureRoot();
-    const changelogBefore = readFileSync(
-      path.join(root, "CHANGELOG.md"),
-      "utf8"
+  test("the release body is built from the commit subjects", () => {
+    const root = makeFixtureRoot({
+      subjects: ["fix(a): x (#1)", "feat(b): a feature (#2)"],
+    });
+    const result = runPublish(root, [
+      "--version",
+      "0.5.0",
+      "--issue",
+      "656",
+      "--dry-run",
+    ]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).bodyPreview).toContain(
+      "- **b**: a feature (#2)"
     );
+  });
+
+  test("a dry run leaves the version stamp untouched", () => {
+    const root = makeFixtureRoot();
     const result = runPublish(root, [
       "--version",
       "0.5.0",
@@ -312,9 +319,6 @@ describe("release publish derivation", () => {
     expect(
       JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version
     ).toBe(FIXTURE_VERSION);
-    expect(readFileSync(path.join(root, "CHANGELOG.md"), "utf8")).toBe(
-      changelogBefore
-    );
   });
 });
 
@@ -358,26 +362,20 @@ describe("release prepare guards", () => {
 
   test("increments the minor and zeroes the patch on a minor bump", () => {
     const root = makeFixtureRoot({
-      changelog: [
-        "# Changelog",
-        "",
-        "## [Unreleased]",
-        "",
-        "### Added",
-        "",
-        "- a feature",
-        "",
-        "## [0.4.2] - 2026-01-01",
-        "",
-        "- old",
-        "",
-      ].join("\n"),
+      subjects: ["fix(a): x (#1)", "feat(b): a feature (#2)"],
     });
     const result = runPrepare(root, ["--allow-dirty", "--skip-check"]);
     expect(result.status).toBe(0);
     const report = JSON.parse(result.stdout);
     expect(report.bump).toBe("minor");
     expect(report.next).toBe("0.5.0");
+  });
+
+  test("refuses to prepare when no commit is releasable", () => {
+    const root = makeFixtureRoot({ subjects: ["chore(release): 0.4.2 (#9)"] });
+    const result = runPrepare(root, ["--allow-dirty", "--skip-check"]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("not a candidate");
   });
 
   test("emits a publish command that still requires a real issue number", () => {

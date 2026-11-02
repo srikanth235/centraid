@@ -52,7 +52,7 @@ export interface Face {
   readonly androidResource: string;
 }
 
-// THE 400 REGISTER IS DRAWN BY A 470 FACE, AND ONLY HERE (decisions.md, ruled
+// THE 400 REGISTER IS DRAWN BY A 470 FACE, AND ONLY HERE (ruled
 // 2026-08-19, restored for these shells 2026-09-22 under #1029).
 //
 // This is a LOWERING AND NOT A THIRD WEIGHT, so read the table below carefully:

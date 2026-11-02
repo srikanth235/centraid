@@ -4,7 +4,7 @@
 //! [#1135](https://github.com/srikanth235/centraid/issues/1135)). It opens a
 //! file, renders its DDL as the committed fixture, and answers two engine-level
 //! soundness questions. The model itself, with its kinds, relations and
-//! registries, is `crates/vault`'s baseline and `docs/vault-ontology.md`; there
+//! registries, is `crates/vault`'s baseline; there
 //! is no second copy of it here. The one other thing it holds is [`text`]: the
 //! fold and the tokenizer of the vault's search index, which the vault, the app
 //! kit and the search door all need to agree on.

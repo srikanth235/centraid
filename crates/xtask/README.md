@@ -34,7 +34,7 @@ Each of `local`, `pr`, `nightly` and `release` is a **superset** of the one befo
 | Profile | Steps it adds | Budget | Where it runs |
 | --- | --- | --- | --- |
 | `local` | `fmt`, `clippy`, `test` (**only the crates the change touches, and their dependents** — see below), `restore-drill`, `rules`, `doc-links`, `ledgers` | < 120 s **warm**, < 3200 s **cold** | by hand, before a push |
-| `pr` | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static`, `emitters`, `lockfile`, `call-budget`, `search-budget`, `fault-door` — and its `test` step runs the **whole** workspace | < 1500 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
+| `pr` | `buf`, `deny`, `ci-policy`, `release-build`, `ts-static`, `emitters`, `lockfile`, `call-budget`, `search-budget`, `fault-door` — and its `test` step runs the **whole** workspace | < 1500 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
 | `nightly` | `device-lanes` | unbounded | `.github/workflows/nightly.yml`, 05:30 UTC |
 | `release` | `artifact-identity`, `prebuilt-core-required` (and `restore-drill`, inherited from `local`) | unbounded | the release workflows |
 | `mobile-jvm` | `mobile-jvm` — one step, not a superset of anything | < 420 s | `.github/workflows/nightly.yml`; on demand from `mobile/` |
@@ -42,20 +42,20 @@ Each of `local`, `pr`, `nightly` and `release` is a **superset** of the one befo
 **`local`'s `test` step runs the crates the change touches, and the crates that depend on them; every other profile runs the whole workspace** (hand-off 6.5, the owner's ruling of 2026-10-15). The loop took 290 to 500 s against its 120 s budget and `cargo nextest run --workspace` was nearly all of it, so the step now asks [`src/select.rs`](src/select.rs) which crates a change can affect:
 
 - **The changed files** are those that differ from the merge base with `origin/main` (then `main`): committed, staged, unstaged and untracked. `CENTRAID_GATE_BASE=<commit or tree>` names a different base (a commit is compared at its merge base with `HEAD`; a tree is taken exactly, and an untracked file identical to the tree's copy is not a change).
-- **A path inside a crate** selects that crate. **A path some crate reads from outside its own directory** selects the crates whose sources name it — `contracts/`, `copy/`, `design/`, `experiments/`, the one Swift file the assistant embeds. That table is _derived_ by scanning every crate's string literals (comments skipped: nearly every module cites `docs/decisions.md`), never listed, and `cargo xtask test-plan --reads` prints it. It over-approximates on purpose: a missed read skips a test, an extra one costs seconds.
+- **A path inside a crate** selects that crate. **A path some crate reads from outside its own directory** selects the crates whose sources name it — `contracts/`, `copy/`, `design/`, `experiments/`, the one Swift file the assistant embeds. That table is _derived_ by scanning every crate's string literals (comments skipped, since doc comments name paths freely), never listed, and `cargo xtask test-plan --reads` prints it. It over-approximates on purpose: a missed read skips a test, an extra one costs seconds.
 - **Every selected crate pulls in its dependents**, through Cargo (every dependency kind, so a dev-dependency counts) and through a source that `include_str!`s another crate's file.
-- **A documentation edit selects nothing**: no crate reads `docs/`, `receipts/`, `scripts/` or the workflows, and the step says `NARROWED to 0` and is a loud `SKIP` rather than a pass.
+- **A documentation edit selects nothing**: no crate reads `docs/`, `scripts/` or the workflows, and the step says `NARROWED to 0` and is a loud `SKIP` rather than a pass.
 - **The whole workspace runs** when a changed path is the root `Cargo.toml` or `Cargo.lock`, the toolchain pin, `.cargo/`, `.config/`, **any** crate manifest (a manifest can move a feature on a crate that does not depend on it, because one `--workspace` build unifies features), `crates/xtask`'s code (the runner decides this selection; its README does not), or when no base can be found — narrowing against nothing would be a guess.
 
 The step says so in three places: a banner before its line naming every crate and why it is in, a `NARROWED to N of M crates (…)` prefix on the line itself (which is the `evidence.json` row), and `target/xtask/local/test/selection.txt`. `CENTRAID_GATE_TESTS=all` widens a local run to the whole workspace.
 
 **The narrowing is a nextest filter over `--workspace`, not `-p`.** `cargo nextest run --workspace -E 'package(=a) | package(=b)'` builds the same units `clippy` and `restore-drill` build; `-p a -p b` resolves features for those packages alone, which is a different feature set, and alternating the two is the 162 to 186 s each way measured in [Where the numbers came from](#where-the-numbers-came-from). So the saving is in what runs, not in what compiles, and without `cargo-nextest` the step runs the whole workspace and says why.
 
-**The drills run once per loop.** `restore_drill` is an ordinary integration test of `centraid-vault` and `centraid`, so a narrowed selection that reaches either would run both drills in `test` and again in the `restore-drill` step that follows (about a minute and a half of CPU each time; QUALITY.md had recorded it as "the drills run twice per loop"). A narrowed `test` therefore filters the `restore_drill` binaries out and says so in its line, and `restore-drill` still runs both by name in the same gate run, so the promise is proved on every loop as before. `--lane test` keeps them, and `pr` and the whole-workspace fallback are unchanged.
+**The drills run once per loop.** `restore_drill` is an ordinary integration test of `centraid-vault` and `centraid`, so a narrowed selection that reaches either would run both drills in `test` and again in the `restore-drill` step that follows (about a minute and a half of CPU each time). A narrowed `test` therefore filters the `restore_drill` binaries out and says so in its line, and `restore-drill` still runs both by name in the same gate run, so the promise is proved on every loop as before. `--lane test` keeps them, and `pr` and the whole-workspace fallback are unchanged.
 
 **What narrowing does not prove.** A change to a crate runs that crate's tests and its dependents', not the other crates'. A read the derivation did not see — a path assembled at run time from pieces no literal names — is caught only by `pr`, which CI runs over every crate on every pull request. The budget in `gate-budgets.json` did not move, and it is not raised by this.
 
-The budgets live in [`contracts/ledgers/gate-budgets.json`](../../contracts/ledgers/gate-budgets.json) and are **enforced**: a profile whose steps together overran its `budgetSeconds` fails, prints the timing table, and says `FAIL — over budget` on its last line. They are down-only, like every other gate knob in this repo; the one time they rose was the 2026-09-12 re-base for the Rust workspace, under an owner ruling recorded as [D-1020-B2](../../docs/decisions.md#governance-and-the-pr-gate).
+The budgets live in [`contracts/ledgers/gate-budgets.json`](../../contracts/ledgers/gate-budgets.json) and are **enforced**: a profile whose steps together overran its `budgetSeconds` fails, prints the timing table, and says `FAIL — over budget` on its last line. They are down-only, like every other gate knob in this repo; the one time they rose was the 2026-09-12 re-base for the Rust workspace, under an owner ruling recorded as.
 
 **`local` is scored warm or cold, and they are different numbers.** The 120 s promise is the developer's feedback time after an edit, not the cost of the first build after a clone — 41.6 s against 1562.4 s on this container at ten crates. The runner asks whether **every** workspace member has a _linked_ artifact in the target directory's `debug/deps` (a `.rlib` or an extensionless executable): an `.rmeta` from a previous `cargo check` does not count, so a tree that has only been checked cannot buy a warm budget while its `test` step still has to compile and link everything. A _stale_ incremental tree does read as warm, on purpose — that is the tree the loop runs on, and rebuilding the delta is what the budget promises. Each run prints `tree warm` or `tree cold` with the reason; `--cold` forces the cold branch without deleting `target/`. A cold `local` run is charged against `coldLocalProfileSeconds` in `compile-time.json` and **fails** if that key states no ceiling, because cold must never be the answer that makes a slow gate green. No other profile has a cold ceiling: they run in CI on a runner that has never seen the workspace, so their budgets hold cold or they are not budgets.
 
@@ -95,20 +95,18 @@ A failing step writes its whole output under `target/xtask/<profile>/<step>/` �
 
 `cargo nextest` gets the same treatment in the other direction: `test` uses `cargo nextest run --workspace` (with the filter above on `local`) when the binary is on PATH and `cargo test --workspace` when it is not, and the step's line says which one ran. nextest never runs doctests, so its branch is followed by `cargo test --workspace --doc` over the libraries it just built: the two branches run the same tests, and a doctest written tomorrow is not silently skipped because the runner changed. `gate.yml` installs a pinned, checksum-verified nextest release binary, because it runs the ~150 test binaries concurrently rather than back to back — the one part of the `test` step that is not compilation ([#1047](https://github.com/srikanth235/centraid/issues/1047)).
 
-### The `ci-policy`, `secrets` and `osv` steps
+### The `ci-policy` and `lockfile` steps
 
-Standing checks over `.github/**`, the working tree and the lockfiles, run on every pull request.
+Standing checks over `.github/**` and the lockfiles, run on every pull request.
 
 | Step | What it runs | Verdict today |
 | --- | --- | --- |
 | `ci-policy` | every third-party `uses:` under `.github/` pinned to a 40-hex commit SHA (`ci::action_pins`), then `actionlint` | green, under a second |
 | `lockfile` | `bun.lock`: no `http:` package URL, integrity markers present; `Cargo.lock`: every registry `[[package]]` pinned by `checksum` and sourced over TLS (`ci::lockfile`) | green |
-| `secrets` | `gitleaks detect` over the working tree with `.gitleaks.toml` (#671); findings in files git does not track are reported and dropped | no inherited finding recorded |
-| `osv` | `scripts/ci/osv-lockfile-scan.mjs`, CRITICAL-only (#671) | green |
 
-**Inherited red is named, never hidden** (D-1020-B1): a step whose target is red today stays on the gate and red, rather than leaving it, and a red is never answered by widening `osv-scanner.toml` or `.gitleaks.toml`.
+**Inherited red is named, never hidden** (D-1020-B1): a step whose target is red today stays on the gate and red, rather than leaving it.
 
-`engine` is its own job in `gate.yml` for the opposite reason: it is a command over the tree, but a cold llama.cpp build (about five minutes) does not fit inside the `pr` profile's budget, so `centraid-core-ffi`'s `llama` feature is off in every step above and the job checks the engine with it on: `cargo clippy -p centraid-assist-llama -p centraid-core-ffi --all-targets --features centraid-core-ffi/llama -- -D warnings` and `cargo test` over the same ([R-CHAT-10](../../docs/decisions.md#the-assistant)). The `mobile-jvm` step builds the cdylib without the feature too.
+`engine` is its own job in `gate.yml` for the opposite reason: it is a command over the tree, but a cold llama.cpp build (about five minutes) does not fit inside the `pr` profile's budget, so `centraid-core-ffi`'s `llama` feature is off in every step above and the job checks the engine with it on: `cargo clippy -p centraid-assist-llama -p centraid-core-ffi --all-targets --features centraid-core-ffi/llama -- -D warnings` and `cargo test` over the same. The `mobile-jvm` step builds the cdylib without the feature too.
 
 `dependency-review` is its own job in `gate.yml`: it is a GitHub Action reading the PR's dependency diff through the API rather than a command over the tree, so it cannot be a step of `cargo xtask gate`.
 
@@ -116,7 +114,7 @@ Standing checks over `.github/**`, the working tree and the lockfiles, run on ev
 
 Every relative link and in-repo anchor in the repository's markdown resolves — the statute for "broken internal links are bugs" (Q-1005-1). It is a `local` step, so every profile carries it, and it costs about a third of a second: no network, so `http:`, `https:`, `mailto:` and every other scheme are skipped. It checks inline links and images, reference definitions, and `href`/`src` in embedded HTML, outside fenced code, inline code and HTML comments; the file part must be a file or directory **git knows about** (a file git ignores resolves here and 404s everywhere else, and a case difference resolves on macOS and breaks on Linux), and a `#fragment` into a markdown file must be a heading's GitHub slug or an explicit `id`/`name`. Line anchors (`#L10`) and fragments into other file types are skipped.
 
-What it does not read is only the append-only records, where a finding could never be fixed: `receipts/*.md` and `QUALITY.md` § Resolved. Links _into_ a frozen section are still checked, and the step's line names every skip. There is no allowlist of findings and no narration tripwire: "history is cited, never narrated" is a judgement a scanner cannot make, and one that tried would teach authors to phrase around it. The rule is the module doc of [`src/doc_links.rs`](src/doc_links.rs); `cargo xtask doc-links` runs it alone.
+What it does not read is only the append-only record, where a finding could never be fixed. Links _into_ a frozen section are still checked, and the step's line names every skip. There is no allowlist of findings and no narration tripwire: "history is cited, never narrated" is a judgement a scanner cannot make, and one that tried would teach authors to phrase around it. The rule is the module doc of [`src/doc_links.rs`](src/doc_links.rs); `cargo xtask doc-links` runs it alone.
 
 ### The `ts-static` step
 
@@ -124,15 +122,15 @@ What it does not read is only the append-only records, where a finding could nev
 
 ## Required checks
 
-Branch protection's required checks are **`gate`**, **`engine`**, **`native-python`**, **`dependency-review`** and **`pr-title`**, the jobs in [`gate.yml`](../../.github/workflows/gate.yml). Branch protection is configured outside the repository, the same way the code-owner review requirement is ([docs/dev-environment.md](../../docs/dev-environment.md#the-local-gate-loop)); a required check that never reports blocks every pull request, which is the failure #557 was written about, so renaming any of them is an owner change to branch protection in the same breath.
+Branch protection's required checks are **`gate`**, **`engine`**, **`native-python`**, **`dependency-review`** and **`pr-title`**, the jobs in [`gate.yml`](../../.github/workflows/gate.yml). Branch protection is configured outside the repository, the same way the code-owner review requirement is; a required check that never reports blocks every pull request, which is the failure #557 was written about, so renaming any of them is an owner change to branch protection in the same breath.
 
 ## `cargo xtask artifact-key` (#1020, D-1020-G2)
 
-The prebuilt core's cache key. `--triple` is required; `--features`, `--profile` and `--explain` are optional. The exact rule — what is in the key, what is deliberately not, and both halves of the `Cargo.lock` case — is the module doc of [`src/artifact.rs`](src/artifact.rs) and the operator-facing half is in [`docs/release.md`](../../docs/release.md).
+The prebuilt core's cache key. `--triple` is required; `--features`, `--profile` and `--explain` are optional. The exact rule — what is in the key, what is deliberately not, and both halves of the `Cargo.lock` case — is the module doc of [`src/artifact.rs`](src/artifact.rs).
 
 ## Debuginfo, and the one-command escape hatch (#1020, D-1020-G7)
 
-`[profile.dev]` and `[profile.test]` carry `debug = "line-tables-only"` with `split-debuginfo = "unpacked"`, and dependencies carry `debug = false`. A backtrace still names the file and the line. The measurement that decided it is in the root `Cargo.toml`'s comment and in [`docs/toolchain.md`](../../docs/toolchain.md): 7.7 GB of test executables became 0.50 GB, and the biggest single one went from 387 MB to 43 MB.
+`[profile.dev]` and `[profile.test]` carry `debug = "line-tables-only"` with `split-debuginfo = "unpacked"`, and dependencies carry `debug = false`. A backtrace still names the file and the line. The measurement that decided it is in the root `Cargo.toml`'s comment: 7.7 GB of test executables became 0.50 GB, and the biggest single one went from 387 MB to 43 MB.
 
 **When you need the full type and variable tables for one debugging session:**
 
@@ -189,7 +187,7 @@ What each ledger stores is a ceiling with **stated headroom**, not the last meas
 
 ## Where the numbers came from
 
-On this container (4 vCPU, 15 GB — the `ci-linux-x64-4c` hardware class in `tests/journeys.json`), with `CENTRAID_GATE_HARDWARE` overridable so a self-hosted device runner can score itself. The first column is a workspace of **one** crate over clap and serde_json; the 2026-09-12 column is **nine** crates over iroh, quinn, tokio, prost and rusqlite-bundled, which is why the ceilings were re-based ([D-1020-B2](../../docs/decisions.md#governance-and-the-pr-gate)):
+On this container (4 vCPU, 15 GB — the `ci-linux-x64-4c` hardware class in `tests/journeys.json`), with `CENTRAID_GATE_HARDWARE` overridable so a self-hosted device runner can score itself. The first column is a workspace of **one** crate over clap and serde_json; the 2026-09-12 column is **nine** crates over iroh, quinn, tokio, prost and rusqlite-bundled, which is why the ceilings were re-based:
 
 | Measurement | One crate | 2026-09-12 | Ceiling |
 | --- | --- | --- | --- |

@@ -24,10 +24,9 @@
 //! cannot be decided by a scanner, and a scanner that tries trains authors to
 //! phrase around it. It stays a reviewer's principle.
 //!
-//! **What it skips, and why.** Only the append-only records, where a finding
-//! could never be fixed: `receipts/*.md` (evidence of past work — many of its
-//! links point at code that has since gone, which is what such a record looks
-//! like) and `QUALITY.md`'s "Resolved" section.
+//! **What it skips, and why.** Only the append-only record, where a finding
+//! could never be fixed: `QUALITY.md`'s "Resolved" section (its links point at
+//! code that has since gone, which is what such a record looks like).
 //!
 //! None of this is an allowlist of findings. Links *into* a frozen section are
 //! still checked, and every skip is named in the step's own line so it is not
@@ -55,11 +54,11 @@ pub struct Exclusions {
 }
 
 impl Exclusions {
-    /// The append-only records.
+    /// Nothing is frozen today.
     pub fn builtin() -> Self {
         Self {
-            frozen_files: vec!["receipts/*.md".to_owned()],
-            frozen_sections: vec![("QUALITY.md".to_owned(), "Resolved".to_owned())],
+            frozen_files: Vec::new(),
+            frozen_sections: Vec::new(),
         }
     }
 
@@ -932,14 +931,17 @@ mod tests {
 
     /// Findings as `file:line why-fragment` pairs for readable assertions.
     fn run(files: &[(&str, &str)]) -> Report {
+        run_with(files, &Exclusions::builtin())
+    }
+
+    fn run_with(files: &[(&str, &str)], exclusions: &Exclusions) -> Report {
         let (names, texts) = repo(files);
-        let exclusions = Exclusions::builtin();
         let scan: Vec<String> = names
             .iter()
-            .filter(|p| is_scanned(p, &exclusions))
+            .filter(|p| is_scanned(p, exclusions))
             .cloned()
             .collect();
-        check_files(&names, &scan, &|path| texts.get(path).cloned(), &exclusions)
+        check_files(&names, &scan, &|path| texts.get(path).cloned(), exclusions)
     }
 
     fn broken(report: &Report) -> Vec<(String, usize, String)> {
@@ -955,16 +957,16 @@ mod tests {
         let report = run(&[
             (
                 "docs/a.md",
-                "# A\n\nSee [the trap](traps/missing.md) and [real](b.md).\n",
+                "# A\n\nSee [the trap](guides/missing.md) and [real](b.md).\n",
             ),
             ("docs/b.md", "# B\n"),
         ]);
         assert_eq!(
             broken(&report),
-            [("docs/a.md".to_owned(), 3, "traps/missing.md".to_owned())]
+            [("docs/a.md".to_owned(), 3, "guides/missing.md".to_owned())]
         );
         assert!(
-            report.findings[0].why.contains("docs/traps/missing.md"),
+            report.findings[0].why.contains("docs/guides/missing.md"),
             "{}",
             report.findings[0].why
         );
@@ -1180,7 +1182,6 @@ mod tests {
         assert!(is_scanned("docs/decisions.md", &skip));
         assert!(is_scanned("README.md", &skip));
         assert!(is_scanned("crates/xtask/README.md", &skip));
-        assert!(!is_scanned("receipts/issue-1-x.md", &skip));
         assert!(!is_scanned("docs/notes.txt", &skip));
         assert!(!is_scanned("web/node_modules/x/README.md", &skip));
         assert!(!is_scanned("target/doc/x.md", &skip));
@@ -1188,16 +1189,23 @@ mod tests {
 
     #[test]
     fn links_in_a_frozen_section_are_skipped_and_links_into_it_are_not() {
-        let report = run(&[
-            (
-                "QUALITY.md",
-                "# Quality\n\n[open broken](gone-open.md)\n\n## Resolved\n\n[old](gone-resolved.md)\n\n### Detail\n\n[older](gone-detail.md)\n\n## Notes\n\n[after](gone-after.md)\n",
-            ),
-            (
-                "docs/a.md",
-                "[into](../QUALITY.md#resolved) [bad](../QUALITY.md#nope)\n",
-            ),
-        ]);
+        let exclusions = Exclusions {
+            frozen_files: Vec::new(),
+            frozen_sections: vec![("QUALITY.md".to_owned(), "Resolved".to_owned())],
+        };
+        let report = run_with(
+            &[
+                (
+                    "QUALITY.md",
+                    "# Quality\n\n[open broken](gone-open.md)\n\n## Resolved\n\n[old](gone-resolved.md)\n\n### Detail\n\n[older](gone-detail.md)\n\n## Notes\n\n[after](gone-after.md)\n",
+                ),
+                (
+                    "docs/a.md",
+                    "[into](../QUALITY.md#resolved) [bad](../QUALITY.md#nope)\n",
+                ),
+            ],
+            &exclusions,
+        );
         assert_eq!(
             broken(&report),
             [
@@ -1211,9 +1219,9 @@ mod tests {
 
     #[test]
     fn a_glob_star_stays_inside_one_segment_and_a_double_star_does_not() {
-        assert!(glob_matches("receipts/*.md", "receipts/issue-1.md"));
-        assert!(!glob_matches("receipts/*.md", "receipts/sub/issue-1.md"));
-        assert!(!glob_matches("receipts/*.md", "docs/receipts/issue-1.md"));
+        assert!(glob_matches("logs/*.md", "logs/run-1.md"));
+        assert!(!glob_matches("logs/*.md", "logs/sub/run-1.md"));
+        assert!(!glob_matches("logs/*.md", "docs/logs/run-1.md"));
         assert!(glob_matches("a/**/c.md", "a/b/x/c.md"));
         assert!(glob_matches("a/**/c.md", "a/c.md"));
         assert!(!glob_matches("a/*.md", "a/b.txt"));

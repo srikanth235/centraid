@@ -11,8 +11,8 @@ import XCTest
 /// sighting, and the one answer a window ends with — and it runs here over
 /// fakes for the two platform seams (`ServiceFinder`, `AddressResolver`).
 /// `NWBrowser` finding a real advertisement and a real connect resolving it
-/// are not provable without a Bonjour responder; the simulator walk and
-/// `docs/release/v1-handoffs.md` carry those. Each rule has its negative
+/// are not provable without a Bonjour responder; the simulator walk
+/// carries those. Each rule has its negative
 /// beside it: a result with no `gw` is never connected to, a second answer is
 /// never delivered, and an answer after the window is ignored. Which sighting
 /// is which gateway is Rust's (`crates/screens/tests/pairing.rs`).

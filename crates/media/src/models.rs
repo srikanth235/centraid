@@ -1,5 +1,5 @@
 //! The model lock: **verify what is on disk, fetch only what is missing**
-//! (#1020 open question 9, `docs/recognition-automations.md:81`).
+//! (#1020 open question 9).
 //!
 //! Weights are release assets, not repository content. `models.lock.json` pins
 //! every file by a BLAKE3 digest, byte length and an immutable upstream URL — a

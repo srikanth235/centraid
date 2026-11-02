@@ -13,8 +13,8 @@ import java.util.concurrent.Executor
 //
 // THE PHONE ONLY BROWSES. `discoverServices` sends a multicast question and reads the answers;
 // nothing here is `registerService`, a `ServerSocket` or an `accept`, and the phone advertises
-// nothing. (`no-listening-socket` scans Rust, and this is not Rust; the doctrine is SECURITY.md's,
-// and this file is where it is kept on Android.) A browse needs no connect of its own: `NsdManager`
+// nothing. (`no-listening-socket` scans Rust, and this is not Rust; this file is where the
+// rule is kept on Android.) A browse needs no connect of its own: `NsdManager`
 // resolves a service to its address and its TXT record, so unlike iOS no TCP handshake is made.
 //
 // NOTHING HERE IS TRUSTED. An address in a sighting is what some machine on the network said;

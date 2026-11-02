@@ -7,7 +7,7 @@ Two names for the authored worlds, no others:
 
 - val: the three authored worlds of eval/sets/val.jsonl (with A to D, its seven worlds; every fix and every
   decision is derived on val). test is scored at milestones and lives on E, F and G, world-disjoint from val
-  and from train (eval/FROZEN.md v8, docs/decisions.md D-1044-14). The val worlds are
+  and from train (eval/FROZEN.md v8). The val worlds are
   PINNED here (`VAL`), not recomputed: the sets are frozen files (eval/FROZEN.md), so the val worlds
   are a fact of the frozen record, and a rule over the world files would move as worlds are added.
   They were picked once by size rank (the 90th, 50th and 10th percentile of the 28 worlds of the

@@ -7,8 +7,7 @@
 //! - A test that cannot fix the clock cannot assert on a retention edge, and
 //!   the retention rules are *about* an edge (a cutoff, a 14-day hold).
 //! - **The vault's zone is the vault's, never the host's.** A gateway on a VPS
-//!   runs UTC; v0's `docs/cron-timezone.md` is the whole file this mistake
-//!   wrote. Instants here are always UTC and the civil-time conversion is
+//!   runs UTC. Instants here are always UTC and the civil-time conversion is
 //!   `crates/automations`' problem, not a stray `chrono::Local`.
 
 use std::sync::atomic::{AtomicU64, Ordering};

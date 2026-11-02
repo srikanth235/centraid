@@ -11,8 +11,7 @@
 //! `crates/core-ffi/tests/assist.rs`) seed them into a vault founded with no
 //! content, so they read the rows a phone holds. No `FoundContent` writes this
 //! scenario: onboarding's goal is time to the member's OWN data, and a vault the
-//! member keeps gets only [`crate::starters`] (docs/decisions.md, "Onboarding
-//! without sample data"). There is NO LOCKER here: Locker's secrets are sealed
+//! member keeps gets only [`crate::starters`]. There is NO LOCKER here: Locker's secrets are sealed
 //! under a vault's keys, and the scenario carries none.
 //!
 //! **THROUGH THE REAL COMMAND PLANE, never SQL.** Every row is a

@@ -33,17 +33,17 @@ People is five queries, twenty-five actions and thirty-three scopes. It stores n
 
 ## What this crate is allowed to contain
 
-SQL, in any form, is refused by `cargo xtask rules` (`sql-confinement`): a read is a `PageQuery` over one table, and the paged door pages one table (a join is refused at the vault's door), so every read is a window and then, per table, the rows its ids name. `Read::among` names a set of ids only while it is small, and otherwise takes the table under the read's own predicate: a keyset page re-binds the whole `IN` list on every page, and the first cut took 19 s for a 5,000-person roster where the table scans take 0.56 s (R-1135-3-14). A write from a query is not expressible. A denial is a value (`Denial`), never an error.
+SQL, in any form, is refused by `cargo xtask rules` (`sql-confinement`): a read is a `PageQuery` over one table, and the paged door pages one table (a join is refused at the vault's door), so every read is a window and then, per table, the rows its ids name. `Read::among` names a set of ids only while it is small, and otherwise takes the table under the read's own predicate: a keyset page re-binds the whole `IN` list on every page, and the first cut took 19 s for a 5,000-person roster where the table scans take 0.56 s. A write from a query is not expressible. A denial is a value (`Denial`), never an error.
 
 ## The rulings this crate is shaped by
 
-R-1135-3-1 to R-1135-3-14 are in [docs/decisions.md](../../../docs/decisions.md#people). The ones a reader of this crate meets first:
+The rulings a reader of this crate meets first:
 
 - **A toggle is two actions.** `toggle-gift` is `complete-task` and `reopen-task`, `toggle-reminder` is `set-reminder`; three commands (`task.complete`, `task.reopen`, `event.edit`) are Agenda's and `ActionRow::pending_schema` names them until that lane lands.
 - **Four actions are confirm-gated** by the manifest, which is the surface's gate: `trash-person`, `purge-person`, `delete-contact-channel` and `merge-people`. No command sets the command-level `confirm`.
 - **A person holds what is written about them alone**: their notes, touches and yearly dates go to the trash and are purged with them; a task about them stays.
-- **`people.limit` is 20-10,000**, the widest window in the tree and the manifest's own (D-1020-PE4); the walk reports `truncated` when it filled.
-- **There is no clock here.** A civil date is read in a zone somebody stated (D-1020-PE7).
+- **`people.limit` is 20-10,000**, the widest window in the tree and the manifest's own; the walk reports `truncated` when it filled.
+- **There is no clock here.** A civil date is read in a zone somebody stated.
 
 ## The five queries
 
@@ -51,7 +51,7 @@ R-1135-3-1 to R-1135-3-14 are in [docs/decisions.md](../../../docs/decisions.md#
 
 ## On the phone
 
-The v1 phone shell reaches `people` (as `roster`), `dashboard` (as `touch`), `person`, `search` and `trash` through `AppQueryRequest` arms 20-24. `party_id` on the wire is the person's entity id. Every civil date is answered in the device's zone (`tz`): the answer carries `today` and each annual date's `in_days` from it. The avatar hue is not stored (R-1135-3-8): `avatar_color` is `reserved` and a shell draws the hue from the id. `touches_known` and `channels_known` stay on the wire and are always true.
+The v1 phone shell reaches `people` (as `roster`), `dashboard` (as `touch`), `person`, `search` and `trash` through `AppQueryRequest` arms 20-24. `party_id` on the wire is the person's entity id. Every civil date is answered in the device's zone (`tz`): the answer carries `today` and each annual date's `in_days` from it. The avatar hue is not stored: `avatar_color` is `reserved` and a shell draws the hue from the id. `touches_known` and `channels_known` stay on the wire and are always true.
 
 ## Volume
 

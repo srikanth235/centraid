@@ -1,6 +1,6 @@
 # `centraid-search` — the FTS door
 
-Text search is a question the **vault** answers, not one an app answers by pulling a table. The vault keeps one index, `search`: a contentless FTS5 table whose rowid is `entity.n`, written at commit by the vault's gate for every entity a command touched ([#1135](https://github.com/srikanth235/centraid/issues/1135), [docs/vault-ontology.md](../../docs/vault-ontology.md)). This crate owns every `MATCH` statement in the workspace; the app kit's grammar has no `MATCH` production, so "an app cannot search by hand" is a fact rather than a convention. Ruling **D-1020-N1** ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
+Text search is a question the **vault** answers, not one an app answers by pulling a table. The vault keeps one index, `search`: a contentless FTS5 table whose rowid is `entity.n`, written at commit by the vault's gate for every entity a command touched ([#1135](https://github.com/srikanth235/centraid/issues/1135)). This crate owns every `MATCH` statement in the workspace; the app kit's grammar has no `MATCH` production, so "an app cannot search by hand" is a fact rather than a convention. Ruling **D-1020-N1** ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
 
 ```rust
 let door = SqliteDoor::open(&connection, vault.words())?;   // checks `search` and `search_vocab` exist; the vault keeps the word list

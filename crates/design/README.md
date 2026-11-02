@@ -20,7 +20,7 @@ Non-ASCII names, an empty name, a whitespace-only name, a name that is one emoji
 
 ## The one bug reproduced rather than fixed
 
-`identityInitials` slices with `String.prototype.slice(0, 1)`, which cuts a **UTF-16 code unit**. A name whose first character is outside the BMP ("🙂 Smith") yields half a surrogate pair: a string Rust's `String` cannot hold and no font can draw. So `identity_initials_units` is the primitive and returns code units; `identity_initials` is the lossy convenience over it, and the corpus compares units. A port that "fixed" this would go red here, and the receipt carries the finding — the fix is a design decision about grapheme clusters, not a port's to take.
+`identityInitials` slices with `String.prototype.slice(0, 1)`, which cuts a **UTF-16 code unit**. A name whose first character is outside the BMP ("🙂 Smith") yields half a surrogate pair: a string Rust's `String` cannot hold and no font can draw. So `identity_initials_units` is the primitive and returns code units; `identity_initials` is the lossy convenience over it, and the corpus compares units. A port that "fixed" this would go red here, and the finding is recorded on [#1020](https://github.com/srikanth235/centraid/issues/1020) — the fix is a design decision about grapheme clusters, not a port's to take.
 
 ## What is not here
 

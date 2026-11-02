@@ -12,9 +12,8 @@
 #   * The Android SDK and NDK. nixpkgs' `androidenv` needs accepted licences and
 #     a composition per API level; wave 3 lane E owns it, and until then the
 #     Android side is the host's SDK plus Gradle's own toolchain resolution.
-#   * Xcode. Nix cannot install it. `/.xcode-version` is the version file, read
-#     by the macOS runner and by `xcode-select`, and lane E confirms the version
-#     against the first real iOS build.
+#   * Xcode. Nix cannot install it. The pin is `XCODE_VERSION` in
+#     `.github/workflows/lane-release-mobile.yml`, read by `xcode-select`.
 #   * The gateway as a package. This is a `devShells` flake, NOT an installable
 #     derivation — the #504 packaging stub it replaces said the same. The
 #     gateway is one Rust binary, `centraid-gateway` (#1080), and the paths
@@ -22,7 +21,7 @@
 #     from `deploy/gateway/Dockerfile`; a Nix package for it is nobody's
 #     request yet. The OS unit writer stays single-writer: a host service
 #     module must call `centraid-gateway install` rather than invent a second
-#     unit path (docs/config-ownership.md).
+#     unit path.
 #
 # THIS FILE HAS NOT BEEN EVALUATED. `nix` is not installed on the container wave
 # 1 was built on, so `nix flake check` has not run and the wave 1 receipt says
@@ -110,7 +109,7 @@
             # elsewhere; wave 3 lane E is where that stops being a footnote.
             ++ pkgs.lib.optional (pkgs.lib.hasAttr "maestro" pkgs) pkgs.maestro
             # Darwin-only extras. `xcbuild` is the command-line half only — the
-            # real Xcode is pinned by /.xcode-version, not by nix.
+            # real Xcode is pinned in lane-release-mobile.yml, not by nix.
             ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
               pkgs.xcbuild
               pkgs.cocoapods
@@ -119,7 +118,7 @@
             shellHook = ''
               echo "centraid v1 dev shell — $(rustc --version)"
               echo "  cargo xtask gate --profile local   # the edit-run loop"
-              echo "  Xcode is NOT pinned here: see /.xcode-version"
+              echo "  Xcode is NOT pinned here: see XCODE_VERSION in lane-release-mobile.yml"
               echo "  the Android SDK is NOT pinned here: wave 3 lane E owns it"
             '';
           };

@@ -2180,7 +2180,7 @@ WIDENERS["after-series-ask"] = widen_after_series_ask
 
 # Hand corrections of the gold rulings, keyed by (session id, turn number). Val ids only: no test session was read, so
 # none is fixed; a convention that changes a test turn is reported, not hand-corrected. Fields of an entry:
-#   ruling  the G-number of eval/gold-rulings (docs/decisions.md D-1044-13); A1 is the gold-wrong turn of the blind gold audit
+#   ruling  the G-number of eval/gold-rulings; A1 is the gold-wrong turn of the blind gold audit
 #   why     one line: what the old gold got wrong
 #   expect  sha1[:8] of the message the fix was written for (a fix never lands on another turn)
 #   user    the message is rewritten (the turn gets `rewritten`: what it was)

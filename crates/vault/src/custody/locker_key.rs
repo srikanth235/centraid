@@ -4,7 +4,7 @@
 //! ## Where `K` is, and where it is not
 //!
 //! `K` is the 24 words' own leaf, `seed / vault'(i) / locker'`
-//! (`centraid_identity::derive`, D-6 in `docs/decisions.md`). The core derives it at open into its
+//! (`centraid_identity::derive`). The core derives it at open into its
 //! in-memory keyring and hands it to a Locker session after the phone's unlock;
 //! it is **never a file** and this crate never holds it. Every function here
 //! takes the key **by value**, so there is no ambient `K` for a read path to

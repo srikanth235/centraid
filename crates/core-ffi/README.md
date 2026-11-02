@@ -55,7 +55,7 @@ Two different questions about "five", both asked: the xtask rule `abi-five-symbo
 | `llama` | **off** | Links the on-device chat's engine (`crates/assist-llama` with its `engine` feature, i.e. llama.cpp) and registers it on the process-wide model slot in `centraid_open`. Without it a model file that is there reads as `NO_ENGINE`. |
 | `debug-fault` | off | The fault door ([`CONTRACT.md`](CONTRACT.md) clause 9). |
 
-**A phone's library is built `--features llama`**: the prebuilt-core lane's Android and iOS legs, `mobile/scripts/android-core.sh` and the iOS hand-off in [`mobile/README.md`](../../mobile/README.md). It is off by default so that `cargo build|clippy|test --workspace` — the PR gate — compiles no llama.cpp, a `cmake` build of about five minutes cold ([R-CHAT-10](../../docs/decisions.md#the-assistant)). The JVM tests build the library without it: no Kotlin spec loads a model, and what they assert about a model file is `NO_ENGINE`. The engine-on half of this crate is built, linted and tested by the `engine` job in `.github/workflows/gate.yml`:
+**A phone's library is built `--features llama`**: the prebuilt-core lane's Android and iOS legs, `mobile/scripts/android-core.sh` and the iOS hand-off in [`mobile/README.md`](../../mobile/README.md). It is off by default so that `cargo build|clippy|test --workspace` — the PR gate — compiles no llama.cpp, a `cmake` build of about five minutes cold. The JVM tests build the library without it: no Kotlin spec loads a model, and what they assert about a model file is `NO_ENGINE`. The engine-on half of this crate is built, linted and tested by the `engine` job in `.github/workflows/gate.yml`:
 
 ```sh
 cargo clippy -p centraid-assist-llama -p centraid-core-ffi --all-targets --features centraid-assist-llama/engine,centraid-core-ffi/llama -- -D warnings
@@ -72,7 +72,7 @@ Miri cannot run this crate's other tests: they open a vault, SQLite is a C libra
 
 ## The binding spike, host half (D-1020-D2-7)
 
-`spike/spike.c` is a C harness. The JVM half measured JNA (not the Foreign Function & Memory API — FFM is final in JDK 22 and Android's minimum is nowhere near it, so an Android shell will use JNA or JNI for years, and measuring the binding the product will ship is the point of a spike); that harness grew up into `mobile/core`'s JNA binding, and its throwaway Gradle project was deleted in [#1047](https://github.com/srikanth235/centraid/issues/1047). Its numbers are in the receipt.
+`spike/spike.c` is a C harness. The JVM half measured JNA (not the Foreign Function & Memory API — FFM is final in JDK 22 and Android's minimum is nowhere near it, so an Android shell will use JNA or JNI for years, and measuring the binding the product will ship is the point of a spike); that harness grew up into `mobile/core`'s JNA binding, and its throwaway Gradle project was deleted in [#1047](https://github.com/srikanth235/centraid/issues/1047).
 
 ```sh
 cargo test -p centraid-core-ffi --test spike -- --nocapture
@@ -80,4 +80,4 @@ cargo test -p centraid-core-ffi --test spike -- --nocapture
 cargo run -p centraid-core-ffi --bin spike-fixture -- /tmp/spike
 ```
 
-The spike fixes the ABI's **shape** the shells are written against. The numbers are `ci-linux-x64-4c` numbers and a floor; the device bindings (cinterop on iOS, JNA on Android) live in `mobile/core` (Android) and `mobile/iosApp/Sources/Core.swift` (iOS), and on-device numbers are an owner hand-off. The measured numbers are in the receipt.
+The spike fixes the ABI's **shape** the shells are written against. The numbers are `ci-linux-x64-4c` numbers and a floor; the device bindings (cinterop on iOS, JNA on Android) live in `mobile/core` (Android) and `mobile/iosApp/Sources/Core.swift` (iOS), and on-device numbers are an owner hand-off.

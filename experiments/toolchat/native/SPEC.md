@@ -384,7 +384,7 @@ The new scorer judges each turn by **effect**, never by the call or echo text:
 
 ## 12. Build plan
 
-The state of the work and its evidence: `README.md` in this directory, the #1044 section of `docs/decisions.md`, and `receipts/issue-1044-native-tool-task.md`.
+The state of the work and its evidence: `README.md` in this directory and [#1044](https://github.com/srikanth235/centraid/issues/1044).
 
 ## 13. Metric strategy
 

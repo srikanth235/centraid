@@ -18,7 +18,7 @@
 //!    claimed exactly once across the two sides (`manifest.ts:508-537`). A
 //!    manifest that forgets a state fails validation instead of reading as "it
 //!    does not apply here".
-//! 4. **No action declares `writes`** (V3 in `docs/release/v1-handoffs.md`).
+//! 4. **No action declares `writes`**.
 //!    v0 required each action to list the tables it wrote, so that change-stream
 //!    invalidation could not drop a subscriber. The vault now says what a commit
 //!    wrote itself: the commit guard's `update_hook` census, carried as

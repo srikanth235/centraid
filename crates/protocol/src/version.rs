@@ -1,7 +1,6 @@
 //! The version window (#1020, D-1020-C6, Compatibility).
 //!
-//! Two constants and one function. The function is the rule in
-//! `docs/protocol.md`, "The version window":
+//! Two constants and one function. The function is the version-window rule:
 //!
 //! ```text
 //! ok iff peer.schema_version >= local.min_supported
@@ -78,7 +77,7 @@ pub fn judge(local: &Hello, peer: &Hello) -> Result<(), UpgradeRequired> {
 ///
 /// A separate answer from `judge` on purpose: the numbers can agree while a
 /// required feature is missing, and which names are required is a policy about
-/// particular features (`docs/protocol.md`, "Feature contract — per feature")
+/// particular features
 /// rather than a property of the handshake.
 pub fn missing_capabilities<'a>(local: &Hello, required: &'a [&'a str]) -> Vec<&'a str> {
     required

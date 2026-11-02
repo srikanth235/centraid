@@ -14,8 +14,7 @@ import org.junit.Test
  * after its backup, a ref naming the other collection and a ref that names no row are all kept,
  * because a gate shown only green is a gate nobody saw refuse. MediaStore has no edit revision,
  * Live Photo pair or camera-original row, so those iOS rules have no case here (the receipt of
- * #1152 says which, case by case); the system's dialog and the deletion itself are device hand-offs
- * (`docs/release/v1-handoffs.md`, section 8).
+ * #1152 says which, case by case); the system's dialog and the deletion itself are device hand-offs.
  */
 class LibraryDeletionTest {
     private val image = LibraryRefs.Row(video = false, id = 42L)

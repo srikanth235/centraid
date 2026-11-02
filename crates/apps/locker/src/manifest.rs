@@ -264,7 +264,7 @@ mod tests {
 
     /// D-1020-L7's second deletion, asserted on the parsed side too: Locker is
     /// byte-bearing (the custody triple, the upload queue, the download gate
-    /// and free-up-space, `docs/blueprint-seats.md:26`-`:30`) and disabled on
+    /// and free-up-space) and disabled on
     /// **no** seat.
     #[test]
     fn it_is_byte_bearing_and_disabled_on_no_seat() {

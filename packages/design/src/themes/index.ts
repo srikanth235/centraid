@@ -1,6 +1,6 @@
 import { darkTheme, lightTheme } from "./centraid";
 
-// No `PAGE`/`WALL` re-export: one-page rule (traps/design-tokens.md).
+// No `PAGE`/`WALL` re-export: one-page rule (.claude/skills/typescript/SKILL.md).
 export type { Theme } from "./shared";
 export {
   ACCENT_HOVER,

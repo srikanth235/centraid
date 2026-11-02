@@ -1,6 +1,6 @@
 # Running a Centraid gateway on a box you own
 
-A gateway is any machine the member controls that runs `centraid-gateway` — the laptop at home, a VPS, a NAS ([#1080](https://github.com/srikanth235/centraid/issues/1080)). It holds a sealed copy of the phone's vaults and can read none of it. One binary, one data directory, one port; the protocol, the commands and the data directory are [docs/gateway.md](../../docs/gateway.md).
+A gateway is any machine the member controls that runs `centraid-gateway` — the laptop at home, a VPS, a NAS ([#1080](https://github.com/srikanth235/centraid/issues/1080)). It holds a sealed copy of the phone's vaults and can read none of it. One binary, one data directory, one port.
 
 ## The shortest path
 
@@ -23,7 +23,7 @@ centraid-gateway install --data-dir ~/centraid-gateway             # writes it, 
 
 ## Getting it reachable
 
-**LAN first** ([R-1080-9](../../docs/decisions.md#backup-and-the-gateway)). A phone on the same network finds the gateway by its addresses and by Bonjour, and that is the ordinary case: the backup happens at home, overnight, on Wi-Fi. Away from home, the phone reaches only an address it can dial directly:
+**LAN first**. A phone on the same network finds the gateway by its addresses and by Bonjour, and that is the ordinary case: the backup happens at home, overnight, on Wi-Fi. Away from home, the phone reaches only an address it can dial directly:
 
 | Shape | How |
 | --- | --- |
@@ -49,7 +49,7 @@ Host networking, because the phone dials the addresses `pair` lists and Bonjour 
 
 Stop the gateway, copy its data directory whole, start it again. **That is everything.** There is no key to export and no credential to keep in step: what the directory holds is the gateway's own TLS identity, hashes of tokens and pairing secrets, the index, and ciphertext nobody there can open. Copied to another machine and started there, it is the same gateway, and every paired phone still trusts it.
 
-A second gateway somewhere else, paired from the phone, is the better answer to a box that dies with the house: the phone backs up to each gateway it can reach ([R-1080-8](../../docs/decisions.md#backup-and-the-gateway)).
+A second gateway somewhere else, paired from the phone, is the better answer to a box that dies with the house: the phone backs up to each gateway it can reach.
 
 ## What the gateway does on its own
 

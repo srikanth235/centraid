@@ -14,8 +14,8 @@
 //! # THE `engine` FEATURE: LLAMA.CPP BUILDS WHERE THE PHONE'S CORE IS BUILT
 //!
 //! `llama-cpp-2` is an optional dependency and `engine` turns it on; so does
-//! `centraid-core-ffi`'s `llama`, which is how the phone's library carries it
-//! (R-CHAT-10 in `docs/decisions.md`). The llama.cpp build is a `cmake`
+//! `centraid-core-ffi`'s `llama`, which is how the phone's library carries it.
+//! The llama.cpp build is a `cmake`
 //! compile that costs ~5 minutes cold, and a workspace build that did it for
 //! every pull request overran the PR gate's cold budget. So a plain
 //! `cargo build --workspace` compiles this crate **without** llama.cpp:
@@ -48,7 +48,7 @@
 //! # BUILD REQUIREMENT
 //!
 //! With `engine`: `cmake` on `PATH` and a C++17 toolchain (Xcode's, or the
-//! Android NDK's): see `docs/toolchain.md`. Without it, nothing beyond Rust.
+//! Android NDK's). Without it, nothing beyond Rust.
 
 #[cfg(feature = "engine")]
 pub mod engine;

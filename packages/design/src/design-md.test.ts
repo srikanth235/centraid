@@ -304,7 +304,7 @@ describe("DESIGN.md body", () => {
 
   test("states the five invariants as laws", () => {
     expect(body.length).toBeGreaterThan(7000);
-    expect(body).toContain("docs/traps/design-tokens.md");
+    expect(body).toContain(".claude/skills/typescript/SKILL.md");
     expect(body).toContain("packages/design/src/roles.ts");
     expect(body).toContain("packages/design/src/recipes/index.ts");
     expect(body).toContain("The five invariants");

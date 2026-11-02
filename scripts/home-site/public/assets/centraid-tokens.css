@@ -496,8 +496,7 @@
 
 /* ---------------------------------------------------------------------------
    Site layer — page-scale values the product shell has no use for. Every one
-   composes from a token above; see docs/design-machinery.md for the one
-   sanctioned step beyond the ramp.
+   composes from a token above, bar the one sanctioned step beyond the ramp.
    --------------------------------------------------------------------------- */
 
 /* The theme is the product's, resolved the product's way: no `data-theme`

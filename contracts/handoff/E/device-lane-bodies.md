@@ -14,7 +14,7 @@ The protocol is `mobile/maestro/backup-measurement.md` ([#1080](https://github.c
 - name: backup-measurement
   run: |
     set -euo pipefail
-    evidence=receipts/experiments/backup
+    evidence=mobile/maestro/evidence/backup
     if [ ! -d "$evidence" ]; then
       echo "SKIPPED backup-measurement: no evidence in $evidence."
       echo "The protocol is mobile/maestro/backup-measurement.md: an evening, a"

@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
  * Every string comes out of the view state; this file writes no copy and names
  * no screen — it switches on which `ViewState` arm Rust sent. It draws the top
  * of the stack Rust holds for [tab] and reports back as an event. A ported
- * screen follows this shape: `docs/screens.md`.
+ * screen follows this shape.
  */
 @Composable
 fun ProofScreen(screens: Screens, tab: String) {

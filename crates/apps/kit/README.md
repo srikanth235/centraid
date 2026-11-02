@@ -42,13 +42,13 @@ It is the read vocabulary — pages, money, paged reads, the statement grammar a
 
 ## Rules that each close a known defect
 
-Each was found in the independent implementation the parity fixtures were captured from, and is recorded in [`receipts/issue-1020-v1-platform.md`](../../../receipts/issue-1020-v1-platform.md).
+Each was found in the independent implementation the parity fixtures were captured from, and is recorded on [#1020](https://github.com/srikanth235/centraid/issues/1020).
 
 1. **A keyset page cannot be continued over a NULLABLE sort column.** SQLite compares a row value with a NULL operand to NULL, so a naive continuation silently drops rows in three of the four (direction, boundary) cases. The kit refuses the continuation (`KitError::NullableSortKey`). Found by a property test, which is why `tests/keyset_properties.rs` is a property test and not a table of examples.
 2. **A fan-out bound reports the cap it can REACH.** `MAX_PAGE_ROWS` clamps a page to 500, so a naive `pageSize × fanOutPages` names a number twice the one it stops at whenever `pageSize` is over 500.
 3. **A stated window is walked.** Asking for a 2,000-row window as one page gets 500, discards the cursor that says there are more, and folds a balance over the partial set.
 4. **Formatting takes an explicit locale and a minor-unit table.** Dividing minor units by 100 unconditionally gets JPY and KWD wrong, and an implicit locale renders the same vault differently on two devices.
 5. **A cursor over a column the projection never carried is refused** rather than stringified as `"undefined"`.
-6. **No manifest action declares `writes`, and the parser refuses the key.** What a command wrote is the commit's own census (`CommandOutcome.tables`, from the commit guard's `update_hook`), which is what the change events are made of; a declared list beside it has no reader and can only drift ([V3](../../../docs/release/v1-handoffs.md)).
+6. **No manifest action declares `writes`, and the parser refuses the key.** What a command wrote is the commit's own census (`CommandOutcome.tables`, from the commit guard's `update_hook`), which is what the change events are made of; a declared list beside it has no reader and can only drift.
 
 Two places use byte order where the captured fixtures used `localeCompare`, both unreachable for the values these types can hold and both documented at the code: the `MoneyBag` sort and the balance folds' tie-break.

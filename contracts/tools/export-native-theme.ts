@@ -13,8 +13,7 @@
 // The precedent is `scripts/site-tokens.mjs`, which emits a committed
 // `centraid-tokens.css` per public surface from the same emitter and is gated
 // by `bun run lint:site-tokens`, failing on drift, on a `var()` that resolves
-// to nothing, on a literal font family and on a font-CDN reference
-// (`docs/decisions.md:411`). A HAND-MAINTAINED Kotlin colour table would be a
+// to nothing, on a literal font family and on a font-CDN reference. A HAND-MAINTAINED Kotlin colour table would be a
 // fourth lowering with no drift gate, which is census §E seam 11.
 //
 //   bun contracts/tools/export-native-theme.ts
@@ -285,7 +284,7 @@ const kotlinLines: string[] = [
   " * THE 400 KEY RESOLVES TO A 470 FACE ON PURPOSE. It is a LOWERING and not a",
   " * third weight: the key is the ramp's 400, the file is `instrument_sans_book`",
   " * (`usWeightClass` 470), and the touch step this table already carries is why",
-  " * — see `docs/decisions.md` and the emitter's own note. Web and desktop draw",
+  " * — see the emitter's own note. Web and desktop draw",
   " * a true 400 and are untouched.",
   " */",
   "public val NATIVE_TYPE_FACES: Map<String, Map<Int, String>> = mapOf(",
@@ -394,7 +393,7 @@ const swiftLines: string[] = [
   "/// THE 400 KEY RESOLVES TO `InstrumentSans-Book` ON PURPOSE. It is a",
   "/// LOWERING and not a third weight: the key is the ramp's 400, the face is",
   "/// the derived 470 instance, and the touch step plus CoreText's grayscale",
-  "/// antialiasing is why — see `docs/decisions.md` and the emitter's own note.",
+  "/// antialiasing is why — see the emitter's own note.",
   "/// Web and desktop draw a true 400 and are untouched.",
   "public let centraidTypeFaces: [String: [Int: String]] = [",
   ...resolvedFaces.map(

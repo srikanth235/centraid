@@ -1,5 +1,5 @@
 <!--
-  DRAFT FOR THE OWNER'S REVIEW. Q-1029-5 in docs/decisions.md. Not approved, not published.
+  DRAFT FOR THE OWNER'S REVIEW. Not approved, not published.
 
   A published policy is the owner's. This is a rewrite around what Centraid is now: a phone that is
   the vault, backing up to a backup device the member owns. Every factual sentence below was
@@ -11,7 +11,7 @@
   TODO(owner): the earlier text carried Google's API Services User Data Policy statement and the
   Assist OAuth sections. Both are gone because Centraid no longer receives Google user data. If a
   "Centraid Assist" OAuth client or consent screen still exists in Google Cloud and points at this
-  URL, retire it (docs/release/oauth-assist-google.md describes it as superseded).
+  URL, retire it.
   TODO(owner): the earlier text named no region-specific rights (GDPR, CCPA and the like). None
   are added here. Say so if you want them.
   TODO(owner): the contact address is the one the earlier text used. Confirm it is the address you
@@ -47,7 +47,7 @@
         its files so that the phone's iCloud or Google backup leaves them out.
       </p>
       <!-- TODO(owner): the backup exclusion is implemented on both platforms, but on iOS it is
-           measured only on a physical device (SECURITY.md claim register). Confirm on a device
+           measured only on a physical device. Confirm on a device
            before this sentence ships. -->
       <p>
         <b>What Centraid reads from this phone.</b> When you make a vault, the phone asks, one at a
@@ -91,8 +91,8 @@
       download shows, such as your network address, and its own terms apply.
     </p>
     <!-- TODO(owner): the model host is pinned in ChatModelAsset (Hugging Face, ggml-org and
-         unsloth repositories). docs/release/v1-handoffs.md 4.7 plans a Centraid-published
-         fine-tuned model whose repository name is still yours to confirm. Update the host named
+         unsloth repositories). A Centraid-published
+         fine-tuned model is planned, and its repository name is still yours to confirm. Update the host named
          here when that ships. -->
   </div>
 </section>
@@ -253,13 +253,7 @@
       >.
     </p>
     <p class="aside">
-      Related: <a href="../terms/">Terms of Service</a> ·
-      <a
-        href="https://github.com/srikanth235/centraid/blob/main/docs/gateway.md"
-        target="_blank"
-        rel="noopener"
-        >How backups work</a
-      >
+      Related: <a href="../terms/">Terms of Service</a>
     </p>
   </div>
 </section>

@@ -8,7 +8,7 @@
 //! There are exactly three verdicts per step and no fourth: `ok`, `FAIL`, and a
 //! loud `SKIP` that names the command which turns it into a real run. A guarded
 //! skip that could be mistaken for a pass is the failure mode this runner is
-//! written to avoid: an external tool (`deny`, `buf`, `gitleaks`…) is required
+//! written to avoid: an external tool (`deny`, `buf`…) is required
 //! in CI and loud-skipped locally.
 //!
 //! Failure artifacts land under `target/xtask/<profile>/<step>/` — the command,
@@ -148,8 +148,6 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         step("buf", run_buf),
         step("deny", run_deny),
         step("ci-policy", run_ci_policy),
-        step("secrets", run_secrets),
-        step("osv", run_osv),
         step("release-build", run_release_build),
         step("ts-static", run_ts_static),
         // THE GENERATED TREES NO `changes` FILTER CLAIMED (#1020, close pass,
@@ -1014,7 +1012,7 @@ fn run_tests(ctx: &Ctx) -> Result<Outcome> {
     // integration test of `centraid-vault` and `centraid`, so a narrowed run
     // that selects either one would run both drills here and then again as the
     // `restore-drill` step that follows — about a minute and a half of CPU, and
-    // the cost QUALITY.md recorded as "the drills run twice per loop". The step
+    // the cost recorded as "the drills run twice per loop". The step
     // still runs them, by name, in this same gate run, so the promise is proved
     // on every loop exactly as before; only the duplicate goes. Asked for
     // alone (`--lane test`) the step keeps them, because nothing else will run
@@ -1137,7 +1135,7 @@ fn run_call_budget(ctx: &Ctx) -> Result<Outcome> {
 /// **A RELEASE build, and `--include-ignored`.** The promise is the shipped
 /// core's: the phone runs an optimised core, and a debug build runs the
 /// correction pass over the word list three to five times slower (measured on
-/// this corpus, `receipts/issue-1135-vault-model.md`), so a debug measurement
+/// this corpus, [#1135](https://github.com/srikanth235/centraid/issues/1135)), so a debug measurement
 /// would hold the product to a promise it was never going to be built under.
 /// The measurement is `#[ignore]`d so the `test` step does not run a minutes-long
 /// suite a second time in a profile it does not measure; this step is where it
@@ -1516,192 +1514,6 @@ fn run_ci_policy(ctx: &Ctx) -> Result<Outcome> {
     })
 }
 
-/// Secret scanning over the working tree (#671). Unfiltered, because any pull
-/// request can introduce a secret — which is also why it cannot be left behind
-/// in a workflow that no longer runs on pull requests.
-///
-/// **The scan is over the repository's files, not over its build output**
-/// (D-1020-B2-5). `--no-git` is what gives the step its working-tree coverage —
-/// an uncommitted secret is exactly what a pre-merge scan is for — but it also
-/// makes gitleaks walk `target/` and `node_modules/`, and once the Rust
-/// workspace is built that walk reports six findings inside `.rmeta` files,
-/// every one of them a PEM header in `pem-rfc7468`/`pkcs8` doc strings a
-/// TLS dependency vendors. gitleaks 8.30 has no `--exclude-path` and no `.gitignore`
-/// support (`gitleaks dir --help`; the only `gitignore` string in the binary is
-/// a stopword), and its one exclusion mechanism is the config allowlist, which
-/// is the file this step exists to keep honest.
-///
-/// So the step keeps ONE unfiltered scan and classifies gitleaks' own JSON
-/// report afterwards: a finding is dropped only when **git itself** says the
-/// file is not part of the repository — `git check-ignore` matches it and `git
-/// ls-files` does not track it. That is not an allowlist of secret patterns, it
-/// is the answer to "is this a file we wrote?", and it cannot hide a tracked
-/// file: `git check-ignore` honours the index, so a tracked file is never
-/// reported as ignored, and the tracked-file probe is belt and braces over that.
-/// Both counts are printed, so the dropped set is never silent.
-///
-/// The alternative considered and rejected was one `gitleaks dir` invocation per
-/// non-ignored top-level entry (71 of them here): measured at 46.5 s against
-/// 2.7 s for the single scan, because gitleaks pays its ruleset compile per
-/// process. A 17× slower secrets step charged to the `pr` budget buys nothing
-/// the report filter does not already give.
-fn run_secrets(ctx: &Ctx) -> Result<Outcome> {
-    const COVERS: &str = "the working tree for high-entropy and non-provider secret patterns";
-    const INSTALL: &str = "install the pinned gitleaks release (gate.yml does)";
-    if !binary_available("gitleaks") {
-        return Ok(missing_binary(ctx, "gitleaks", COVERS, INSTALL));
-    }
-    let dir = ctx.artifacts.join("secrets");
-    fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
-    let report = dir.join("report.json");
-    let report_arg = report.to_string_lossy().into_owned();
-    let args = [
-        "detect",
-        "--source",
-        ".",
-        "--no-git",
-        "--config",
-        ".gitleaks.toml",
-        "--redact",
-        "--no-banner",
-        "--report-format",
-        "json",
-        "--report-path",
-        &report_arg,
-    ];
-    let output = Command::new("gitleaks")
-        .args(args)
-        .current_dir(&ctx.root)
-        .output()
-        .context("spawn `gitleaks detect`")?;
-    fs::write(
-        dir.join("command.txt"),
-        format!("gitleaks {}\n", args.join(" ")),
-    )?;
-    fs::write(dir.join("stderr.log"), &output.stderr)?;
-    // gitleaks exits 1 when it found something and something else when it could
-    // not run at all. Only the second is this step failing to answer, and it is
-    // reported as such rather than as "no secrets".
-    let code = output.status.code().unwrap_or(-1);
-    if code != 0 && code != 1 {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let why: String = stderr
-            .lines()
-            .rev()
-            .find(|candidate| !candidate.trim().is_empty())
-            .unwrap_or("(no stderr)")
-            .chars()
-            .take(160)
-            .collect();
-        return Ok(Outcome::Failed(format!(
-            "`gitleaks detect` exited {code} without producing a verdict — {why} · artifact: {}",
-            display_relative(&ctx.root, &dir)
-        )));
-    }
-    let files = report_files(&report)?;
-    let (in_repo, dropped) = split_by_repository_membership(&ctx.root, &files);
-    let aside = if dropped.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "; {} finding(s) dropped in files .gitignore excludes and git does not track (build output, e.g. {})",
-            dropped.len(),
-            dropped[0]
-        )
-    };
-    if in_repo.is_empty() {
-        return Ok(Outcome::Ok(format!(
-            "gitleaks over the working tree: 0 finding(s) in repository files{aside}"
-        )));
-    }
-    fs::write(
-        dir.join("findings.txt"),
-        format!("{}\n", in_repo.join("\n")),
-    )?;
-    Ok(Outcome::Failed(format!(
-        "{} secret finding(s) in repository files (first: {}){aside} · artifact: {}",
-        in_repo.len(),
-        in_repo[0],
-        display_relative(&ctx.root, &dir)
-    )))
-}
-
-/// The `File` of every finding in a gitleaks JSON report, in report order.
-///
-/// A report gitleaks did not write (it writes none when it found nothing) is an
-/// empty finding list, not an error.
-fn report_files(report: &Path) -> Result<Vec<String>> {
-    let Ok(text) = fs::read_to_string(report) else {
-        return Ok(Vec::new());
-    };
-    if text.trim().is_empty() {
-        return Ok(Vec::new());
-    }
-    let findings: Vec<serde_json::Value> =
-        serde_json::from_str(&text).context("the gitleaks JSON report did not parse")?;
-    Ok(findings
-        .iter()
-        .map(|finding| {
-            finding
-                .get("File")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("(no File field)")
-                .replace('\\', "/")
-        })
-        .collect())
-}
-
-/// Split finding paths into (part of the repository, build output).
-///
-/// A path is build output only when `git check-ignore` matches it AND
-/// `git ls-files` does not track it. Anything git cannot classify — including
-/// the case where git is not runnable at all — stays in the repository half, so
-/// a broken git makes the step noisier rather than blinder.
-fn split_by_repository_membership(root: &Path, files: &[String]) -> (Vec<String>, Vec<String>) {
-    let mut in_repo = Vec::new();
-    let mut dropped = Vec::new();
-    for file in files {
-        if git_says_ignored(root, file) && !git_says_tracked(root, file) {
-            dropped.push(file.clone());
-        } else {
-            in_repo.push(file.clone());
-        }
-    }
-    (in_repo, dropped)
-}
-
-fn git_says_ignored(root: &Path, file: &str) -> bool {
-    Command::new("git")
-        .args(["check-ignore", "--quiet", "--", file])
-        .current_dir(root)
-        .output()
-        .is_ok_and(|output| output.status.success())
-}
-
-fn git_says_tracked(root: &Path, file: &str) -> bool {
-    Command::new("git")
-        .args(["ls-files", "--error-unmatch", "--", file])
-        .current_dir(root)
-        .output()
-        .is_ok_and(|output| output.status.success())
-}
-
-/// The full lockfile advisory inventory (#671), through the repo's own script so
-/// the CRITICAL-only threshold and the report stay in one place.
-fn run_osv(ctx: &Ctx) -> Result<Outcome> {
-    if !binary_available("osv-scanner") {
-        return external(
-            ctx,
-            "osv",
-            "osv-scanner",
-            &["--version"],
-            "bun.lock against the OSV database",
-            "install the pinned osv-scanner release (gate.yml does)",
-        );
-    }
-    process(ctx, "osv", "node", &["scripts/ci/osv-lockfile-scan.mjs"])
-}
-
 /// The release build, scored against the compile-time ledger.
 ///
 /// The measurement is written as evidence and compared with the ledger's
@@ -1867,7 +1679,7 @@ fn run_device_lanes(ctx: &Ctx) -> Result<Outcome> {
 /// exists under the names the protocol fixes, is complete, is under 90 days
 /// old, and did not come from a simulator (R-1020-20).
 fn device_backup_evidence(ctx: &Ctx) -> Result<Outcome> {
-    let dir = ctx.root.join("receipts/experiments/backup");
+    let dir = ctx.root.join("mobile/maestro/evidence/backup");
     if !dir.is_dir() {
         return Ok(Outcome::Skipped(format!(
             "no evidence in {}. The protocol is mobile/maestro/backup-measurement.md: an evening, a night and a restore on a NAMED reference device, not a nightly",
@@ -2327,11 +2139,11 @@ mod tests {
         assert_eq!(&release[..nightly.len()], &nightly[..]);
     }
 
-    /// The CI-policy and supply-chain steps run on every pull request.
+    /// The CI-policy and contract steps run on every pull request.
     #[test]
-    fn pr_carries_the_ci_policy_and_security_steps() {
+    fn pr_carries_the_ci_policy_and_buf_steps() {
         let pr = names(Profile::Pr);
-        for required in ["ci-policy", "secrets", "osv", "buf"] {
+        for required in ["ci-policy", "buf"] {
             assert!(
                 pr.contains(&required),
                 "`{required}` missing from pr: {pr:?}"
@@ -2592,7 +2404,7 @@ mod tests {
     ///
     /// The step is not CALLED here: it starts a Gradle daemon-less build and a
     /// `cargo build`, so invoking it from a unit test would be running the
-    /// profile inside `cargo test -p xtask`. Its wall clock is in the receipt.
+    /// profile inside `cargo test -p xtask`. Its wall clock is on the issue.
     #[test]
     fn the_mobile_jvm_profile_has_one_real_step_and_fails_without_the_mobile_tree() {
         assert_eq!(
@@ -2760,10 +2572,10 @@ mod tests {
         let ctx = scoring_ctx(&root);
         assert!(matches!(
             device_backup_evidence(&ctx).expect("runs"),
-            Outcome::Skipped(why) if why.contains("receipts/experiments/backup")
+            Outcome::Skipped(why) if why.contains("mobile/maestro/evidence/backup")
         ));
 
-        let dir = root.join("receipts/experiments/backup");
+        let dir = root.join("mobile/maestro/evidence/backup");
         fs::create_dir_all(&dir).expect("the evidence dir");
         let restore = serde_json::json!({
             "device": "iPhone 15", "osVersion": "26.0", "build": "1.0.0",
@@ -2863,67 +2675,6 @@ mod tests {
             score(Profile::Nightly, Tree::Cold, 9_999.0, None, &ctx),
             "unbounded by ruling"
         );
-    }
-
-    /// The secrets step drops a finding only when git says the file is neither
-    /// tracked nor part of the repository (D-1020-B2-5). The two halves that
-    /// matter are pinned here: a dependency's `.rmeta` under `target/` goes, and a
-    /// tracked file goes nowhere — including a tracked file that matches an
-    /// ignore pattern, which is the case a naive `.gitignore` filter would lose.
-    #[test]
-    fn only_untracked_ignored_build_output_is_dropped_from_a_secrets_report() {
-        let root = crate::testing::fixture_dir("secrets-membership");
-        let git = |args: &[&str]| {
-            let ok = Command::new("git")
-                .args(args)
-                .current_dir(&root)
-                .output()
-                .expect("git runs")
-                .status
-                .success();
-            assert!(ok, "git {args:?}");
-        };
-        git(&["init", "--quiet"]);
-        fs::write(root.join(".gitignore"), "target\nkept.log\n").expect("write .gitignore");
-        fs::create_dir_all(root.join("target/debug/deps")).expect("create target");
-        fs::write(root.join("target/debug/deps/libpem.rmeta"), "-----BEGIN").expect("write rmeta");
-        fs::write(root.join("kept.log"), "tracked though ignored").expect("write kept.log");
-        fs::write(root.join("src.rs"), "fn main() {}").expect("write src.rs");
-        git(&["add", "--force", ".gitignore", "kept.log", "src.rs"]);
-        git(&[
-            "-c",
-            "user.email=t@t",
-            "-c",
-            "user.name=t",
-            "commit",
-            "--quiet",
-            "-m",
-            "base",
-        ]);
-        let files = [
-            "target/debug/deps/libpem.rmeta".to_owned(),
-            "kept.log".to_owned(),
-            "src.rs".to_owned(),
-        ];
-        let (in_repo, dropped) = split_by_repository_membership(&root, &files);
-        assert_eq!(dropped, ["target/debug/deps/libpem.rmeta"]);
-        assert_eq!(in_repo, ["kept.log", "src.rs"]);
-    }
-
-    /// A report gitleaks never wrote is zero findings; a report it wrote is read
-    /// by its `File` field. Anything else would make the step's verdict depend
-    /// on a parse that silently returned nothing.
-    #[test]
-    fn a_gitleaks_report_is_read_by_its_file_field() {
-        let root = crate::testing::fixture_dir("secrets-report");
-        assert!(
-            report_files(&root.join("absent.json"))
-                .expect("an absent report is not an error")
-                .is_empty()
-        );
-        let path = root.join("report.json");
-        fs::write(&path, r#"[{"File":"a/b.md","RuleID":"generic-api-key"}]"#).expect("write");
-        assert_eq!(report_files(&path).expect("parse"), ["a/b.md"]);
     }
 
     #[test]

@@ -6,7 +6,7 @@ import SwiftUI
 /// **A fresh install used to land on Home** — "No vault yet" over a grid that
 /// could only skeleton — with onboarding two taps away behind the vault chip.
 /// The vault is founded on this phone, so the first thing the app owes a
-/// member is the way to make one (`docs/recovery/pairing.md`'s "Founding").
+/// member is the way to make one.
 ///
 /// ## Three paper slips, because the model is the unfamiliar part
 ///

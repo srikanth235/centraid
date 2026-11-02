@@ -6,7 +6,7 @@
 //!
 //! The file is opened as it is, so point it at a COPY: opening a vault writes a
 //! `-wal` sidecar and a checkpoint folds that back into the file
-//! ([`docs/traps/wal-checkpoint.md`](../../../../docs/traps/wal-checkpoint.md)).
+//! (`.claude/skills/sqlite/SKILL.md`).
 
 use std::process::ExitCode;
 
