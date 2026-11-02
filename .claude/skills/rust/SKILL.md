@@ -29,7 +29,7 @@ Ruling R4 ([#1160](https://github.com/srikanth235/centraid/issues/1160)): `thise
 | A failure a caller handles differently | Its own variant, with the remedy in the doc comment (`DiskFull`, `RebootstrapRequired`, `Unpaired`) |
 | A refusal that crosses the C ABI | A `CoreError` variant that maps to exactly one `ErrorCode` in `CoreError::code()` |
 | A deny from the authority plane | A value (`Decision`), not an error |
-| `main`, a CLI verb, xtask | `anyhow::Result` with `.context(...)`. These are the only places `anyhow` is a dependency: `gateway` (the `server` feature, `bin/centraid-gateway.rs`), `xtask`, and `media` (see [CENTRAID.md](CENTRAID.md)) |
+| `main`, a CLI verb, xtask | `anyhow::Result` with `.context(...)`. These are the only places `anyhow` is a dependency: `gateway` (the `server` feature, `bin/centraid-gateway.rs`), `xtask`. (`media` also depends on it; that is not a pattern, see [CENTRAID.md](CENTRAID.md).) |
 | A bug or violated invariant | `.expect("<the invariant>")`, `assert!`, `unreachable!` |
 
 - Library `src` outside `#[cfg(test)]` has **no `.unwrap()` today** and about 40 `.expect(...)`, each message stating why it cannot fail (`"n - k is non-negative here"`). Keep it at zero: a new `.unwrap()` in product code is a review blocker. `?` for anything input, disk, network or a lock can cause.
