@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Report which release secret *names* are present in the environment.
- * Never prints secret values (issue #501 / #512 / docs/enrollment.md).
+ * Never prints secret values (issue #501 / #512).
  *
  *   node scripts/release/verify-secrets.mjs [--strict]
  */
@@ -66,7 +66,7 @@ if (strict) {
   }
   if (missingRequired > 0) {
     console.error(
-      `${missingRequired} secret group(s) incomplete — enrollment residual (docs/enrollment.md)`
+      `${missingRequired} secret group(s) incomplete — enrollment residual`
     );
     process.exit(1);
   }

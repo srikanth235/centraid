@@ -28,7 +28,7 @@ import java.util.concurrent.Executors
  * whose dialog counts what goes and deletes on a yes. Below API 30 that verb
  * does not exist — API 29 asks once per item and API 28 and below not at all —
  * so [offered] is false there and the More sheet draws no row
- * (`minSdk` is an owner question, `docs/release/v1-handoffs.md` PH4).
+ * (`minSdk` is an owner question).
  *
  * **One per activity.** The dialog's answer comes back through an activity
  * result launcher, which must be registered before the activity starts — so

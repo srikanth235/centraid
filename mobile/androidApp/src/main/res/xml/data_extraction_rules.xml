@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  ALL app data is excluded from cloud backup AND from device-to-device transfer
-  (`docs/mobile-offline.md:240-247`). Two `<exclude>` blocks and not one: the
+  ALL app data is excluded from cloud backup AND from device-to-device transfer.
+  Two `<exclude>` blocks and not one: the
   two transports are configured separately on Android 12+, and excluding only
   the first is how a vault replica ends up on a new phone the owner never
   enrolled.

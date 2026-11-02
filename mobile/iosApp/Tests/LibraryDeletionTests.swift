@@ -10,8 +10,7 @@ import XCTest
 /// request meant — without the library. Each rule has its NEGATIVE case: an
 /// asset edited after its backup, a Live Photo without its movie and a movie
 /// row alone are all kept, because a gate shown only green is a gate nobody saw
-/// refuse. The system's alert and the deletion itself are device hand-offs
-/// (`docs/release/v1-handoffs.md`, section 8).
+/// refuse. The system's alert and the deletion itself are device hand-offs.
 final class LibraryDeletionTests: XCTestCase {
     private let still = "6C1E9C2B-1F0A-4E7B-9B21-3D1A2F0C8E11/L0/001"
 

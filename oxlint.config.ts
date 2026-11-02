@@ -6,7 +6,7 @@ import vitest from "ultracite/oxlint/vitest";
 // ---------------------------------------------------------------------------
 // #656 Layer 4 — test seams as merge blockers.
 //
-// TESTING.md says "prefer the kit". Prose does not survive contact with an
+// The typescript skill says "prefer the kit". Prose does not survive contact with an
 // agent writing the twentieth test file of a session, so the three seams whose
 // hand-rolled forms actually caused defects are mechanical here. Each entry
 // names the kit helper that replaces it; a ban with no shorter alternative is
@@ -114,7 +114,7 @@ const VITEST_TEST_FILES = [
 // consumer's, so `extends: [vitest]` would leave no way to order the repo's
 // own vitest corrections after it. Its override is therefore spliced into
 // `overrides` below verbatim — same rules, same glob — which makes ordering
-// ours. See TESTING.md, "ultracite vitest preset (#573)".
+// ours (#573).
 export default defineConfig({
   extends: [core, react],
   options: {
@@ -287,13 +287,13 @@ export default defineConfig({
     {
       // The two rules in the preset that trade assertion precision for
       // brevity, and the only two that contradict a rule this repo already
-      // documents: TESTING.md's test convention says "Prefer specific matchers
+      // documents: the typescript skill's test convention says "Prefer specific matchers
       // and meaningful expected values over `toBeTruthy()`". `expect(x).toBe(true)`
       // asserts x is exactly the boolean true; `expect(x).toBeTruthy()` also
       // passes for 1, 'x', [], {}. Autofixing the preset over this suite
       // rewrites 1,117 `toBe(true)` and 720 `toBe(false)` into strictly weaker
       // assertions. Everything else in the preset is adopted as-is; these two
-      // are held off deliberately. See TESTING.md, "ultracite vitest preset (#573)".
+      // are held off deliberately (#573).
       files: [
         "**/*.{test,spec}.{ts,tsx,js,jsx}",
         "**/__tests__/**/*.{ts,tsx,js,jsx}",
@@ -307,7 +307,7 @@ export default defineConfig({
         // printed when the assertion fails, e.g.
         // `expect(res.status, JSON.stringify(body)).toBe(400)`. Complying with
         // the default would mean deleting those messages, which is the opposite
-        // of the "clear failure output" rule in TESTING.md. This corrects the
+        // of the "clear failure output" rule in the typescript skill. This corrects the
         // rule for the runner rather than relaxing it: everything else it
         // checks still applies.
         "vitest/valid-expect": ["error", { maxArgs: 2 }],

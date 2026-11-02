@@ -21,7 +21,7 @@ import org.junit.Test
  * instance on two interfaces becomes one sighting, and the one answer a window ends with. It runs
  * here over fakes for the two platform seams (`ServiceFinder`, `AddressResolver`), the same split
  * as iOS's `GatewayBrowseTests`. `NsdManager` finding a real advertisement is not provable without
- * an mDNS responder; `docs/release/v1-handoffs.md` carries that. Each rule has its negative beside
+ * an mDNS responder, so that is a device hand-off. Each rule has its negative beside
  * it: a result with no `gw` is never reported, a second answer is never delivered, and an answer
  * after the window is ignored. Which sighting is which gateway is Rust's.
  */

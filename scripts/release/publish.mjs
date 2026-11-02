@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * D2 publish half — only after maintainer authorization (docs/release.md D1).
+ * D2 publish half — only after maintainer authorization.
  *
  *   node scripts/release/publish.mjs --version 0.2.1 --issue 501 \
  *     [--surfaces desktop,gateway-image] [--dry-run] [--beta] [--push]

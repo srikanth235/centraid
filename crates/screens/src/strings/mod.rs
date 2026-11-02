@@ -3,7 +3,7 @@
 //!
 //! A hand-rolled catalog rather than `fluent`: the product needs plural forms
 //! and a locale seam, not message selectors, and a parser dependency for that
-//! would be the first of its kind in `docs/toolchain.md`'s register. If a
+//! would be the first of its kind in the dependency tree. If a
 //! locale ever needs gender or case selection, this file is what moves.
 //!
 //! ## Adding a string

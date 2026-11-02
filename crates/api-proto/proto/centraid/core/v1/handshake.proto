@@ -1,6 +1,6 @@
 // The version window (#1020, D-1020-C6, Compatibility).
 //
-// Three numbers ride the wire (`docs/protocol.md`, "The version window"): the
+// Three numbers ride the wire: the
 // product version is DISPLAY ONLY — a client must not refuse to connect on it;
 // `schema_version` and `min_supported` are the window. The rule is symmetric:
 //
@@ -25,8 +25,7 @@ message Hello {
   // connection on it is the bug this comment exists to prevent.
   string product_version = 3;
   // Required feature flags. A peer that does not offer a capability this build
-  // requires is out of the window even when the numbers agree
-  // (`docs/protocol.md`, "Feature contract — per feature").
+  // requires is out of the window even when the numbers agree.
   repeated string capabilities = 4;
   // WHAT THIS BUILD IS ([#1020](https://github.com/srikanth235/centraid/issues/1020)
   // Artifacts, D-1020-G2). A prebuilt core the shell did not compile cannot be

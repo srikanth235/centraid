@@ -30,8 +30,7 @@ export interface TypeStyle {
    * is 13/19 here and 15/22 in `design/native-theme.json`, in
    * `mobile/iosApp/Design/Theme.swift`, which are emitted from this table by
    * `contracts/tools/export-native-theme.ts`. One role, two surfaces, one
-   * declared step — see [nativeDelta] and `docs/design-machinery.md`'s
-   * invariant 5.
+   * declared step — see [nativeDelta].
    *
    * The reading that costs an afternoon is treating the emitted table as a
    * second scale and "correcting" it towards this one. It is generated; the

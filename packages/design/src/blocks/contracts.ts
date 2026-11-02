@@ -321,8 +321,8 @@ export interface GridSortData {
  *    the phone. On the shell a commit control disables itself while the gateway
  *    is down, because a shell write goes THROUGH the gateway and would simply
  *    fail. A phone write does not: it lands in the local replica and is
- *    admitted as `queued`, reconciling when the gateway answers again
- *    (docs/mobile-offline.md). Refusing it there would break the offline-first
+ *    admitted as `queued`, reconciling when the gateway answers again.
+ *    Refusing it there would break the offline-first
  *    contract to buy a symmetry nobody asked for. The concept is shared; the
  *    CONSEQUENCE is genuinely per-surface, so the flag stays where it has one.
  */

@@ -59,7 +59,7 @@ permissions:
 jobs:
   # We only ship a build a green nightly promoted: the tag must point at
   # `refs/candidates/latest`. `bun run release:prepare` refuses the same SHA
-  # before the tag exists (docs/release.md).
+  # before the tag exists.
   require-candidate:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -128,7 +128,7 @@ jobs:
       ref: ${{ inputs.ref || '' }}
 
   # Never reached by a tag: store submission is opt-in, by dispatching with
-  # `surfaces: mobile` exactly (J7, docs/release.md).
+  # `surfaces: mobile` exactly (J7).
   mobile:
     needs: plan
     if: >

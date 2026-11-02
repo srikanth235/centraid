@@ -414,7 +414,7 @@ class AbiRoundTripSpec : StringSpec({
          * `entity` and none in this one, so these numbers are a **bounded read's floor** — the
          * SQL plan, the protobuf round trip and the JNA marshalling are real and
          * the row copy is not. The device measurement at 50k assets is the
-         * owner's, and `docs/mobile-offline.md` says which number decides what.
+         * owner's.
          */
         private val SCREEN_READS = mapOf(
             "photos.grid" to ScreenRead(

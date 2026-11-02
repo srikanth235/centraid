@@ -290,7 +290,7 @@ targets:
         NSBonjourServices:
           - _centraid-gateway._tcp
         # iCloud is EXCLUDED from the replica directory in code; this is the
-        # declaration that goes with it (`docs/mobile-offline.md:240-247`).
+        # declaration that goes with it.
         ITSAppUsesNonExemptEncryption: false
 
   CentraidTests:

@@ -12,8 +12,8 @@ import Network
 //
 // THE PHONE ONLY BROWSES. `NWBrowser` sends a multicast query and reads its
 // answers; nothing here is an `NWListener`, and nothing accepts a connection.
-// (`no-listening-socket` scans Rust, and this is not Rust; the doctrine is
-// SECURITY.md's, and this file is where it is kept on iOS.) The one other act
+// (`no-listening-socket` scans Rust, and this is not Rust; this file is where the
+// rule is kept on iOS.) The one other act
 // is an OUTBOUND TCP connect to a service the browse found, below.
 //
 // HOW AN ADVERTISEMENT BECOMES ADDRESSES. `NWBrowser` returns a Bonjour

@@ -68,7 +68,7 @@ final class ScreenStore: ObservableObject {
     #if os(iOS)
     private var backgroundGrace: ForegroundGrace?
     #endif
-    /// EACH SCREEN'S EFFECTS, PERFORMED IN THE ORDER IT ASKED (`docs/screens.md`, phone
+    /// EACH SCREEN'S EFFECTS, PERFORMED IN THE ORDER IT ASKED (phone
     /// imports): a service tells its answers apart by what they answer, so a cursor write that is
     /// answered after the wait behind it would be taken for the wait. One queue per instance; an
     /// effect that answers more than once and for long (a model download, a browse, a pick)

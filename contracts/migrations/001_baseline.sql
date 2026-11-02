@@ -1,6 +1,6 @@
 -- THE VAULT'S BASELINE: the whole schema a new vault is founded with, and the rows that founding
 -- seeds. One rung, hand-written ([#1135](https://github.com/srikanth235/centraid/issues/1135));
--- `docs/vault-ontology.md` says what each table means and why, and this file is what the
+-- this file is what the
 -- commitment tests in `crates/vault/tests/commitments.rs` read.
 --
 -- `contracts/schema/vault-ddl.sql` is the same schema ordered for READING, generated:
