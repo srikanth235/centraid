@@ -62,6 +62,27 @@ fn a_to_b(e: &mut MyEnum) {
 
 **Keep `Rc`, `Arc`, `Box`, and `RefCell` out of public signatures.** Take `&T`, `&mut T`, or `T` and let callers decide how to own things. A service that must be shared implements a cheap `Clone` by wrapping its state in `Arc<Inner>` internally.
 
+### Compiler and clippy errors
+
+Fix the first error first: later ones are often its echo. Clippy runs `cargo clippy --workspace --all-targets -- -D warnings` in the gate, so every warning is an error; fix the code, never add `#[allow]` to go green.
+
+| Error | Fix |
+| --- | --- |
+| `E0382` use of moved value | Borrow it (`&x`), move the last use later, or restructure so one owner consumes it; clone only if two owners are really needed |
+| `E0502` / `E0499` cannot borrow as mutable more than once | Shorten the first borrow (end it before the second), split the struct into disjoint fields, or collect indices first and mutate after |
+| `E0505` move out while borrowed | End the borrow first, or move the data into the closure or thread that needs it |
+| `E0106` missing lifetime specifier | Return an owned value, or name one lifetime tying the output to the input it borrows from |
+| `E0597` / `E0515` does not live long enough, returns reference to local | Return the owned value, or take the buffer from the caller |
+| "future is not `Send`" | A non-`Send` value (`Rc`, `RefCell` guard, `MutexGuard`) is held across an `.await`; drop it in a block before the await, or use `Arc` and an async-aware lock |
+| `E0277` trait bound not satisfied | Read the "required by" note; add the bound to the generic, derive the trait, or convert the type |
+| `E0308` mismatched types | Convert at the boundary (`.into()`, `?` with a `From` impl, `as_deref()`), not with a cast |
+| `E0599` no method found | Import the trait that provides it, or the type lacks a derive or a feature flag |
+| `clippy::unnecessary_unwrap`, `clippy::manual_unwrap_or` | Use `if let`, `?` or `unwrap_or`; product code has no `unwrap()` by house rule (clippy does not enforce it, review does) |
+| `clippy::needless_borrow`, `redundant_clone`, `clone_on_copy` | Delete the `&` or `.clone()` it points at |
+| `clippy::too_many_arguments`, `type_complexity` | Group arguments in a struct; name the type with an alias |
+| `unused_must_use` / unused `Result` | Handle it with `?`; `let _ =` only for a deliberate best-effort call, with a comment |
+| "usage of an `unsafe` block" under `#![forbid(unsafe_code)]` | Only the FFI crates may use `unsafe`; do not lift the forbid, move the code or use a safe API |
+
 ## 4. Types and API design
 
 ### Naming
@@ -252,9 +273,39 @@ Pick the mechanism by contract:
 - Fuzz parsers of untrusted input with `cargo fuzz`. Benchmark with `criterion` or `divan` and `std::hint::black_box`. Run Miri over `unsafe`.
 - Assertions get context so failures read well: `assert_eq!(got, want, "input {input:?}")`.
 
-## 12. Performance, in order
+## 12. Performance
 
-Design for usability first and optimize after measuring. When you do: `Vec::with_capacity` or `collect()` over push loops; reuse caller-owned buffers in hot APIs (`fn read_into(&mut self, buf: &mut Vec<u8>)`); `Box<[T]>`, `Box<str>`, `Arc<str>` for long-lived immutable sequences; `shrink_to_fit` on long-lived collections built without a reservation; a faster hasher (`foldhash`, `FxHash`) only for trusted keys; batch work instead of per-item locking; applications may set a `#[global_allocator]` such as `mimalloc`. Derive `Copy` for small plain types and never for large ones.
+Design for usability first, optimize after measuring. Every change starts and ends with a number.
+
+```text
+reproduce -> measure (optimized build) -> find the line -> fix -> measure again -> commit with the numbers
+```
+
+1. **Reproduce** with one command: a test, an `--ignored` rig, or the budget step. Write it down.
+2. **Measure an optimized build.** A debug build is several times slower and points at the wrong code (the search budget runs `--release` for exactly that reason). This workspace's `dev` profile optimizes dependencies at `opt-level = 2` but not your crates; `cargo test --release` or `cargo build --release` is the number to trust. `[profile.release]` keeps `panic = "unwind"` because the FFI boundary catches panics, and `dist` adds thin LTO.
+3. **Find the line** with the tool for the symptom:
+
+   | Symptom | Tool |
+   | --- | --- |
+   | A test or request is slow | `RUST_LOG=debug cargo test --release -p <crate> --test <name> -- --nocapture`, with `tracing` spans (`#[tracing::instrument]`, `tracing` is a workspace dependency) around the suspects |
+   | CPU hot spot, any function | `perf record -g` then `perf report` on the test binary, if installed (Linux); `cargo flamegraph` if installed; on macOS `xcrun xctrace record --template 'Time Profiler'` |
+   | A SQL read is slow | `EXPLAIN QUERY PLAN` (see the sqlite skill); `crates/core/tests/query_plans.rs` plans every page query |
+   | Allocation churn | count allocations with a counting `#[global_allocator]` in a test, or `heaptrack` if installed |
+   | Slow incremental build | `cargo build --timings`; `cargo xtask measure --write` records the edit-run loop |
+   | Two implementations, which is faster | a `criterion` or `divan` bench with `std::hint::black_box`; no crate here has `benches/` yet, so adding one is a new dependency to justify |
+
+   Profiler traces, flamegraph SVGs and core dumps can contain the process environment, including tokens inherited from the agent's shell. Delete them after reading; never commit them.
+
+4. **Fix**, smallest change first: `Vec::with_capacity` or `collect()` over push loops; reuse caller-owned buffers in hot APIs (`fn read_into(&mut self, buf: &mut Vec<u8>)`); `Box<[T]>`, `Box<str>`, `Arc<str>` for long-lived immutable sequences; a faster hasher (`foldhash`, `FxHash`) only for trusted keys; batch work instead of per-item locking. Derive `Copy` for small plain types, never large ones.
+5. **Measure again** with the same command. Put before and after in the commit message: "search p95 41 ms, was 180 ms".
+
+This repo's own budgets, all run by `cargo xtask gate --profile pr`:
+
+- `call-budget`: `cargo test --workspace --test call_budget -- --nocapture` (`crates/core/tests/call_budget.rs`), p50/p95/p99 of core calls against the ledger; ceilings only go down.
+- `search-budget`: `cargo test --release --workspace --test search_budget -- --nocapture --include-ignored`, p95 of each query on each surface over the year-3 vault, against `contracts/ledgers/search-budget.json`.
+- `tests/journeys.json`: the journey ledger of measured ceilings per surface, volume and hardware. A ceiling is tightened freely; widening one needs an `approvedDeviation` note.
+- Year-3 rigs, `#[ignore]`d from normal runs: `crates/apps/<app>/tests/year3.rs`, e.g. `cargo test -p centraid-apps-notes --test year3 -- --ignored --nocapture` (agenda, docs, health, money, notes, people, photos). Run them in `--release` for numbers you quote.
+- Nothing whose cost grows with the vault runs on a request path: page by keyset cursor with `LIMIT`.
 
 ## 13. Final checklist
 
@@ -292,6 +343,8 @@ Centraid is one Rust workspace in `crates/`. Its crates are internal, so most ar
 - **Never sort, key, hash or compare a `serde_json::Value` by its printed text.** `to_string` prints keys in insertion order when `preserve_order` is on and name order when off, and Cargo unifies that feature across the whole build (`agent-client-protocol` turns it on, four crates away). A parity suite that sorted rows by printed JSON passed under `cargo test -p centraid-apps-people` and failed under `cargo test --workspace`. Use `crates/apps/kit`'s `canonical_json` (sorted keys, one number spelling), compare values with `==`, assert the order-independence property as well as the answer, and re-run JSON-ordering claims under `cargo test --workspace`. Do not toggle `preserve_order` to fix it, either way.
 - **A test that writes an executable and runs it is slow on macOS.** The first exec of a just-written file waits on the system's code assessment, one file at a time: about 500 ms for one script, over 7 s for sixteen at once, which is exactly what nextest does under the `pr` gate. A fixed few-seconds window for a fake tool is a guess about the whole machine (the fake-`dns-sd` tests in `crates/gateway/src/server/bonjour.rs` failed this way while passing alone). Wait on a condition, not a sleep, with a generous ceiling (60 s) for a fake's first run; wait for a noted line to be whole (ends in a newline), not for the file to exist (`echo > f` creates it before writing); have production code answer the moment a watched child exits; and prefer a binary the system ships (`/bin/sh`) over a fresh one.
 
+**Done when** `cargo xtask gate --profile local` is green (fmt, clippy `-D warnings`, the tests of the crates you touched and their dependents, rules, doc-links), and `cargo xtask gate --profile pr` is green before you open a PR. One crate's `cargo test` alone is not enough. A performance change also has its before and after numbers in the commit message.
+
 ## References
 
 Read these when you need the reasoning behind a rule or a complete checklist for a task. Each is a condensed digest of one source.
@@ -302,4 +355,4 @@ Read these when you need the reasoning behind a rule or a complete checklist for
 - `references/microsoft-rust-guidelines.md` (https://microsoft.github.io/rust-guidelines/): error struct design, panic policy, unsafe policy, async, workspace layout, performance.
 - `references/google-rust-style-guide.md` (https://google.github.io/styleguide/rustguide.html): formatting, imports, module layout, accessor naming, application vs library.
 
-Adapted from [BeautifulRust](https://github.com/morganlinton/BeautifulRust) by Morgan Linton (MIT, [license](licenses/BeautifulRust-LICENSE)).
+Error table, measuring loop and done-when adapted from [Bama](https://github.com/daveebbelaar/bama) by Dave Ebbelaar (MIT, [license](licenses/Bama-LICENSE)). Adapted from [BeautifulRust](https://github.com/morganlinton/BeautifulRust) by Morgan Linton (MIT, [license](licenses/BeautifulRust-LICENSE)).
