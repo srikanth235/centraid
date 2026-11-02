@@ -42,7 +42,7 @@ It is the read vocabulary — pages, money, paged reads, the statement grammar a
 
 ## Rules that each close a known defect
 
-Each was found in the independent implementation the parity fixtures were captured from, and is recorded in [`receipts/issue-1020-v1-platform.md`](../../../receipts/issue-1020-v1-platform.md).
+Each was found in the independent implementation the parity fixtures were captured from, and is recorded on [#1020](https://github.com/srikanth235/centraid/issues/1020).
 
 1. **A keyset page cannot be continued over a NULLABLE sort column.** SQLite compares a row value with a NULL operand to NULL, so a naive continuation silently drops rows in three of the four (direction, boundary) cases. The kit refuses the continuation (`KitError::NullableSortKey`). Found by a property test, which is why `tests/keyset_properties.rs` is a property test and not a table of examples.
 2. **A fan-out bound reports the cap it can REACH.** `MAX_PAGE_ROWS` clamps a page to 500, so a naive `pageSize × fanOutPages` names a number twice the one it stops at whenever `pageSize` is over 500.

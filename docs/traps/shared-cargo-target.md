@@ -52,7 +52,7 @@ Disk is the reason anybody shares one, so budget for it: a warm debug tree of th
 
 ## How agents get it wrong
 
-1. **Sharing one directory to save disk, then trusting the gate.** The disk is saved and the verdict is worthless. Re-establish every claim in a private directory before quoting it in a receipt.
+1. **Sharing one directory to save disk, then trusting the gate.** The disk is saved and the verdict is worthless. Re-establish every claim in a private directory before quoting it in a PR description.
 2. **Assuming a build error names the lane that caused it.** It names the crate that failed to compile. When the failing file is one the lane never edited and the field it complains about is in generated code, suspect the shared directory first.
 3. **Killing another lane's cargo process to get the lock.** Cargo serialises concurrent builds on purpose; waiting is correct and killing corrupts.
 4. **Re-running `cargo xtask` after switching worktrees without rebuilding it.** The alias runs whatever binary the shared directory holds.
@@ -62,7 +62,7 @@ Disk is the reason anybody shares one, so budget for it: a warm debug tree of th
 - [ ] `CARGO_TARGET_DIR` set, unique to this worktree (or, when it cannot be, a lane `--config` on every cargo command, and the sibling's too)
 - [ ] `touch crates/api-proto/build.rs` before the first build in a fresh directory
 - [ ] `$CARGO_TARGET_DIR/release` removed after a release build
-- [ ] Any gate verdict quoted in a receipt was taken in this worktree's own directory
+- [ ] Any gate verdict quoted in a PR description was taken in this worktree's own directory
 
 ## Related
 

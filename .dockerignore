@@ -13,7 +13,6 @@
 coverage
 **/coverage
 artifacts
-receipts
 docs
 tests
 scripts/docs-site

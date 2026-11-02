@@ -10,7 +10,7 @@ Centraid is a personal, local-first superapp: one shell wrapping many first-part
 
 ## Skills
 
-How to write code here lives in [`.claude/skills/`](.claude/skills): `centraid-engineering` for the rules every language shares, and `rust`, `swift-swiftui`, `kotlin-compose`, `typescript`, `sqlite` and `python` for each language.
+How to write code here lives in [`.claude/skills/`](.claude/skills), one skill per language: `rust`, `swift-swiftui`, `kotlin-compose`, `typescript`, `sqlite` and `python`.
 
 ## Conventions
 

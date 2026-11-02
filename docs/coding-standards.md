@@ -161,7 +161,7 @@ A perf rig seeded with the same fixtures the unit tests use measures nothing —
 
 ## Comments face forward
 
-Code comments are the State layer (AGENTS.md: "code-level facts live in code comments next to the invariant"). The governing definition ([#861](https://github.com/srikanth235/centraid/issues/861)): **a comment is a forward-facing obligation — a message to the next editor stating something the code cannot state, alive only as long as its deletion would mislead someone.** A comment records how the code must be edited, never how it came to be. History lives in issues, receipts, and `git log` — cite it by bare issue link, never by narration.
+Code comments are the State layer (AGENTS.md: "code-level facts live in code comments next to the invariant"). The governing definition ([#861](https://github.com/srikanth235/centraid/issues/861)): **a comment is a forward-facing obligation — a message to the next editor stating something the code cannot state, alive only as long as its deletion would mislead someone.** A comment records how the code must be edited, never how it came to be. History lives in issues and `git log` — cite it by bare issue link, never by narration.
 
 **Every comment is one of four species; unclassifiable means delete.**
 

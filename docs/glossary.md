@@ -4,7 +4,7 @@ Authoritative product vocabulary. Prefer these terms in code, docs, commits, and
 
 ## Runtime model (never "chat" for the ledger) — retired
 
-> **Superseded, 2026-09-21.** (The member-facing chat history is a different thing, saved since rung eleven: see **chat thread**.) The conversation ledger band was dropped in rung five with the assistant and automation planes it recorded ([#1029](https://github.com/srikanth235/centraid/issues/1029) W19). No table below exists and nothing writes one. Kept as vocabulary for old receipts.
+> **Superseded, 2026-09-21.** (The member-facing chat history is a different thing, saved since rung eleven: see **chat thread**.) The conversation ledger band was dropped in rung five with the assistant and automation planes it recorded ([#1029](https://github.com/srikanth235/centraid/issues/1029) W19). No table below exists and nothing writes one. Kept as vocabulary for old rulings.
 
 | Term | Meaning | Code |
 | --- | --- | --- |
@@ -76,7 +76,7 @@ Schema names follow the same one-axis rule: **a table never repeats its schema n
 | **egress class** | **Retired.** Every engine v0 ships is `on-device`; there is no provider to egress to. | — |
 | **policy cascade** | The scoped enrichment rules — vault, domain, collection, item — stating per capability whether it is enabled and its trigger. `NULL` inherits and most specific wins. | `enrich_policy_rule` |
 | **design tokens** | Shared colors, type, spacing and icons across desktop and mobile. The TypeScript source is lowered into Rust and the native shells by generators. | `packages/design`; [`crates/design`](../crates/design/README.md) |
-| **receipt** | Repo `receipts/issue-N-*.md` for issue work. Locker no longer has a `receipt` table ([#1146](https://github.com/srikanth235/centraid/issues/1146)): an item carries `last_used_at`, and the Locker's key row counts the unlocks the phone refused. | context-dependent |
+| **receipt** | Locker no longer has a `receipt` table ([#1146](https://github.com/srikanth235/centraid/issues/1146)): an item carries `last_used_at`, and the Locker's key row counts the unlocks the phone refused. | context-dependent |
 
 ## The vault model ([#1135](https://github.com/srikanth235/centraid/issues/1135))
 
@@ -247,7 +247,7 @@ Invariants:
 
 ## Sharing: the grant plane, subscriptions and links (#726, #731, #825, #929) — retired
 
-> **Superseded, 2026-09-21.** The [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795) struck **sharing in full** — share feeds, share capabilities, the link ceremony, the mailbox and every `share_*` table — **deleted, not parked**: rung five drops the tables and W16 deleted the readers. The vocabulary below is kept because it is in old receipts and old rulings, and a reader who meets one of these words needs to be told the plane is gone rather than to find nothing. **Nothing here describes current state.**
+> **Superseded, 2026-09-21.** The [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795) struck **sharing in full** — share feeds, share capabilities, the link ceremony, the mailbox and every `share_*` table — **deleted, not parked**: rung five drops the tables and W16 deleted the readers. The vocabulary below is kept because it is in old rulings and the CHANGELOG, and a reader who meets one of these words needs to be told the plane is gone rather than to find nothing. **Nothing here describes current state.**
 
 | Term | Meaning | Code |
 | --- | --- | --- |
@@ -277,7 +277,7 @@ Retired vocabularies, historical only. **lend** — #726's live edges and borrow
 | "third-party app" / "user-built app" / "generated app" | **system app** — there is one kind of app and this repo ships all of them. `access_app.origin` declares `CHECK (origin IN ('installed'))` — the dead `'generated'` value left the vocabulary in [#916](https://github.com/srikanth235/centraid/issues/916) |
 | "served app" / "inline app" | Retired vocabulary (#799, [#1020](https://github.com/srikanth235/centraid/issues/1020)). The gateway serves an app's **data**, never its bytes, and an app's screens ship in the mobile and desktop releases. Say **system app** |
 | "code store" for where an app's UI lives | there isn't one — app code ships in the release (`crates/apps/*` and the shells) |
-| "purpose" / `dpv:` prefixes for why an actor may read | Retired vocabulary ([#928](https://github.com/srikanth235/centraid/issues/928)). Say what actually bounds the reach: an app's **declared entity manifest**, or the **authority row** an automation or the assistant acts under. The word survives only in receipts and changelogs |
+| "purpose" / `dpv:` prefixes for why an actor may read | Retired vocabulary ([#928](https://github.com/srikanth235/centraid/issues/928)). Say what actually bounds the reach: an app's **declared entity manifest**, or the **authority row** an automation or the assistant acts under. The word survives only in old rulings and changelogs |
 | "app grant" / "consent-scoped app handler" | there isn't one ([#928](https://github.com/srikanth235/centraid/issues/928)) — a first-party app is not a **principal**; it declares, and an owner-device read is an **owner-direct read**. Say **grant** only of a principal |
 | "enrichment service" / "ML sidecar" | **recognition automation** — the handler itself owns model execution |
 | "database" for the personal ontology | **vault** (`vault.db` is the file) |

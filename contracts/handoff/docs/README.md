@@ -4,7 +4,7 @@
 
 `crates/apps/kit/**` has no wave 4 owner; the census recommends **root**, and a change arrives "as a named function plus its demonstrated red" rather than an edit in place (`census-wave4.md` §Cross-lane).
 
-This patch is that change, and it is **applied in this lane's branch** so the Docs crate could be written at all — the receipt says so, and this file is the hand-off the root splices or re-applies.
+This patch is that change, and it is **applied in this lane's branch** so the Docs crate could be written at all — #1020 says so, and this file is the hand-off the root splices or re-applies.
 
 - **What moves**: `crates/apps/photos/src/representations.rs`'s fold and statement, into `crates/apps/kit/src/representations.rs`. Lane Photos wrote the module and filed exactly this lift for "whichever lane ports the second caller"; Docs is that caller.
 - **What the lift adds**: `RepresentationIndex.by_content`, the second index, which Photos' narrowing dropped. `by_owner` is also re-keyed on the PAIR `(owner_type, owner_id)`, instead of on `owner_id` under one implied owner type.

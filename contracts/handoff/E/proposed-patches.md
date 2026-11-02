@@ -1,6 +1,6 @@
 # Proposed patches for files lane E does not own
 
-The receipt carries one line per finding; this file carries the patch each one needs, so the owning lane has an edit rather than a description ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3 lane E; R-1020-35: a correctness bug the port surfaces is fixed at its source).
+The issue carries one line per finding; this file carries the patch each one needs, so the owning lane has an edit rather than a description ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3 lane E; R-1020-35: a correctness bug the port surfaces is fixed at its source).
 
 ---
 

@@ -60,7 +60,7 @@ export function judgeCandidate({ head, candidate, allowUncandidated, reason }) {
   if (allowUncandidated) {
     return {
       ok: true,
-      message: `release-guard: OVERRIDDEN with --allow-uncandidated. ${head} is not ${CANDIDATE_REF}${candidate ? ` (which is ${candidate})` : " (no candidate has ever been promoted)"}. Reason given: ${reason?.trim() || "(none given — say why in the receipt)"}`,
+      message: `release-guard: OVERRIDDEN with --allow-uncandidated. ${head} is not ${CANDIDATE_REF}${candidate ? ` (which is ${candidate})` : " (no candidate has ever been promoted)"}. Reason given: ${reason?.trim() || "(none given — say why in the PR description)"}`,
     };
   }
   if (!candidate) {

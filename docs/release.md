@@ -86,7 +86,7 @@ Enforced in three places, earliest first:
 | `bun run release:classify -- --require-candidate [--sha <40hex>]` | the same rule, for a caller that only classifies. Classification is a pure read of `CHANGELOG.md` and has no SHA of its own, so here it is opt-in |
 | `release.yml` job `require-candidate` | the backstop, after the tag exists: the tagged SHA equals the current pointer. The pointer moves once a night, so a tag cut on the day's candidate stays valid until the next green nightly |
 
-The escape, for `release:prepare` and `release:classify` only, is `--allow-uncandidated`, which passes and **prints the reason it was used** (or `(none given — say why in the receipt)`). A hatch that leaves no trace is a hatch nobody can audit. Never widen the rule to make a release green; promote the build instead.
+The escape, for `release:prepare` and `release:classify` only, is `--allow-uncandidated`, which passes and **prints the reason it was used** (or `(none given — say why in the PR description)`). A hatch that leaves no trace is a hatch nobody can audit. Never widen the rule to make a release green; promote the build instead.
 
 ## D3 — Changelog → GitHub release + what's-new
 

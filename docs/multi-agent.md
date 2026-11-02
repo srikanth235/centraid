@@ -4,7 +4,7 @@ How an umbrella issue is executed by one root agent and a set of sub-agents, and
 
 ## The shape
 
-- **One umbrella issue, one branch, one draft PR, one receipt.** No child issues. Work is cut into slices; slices are grouped into lanes; lanes run as worktrees in parallel; the merge order of their commits is the wave plan.
+- **One umbrella issue, one branch, one draft PR.** No child issues. Work is cut into slices; slices are grouped into lanes; lanes run as worktrees in parallel; the merge order of their commits is the wave plan.
 - **The root is the brain, not a dispatcher.** It holds the plan's intricacies: ordering, shared files, cross-lane invariants, what "done" means for each slice. Nothing else in the system holds those.
 - **Workers own change.** Every edit, commit and gate fix is done by a worker in its lane worktree. The root reads, greps, merges lane branches, typechecks, pushes commits that already exist, records rulings.
 - **Model split.** The root runs on the strongest model available; workers run on the model the owner names for change-making. The root never spawns a worker on its own model unless the owner says so.
@@ -89,7 +89,7 @@ Fix: split at a reading-set seam, or, if the reading set cannot be split, commit
 
 - Read its brief's reading set and doctrine digest before touching code.
 - Work only in its lane worktree on its lane branch ([dev-environment.md](dev-environment.md#worktrees), [traps/worktrees.md](traps/worktrees.md)).
-- Commit at seams with the umbrella's trailers, the subject within 100 characters and ending with the issue number (`.githooks/commit-msg`), and every changed or deleted file named by full path in the receipt.
+- Commit at seams with the umbrella's trailers, the subject within 100 characters and ending with the issue number (`.githooks/commit-msg`).
 - Run the slice's exit list, including the gates, before reporting.
 - Keep a milestone note in the worktree (below).
 - Report within its cap: what landed (commit id), the exit list line by line with command and result, what it did not do and why, and what it found that is not its slice.
@@ -102,7 +102,7 @@ A deletion or replacement slice is never briefed from memory of what depends on 
 
 ### Order by evidence, not by hope
 
-A slice starts only when its inputs exist on disk in the umbrella branch. A slice "unblocked by the next merge" is not unblocked. When the owner rules that a slice may open before a measurement, the ruling and the substitute evidence go in the receipt.
+A slice starts only when its inputs exist on disk in the umbrella branch. A slice "unblocked by the next merge" is not unblocked. When the owner rules that a slice may open before a measurement, the ruling and the substitute evidence go in the PR description.
 
 ## The brief
 
@@ -149,9 +149,9 @@ The container can restart at any time and kill every worker. Uncommitted work on
 
 - **A claim names its grep.** "No callers", "all converted", "deleted everywhere" are accepted only with the command and its output. Absence is the claim most often wrong.
 - **The root re-checks absence** before it becomes a ruling or a deletion.
-- **Conversion is review.** Rewriting a path onto a new grammar exposes latent bugs in the old one. Workers file each as a receipt row, fix it in place when in scope, and hand it to the root when not.
+- **Conversion is review.** Rewriting a path onto a new grammar exposes latent bugs in the old one. Workers report each in the PR description, fix it in place when in scope, and hand it to the root when not.
 - **Inherited red is measured, not assumed.** Stash onto the branch head, rerun, report the failure-for-failure match. A count of inherited failures is remeasured at every merge; a stale count propagates through briefs.
-- **Red-first slices get a verifier.** A separate read-only agent confirms the test fails on the base and passes on the slice before the merge. Every other lane's receipt section ends with a falsification instead: the two riskiest claims in the diff, the throwaway check run against each, and the result. A verifier trusts the worker's gate run when the receipt quotes the tree hash of the landed head and the diff touches no gate, fixture, ratchet, claims or test-kit file, and it messages the worker only on a refuted finding — a message resumes a finished agent and spends its whole context.
+- **Red-first slices get a verifier.** A separate read-only agent confirms the test fails on the base and passes on the slice before the merge. Every other lane's report ends with a falsification instead: the two riskiest claims in the diff, the throwaway check run against each, and the result. A verifier trusts the worker's gate run when the worker quotes the tree hash of the landed head and the diff touches no gate, fixture, ratchet, claims or test-kit file, and it messages the worker only on a refuted finding — a message resumes a finished agent and spends its whole context.
 
 ## Reporting to the owner
 
@@ -164,8 +164,8 @@ The container can restart at any time and kill every worker. Uncommitted work on
 
 Runs once per umbrella, after the last lane lands, and only when the owner opens it. One worker:
 
-1. Doc pass: every touched doc to current state; no text describing the deleted thing; decisions moved from the receipt to the decisions log.
-2. Receipt close: the issue's acceptance boxes reconciled one by one, the inherited-red table, corrections to the plan, and the owner hand-offs.
+1. Doc pass: every touched doc to current state; no text describing the deleted thing; decisions moved into the decisions log.
+2. Issue close: the issue's acceptance boxes reconciled one by one, the inherited-red table, corrections to the plan, and the owner hand-offs.
 3. Dead-code sweep for what the last slice orphaned.
 4. PR readiness: body against the issue checklist; draft off; issue body reconciled to what shipped.
 5. Owner hand-offs as explicit questions.
@@ -202,7 +202,7 @@ Runs once per umbrella, after the last lane lands, and only when the owner opens
 
 ## Related
 
-- [dev-environment.md](dev-environment.md) — worktrees, the local gate loop, and how sibling appends to one receipt merge
+- [dev-environment.md](dev-environment.md) — worktrees and the local gate loop
 - [traps/worktrees.md](traps/worktrees.md) — the worktree failures agents hit
 - [TESTING.md](../TESTING.md) — the lanes a slice's exit list draws from
 - [coding-standards.md](coding-standards.md)

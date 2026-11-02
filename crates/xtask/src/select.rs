@@ -1200,7 +1200,7 @@ mod tests {
                 "scripts/lint-copy.mjs",
                 "mobile/androidApp/src/Foo.kt",
                 ".github/workflows/gate.yml",
-                "receipts/issue-1.md",
+                "docs/notes/issue-1.md",
             ]),
         );
         assert!(names(&selected).is_empty());
