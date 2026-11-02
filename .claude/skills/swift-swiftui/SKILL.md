@@ -95,14 +95,74 @@ Write code that compiles cleanly under strict concurrency checking (Swift 6 mode
 
 ## 10. Performance
 
-Measure with Instruments (SwiftUI, Time Profiler, Hangs) before optimising. Then:
+Fast means the first frame after a tap shows at once and nothing blocks the main thread for more than 50 ms. Every change starts and ends with a **measurement**.
 
-- Narrow what a view reads; with `@Observable`, reading fewer properties means fewer redraws. Split views so a frequently changing value invalidates a small subtree.
-- Keep work off the main actor; the main thread is for layout and input.
-- Downsample images to their display size before showing them.
-- Avoid `AnyView` and deep conditional view trees in lists; prefer `@ViewBuilder` and stable structure.
+```text
+reproduce -> measure (release build) -> find the line -> fix -> measure again -> commit with the numbers
+```
 
-## 11. Final checklist
+1. **Reproduce** with written steps (or a UI test) that run the slow action.
+2. **Measure an optimized build on a device where you can.** Debug Swift is several times slower and points at the wrong code; a simulator shares the host's CPU and disk, so its numbers bound the experience from below and are never a budget.
+3. **Find the line** with the tool for the symptom. `xcrun xctrace record --template '<name>' --output <file>.trace --time-limit 10s` works with `--attach <process>`, `--launch -- <app>`, and `--device <name or UDID>` for a device (omit it for the simulator); `xcrun xctrace list templates` shows what is installed.
+
+   | Symptom | Template or tool |
+   | --- | --- |
+   | Slow action, high CPU | `'Time Profiler'` |
+   | Taps or scrolls freeze briefly | `'Hangs'` |
+   | Scroll or animation stutters | `'Animation Hitches'` |
+   | Memory grows | `'Allocations'`; `'Leaks'` for retained cycles |
+   | Battery, heat, background work | `'Energy Log'`; look for timers and polling |
+   | A view redraws too often | Instruments' SwiftUI template, or `let _ = Self._printChanges()` in `body` while debugging (remove it after) |
+
+   Read a trace as text with `xcrun xctrace export --input <file>.trace --toc`, then `--xpath` for the table you need, rather than screenshotting the Instruments window.
+
+4. **Fix**, then **measure again** with the same steps. Put before and after in the commit message: "Library opens in 40 ms, was 600 ms".
+
+**Delete every `.trace` after reading it, and never commit or share one.** A trace stores the profiled process's environment, and an app started from an agent's shell inherits that shell's tokens.
+
+Rules that fix most problems:
+
+- **Show first, work after.** Put the screen up in the same frame as the tap, then load. Never make the UI wait for the work.
+- **Main actor for UI only.** Decoding, file, database and core calls go elsewhere.
+- **Decode at display size.** Downsample with ImageIO (`CGImageSourceCreateThumbnailAtIndex`) before showing, and cache the result.
+- **Timers get a tolerance** (`timer.tolerance`) and stop when nothing on screen needs them; prefer no polling.
+- **Narrow what a view reads;** with `@Observable`, fewer properties read means fewer redraws. Split views so a frequently changing value invalidates a small subtree.
+- Avoid `AnyView` and deep conditional trees in lists; prefer `@ViewBuilder` and stable structure.
+
+This repo's own budget checks: `cargo xtask gate --profile pr` runs `call-budget` and `search-budget` against the core (Rust-side numbers, ledgers under `contracts/ledgers/`); the ceilings for on-device journeys live in `tests/journeys.json` and are promoted only from a named physical device. The `ios-xctest-metrics` device lane (`nightly` profile, macOS with an attached device) runs `-only-testing:CentraidTests/BackgroundTransferMetrics`.
+
+## 11. Compiler errors
+
+Fix the first error first; later ones often come from it.
+
+| Error | Fix |
+| --- | --- |
+| `cannot find 'X' in scope` right after adding a file | The target globs a directory: run `xcodegen generate`, then rebuild |
+| `Main actor-isolated … from a nonisolated context` | Make the caller `@MainActor`, or `await` the call |
+| `Sending 'x' risks causing data races` | Make the type `Sendable`, or keep it on one actor |
+| `Capture of 'x' with non-sendable type in a @Sendable closure` | Capture a value (id, copy) instead of the reference, or make the type `Sendable` |
+| `The compiler is unable to type-check this expression in reasonable time` | Split the view into subview structs or `let` constants; add explicit types |
+| `ambiguous use of 'Task'` | A type in the module is named `Task`; rename it |
+| `Call to main actor-isolated … in a synchronous nonisolated context` | Hop with `Task { @MainActor in … }`, or mark the caller `@MainActor` |
+| `Type 'X' does not conform to protocol 'View'` (huge message) | Look at the first error inside `body`; the conformance error is its echo |
+| `'X' is only available in iOS 18.0 or newer` | Wrap in `if #available(iOS 18, *)` with a fallback; never raise the deployment target (17.5) |
+| `Reference to property 'x' in closure requires explicit use of 'self'` | Write `self.x`, or capture `[weak self]` where the closure can outlive it |
+| `Generated/*.swift` missing or stale after a `.proto` change | Rebuild: Xcode's pre-build phase regenerates it; a _new_ `.proto` also needs `xcodegen generate` |
+
+## 12. Swift 6 errors
+
+The target is Swift 5.9 language mode, but new code must compile clean under Swift 6 strict concurrency (`-strict-concurrency=complete`).
+
+| Error | Fix |
+| --- | --- |
+| Static `let` of a non-`Sendable` type (formatter, `UIFont`, `CFString`) | `@MainActor` on the enclosing type, a computed `var`, or a commented `nonisolated(unsafe)` |
+| Notification or delegate callback "risks causing data races" | Copy the `Sendable` parts (an id, a flag) out of the notification first, then hop to the actor |
+| Callback known to run on the main thread (a main-queue observer, a UIKit delegate) calls main-actor code | `MainActor.assumeIsolated { … }`; it traps at runtime if the thread is wrong, so use it only where the framework guarantees main |
+| Observer token captured before it is assigned | Keep the token in a small `@MainActor` class |
+| "pattern that the region-based isolation checker does not understand" in a task group | An array of `Task { @MainActor in … }`, awaiting each one |
+| Vars mutated from `OperationQueue` or dispatch blocks under `NSLock` | `OSAllocatedUnfairLock(initialState:)`, or move the state into an `actor` |
+
+## 13. Final checklist
 
 - Builds with zero warnings; clean under strict concurrency checking.
 - No force unwrap, `try!` or `as!` on a fallible path.
@@ -113,7 +173,9 @@ Measure with Instruments (SwiftUI, Time Profiler, Hangs) before optimising. Then
 - Errors reach the member; nothing user-triggered fails silently.
 - Logic is tested outside views.
 
-## 12. In this repo
+**Done when** the app builds with zero warnings, strict concurrency reports nothing new, `xcodebuild … test` passes in the simulator (command in `mobile/README.md`; it needs a Mac, so a Linux session says it could not run it), and `cargo xtask gate --profile mobile-jvm` is green for anything the Rust core or generated tables feed.
+
+## 14. In this repo
 
 The iOS shell lives in `mobile/iosApp`, generated by XcodeGen from `project.yml` (Swift 5.9 language mode, iOS 17.5 deployment target).
 
@@ -134,4 +196,4 @@ Detailed checklists, read when the task touches the area:
 - `references/performance.md`: keeping SwiftUI fast.
 - `references/accessibility.md`: Dynamic Type, VoiceOver, Reduce Motion.
 
-The references are from [SwiftUI Pro](https://github.com/twostraws/SwiftUI-Agent-Skill) by Paul Hudson (MIT, [license](licenses/twostraws-SwiftUI-Agent-Skill-LICENSE)). They target recent iOS releases: check the deployment target before applying version-specific advice.
+The error tables (sections 11 and 12) and the measuring loop are adapted from [Bama](https://github.com/daveebbelaar/bama)'s macOS Swift skills (MIT, Dave Ebbelaar, [license](licenses/Bama-LICENSE)). The references are from [SwiftUI Pro](https://github.com/twostraws/SwiftUI-Agent-Skill) by Paul Hudson (MIT, [license](licenses/twostraws-SwiftUI-Agent-Skill-LICENSE)). They target recent iOS releases: check the deployment target before applying version-specific advice.
