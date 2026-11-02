@@ -1,6 +1,6 @@
 # TypeScript type patterns
 
-Pack rules for type design. Where this repo differs (no `exactOptionalPropertyTypes`, `enum` not lint-banned, no branded ids in use), [CENTRAID.md](../CENTRAID.md) names the winner.
+Rules for type design. Where this repo differs, "In this repo" in [SKILL.md](../SKILL.md) wins.
 
 ## When to use
 

@@ -16,7 +16,8 @@ coverage
 artifacts
 output/playwright/
 target
-.claude
+.claude/*
+!.claude/skills/
 # Python bytecode (not source).
 __pycache__
 *.pyc

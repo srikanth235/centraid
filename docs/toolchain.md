@@ -68,7 +68,7 @@ A rule is enabled only when every answer is yes:
 6. For a type-aware rule, does it agree with the pinned TypeScript compiler?
 7. If it fixes code, is the fix tier known and the behavioural risk understood?
 
-Standing declines are filename conventions, `github/no-then`-style syntax preferences, blanket cognitive-complexity thresholds, mandatory function-expression styles, formatter duplicates, and optional JavaScript-plugin presets as bundles. File length is not a decline: `max-lines` is enforced at 625 ([coding-standards.md](coding-standards.md#file-length-mechanically-enforced)).
+Standing declines are filename conventions, `github/no-then`-style syntax preferences, blanket cognitive-complexity thresholds, mandatory function-expression styles, formatter duplicates, and optional JavaScript-plugin presets as bundles. File length is not a decline: `max-lines` is enforced at 625 in `oxlint.config.ts`.
 
 All diagnostics are errors or off; warning debt is not a supported state. Fix code before suppressing a diagnostic. A local suppression stays narrow, references its owning issue, and explains why the rule is wrong for that site. Never weaken policy merely to make a PR green. The same holds for Rust: `clippy -D warnings` is the gate, and an `#[allow]` carries its reason.
 

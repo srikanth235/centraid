@@ -1,142 +1,119 @@
 ---
 name: typescript
-description: TypeScript and .mjs rules for Centraid's Bun tooling (packages/design, packages/test-kit, contracts/tools, scripts/): strict typing, type design, errors, vitest, emitters, oxlint/oxfmt. Use when writing, reviewing or debugging TypeScript or .mjs here, a tsc diagnostic, an oxlint finding, a vitest failure, or `bun run check` red.
+description: >-
+  Write idiomatic, type-safe, maintainable TypeScript and JavaScript modules. Use this skill whenever you write, review, refactor, debug or explain .ts or .mjs code: type design, narrowing, errors, async code, modules, scripts and CLIs under Bun or Node, and vitest tests. Trigger on a tsc diagnostic, an oxlint finding, a vitest failure, `bun run check`, even when the user does not ask for "best practices". Closes with how Centraid's TypeScript tooling applies them.
 ---
 
-# TypeScript and .mjs
+# TypeScript best practices
 
-The code is right when `bun run check` is green: `format:check`, `lint` (oxlint, `--deny-warnings`), `lint:product`, `typecheck` (tsc per package), `test` (vitest) and `scripts:test`. TypeScript here is small and tooling-shaped: the design token registry, the test kit, the emitters, repo scripts. There is no React, Node server or framework code to imitate. The repo's own rules are [centraid-engineering](../centraid-engineering/SKILL.md), linked below, never restated.
+Where common advice disagrees, this file says which to follow and why. The digests in `references/` go deeper on type patterns and vitest.
 
-## Compiler assumptions
+## 1. Mindset
 
-Root [tsconfig.base.json](../../../tsconfig.base.json) is the floor: `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, ES2023, `isolatedModules`. Package tsconfigs extend it. `exactOptionalPropertyTypes` is **not** on: write `x?: T` and `x: T | undefined` as meaning the same thing.
+- **Let the types carry the design.** A good TypeScript program is mostly types that make wrong code fail to compile; the runtime code is then short and boring.
+- **Make invalid states unrepresentable.** Discriminated unions instead of objects with optional fields that "must be set together"; literal unions instead of free strings.
+- **Trust nothing at the edge, everything inside.** Data from JSON, files, the network, `process.argv` or a `catch` is `unknown` until parsed. After that one parse, the type is true and the code stops checking.
+- **Small modules with one job,** named for the domain, not `utils` or `helpers`.
+- **Let the tools work.** The formatter owns layout, the linter owns idiom, the compiler owns types. Don't fight them with casts and suppressions.
 
-- `packages/design` splits into a token program (`lib: ["ES2023"]`, no DOM, so a stray `document` fails to compile) and an element program (`src/elements/**`, DOM lib). A token module never touches `document`/`window`.
-- Nothing typechecks `contracts/tools/*.ts`, `scripts/**` or `.mjs`; `oxlint` and `oxfmt` are their only gate. Write them as if `tsc` were watching.
+## 2. Before you hand back code
 
-## Type design
+- Type check, lint, format and tests all pass. Fix a diagnostic rather than silencing it.
+- No `any`, no `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck`, no `as unknown as T`. If a suppression is truly needed, put it on one line with the rule name and a reason.
+- No `!` non-null assertions to quiet the compiler; narrow instead.
+
+## 3. Type design
 
 | Need | Use |
 | --- | --- |
-| States that exclude each other | Discriminated union on a literal field, never optional fields |
-| Closed set of names | `as const` object or string-literal union, then `keyof typeof` / `(typeof X)[number]`; no TS `enum` (the only `enum ` text in the tree is emitted Swift) |
-| Table keyed by a union | `Record<Kind, Handler>`, or `satisfies Record<Kind, T>` to keep literal types; the table is the policy ([centraid-engineering](../centraid-engineering/SKILL.md#structure)) |
-| Validate a literal without widening | `satisfies`, not `as T` |
-| Foreign data (JSON, `process.argv`, fs reads, `catch`) | `unknown`, narrow with a guard or parse once at the edge |
-| Narrowing helper | `(x: unknown): x is T`, or `asserts x is T` for a throw-on-fail check |
-| Read-only inputs | `readonly T[]`, `ReadonlyMap`, `Readonly<...>` in parameters and exported constants |
-| Same-shaped ids that must not mix | A brand (`string & { readonly __brand: "X" }`) only where a mix-up already happened; this repo has none by default |
-| Exhaustive handling | `switch` with a `never` default that throws, or a `Record<Union, ...>` table the compiler checks |
-| Type-only import | top-level `import type { X } from "..."`; inline `{ type X }` is a lint error |
+| States that exclude each other | A discriminated union on a literal `kind` field |
+| A closed set of names | A string-literal union or an `as const` object, not `enum` |
+| A table keyed by a union | `Record<Kind, Handler>`; the compiler checks every case |
+| Check a literal against a type without widening it | `satisfies T`, not `: T` or `as T` |
+| Foreign data | `unknown`, narrowed by a type guard or parsed once at the edge |
+| A reusable check | A guard `(x: unknown): x is T`, or `asserts x is T` |
+| Ids of the same shape that must not mix | A branded type, where a mix-up is a real risk |
+| Inputs a function must not change | `readonly T[]`, `ReadonlyMap`, `Readonly<T>` |
 
-- Return types on exported functions; inference inside bodies.
-- Function signatures name their units and invariants in types, not comments ([Comments face forward](../centraid-engineering/SKILL.md#comments)).
-- Depth, with wrong/right pairs: [references/type-patterns.md](references/type-patterns.md).
+- **Exhaustiveness:** a `switch` over a union ends in a `never` default that throws, or the logic lives in a `Record<Union, …>` table. When the same branch on a kind appears in two places, make it one table.
+- **Generics earn their place.** Add a type parameter when a type flows from input to output; otherwise use the concrete type. Constrain parameters (`<T extends Key>`) and let inference supply them at call sites.
+- **Annotate what you export** (return types of exported functions, exported constants); let inference handle locals.
+- **Prefer `type` aliases and unions; use `interface` for object shapes others extend.**
+- **Type-only imports are separate statements:** `import type { X } from "./x"`.
 
-## Null, optionality, errors
+## 4. Null, optional and errors
 
-- `?.` and `??` only at true optionality, never after a parse or guard; untagged `??` is not a compat shim: [Justify `?.` and `??`](../centraid-engineering/SKILL.md#optional-values).
-- `noUncheckedIndexedAccess` makes `a[i]` `T | undefined`. Narrow with a check that throws with context (`if (!role) throw new Error("missing role")`, the shape in `packages/design/src/stage.test.ts` and `roles.ts`), not `!` and not `?? ""`.
-- `throw new Error(message)` for impossible states and bad input; the message names the offending value. Never throw a non-Error (`no-throw-literal`).
-- `catch` only for recovery, typed translation or a process edge ([No just-in-case try/catch](../centraid-engineering/SKILL.md#errors)). The caught binding is named `error` (`unicorn/catch-error-name`) and is `unknown`.
-- UI/IPC-facing failures reach the caller as a structured error, not a log line: [Fallible-action contract](../centraid-engineering/SKILL.md#errors).
+- `?.` and `??` belong where a value is genuinely optional. After a parse or a guard has proved a value present, use it directly; a defensive `?? ""` hides missing data.
+- With `noUncheckedIndexedAccess`, `array[i]` and `map.get(k)` may be `undefined`: narrow with a check that throws a message naming the missing thing.
+- **Throw `Error` objects,** never strings, with a message that names the bad value; use `cause` to keep the underlying error. Define an error subclass only when a caller branches on it.
+- **Catch only to recover, translate or report at a boundary** (a CLI's top level, a request handler). No empty `catch`, no catch-log-and-continue. The caught value is `unknown`.
+- A failure a user triggered reaches them as a structured error, not only a log line.
+- A shim that tolerates an older data shape is tagged in a comment so it can be removed; an untagged default that papers over old data has no cleanup signal.
 
-## Async
+## 5. Async
 
-- No `await` in a loop (`no-await-in-loop` is an error). Independent work is `Promise.all`; deliberately ordered work goes through a named primitive (`forEachSequentially` in `@centraid/test-kit/sequential`).
-- No `new Promise` executor that returns a value (`no-promise-executor-return`): wrap in braces, `new Promise((resolve) => { setTimeout(resolve, 0); })`.
-- Every timer, listener and poller has a stop path ([Every poller is visibility-gated](../centraid-engineering/SKILL.md#state-and-cost)).
-- Work whose cost grows with the vault stays off the request path: [Nothing O(vault-size)](../centraid-engineering/SKILL.md#state-and-cost).
+- `async`/`await` over `.then` chains. Every promise is awaited, returned or explicitly handled; no floating promises.
+- Independent work runs together with `Promise.all`; sequential work is deliberate and named, not an accidental `await` in a loop.
+- Bound concurrency for large fan-outs; don't start ten thousand requests at once.
+- Every timer, listener, subscription and poller has a stop path, and a poller needs a reason push cannot do the job.
+- Pass an `AbortSignal` through long operations so callers can cancel.
 
-## Modules and files
+## 6. Modules and files
 
-- One domain per file, named for the domain. `*-utils.ts`, `*-helpers.ts`, `*-manager.ts` are review smells (`unicorn/filename-case` is off) ([Filename smells](../centraid-engineering/SKILL.md#structure)).
-- A source file stops at **625 lines** (`max-lines`, error). `packages/design/src/roles.ts` is the only exemption; split before adding to it. A new file gets none ([File length](../../../oxlint.config.ts)).
-- Cross-package imports go through the package barrel or a declared `exports` subpath (`@centraid/design/elements`), never `@centraid/*/src/*` or `/dist/*` (`no-restricted-imports`).
-- Import style follows the tree you are in: `packages/design/src` uses extensionless relative specifiers; `contracts/tools/*.ts` run directly under Bun and use `.ts` specifiers. oxfmt sorts imports (builtin, external, `@centraid/`, relative); never hand-sort.
-- Change a module in place; no `foo-v2.ts`, no dual exports ([Refactors look like edits](../centraid-engineering/SKILL.md#structure)).
-- Comments: four species, deletion test, `// ─── name ─────` banners if any, suppressions `// oxlint-disable-next-line <rule> -- reason` ([Comments face forward](../centraid-engineering/SKILL.md#comments)).
+- One concern per module, a small public surface, and imports through a package's public entry (its barrel or `exports` subpath), never its `src` internals.
+- Keep files short; split by domain when a file grows past a few hundred lines.
+- Change a module in place when replacing behaviour. No `foo-v2.ts` beside `foo.ts`, no dual exports kept "for migration".
+- Pure functions at the core, side effects (file system, network, clock, randomness) at the edges, passed in so they can be replaced in tests.
+- Comments state what the code cannot: contracts, the constraint behind an odd shape, the tempting edit that is wrong. No comments that narrate history or restate the code.
 
-## Generated output
+## 7. Scripts and CLIs (Bun and Node)
 
-`design/native-theme.json`, `Tokens.kt`, `Catalog.kt`, `Words.kt`, `Theme.swift`, `Catalog.swift`, `Words.swift`, `design/identity-corpus.json` and the two `scripts/*-site/public/assets/centraid-tokens.css` are **emitted, never hand-edited**. Change the registry in `packages/design/src` (or the emitter in `contracts/tools/`), then regenerate:
+- Use `node:`-prefixed builtins and resolve paths from `import.meta.dirname`, never from the current directory.
+- Never build a shell command from strings. Use `spawn`/`execFile` (or `Bun.spawn`) with an argument array, and check the exit code.
+- Validate paths that come from input against an allowed root; reject `..` escapes.
+- Exit non-zero with a one-line reason on failure; print machine-readable output when another tool reads it.
+- Parse JSON into `unknown` and validate it before use.
 
-```
-bun contracts/tools/export-native-theme.ts
-bun run format
-git diff --exit-code design mobile
-```
+## 8. Testing with vitest
 
-`bun run site:tokens` rewrites the public-site CSS. The `emitters` step of `cargo xtask gate --profile pr` fails on drift and on a new untracked file under the emitted trees. Owner doc: [design-machinery.md](../../../docs/design-machinery.md). An emitter writes a value once per syntax; it never invents a design decision.
+- Test behaviour through the public API: inputs and observable outputs, not private helpers. A refactor that keeps behaviour should not need assertion changes.
+- One scenario per test, named for the behaviour. Table-driven tests for many cases, with an assertion message naming the case.
+- Exact matchers (`toBe`, `toEqual`, `toStrictEqual`) over vague ones (`toBeTruthy`).
+- Deterministic by construction: inject or fake the clock, seed randomness, use temporary directories that are removed even when the test fails. Never compare against `Date.now()` captured in the expected value.
+- Each rule is asserted in one owning test file; a second copy drifts.
+- Type-level contracts get type tests (`expectTypeOf`), not runtime ones.
 
-## Tests (vitest, and `node --test` for .mjs)
+## 9. Performance
 
-- Projects come from `nodeProject()` / `jsdomProject()` in `@centraid/test-kit/vitest` (a package's `vitest.config.ts` is one call). `requireAssertions` is on: a test with no `expect` fails; an intentionally assertion-free test says `expect.assertions(0)`.
-- Import `describe, expect, test` from `"vitest"` explicitly; files are `*.test.ts` beside the module.
+Measure first. Then: avoid repeated work in hot loops (hoist, cache, index with a `Map`), stream large files instead of reading them whole, and keep work whose cost grows with the data off interactive paths.
 
-| Test needs | Use (the raw form is an oxlint error in test files) |
-| --- | --- |
-| A temp directory | `tempDir()` / `tempDirSync()` from `@centraid/test-kit/temp-dir`, never `mkdtemp*` |
-| A fake clock | `useFakeClock()` from `@centraid/test-kit/fake-clock`, never `vi.useFakeTimers` / `setSystemTime` |
-| Random input | `seededRandom(<literal>)` from `@centraid/test-kit/random`, never `Math.random()` |
-| Yield a macrotask | `flushMacrotasks()` from `@centraid/test-kit/flush` |
-| Property tests | `fc` from `@centraid/test-kit/fast-check` |
+## 10. Final checklist
 
-- Assertion messages on loops: `expect(x, "concept -> name").toBe(true)` (`valid-expect` allows 2 args). Prefer exact matchers (`toBe(true)`) over `toBeTruthy()`; max 31 `expect` per test.
-- One named law has one owning test file; a second file asserting it is deleted ([One law, one home](../centraid-engineering/SKILL.md#structure)). Test seams rationale: [Test seams](../../../oxlint.config.ts); strategy: [TESTING.md](../../../TESTING.md).
-- `.test.mjs` under `node:test` cannot use the kit (it registers vitest hooks); it suppresses `no-restricted-imports` per line with the issue and removes its temp dir in `finally` (see `scripts/lint-copy.test.mjs`).
-- Fixtures: [references/vitest-fixtures.md](references/vitest-fixtures.md); type-level assertions: [references/vitest-type-testing.md](references/vitest-type-testing.md).
+- Type check, lint, format and tests are green with no new suppressions.
+- No `any`, `!`, double casts or `@ts-` comments.
+- Foreign data is `unknown` until parsed; validated values are not re-checked.
+- Unions are exhaustive; repeated branches became a table.
+- Every promise is handled; every timer and listener has a stop path.
+- Errors are `Error`s with context, caught only where something can be done.
+- Tests are deterministic and assert behaviour.
 
-## Bun and .mjs scripts
+## 11. In this repo
 
-- Run tools only through `bun run <script>` ([centraid-engineering](../centraid-engineering/SKILL.md#structure)), never `npx`. `bun contracts/tools/x.ts` runs TypeScript directly; there is no build step for tools.
-- `scripts/*.mjs` are plain ESM with a `#!/usr/bin/env node` (or `bun`) shebang, `node:` prefixed builtins, root from `path.resolve(import.meta.dirname, "..")`. `scripts/site-tokens.mjs` is the one that needs Bun.
-- Ratchet scripts (`lint-copy`, `lint-native-controls`) fail when a count is over **or** under its budget, and a number only shrinks. Never raise a budget.
-- No dependency without need: add to the `catalog:` / package.json deliberately; `bun.lock` is audited by the `lockfile` and `osv` gate steps.
+TypeScript here is tooling: the design token registry and its emitters (`packages/design`, `contracts/tools`), the shared test kit (`packages/test-kit`) and repo scripts (`scripts/`). There is no React or web server.
 
-## Never
-
-- `any` (`no-explicit-any` is an error): `unknown` and narrow.
-- `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck` (`ban-ts-comment`): fix the type. The tree has zero today.
-- `as unknown as T` to silence a mismatch. It exists in a few DOM-timer and `File` test doubles; a new one needs a reason in a comment.
-- Silencing a rule or editing `oxlint.config.ts` / `oxfmt.config.ts` / a tsconfig to go green; fix the code ([AGENTS.md](../../../AGENTS.md) conventions).
-- `Date.now()` or `new Date()` baked into an expected value; read `clock.now()`.
-- `-utils`/`-manager` grab-bags, a comment that narrates history, an empty `catch`.
-- Hand-edited generated files, or an emitter that is not the one command that writes everything.
-
-## Errors and fixes
-
-| Diagnostic | Fix |
-| --- | --- |
-| TS2532 / TS18048 `Object is possibly undefined` on `a[i]`, `map.get(k)` | Narrow: `const v = a[i]; if (v === undefined) throw new Error("...")` |
-| TS2345 `string` not assignable to a union | The value is not narrowed: declare it `as const`, or guard it with a `x is Union` predicate |
-| TS2322 object literal too wide/narrow | `satisfies T` instead of `: T` or `as T` |
-| TS7053 element implicitly `any` indexing by string | Key the table by the union (`Record<Kind, V>`), or narrow the key first |
-| TS2307 cannot find module `@centraid/x/src/y` | Import the barrel/`exports` subpath, never `src`/`dist` |
-| TS5097 import path ends in `.ts` | Only `packages/design`'s test program sets `allowImportingTsExtensions`; drop the extension in `packages/*/src` |
-| TS2339 property missing after `typeof`/`in` check | Narrow with a discriminant or a user-defined guard, not a cast |
-| TS7030 / fall-through | `noFallthroughCasesInSwitch`: `return`/`break` each case, or use a table |
-| `no-explicit-any` | `unknown` + guard; generic parameter if the type flows through |
-| `typescript/consistent-type-imports`, `import/consistent-type-specifier-style` | `import type { X } from "..."` as its own statement |
-| `max-lines` | Split by domain; do not add an override |
-| `no-await-in-loop` | `Promise.all(items.map(...))`, or `forEachSequentially` when order is the behavior |
-| `no-shadow` | Rename the inner binding |
-| `unicorn/catch-error-name` | `catch (error)` |
-| `no-restricted-properties` / `no-restricted-imports` in a test | Use the named kit helper in the message |
-| `vitest/max-expects` | One scenario per test, or a table-driven loop with messages |
-| `reportUnusedDisableDirectives` | Delete the stale `oxlint-disable`; every directive must suppress something |
-| `format:check` red | `bun run format`; do not hand-format. Copied/generated trees are regenerated, then formatted |
-| "no assertions" vitest failure | Add the `expect`, or `expect.assertions(0)` if truly assertion-free |
-| `emitters` drift | Rerun the emitter, `bun run format`, commit the output with the source change |
+- **The check is `bun run check`** (format, oxlint with warnings as errors, product lints, tsc, vitest, script tests). Run tools through `bun run`, never `npx`.
+- **Compiler settings:** `strict`, `noUncheckedIndexedAccess`, ES2023. Nothing type checks `contracts/tools` or `scripts`; write them as if it did.
+- **Lint rules that bite:** a 625-line ceiling per file (`max-lines`); no `any`; type-only imports as their own statement; no `await` in loops; the catch binding is named `error`.
+- **Tests use the kit, not the raw APIs** (the raw forms are lint errors in tests): `tempDir()` instead of `mkdtemp`, `useFakeClock()` instead of `vi.useFakeTimers`, `seededRandom()` instead of `Math.random()`, all from `@centraid/test-kit`.
+- **Emitted files are never hand-edited.** The native theme, catalogue and words for Kotlin and Swift and the site token CSS are generated from `packages/design`; change the registry or the emitter and regenerate. The gate fails on drift.
+- **Budgets only go down.** Ratchet scripts fail when a count is over its budget; never raise one to pass.
 
 ## References
 
-| Open when | File |
-| --- | --- |
-| Designing a union, brand, `satisfies`, `NoInfer`, `using` | [references/type-patterns.md](references/type-patterns.md) |
-| Building a shared test fixture with `test.extend` | [references/vitest-fixtures.md](references/vitest-fixtures.md) |
-| Asserting a type-level contract | [references/vitest-type-testing.md](references/vitest-type-testing.md) |
-| Where this repo overrides the packs | [CENTRAID.md](CENTRAID.md) |
-| Provenance and licenses | [SOURCES.md](SOURCES.md) |
+Read when the task touches the area:
 
-Done when `bun run check` is green; for emitter or token changes also `cargo xtask gate --profile pr` ([docs/toolchain.md](../../../docs/toolchain.md)).
+- `references/type-patterns.md`: unions, brands, `satisfies`, inference, wrong/right pairs.
+- `references/vitest-fixtures.md`: shared fixtures with `test.extend`.
+- `references/vitest-type-testing.md`: asserting type-level contracts.
+
+From [typescript-best-practices](https://github.com/ofershap/typescript-best-practices) by Ofer Shapira and [antfu/skills](https://github.com/antfu/skills) by Anthony Fu (MIT; [licenses](licenses/)).

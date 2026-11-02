@@ -1,6 +1,6 @@
 # SQLite Concurrency and Durability
 
-> Pack file (claude-mods `sqlite-ops`, MIT, see [SOURCES.md](../SOURCES.md)). Where this repo differs, [CENTRAID.md](../CENTRAID.md) wins; the repo's SQLite law is in [SKILL.md](../SKILL.md).
+> From claude-mods `sqlite-ops` (MIT, [license](../licenses/claude-mods-LICENSE)). Where this repo differs, "In this repo" in [SKILL.md](../SKILL.md) wins.
 
 Engine-agnostic. The locking model, journal modes, and transaction semantics below are properties of SQLite itself and behave identically in every host that gives you a real connection. Managed engines (D1) hide most of this — see [`d1-edge.md`](https://github.com/0xDarkMatter/claude-mods/blob/82f5d0a34618bb4228d7e6662579a88d6fe5297c/skills/sqlite-ops/references/d1-edge.md).
 

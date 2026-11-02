@@ -32,7 +32,3 @@ Sort, key, compare and hash a `Value` by a **canonical normal form** you compute
 - [ ] Canonical form computed by one shared function, not per call site
 - [ ] The property asserted, not only the answer
 - [ ] Re-run under `cargo test --workspace`, not only `-p <crate>`
-
-## Related
-
-- [../coding-standards.md](../coding-standards.md)

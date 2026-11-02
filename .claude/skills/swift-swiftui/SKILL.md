@@ -1,188 +1,137 @@
 ---
 name: swift-swiftui
-description: Swift, Swift concurrency, SwiftUI and XCTest rules for Centraid's iOS shell (mobile/iosApp). Use when writing, reviewing or debugging any .swift file in this repo - a view for a Rust ViewState, an effect performer, ScreenStore or Core, a test - or on Sendable, actor-isolation, "Main actor-isolated", ObservableObject/@Observable, ForEach identity, type-checker timeout or "cannot find in scope" errors.
+description: >-
+  Write idiomatic, safe, maintainable Swift and SwiftUI. Use this skill whenever you write, review, refactor, debug or explain Swift code: views, view state, Swift concurrency (actors, Task, Sendable, @MainActor), error handling, value types and protocols, XCTest, or the iOS shell under mobile/iosApp. Trigger on .swift files, Xcode or XcodeGen, SwiftUI, "Main actor-isolated", Sendable or data-race diagnostics, type-checker timeouts, even when the user does not ask for "best practices". Closes with how Centraid's iOS shell applies them.
 ---
 
-# Swift and SwiftUI in the iOS shell
+# Swift and SwiftUI best practices
 
-The Rust core decides what a person sees; Swift draws a `ViewState`, sends `ScreenEvent`s and performs the platform work Rust asks for ([mobile/README.md](../../../mobile/README.md#the-abi-in-one-paragraph), [crates/core-ffi/CONTRACT.md](../../../crates/core-ffi/CONTRACT.md), [docs/screens.md](../../../docs/screens.md)). Where this file and a repo doc disagree, the doc wins; [CENTRAID.md](CENTRAID.md) lists every place the packs this skill draws on were overruled.
+Where common advice disagrees, this file says which to follow and why. The digests in `references/` hold the detailed API-level checklists.
 
-Toolchain facts (read them again if a change touches build settings): language mode `SWIFT_VERSION: "5.9"` in `mobile/iosApp/project.yml`, deployment floor in `mobile/ios-deployment-target` (17.5), Xcode pinned in `.xcode-version` (26.6). Write code that would compile clean in Swift 6 language mode (the switch is a separate change, [#1160](https://github.com/srikanth235/centraid/issues/1160) R1). A Linux session has no Swift compiler: you cannot build, so reason from the code and say so in the report.
+## 1. Mindset
 
-## Where work goes
+- **Write Swift-shaped code.** Model absence with `Optional`, failure with `throws` or `Result`, variation with `enum`s carrying data, and shared behaviour with protocols and extensions. Class hierarchies, singletons and `Manager`/`Helper` types are smells.
+- **Make invalid states unrepresentable.** An enum with associated values beats a struct of optionals and bool flags that "must be set together". Validate once at the edge, then pass a type that cannot be wrong.
+- **Prefer values.** `struct` and `enum` by default; a `class` only for identity, shared mutable state or framework requirements, and then `final`.
+- **Views describe, they don't decide.** A SwiftUI view is a function of state. Business rules, persistence and networking live outside the view, where they can be tested.
+- **Let the compiler work.** Strict concurrency checking, exhaustive `switch` and non-optional types turn bugs into build errors. Don't silence them.
 
-| Work | Put it in |
+## 2. Before you hand back code
+
+- It builds with zero warnings, and the tests pass. Fix a warning rather than hiding it.
+- No force unwrap (`!`), `try!` or `as!` on a path that can fail. Where a failure truly means a programmer error, use `preconditionFailure("why")` or `fatalError("why")` with a message that names the broken invariant.
+- Check the deployment target before using a newer API. Gate it with `#available` or don't use it; never raise the target to make one call compile.
+
+## 3. Types and API design
+
+- **Naming follows the Swift API Design Guidelines:** clarity at the call site over brevity, no type names repeated in method names (`remove(_ item:)`, not `removeItem(_:)`), argument labels that read as a phrase, Booleans read as assertions (`isEmpty`, `canSave`), factory methods begin with `make`.
+- **Never name a type after a framework type** (`Task`, `View`, `Text`, `Image`, `Color`, `Section`, `Label`, `Menu`, `Group`, `Settings`). Shadowing `Task` breaks every `Task { }` in the module.
+- **No `Bool` parameters in shared APIs.** Use an enum (`.summary`, `.full`) or two methods; `render(true)` cannot be read at the call site.
+- **Access control is a design tool.** Start `private`, widen to `internal`, and make something `public` only when another module needs it. `fileprivate` is rarely right.
+- **Protocols for real abstraction only.** Introduce one when there are two conforming types or a test seam needs it, not to organise code. Prefer protocol extensions and generics to `any` existentials on hot paths.
+- **Conform to the standard protocols** a type naturally supports: `Equatable`, `Hashable`, `Identifiable` (with a stable id), `Codable`, `Sendable`, `CustomStringConvertible` for anything a person reads in logs.
+- **One primary type per file**, files grouped by feature, not by kind.
+
+## 4. Optionals and errors
+
+- Unwrap with `guard let value else { return }` at the top of a function and `if let value` for local branches. Don't nest optional chains past the point where a value has already been validated; past a guard, the value is not optional.
+- `??` with a default only when the default is a real product answer, not to make a missing value disappear.
+- **Throw typed, meaningful errors** (`enum ImportError: Error { case unreadable(URL) }`) and let them propagate to the place that can act: show the member an error state, retry, or translate. Catch only to recover, translate or present.
+- **A failure the member caused must reach the member.** `print(error)` in a button action is a silent failure; surface it in the UI.
+- `try?` discards the reason. Use it only when every failure means the same thing.
+
+## 5. Concurrency
+
+Write code that compiles cleanly under strict concurrency checking (Swift 6 mode), even in a Swift 5 target.
+
+| Work | Put it on |
 | --- | --- |
-| A label, sentence, chip, hue, enabled flag, empty-state choice, accessibility label, destination | The Rust `ViewState`. A view that needs one the state lacks reports a gap in Rust, never computes it ([R-1047-K1](../../../docs/decisions.md#the-mobile-shell)) |
-| Draw one `ViewState` arm | A `View` struct, routed from `Sources/RustScreenHost.swift`; takes the state plus `send` closures |
-| A tap, edit, appearance | `store.send(instance, .event)`; the view holds no business state |
-| A platform capability Rust asks for (Keychain, Photos, EventKit, BGTask, NWBrowser) | An effect performer beside `ScreenStore` that answers with an `EffectResult` |
-| Pure formatting or parsing the shell must own | A free-standing type with no UIKit in its signature, so a test can reach it |
-| A design value (colour, type, spacing, radius, icon) | `Theme` / `CentraidTokens` / `CentraidCatalog`; never a literal |
+| Views, view state, anything UIKit/SwiftUI touches | `@MainActor` |
+| CPU-heavy pure work (decoding, diffing, image work) | a `nonisolated` async function, or a background actor |
+| Shared mutable state used off the main thread | an `actor` |
+| A callback from C, the system or a framework on an unknown thread | hop with `Task { @MainActor in … }` |
 
-## Concurrency
+- **Prefer `async`/`await` over completion handlers and Grand Central Dispatch.** Don't reach for `DispatchQueue.main.async` to fix an isolation error; fix the isolation.
+- **`Task { }` inherits the caller's actor and priority.** `Task.detached` drops both; use it only when that is the point, and say why in a comment.
+- **Structured over unstructured.** `async let` and task groups tie child work to the parent's lifetime and cancellation; a bare `Task` does not, so store it and cancel it when its owner goes away. In SwiftUI, prefer `.task { }`, which cancels when the view disappears.
+- **Check cancellation** in long loops (`try Task.checkCancellation()`), and use `Task.sleep(for:)`.
+- **Data that crosses actors is `Sendable`:** value types of `Sendable` members, or `final class` with only immutable stored properties. Fix a diagnostic at the type, not with `@unchecked Sendable` or `nonisolated(unsafe)`; those are last resorts with a comment that proves safety.
+- **Watch actor reentrancy.** State read before an `await` may have changed after it. Re-check invariants after every suspension point.
+- **Closures handed to non-concurrency APIs** (dispatch sources, notification blocks, timers) inherit the main actor if created inside a `@MainActor` type. If they run on another thread, Swift 6 traps at runtime; mark them `@Sendable` and hop explicitly.
 
-Rules for iOS 17.5 on Swift 5.9 mode, written to stay clean under Swift 6.
+## 6. State and data flow in SwiftUI
 
-| Work | Use |
-| --- | --- |
-| Views, `ScreenStore`, `ShellModel`, anything a view reads | `@MainActor` on the type |
-| Shared mutable state off the main thread | An `actor` (as `Core`); one owner, small isolated sections |
-| Blocking or CPU-heavy work (decode, directory walk, HealthKit statistics) | A `nonisolated` async function that does not inherit the caller's actor (`@concurrent`, Swift 6.2 compiler; not yet used in this tree, so confirm it builds) or, as existing code does, `Task.detached(priority:)` with a comment saying why it must not inherit the actor |
-| A blocking C call | The serial queues inside `Core` (see below); nowhere else |
-| N known parallel awaits / unknown count | `async let` / `withTaskGroup` |
-| Fire-and-forget from a synchronous `@MainActor` method | `Task { }` (inherits the actor); hold the handle if it must be cancelled |
-| A delegate or OS callback (`@objc`, `URLSessionDelegate`, `PHPhotoLibraryChangeObserver`) | `nonisolated` method that hops with `Task { @MainActor in }`; closure parameters `@Sendable` |
-| A callback API with one answer | `withCheckedContinuation`, resumed exactly once on every path |
-| A stream of values | `AsyncStream` with a stated buffering policy; end it when its owner dies |
-| A delay or timeout | `try await Task.sleep(for:)` inside a cancellable `Task`, never `asyncAfter` |
+- **One source of truth per piece of state.** Derive everything else; never copy state into a second `@State` and try to keep the two in sync.
+- **The owner holds it, the rest borrow it.** `@State` for state a view owns (including an `@Observable` model it creates), `@Bindable`/`Binding` to edit someone else's, `@Environment` for app-wide dependencies. Pass plain values to views that only read.
+- **Prefer `@Observable` (iOS 17+) to `ObservableObject`.** It tracks the properties a view actually reads, so views redraw less, and needs no `@Published`. Mark caches, timers and handles `@ObservationIgnored`.
+- **Never create an observable model in a view initializer** or as a default property value of a view that isn't `@State`; it is recreated on every parent redraw.
+- **Avoid `Binding(get:set:)` in `body`.** Bind to the property and move side effects into `.onChange(of:)`.
+- **`ForEach` needs stable identity.** Use `Identifiable` ids, never `\.self` on values that can repeat, and never array offsets for data that can be inserted or deleted. Don't use `ForEach($items)` for deletable rows; look the item up by id.
 
-- `Core.swift` keeps two serial `DispatchQueue`s on purpose: `centraid_call` and `centraid_next_event` block, must run off the main thread (the core asserts the UI thread by name in debug), and the screens lane must answer in the order sent ([CONTRACT.md](../../../crates/core-ffi/CONTRACT.md)). That is the one reason a new queue is acceptable. Every other `DispatchQueue` in `Sources/` is legacy: touch one, replace it.
-- Data that crosses an isolation boundary is `Sendable`: a struct or enum of `Sendable` values, or a `final class` of `let` properties. The generated SwiftProtobuf messages are value types, so they cross freely.
-- Fix a diagnostic at its type. `@unchecked Sendable`, `nonisolated(unsafe)` and `@preconcurrency` need a comment stating the invariant that makes them safe (compare the `Raw` pointer wrapper in `Core.swift`).
-- **Runtime trap the compiler misses.** A closure made in a `@MainActor` type and handed to an API with no `@Sendable` parameter (`DispatchSource`, `DispatchWorkItem`, `AVCaptureSession` handlers, `NWBrowser` handlers) inherits the main actor; when it runs on another queue Swift 6 traps. Write it `{ @Sendable in ... }`, hop explicitly, and run the background path once.
-- Check `Task.isCancelled` (or call a throwing `Task` API) in loops that outlive a screen. `.task { }` on a view is cancelled with the view; prefer it to a `Task` stored by hand.
+## 7. Views, layout and navigation
 
-## State
+- **Small views, extracted by meaning.** Split a `body` into subviews (separate `struct`s, not computed properties or functions returning `some View`) when it grows past one screen or the type checker slows down. Subview structs get their own diffing.
+- **Keep `body` cheap and pure.** No formatting objects created per call, no sorting or filtering of large collections, no side effects. Precompute in the model.
+- **Modifier order matters** (`padding` then `background` differs from the reverse). Prefer the modern modifiers (`foregroundStyle`, `clipShape`, `overlay(alignment:)`).
+- **Lay out with stacks, `Grid` and `ViewThatFits`**, not hard-coded frames or screen sizes. Respect safe areas and Dynamic Type; test the largest accessibility size.
+- **`NavigationStack` with value-based `navigationDestination`**, driven by a path the model can change, rather than `NavigationLink(destination:)` with eager views.
+- **Lazy containers for long lists** (`List`, `LazyVStack`), with stable ids.
+- **Animate state changes, not views:** `withAnimation` around the mutation, or `.animation(_:value:)` scoped to the value that changed.
 
-| Need | Use |
-| --- | --- |
-| A model object a view reads | `@Observable` `@MainActor final class` (new code) |
-| The view that creates the model | `@State private var model = Model()` |
-| A model passed in that the view binds to | `@Bindable var model` |
-| A model many views need | `.environment(model)` and `@Environment(Model.self)` |
-| One value the view alone owns | `@State private var` (always `private`) |
-| A value the parent owns and the child edits | `@Binding` |
-| A cache or handle on a model | `@ObservationIgnored` |
-| Small user preference | `@AppStorage` in a view only (never inside an `@Observable`); secrets in the Keychain via `SecretStores` |
+## 8. Accessibility and localisation
 
-- `ObservableObject`, `@Published`, `@StateObject`, `@ObservedObject` and `@EnvironmentObject` are legacy: leave them in files you do not otherwise touch; migrate the type when its file is touched for other work ([observable-migration](references/observable-migration.md)). Never write a new one.
-- Views read `ScreenStore` (navigation, `views[instance]`); they never keep a copy of what Rust pushed, and never cache a derived business value in `@State`.
-- `@State` seeded from a parent value is a one-time seed. If the parent value can change, read it directly or key the view with `.id`.
-- A stored closure in a custom `@Environment` key defeats change detection: put data and a method on a struct or `@Observable` instead (existing keys such as `\.askChat` predate this; do not copy them).
+- Every interactive control has a label VoiceOver can read; icon-only buttons need one explicitly. Group related elements, hide decoration, and give state as a value (`accessibilityValue`), not in the label.
+- Support Dynamic Type everywhere (system text styles, no fixed heights around text) and respect Reduce Motion.
+- Minimum touch target 44×44 points.
+- User-visible text is localisable; format numbers, dates, names, lists and measurements with `FormatStyle`, never string concatenation or `String(format:)`.
 
-## Navigation, sheets, lists
+## 9. Testing
 
-- One `NavigationStack(path:)` with `navigationDestination(for:)`, registered once per type; Rust holds the stack and the shell mirrors it ([RustScreenHost](../../../mobile/iosApp/Sources/RustScreenHost.swift)). Never `NavigationView`, never `NavigationLink(destination:)` beside it.
-- Present with `sheet(item:)`, not `sheet(isPresented:)` plus a separate value. Anything a sheet or dialog shows is drawn from the kit, not hand-rolled.
-- Rows: a tappable row is a `Button` with `KitRowPress`, never `onTapGesture`.
-- `ForEach` identity comes from the element: `Identifiable` or `id: \.stableField`. Never `.indices`, never `\.offset`, never an id built from editable text, never an id minted inside `body`. Never `ForEach($items)` over data that can be deleted while the row is on screen: look the element up by id.
-- A `List` row or `ForEach` element yields a constant number of views.
-- `LazyVStack` inside `ScrollView` for long content; no `AnyView`; no `GeometryReader` where `containerRelativeFrame`, `visualEffect` or a `Layout` does it.
+- Test the logic outside the views: models, reducers, formatters, mappings. A view that needs a test of its logic has logic in the wrong place.
+- One behaviour per test, named for the behaviour. Arrange, act, assert.
+- Inject time, randomness, the network and storage so tests are deterministic.
+- `async` tests `await` the result; never sleep to wait for work. Test cancellation and the error paths, not only the happy path.
+- Snapshot tests catch layout regressions; record them in both colour schemes and at a large Dynamic Type size.
 
-## Design values
+## 10. Performance
 
-- Colours, type, spacing, radii and icons come from the generated tables through `Theme.color(_:_:)`, `.centraidType(_:)`, `Theme.spacing`, `Theme.radius` and `CentraidCatalog`. No hex, no `Color(red:)`, no `.secondary`/`.primary`, no SF Symbols, no `Font.system` ([DESIGN.md](../../../DESIGN.md), [trap](../../../docs/traps/design-tokens.md)).
-- Never edit `Design/{Theme,Catalog,Words}.swift` or `Sources/Generated/**`; they are emitted ([generated files](../../../mobile/README.md#generated-files--do-not-edit)). A missing token is a change in `packages/design`.
-- Liquid Glass exists on iOS 26 and is out of scope here: the platform draws chrome, the kit draws content ([DESIGN.md](../../../DESIGN.md)); do not call `glassEffect` or its styles, and do not apply any pack advice about them.
-- Reduced motion: read `@Environment(\.accessibilityReduceMotion)` and drop the slide to a fade (see `OnboardingViews.swift`). `.animation` always takes `value:`.
-- Dynamic Type is capped once at the root ([DESIGN.md](../../../DESIGN.md)); views do not re-cap.
+Measure with Instruments (SwiftUI, Time Profiler, Hangs) before optimising. Then:
 
-## Accessibility
+- Narrow what a view reads; with `@Observable`, reading fewer properties means fewer redraws. Split views so a frequently changing value invalidates a small subtree.
+- Keep work off the main actor; the main thread is for layout and input.
+- Downsample images to their display size before showing them.
+- Avoid `AnyView` and deep conditional view trees in lists; prefer `@ViewBuilder` and stable structure.
 
-- Every label comes from the `ViewState` (`row.accessibilityLabel`), never a string made in the view. Decorative icons are `.accessibilityHidden(true)`.
-- Icon-only controls are `Button`s with a label; targets are at least `CentraidGeometry.targetMinCoarse` (44).
-- Interactive and asserted elements carry an `accessibilityIdentifier` following [mobile/maestro/flows/selectors.md](../../../mobile/maestro/flows/selectors.md); pair a new id with the flow that proves it selects one thing.
-- Group a row with `.accessibilityElement(children: .combine)` only when its parts read as one sentence.
+## 11. Final checklist
 
-## Performance
+- Builds with zero warnings; clean under strict concurrency checking.
+- No force unwrap, `try!` or `as!` on a fallible path.
+- UI work on `@MainActor`; no new GCD; every `Task.detached` justified.
+- One source of truth per state; `@Observable` for new models.
+- `ForEach` ids are stable; no offsets for mutable collections.
+- Every control is accessible and Dynamic Type safe; text is localisable.
+- Errors reach the member; nothing user-triggered fails silently.
+- Logic is tested outside views.
 
-- A `View` is an invalidation boundary: pass it only what it reads; split fast-changing state into the smallest subview.
-- `body` is cheap and pure: no sorting, formatting, I/O, `Date()`, or object creation in it. Compute in Rust or in the model once.
-- Decode images off the main actor and downsample to the display size ([PhotosLightboxStage](../../../mobile/iosApp/Sources/PhotosLightboxStage.swift)).
-- Profile with Instruments before optimising; present a speed-up as a measured one.
-- If the type checker reports it cannot check an expression, split the view into subviews or `let` constants (the app root does this on purpose).
+## 12. In this repo
 
-## Testing
+The iOS shell lives in `mobile/iosApp`, generated by XcodeGen from `project.yml` (Swift 5.9 language mode, iOS 17.5 deployment target).
 
-- Unit tests are XCTest, `final class FooTests: XCTestCase`, `@testable import CentraidApp`, sentence-style names (`testAnIPv4EndpointIsHostColonPort`), the invariant stated in the doc comment. Swift Testing is not used in this tree; do not introduce it in one file ([CENTRAID.md](CENTRAID.md)).
-- Reach logic through a seam (`ScreenCore`, `ServiceFinder`, a fake) and test the decision, not the OS. What needs a device or simulator is an owner hand-off ([mobile/README.md](../../../mobile/README.md#what-runs-here-and-what-is-a-hand-off)).
-- Async: `async` test methods and `await fulfillment(of:)`; never `wait(for:)` in an async test; never sleep to wait for a positive result.
-- Every behaviour change gets a negative case beside the positive one.
-- No `#Preview`, no snapshot test, until swift-snapshot-testing is added (README hand-off).
-- Write tests in [references/xctest-in-this-repo.md](references/xctest-in-this-repo.md).
+- **The Rust core owns the product.** Screens, navigation, copy and business state come from the core through `ScreenStore` and `Core`; Swift views render what they are given and perform effects. Don't add business state, rules or user-facing strings in Swift.
+- **Generated files are never edited.** `Design/Theme.swift`, `Design/Catalog.swift` and `Design/Words.swift` come from `contracts/tools/export-native-*.ts`; the protobuf types in `Sources/Generated` are built at compile time. Use their tokens and words; no raw colours or fonts in place of the theme.
+- **`Core.swift` owns the two serial queues** that call the C ABI; nothing else adds a `DispatchQueue`. Read `crates/core-ffi/CONTRACT.md` before touching the bridge.
+- `ScreenStore` is an `ObservableObject` today; new models use `@Observable`, and an existing one moves when its file is touched for other work.
+- Tests are XCTest under `mobile/iosApp/Tests`. The simulator test command is in `mobile/README.md`; it needs a Mac, so a Linux session cannot run it and must say so.
+- After adding a Swift file, regenerate the project (`xcodegen generate`).
 
-## Names Swift already uses
+## References
 
-Never name a type `Task`, `View`, `Color`, `Image`, `Text`, `Section`, `Label`, `Menu`, `Group`, `Scene`, `Result`, `Error` or `Data`. A type called `Task` breaks every `Task { }`; the generated protobuf types are `Centraid_Core_V1_*` for the same reason.
+Detailed checklists, read when the task touches the area:
 
-## Always
+- `references/swift.md`: modern Swift and Foundation API choices, concurrency rules.
+- `references/data.md`: data flow, property wrappers, shared state.
+- `references/views.md`: view structure, composition, animation, list editing.
+- `references/performance.md`: keeping SwiftUI fast.
+- `references/accessibility.md`: Dynamic Type, VoiceOver, Reduce Motion.
 
-- Match the neighbouring file: header comment states the invariant, one type per file unless the types are one idea.
-- Add a new `Sources/**.swift` or `Tests/**.swift`, then run `xcodegen generate`: the project is generated and globbing happens then.
-- Optional-unwrap with `guard let` / `if let x`; propagate or show a failure; a failure a member caused is never swallowed with `print`.
-- Use `Task.sleep(for:)`, `URL.appending(path:)`, `FormatStyle`, `foregroundStyle`, `clipShape(.rect(cornerRadius:))`, `onChange(of:) { old, new in }`.
-- Gate any iOS 18 or later API with `#available` (the floor is 17.5).
-
-## Never
-
-- `DispatchQueue` for new code outside `Core`; `Thread`, semaphores or locks in async code; `Task.detached` without a stated reason.
-- `@unchecked Sendable` or `nonisolated(unsafe)` to silence a diagnostic.
-- A new `ObservableObject`; `ForEach` over indices; `AnyView`; `onTapGesture` for a button.
-- Business logic, copy, counting or a timer in a view; a literal colour or font.
-- Calling `centraid_*` symbols except through `Core`; holding a buffer past `centraid_free`.
-- Editing a generated file, a `.xcodeproj`, or `project.yml` settings to make a build pass.
-- `try!`, `!` on data from outside the process, `fatalError` for a recoverable failure.
-
-## Compiler and runtime errors
-
-Fix the first error first; later ones often follow from it.
-
-| Error | Fix |
-| --- | --- |
-| `cannot find 'X' in scope` after adding a file | `xcodegen generate` (globbed at generation); for `Centraid_Core_V1_*` the pre-build proto phase must have run |
-| `Main actor-isolated ... cannot be used from a nonisolated context` | Make the caller `@MainActor`, or `await` the call; do not sprinkle `MainActor.run` |
-| `Call to main actor-isolated initializer in a synchronous nonisolated context` | Create the object inside a `@MainActor` context or make the factory `@MainActor` |
-| `Sending 'x' risks causing data races` | Send a `Sendable` value or a snapshot; keep the reference on one actor |
-| `Capture of 'x' with non-sendable type in a '@Sendable' closure` | Copy the needed `Sendable` fields before the closure; do not capture `self` of a non-`Sendable` class |
-| `Static property 'x' is not concurrency-safe` | `let` of a `Sendable` type, `@MainActor` on the owner, or a commented `nonisolated(unsafe)` |
-| `Actor-isolated property cannot be mutated from a non-isolated context` | Add an actor method that mutates, `await` it |
-| `Expression is 'async' but is not marked with 'await'` | Add `await`; the caller must be async or a `Task` |
-| `Reference to property in closure requires explicit use of 'self'` | `self.` or `[weak self]` per ownership; a `Task` on a long-lived object captures `[weak self]` |
-| `Conformance of 'X' to protocol 'Y' crosses into main actor-isolated code` | Prefer an isolated conformance (`extension X: @MainActor Y`) on Swift 6.2; else `nonisolated` for requirements that need no state |
-| `Type 'X' does not conform to protocol 'Sendable'` on a class | `final class` with `let` stored properties, or make it an `actor`/`@MainActor` |
-| `The compiler is unable to type-check this expression in reasonable time` | Extract subviews, `let` intermediates, give literals types |
-| `Ambiguous use of 'Task'` | A type in your code is named `Task`; rename it |
-| `Instance method 'wait' is unavailable from asynchronous contexts` | `await fulfillment(of:timeout:)` |
-| `Cannot find '$model' in scope` on an `@Observable` | The view needs `@Bindable var model` to project bindings |
-| Runtime: `EXC_BREAKPOINT` in `_dispatch_assert_queue_fail` | A main-actor closure ran on a background queue; mark it `@Sendable` and hop |
-| Runtime: `-34018` from `SecItem*` | The entitlement is missing; see `project.yml` `entitlements`, not the call site |
-
-## Go deeper
-
-| When | Open |
-| --- | --- |
-| Moving an `ObservableObject` to `@Observable` | [references/observable-migration.md](references/observable-migration.md) |
-| Writing or reviewing a test | [references/xctest-in-this-repo.md](references/xctest-in-this-repo.md) |
-| Property wrappers, `@Observable` granularity | [references/swiftui/state-management.md](references/swiftui/state-management.md) |
-| Splitting a big view, `@ViewBuilder` | [references/swiftui/view-structure.md](references/swiftui/view-structure.md) |
-| Lists, `ForEach`, identity | [references/swiftui/list-patterns.md](references/swiftui/list-patterns.md) |
-| Redraw cost, `_printChanges` | [references/swiftui/performance-patterns.md](references/swiftui/performance-patterns.md) |
-| Custom environment keys, `@Entry` | [references/swiftui/environment-patterns.md](references/swiftui/environment-patterns.md) |
-| Sheets, alerts, stacks | [references/swiftui/sheet-navigation-patterns.md](references/swiftui/sheet-navigation-patterns.md) |
-| Scroll position, `ScrollViewReader` | [references/swiftui/scroll-patterns.md](references/swiftui/scroll-patterns.md) |
-| Focus | [references/swiftui/focus-patterns.md](references/swiftui/focus-patterns.md) |
-| VoiceOver, Dynamic Type | [references/swiftui/accessibility-patterns.md](references/swiftui/accessibility-patterns.md) |
-| Animation | [basics](references/swiftui/animation-basics.md), [transitions](references/swiftui/animation-transitions.md), [advanced](references/swiftui/animation-advanced.md) |
-| Layout and safe areas | [references/swiftui/layout-best-practices.md](references/swiftui/layout-best-practices.md) |
-| Image decoding | [references/swiftui/image-optimization.md](references/swiftui/image-optimization.md) |
-| Toolbars, text, modifiers | [toolbar](references/swiftui/toolbar-patterns.md), [text](references/swiftui/text-patterns.md), [modifiers](references/swiftui/modifier-patterns.md) |
-| A deprecated API | [latest-apis](references/swiftui/latest-apis.md), [soft-deprecation](references/swiftui/soft-deprecation.md) |
-| A review checklist for SwiftUI | [references/swiftui-pro/](references/swiftui-pro/api.md): api, data, views, navigation, performance, accessibility, swift, hygiene |
-| Actor isolation, reentrancy | [references/concurrency/actors.md](references/concurrency/actors.md) |
-| `Sendable` | [references/concurrency/sendable.md](references/concurrency/sendable.md) |
-| `Task`, groups, cancellation | [references/concurrency/tasks.md](references/concurrency/tasks.md) |
-| Threads versus isolation | [references/concurrency/threading.md](references/concurrency/threading.md) |
-| Retain cycles in tasks | [references/concurrency/memory-management.md](references/concurrency/memory-management.md) |
-| Strict-concurrency migration | [references/concurrency/migration.md](references/concurrency/migration.md) |
-| `AsyncSequence`, `AsyncStream` | [references/concurrency/async-sequences.md](references/concurrency/async-sequences.md) |
-| `@Observable` across actors | [references/concurrency/observation.md](references/concurrency/observation.md) |
-| Async tests | [references/concurrency/testing.md](references/concurrency/testing.md) |
-| Terms | [references/concurrency/glossary.md](references/concurrency/glossary.md) |
-| Swift Testing, if the owner adopts it | [references/testing/fundamentals.md](references/testing/fundamentals.md) and its neighbours |
-
-Pack references quote iOS 18 to 27 APIs and Xcode 27 toolchain features; the floor here is iOS 17.5 on Xcode 26.6, so check availability before using any.
-
-## Done when
-
-The change builds with zero warnings and no new Swift 6 diagnostics, and on a Mac the simulator command from [mobile/README.md](../../../mobile/README.md#the-ios-hand-off) is green: `xcodegen generate` in `mobile/iosApp`, then `xcodebuild -project Centraid.xcodeproj -scheme Centraid -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test`. A Linux session cannot run it; say so in the report and name the owner hand-off. On any machine, `cargo xtask doc-links` passes for the docs you touched, and a token or word change is regenerated, never hand-edited.
+The references are from [SwiftUI Pro](https://github.com/twostraws/SwiftUI-Agent-Skill) by Paul Hudson (MIT, [license](licenses/twostraws-SwiftUI-Agent-Skill-LICENSE)). They target recent iOS releases: check the deployment target before applying version-specific advice.

@@ -1,6 +1,6 @@
 # SQLite Schema Design
 
-> Pack file (claude-mods `sqlite-ops`, MIT, see [SOURCES.md](../SOURCES.md)). Where this repo differs, [CENTRAID.md](../CENTRAID.md) wins; the repo's SQLite law is in [SKILL.md](../SKILL.md).
+> From claude-mods `sqlite-ops` (MIT, [license](../licenses/claude-mods-LICENSE)). Where this repo differs, "In this repo" in [SKILL.md](../SKILL.md) wins.
 
 Engine-agnostic. Type affinity, STRICT tables, foreign-key enforcement, generated columns, and `WITHOUT ROWID` behave identically on every host. For ready-made table recipes see [`schema-patterns.md`](https://github.com/0xDarkMatter/claude-mods/blob/82f5d0a34618bb4228d7e6662579a88d6fe5297c/skills/sqlite-ops/references/schema-patterns.md); for changing an existing schema see [`migration-patterns.md`](migration-patterns.md).
 

@@ -1,155 +1,120 @@
 ---
 name: sqlite
-description: SQLite schema, migrations, queries and their rusqlite access in Centraid's vault and gateway. Use when writing, reviewing or debugging SQL, DDL, a migration rung, an index, a transaction or a rusqlite call in this repo, or on SQLITE_BUSY, constraint-failure, "no such table", slow-query, snapshot or `sql-confinement` errors.
+description: >-
+  Design SQLite schemas and write correct, fast, durable SQL. Use this skill whenever you write, review, refactor, debug or explain SQL, DDL, a migration, an index, a transaction, a trigger, FTS5, or database access from Rust through rusqlite. Trigger on SQLITE_BUSY, constraint failures, "no such table", slow queries, WAL or checkpoint questions, even when the user does not ask for "best practices". Closes with how Centraid's vault and gateway apply them.
 ---
 
-# SQLite in Centraid
+# SQLite best practices
 
-Two databases, one rule set. **The vault** (`vault.db`, on the phone) is the member's data; the core is its only writer. **The gateway's `state.db`** is a blind store's bookkeeping. The schema is the product's contract: `docs/vault-ontology.md` says what each table means and which commitments the tests enforce. This skill says how to write the SQL.
+Where common advice disagrees, this file says which to follow and why. The digests in `references/` go deeper on schema design, query performance, concurrency and migrations.
 
-Laws that live elsewhere are linked, not restated: [docs/traps/wal-checkpoint.md](../../../docs/traps/wal-checkpoint.md) (pragmas, snapshots, `VACUUM`) · [docs/vault-ontology.md](../../../docs/vault-ontology.md) (indexes, commitments, adding a table) · [centraid-engineering](../centraid-engineering/SKILL.md) (store atomicity, nothing O(vault-size) on the request path, no "vaults are small", year-3 scale rigs) · [docs/decisions.md](../../../docs/decisions.md) (R-1029-5, D-1020-D1-2, R-1047-R1, R8, R-1146-1B-6).
+## 1. Mindset
 
-## Where SQL may live
+- **The schema is the contract.** Constraints the database enforces (types, `NOT NULL`, `CHECK`, foreign keys, unique indexes) hold for every writer, forever; constraints in application code hold only for the code you remembered to write.
+- **SQLite is a library, not a server.** Connections are cheap, there is one writer at a time, and the file is the whole database. Design for that instead of imitating a client/server database.
+- **Measure queries, don't guess.** `EXPLAIN QUERY PLAN` says what a query will do; read it before and after adding an index.
+- **Cost that grows with the data is a design bug,** not a tuning task. Every query on an interactive path is bounded.
 
-| Work | Where |
-| --- | --- |
-| Vault schema, vault queries, commands | `crates/vault`, `crates/ontology`, `crates/search`, `crates/apps/kit` (the `SQL_ALLOWED_ROOTS` of the `sql-confinement` rule in `crates/xtask/src/rules.rs`) |
-| Gateway `state.db` | `crates/gateway/src/server/sql/*.sql`, reached by `include_str!` in `server/sql.rs` |
-| Anything else (core, screens, apps, assist, FFI, shells) | Ask the vault or the kit through a typed method. No SQL |
+## 2. Before you hand back SQL
 
-- The rule scans Rust string literals for uppercase `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE TABLE`, `PRAGMA`. A crate outside the roots that needs a statement has reached past its layer; move the work to the owning crate. Never rename a keyword to dodge the scan.
-- A new gateway statement is a new `.sql` file plus a `statement!` line, one caller each.
+- Every statement uses bound parameters (`?1`, `:name`). Never build SQL by string formatting with values; it is both an injection hole and a cache miss.
+- Every query on a hot path has been checked with `EXPLAIN QUERY PLAN`: no full scan of a table that grows.
+- Every schema change comes with a migration and a test that opens an old database.
+- Writes that belong together are in one transaction.
 
-## Connection setup
+## 3. Schema design
 
-- One opener: `Vault::wrap` in `crates/vault/src/file.rs` applies the pragma set (`journal_mode = wal`, `synchronous = FULL`, `journal_size_limit`, busy timeout) to every connection. `page_size` and `auto_vacuum` are set once in `create_with`. Read the [trap](../../../docs/traps/wal-checkpoint.md) before touching any of it.
-- Foreign keys are connection-scoped and off by default: the vault sets `foreign_keys = ON` after the ladder on a create and before it on an open; the gateway sets it in `SqliteState::prepared`. A new opener sets it explicitly.
-- Reads go through `Vault::read` (`query_only = ON`). Writes go through `Vault::commit` only ([R-1047-R1](../../../docs/decisions.md): every vault write is under the commit guard).
-- Never open a second writable connection to `vault.db`, never `cp` it, never `VACUUM` it. A snapshot is the online backup API under the write lock.
+- **`STRICT` tables** so a column's declared type is enforced; without it SQLite accepts any value in any column (type affinity).
+- **Primary keys:** a stable, meaningful key or a generated id. Pick one id format per database and keep it; time-ordered ids (UUIDv7) keep inserts local in the index.
+- **`NOT NULL` by default.** A nullable column means "unknown or not applicable", and every reader must handle it.
+- **`CHECK` constraints** for enumerations and shapes (`CHECK (status IN ('open','done'))`, "exactly one of these columns is set"). When you add a value to a `CHECK`, find every writer and reader of that column.
+- **Foreign keys with a deliberate delete rule:** `CASCADE` for parts owned by the parent, `RESTRICT`/`NO ACTION` for references that must block a delete, `SET NULL` only when null is meaningful. Siblings referencing the same parent should agree. Foreign keys are off by default in SQLite and are a per-connection setting: turn them on in every connection.
+- **Timestamps in one format per database** (ISO-8601 text or integer milliseconds), with a clear `created_at`/`updated_at` policy applied to every table.
+- **`WITHOUT ROWID`** for tables keyed by a composite or text primary key with small rows; note that `update_hook` does not fire for them.
+- **Normalise first,** denormalise only for a measured read path, and keep the copy maintained in one place.
 
-## Transactions and atomicity
+## 4. Queries and indexes
 
-| Work | Use |
-| --- | --- |
-| A vault write | `vault.commit(\|tx\| …)`: `BEGIN IMMEDIATE`, body, reindex, `COMMIT`; one commit is one atomic step |
-| A write that reads first | `BEGIN IMMEDIATE` (a deferred read-then-write is `SQLITE_BUSY` at once, `busy_timeout` ignored) |
-| Gateway read-decide-write | `SqliteState`'s `atomically` (`BEGIN IMMEDIATE`), never a bare read then write |
-| A migration rung | `migrations::run_rungs`: own transaction per rung, `user_version` set inside it |
-| Read-only work | `Vault::read` |
+- An index serves a query when its leading columns match the equality filters, followed by the range or sort column. Design indexes from the queries, not the columns.
+- **Covering indexes** (all selected columns in the index) avoid table lookups on hot reads.
+- **Partial indexes** (`WHERE deleted_at IS NULL`) keep indexes small for common filters; **expression indexes** serve queries on `lower(name)` or JSON fields.
+- **Paginate by key, not offset.** `WHERE (sort_key, id) > (?1, ?2) ORDER BY sort_key, id LIMIT ?3` stays fast at any depth; `OFFSET` reads and discards every skipped row.
+- `SELECT` the columns you need. Avoid functions on indexed columns in `WHERE` unless an expression index matches.
+- Correlated subqueries and `IN (SELECT …)` are fine when they use an index; check the plan.
+- Run `ANALYZE` (or `PRAGMA optimize`) so the planner has statistics, when the database is large enough for plans to vary.
 
-- Callers never read, merge and write across statements outside a transaction ([Store atomicity](../centraid-engineering/SKILL.md#state-and-cost)).
-- A transaction holds no network I/O, no sleep, no user wait.
-- Upsert, never `INSERT OR REPLACE`: REPLACE displaces rows without firing the update hook or delete triggers ([R-1047-R1](../../../docs/decisions.md)).
+## 5. Writes, transactions and concurrency
 
-## Schema rules (verified against `contracts/migrations/001_baseline.sql`)
+- **Group related writes in one transaction.** It is atomic, and far faster than many autocommit statements.
+- **Use `BEGIN IMMEDIATE` for a transaction that will write.** A deferred transaction that reads first and writes later can fail with `SQLITE_BUSY` immediately, without waiting, when another writer got there first.
+- **Keep write transactions short;** never hold one across network calls or user input.
+- **Set a busy timeout** on every connection so a waiting writer retries instead of failing.
+- **WAL mode** lets readers proceed during a write. Readers see a snapshot as of their transaction's start.
+- **Upsert with `INSERT … ON CONFLICT (…) DO UPDATE`.** `INSERT OR REPLACE` deletes the old row and inserts a new one: it fires no delete trigger (unless recursive triggers are on), is not reported to the update hook as a delete, and can cascade through foreign keys.
+- **Read-modify-write belongs inside one transaction** owned by one function, never spread across callers.
 
-| Concern | Rule |
-| --- | --- |
-| Tables | `STRICT` always; `WITHOUT ROWID` for small keyed child and key-value tables (each is covered by `install_without_rowid_census`, because `update_hook` never fires for them) |
-| Vault ids | TEXT, minted UUIDv7 from the injected clock ([D-1020-X3-2](../../../docs/decisions.md)); `entity.n` is the integer handle. Never persist a counter |
-| Vault timestamps | TEXT, `YYYY-MM-DDTHH:MM:SS.mmmZ` UTC, exactly `strftime('%Y-%m-%dT%H:%M:%fZ','now')`; code writes `Clock::now_text()`. Date-only columns are `CHECK (date(c) = c)` |
-| Gateway timestamps | INTEGER `*_ms` since the epoch. A different database, a different convention; never mix inside one |
-| Money | INTEGER minor units (`amount_minor`) |
-| Enumerations | `CHECK (col IN (...))`, and a Rust enum that a test holds equal to it (`Kind`, `Rel`) |
-| Optional JSON | `CHECK (col IS NULL OR json_valid(col))` |
-| Row-shape invariants | `CHECK` across columns, e.g. `(deleted_at IS NULL) = (purge_at IS NULL)` |
-| Foreign keys | Kind rows, children and edges `ON DELETE CASCADE`; attribution pointers `SET NULL`; the rest no action with a purge rule (commitment 4, 4b) |
-| Kind rows | Generated constant `kind … VIRTUAL` plus composite `FOREIGN KEY (id, kind)` |
-| Hashes | A column holding a hash is a foreign key into `blob(hash)` |
-| Bytes | Large content stays out of rows (`blob:blake3-<hex>` in the byte store) |
-| Dormant tables | None. A table with no producer and no consumer leaves the schema ([ONT-dormant](../../../docs/decisions.md)) |
+## 6. Durability and file safety
 
-- Every foreign key's first child column leads an index (commitment 9); mostly-NULL columns get a partial index.
-- A new `entity.kind`, relation or table is a decision about the model first: follow [Adding or changing a table](../../../docs/vault-ontology.md#adding-or-changing-a-table).
+- `synchronous = FULL` when every acknowledged commit must survive power loss; `NORMAL` under WAL can lose the last commits.
+- Copy a live database only through the online backup API or `VACUUM INTO`, never by copying the file: a file copy during a write can be torn, and the `-wal` file holds committed data.
+- Don't put the database on a network file system, and never delete or move `-wal` and `-shm` files while a connection is open.
+- `VACUUM` rewrites the whole file and renumbers pages. Decide deliberately whether to run it; it changes every page a page-level backup tracks.
 
-## Migrations
+## 7. Migrations
 
-| Situation | Do |
-| --- | --- |
-| No release has needed to migrate (check `git tag` and [docs/release.md](../../../docs/release.md)) | Edit `contracts/migrations/001_baseline.sql` in place ([R-1029-5](../../../docs/decisions.md)), regenerate `contracts/schema/vault-ddl.sql`, update `SCHEMA_DIGEST` |
-| A released baseline exists | Append `002_<name>.sql`, an `include_str!` constant and a `Migration` in `LADDER` (`crates/vault/src/migrations.rs`). Never insert, never edit an applied rung |
-| Gateway `state.db` | `schema.sql` is idempotent (`IF NOT EXISTS`), applied on every open; an incompatible change needs its own plan |
+- **Track the schema version** with `PRAGMA user_version` (and `application_id` to tag the file as yours), migrating forward one step at a time, each step in its own transaction.
+- **Forward-only.** Refuse to open a file from a newer schema rather than guessing.
+- **Never edit a migration that has shipped;** add a new one. Changing a column usually means create a new table, copy, drop, rename, with foreign keys off during the copy and a `PRAGMA foreign_key_check` after.
+- **Test migrations against real old files,** including rows that the old schema allowed and the new one constrains.
 
-- Forward-only. A file above the binary is `DowngradeRefused`; a failing rung leaves the file unmigrated, proved by `999_fails.sql` and the restore drill.
-- A rung is proved by founding a vault, winding it back to the previous `user_version`, writing rows the old shape allowed, and opening it. A table recreate follows the 12-step procedure in [references/migration-patterns.md](references/migration-patterns.md) with `foreign_key_check` clean before commit; remember the ladder runs with `foreign_keys` OFF on create and ON on open.
-- `SCHEMA_DIGEST` (`crates/vault/src/format.rs`) must equal the founded file: `the_schema_digest_is_the_founded_files` prints the new value.
-- Schema changes land with their snapshot and restore evidence ([X-630-migrations](../../../docs/decisions.md)).
+## 8. Triggers, FTS and JSON
 
-## Queries and planning
+- Triggers for invariants the schema cannot express (immutability, append-only history, shape checks), kept short and side-effect-free beyond the database.
+- FTS5 for full-text search; keep the index in sync in the same transaction as the source rows, and rebuild it rather than patch it when its definition changes.
+- JSON columns for genuinely schemaless data only; anything queried often deserves a real column or an expression index.
 
-- Nothing O(vault-size) on a request path ([rule](../centraid-engineering/SKILL.md#state-and-cost)): every list is keyset-paged by a stable `(sort_key, pk)` cursor, never `OFFSET`, with a `LIMIT` ([R8](../../../docs/decisions.md)). Never continue a keyset over a nullable sort column.
-- Every hand-written statement in the allowed crates is planned by `crates/core/tests/query_plans.rs` over the year-3 corpus. A full scan or a sort after a paged read fails unless `contracts/ledgers/query-plans.json` says why (down-only ledger). A new statement either streams from an index or gets the index in the baseline.
-- Run `EXPLAIN QUERY PLAN` before you ship a statement; the word `COVERING`, no `USE TEMP B-TREE`, no `SCAN` of a large table. Query-planning depth: [references/query-performance.md](references/query-performance.md).
-- Index the question the code asks (equality columns, then the range or sort column, then coverage). A partial index only helps a literal predicate that implies its `WHERE`.
-- Plan text changes between SQLite versions; the gate is measured work at year-3 scale, not a plan snapshot.
-- Page reads are `Request::Page` over `PAGE_TABLES` under an authorizer; do not widen it.
+## 9. rusqlite
 
-## Parameter binding and rusqlite idioms
+- `prepare_cached` for statements run repeatedly; `params![]` or named parameters; map rows with `query_row`/`query_map` into typed structs in one place.
+- `Transaction` (or `transaction_with_behavior(Immediate)`) for multi-statement writes; it rolls back on drop unless committed.
+- Convert `rusqlite::Error` into the crate's own error type at the module boundary; callers should not match on SQLite error codes.
+- Blocking database calls do not run on an async executor thread.
 
-- Bind values with `?1` placeholders with `params![]`; never format a value into SQL. `format!` is for identifiers that came from `sqlite_master` or a `PRAGMA`, wrapped in `log::quoted` (`crates/vault/src/log/identifiers.rs`).
-- `prepare_cached` for statements on a hot path, `query_row(...).optional()` (`OptionalExtension`) for zero-or-one.
-- Dynamic `IN` lists and optional filters: build the placeholder string and bind with `params_from_iter` (`crates/search/src/sqlite.rs`).
-- Read columns by index with a typed `get::<_, T>`; STRICT makes a mismatch an error at write, not a surprise at read.
-- Convert errors through `VaultError::from_sqlite(context, e)` (classifies `SQLITE_FULL` as `DiskFull` once); do not hand-match `rusqlite::Error` at call sites. Gateway code maps to `StoreFault`.
-- `rusqlite` is `bundled` with `session`, `hooks`, `functions`, `backup` (root `Cargo.toml`); do not link a system SQLite.
-- Library code returns errors, never `unwrap`s a SQL result outside tests.
+## 10. Reviewing a schema change
 
-## Always / Never
+Reading the DDL is not enough. Sweep mechanically:
 
-Always
+- every `CHECK` value against every writer of that column;
+- every foreign key's delete rule against its siblings on the same parent;
+- every table's timestamp columns against the policy;
+- every new query's plan against a database seeded at realistic volume.
 
-- Add the test with the schema change: commitments (`crates/vault/tests/commitments.rs`), `ladder_ddl.rs`, the digest, and a command test that writes through `Vault::commit`.
-- Run the mechanical sweeps below before calling a schema change done.
-- State a bound in code (`LIMIT`, retention cap, cursor) for every query over a growing table.
-- Seed a scale rig to the declared year-3 volumes when a statement's cost depends on volume.
+## 11. Final checklist
 
-Never
+- Parameters bound; no SQL built from values.
+- Hot queries checked with `EXPLAIN QUERY PLAN`; paging by key with a `LIMIT`.
+- Constraints in the schema: `STRICT`, `NOT NULL`, `CHECK`, foreign keys with chosen delete rules, foreign keys enabled per connection.
+- Writes grouped in short `BEGIN IMMEDIATE` transactions; upserts, never `OR REPLACE`.
+- A forward-only migration and a test from an old file.
 
-- Never write to the vault outside the commit guard; never add a second writer.
-- Never `VACUUM`, change `auto_vacuum`, or copy `vault.db` with `cp` ([trap](../../../docs/traps/wal-checkpoint.md)).
-- Never edit an applied rung; never add a dormant table "for later".
-- Never `INSERT OR REPLACE` on a vault table.
-- Never `SELECT *` into a typed row on a hot path; name columns.
-- Never put SQL in a Rust literal outside the confinement roots.
-- Never add a "tables stay small" comment as the justification for a scan.
+## 12. In this repo
 
-## Mechanical sweeps (a schema change is not reviewed by reading)
+There are two databases. **The vault** (`vault.db`) lives on the phone and the Rust core is its only writer. **The gateway's `state.db`** is the blind store's bookkeeping.
 
-[AGENTS.md](../../../AGENTS.md) and [vault-ontology.md](../../../docs/vault-ontology.md#how-this-model-is-reviewed) make these part of a model review. Run each and record the result in the PR:
-
-1. **CHECK values against writers**: for every `CHECK (col IN (...))` you touched, grep each value in the Rust writers and each writer's value in the CHECK (`rg "'<value>'" crates/vault/src crates/apps`). Both directions; a value nobody writes is dormant, a value a writer emits that the CHECK rejects is a bug.
-2. **Delete rules against siblings**: list `PRAGMA foreign_key_list` for the new table and its siblings; the rule must match commitment 4/4b, and the purge path must still be one `DELETE` of the entity row.
-3. **Timestamps**: every `*_at`/`*_on` column of the table uses the table's convention (vault ISO text, gateway `*_ms`), is `NOT NULL` only if every writer sets it, and is written from the injected clock, not `now()` in Rust code.
-4. **Indexes**: each foreign key's first child column leads an index (commitment 9); each new statement is in `query_plans.rs`' coverage.
-5. **Founded tables and census**: a new table is in commitment 8's list of founded tables, and a `WITHOUT ROWID` table is covered by the update-hook shim (`install_without_rowid_census`).
-
-## Error to fix
-
-| Symptom | Cause and fix |
-| --- | --- |
-| `SQLITE_BUSY` / "database is locked" | A second connection or a deferred read-then-write. Open writes `BEGIN IMMEDIATE`; the vault has one writer, so look for a second opener. Retry the whole transaction, never the statement |
-| `SQLITE_LOCKED` | Writing a table while a cursor on it is open. Collect rows first, then write. Not retryable |
-| `FOREIGN KEY constraint failed` | Parent missing, or a delete rule bites. Check `PRAGMA foreign_key_check`; a seed written out of order |
-| `CHECK constraint failed` | The writer emits a value the CHECK rejects (sweep 1) or breaks a row-shape invariant |
-| `NOT NULL constraint failed` | A writer skips the column; fix the writer, not the column |
-| `cannot store TEXT value in INTEGER column` | STRICT doing its job; fix the bound type |
-| `UNIQUE constraint failed` on upsert | The conflict target does not name the unique index; use `ON CONFLICT (cols) DO UPDATE` |
-| `SQLITE_FULL` / `DiskFull` | Already classified by `VaultError::from`; render, do not retry |
-| `no such table` in a statement | A table outside `PAGE_TABLES` read through the page door, or a migration not run on this file |
-| Schema digest / `DowngradeRefused` / "made by an earlier version" | `SCHEMA_DIGEST` not updated, or a file from another build. Do not touch the file; update the constant or use a founded vault |
-| `sql-confinement` finding | SQL in a crate outside the roots; move it |
-| `query_plans` red | Full scan or sort after a paged read; add the index to the baseline or fix the predicate (planning reference) |
-| Snapshot / backup drill red | A `VACUUM`, a second writer, or a page-moving change; read the trap |
-| `last_insert_rowid` surprises | `WITHOUT ROWID` tables have none; key by the declared primary key |
+- **SQL lives only in the vault, ontology, search and apps-kit crates**; a check (`sql-confinement`) fails on SQL elsewhere. The gateway keeps its statements in `.sql` files loaded with `include_str!`.
+- **One connection, one writer per vault.** Every vault write goes through `Vault::commit` (`BEGIN IMMEDIATE`); reads go through `Vault::read`. Never open a second writable connection or copy the file.
+- **Pragmas are fixed by the vault's opener:** WAL, `synchronous = FULL`, a busy timeout, foreign keys on, `auto_vacuum = NONE`. **`VACUUM` never runs**, because the backup is the file cut into page ranges and a vacuum would make every range new. Backups use the online backup API. Read `docs/traps/wal-checkpoint.md` before changing any of this.
+- **Schema versioning:** `application_id` tags the file, `user_version` counts migration rungs, and a schema digest is checked on open. The baseline (`contracts/migrations/001_baseline.sql`) is edited in place until the first release that must migrate; after that, changes are new rungs. `contracts/schema/vault-ddl.sql` is generated, not edited.
+- Vault ids are UUIDv7 text and vault timestamps ISO-8601 text; the gateway uses millisecond integers.
+- Upsert, never `OR REPLACE`, in vault writers. Lists page by key, never `OFFSET`.
 
 ## References
 
-- [references/schema-design.md](references/schema-design.md): affinity, STRICT, keys, generated columns, collation. Open when designing a table.
-- [references/query-performance.md](references/query-performance.md): reading `EXPLAIN QUERY PLAN`, covering and partial indexes, keyset paging. Open when a plan is red.
-- [references/concurrency-durability.md](references/concurrency-durability.md): one-writer model, `SQLITE_BUSY` vs `LOCKED`, transaction modes. Open on a lock error.
-- [references/migration-patterns.md](references/migration-patterns.md): `ALTER TABLE` limits and the table-recreate procedure. Open when a rung changes a table's shape.
-- [CENTRAID.md](CENTRAID.md): where this repo departs from those files.
+Read when the task touches the area:
 
-## Done when
+- `references/schema-design.md`: types, constraints, keys, normalisation.
+- `references/query-performance.md`: indexes, query plans, pagination.
+- `references/concurrency-durability.md`: WAL, locking, busy handling, durability.
+- `references/migration-patterns.md`: versioning and table rebuilds.
 
-`cargo xtask gate --profile local` is green, and the tests that touch the change pass: `cargo test -p centraid-vault` (commitments, `ladder_ddl`, `restore_drill`, `backup_snapshot`), `cargo test -p centraid-gateway` for `state.db`, and `cargo test -p centraid-core --test query_plans` for any new statement. A schema change also has the regenerated `contracts/schema/vault-ddl.sql`, the new `SCHEMA_DIGEST`, and the sweeps' results.
+The references are from [claude-mods](https://github.com/0xDarkMatter/claude-mods) by 0xDarkMatter (MIT, [license](licenses/claude-mods-LICENSE)). Where they recommend `VACUUM`, `synchronous = NORMAL` or a migrations table, section 12 wins.

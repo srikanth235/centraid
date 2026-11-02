@@ -18,46 +18,46 @@ import vitest from "ultracite/oxlint/vitest";
 // ban is. That ban would touch 162 call sites, of which the sampled majority
 // are relative offsets (`Date.now() + 60_000`), unique id suffixes, and elapsed
 // measurement in perf rigs. A fake clock makes those wrong, not better, so the
-// rule would buy a rename and no determinism. See docs/coding-standards.md.
+// rule would buy a rename and no determinism.
 const TEST_SEAM_PROPERTIES = [
   {
     property: "mkdtemp",
     message:
-      "Use tempDir() from @centraid/test-kit/temp-dir — it registers the removal at creation, so a failing test cannot leak the directory. See docs/coding-standards.md, test seams.",
+      "Use tempDir() from @centraid/test-kit/temp-dir — it registers the removal at creation, so a failing test cannot leak the directory. See the typescript skill, test seams.",
   },
   {
     property: "mkdtempSync",
     message:
-      "Use tempDirSync() from @centraid/test-kit/temp-dir — it registers the removal at creation, so a failing test cannot leak the directory. See docs/coding-standards.md, test seams.",
+      "Use tempDirSync() from @centraid/test-kit/temp-dir — it registers the removal at creation, so a failing test cannot leak the directory. See the typescript skill, test seams.",
   },
   {
     object: "vi",
     property: "useFakeTimers",
     message:
-      "Use useFakeClock() from @centraid/test-kit/fake-clock — it restores real timers even when the test throws, so a fake clock cannot leak into later tests as a hang. See docs/coding-standards.md, test seams.",
+      "Use useFakeClock() from @centraid/test-kit/fake-clock — it restores real timers even when the test throws, so a fake clock cannot leak into later tests as a hang. See the typescript skill, test seams.",
   },
   {
     object: "vi",
     property: "useRealTimers",
     message:
-      "useFakeClock() from @centraid/test-kit/fake-clock already restores real timers; call clock.restore() if a test needs it early. See docs/coding-standards.md, test seams.",
+      "useFakeClock() from @centraid/test-kit/fake-clock already restores real timers; call clock.restore() if a test needs it early. See the typescript skill, test seams.",
   },
   {
     object: "vi",
     property: "setSystemTime",
     message:
-      "Use clock.set() from useFakeClock() (@centraid/test-kit/fake-clock) — setting the system time without owning its restore is what leaks. See docs/coding-standards.md, test seams.",
+      "Use clock.set() from useFakeClock() (@centraid/test-kit/fake-clock) — setting the system time without owning its restore is what leaks. See the typescript skill, test seams.",
   },
   {
     object: "Math",
     property: "random",
     message:
-      "Use seededRandom() from @centraid/test-kit/random — a failure found from an unseeded draw is not reproducible from the failing run's own output. See docs/coding-standards.md, test seams.",
+      "Use seededRandom() from @centraid/test-kit/random — a failure found from an unseeded draw is not reproducible from the failing run's own output. See the typescript skill, test seams.",
   },
 ] as const;
 
 const TEMP_DIR_IMPORT_MESSAGE =
-  "Import tempDir()/tempDirSync() from @centraid/test-kit/temp-dir instead — the kit owns the removal. See docs/coding-standards.md, test seams.";
+  "Import tempDir()/tempDirSync() from @centraid/test-kit/temp-dir instead — the kit owns the removal. See the typescript skill, test seams.";
 
 const TEST_SEAM_IMPORTS = {
   paths: [

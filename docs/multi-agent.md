@@ -205,4 +205,3 @@ Runs once per umbrella, after the last lane lands, and only when the owner opens
 - [dev-environment.md](dev-environment.md) — worktrees and the local gate loop
 - [traps/worktrees.md](traps/worktrees.md) — the worktree failures agents hit
 - [TESTING.md](../TESTING.md) — the lanes a slice's exit list draws from
-- [coding-standards.md](coding-standards.md)

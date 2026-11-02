@@ -1,174 +1,298 @@
 ---
 name: rust
-description: Rust and protobuf/prost rules for Centraid's crates (the vault, the core, the gateway, the C ABI, the apps, xtask). Covers errors, async versus blocking, locks, unsafe, logging, tests, performance and the .proto schema. Use when writing, reviewing or debugging .rs or .proto files in this repo, or on a clippy finding, a borrow-checker or "future is not Send" error, an unwrap in review, an unsafe block, a new thread or task, a buf lint failure, or the `sql-confinement`, `abi-five-symbols` and `no-listening-socket` rules.
+description: >-
+  Write idiomatic, robust, maintainable Rust. Use this skill whenever you write, review, refactor, debug, or explain Rust code: new crates, modules, functions, structs, traits, error types, async code, unsafe or FFI code, Cargo.toml, tests, or rustdoc. Trigger on any mention of Rust, cargo, crates, .rs files, the borrow checker, lifetimes, traits, clippy, or rustfmt, even when the user does not ask for "best practices" or "idiomatic" code. Synthesized from the Google Rust Style Guide, the Rust API Guidelines, Effective Rust, Rust Design Patterns, and Microsoft's Pragmatic Rust Guidelines, with a closing section on how Centraid's workspace applies them.
 ---
 
-# Rust
+# Rust best practices
 
-The code is right when `cargo xtask gate --profile local` is green and the change does what the issue says. Edition 2024, toolchain `1.94.1` (`rust-toolchain.toml`), `rust-version` `1.91`: do not use a std API stabilised after 1.94. Rules the repository already states are linked, never copied; where this file and a doc differ, the doc wins ([CENTRAID.md](CENTRAID.md) lists the places a pack differs).
+Distilled from five Rust style and design guides, with a digest of each in `references/`. Where they disagree, this file says which to follow and why.
 
-| Need | Owner |
+## 1. Mindset
+
+- **Write Rust-shaped code.** Don't port C++, Java, C#, or Python constructs one-to-one. Model errors with `Result`, resources with ownership and `Drop`, polymorphism with traits and enums, and nullability with `Option`. Inheritance-flavored tricks (`Deref` to a "base" struct, `Manager`/`Factory` types, `throw_if_null` helpers) are smells.
+- **Make invalid states unrepresentable.** Push invariants into types: enums instead of bool flags and "must be X if Y" comments, newtypes for units and IDs, fallible constructors that validate once. Then the compiler enforces what a comment only requests.
+- **Application code is not library code.** Library code (anything with external users) follows the API-design rules below strictly. Application code should favor simplicity and directness: concrete types, `String` or `&str` rather than `impl Into<String>` parameters, `anyhow`-style errors, `Vec` return values, no speculative generality.
+- **Let the tools do the work.** rustfmt owns formatting, clippy owns idiom checks, the compiler owns memory safety. Spend your attention on design.
+
+## 2. Before you hand back code
+
+Run these and fix everything they report:
+
+```bash
+cargo fmt
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+cargo doc --no-deps   # libraries: catches broken doc links and missing docs
+```
+
+- Fix a lint rather than silencing it. When a lint is genuinely wrong for one item, use `#[expect(clippy::name, reason = "...")]` on the narrowest item. `expect` warns when the lint stops firing, so stale suppressions get cleaned up. Use `#[allow]` only in generated code or macro output.
+- Never put `#![deny(warnings)]` in source: new toolchains add warnings and break the build. Enforce warnings-as-errors in CI instead, with `cargo clippy -- -D warnings`.
+- Configure lints once in `Cargo.toml` (`[lints]` or `[workspace.lints]`), not with scattered crate attributes.
+
+## 3. Ownership and borrowing
+
+**Prefer unique ownership.** Reach for `Rc`/`Arc` only when shared ownership is part of the design, and for `RefCell`/`Mutex` only when interior mutability is. They are not failures, but they move checking from compile time to run time, so use them on purpose.
+
+**Don't clone to make the borrow checker stop complaining.** A clone that exists only to end a borrow produces a silent copy whose later changes are lost. Try these first, in roughly this order:
+
+1. Extend a temporary with a named `let`, or shorten a borrow with a block.
+2. Split a long expression into typed intermediates so the failing step is visible.
+3. Move a field out of `&mut self` with `std::mem::take` (needs `Default`), `std::mem::replace`, or `Option::take` instead of cloning it.
+4. Split a large struct into smaller ones so disjoint fields can be borrowed separately. The compiler tracks disjoint field borrows inside one function, but not across method calls.
+5. Clone small, immutable data deliberately, and say so in a comment if it's not obvious.
+6. Use indices into an owning `Vec`, or `Rc<RefCell<_>>` with `Weak` back-pointers, as a last resort. Avoid self-referential structs.
+
+```rust
+// Move out of a &mut enum without cloning.
+fn a_to_b(e: &mut MyEnum) {
+    if let MyEnum::A { name, x: 0 } = e {
+        *e = MyEnum::B { name: std::mem::take(name) };
+    }
+}
+```
+
+**Accept the most general borrowed type.** `&str` not `&String`, `&[T]` not `&Vec<T>`, `&T` not `&Box<T>`, `Option<&T>` not `&Option<T>`. Deref coercion then lets callers pass owned values, borrows, or literals. Where you only read a path, string, or byte buffer, `impl AsRef<Path>` / `impl AsRef<str>` / `impl AsRef<[u8]>` is fine on parameters (never on struct fields; store `PathBuf` and `String`). Library code that only iterates should take `impl IntoIterator<Item = T>`; application code may simply take `&[T]`.
+
+**Take ownership only when you need it, and then take it by value.** If a function stores or consumes its argument, take `T`, not `&T` plus an internal `.clone()`. If it only reads, take `&T`; if it mutates in place, `&mut T`. Return multiple values as a tuple or struct, not through `&mut` out-parameters (reusing a caller-owned buffer, as `Read::read` does, is the exception).
+
+**Prefer owned data in structs.** A struct holding `&'a T` forces a lifetime onto every container. Owning a `String` or `Vec<u8>` is usually simpler and rarely the bottleneck. When a type does carry a lifetime, give it a descriptive name (`'src`, `'conn`); `'_` and `'a` are fine on simple functions.
+
+**Freeze after setup.** Build with `let mut`, then rebind `let data = data;` so later code cannot mutate it by accident.
+
+**Keep `Rc`, `Arc`, `Box`, and `RefCell` out of public signatures.** Take `&T`, `&mut T`, or `T` and let callers decide how to own things. A service that must be shared implements a cheap `Clone` by wrapping its state in `Arc<Inner>` internally.
+
+## 4. Types and API design
+
+### Naming
+
+| Item | Case | Notes |
+| --- | --- | --- |
+| Types, traits, enum variants | `UpperCamelCase` | Acronyms are one word: `Uuid`, `HttpClient` |
+| Functions, methods, modules, locals | `snake_case` |  |
+| Constants, statics | `SCREAMING_SNAKE_CASE` |  |
+| Type parameters | short, from the main bound | `T`, `R: Read`, `W: Write` |
+| Lifetimes | short lowercase | descriptive when on a type |
+
+- No `get_` prefix on getters: `fn len(&self)`, `fn name(&self) -> &str`, `fn name_mut(&mut self)`. Use bare `get` only when there is one obvious thing to get (`Cell::get`). Related: `set_foo(T)`, `take_foo()`, `with_foo(|f| ..)` for closure access, and unsafe `_unchecked` siblings for checked accessors.
+- Conversion prefixes signal cost and ownership: `as_` (free, borrow to borrow), `to_` (expensive, borrow to owned or borrow to borrow), `into_` (consumes `self`). Put `mut` in type order: `as_mut_slice`, not `as_slice_mut`.
+- Constructors: `new` (primary), `with_capacity` / `new_with_foo` (variants), `try_new` (fallible), `from_foo` (conversion; pair important ones with a `From` impl). I/O resources use domain verbs: `File::open`, `TcpStream::connect`.
+- `iter` / `iter_mut` / `into_iter` return types named `Iter` / `IterMut` / `IntoIter`; `keys()` returns `Keys`.
+- Error types read verb-object-error: `ParseBoolError`, not `BoolParseError`.
+- Avoid weasel suffixes `Service`, `Manager`, `Factory`, `Helper`, `Util`. Name the thing it is (`Bookings`, `Dispatcher`, `FooBuilder`). Don't repeat the module name in the type (`foo::Id`, not `foo::FooId`). Avoid abbreviations an outsider wouldn't know.
+- If you implement `len()`, implement `is_empty()`.
+- Feature names are bare: `std`, `serde`, `alloc`, never `use-std` or `no-std`.
+
+### Model the domain with types
+
+- **Newtypes** for semantic distinctions: `struct Miles(f64)` and `struct Kilometers(f64)` cannot be mixed, where a type alias can. Add `#[repr(transparent)]` when layout matters, and derive or forward the traits you need (`derive_more` cuts the boilerplate). A newtype that encodes an invariant (`Month`) validates in a fallible constructor (`TryFrom`, `FromStr`, `try_new`) and never offers an infallible `From` from the raw type.
+- **No `bool` parameters in public or shared signatures.** `report(true)` is unreadable at the call site and cannot grow a third mode. Use a two-variant enum (`Verbosity::Summary`, `Verbosity::Full`) or two methods (`report()`, `report_verbose()`): `Widget::new(Size::Small, Shape::Round)`, not `Widget::new(true, false)`. The only exception is a private helper whose call sites sit a few lines away. When refactoring, an existing `bool` parameter is one of the smells to remove, not a detail to preserve.
+- **Named fields over tuples**, except single-field newtypes and very local code.
+- **`Option` for absence, never sentinels** such as `-1` or `""`. **Data-carrying enums** instead of "field X is only meaningful when Y is set".
+- **Use the strongest std type:** `PathBuf` / `&Path` for paths, `Duration` for spans, `NonZeroU32` internally only (keep plain integers at API boundaries).
+- **Independent flags** use the `bitflags` crate; an enum models exactly one choice.
+
+### Derive and implement the standard traits eagerly
+
+Downstream crates cannot add std traits to your types (orphan rule), so you must. Derive whenever every field supports it: `Debug` (on every public type; hand-write it to redact secrets), `Clone` (except unique resources and key material), `Copy` (only small bitwise-copyable types, because the compiler copies silently), `PartialEq` / `Eq`, `PartialOrd` / `Ord` (never ship `PartialOrd` without `Ord` when a total order exists), `Hash` (consistent with `Eq`), `Default`. Implement `Display` for anything meant to be read: error types, string-like wrappers. Add `#[must_use]` to pure functions and to types, such as errors and lazy values, whose discarding is a bug.
+
+Implement `From` / `TryFrom`, never `Into` / `TryInto` directly (blanket impls give you those). Prefer `from` / `into` over `as`, which silently allows lossy casts. Implement `FromStr` rather than an ad-hoc `from_str` method, `FromIterator` and `Extend` on collections, and `IntoIterator` for both owned and borrowed forms. Implement `Deref` only on smart pointers and owning collections (`Vec<T>` to `[T]`), never to fake inheritance. Overload operators only for their mathematical meaning.
+
+Don't put derivable trait bounds on struct definitions: `#[derive(Clone)] struct Good<T>`, not `struct Bad<T: Clone + Debug>`. Bounds belong on the `impl` blocks that need them.
+
+If you hand-write `Ord`, hand-write `PartialEq`, `PartialOrd`, and `Hash` to agree with it (compare the same fields, ignore the same fields). A derived `PartialEq` next to a custom `Ord` breaks the std contract and misbehaves in `BTreeMap` and `sort`/`dedup`. Say in the docs which fields equality ignores.
+
+### Constructors, builders, defaults
+
+- Provide `new()` even when `Default` exists, and make them agree (one delegates to the other). Derive or implement `Default` so callers can write `..Default::default()`; bag-of-options structs with public fields should always have it.
+- Up to two optional parameters: inherent constructors (`new`, `with_a`, `with_b`). Beyond that, or when construction validates or has side effects, add a builder: `Foo::builder()` returns `FooBuilder`, setters are named after fields (`timeout(d)`, not `set_timeout`) and infallible, and `build() -> Result<Foo, Error>` does all validation including cross-field checks. Prefer non-consuming setters (`&mut self -> &mut Self`) unless `build` must move a value out.
+- A constructor with four or more loose arguments should group them into semantic types: `Deposit::new(account, amount)` rather than four `&str` / `u64` parameters.
+
+### Visibility and evolution
+
+- Private by default. Fields stay private unless the struct is passive C-style data. Widen to `pub(crate)` or `pub(super)` before `pub`. Making an item more public later is non-breaking; the reverse is breaking, and every `pub` item is a promise.
+- Mark public enums and public-field structs that cross crate boundaries `#[non_exhaustive]` unless the set is a stable ontology. When matching one, list the variants you handle and add a wildcard arm.
+- Seal traits you don't want implemented downstream, and say so in the docs:
+
+  ```rust
+  pub trait TheTrait: private::Sealed { /* ... */ }
+  mod private {
+      pub trait Sealed {}
+      impl Sealed for usize {}
+  }
+  ```
+
+- Library code returns iterators, not a `Vec` collected only to return, behind `impl Iterator<Item = T>` (internal APIs) or a newtype (public APIs you must keep stable).
+- Expose each public item at exactly one path. Don't `pub use` a foreign crate's items unless you are an umbrella crate. Avoid leaking third-party types into your public API; feature-gate `serde` impls behind a feature named `serde`. If a dependency's type must appear, re-export it so callers can name the matching version.
+- Mark a function `const` only if it will stay `const`. Don't expose `ErrorKind` enums or other internals that lock in failure modes you consider private.
+
+### Traits and generics
+
+- Define a trait only for generic programming (`T: Trait`, `impl Trait`, `dyn Trait`) or as an extension trait (`FooExt`). Don't use traits merely to organize code. Put essential functionality in inherent methods and have trait impls forward to them, so callers need no import.
+- Prefer, in order: concrete types; generics (`T: Trait`, `impl Trait`); `dyn Trait`, ideally wrapped in your own struct (`struct DynStore(Arc<dyn Store>)`). Generics give static dispatch and inlining; trait objects give heterogeneous collections and smaller binaries. Don't nest generics on service-level types (`Service<Backend>` is fine; `Service<Backend<Store>>` is not).
+- Decide early whether a trait must be object-safe. Generic methods or `Self` outside the receiver break it; exclude such methods with `where Self: Sized`.
+- Keep required trait methods minimal and provide defaults for everything derivable from them, as `Iterator` does from `next`.
+- If a function has a clear receiver, make it a method. A computation with no receiver is a free function, not `Database::check(params)`. Associated functions are for construction.
+- Closures: use the most general bound that works (`FnOnce` if called once, `FnMut` if it mutates, else `Fn`) and prefer `Fn*` bounds to bare `fn` pointers. Closure parameters go last; don't take more than one.
+- Keep parameter order consistent across a crate: call-specific first, ubiquitous context (loggers, allocators) last.
+- Reach for a macro only when functions, generics, and traits cannot do the job. Prefer `macro_rules!` to proc macros, make macro input look like the output it generates, and never let a macro change a type's kind or a function's signature.
+
+### Refactoring someone else's code
+
+- Fix every smell the request is about, not just the cheap ones: clones that only satisfy the borrow checker, `&String` / `&Vec<T>` parameters, `unwrap` on fallible paths, `Rc<RefCell<_>>` in signatures, `get_` getters, `bool` parameters, `+` string concatenation, `#![deny(warnings)]`, error types without `Error`, nondeterministic `HashMap` iteration in output.
+- Keep public behavior identical unless changing it is the point: the same operations, the same success and failure semantics, the same output bytes. Turning a panic into an `Err` is the change callers want. Dropping an error variant, removing a derive, or changing what a constructor takes is not; if a signature must change, show the before and after in the change list and say why.
+- Preserve quirks you don't understand and flag them, rather than silently "fixing" them.
+- When the module has no tests, pin the current behavior with a few before you touch it.
+
+## 5. Errors and panics
+
+Pick the mechanism by contract:
+
+| Situation | Use |
 | --- | --- |
-| House style, comments, performance, atomicity | [centraid-engineering](../centraid-engineering/SKILL.md) |
-| The strategy and what each gate step proves | [TESTING.md](../../../TESTING.md), [crates/xtask/README.md](../../../crates/xtask/README.md) |
-| The C ABI | [crates/core-ffi/CONTRACT.md](../../../crates/core-ffi/CONTRACT.md) |
-| Footguns (open the matching one first) | [docs/traps/](../../../docs/traps/README.md): `wal-checkpoint`, `shared-cargo-target`, `stale-core-slice`, `serde-json-preserve-order` |
-| Where a failing run's logs are | [docs/logs.md](../../../docs/logs.md) |
-| Vocabulary: the phone is the vault; `centraid-gateway` is a _gateway_ | [AGENTS.md](../../../AGENTS.md) |
+| Absence is normal (`first()`, `checked_add`) | `Option<T>` |
+| The caller may need to know what went wrong | `Result<T, E>` |
+| A bug or violated invariant inside your code | `panic!` / `assert!` / `expect("why")` |
 
-SQL, schema and migrations are the `sqlite` skill; the rusqlite call sites are Rust but the statements are not written here.
+**Panics are not exceptions.** A panic means "stop now". Never use one to report bad input, never rely on `catch_unwind` for control flow (it does nothing under `panic = "abort"` and can leave state inconsistent), and never catch a panic and continue inside a library. Where a panicking convenience is justified, pair it with a fallible API (`v[i]` / `v.get(i)`, `new` / `try_new`) and document it under `# Panics`.
 
-## Errors and panics
+**Every intentional panic carries a message with the relevant values:** `assert!(buf.len() >= HEADER, "buffer too small: {} bytes", buf.len())`, `expect("config is loaded before workers start")`. Prefer `expect("reason")` to `unwrap()`. Don't restate the condition as the message.
 
-Ruling R4 ([#1160](https://github.com/srikanth235/centraid/issues/1160)): `thiserror` for typed errors in library crates; `anyhow` only at binary and tooling edges.
+**Pattern-match instead of check-then-unwrap:** `if let Some(v) = opt { .. }` or `let Some(v) = opt else { return .. };`, never `if opt.is_some() { opt.unwrap() }`.
 
-| Work | Use |
-| --- | --- |
-| A library function that can fail | `-> Result<T>` with the crate's alias over its own `thiserror` enum (`CoreError`, `VaultError`, `StoreError`, `OntologyError`, `ProtocolError`) |
-| Wrapping a lower error | `#[from]` for a plain wrap, `#[source]` plus a field when the call site adds context. Never `map_err(\|_\| ...)` that drops the cause |
-| A failure a caller handles differently | Its own variant, with the remedy in the doc comment (`DiskFull`, `RebootstrapRequired`, `Unpaired`) |
-| A refusal that crosses the C ABI | A `CoreError` variant that maps to exactly one `ErrorCode` in `CoreError::code()` |
-| A deny from the authority plane | A value (`Decision`), not an error |
-| `main`, a CLI verb, xtask | `anyhow::Result` with `.context(...)`. These are the only places `anyhow` is a dependency: `gateway` (the `server` feature, `bin/centraid-gateway.rs`), `xtask`. (`media` also depends on it; that is not a pattern, see [CENTRAID.md](CENTRAID.md).) |
-| A bug or violated invariant | `.expect("<the invariant>")`, `assert!`, `unreachable!` |
+**Lock poisoning is fatal:** `.lock().expect("lock poisoned")`. Don't recover with `into_inner`.
 
-- Library `src` outside `#[cfg(test)]` has **no `.unwrap()` today** and about 40 `.expect(...)`, each message stating why it cannot fail (`"n - k is non-negative here"`). Keep it at zero: a new `.unwrap()` in product code is a review blocker. `?` for anything input, disk, network or a lock can cause.
-- Tests, `tests/`, and `fn main` of a throwaway binary may `.unwrap()`.
-- Error text is lowercase, no trailing period, and names the thing (`"there is no vault at this path yet; create one, or restore one"`). Each fallible `pub fn` has an `# Errors` section.
-- `Result<T, String>` exists (mostly in `assist`, where the text is the tool result shown to the model). Do not add it to a library API a caller branches on. `Box<dyn Error>` has no use in `src`; do not introduce one.
-- A failure a member or shell must see is returned, not only logged ([fallible-action contract](../centraid-engineering/SKILL.md#errors)). Catch only to recover, translate or at a boundary; `let _ = fallible()` needs a comment saying why dropping it is correct.
-- `catch_unwind` belongs to `crates/core-ffi` and nowhere else. A panic that reaches the ABI poisons the handle by design ([CONTRACT.md clause 9](../../../crates/core-ffi/CONTRACT.md#9-a-rust-panic-never-crosses-the-boundary)); the release profile is `panic = "unwind"` so that works.
+**Library error types** (any `E` in a public `Result`):
 
-## Async, threads and locks
+- Implement `std::error::Error` (which requires `Debug` + `Display`), be `Send + Sync + 'static`, and implement `source()` for wrapped causes. Never use `()`, `String`, or `Box<dyn Error>` as a library's public error type.
+- `Display` messages are lowercase, concise, and have no trailing punctuation: `"invalid header length"`.
+- Implement `From<Upstream>` so `?` converts. Use `map_err` only for foreign errors or to add context.
+- Two sound shapes: an enum with one variant per cause (`thiserror` generates this well), or a struct per situation with a private `kind` plus `is_xxx()` and accessor methods. Either way, don't make one crate-wide enum that lists every failure mode in the crate, and don't expose details callers cannot act on.
+- If a fallible function consumes an argument, return it inside the error so the caller can retry without cloning (`FromUtf8Error::into_bytes`).
+- Never expose `anyhow::Error` in a library's public API.
 
-Details and the file each idiom lives in: [references/threads-and-locks.md](references/threads-and-locks.md). Open it before adding a thread, task, lock or `block_on`.
+**Application error handling:** `anyhow` or `eyre` with `.context("opening config")` is the right tool. Use one app-level error type, not several. `main` may return `Result<(), anyhow::Error>`.
 
-| Work | Use |
-| --- | --- |
-| Library code on the phone (`core`, `vault`, `screens`, `apps/*`) | Synchronous. No `async fn` |
-| Dialing a gateway from a sync call | `Handle::runtime_handle()` (the core's one lazily built runtime) and `block_on` / `spawn` on it |
-| Blocking SQLite, hashing or file work inside an async gateway task | `tokio::task::spawn_blocking`, and handle the `JoinError` |
-| A guard held across `.await` | `tokio::sync::Mutex` (only `Client::live` does) |
-| All other shared state | `std::sync::Mutex`; guard never crosses an `.await` or leaves the function |
-| A long-lived loop blocking on a sync queue | A named raw thread that holds a `Weak` and ends when its owner closes (`tidy_in_background`, `Shelf::pump`) |
-| Parallelism for speed | None. No `rayon`; a command handler must not fan out |
+**Destructors never fail, panic, or block.** Provide `close(self) -> Result<()>` for fallible teardown and let `Drop` do best-effort cleanup.
 
-- Never add a second SQLite connection or a connection pool: the phone is the single writer, `Vault` is `!Sync` ([wal-checkpoint trap](../../../docs/traps/wal-checkpoint.md)).
-- Never `block_on` from inside a runtime worker; never `std::thread::sleep` inside an `async fn`.
-- Decide poison per lock and say so beside the accessor: recover with `PoisonError::into_inner` when the invariant survives a panic, return a typed refusal when it does not.
-- A listening socket is not yours to add: `no-listening-socket` allows one gateway file (`crates/gateway/src/server/serve.rs`). The phone dials and accepts nothing.
+**Document failure modes:** `# Errors` for any `Result`, `# Panics` for any reachable panic, `# Safety` for every `unsafe fn`.
 
-## Ownership and types
+## 6. Everyday idioms
 
-- Own your data; borrow in parameters (`&str`, `&[T]`, `&Path`; never `&String`, `&Vec<T>`). Take `T` by value when you store or consume it. A clone that exists only to end a borrow is a bug: use `mem::take`, restructure, or split the borrow ([own-borrow-over-clone](references/rules/own-borrow-over-clone.md)).
-- `Arc` only for state that crosses threads. A background thread or callback holds `Weak` (the `me: Weak<Self>` + `Arc::new_cyclic` shape in `Handle`) so dropping the owner really drops.
-- Newtype ids and units; an enum for a closed set; `Option` for absence, never `-1` or `""`. No `bool` parameter in a signature with more than one call site; use a two-variant enum.
-- Parse at the boundary into a validated type, then pass the type ([api-parse-dont-validate](references/rules/api-parse-dont-validate.md)). A `serde_json::Value` past the boundary is a smell ([serde-json-preserve-order trap](../../../docs/traps/serde-json-preserve-order.md): its printed text is not canonical).
-- Match owned enums exhaustively; a `_ =>` arm hides the next variant. Prefer `let ... else` for early exit and `if let ... && ...` chains over nesting.
-- Public enums and structs that cross a crate seam: derive `Debug`; add `#[must_use]` on pure functions and result-like types (it is already the house style: ~1,500 uses).
-- Go through a crate's public API, never into a sibling crate's modules. A module named `utils`, `helpers` or `*_manager` is a [filename smell](../centraid-engineering/SKILL.md#structure); name the domain.
-- Time and ids in `centraid-vault` come from the `Clock` and `Ids` traits ([references/testing.md](references/testing.md)), never inline.
-- A new dependency: declare the version once in the root `[workspace.dependencies]`, take it with `name.workspace = true`, expect `cargo deny` (`deny.toml`) and review to ask why. Never add a crate for a micro-optimisation.
+- **Iterators over hand loops** when the pipeline is short and reads top-down: `values.iter().filter(..).map(..).collect()`, `.any()`, `.sum()`, `.fold()`. Collect fallible steps into `Result<Vec<_>, E>` and apply `?`. Keep an explicit `for` loop when the body is large, does several jobs, or needs awkward early returns. Bind a long chain to a named variable rather than putting it in a `for` header, and prefer `for x in it` to `.for_each(|x| ..)`.
+- **`Option` / `Result` combinators** (`map`, `and_then`, `ok_or_else`, `unwrap_or_else`, `as_ref`, `as_deref`) when they're clearer than `match`, and `match` when they're not.
+- **`format!` / `write!`** with inline args (`format!("{name}: {count}")`) for concatenation and substitution, not chained `+` or `str::replace`. `write!` into an existing buffer in hot paths.
+- **Explicit types where inference obscures intent:** on `.into()`, `.parse()`, `.collect()`, and complex iterator results. Prefer `let x: Vec<u32> = ..` to a turbofish.
+- **Drop guards for cleanup** that must run on early return or unwind. Bind them to a name (`let _guard = ..`), because `let _ = ..` drops immediately.
+- **Closures that capture mixed ownership:** rebind in a block, then `move`:
 
-## Unsafe
+  ```rust
+  let job = {
+      let cfg = cfg.clone();
+      move || run(cfg, data)
+  };
+  ```
 
-- `#![forbid(unsafe_code)]` is the default and sits in 15 crates (`vault`, `core`, `gateway` and its binary, `identity`, `ontology`, `protocol`, `search`, `media`, `blobs`, `api-proto`, `nativetools`, `xtask`, `centraid`, `design`, `apps/notes`); the rest have no `unsafe` either. A new crate starts with it.
-- Unsafe lives in exactly two crates: `crates/core-ffi` (the C ABI) and `crates/assist-llama` (`engine.rs`, one `atexit` registration). Do not add a third; if a safe API exists, use it.
-- Every `unsafe` block has a `// SAFETY:` comment naming the promise it relies on, and every `unsafe fn` a `# Safety` section. Keep the block to the one operation. `core-ffi` denies `unsafe_op_in_unsafe_fn`.
-- Edition 2024 spellings: `unsafe extern "C" { ... }` and `#[unsafe(no_mangle)]`.
-- The ABI is five symbols and ten clauses, each with a test named after it. Do not add a sixth symbol, change a clause, or free a library buffer with anything but `centraid_free(buf, len)`. Read [CONTRACT.md](../../../crates/core-ffi/CONTRACT.md) before touching `crates/core-ffi`; a new capability is a request kind in the proto, not a symbol. `abi-five-symbols` and the `symbols` test enforce it.
-- A change to the core must reach the shells as a rebuilt file ([stale-core-slice trap](../../../docs/traps/stale-core-slice.md)).
+- **Import style:** one `use` per module path (`use foo::bar::{Bar, Baz};`); types and traits imported and used unqualified (`Regex`); free functions qualified by their module (`mem::take`, `fs::read`). Import a trait inside the function that needs it unless the whole file uses it. No globs except `use super::*` in tests, `use Enum::*` in a function that matches on it, and a framework's prelude.
+- **Magic numbers** become named `const`s with a doc comment saying where the value comes from and what changing it affects.
+- **Logging:** structured events through `tracing` or `log`, not `println!` / `dbg!`, except for a CLI's own stdout output.
 
-## Logging
+## 7. Concurrency and async
 
-- `tracing` events, one line each, with the error as a field: `tracing::warn!(%error, "the sweeps cannot record their times")`. `info` for a thing an operator wants, `warn` for a degraded step, `debug` for the rest.
-- A library emits and never installs a subscriber. Only a binary does (`install_tracing` in `crates/centraid/src/run.rs`, the gateway's `main`). `core-ffi` installs none, so on a device the events are dropped: what a caller must know travels in the returned error.
-- No `println!`, `eprintln!` or `dbg!` in library `src`. A binary's stdout is its interface (the gateway's `listening` line is parsed by service units).
-- Log once, at the point of handling; never log and also return the same error up.
-- Never log a seed, a key, a token, a pairing secret, an original's path or vault content. Sweeps log counts only ([docs/logs.md](../../../docs/logs.md)).
+- Public types, and the futures they return, should be `Send` (and usually `Sync`). Pin it with a compile-time check so a refactor can't silently regress it:
 
-## Protobuf and prost
+  ```rust
+  const _: () = {
+      const fn assert_send<T: Send>() {}
+      assert_send::<MyClient>();
+  };
+  ```
 
-All of it in [references/protobuf-prost.md](references/protobuf-prost.md). The four rules that bite: new field numbers only and `reserved` number plus name on removal; a new `.proto` goes in `PROTOS` in `crates/api-proto/build.rs`; a field on a screens message is read by both shells or is a parity-register row; never edit a `.proto` on a target directory another worktree shares.
+  Holding an `Rc` or a `RefCell` borrow across an `.await` makes a future `!Send`.
 
-## Tests
+- Prefer message passing (channels) to shared state. When sharing is necessary: keep data with linked invariants under one lock, keep lock scopes to a few lines, never call user closures while holding a lock, and never return a `MutexGuard` from a public method.
+- Write `async fn` rather than `fn -> impl Future`, except in traits or when setup must run outside the async block for a hot path.
+- Long CPU-bound work inside async must yield (`tokio::task::yield_now().await` every tens of microseconds) or move to `spawn_blocking`.
+- Library code doesn't spawn raw threads or assume a runtime; take an executor, a spawn function, or `impl AsyncRead` / `impl Read` from the caller.
 
-Where a test goes, the idioms, and what is banned: [references/testing.md](references/testing.md). Names are sentences that state the law (`exactly_five_symbols_are_exported`); one law has one owning file; time, ids and directories are injected; SQL in a test is a testdoor call, not a string.
+## 8. Unsafe and FFI
 
-## Performance
+- Write `unsafe` only for one of three reasons: a novel abstraction safe code can't express, a benchmarked performance need, or FFI and platform calls. Reach for std and well-reviewed crates first; they already contain the audited `unsafe`.
+- Every `unsafe` block or impl gets a `// SAFETY:` comment stating why the invariants hold. Every `unsafe fn` gets a `# Safety` doc section listing what the caller must uphold. Enable `unsafe_op_in_unsafe_fn`.
+- Keep `unsafe` in the smallest module that can uphold its invariant and wrap it in a safe API; the module boundary is the soundness boundary. A safe function that can cause undefined behavior through any sequence of safe calls is unsound, and unsound code is never acceptable.
+- Mark a function `unsafe` only when misuse can cause undefined behavior, not because it is dangerous (`delete_database()` is a safe function).
+- No `transmute` to cast enums or dodge lifetimes, and no `unsafe impl Send` to silence the compiler.
+- Test unsafe code under Miri and with adversarial inputs.
+- FFI: `#[repr(C)]` on shared structs, sized integer types, `CString` / `CStr` for strings, allocate and free on the same side, wrap C-owned pointers in an RAII type whose `Drop` frees them, check for null and return `Result`, and stop panics at the boundary with `catch_unwind`. Generate bindings with `bindgen` in a `foo-sys` crate and keep business logic in a safe core crate.
 
-[Nothing O(vault-size) on the request path](../centraid-engineering/SKILL.md#state-and-cost), [no load-bearing "vaults are small"](../centraid-engineering/SKILL.md#state-and-cost), [compute once, share the result](../centraid-engineering/SKILL.md#state-and-cost). A `LIMIT`ed query, a paged cursor, a fixed-size digest are bounded; a scan, a whole-blob hash or a per-subscriber recompute is not. A hot path ships with a measured budget (`call-budget`, `search-budget`). Measure before optimising ([perf-profile-first](references/rules/perf-profile-first.md)); the release profile and codegen settings belong to `Cargo.toml`.
+## 9. Crates, modules, dependencies
 
-## Comments and docs
+- **Prefer small, single-purpose crates** in a flat `crates/` workspace; never nest a crate inside another crate's `src/`. Split when a crate grows a second purpose or a subdirectory. Share versions and lints through `[workspace.dependencies]` and `[workspace.lints]`.
+- **Modules:** name a leaf module after its primary item (`Foo` lives in `foo.rs`). Non-leaf modules contain only `mod` declarations and re-exports. Put the essential items at the crate root and group the rest by use case (`account`, `network`), not by kind (`traits`, `errors`). Don't define a prelude.
+- **Re-export individually** (`pub use foo::{A, B};`), never with a glob.
+- **Dependencies:** every one costs compile time, binary size, and supply-chain exposure, including `build.rs` and proc macros. Use ranges (`"1"`, `"1.4"`), never `"*"` or a needless `"="`. Commit `Cargo.lock` for binaries. Audit with `cargo tree --duplicates`, `cargo deny`, `cargo udeps`, and `cargo audit`.
+- **Features are additive and bare-named:** `std`, `serde`, `alloc`, `test-util`. Never `no-std`, `use-serde`, or a feature that removes or changes a public item. Don't feature-gate struct fields or trait methods. Put mocks and fakes behind `test-util`.
+- **Semver:** breaking changes include removing or renaming public items, adding a variant to an enum that isn't `#[non_exhaustive]`, adding a field to a publicly constructible struct, adding a trait bound, or making a trait non-object-safe. Deprecate in a minor release before removing in a major one. Use the latest stable edition for new crates and set an MSRV deliberately.
+- Don't run code before `main()` (no `ctor`-style crates). Don't use unstable features on a stable toolchain.
 
-Comments are forward-facing obligations: contract, rationale, warning or orientation; delete the rest and apply the tense test ([centraid-engineering](../centraid-engineering/SKILL.md#comments)). Put the mental model in a `//!` module header; use a capitalised heading for a named invariant. History is cited by `(#N)`, never narrated. Public items get a one-line `///`; add `# Errors` and `# Panics` where they apply.
+## 10. Documentation and comments
 
-## Always
+- `///` on every public item; `//!` at the top of every public module and the crate root. The first sentence is a single line of about fifteen words, because it becomes the summary in listings.
+- Sections, in this order, as applicable: `# Examples`, `# Errors`, `# Panics`, `# Safety`. Examples use `?` with the `fn main` hidden behind `# ` lines, never `unwrap()`, because users copy them verbatim. Describe parameters in prose, not a table.
+- Document what the signature can't say: preconditions, side effects, ownership transfer, complexity, and why. Don't restate the type or the name; `/// Removes an element.` on `remove_element` is noise.
+- Link items with ``[`Type`]``. Hide impls users never trigger (`From<PrivateError> for PublicError`) with `#[doc(hidden)]`.
+- `//` comments explain why, not what: `// SAFETY:`, `// TODO(issue-123):`, non-obvious magic values, workarounds with a link. No design journals, "why we chose X" essays, or rule-compliance tables in code docs. Document the end state.
 
-- Run the gate, not one crate's `cargo test`, before saying done.
-- Fix the code, not the lint. An `#[expect(clippy::name, reason = "...")]` on the narrowest item is the exception, and the reason is real.
-- Read the doc comment and tests of the module you edit; the invariant is usually written next to the code.
-- Keep a diff an edit: change the module in place, delete the old path in the same change, no `_v2` beside the original.
+## 11. Tests
 
-## Never
+- Unit tests in `#[cfg(test)] mod tests { use super::*; .. }` for private internals. Integration tests in `tests/` for anything reachable through the public API, and prefer that location when either would do. Doc examples are tests too.
+- Test observable behavior and properties (monotonic, round-trips, idempotent), not restated constants or mirrored branches.
+- Write a failing test before fixing a bug. Cover each feature combination and each platform-specific path.
+- Anything doing I/O, time, randomness, or network must be mockable: `new_mocked() -> (Self, MockCtrl)` behind `test-util`, not a `Default` that performs I/O.
+- Fuzz parsers of untrusted input with `cargo fuzz`. Benchmark with `criterion` or `divan` and `std::hint::black_box`. Run Miri over `unsafe`.
+- Assertions get context so failures read well: `assert_eq!(got, want, "input {input:?}")`.
 
-- `.unwrap()` in product code; `Box<dyn Error>`; a string as an error type a caller must match on.
-- `anyhow` in a library crate's public API.
-- A guard across `.await`; a second vault connection; a new raw thread without an owner that ends it.
-- A new `unsafe` outside the two crates; an `unsafe` block without `// SAFETY:`.
-- `#![deny(warnings)]`, a `[lints]` table, or an edit to `deny.toml`, a ledger or a rule allowlist to get green.
-- `println!` in a library; a secret in a log line; a gateway called a "server" or "host" in a comment or error.
-- A SQL string outside `crates/{ontology,vault,search}` and `crates/apps/kit` (`sql-confinement`).
-- Generated code committed, or a `.proto` edited on a shared `CARGO_TARGET_DIR`.
+## 12. Performance, in order
 
-## Compiler and linter error to fix
+Design for usability first and optimize after measuring. When you do: `Vec::with_capacity` or `collect()` over push loops; reuse caller-owned buffers in hot APIs (`fn read_into(&mut self, buf: &mut Vec<u8>)`); `Box<[T]>`, `Box<str>`, `Arc<str>` for long-lived immutable sequences; `shrink_to_fit` on long-lived collections built without a reservation; a faster hasher (`foldhash`, `FxHash`) only for trusted keys; batch work instead of per-item locking; applications may set a `#[global_allocator]` such as `mimalloc`. Derive `Copy` for small plain types and never for large ones.
 
-| Message | Fix |
-| --- | --- |
-| `future cannot be sent between threads safely` ... `MutexGuard` held across `.await` | Scope the guard in a block or `drop(guard)` before the `.await`; copy or `Arc::clone` what the await needs |
-| `usage of an `unsafe` block` under `forbid(unsafe_code)` | You are in the wrong crate. Use a safe API; the ABI work belongs in `core-ffi`. Never remove the `forbid` |
-| `E0382` use of moved value | Borrow it, move it last, or `Arc::clone` before the `move` closure; not a blanket `.clone()` |
-| `E0373` closure may outlive the current function | `move` the owned values in; a thread needs `'static` data, so `Arc` it or use `std::thread::scope` |
-| `E0502` / `E0499` cannot borrow as mutable | End the earlier borrow (a block, a `let` copy), or `mem::take` the field out; do not `clone` to silence it |
-| `E0599` no method `decode` / `encode_to_vec` | `use prost::Message;` |
-| `clippy::large_enum_variant`, `clippy::result_large_err` | `Box` the large variant or payload |
-| `clippy::too_many_arguments` | Group the arguments into a struct named for the thing they describe |
-| `clippy::type_complexity` | A `type` alias or a small struct |
-| `clippy::needless_borrow`, `redundant_clone`, `needless_pass_by_value` | Apply what it says; `cargo clippy --fix` only after reading the diff |
-| A reviewer's "unwrap" (no lint enforces it) | `?`, a typed variant, or `.expect("<invariant>")` when it is a real invariant |
-| `unused_imports`, `dead_code` (fatal under `-D warnings`) | Delete the item. In a shared `tests/common/mod.rs` the file-level `#![allow(dead_code)]` with its stated reason is the existing exception |
-| `cargo fmt --all --check` diff | `cargo fmt --all` |
-| `doc-links` finding | Make the link target a tracked file and the anchor a GitHub slug |
-| `rules`: `sql-confinement` | Move the statement into `ontology`, `vault`, `search` or `apps/kit`; a test asks the testdoor |
-| `rules`: `abi-five-symbols`, `no-listening-socket` | You added an exported symbol or a listener. Remove it; see CONTRACT.md or the gateway's one file |
-| `buf breaking` | A number was reused, a field retyped or a removal not `reserved` (number and name). Restore, then follow the api-proto README |
-| `tests/tree.rs` mismatch | The new `.proto` is missing from `PROTOS` in `build.rs` |
-| `native-shell-parity` | The new screens field is unread by Compose or SwiftUI: read it in both, or add the register row with a reason |
-| A generated type "missing a field" you just added | A shared `CARGO_TARGET_DIR`; build in a private one ([shared-cargo-target trap](../../../docs/traps/shared-cargo-target.md)) |
-| Errors naming an edition-2024 item (`gen` as an identifier, `unsafe extern`, `#[unsafe(no_mangle)]`) | Rename the identifier (`r#gen`) or use the 2024 spelling |
+## 13. Final checklist
 
-## Reading list
+Before returning Rust code, confirm:
 
-| Open | When |
-| --- | --- |
-| [references/threads-and-locks.md](references/threads-and-locks.md) | adding a thread, task, lock, runtime or `block_on` |
-| [references/protobuf-prost.md](references/protobuf-prost.md) | any `.proto`, `build.rs` or encode/decode |
-| [references/testing.md](references/testing.md) | writing or moving a test, a fixture or a clock |
-| [references/async-and-cancellation.md](references/async-and-cancellation.md) | writing `async` code, a timeout, a channel, shutdown, or handling a `Cancel` |
-| [references/error-design.md](references/error-design.md) | adding an error enum or variant, a conversion, or a refusal a shell sees |
-| [references/api-and-traits.md](references/api-and-traits.md) | adding a public type, trait, port or module boundary |
-| [references/unsafe-ffi.md](references/unsafe-ffi.md) | touching `core-ffi`, `assist-llama` engine, or any `unsafe` |
-| [references/observability.md](references/observability.md) | adding a log line, a subscriber or a diagnostic |
-| [references/serde.md](references/serde.md) | adding a serde type or parsing JSON |
-| [references/performance.md](references/performance.md) | optimising, adding request-path work, or a budget step is red |
-| [references/lint-rationale.md](references/lint-rationale.md) | why a reviewer checks something clippy does not enforce here (reference only; lints are not changed) |
-| [references/porting.md](references/porting.md) | porting code from C, Python or another language into a crate |
-| [references/rules-index.md](references/rules-index.md) | a topic not covered above; all 265 pack rules by prefix, each a short file with a bad and good example (some carry an override banner) |
-| [references/best-practices.md](references/best-practices.md) | designing an API, a type or a module layout |
-| [references/review-checklist.md](references/review-checklist.md) | reviewing a diff; priority order and report format |
-| [references/guides/](references/guides/) | the reasoning behind a rule: API Guidelines, Effective Rust, design patterns, Google and Microsoft guides |
-| [CENTRAID.md](CENTRAID.md) | a pack rule seems to conflict with the repo |
+- `cargo fmt`, `cargo clippy -- -D warnings`, and `cargo test` are clean.
+- No `unwrap()` outside tests and `main`; every `expect`, `assert`, and `panic` has a message with the relevant values.
+- Public functions take `&str`, `&[T]`, `impl AsRef<_>`, or `impl IntoIterator`, not `&String` or `&Vec<T>`.
+- Every public type derives `Debug` and the applicable common traits; error types implement `Error + Display + Send + Sync + 'static`.
+- No `bool` parameters in public signatures; no hand-written `Ord` without matching `PartialEq` and `Hash`.
+- No `.clone()` whose only job is to satisfy the borrow checker.
+- No globs (bar a framework's prelude), no preludes of your own, no leaked third-party types.
+- Every `unsafe` block has a `// SAFETY:` comment; every `unsafe fn` has `# Safety` docs.
+- Public items have docs with a one-line summary and `# Errors` / `# Panics` where relevant.
+- Application code stayed simple; library code followed the API rules.
 
-## Done when
+## 14. In this repo
 
-`cargo xtask gate --profile local` is green (fmt, clippy `-D warnings`, the tests the change touches, `restore-drill`, `rules`, `doc-links`, `ledgers`); before a push `cargo xtask gate --profile pr`, which adds `buf`, `deny`, `call-budget`, `search-budget` and `fault-door`. A change in `crates/core-ffi` also runs its `contract` test and `cargo miri test -p centraid-core-ffi --test marshal_miri`.
+Centraid is one Rust workspace in `crates/`. Its crates are internal, so most are application code in the sense of section 1, with these house rules on top:
+
+- **The check is the gate.** `cargo xtask gate --profile local` runs fmt, clippy with `-D warnings` and the tests of the crates you touched; the `pr` profile runs everything.
+- **Errors:** library crates define typed errors with `thiserror`; `anyhow` stays at binary and tooling edges (the gateway binary, media tooling, `xtask`). The core answers the shells a typed refusal, never a bare string or `null`.
+- **No `unwrap()` in product code.** `expect` names the invariant that makes it safe.
+- **`unsafe` lives only in the FFI crates.** Every other crate has `#![forbid(unsafe_code)]`. The C ABI's rules are in `crates/core-ffi/CONTRACT.md`; read it before touching that crate.
+- **The vault has one connection and one writer.** Writes go through `Vault::commit`; blocking SQLite work never runs on an async task (use `spawn_blocking`). SQL lives only in the vault, ontology, search and apps-kit crates; the `sql-confinement` rule enforces it.
+- **Nothing whose cost grows with the vault runs on a request path.** Page with keyset cursors and `LIMIT`; a comment saying a table is small is not a bound.
+- **No new dependency for convenience.** `cargo deny` checks licenses and advisories.
+- **Comments state obligations, not history.** Cite history as an issue link.
+- A machine running `centraid-gateway` is a _gateway_, never a server or host.
+
+## References
+
+Read these when you need the reasoning behind a rule or a complete checklist for a task. Each is a condensed digest of one source.
+
+- `references/rust-api-guidelines.md` (https://rust-lang.github.io/api-guidelines/): designing a public API or crate; all 54 checklist items with conventions.
+- `references/effective-rust.md` (https://www.lurklurk.org/effective-rust/): choosing between alternatives: generics vs `dyn`, `Result` vs panic, iterators vs loops, borrow-checker tactics, dependencies, CI.
+- `references/rust-design-patterns.md` (https://rust-unofficial.github.io/patterns/): idioms, patterns, and anti-patterns with code.
+- `references/microsoft-rust-guidelines.md` (https://microsoft.github.io/rust-guidelines/): error struct design, panic policy, unsafe policy, async, workspace layout, performance.
+- `references/google-rust-style-guide.md` (https://google.github.io/styleguide/rustguide.html): formatting, imports, module layout, accessor naming, application vs library.
+
+Adapted from [BeautifulRust](https://github.com/morganlinton/BeautifulRust) by Morgan Linton (MIT, [license](licenses/BeautifulRust-LICENSE)).

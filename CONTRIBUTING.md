@@ -32,7 +32,7 @@ Low-effort, fully generated PRs with no issue link, no tests, and no evidence th
 
 Rough ladder (not a bureaucracy — signal only):
 
-1. **Good citizen** — small, linked, tested PRs that match house style ([docs/coding-standards.md](docs/coding-standards.md)).
+1. **Good citizen** — small, linked, tested PRs that follow the language skills in `.claude/skills/`.
 2. **Area regular** — repeated solid work in one area; reviews get lighter.
 3. **Delegate** — maintainer may ask you to drive a follow-up issue; still solo-merge by default.
 

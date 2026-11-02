@@ -1,6 +1,6 @@
 # SQLite Migrations
 
-> Pack file (claude-mods `sqlite-ops`, MIT, see [SOURCES.md](../SOURCES.md)). Where this repo differs, [CENTRAID.md](../CENTRAID.md) wins; the repo's SQLite law is in [SKILL.md](../SKILL.md).
+> From claude-mods `sqlite-ops` (MIT, [license](../licenses/claude-mods-LICENSE)). Where this repo differs, "In this repo" in [SKILL.md](../SKILL.md) wins.
 
 Changing a schema that already holds data. Engine-agnostic SQL. For designing a schema in the first place see [`schema-design.md`](schema-design.md).
 

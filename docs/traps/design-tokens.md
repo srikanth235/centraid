@@ -99,7 +99,6 @@ A loose `gap: 2px` is indistinguishable from someone eyeballing a rung; `var(--s
 
 - `packages/design`
 - [design-machinery.md](../design-machinery.md)
-- [coding-standards.md](../coding-standards.md)
 - Issue [#43](https://github.com/srikanth235/centraid/issues/43) history
 
 ## The two layers of `packages/design`
