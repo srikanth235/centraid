@@ -141,22 +141,21 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      # The Xcode pin nix cannot carry; this is the only place it is written.
-      - name: Select Xcode
-        env:
-          XCODE_VERSION: "26.6"
-        run: |
-          version="${XCODE_VERSION}"
-          echo "Selecting Xcode ${version}"
-          sudo xcode-select --switch "/Applications/Xcode_${version}.app" ||
-            echo "OWNER HAND-OFF: ${version} is not on this runner image."
+      - name: Select pinned Xcode (fail if unavailable)
+        run: bash mobile/scripts/select-xcode.sh
+      - uses: ./.github/actions/setup
+        with:
+          bun: "false"
+          rust: "true"
+          rust-targets: aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+          cargo-cache: release-ios
 
       # THE CORE'S STATIC LIBRARY, built for the iOS slices the project links
       # (`iosApp/CoreBridge` maps its header to `CentraidCoreC`). There is no
       # Kotlin framework in the app any more (#1135).
       - name: Build the core's iOS slices
         run: |
-          rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+          export IPHONEOS_DEPLOYMENT_TARGET="$(cat mobile/ios-deployment-target)"
           mobile/scripts/ios-core.sh
 
       # `protobuf` and `swift-protobuf` are `protoc` and `protoc-gen-swift`.
@@ -186,11 +185,18 @@ jobs:
       - name: The fixture test - one fixture, two languages
         working-directory: mobile/iosApp
         run: |
-          # The SwiftUI shell's unit tests, the first machine in the pipeline
-          # that can run them.
-          # A SIMULATOR BUNDLE, NOT `swift test`: `Sources/` imports UIKit.
-          xcodebuild -scheme Centraid \
-            -destination 'platform=iOS Simulator,name=iPhone 16' test
+          bash ../scripts/verify-ios.sh
+
+      - name: Upload iOS compiler and test evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-ios-verification
+          path: |
+            target/ios-verification/*.log
+            target/ios-verification/*.xcresult
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: Submit to TestFlight
         if: inputs.submit && needs.probe.outputs.ios_signed == 'true'

@@ -11,7 +11,7 @@ import Foundation
 enum PhoneCalendar {
     /// EventKit posts `EKEventStoreChanged` only for a store that exists, so one
     /// is held for the life of the process. Making it asks for nothing.
-    static let watcher = EKEventStore()
+    @MainActor static let watcher = EKEventStore()
 
     /// Full access the member has already given. Never prompts.
     static var granted: Bool {
@@ -26,7 +26,7 @@ enum PhoneCalendar {
         } else if !granted {
             return .failed(denied())
         }
-        return await Task.detached(priority: .utility) { .calendar(snapshot(store, read)) }.value
+        return await Task.detached(priority: .utility) { .calendar(snapshot(EKEventStore(), read)) }.value
     }
 
     private static func denied() -> Centraid_Core_V1_EffectFailed {
@@ -37,13 +37,13 @@ enum PhoneCalendar {
     }
 
     /// This install's id, minted once and kept off the vault (R-1127-10).
-    static var deviceID: String {
+    static let deviceID: String = {
         let key = "dev.centraid.install-id"
         if let known = UserDefaults.standard.string(forKey: key) { return known }
         let minted = UUID().uuidString
         UserDefaults.standard.set(minted, forKey: key)
         return minted
-    }
+    }()
 
     /// **Complete only with full access** (R-1127-10), which is the only access this reads under.
     private static func snapshot(_ store: EKEventStore, _ read: Centraid_Core_V1_CalendarRead) -> Centraid_Core_V1_CalendarSnapshot {

@@ -30,7 +30,7 @@ actor Core {
     /// own; the Rust shelf opens every vault under it, keys each from the phone's
     /// secrets and sends every call about a vault to the one in front. A debug
     /// build's demo seed is the only secret in it and is never logged.
-    struct Configuration: Encodable {
+    struct Configuration: Encodable, Sendable {
         var shelf: String
         var devSeed: String?
         var uiThreadName = "main"
@@ -52,6 +52,7 @@ actor Core {
     /// what must be serial itself.
     private let bulk = DispatchQueue(label: "dev.centraid.core.bulk")
     private var closed = false
+    private let pendingCalls = DispatchGroup()
 
     /// Which queue a call waits on.
     enum Lane {
@@ -66,9 +67,9 @@ actor Core {
 
     private init(raw: Raw) {
         self.raw = raw
-        var sink: AsyncStream<Centraid_Core_V1_ScreenUpdate>.Continuation!
-        updates = AsyncStream { sink = $0 }
-        updateSink = sink
+        let stream = AsyncStream<Centraid_Core_V1_ScreenUpdate>.makeStream()
+        updates = stream.stream
+        updateSink = stream.continuation
     }
 
     /// Open the front core over the vault directory. Blocking: call from a
@@ -95,23 +96,36 @@ actor Core {
 
     /// One request on `lane`.
     func call(_ request: Centraid_Core_V1_Request, lane: Lane) async throws -> Centraid_Core_V1_Response {
+        guard !closed else { throw Failure.closed }
         var envelope = Centraid_Core_V1_Envelope()
         envelope.body = .request(request)
         let bytes = try envelope.serializedData()
         let raw = self.raw
         let queue = lane == .bulk ? bulk : calls
+        let pending = pendingCalls
+        pending.enter()
         return try await withCheckedThrowingContinuation { continuation in
             queue.async {
+                defer { pending.leave() }
                 continuation.resume(with: Result { try Core.callSync(raw, bytes) })
             }
         }
     }
 
     /// Close the core. Unblocks the event pump, which ends `updates`.
-    func close() {
+    func close() async {
         guard !closed else { return }
         closed = true
-        _ = centraid_close(raw.pointer)
+        let raw = self.raw
+        // Actor reentrancy lets close arrive while a queued call is awaiting
+        // its answer. Wait for both lanes before releasing the C handle, and
+        // keep the blocking close off the actor executor/UI thread.
+        await withCheckedContinuation { continuation in
+            pendingCalls.notify(queue: calls) {
+                _ = centraid_close(raw.pointer)
+                continuation.resume()
+            }
+        }
     }
 
     // MARK: - the five symbols

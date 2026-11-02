@@ -36,7 +36,7 @@ enum PhoneContacts {
         } else if !granted {
             return .failed(denied())
         }
-        return await Task.detached(priority: .utility) { .contacts(snapshot(store)) }.value
+        return await Task.detached(priority: .utility) { .contacts(snapshot(CNContactStore())) }.value
     }
 
     private static func denied() -> Centraid_Core_V1_EffectFailed {

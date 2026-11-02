@@ -16,6 +16,7 @@ import XCTest
 /// beside it: a result with no `gw` is never connected to, a second answer is
 /// never delivered, and an answer after the window is ignored. Which sighting
 /// is which gateway is Rust's (`crates/screens/tests/pairing.rs`).
+@MainActor
 final class GatewayBrowseTests: XCTestCase {
     private let id = String(repeating: "ab", count: 32)
 
@@ -45,7 +46,7 @@ final class GatewayBrowseTests: XCTestCase {
 
     // MARK: one run
 
-    func testAnAdvertisementIsResolvedAndAnsweredOnceAtTheWindow() throws {
+    func testAnAdvertisementIsResolvedAndAnsweredOnceAtTheWindow() async throws {
         let finder = FakeFinder()
         let resolver = FakeResolver(answers: ["lan": ["192.168.1.44:7443"]])
         let answer = expectation(description: "answered")
@@ -56,10 +57,10 @@ final class GatewayBrowseTests: XCTestCase {
         }
         run.start()
         finder.show([service("centraid-gateway-abababab", txt: ["gw": id], interface: "lan")])
-        wait(for: [answer], timeout: 2)
+        await fulfillment(of: [answer], timeout: 2)
         // A late sighting and a second window end change nothing.
         finder.show([service("centraid-gateway-late", txt: ["gw": id], interface: "late")])
-        Thread.sleep(forTimeInterval: 0.2)
+        try await Task.sleep(for: .milliseconds(200))
         XCTAssertEqual(answers.count, 1)
         XCTAssertEqual(answers[0], [ResolvedService(
             serviceName: "centraid-gateway-abababab",
@@ -70,7 +71,7 @@ final class GatewayBrowseTests: XCTestCase {
         XCTAssertTrue(resolver.cancelled)
     }
 
-    func testAResultWithNoGatewayIdIsNeverConnectedTo() {
+    func testAResultWithNoGatewayIdIsNeverConnectedTo() async {
         let finder = FakeFinder()
         let resolver = FakeResolver(answers: ["decoy": ["192.168.1.99:7443"]])
         let answer = expectation(description: "answered")
@@ -81,12 +82,12 @@ final class GatewayBrowseTests: XCTestCase {
         }
         run.start()
         finder.show([service("centraid-gateway-abababab", txt: ["v": "2"], interface: "decoy")])
-        wait(for: [answer], timeout: 2)
+        await fulfillment(of: [answer], timeout: 2)
         XCTAssertEqual(found, [])
         XCTAssertEqual(resolver.asked, [])
     }
 
-    func testOneInstanceOnTwoInterfacesIsOneSighting() {
+    func testOneInstanceOnTwoInterfacesIsOneSighting() async {
         let finder = FakeFinder()
         let resolver = FakeResolver(answers: [
             "en0": ["192.168.1.44:7443"],
@@ -105,13 +106,13 @@ final class GatewayBrowseTests: XCTestCase {
         ])
         // The same result shown again is not resolved again.
         finder.show([service("centraid-gateway-abababab", txt: ["gw": id], interface: "en0")])
-        wait(for: [answer], timeout: 2)
+        await fulfillment(of: [answer], timeout: 2)
         XCTAssertEqual(found.count, 1)
         XCTAssertEqual(found[0].addresses, ["192.168.1.44:7443", "[fd00::5]:7443"])
         XCTAssertEqual(resolver.asked.sorted(), ["en0", "en1"])
     }
 
-    func testAnAdvertisementThatNeverAnswersIsLeftOutNotWaitedFor() {
+    func testAnAdvertisementThatNeverAnswersIsLeftOutNotWaitedFor() async {
         let finder = FakeFinder()
         let resolver = FakeResolver(answers: [:])
         let answer = expectation(description: "answered")
@@ -123,12 +124,12 @@ final class GatewayBrowseTests: XCTestCase {
         }
         run.start()
         finder.show([service("centraid-gateway-gone", txt: ["gw": id], interface: "stale")])
-        wait(for: [answer], timeout: 2)
+        await fulfillment(of: [answer], timeout: 2)
         XCTAssertEqual(found, [])
         XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(started), 0.25)
     }
 
-    func testABrowserThatFailsEndsTheBrowseAtOnceWithNothing() {
+    func testABrowserThatFailsEndsTheBrowseAtOnceWithNothing() async {
         let finder = FakeFinder()
         let answer = expectation(description: "answered")
         var answers = 0
@@ -139,7 +140,7 @@ final class GatewayBrowseTests: XCTestCase {
         }
         run.start()
         finder.fail()
-        wait(for: [answer], timeout: 2)
+        await fulfillment(of: [answer], timeout: 2)
         XCTAssertEqual(answers, 1)
     }
 
@@ -156,26 +157,19 @@ final class GatewayBrowseTests: XCTestCase {
 }
 
 private final class FakeFinder: ServiceFinder {
-    private var found: (([FoundService]) -> Void)?
-    private var failed: (() -> Void)?
+    private var found: (@MainActor @Sendable ([FoundService]) -> Void)?
+    private var failed: (@MainActor @Sendable () -> Void)?
     private(set) var stopped = false
-    private let started = DispatchSemaphore(value: 0)
 
-    func start(queue: DispatchQueue, found: @escaping ([FoundService]) -> Void, failed: @escaping () -> Void) {
+    func start(found: @escaping @MainActor @Sendable ([FoundService]) -> Void, failed: @escaping @MainActor @Sendable () -> Void) {
         self.found = found
         self.failed = failed
-        started.signal()
     }
 
     func stop() { stopped = true }
 
-    /// `GatewayBrowseRun.start` hops to its queue, so a test waits for the browse to begin.
-    private func begun() {
-        if started.wait(timeout: .now() + 2) == .success { started.signal() }
-    }
-
-    func show(_ results: [FoundService]) { begun(); found?(results) }
-    func fail() { begun(); failed?() }
+    func show(_ results: [FoundService]) { found?(results) }
+    func fail() { failed?() }
 }
 
 /// Answers by the endpoint's domain (the fake's interface name); an
@@ -187,10 +181,10 @@ private final class FakeResolver: AddressResolver {
 
     init(answers: [String: [String]]) { self.answers = answers }
 
-    func resolve(_ endpoint: NWEndpoint, queue: DispatchQueue, completion: @escaping ([String]) -> Void) {
+    func resolve(_ endpoint: NWEndpoint, completion: @escaping @MainActor @Sendable ([String]) -> Void) {
         guard case .service(_, _, let domain, _) = endpoint else { return }
         asked.append(domain)
-        if let addresses = answers[domain] { queue.async { completion(addresses) } }
+        if let addresses = answers[domain] { completion(addresses) }
     }
 
     func cancelAll() { cancelled = true }

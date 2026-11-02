@@ -54,13 +54,7 @@ enum HealthKitReader {
 
     /// This install's id, minted once and kept off the vault (R-1127-10): the same one the calendar
     /// stamps, so a followed workout's `local:` link names this phone.
-    private static var deviceID: String {
-        let key = "dev.centraid.install-id"
-        if let known = UserDefaults.standard.string(forKey: key) { return known }
-        let minted = UUID().uuidString
-        UserDefaults.standard.set(minted, forKey: key)
-        return minted
-    }
+    private static var deviceID: String { PhoneCalendar.deviceID }
 
     // MARK: - One read
 

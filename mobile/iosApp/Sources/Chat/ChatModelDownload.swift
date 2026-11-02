@@ -83,8 +83,8 @@ final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecke
     static let shared = ChatModelDownloader()
 
     /// Both fire on the main queue. The ChatModel points them at the chat.
-    var onProgress: ((_ vision: Bool, Int64, Int64) -> Void)?
-    var onFinished: ((_ vision: Bool, Bool) -> Void)?
+    @MainActor var onProgress: ((_ vision: Bool, Int64, Int64) -> Void)?
+    @MainActor var onFinished: ((_ vision: Bool, Bool) -> Void)?
 
     private let lock = NSLock()
     private var lastReportedAt: [Bool: Date] = [:]
@@ -95,14 +95,14 @@ final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecke
         ChatAsset.decode(task.taskDescription)
     }
 
-    private lazy var session: URLSession = {
+    @MainActor private lazy var session: URLSession = {
         let configuration = URLSessionConfiguration.default
         configuration.waitsForConnectivity = true
         return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
     }()
 
     /// Make sure the session exists before the chat asks about running work.
-    func reconnect() {
+    @MainActor func reconnect() {
         _ = session
     }
 
@@ -111,7 +111,7 @@ final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecke
     /// A member who leaves the Chat tab mid-download and comes back finds the model still
     /// arriving. Its progress is reported at once, bypassing the throttle, and the chat treats
     /// progress heard before any tap as "already downloading".
-    func reportRunning() {
+    @MainActor func reportRunning() {
         session.getAllTasks { [weak self] tasks in
             guard let self else { return }
             for running in tasks where running.state == .running {
@@ -124,7 +124,7 @@ final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecke
     }
 
     /// Start the transfer of `asset`, or pick up the one already running.
-    func start(_ asset: ChatAsset) {
+    @MainActor func start(_ asset: ChatAsset) {
         ChatModelStore.prepareDirectory()
         let session = session
         session.getAllTasks { [weak self] tasks in

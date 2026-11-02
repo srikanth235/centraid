@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import os
 
 /// FOLLOWING A FOLDER, THE IOS HALF (#1127, R-1127-7; #1135).
 ///
@@ -14,19 +15,26 @@ import UniformTypeIdentifiers
 /// nothing is written to the folder).
 enum FolderAccess {
     private static let prefix = "docs.folder.bookmark."
-    private static let lock = NSLock()
-    /// Scopes started and kept for the process: a pass lists a folder and then reads its files later.
-    private static var started: [String: URL] = [:]
+    /// Scopes started and kept for the process, protected together with the
+    /// bookmark operations so concurrent effects cannot acquire duplicate scopes.
+    private static let scopes = OSAllocatedUnfairLock(initialState: [String: URL]())
 
     /// Keep the access to [url] under [origin]. False when iOS would not make a bookmark of it.
     static func remember(origin: String, url: URL) -> Bool {
+        scopes.withLock { started in
+            remember(origin: origin, url: url, started: &started)
+        }
+    }
+
+    private static func remember(origin: String, url: URL, started: inout [String: URL]) -> Bool {
         let scoped = url.startAccessingSecurityScopedResource()
         guard let data = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) else {
             if scoped { url.stopAccessingSecurityScopedResource() }
             return false
         }
         UserDefaults.standard.set(data, forKey: prefix + origin)
-        lock.withLock { started[origin] = url }
+        started[origin]?.stopAccessingSecurityScopedResource()
+        started[origin] = scoped ? url : nil
         return true
     }
 
@@ -35,11 +43,15 @@ enum FolderAccess {
     /// trash, or one whose folder cannot be reached. A STALE bookmark (the folder moved or was
     /// renamed) resolves, and is refreshed.
     static func resolve(origin: String) -> URL? {
-        if let held = lock.withLock({ started[origin] }), reachable(held) { return held }
-        lock.withLock {
-            started[origin]?.stopAccessingSecurityScopedResource()
-            started[origin] = nil
+        scopes.withLock { started in
+            resolve(origin: origin, started: &started)
         }
+    }
+
+    private static func resolve(origin: String, started: inout [String: URL]) -> URL? {
+        if let held = started[origin], reachable(held) { return held }
+        started[origin]?.stopAccessingSecurityScopedResource()
+        started[origin] = nil
         guard let data = UserDefaults.standard.data(forKey: prefix + origin) else { return nil }
         var stale = false
         guard let url = try? URL(resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale) else {
@@ -53,7 +65,7 @@ enum FolderAccess {
         if stale, let fresh = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
             UserDefaults.standard.set(fresh, forKey: prefix + origin)
         }
-        lock.withLock { started[origin] = url }
+        started[origin] = scoped ? url : nil
         return url
     }
 
@@ -70,11 +82,11 @@ enum FolderAccess {
 
     /// The member stopped following [origin], or a pick was refused: the bookmark and its scope go.
     static func forget(origin: String) {
-        lock.withLock {
+        scopes.withLock { started in
             started[origin]?.stopAccessingSecurityScopedResource()
             started[origin] = nil
+            UserDefaults.standard.removeObject(forKey: prefix + origin)
         }
-        UserDefaults.standard.removeObject(forKey: prefix + origin)
     }
 
     private static func reachable(_ url: URL) -> Bool {

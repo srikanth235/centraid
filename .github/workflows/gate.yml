@@ -27,6 +27,42 @@ permissions:
   contents: read
 
 jobs:
+  # UIKit needs a real Apple SDK; Linux's JVM gate cannot compile the shell.
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select pinned Xcode (fail if unavailable)
+        run: bash mobile/scripts/select-xcode.sh
+      - uses: ./.github/actions/setup
+        with:
+          bun: "false"
+          rust: "true"
+          rust-targets: aarch64-apple-ios-sim
+          cargo-cache: ios-simulator
+      - name: Install the native generators
+        run: brew install xcodegen protobuf swift-protobuf
+      - name: Build the actual simulator core with llama
+        run: |
+          set -euo pipefail
+          mkdir -p target/ios-verification
+          export IPHONEOS_DEPLOYMENT_TARGET="$(cat mobile/ios-deployment-target)"
+          mobile/scripts/ios-core.sh aarch64-apple-ios-sim 2>&1 | tee target/ios-verification/rust-core.log
+      - name: Compile Swift 6 app, run XCTest, and compile HealthSeeder
+        run: bash mobile/scripts/verify-ios.sh
+      - name: Upload iOS compiler and test evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ios-verification
+          path: |
+            target/ios-verification/*.log
+            target/ios-verification/*.xcresult
+            mobile/iosApp/Sources/Generated
+          retention-days: 7
+          if-no-files-found: warn
+
   gate:
     runs-on: ubuntu-latest
     # A backstop against a hung job, above the `pr` profile's own cold budget

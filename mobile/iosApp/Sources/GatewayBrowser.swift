@@ -82,7 +82,7 @@ enum GatewayBrowse {
 }
 
 /// One service the browse saw, before it is resolved.
-struct FoundService {
+struct FoundService: Sendable {
     /// The DNS-SD instance name. Never an identity.
     let name: String
     let txt: [String: String]
@@ -92,39 +92,41 @@ struct FoundService {
 }
 
 /// One advertisement as resolved: what a `GatewaySighting` carries to Rust.
-struct ResolvedService: Equatable {
+struct ResolvedService: Equatable, Sendable {
     let serviceName: String
     let txt: [String: String]
     let addresses: [String]
 }
 
 /// WHAT FINDS ADVERTISEMENTS — `NWBrowser` in production, a fake in tests.
+@MainActor
 protocol ServiceFinder: AnyObject {
     /// Begin. `found` is given every result seen so far each time the set
     /// changes; `failed` is called if the browse cannot run.
-    func start(queue: DispatchQueue, found: @escaping ([FoundService]) -> Void, failed: @escaping () -> Void)
+    func start(found: @escaping @MainActor @Sendable ([FoundService]) -> Void, failed: @escaping @MainActor @Sendable () -> Void)
     /// End, and drop every handler. Idempotent.
     func stop()
 }
 
 /// WHAT TURNS A SERVICE ENDPOINT INTO ADDRESSES — an outbound connect in
 /// production, a fake in tests.
+@MainActor
 protocol AddressResolver: AnyObject {
     /// Resolve [endpoint]. [completion] is called with each batch of addresses
     /// as one resolves — once per IP family that answers, so possibly twice,
     /// possibly never (a family the gateway does not serve stays pending until
     /// the window ends) and never after [cancelAll].
-    func resolve(_ endpoint: NWEndpoint, queue: DispatchQueue, completion: @escaping ([String]) -> Void)
+    func resolve(_ endpoint: NWEndpoint, completion: @escaping @MainActor @Sendable ([String]) -> Void)
     /// Cancel everything in flight. Idempotent.
     func cancelAll()
 }
 
-/// ONE BROWSE, FROM START TO THE ONE ANSWER. All state lives on [queue].
+/// ONE BROWSE, FROM START TO THE ONE ANSWER. State and callbacks stay on the main actor.
+@MainActor
 final class GatewayBrowseRun {
     private let finder: ServiceFinder
     private let resolver: AddressResolver
     private let window: TimeInterval
-    private let queue: DispatchQueue
     private let deliver: ([ResolvedService]) -> Void
 
     private var finished = false
@@ -138,35 +140,30 @@ final class GatewayBrowseRun {
         finder: ServiceFinder,
         resolver: AddressResolver,
         window: TimeInterval,
-        queue: DispatchQueue = DispatchQueue(label: "dev.centraid.gateway-browse"),
         deliver: @escaping ([ResolvedService]) -> Void
     ) {
         self.finder = finder
         self.resolver = resolver
         self.window = window
-        self.queue = queue
         self.deliver = deliver
     }
 
     /// Begin. A second call does nothing.
     func start() {
-        queue.async {
-            guard !self.started, !self.finished else { return }
-            self.started = true
-            self.finder.start(
-                queue: self.queue,
-                found: { results in self.queue.async { self.saw(results) } },
-                failed: { self.queue.async { self.finish() } }
-            )
-            self.queue.asyncAfter(deadline: .now() + self.window) { self.finish() }
-        }
+        guard !started, !finished else { return }
+        started = true
+        finder.start(
+            found: { results in self.saw(results) },
+            failed: { self.finish() }
+        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + window) { self.finish() }
     }
 
     private func saw(_ results: [FoundService]) {
         guard !finished else { return }
         for result in results where GatewayBrowse.claimsGateway(result.txt) && seen.insert(result.key).inserted {
-            resolver.resolve(result.endpoint, queue: queue) { addresses in
-                self.queue.async { self.merge(result, addresses) }
+            resolver.resolve(result.endpoint) { addresses in
+                self.merge(result, addresses)
             }
         }
     }
@@ -198,10 +195,11 @@ final class GatewayBrowseRun {
 
 /// `NWBrowser` over `_centraid-gateway._tcp`. Outbound only: a query, and
 /// the answers to it.
+@MainActor
 final class NWServiceFinder: ServiceFinder {
     private var browser: NWBrowser?
 
-    func start(queue: DispatchQueue, found: @escaping ([FoundService]) -> Void, failed: @escaping () -> Void) {
+    func start(found: @escaping @MainActor @Sendable ([FoundService]) -> Void, failed: @escaping @MainActor @Sendable () -> Void) {
         // `NWParameters()` and not a peer-to-peer set: a gateway is on the
         // member's own network, and AWDL is not that.
         let browser = NWBrowser(
@@ -211,13 +209,13 @@ final class NWServiceFinder: ServiceFinder {
         browser.stateUpdateHandler = { state in
             // `.waiting` is a refused or pending local-network grant: it may
             // yet resolve, and the window bounds it either way.
-            if case .failed = state { failed() }
+            if case .failed = state { MainActor.assumeIsolated { failed() } }
         }
         browser.browseResultsChangedHandler = { results, _ in
-            found(results.compactMap(Self.service))
+            MainActor.assumeIsolated { found(results.compactMap(Self.service)) }
         }
         self.browser = browser
-        browser.start(queue: queue)
+        browser.start(queue: .main)
     }
 
     func stop() {
@@ -237,11 +235,12 @@ final class NWServiceFinder: ServiceFinder {
 
 /// A TCP CONNECT, CANCELLED AT ONCE, READ FOR THE PATH'S REMOTE ENDPOINT.
 /// One per IP family, so a dual-stack gateway yields both.
+@MainActor
 final class ConnectionResolver: AddressResolver {
     private var connections: [NWConnection] = []
     private var cancelled = false
 
-    func resolve(_ endpoint: NWEndpoint, queue: DispatchQueue, completion: @escaping ([String]) -> Void) {
+    func resolve(_ endpoint: NWEndpoint, completion: @escaping @MainActor @Sendable ([String]) -> Void) {
         guard !cancelled else { return }
         let families: [NWProtocolIP.Options.Version] = [.v4, .v6]
         for family in families {
@@ -250,28 +249,29 @@ final class ConnectionResolver: AddressResolver {
                 options.version = family
             }
             let connection = NWConnection(to: endpoint, using: parameters)
-            var settled = false
             connection.stateUpdateHandler = { [weak connection] state in
-                guard !settled else { return }
-                switch state {
-                case .ready:
-                    settled = true
-                    var found: [String] = []
-                    if case .hostPort(let host, let port)? = connection?.currentPath?.remoteEndpoint,
-                       let address = GatewayBrowse.spelling(host: host, port: port) {
-                        found = [address]
+                MainActor.assumeIsolated {
+                    guard let connection, connection.stateUpdateHandler != nil else { return }
+                    switch state {
+                    case .ready:
+                        connection.stateUpdateHandler = nil
+                        var found: [String] = []
+                        if case .hostPort(let host, let port)? = connection.currentPath?.remoteEndpoint,
+                           let address = GatewayBrowse.spelling(host: host, port: port) {
+                            found = [address]
+                        }
+                        connection.cancel()
+                        completion(found)
+                    case .failed:
+                        connection.stateUpdateHandler = nil
+                        connection.cancel()
+                    default:
+                        break
                     }
-                    connection?.cancel()
-                    completion(found)
-                case .failed:
-                    settled = true
-                    connection?.cancel()
-                default:
-                    break
                 }
             }
             connections.append(connection)
-            connection.start(queue: queue)
+            connection.start(queue: .main)
         }
     }
 

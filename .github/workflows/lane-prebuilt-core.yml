@@ -217,14 +217,14 @@ jobs:
   # slice is ONE lipo'd library: Xcode rejects an xcframework with two.
   ios:
     if: ${{ !inputs.binary-only }}
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 60
-    env:
-      IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.ref }}
+      - name: Select pinned Xcode (fail if unavailable)
+        run: bash mobile/scripts/select-xcode.sh
       - uses: ./.github/actions/setup
         with:
           bun: "false"
@@ -240,6 +240,7 @@ jobs:
           CENTRAID_BUILD_DIGEST: ${{ steps.key.outputs.key }}
         run: |
           set -euo pipefail
+          export IPHONEOS_DEPLOYMENT_TARGET="$(cat mobile/ios-deployment-target)"
           for target in aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios; do
             cargo build --profile dist -p centraid-core-ffi --features llama --target "$target"
           done

@@ -54,6 +54,7 @@ struct ContentImage: View {
 /// Keyed by path rather than by asset id because the path is what was opened:
 /// two assets over one sha share a file and should share one decode, which
 /// keying on the asset would miss.
+@MainActor
 private final class ImageCache {
     static let shared = ImageCache()
 
