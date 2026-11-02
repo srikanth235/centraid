@@ -43,6 +43,30 @@ Where common advice disagrees, this file says which to follow and why. The diges
 - Correlated subqueries and `IN (SELECT …)` are fine when they use an index; check the plan.
 - Run `ANALYZE` (or `PRAGMA optimize`) so the planner has statistics, when the database is large enough for plans to vary.
 
+### Performance as a measuring loop
+
+```text
+reproduce -> measure at realistic volume -> read the plan -> fix -> measure again -> commit with the numbers
+```
+
+1. **Reproduce** on a database seeded at year-3 volume: a query that is fast over a few hundred rows and scans a table over tens of thousands is the usual regression. This repo seeds one for the search budget (about 46,000 entities) and the apps have `#[ignore]`d year-3 rigs.
+2. **Measure an optimized build** (`--release`), warm, with many samples and the p95, not one run.
+3. **Read the plan** with `EXPLAIN QUERY PLAN`, before and after: `SCAN t` on a growing table is the finding; `SEARCH t USING INDEX` and `USING COVERING INDEX` are the goal; `USE TEMP B-TREE FOR ORDER BY` means the index does not serve the sort.
+4. **Fix** with the smallest change: the index that matches equality columns then the sort column, a keyset page, fewer columns, one transaction instead of many.
+5. **Measure again** and put before and after in the commit message: "contacts page p95 38 ms, was 210 ms; plan SCAN to SEARCH USING INDEX".
+
+| Symptom | Tool |
+| --- | --- |
+| Query slow | `EXPLAIN QUERY PLAN <sql>` (any `sqlite3` shell, or `Vault::explain_query_plan` in the vault's crate); `ANALYZE` first if the database is large |
+| Which page reads scan a table | `crates/core/tests/query_plans.rs` plans every page query the apps' loaders hold, counting table rows and refusing a scan of a growing table |
+| Writes slow | Many autocommit statements: batch them in one `BEGIN IMMEDIATE`; check `synchronous` and that each commit is not followed by a checkpoint |
+| `SQLITE_BUSY` under load | A long transaction or a second writer; shorten it before raising the timeout |
+| Search slow | `cargo test --release --workspace --test search_budget -- --nocapture --include-ignored` (the `search-budget` step of `cargo xtask gate --profile pr`), p95 against `contracts/ledgers/search-budget.json` |
+| A whole app read path | `cargo test --release -p centraid-apps-<app> --test year3 -- --ignored --nocapture` (agenda, docs, health, money, notes, people, photos), ceilings in `tests/journeys.json` |
+| A core call | `call-budget`: `cargo test --workspace --test call_budget -- --nocapture` |
+
+A database file is data: do not attach a user's vault to a bug report, and delete profiler output (`perf` data, flamegraph SVGs, traces) after reading, since it can contain the environment and tokens inherited from the agent's shell.
+
 ## 5. Writes, transactions and concurrency
 
 - **Group related writes in one transaction.** It is atomic, and far faster than many autocommit statements.
@@ -80,6 +104,26 @@ Where common advice disagrees, this file says which to follow and why. The diges
 - Convert `rusqlite::Error` into the crate's own error type at the module boundary; callers should not match on SQLite error codes.
 - Blocking database calls do not run on an async executor thread.
 
+### SQLite and rusqlite errors
+
+Fix the first error first; a failed statement inside a transaction often explains the later ones.
+
+| Error | Fix |
+| --- | --- |
+| `SQLITE_BUSY` / "database is locked" | Another writer holds the lock. Set `busy_timeout`, begin writers with `BEGIN IMMEDIATE`, shorten the write transaction, and make sure no reader keeps a transaction open. In the vault the cause is usually a second writable connection, which must not exist |
+| `FOREIGN KEY constraint failed` | The parent row is missing, or a delete is blocked by a child. Insert parent before child; check the delete rule; `PRAGMA foreign_key_check` lists offenders |
+| `CHECK constraint failed: <name>` | The value is not in the allowed set. Find every writer of the column; when adding an enum value, change the `CHECK` and the writers together |
+| `UNIQUE constraint failed: t.col` | Upsert with `ON CONFLICT (col) DO UPDATE`, or look up first inside the same transaction |
+| `NOT NULL constraint failed` | Supply the value, or decide the column is genuinely optional |
+| `no such table` / `no such column` | The file is at an older schema, a migration did not run, or the name is misspelled. Compare with `PRAGMA table_info(t)`; in the vault never patch the file, fix the ladder |
+| "cannot start a transaction within a transaction" | One function begins a transaction while its caller already did. Own the transaction in one place and pass the `Transaction`/`&Connection` down |
+| "cannot VACUUM from within a transaction" | Run it outside any transaction. In the vault it never runs at all |
+| `rusqlite::Error::QueryReturnedNoRows` | `query_row` found nothing. Use `.optional()` (`rusqlite::OptionalExtension`) when absence is a normal answer |
+| `rusqlite::Error::InvalidColumnType` | The Rust type does not match the stored value (an `Option` is missing, or a `STRICT`-less column holds the wrong type). Fix the `get::<_, T>` type or the writer |
+| "too many SQL variables" | Chunk an `IN (…)` list, or join against a temp table or `json_each` |
+| `VaultError::SchemaMismatch` on open ("does not match this version of Centraid") | The file's tables differ from the build's `SCHEMA_DIGEST`. After a baseline edit, run `cargo test -p centraid-vault the_schema_digest_is_the_founded_files` and paste its `found:` value into `SCHEMA_DIGEST`; a file changed outside the core is refused on purpose |
+| `VaultError::DowngradeRefused` | The file came from a newer build. Use the newer build; the core never guesses a schema down |
+
 ## 10. Reviewing a schema change
 
 Reading the DDL is not enough. Sweep mechanically:
@@ -96,6 +140,8 @@ Reading the DDL is not enough. Sweep mechanically:
 - Constraints in the schema: `STRICT`, `NOT NULL`, `CHECK`, foreign keys with chosen delete rules, foreign keys enabled per connection.
 - Writes grouped in short `BEGIN IMMEDIATE` transactions; upserts, never `OR REPLACE`.
 - A forward-only migration and a test from an old file.
+
+**Done when** the touched queries have a plan checked before and after, `cargo test -p centraid-vault` and `cargo test -p centraid-gateway` pass (plus `-p centraid-core` for the plan and budget tests when a read changed), and `cargo xtask gate --profile local` is green; run `--profile pr` before a PR that changes a query, an index or the schema.
 
 ## 12. In this repo
 
@@ -128,4 +174,4 @@ Read when the task touches the area:
 - `references/concurrency-durability.md`: WAL, locking, busy handling, durability.
 - `references/migration-patterns.md`: versioning and table rebuilds.
 
-The references are from [claude-mods](https://github.com/0xDarkMatter/claude-mods) by 0xDarkMatter (MIT, [license](licenses/claude-mods-LICENSE)). Where they recommend `VACUUM`, `synchronous = NORMAL` or a migrations table, section 12 wins.
+The error table, measuring loop and done-when are adapted from [Bama](https://github.com/daveebbelaar/bama) by Dave Ebbelaar (MIT, [license](licenses/Bama-LICENSE)). The references are from [claude-mods](https://github.com/0xDarkMatter/claude-mods) by 0xDarkMatter (MIT, [license](licenses/claude-mods-LICENSE)). Where they recommend `VACUUM`, `synchronous = NORMAL` or a migrations table, section 12 wins.
