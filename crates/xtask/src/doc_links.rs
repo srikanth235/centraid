@@ -54,7 +54,7 @@ pub struct Exclusions {
 }
 
 impl Exclusions {
-    /// The append-only records.
+    /// Nothing is frozen today.
     pub fn builtin() -> Self {
         Self {
             frozen_files: Vec::new(),
@@ -931,14 +931,17 @@ mod tests {
 
     /// Findings as `file:line why-fragment` pairs for readable assertions.
     fn run(files: &[(&str, &str)]) -> Report {
+        run_with(files, &Exclusions::builtin())
+    }
+
+    fn run_with(files: &[(&str, &str)], exclusions: &Exclusions) -> Report {
         let (names, texts) = repo(files);
-        let exclusions = Exclusions::builtin();
         let scan: Vec<String> = names
             .iter()
-            .filter(|p| is_scanned(p, &exclusions))
+            .filter(|p| is_scanned(p, exclusions))
             .cloned()
             .collect();
-        check_files(&names, &scan, &|path| texts.get(path).cloned(), &exclusions)
+        check_files(&names, &scan, &|path| texts.get(path).cloned(), exclusions)
     }
 
     fn broken(report: &Report) -> Vec<(String, usize, String)> {
@@ -1186,16 +1189,23 @@ mod tests {
 
     #[test]
     fn links_in_a_frozen_section_are_skipped_and_links_into_it_are_not() {
-        let report = run(&[
-            (
-                "QUALITY.md",
-                "# Quality\n\n[open broken](gone-open.md)\n\n## Resolved\n\n[old](gone-resolved.md)\n\n### Detail\n\n[older](gone-detail.md)\n\n## Notes\n\n[after](gone-after.md)\n",
-            ),
-            (
-                "docs/a.md",
-                "[into](../QUALITY.md#resolved) [bad](../QUALITY.md#nope)\n",
-            ),
-        ]);
+        let exclusions = Exclusions {
+            frozen_files: Vec::new(),
+            frozen_sections: vec![("QUALITY.md".to_owned(), "Resolved".to_owned())],
+        };
+        let report = run_with(
+            &[
+                (
+                    "QUALITY.md",
+                    "# Quality\n\n[open broken](gone-open.md)\n\n## Resolved\n\n[old](gone-resolved.md)\n\n### Detail\n\n[older](gone-detail.md)\n\n## Notes\n\n[after](gone-after.md)\n",
+                ),
+                (
+                    "docs/a.md",
+                    "[into](../QUALITY.md#resolved) [bad](../QUALITY.md#nope)\n",
+                ),
+            ],
+            &exclusions,
+        );
         assert_eq!(
             broken(&report),
             [
