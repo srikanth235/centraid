@@ -50,7 +50,7 @@ Every one is an answer to a way this crate could be wrong, and every one has a t
 - **The spine counts "Unfiled" too** (#1047): live, non-memo notes filed in no notebook, over the library's default window plus every pinned note, with `unfiled_truncated` when the window filled.
 - **A notebook holds notes by one column** (`note.notebook_id`). A notebook's delete is `entity.trash`, which takes the notes filed in it to the trash with it and brings them back with it on restore.
 - **A new journal entry is a note, and Notes owns no command for it** (Q-1047-8). The Journal's "New entry for today" sheet saves People's `people.add_journal_entry`, which founds a note and adds its `about` edge; the entry is drawn under the day it was written in the device's zone, kept off the library and reachable by id.
-- **`note.edit` takes no base, and the last write wins** (the `row_version` the editor once compared was dropped with `entity.version`, [R-1146-1B-5](../../../docs/decisions.md#the-journal-is-gone-1146)). `title` may be empty on an edit and not on a create; `body` may be empty on both (a note may be cleared).
+- **`note.edit` takes no base, and the last write wins** (the `row_version` the editor once compared was dropped with `entity.version`). `title` may be empty on an edit and not on a create; `body` may be empty on both (a note may be cleared).
 
 ```sh
 cargo test -p centraid-apps-notes

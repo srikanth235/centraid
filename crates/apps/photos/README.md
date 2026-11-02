@@ -16,25 +16,25 @@ Photos is 5 queries and 21 actions. This crate is the read plane and the action 
 
 ## The model Photos reads (#1135)
 
-A photograph is an `entity` of kind `photo` (its title is the caption, and may be empty) over a `photo` row (the blob, what it is, when and where it was taken, the burst it belongs to and the photograph it was edited from); an album is a `container` joined to its photographs by ordered `contains` edges; a heart, the archive and a label are `tagged` edges; a place is a `place` entity; a thumbnail, a perceptual hash and a caption are the blob's `derivative`s. The decisions are [R-1135-5-1 to R-1135-5-19](../../../docs/decisions.md#performance-and-scale).
+A photograph is an `entity` of kind `photo` (its title is the caption, and may be empty) over a `photo` row (the blob, what it is, when and where it was taken, the burst it belongs to and the photograph it was edited from); an album is a `container` joined to its photographs by ordered `contains` edges; a heart, the archive and a label are `tagged` edges; a place is a `place` entity; a thumbnail, a perceptual hash and a caption are the blob's `derivative`s. The decisions are.
 
 ## The rulings this crate is shaped by
 
 Every one is an answer to a way this crate could be wrong.
 
-**Faces and memories are gone** ([R-1135-5-18](../../../docs/decisions.md#photos), Q-1047-2). Their queries, actions and surfaces left when nothing produced either; so did `storage` and `enrichment-status` and the `request-enrichment` action ([R-1135-5-12](../../../docs/decisions.md#photos)). The model holds no table for them, and `contracts/apps/photos` carries v0's answers as frozen evidence nothing reads.
+**Faces and memories are gone** (Q-1047-2). Their queries, actions and surfaces left when nothing produced either; so did `storage` and `enrichment-status` and the `request-enrichment` action. The model holds no table for them, and `contracts/apps/photos` carries v0's answers as frozen evidence nothing reads.
 
-**There is no Duplicates screen** ([#1146](https://github.com/srikanth235/centraid/issues/1146) D5, retiring [R-1135-5-15](../../../docs/decisions.md#photos)). The member never asked for near-duplicate sets, so nothing clusters the perceptual hashes any more; `photo.add` still accepts a `phash`, and `centraid_media::duplicates` is gone with its only reader.
+**There is no Duplicates screen** ([#1146](https://github.com/srikanth235/centraid/issues/1146) D5, retiring). The member never asked for near-duplicate sets, so nothing clusters the perceptual hashes any more; `photo.add` still accepts a `phash`, and `centraid_media::duplicates` is gone with its only reader.
 
 **One verdict on what is live, in the kit** (`centraid_apps_kit::rules::Standing`). Live is not trashed AND not archived AND not folded under an edit. The archive shelf is archived and not trashed; the trash is every trashed photograph; an album draws every member that is not trashed. Every read here asks it, so a count and the shelf it opens cannot disagree (the favorites tile once counted the archived).
 
 **An edit folds its original, and a burst folds its older stills.** A phone's edited photograph arrives as two photographs of one capture: the camera's bytes, and the edit's render with `edited_from` naming them and a shared `burst`. The library draws the newest live one, so the grid shows the edit; trashing or archiving the edit brings the original back. A crop saved from Centraid's own editor carries no burst and folds nothing. The fold is read over the whole library (`photo_by_burst` serves it), never over one window.
 
-**The Places facet stays here.** There is no `crates/apps/places`. The phrase logic is the load-bearing half: in a **shared** context the relative rung is skipped, because "5.2 km NW of the cabin" hands a stranger a bearing to the member's house, and `printable_name` refuses a coordinate-shaped name at every rung, so a gazetteer that wrote digits into a title cannot leak them. A place has no kind, so the relative rung measures from the nearest named place and prefers no home ([R-1135-5-3](../../../docs/decisions.md#photos)).
+**The Places facet stays here.** There is no `crates/apps/places`. The phrase logic is the load-bearing half: in a **shared** context the relative rung is skipped, because "5.2 km NW of the cabin" hands a stranger a bearing to the member's house, and `printable_name` refuses a coordinate-shaped name at every rung, so a gazetteer that wrote digits into a title cannot leak them. A place has no kind, so the relative rung measures from the nearest named place and prefers no home.
 
 **A shelf is two walks, dated then undated (D-1020-P11).** `photo.taken_at` is nullable, and the kit's door refuses a **continued** page over a nullable sort key because SQLite's row-value comparison puts every NULL on one side of the keyset and the walk silently drops them. The dated walk therefore excludes its NULLs and continues by predicate (`page_by_predicate`: `(taken_at < ? OR (taken_at = ? AND id < ?))` on a first page the door never sees as a continuation); the photographs with no capture time are a second walk keyed on the id alone; one cursor spans both (an empty sort key is inside the tail). The trash, the archive and the fold are not columns, so a walk applies the verdict to every row it examines and stops when the page is full.
 
-**An album's cover is a photograph's blob, and the read falls back to the first live member** ([R-1135-5-2](../../../docs/decisions.md#photos)). Trashing a photograph keeps its album edges, and counts and covers read live members only ([R-1135-5-6](../../../docs/decisions.md#the-vault-model)).
+**An album's cover is a photograph's blob, and the read falls back to the first live member**. Trashing a photograph keeps its album edges, and counts and covers read live members only.
 
 ## What stops this crate doing more
 

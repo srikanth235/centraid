@@ -41,7 +41,7 @@
 ## Resolved
 
 - #1047 — **A vault that stayed with the old phone had no way back on its
-  own** (F8, [R-1047-R6](docs/decisions.md#a-restore-that-holds-1047-r3)).
+  own** (F8).
   `RestoreRequest` named no index, so the core restored every index or none,
   and a second restore would have laid the claimed vaults down again under an
   open session. `RestoreRequest.indices` now names the indices an earlier
@@ -90,8 +90,7 @@
   (Rust and the shell) filters on it, `knowledge.*` and `media.*` refuse the
   other kind's id with a sentence, and deleting a notebook can no longer touch
   an album's placements. An existing vault is classified by the rule the rung
-  states. Locks: `crates/vault/tests/collection_kind.rs`; ruling
-  [R-COLL-1…4](docs/decisions.md#notes-and-photos-a-collection-says-which-it-is-1029).
+  states. Locks: `crates/vault/tests/collection_kind.rs`.
 
 - #1046 — **Three vault-writer bugs the app_query arms surfaced, and the empty
   note.** `core.add_document` and `schedule.add_task` stamped SQLite's host
@@ -195,8 +194,7 @@
 - #883 — The #880 residuals register is closed, six of seven. The stored,
   indexed order column is **not** among them — the sort was pushed into SQLite,
   but the ORDER BY still reads `json_extract`, and measurement says it should
-  (see the open entry above and D-order in
-  [docs/decisions.md](docs/decisions.md#grants-v2--one-authority-plane-883)); the
+  (see the open entry above); the
   `has_unavailable_fields` fallback is on the wire and the replica rig asserts
   pushdown actually engaged, so a tile that silently reverted to a full read now
   says so; the native session produces `stewardLabel`, so the phone can draw the
@@ -242,8 +240,7 @@
   `_shared/AppChrome`), so the second chrome inside the frame's chrome is gone.
 
 - #883 — The parallel-wave lesson is now a written norm rather than an
-  observation. [docs/multi-agent.md](docs/multi-agent.md) G1 states it as this
-  umbrella's invariant D7: a slice's exit condition is the repo-wide gate for
+  observation. It is this umbrella's invariant: a slice's exit condition is the repo-wide gate for
   every lane its tree participates in — at minimum root `bun run lint` and the
   whole `test` suite of the package it edits — never the touched-file subset,
   so repo-wide reds surface inside the slice that caused them.
