@@ -4,6 +4,7 @@
 mod money_support;
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_screens::catalog::act;
 use centraid_screens::money::routes;
 use money_support::*;
 use wire::money_search_event as se;
@@ -303,7 +304,23 @@ fn a_target_is_seeded_from_the_stored_plan_and_previews_next_month() {
 fn typing_an_amount_asks_the_core_again_and_saving_finishes_the_page() {
     let mut d = driver();
     let route = a_category(&d);
+    // The category comes from the live example month and can already have a
+    // carry-enabled plan. This test starts with no plan before testing its toggle.
+    let Some(wire::route::Args::MoneyTarget(args)) = &route.args else {
+        panic!("target route");
+    };
+    let mut clear: wire::ActRequest = act::money::SetTarget {
+        amount_minor: None,
+        category_id: args.category_id.clone(),
+        month: args.month.clone(),
+        currency: Some(args.currency.clone()),
+        carry: None,
+    }
+    .into();
+    clear.invoke_key = format!("test:{}", centraid_screens::kit::act::fresh());
+    assert_eq!(d.act(clear).status, wire::ActStatus::Executed as i32);
     let i = push(&mut d, route);
+    assert!(!target_state(d.view(i)).carry);
     event(
         &mut d,
         i,
