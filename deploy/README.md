@@ -2,7 +2,7 @@
 
 One home for the artifacts that put `centraid-gateway` on a host — the container image, the OS service units and the VPS installer ([#1080][issue]). The protocol the gateway serves, its commands and its data directory are [docs/gateway.md](../docs/gateway.md).
 
-**There is one gateway, and a phone reaches it one way**: HTTPS, straight to the machine, pinning the certificate the gateway minted at its first `serve` ([R-1080-1][r1]). A gateway is any machine the member controls — the laptop at home, a VPS, a NAS — and everything in this directory follows from that shape:
+**There is one gateway, and a phone reaches it one way**: HTTPS, straight to the machine, pinning the certificate the gateway minted at its first `serve`. A gateway is any machine the member controls — the laptop at home, a VPS, a NAS — and everything in this directory follows from that shape:
 
 - **It listens, on one TCP port** (8443 unless `--bind` says otherwise), and it is the only thing in the product that does. Its listener is confined to `crates/gateway/src/server/serve.rs`, the one file `cargo xtask rules`' `no-listening-socket` allows; a second listener anywhere, that crate included, is a finding.
 - **No reverse proxy that terminates TLS, no ACME, no certbot and no domain.** The phone compares the certificate it is shown against the pin it scanned, so a proxy that terminates TLS presents a certificate the phone refuses. A port forward or a TCP pass-through in front of a gateway is fine.
@@ -41,4 +41,3 @@ The image runs `centraid-gateway serve --data-dir /var/lib/centraid` as an unpri
 `vps/install.sh` verifies **before** it unpacks (`SHA256SUMS`), checks the installed `centraid` binary's identity stamp against the release that claims to have published it, installs `centraid-gateway` beside it when the tarball carries it, and **never installs an OS service silently**: `--with-service` prints the `centraid-gateway install` commands, only `--yes` runs them, and enabling — `systemctl --user enable --now dev.centraid.gateway`, with `loginctl enable-linger` on a box nobody logs in to — is always left to the operator. A tarball without `centraid-gateway` installs no gateway and refuses `--with-service`; the release's prebuilt-core lane builds `--bin centraid` alone today ([#1080][issue] open item).
 
 [issue]: https://github.com/srikanth235/centraid/issues/1080
-[r1]: ../docs/decisions.md#backup-and-the-gateway

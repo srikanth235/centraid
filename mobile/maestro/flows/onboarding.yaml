@@ -1,5 +1,4 @@
-# Onboarding without sample data (docs/decisions.md, "Onboarding without sample
-# data"): a fresh install makes ONE vault — the member's, with its teaching
+# Onboarding without sample data: a fresh install makes ONE vault — the member's, with its teaching
 # starter rows — and every empty app is a tile that opens on its own day one.
 #
 # THE POINT OF THIS FLOW is what the shared specs cannot see: that Get started

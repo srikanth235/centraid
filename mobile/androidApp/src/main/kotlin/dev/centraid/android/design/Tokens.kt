@@ -118,7 +118,7 @@ public val NATIVE_EFFECT_ROLES: List<String> = listOf(
  * THE 400 KEY RESOLVES TO A 470 FACE ON PURPOSE. It is a LOWERING and not a
  * third weight: the key is the ramp's 400, the file is `instrument_sans_book`
  * (`usWeightClass` 470), and the touch step this table already carries is why
- * — see `docs/decisions.md` and the emitter's own note. Web and desktop draw
+ * — see the emitter's own note. Web and desktop draw
  * a true 400 and are untouched.
  */
 public val NATIVE_TYPE_FACES: Map<String, Map<Int, String>> = mapOf(

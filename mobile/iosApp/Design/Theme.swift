@@ -103,7 +103,7 @@ public let centraidColorRoles: [String] = [
 /// THE 400 KEY RESOLVES TO `InstrumentSans-Book` ON PURPOSE. It is a
 /// LOWERING and not a third weight: the key is the ramp's 400, the face is
 /// the derived 470 instance, and the touch step plus CoreText's grayscale
-/// antialiasing is why — see `docs/decisions.md` and the emitter's own note.
+/// antialiasing is why — see the emitter's own note.
 /// Web and desktop draw a true 400 and are untouched.
 public let centraidTypeFaces: [String: [Int: String]] = [
     "sans": [400: "InstrumentSans-Book", 600: "InstrumentSans-SemiBold"],

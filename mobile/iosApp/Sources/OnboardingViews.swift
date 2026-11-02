@@ -1,7 +1,6 @@
 import SwiftUI
 
-// ONBOARDING WITHOUT SAMPLE DATA (docs/decisions.md, "Onboarding without sample
-// data"): what a made vault imports is asked at the point of use, and what came
+// ONBOARDING WITHOUT SAMPLE DATA: what a made vault imports is asked at the point of use, and what came
 // in is one line (`imports.made`). This is the shell's half: the banner it draws.
 
 /// THE IMPORT'S STATUS LINE (DESIGN.md: "`StatusLine` is the one feedback

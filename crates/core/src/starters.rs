@@ -1,8 +1,7 @@
 //! THE STARTER ROWS: what a member's first vault holds the moment it is
 //! founded with `FOUND_CONTENT_STARTERS`.
 //!
-//! Onboarding's goal is time to the member's OWN data (docs/decisions.md,
-//! "Onboarding without sample data", `#onboarding-without-sample-data`), so
+//! Onboarding's goal is time to the member's OWN data, so
 //! these are ORDINARY ROWS OF THE MEMBER'S, with no mark and nothing to clean
 //! up: a vault they just made is not a blank wall, and every row here is one
 //! they edit, complete or delete like any other. There is no sample data: the

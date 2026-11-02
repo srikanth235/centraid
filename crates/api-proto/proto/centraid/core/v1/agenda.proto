@@ -478,8 +478,8 @@ message AgendaTask {
   string title = 6;
   optional string description = 7;
   // Todoist's scale: 0 is unset, 1..9 with HIGHER MORE URGENT — not RFC
-  // 5545's 1-is-highest. Ruled by D-1020-S5 (`docs/decisions.md`: the board
-  // sorts "priority desc"); `task.add` and `task.edit` store it as sent.
+  // 5545's 1-is-highest. The board
+  // sorts "priority desc"; `task.add` and `task.edit` store it as sent.
   int64 priority = 8;
   // As stored: a civil date or an instant.
   optional string due_at = 9;

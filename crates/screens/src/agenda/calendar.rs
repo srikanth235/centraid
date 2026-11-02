@@ -1,5 +1,4 @@
-//! CALENDAR → AGENDA, IMPORTED AND FOLLOWED (docs/decisions.md, "Onboarding
-//! without sample data", R-ONBOARD-4; #1127; #1135).
+//! CALENDAR → AGENDA, IMPORTED AND FOLLOWED (#1127; #1135).
 //!
 //! The phone is read by the shell (iOS EventKit, Android `CalendarContract`),
 //! which performs a [`wire::CalendarRead`] effect and answers a

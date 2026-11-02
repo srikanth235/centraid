@@ -74,8 +74,8 @@ final class FontRegistrationTests: XCTestCase {
 
     /// THE 400 REGISTER DRAWS THE 470 FACE, AND A RE-POINT REDS HERE.
     ///
-    /// Ruled 2026-08-19 and restored for this shell 2026-09-22 (#1029,
-    /// `docs/decisions.md`). The touch step the emitted table already carries
+    /// Ruled 2026-08-19 and restored for this shell 2026-09-22 (#1029).
+    /// The touch step the emitted table already carries
     /// grants a phone +2px size and +3px leading over a desktop pane at the same
     /// role, and that step scales the GLYPH without scaling the stroke's optical
     /// presence; CoreText compounds it, drawing with grayscale antialiasing
@@ -102,7 +102,7 @@ final class FontRegistrationTests: XCTestCase {
         XCTAssertEqual(
             centraidTypeFaces["sans"]?[400], "InstrumentSans-Book",
             "the sans 400 register is no longer lowered to the 470 face — see "
-                + "docs/decisions.md and the FACES table in "
+                + "the FACES table in "
                 + "contracts/tools/export-native-theme.ts"
         )
         XCTAssertTrue(
