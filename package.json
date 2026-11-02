@@ -47,7 +47,7 @@
     "pagefind": "^1.5.2",
     "typescript": "catalog:",
     "ultracite": "7.9.4",
-    "vitest": "4.1.10"
+    "vitest": "4.1.12"
   },
   "overrides": {
     "shell-quote": "1.8.4",
