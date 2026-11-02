@@ -50,7 +50,7 @@ Two secrets per vault in the platform store, and their sync postures are deliber
 | --- | --- |
 | LaunchAgent `~/Library/LaunchAgents/<label>.plist` / systemd user unit `~/.config/systemd/user/<label>.service` | `centraid-gateway install --data-dir <dir> [--bind <addr>]` |
 
-The command creates a missing data directory with mode 0700, writes the unit and **prints** the command that starts it; it never enables it. `--dry-run` prints the unit and its path and writes nothing. Hand-edited units may be replaced on reinstall. Service install is **opt-in, default off** ([decisions.md](decisions.md) H5). `deploy/vps/install.sh` installs from a release and _offers_ a service rather than enabling one, and the container image runs `serve` itself ([deploy/README.md](../deploy/README.md)).
+The command creates a missing data directory with mode 0700, writes the unit and **prints** the command that starts it; it never enables it. `--dry-run` prints the unit and its path and writes nothing. Hand-edited units may be replaced on reinstall. Service install is **opt-in, default off**. `deploy/vps/install.sh` installs from a release and _offers_ a service rather than enabling one, and the container image runs `serve` itself ([deploy/README.md](../deploy/README.md)).
 
 **Packaging / declarative modules (issue #504):** Docker, Nix flakes, and future NixOS modules must **not** become a second independent writer of the same unit files. The canonical generator is `centraid-gateway install` (use `--dry-run` as the template source). A NixOS module, if added later, must call or bit-for-bit replicate that generator's output. Declarative host config may feed **into** the generator or the `gateway` flags.
 
