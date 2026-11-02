@@ -154,7 +154,16 @@ Comments are forward-facing obligations: contract, rationale, warning or orienta
 | [references/threads-and-locks.md](references/threads-and-locks.md) | adding a thread, task, lock, runtime or `block_on` |
 | [references/protobuf-prost.md](references/protobuf-prost.md) | any `.proto`, `build.rs` or encode/decode |
 | [references/testing.md](references/testing.md) | writing or moving a test, a fixture or a clock |
-| [references/rules-index.md](references/rules-index.md) | a topic not covered above; ~230 pack rules by prefix, each a short file with a bad and good example |
+| [references/async-and-cancellation.md](references/async-and-cancellation.md) | writing `async` code, a timeout, a channel, shutdown, or handling a `Cancel` |
+| [references/error-design.md](references/error-design.md) | adding an error enum or variant, a conversion, or a refusal a shell sees |
+| [references/api-and-traits.md](references/api-and-traits.md) | adding a public type, trait, port or module boundary |
+| [references/unsafe-ffi.md](references/unsafe-ffi.md) | touching `core-ffi`, `assist-llama` engine, or any `unsafe` |
+| [references/observability.md](references/observability.md) | adding a log line, a subscriber or a diagnostic |
+| [references/serde.md](references/serde.md) | adding a serde type or parsing JSON |
+| [references/performance.md](references/performance.md) | optimising, adding request-path work, or a budget step is red |
+| [references/lint-rationale.md](references/lint-rationale.md) | why a reviewer checks something clippy does not enforce here (reference only; lints are not changed) |
+| [references/porting.md](references/porting.md) | porting code from C, Python or another language into a crate |
+| [references/rules-index.md](references/rules-index.md) | a topic not covered above; all 265 pack rules by prefix, each a short file with a bad and good example (some carry an override banner) |
 | [references/best-practices.md](references/best-practices.md) | designing an API, a type or a module layout |
 | [references/review-checklist.md](references/review-checklist.md) | reviewing a diff; priority order and report format |
 | [references/guides/](references/guides/) | the reasoning behind a rule: API Guidelines, Effective Rust, design patterns, Google and Microsoft guides |

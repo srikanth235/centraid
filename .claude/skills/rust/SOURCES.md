@@ -1,6 +1,6 @@
 # Sources
 
-Everything under [references/](references/) that is not named `threads-and-locks.md`, `protobuf-prost.md` or `testing.md` was copied from the two packs below, at the pinned commits. Those three files, [SKILL.md](SKILL.md) and [CENTRAID.md](CENTRAID.md) are written for this repository. Nothing executable was copied: only markdown and the license texts. Every copied file was reformatted by oxfmt, and links were adapted (see each pack). The license texts are in [licenses/](licenses/).
+Everything under [references/](references/) that is not listed under "Written for this repository" was copied from the two packs below, at the pinned commits. Those three files, [SKILL.md](SKILL.md) and [CENTRAID.md](CENTRAID.md) are written for this repository. Nothing executable was copied: only markdown and the license texts. Every copied file was reformatted by oxfmt, and links were adapted (see each pack). The license texts are in [licenses/](licenses/).
 
 ## leonardomso/rust-skills
 
@@ -11,11 +11,11 @@ Everything under [references/](references/) that is not named `threads-and-locks
 | License | MIT, "Copyright (c) 2025 Leonardo Maldonado": [licenses/leonardomso-rust-skills-LICENSE](licenses/leonardomso-rust-skills-LICENSE) |
 | Pack NOTICE | none |
 
-**Copied:** 228 of the pack's 265 rule files, unchanged except for link edits, to [references/rules/](references/rules/). The pack's `SKILL.md` category index became [references/rules-index.md](references/rules-index.md): the quick-reference lists and the priority table were kept, the "Recommended Cargo.toml Settings", "How to Use" and attribution sections and the lint category were removed, and a header pointing at [CENTRAID.md](CENTRAID.md) was added.
+**Copied:** all 265 rule files to [references/rules/](references/rules/). 228 are unchanged. The 37 listed below contradict this repository, so each opens with a one-line "Repository override" banner pointing at [CENTRAID.md](CENTRAID.md); the rest of the file is unchanged. The pack's `SKILL.md` category index became [references/rules-index.md](references/rules-index.md): the quick-reference lists and the priority table were kept, the "Recommended Cargo.toml Settings", "How to Use" and attribution sections and the lint category were removed, and a header pointing at [CENTRAID.md](CENTRAID.md) was added; the 37 overridden rules are marked in it.
 
-**Link edits:** a rule's link to a dropped rule now points at that rule's page in the pack at the pinned commit.
+**Link edits:** a few links inside rule files point at the pack's page for an overridden rule at the pinned commit.
 
-**Left out (37), and why:**
+**Overridden (37, copied with a banner), and why:**
 
 | Files | Reason |
 | --- | --- |
@@ -44,13 +44,15 @@ The pack's `checks/` directory (scripts, a Cargo project), `AGENTS.md`, `CLAUDE.
 | --- | --- | --- |
 | `skills/rust-best-practices/SKILL.md` | [references/best-practices.md](references/best-practices.md) | Front matter removed; a note about this repository added at the top; the advice to adopt the pack's lint files removed; the `bevy.md` reference and the workspace-lints phrase removed; reference paths pointed at `guides/` |
 | `skills/rust-review/SKILL.md` | [references/review-checklist.md](references/review-checklist.md) | Front matter removed; a note added; the Bevy framework and ECS bullets and the closing "offer the lints" section removed; the pointer to the other skill re-pointed at the local files |
+| `skills/rust-port/SKILL.md` | [references/porting.md](references/porting.md) | Front matter removed; a note added |
+| `lints/lints.toml`, `lints/clippy.toml` | [references/lint-rationale.md](references/lint-rationale.md) | Wrapped in fenced blocks under a "reference only, not adopted" header; not usable as config files |
 | `skills/rust-best-practices/references/{google-rust-style-guide,effective-rust,rust-design-patterns,rust-api-guidelines,microsoft-rust-guidelines}.md` | [references/guides/](references/guides/) | None beyond oxfmt |
 
-**Left out:** `skills/rust-port/` (porting from other languages: no use here), `skills/rust-best-practices/references/bevy.md` (the repository does not use Bevy), all `evals/` directories, `lints/` (`lints.toml`, `clippy.toml` and the `check` crate: configuration the repository does not adopt, see CENTRAID.md), `scripts/`, `benchmarks/`, `examples/`, `tests/`, `plugin.json`, `assets/`, `.gitattributes` and the repository-level docs.
+**Left out:** `skills/rust-best-practices/references/bevy.md` (the repository does not use Bevy), all `evals/` directories, `lints/check` (a Cargo project), `scripts/`, `benchmarks/`, `examples/`, `tests/`, `plugin.json`, `assets/`, `.gitattributes` and the repository-level docs.
 
 ## Written for this repository
 
 | File | Basis |
 | --- | --- |
 | [SKILL.md](SKILL.md), [CENTRAID.md](CENTRAID.md) | `AGENTS.md`, `docs/coding-standards.md`, `docs/traps/`, `crates/core-ffi/CONTRACT.md`, `crates/xtask/README.md`, `TESTING.md` and a read of `crates/{core,vault,gateway,core-ffi,screens,api-proto}`; the shape follows `skills/code/swift-swiftui` of [daveebbelaar/bama](https://github.com/daveebbelaar/bama) (MIT, commit `639893c397278256f1ae204dd8f837eb82bd6527`), which is a model for structure only and no text was copied |
-| [references/threads-and-locks.md](references/threads-and-locks.md), [references/testing.md](references/testing.md), [references/protobuf-prost.md](references/protobuf-prost.md) | The same, and `crates/api-proto/README.md`; no pack covers prost or the repository's seams |
+| [references/threads-and-locks.md](references/threads-and-locks.md), [testing.md](references/testing.md), [protobuf-prost.md](references/protobuf-prost.md), [async-and-cancellation.md](references/async-and-cancellation.md), [error-design.md](references/error-design.md), [api-and-traits.md](references/api-and-traits.md), [unsafe-ffi.md](references/unsafe-ffi.md), [observability.md](references/observability.md), [serde.md](references/serde.md), [performance.md](references/performance.md) | The same, and `crates/api-proto/README.md`; no pack covers prost or the repository's seams. External works are linked, not copied: the [Tokio tutorial](https://tokio.rs/tokio/tutorial) and [Async book](https://rust-lang.github.io/async-book/) (MIT), the [Rustonomicon](https://doc.rust-lang.org/nomicon/) and [Performance Book](https://nnethercote.github.io/perf-book/) (MIT/Apache-2.0); the Rust API Guidelines are carried by the BeautifulRust digest |
