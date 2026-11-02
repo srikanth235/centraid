@@ -22,6 +22,25 @@ Where common advice disagrees, this file says which to follow and why. The diges
 - No `any`, no `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck`, no `as unknown as T`. If a suppression is truly needed, put it on one line with the rule name and a reason.
 - No `!` non-null assertions to quiet the compiler; narrow instead.
 
+### Diagnostic to fix
+
+Fix the first error first: later ones are often its echo. Rerun after each fix.
+
+| Diagnostic | Fix |
+| --- | --- |
+| TS2532 / TS18048 "possibly undefined" on `a[i]` or `map.get(k)` | `noUncheckedIndexedAccess`: narrow with `if (x === undefined) throw new Error("missing <what>")`, not `!` |
+| TS2322 "not assignable" on a literal typed `: T` | Use `satisfies T` so the literal keeps its narrow type, then fix the property the message names |
+| TS7053 "implicitly has an 'any' type" indexing an object | Type the key as `keyof typeof obj`, or make the object a `Record<Key, V>` |
+| TS2345 `unknown` / `string` not assignable to a union | Narrow with a guard or a parse at the edge; do not cast |
+| oxlint `typescript/no-explicit-any` | Use `unknown` and narrow, or a generic |
+| `typescript/consistent-type-imports`, `import/consistent-type-specifier-style` | `import type { X } from "./x"` as its own statement, not `import { type X }` |
+| `eslint/no-await-in-loop` | `await Promise.all(items.map(...))`; if order is the point, name it and suppress on that line with the reason |
+| `eslint/max-lines` (625) | Split the file by domain; do not raise the ceiling |
+| `unicorn/catch-error-name` | Name the catch binding `error` |
+| A restricted `mkdtemp`, `vi.useFakeTimers`, `Math.random` in a test | `tempDir()`, `useFakeClock()`, `seededRandom()` from `@centraid/test-kit` (the lint message names the subpath) |
+| vitest fails a test with no assertions | `expect.requireAssertions` is on in the kit presets: assert something, or call `expect.assertions(0)` for a deliberate assertion-free test |
+| `emitters` step or `mobile-jvm` reports drift in `packages/design` or `mobile` | Never edit the generated file: change the registry or emitter, rerun `bun contracts/tools/export-native-theme.ts` and `bun run format`, commit the result |
+
 ## 3. Type design
 
 | Need | Use |
@@ -83,9 +102,28 @@ Where common advice disagrees, this file says which to follow and why. The diges
 - Each rule is asserted in one owning test file; a second copy drifts.
 - Type-level contracts get type tests (`expectTypeOf`), not runtime ones.
 
-## 9. Performance
+## 9. Performance: a measuring loop
 
-Measure first. Then: avoid repeated work in hot loops (hoist, cache, index with a `Map`), stream large files instead of reading them whole, and keep work whose cost grows with the data off interactive paths.
+Fast is a number, not a feeling. Every change starts and ends with a measurement.
+
+```text
+reproduce -> measure (the real runtime, not watch mode) -> find the line -> fix -> measure again -> commit with the numbers
+```
+
+1. **Reproduce** with one command that runs the slow thing (a script, one vitest file) and prints its wall time.
+2. **Measure** with `performance.now()` around the suspect step, several runs, and the median. Run it under the runtime the repo ships (`bun` for scripts, `node` for the vitest runner), not under a debugger.
+3. **Find the line** with the tool for the symptom (table below). Read the profile as text.
+4. **Fix** the line the profile names: hoist repeated work out of the loop, index with a `Map`, stream instead of reading whole files, start independent work together with `Promise.all`, and keep cost that grows with the data off interactive paths.
+5. **Measure again** with the same command. Put before and after in the commit message: "theme export 4 s, was 11 s".
+
+| Symptom | Tool |
+| --- | --- |
+| A script is slow | `bun --cpu-prof --cpu-prof-md script.ts` (writes a markdown profile you can grep), or `node --cpu-prof --cpu-prof-dir=<dir> script.mjs` (a `.cpuprofile` for DevTools or speedscope) |
+| Memory grows | `bun --heap-prof-md script.ts`, or `node --heap-prof` |
+| One vitest file is slow | `bun run --cwd packages/<pkg> test -- <file> --reporter=verbose` shows per-test time; time the setup with `performance.now()` |
+| A step wastes time waiting | Log `performance.now()` deltas between awaits; a sequential `await` chain of independent calls shows as a staircase |
+
+A profile file records the process environment, and a shell started by an agent carries its tokens. Write profiles to the scratchpad or a temp directory, delete them after reading, never commit them.
 
 ## 10. Final checklist
 
@@ -115,6 +153,8 @@ TypeScript here is tooling: the design token registry and its emitters (`package
 - **There is one page and one face.** Shell and every app share `--bg` / `colors.bg`; an app never retunes it (a per-app tone moved only `--bg` and inverted the paper metaphor; if a tone ever returns it must carry the whole surface set). `PAGE` and `WALL` are deliberately not re-exported. Every role is Instrument Sans; `--t-mono` is tabular figures, not monospace; `--font-code` is only for code, an inline literal or a path. Under 4px only `--sp-hair` (1px), `--sp-gutter` (2px) or `--sp-chip` (3px) exist. The element layer (`packages/design/src/elements`, `kit.css`) holds no design decisions: a literal or new `--name` there belongs in the token layer and `src/contract.ts`. No linter checks the face, radius and spacing rules; review does.
 - **A guard on a generated-and-committed pair must watch the source.** When a file is generated and also committed (`mobile/iosApp/Resources/Info.plist` from `mobile/iosApp/project.yml`), a test pointed at the visible generated file goes green while the source is wrong, and the next regeneration restores the defect (a background-task identifier was right in the plist and wrong in `project.yml`, so iOS would have terminated the app). Assert against the source, and separately that the generated half matches it; if only one is affordable, take the source. Being in git says nothing about which file a human edits. To find the next pair, list the tracked files under `mobile/iosApp/Resources` and grep for `GENERATED` / `DO NOT EDIT`.
 
+**Done when** `bun run check` is green: it runs `format:check`, oxlint with `--deny-warnings`, the product lints, `tsc` and vitest per workspace, and the release-script tests. A single package's vitest or `tsc` alone is not enough.
+
 ## References
 
 Read when the task touches the area:
@@ -123,4 +163,4 @@ Read when the task touches the area:
 - `references/vitest-fixtures.md`: shared fixtures with `test.extend`.
 - `references/vitest-type-testing.md`: asserting type-level contracts.
 
-From [typescript-best-practices](https://github.com/ofershap/typescript-best-practices) by Ofer Shapira and [antfu/skills](https://github.com/antfu/skills) by Anthony Fu (MIT; [licenses](licenses/)).
+From [typescript-best-practices](https://github.com/ofershap/typescript-best-practices) by Ofer Shapira and [antfu/skills](https://github.com/antfu/skills) by Anthony Fu (MIT; [licenses](licenses/)). The diagnostic table and the measuring loop adapt the Swift and performance skills of [Bama](https://github.com/daveebbelaar/bama) by Dave Ebbelaar (MIT, [license](licenses/Bama-LICENSE)).
