@@ -38,6 +38,21 @@ Distilled from the Google Python Style Guide and three of Owen Lamont's Python s
 - **Dispatch on a finite set** with a mapping or `match`; if the same switch appears in two functions, pick the case once and pass the result (one `Protocol` implementation per case).
 - **Composition over inheritance;** a base plus one level at most. A class earns its place by owning state; a method that never reads `self` belongs at module level.
 
+### Traceback to fix
+
+Fix the first error first: later ones are often its echo.
+
+| Symptom | Fix |
+| --- | --- |
+| `ModuleNotFoundError` for a sibling module under `python3 -I` | `-I` leaves both the script's directory and the current directory off `sys.path`. Insert `HERE` the way `eval/build_sets.py` does (`sys.path.insert(0, str(HERE))`), or run the test with `python -m unittest test_x` from inside its directory, as `run_cpu_tests.py` does |
+| `NATIVETOOLS` unset, or `FileNotFoundError` for `target/debug/nativetools` | `eval/lib.py` defaults to `target/debug/nativetools`. Build it (`cargo build -p centraid-nativetools --bin nativetools`) or export `NATIVETOOLS` as an absolute path |
+| Tokenizer or config not found with `HF_HUB_OFFLINE=1` | Point `HF_HOME` at a cache holding the tokenizer and config of Qwen/Qwen3.5-0.8B (no weights). The suite raises `SkipTest`, which the runner reports as `skipped:` and fails |
+| `build_sets.py check` says `sets/<file> is not the file FROZEN.md records` | The frozen set changed. Restore it; a new freeze goes through `build_sets.py` into another directory, is checked, and is recorded in `FROZEN.md`. Never edit the hash to match |
+| `check` fails because held-out files are missing | Those files are held out of a public checkout; the check says so by failing. Run it where the private data version is fetched |
+| `pip` reports `THESE PACKAGES DO NOT MATCH THE HASHES` or requires pinned versions | Install only from `requirements-ci.txt` with `--require-hashes`. After editing `requirements-ci.in`, recompile the pinned file (its header holds the `uv pip compile` command) instead of installing loose |
+| `run_cpu_tests.py` red on `skipped:` or a module that ran zero tests | A skip is a failure here. Provide what the test looks for (binary, tokenizer cache, public worlds via `python3 artefacts.py fetch --public-only`) rather than catching `SkipTest` |
+| A test dirtied the tree (`git status` shows a tracked file changed) | Point the output at a `tempfile` directory; the suite's tests must not write tracked files |
+
 ## 4. Errors
 
 - Raise specific exceptions with messages that name the bad value: `raise ValueError(f"bad seed {seed!r}")`. Chain with `raise NewError(...) from err` to keep the cause.
@@ -98,7 +113,28 @@ Formatting is the formatter's job; these are the rules a formatter cannot enforc
 
 - Pin exact versions, with hashes, for anything CI installs (`pip install --require-hashes`). Adding or bumping a dependency updates the pinned file in the same change.
 - Keep the import surface small: import heavy libraries (ML frameworks) inside the functions that need them when most callers don't. Avoid mutable module-level state; a cache or registry is the acceptable kind, and private.
-- Profile (`cProfile`, `time.perf_counter`) before optimising. Then stream instead of loading, batch, move hot loops into vectorised library calls, cache pure results keyed by their inputs, and parallelise independent processes with a bounded pool.
+
+### Performance: a measuring loop
+
+```text
+reproduce -> measure (same interpreter, same inputs) -> find the line -> fix -> measure again -> commit with the numbers
+```
+
+1. **Reproduce** with one command on fixed input and a fixed seed, so two runs are comparable.
+2. **Measure** with `time.perf_counter()` around the step, several runs, the median. Do not time the first run: imports and caches distort it.
+3. **Find the line** with the tool for the symptom:
+
+   | Symptom | Tool |
+   | --- | --- |
+   | Which function is slow | `python3 -m cProfile -o out.prof script.py args`, then `python3 -m pstats out.prof` (`sort cumtime`, `stats 20`) |
+   | One loop or call is slow | `time.perf_counter()` before and after; `timeit` for a pure expression |
+   | Memory grows | `tracemalloc.start()`, then `tracemalloc.take_snapshot().statistics("lineno")[:10]` |
+   | Many interpreters run slower than one | Oversubscribed threads: `run_cpu_tests.py` gives each interpreter `cores // jobs` of `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`; set them the same way for your own parallel runs |
+
+4. **Fix:** stream instead of loading, batch, move hot loops into vectorised library calls, cache pure results keyed by their inputs, parallelise independent processes with a bounded pool.
+5. **Measure again** with the same command and put before and after in the commit message: "eval pass 9 s, was 31 s".
+
+A `.prof` file or profiler output can capture the environment, and a shell started by an agent carries its tokens. Write it to the scratchpad, delete it after reading, never commit it. The training and VM jobs under `train/` are outside CI; measure them where they run.
 
 ## 10. Final checklist
 
@@ -121,6 +157,8 @@ Python lives in `experiments/toolchat/native`: the authoring, training and evalu
 - Scripts run with `python3 -I`. GPU and VM jobs under `train/` are outside CI.
 - The tree has no pytest, ruff or mypy gate; the `from __future__ import annotations` line stays in every module.
 
+**Done when** `python3 experiments/toolchat/native/run_cpu_tests.py --jobs 4` exits 0 in the environment its docstring names (`NATIVETOOLS`, `HF_HOME` with `HF_HUB_OFFLINE=1`, `EVAL_VAULTS`, the two integration switches), with no skipped test and no modified tracked file.
+
 ## References
 
 Read these when you need the reasoning behind a rule. Two of the sources recommend tools this tree does not use (pytest, ruff, uv, mypy as a gate, Pydantic, pandas); take the rule, not the tool. The tree uses `unittest`, pip with `--require-hashes`, and `run_cpu_tests.py`.
@@ -130,4 +168,4 @@ Read these when you need the reasoning behind a rule. Two of the sources recomme
 - `references/error-handling.md` (https://github.com/owenlamont/skills): the error-handling skill, copied. Custom exceptions, narrow catches, fail-fast, log severity. Read when designing an exception hierarchy or a catch.
 - `references/datetime.md` (https://github.com/owenlamont/skills): the datetime skill, copied. Aware datetimes, `zoneinfo`, ISO 8601, the calendar-day pitfall. Read before parsing, storing or comparing times.
 
-Adapted from the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html) (CC-BY 3.0, [license](licenses/google-styleguide-LICENSE); condensed and adapted here) and [Owen Lamont's skills](https://github.com/owenlamont/skills) (MIT, [license](licenses/owenlamont-skills-LICENSE)).
+Adapted from the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html) (CC-BY 3.0, [license](licenses/google-styleguide-LICENSE); condensed and adapted here) and [Owen Lamont's skills](https://github.com/owenlamont/skills) (MIT, [license](licenses/owenlamont-skills-LICENSE)). The traceback table and the measuring loop adapt the Swift and performance skills of [Bama](https://github.com/daveebbelaar/bama) by Dave Ebbelaar (MIT, [license](licenses/Bama-LICENSE)).
