@@ -1,6 +1,7 @@
 ---
 name: product-intuition
-description: The owner's product judgement for Centraid. Use for product, scope, UX, feature, naming, refusal, or trade-off decisions, especially where the established principles or non-goals apply.
+description: >-
+  The owner's product judgement for Centraid, for deciding what to build, how much, and how it should behave without asking. Use for any product, scope, UX, feature or trade-off question; "should we", "what should X do", "is this in scope", "how should this screen behave"; naming or wording anything a member reads; adding an app, screen, setting or feature; deciding what to refuse; and whenever a change touches Locker, backup or the gateway, sync and phone-store following, the on-device assistant, identity and enrollment, search, trash and deletion, or performance at scale. It states what Centraid is, the principles, the non-goals, the domain rulings, and when to stop and ask the owner.
 ---
 
 # Product intuition
@@ -9,7 +10,7 @@ Centraid is a personal, local-first superapp: one shell wraps a fixed set of fir
 
 Use the governing principles and deliberate non-goals below as settled product rulings. Apply them directly when they answer a question. Detailed domain rulings are in the linked references; consult the relevant one when a change touches that domain.
 
-## 2. The governing principles
+## Governing principles
 
 Most rulings are one of these applied to a domain.
 
@@ -24,7 +25,7 @@ Most rulings are one of these applied to a domain.
 9. **Calm, honest, concrete.** Short sentences, no exclamation, no apology, no jargon, no exception strings. The product says what happened and what to do, once, where the member first meets it.
 10. **A control that does nothing is a lie.** No setting without a consumer, no tab that opens onto nothing, no tile that is always loading, no field that nothing reads. Delete it.
 
-## 3. Deliberate non-goals
+## Deliberate non-goals
 
 These are decided. Do not build them, propose them in passing, or leave a hook "for later". Raising one means asking the owner to reverse a ruling, not slipping it into a change.
 
@@ -54,7 +55,7 @@ These are decided. Do not build them, propose them in passing, or leave a hook "
 
 Ask these in order. The first one that bites usually settles it.
 
-1. **Is it a non-goal (section 3)?** If it is a shaped version of one (a "lightweight share", a "just this once" public link, a hosted helper), it is still the non-goal.
+1. **Is it a deliberate non-goal (above)?** If it is a shaped version of one (a "lightweight share", a "just this once" public link, a hosted helper), it is still the non-goal.
 2. **Does it hold for a member with years of data on one phone, offline, after losing the phone?** Check the year-3 volume, the empty vault, the restored vault and the first launch.
 3. **Does it leak anything to the gateway or off the phone?** Content, names, schema, coordinates, tile requests, push payloads, a listing that links vaults. If yes, the design is wrong, not the leak.
 4. **Does it make the UI lie?** Emptiness for failure, health for not-checked, "backed up" for imported, zero for no data, a time the member did not choose, a destruction the app cannot perform.
@@ -64,3 +65,18 @@ Ask these in order. The first one that bites usually settles it.
 8. **Would the owner want this to be a bar to maintain?** A new app, setting, tab or wire number is a permanent cost. Reserve numbers rather than reusing them. Fewer places is better.
 
 When a question survives all of these, it is a genuine product call: what the product is, who it is for, what to give up, a new surface, a change to a non-goal, anything that reverses an instinct here. Stop, write the options with a recommendation and what each costs, and put it to the owner. Do not decide it by implementing one answer. Rulings are judged on their merits for the product as it is now; if one here no longer holds, say so to the owner rather than working around it.
+
+## Final checklist
+
+- [ ] Not a non-goal, and not a shaped version of one.
+- [ ] The phone stays the only writer; nothing queues for, relays through, or is readable by the gateway.
+- [ ] Works offline, and at year-3 volume on a mid-range phone, and after a restore.
+- [ ] No secret in an index, log, queue, backup in the clear, or the assistant's reach; Locker reads nothing while locked and a relock wipes.
+- [ ] Every claim on screen is true: failure, partial, unchecked and unacknowledged are each said, never drawn as empty or healthy.
+- [ ] Derived, not stored; one mechanism, one writer, one door.
+- [ ] Time and money carry their zone and currency; no invented time or amount.
+- [ ] Deleting goes through trash, with a restore path and a honest purge; backups are described as they are.
+- [ ] Copy is calm, concrete, sentence case, one noun per destination, no exception text, no host or transport word.
+- [ ] Every control and field has a consumer; nothing opens onto nothing.
+- [ ] Writes by the assistant or an import wait for the member's tap or a preview when ambiguous.
+- [ ] A genuine product call was put to the owner with options and a recommendation, not guessed.

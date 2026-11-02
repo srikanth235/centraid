@@ -6,7 +6,7 @@ description: >-
 
 # Changing the Rust/shell C ABI
 
-The ABI has five symbols. A feature normally adds a protobuf request kind to `centraid_call`, not a symbol. The normative rules are [crates/core-ffi/CONTRACT.md](../../../crates/core-ffi/CONTRACT.md); read it and [crates/core-ffi/README.md](../../../crates/core-ffi/README.md) in full before changing the boundary. The contract's clauses and tests settle ownership, status, lifecycle, cancellation, configuration, and request behavior. Do not restate or weaken those rules here.
+The ABI has five symbols. A feature normally adds a protobuf request kind to `centraid_call`, not a symbol. The normative rules are [crates/core-ffi/CONTRACT.md](../../../crates/core-ffi/CONTRACT.md); read it and [crates/core-ffi/README.md](../../../crates/core-ffi/README.md) in full before changing the boundary. The contract's clauses and tests settle ownership, status, lifecycle, cancellation, configuration, and request behavior on the C side. The binding-side rules the contract does not state (threading, event buffering, one handle per vault, seed redaction, feature sets, JNA packaging) and the final checklist are in [references/bindings.md](references/bindings.md); read it before touching either binding.
 
 ## Change path
 
@@ -25,10 +25,13 @@ A signature change requires regenerating the committed header with `CENTRAID_WRI
 
 - Keep all unsafe operations in `marshal.rs` so the focused Miri coverage applies.
 - Preserve the exact contract behavior in both bindings; route every allocated buffer through the ABI's matching free path and make every result a typed answer or refusal.
-- Keep one event reader per core and do not add lossy buffering.
+- Keep one event reader per core and do not add lossy buffering: Kotlin's event flow stays `BufferOverflow.SUSPEND`.
+- Never touch the ABI on the UI thread. Kotlin hops to the core dispatcher and then calls `assertNotOnUiThread`; the assertion comes after the hop.
+- Zero the out-pointers before `centraid_next_event`, and treat `TIMEOUT` as a normal answer, not a failure.
+- Keep the seed out of every `toString` and log line.
 - Do not add feature switches to open configuration when the capability belongs in a request message.
 - Rebuild the Rust core for a target before running a shell against it; the mobile scripts and platform limits are documented in [mobile-verify](../mobile-verify/SKILL.md).
 
 ## Verification
 
-The ABI tests include `cargo test -p centraid-core-ffi`, a debug-fault panic case, and focused Miri coverage for `marshal.rs`. Check symbol count and `cargo xtask rules`; run the relevant mobile JVM gate when bindings change. The canonical commands, prerequisites, target limitations, and working-directory notes are in [mobile-verify/references/mobile-commands.md](../mobile-verify/references/mobile-commands.md).
+The ABI tests include `cargo test -p centraid-core-ffi`, a debug-fault panic case, and focused Miri coverage for `marshal.rs`. Check symbol count and `cargo xtask rules`; run the relevant mobile JVM gate when bindings change. The canonical commands, prerequisites, target limitations, and working-directory notes are in [mobile-verify/references/mobile-commands.md](../mobile-verify/references/mobile-commands.md). Before calling the change done, walk the [final checklist](references/bindings.md#final-checklist).

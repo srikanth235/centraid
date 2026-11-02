@@ -27,3 +27,13 @@ Use [the mobile command and capability reference](references/mobile-commands.md)
 - Use the demo vault for app checks. Never seed a test from a live vault copy.
 
 For the C ABI's normative rules and boundary invariants, see [core-ffi](../core-ffi/SKILL.md) and [its contract](../../../crates/core-ffi/CONTRACT.md).
+
+## Final checklist
+
+- [ ] Behaviour proven in Rust (`cargo test -p centraid-screens`, `cargo xtask rules`) where it lives there
+- [ ] `cargo xtask gate --profile mobile-jvm` green
+- [ ] Core rebuilt for each platform you ran (`ios-core.sh`, `android-core.sh`), with the mtime or `nm` check if the change does not show
+- [ ] Emitted design and word files regenerated and committed, not edited by hand
+- [ ] New iOS source or `.proto` file: `xcodegen generate` re-run
+- [ ] Same selector id on both platforms and listed in `flows/selectors.md`
+- [ ] Anything not run (simulator, emulator, device, snapshots) named as such, with the commands to hand off

@@ -16,8 +16,6 @@ export async function checkSkills(root = process.cwd()): Promise<SkillIssue[]> {
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
-  const issues: SkillIssue[] = [];
-
   const results = await Promise.all(
     entries.map(async (directory) => {
       const relative = `.claude/skills/${directory}/SKILL.md`;
@@ -74,8 +72,7 @@ export async function checkSkills(root = process.cwd()): Promise<SkillIssue[]> {
       return found;
     })
   );
-  issues.push(...results.flat());
-  return issues;
+  return results.flat();
 }
 
 if (import.meta.main) {

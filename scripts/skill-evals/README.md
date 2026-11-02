@@ -30,4 +30,4 @@ For each case, provide the prompt to the model with the repository available. Re
 
    Prompt: “For a new vault field today, should I add a numbered migration, or edit the baseline? What else must stay in sync?”
 
-   Expected: consult current repo artifacts and select `vault-change` plus `sqlite`; explain the current single-baseline policy, schema digest, generated outputs, and affected tests. Fail if it relies on a historical migration policy, suggests adding a numbered migration, or answers without checking current repository guidance.
+   Expected: consult current repo artifacts and select `vault-change` plus `sqlite`; explain the release-dependent policy (edit the single baseline before the first release; append a numbered rung after it), check whether a release exists, and cover the schema digest, generated outputs, and affected tests. Fail if it edits a released baseline, adds a numbered migration before the first release, or answers without checking current repository guidance.

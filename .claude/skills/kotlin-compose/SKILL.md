@@ -13,7 +13,7 @@ Use Kotlin's type system to make invalid states hard to represent. Prefer immuta
 - Read the relevant repository code and contracts first. For core calls, read [`crates/core-ffi/CONTRACT.md`](../../../crates/core-ffi/CONTRACT.md).
 - Keep `commonMain` platform-free. Do not add ViewModels or a DI framework to the Android shell.
 - Generated files (`design/Tokens.kt`, `design/Catalog.kt`, and `design/Words.kt`) are outputs of the native export tools; edit their sources instead.
-- Use the version catalog in [`mobile/gradle/libs.versions.toml`](../../../mobile/gradle/libs.versions.toml). Current versions are Kotlin 2.4.20 and kotlinx.coroutines 1.11.0. Check actual APIs and language feature support against these versions before recommending a pattern.
+- Use the version catalog in [`mobile/gradle/libs.versions.toml`](../../../mobile/gradle/libs.versions.toml). Read the `kotlin` and `coroutines` versions there, and check APIs and language feature support against them before recommending a pattern.
 - Dependency changes include updated lockfiles. Follow [`mobile/README.md`](../../../mobile/README.md) for the applicable commands.
 
 ## Core practices
