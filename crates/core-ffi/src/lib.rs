@@ -262,8 +262,9 @@ pub unsafe extern "C" fn centraid_call(
         return CENTRAID_BAD_ARGUMENT;
     }
     // SAFETY: the caller's promise. `handle_of` refuses a null pointer, so the
-    // reference below is to storage the caller said is live.
-    let Some(core) = (unsafe { marshal::handle_of(handle) }) else {
+    // reference below is to storage the caller said is live. Keep our own
+    // state owner through dispatch and panic reporting.
+    let Some(core) = (unsafe { marshal::handle_of(handle) }).cloned() else {
         return CENTRAID_BAD_ARGUMENT;
     };
     // SAFETY: as above, for `req`/`len`.
@@ -311,7 +312,7 @@ pub unsafe extern "C" fn centraid_call(
             unsafe { marshal::hand_over(encoded, out_buf, out_len) };
             code
         }
-        Err(_) => unsafe { poison(core, "call", answer_id, out_buf, out_len) },
+        Err(_) => unsafe { poison(&core, "call", answer_id, out_buf, out_len) },
     }
 }
 
@@ -338,8 +339,12 @@ pub unsafe extern "C" fn centraid_next_event(
     if out_buf.is_null() || out_len.is_null() {
         return CENTRAID_BAD_ARGUMENT;
     }
-    // SAFETY: the caller's promise; `handle_of` refuses null.
-    let Some(core) = (unsafe { marshal::handle_of(handle) }) else {
+    // Own the shared state before waiting. `centraid_close` may release the
+    // caller's boxed Handle while this entered event read is still running;
+    // a reference borrowed from that box cannot survive the wait.
+    // SAFETY: the caller's promise; `handle_of` refuses null. The raw borrow
+    // ends after this clone, before any wait or screen callback runs.
+    let Some(core) = (unsafe { marshal::handle_of(handle) }).cloned() else {
         return CENTRAID_BAD_ARGUMENT;
     };
     let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
@@ -358,7 +363,7 @@ pub unsafe extern "C" fn centraid_next_event(
         Ok(Ok(None)) => CENTRAID_TIMEOUT,
         Ok(Err(error)) => code_for(&error),
         // SAFETY: both out-pointers were checked non-null on entry.
-        Err(_) => unsafe { poison(core, "next_event", 0, out_buf, out_len) },
+        Err(_) => unsafe { poison(&core, "next_event", 0, out_buf, out_len) },
     }
 }
 

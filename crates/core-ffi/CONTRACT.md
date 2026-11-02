@@ -210,9 +210,11 @@ Test: `a_timeout_allocates_nothing`
 
 `centraid_close` releases every thread parked in `centraid_next_event`, which returns `CLOSED` (-3) once the events already accepted have been handed out. A close is **not** a discard: accepted events come out first.
 
+An entered event read keeps its own shared-state owner through waiting and screen callbacks. Releasing the caller's boxed handle does not free state an entered read is still using.
+
 After `close` the handle pointer is **dangling**. A shell must null its own copy; no ABI can make a use-after-free safe. `close` on a null pointer is `BAD_ARGUMENT`, and `close` twice on the same pointer is undefined — that is a statement about C and not a gap in this library.
 
-Test: `close_unblocks_next_event_with_a_terminal_answer`
+Tests: `close_unblocks_next_event_with_a_terminal_answer`, `an_entered_event_read_keeps_its_state_after_close_releases_the_box`
 
 ## 8. Calls after close return a typed error
 

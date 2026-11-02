@@ -299,7 +299,7 @@ struct StageImage: View {
             image = StageImageCache.cached(path, maxPixel)
             if image != nil { return }
             let loaded = await Task.detached(priority: .userInitiated) {
-                StageImageCache.decode(path, maxPixel)
+                await StageImageCache.decode(path, maxPixel)
             }.value
             image = loaded
         }
@@ -307,21 +307,23 @@ struct StageImage: View {
 }
 
 /// The decoded stills, by path and size. Small: a lightbox holds three pages
-/// and a strip, and anything older is cheap to decode again.
+/// and a strip, and anything older is cheap to decode again. Cache lookup and
+/// insertion stay on the main actor; ImageIO decoding stays in the caller's
+/// detached worker and only the finished UIImage crosses back.
 enum StageImageCache {
-    private static let cache: NSCache<NSString, UIImage> = {
+    @MainActor private static let cache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 48
         return cache
     }()
 
-    static func cached(_ path: String, _ maxPixel: Int) -> UIImage? {
+    @MainActor static func cached(_ path: String, _ maxPixel: Int) -> UIImage? {
         cache.object(forKey: "\(path)|\(maxPixel)" as NSString)
     }
 
     /// `kCGImageSourceCreateThumbnailWithTransform` is what makes it upright:
     /// the EXIF orientation is applied, and a sideways photograph is not.
-    static func decode(_ path: String, _ maxPixel: Int) -> UIImage? {
+    static func decode(_ path: String, _ maxPixel: Int) async -> UIImage? {
         guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil)
         else { return nil }
         let options: [CFString: Any] = [
@@ -333,7 +335,9 @@ enum StageImageCache {
         guard let decoded = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
         else { return nil }
         let image = UIImage(cgImage: decoded)
-        cache.setObject(image, forKey: "\(path)|\(maxPixel)" as NSString)
+        await MainActor.run {
+            cache.setObject(image, forKey: "\(path)|\(maxPixel)" as NSString)
+        }
         return image
     }
 }
@@ -621,7 +625,7 @@ private struct StageFrame: View {
         .task(id: path) {
             image = StageImageCache.cached(path, 160)
             if image != nil { return }
-            image = await Task.detached(priority: .utility) { StageImageCache.decode(path, 160) }.value
+            image = await Task.detached(priority: .utility) { await StageImageCache.decode(path, 160) }.value
         }
     }
 }

@@ -1652,3 +1652,107 @@ fn the_backup_plane_doors_are_request_kinds_and_answer_an_unpaired_phone() {
         assert_eq!(error.code, wire::ErrorCode::InvalidRequest as i32);
     }
 }
+
+/// An entered event read owns its state until callbacks and panic reporting
+/// finish, even after close has released the C caller's boxed Handle.
+#[test]
+fn an_entered_event_read_keeps_its_state_after_close_releases_the_box() {
+    use centraid_core::screens::{ScreenCtx, ScreenHost, VaultRequest};
+    use std::sync::{Arc, Barrier, mpsc};
+
+    struct PausedScreen {
+        entered: mpsc::Sender<()>,
+        resume: Arc<Barrier>,
+        dropped: mpsc::Sender<()>,
+    }
+    impl Drop for PausedScreen {
+        fn drop(&mut self) {
+            let _ = self.dropped.send(());
+        }
+    }
+    impl ScreenHost for PausedScreen {
+        fn call(
+            &self,
+            _: &dyn ScreenCtx,
+            _: &wire::ScreenRequest,
+        ) -> centraid_core::Result<wire::ScreenResponse> {
+            unreachable!("this host only observes an event")
+        }
+        fn changed(&self, ctx: &dyn ScreenCtx, _: &[String]) {
+            self.entered.send(()).expect("the closer is waiting");
+            self.resume.wait();
+            assert!(
+                matches!(
+                    ctx.vault(VaultRequest::Phrase(wire::PhraseRequest::default())),
+                    Err(centraid_core::CoreError::Closed)
+                ),
+                "the callback still has a live, closed core"
+            );
+        }
+        fn wake(&self, _: &dyn ScreenCtx) {}
+        fn job_done(&self, _: &dyn ScreenCtx, _: u64, _: Vec<u8>) {}
+    }
+    let dir = centraid_ontology::scratch::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("a directory");
+    let mut config = centraid_core::CoreConfig::new(dir.join("not-created.db"));
+    config.create = false;
+    let core = centraid_core::Core::open(config).expect("a core");
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (dropped_tx, dropped_rx) = mpsc::channel();
+    let resume = Arc::new(Barrier::new(2));
+    core.attach_screens(Arc::new(PausedScreen {
+        entered: entered_tx,
+        resume: Arc::clone(&resume),
+        dropped: dropped_tx,
+    }));
+    assert!(core.events().push(wire::Event {
+        kind: Some(wire::event::Kind::Change(wire::ChangeEvent {
+            table: "note".to_owned(),
+            pk_set: Vec::new()
+        })),
+    }));
+    // Exactly the allocation `centraid_open` produces, with a test screen
+    // host in place of the real runtime so callback entry is observable.
+    let pointer = Box::into_raw(Box::new(core)) as usize;
+    let reader = std::thread::spawn(move || {
+        let mut buf = std::ptr::null_mut();
+        let mut len = 0;
+        // SAFETY: the owned Handle is live at entry. Close happens only after
+        // the screen callback confirms this read has entered.
+        let status = unsafe {
+            centraid_next_event(
+                pointer as *mut centraid_core::Handle,
+                30_000,
+                &raw mut buf,
+                &raw mut len,
+            )
+        };
+        if !buf.is_null() {
+            // SAFETY: the exact allocation and length returned by this read.
+            unsafe { centraid_free(buf, len) };
+        }
+        status
+    });
+    entered_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the read entered its callback");
+    // SAFETY: the box is released exactly once; the read already entered and
+    // no new operation starts through the pointer after this close.
+    assert_eq!(
+        unsafe { centraid_close(pointer as *mut centraid_core::Handle) },
+        CENTRAID_OK
+    );
+    assert!(
+        matches!(dropped_rx.try_recv(), Err(mpsc::TryRecvError::Empty)),
+        "the callback's core state is retained"
+    );
+    resume.wait();
+    assert_eq!(
+        reader.join().expect("the entered read returns"),
+        CENTRAID_OK
+    );
+    dropped_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the entered read releases its state");
+    std::fs::remove_dir_all(dir).expect("the scratch directory is removed");
+}
