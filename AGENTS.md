@@ -10,10 +10,10 @@ Centraid is a personal, local-first superapp: one shell wrapping many first-part
 
 ## Skills
 
-How to write code here lives in [`.claude/skills/`](.claude/skills), one skill per language: `rust`, `swift-swiftui`, `kotlin-compose`, `typescript`, `sqlite` and `python`.
+Guidance lives in [`.claude/skills/`](.claude/skills): `product-intuition` for what to build and how it should behave; one skill per language (`rust`, `swift-swiftui`, `kotlin-compose`, `typescript`, `sqlite`, `python`); and one per kind of change (`screen-change`, `core-ffi`, `vault-change`, `mobile-verify`).
 
 ## Conventions
 
 - **Docs describe current state.** When a change makes a doc wrong, fix the doc in the same change.
-- **Decisions** live in [docs/decisions.md](docs/decisions.md). Judge a ruling on its merits for the product as it is now, and raise it with the owner if it no longer holds.
+- **Product calls go to the owner.** When a choice is about what the product should be and the `product-intuition` skill does not settle it, ask rather than guess.
 - **Vocabulary**: a machine running `centraid-gateway` is a _gateway_, not a server or host. See [docs/glossary.md](docs/glossary.md).
