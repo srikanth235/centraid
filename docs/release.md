@@ -1,4 +1,4 @@
-# Release playbook (D1–D6 + three-number versioning)
+# Release playbook (D1–D5 + three-number versioning)
 
 How Centraid ships. One home for the ritual; skills are thin shims that point here.
 
@@ -130,15 +130,6 @@ The release agent **asserts** classification from the changelog headings; it doe
 - **Gateway image:** `ghcr.io/<owner>/centraid-gateway:<tag>`; **`latest` only for non-beta tags**.
 - **Gateway binary:** the `centraid` binary per triple from `lane-prebuilt-core.yml`, installed on a host by [`deploy/vps/install.sh`](../deploy/vps/install.sh) (below).
 - **Mobile beta:** TestFlight / Play internal track (`release.yml` → `lane-release-mobile.yml`, profiles `preview` / `production`), built with Gradle and XcodeGen + Xcode from `mobile/`. Never implied by a tag (J7).
-
-## D6 — Skills as shims
-
-| Skill | Role |
-| --- | --- |
-| `.claude/skills/release-prepare/SKILL.md` | Read this doc; run prepare checklist only |
-| `.claude/skills/release-publish/SKILL.md` | Read this doc; run publish only after maintainer go-ahead |
-
-Do not fork process text into skills.
 
 ## Workflows (fan-out)
 
