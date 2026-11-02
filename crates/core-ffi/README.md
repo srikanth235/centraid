@@ -72,7 +72,7 @@ Miri cannot run this crate's other tests: they open a vault, SQLite is a C libra
 
 ## The binding spike, host half (D-1020-D2-7)
 
-`spike/spike.c` is a C harness. The JVM half measured JNA (not the Foreign Function & Memory API — FFM is final in JDK 22 and Android's minimum is nowhere near it, so an Android shell will use JNA or JNI for years, and measuring the binding the product will ship is the point of a spike); that harness grew up into `mobile/core`'s JNA binding, and its throwaway Gradle project was deleted in [#1047](https://github.com/srikanth235/centraid/issues/1047). Its numbers are in the receipt.
+`spike/spike.c` is a C harness. The JVM half measured JNA (not the Foreign Function & Memory API — FFM is final in JDK 22 and Android's minimum is nowhere near it, so an Android shell will use JNA or JNI for years, and measuring the binding the product will ship is the point of a spike); that harness grew up into `mobile/core`'s JNA binding, and its throwaway Gradle project was deleted in [#1047](https://github.com/srikanth235/centraid/issues/1047).
 
 ```sh
 cargo test -p centraid-core-ffi --test spike -- --nocapture
@@ -80,4 +80,4 @@ cargo test -p centraid-core-ffi --test spike -- --nocapture
 cargo run -p centraid-core-ffi --bin spike-fixture -- /tmp/spike
 ```
 
-The spike fixes the ABI's **shape** the shells are written against. The numbers are `ci-linux-x64-4c` numbers and a floor; the device bindings (cinterop on iOS, JNA on Android) live in `mobile/core` (Android) and `mobile/iosApp/Sources/Core.swift` (iOS), and on-device numbers are an owner hand-off. The measured numbers are in the receipt.
+The spike fixes the ABI's **shape** the shells are written against. The numbers are `ci-linux-x64-4c` numbers and a floor; the device bindings (cinterop on iOS, JNA on Android) live in `mobile/core` (Android) and `mobile/iosApp/Sources/Core.swift` (iOS), and on-device numbers are an owner hand-off.

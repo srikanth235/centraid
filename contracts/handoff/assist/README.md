@@ -6,7 +6,7 @@ One named `pr` step, `prompt-injection`, plus the two functions behind it (`run_
 
 **Why it is a patch file.** `crates/xtask` is lane X3's this slot (§Cross-lane), and two lanes editing one file is how a step goes missing at a merge. It is applied in this lane's own commit touching nothing else, so the root can drop that commit and apply this file instead if X3's changes land first and conflict.
 
-Applied locally as `commit 5 of this lane` — see the receipt.
+Applied locally as `commit 5 of this lane` — see [#1020](https://github.com/srikanth235/centraid/issues/1020).
 
 ### The demonstrated red
 

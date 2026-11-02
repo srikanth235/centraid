@@ -78,7 +78,7 @@ NATIVETOOLS=$NT python3 eval/rollout.py export --screen-run screen/run.jsonl --s
     --sample-run sample/run.jsonl --sample-report sample/report.json --worlds $W --out OUT [-m 2] [-p 2]
 ```
 
-Decisions: `docs/decisions.md`, the #1044 section. Evidence: `receipts/issue-1044-*.md`. Where the work stands and what comes next: `HANDOFF.md`.
+Decisions: `docs/decisions.md`, the #1044 section. Evidence: [#1044](https://github.com/srikanth235/centraid/issues/1044). Where the work stands and what comes next: `HANDOFF.md`.
 
 ## Data versions
 

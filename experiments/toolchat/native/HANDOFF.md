@@ -2,7 +2,7 @@
 
 This is the state on 2026-10-06, written for the next coding agent.
 
-- Evidence and numbers: [`receipts/issue-1044-native-tool-task.md`](../../../receipts/issue-1044-native-tool-task.md) (the phase-0 section is last).
+- Evidence and numbers: [#1044](https://github.com/srikanth235/centraid/issues/1044).
 - How the task works (sets, the loop, layout): [`README.md`](README.md).
 - The runtime contract: [`SPEC.md`](SPEC.md).
 - Decisions: [`docs/decisions.md`](../../../docs/decisions.md), #1044 section; today's rulings are D-1044-16.
@@ -40,10 +40,10 @@ No model has been trained or scored on the `transaction` kind, and the shipped m
 - **Noise protects every word the runtime reads in a message** (`authored/noise.py`, 2026-10-08). That includes the nt14 and nt15 words `work`, `works`, `free`, `busy`, `available` and `throughout`, and the cue words `least`, `amount`, `effort` and `work` of `eval/regen.py`'s `SUPERLATIVE`. The two `Lexicon` tests of `authored/test_noise.py` pass, and `run_cpu_tests.py` tolerates no red test.
   - The next train build's noise pass leaves those words alone, so its augmented sessions can differ from the ones S2 trained on. Val and test gold and the current model are unchanged.
 - 82 % is a val number: every fix, ruling and soup choice was derived on val. Expect test lower until it is scored.
-- **The branch is on main** (`f5487678`, #1080) **plus #1078's on-device chat** (the `ios-app-simulator-aaef2f` branch), merged 2026-10-07. Main wins every overlap; the record is in the receipt's merge section.
+- **The branch is on main** (`f5487678`, #1080) **plus #1078's on-device chat** (the `ios-app-simulator-aaef2f` branch), merged 2026-10-07. Main wins every overlap; the record is on #1044.
   - `crates/nativetools` is ported to main's APIs. Harness worlds seal Locker cells under a fixed `HARNESS_LOCKER_KEY` (`crates/nativetools/src/vaultio.rs`) and name the generation through `Vault::locker_generation`, because the phone derives `K` from the 24 words.
   - Decoding is free and the grammar path is gone (D-1044-18, 2026-10-07): no `hard`/`soft` modes, no Lark exports, no llguidance, no llama.cpp arm. `free` is the only arm `bundle.py` and `kernel.py` accept, and `NATIVE_DECODING`, `NATIVE_LARK`, `NATIVE_SOFT_THRESHOLD` and `NATIVE_HANDLES` are refused. Free decoding was shown token-identical before and after the cut on the base model (CPU), and val v7.4 refreezes byte-identical on the cut runtime.
-  - Everything S2 does not depend on is gone from the branch (2026-10-07, D-1044-17): the canonical-English harness (`crates/evalsuite`, `crates/evalworld`, `crates/candidates`, `experiments/canon-model`, the `joined-*.jsonl` corpora and its manifest, registry and command declarations), the earlier toolchat rounds `v2` to `v8` and their scripts, and the `afm-spike`, `frontier-probe`, `qwen-mobile` and `qwen-sanity` experiments. They remain in history (`69d89575f` and earlier); the receipt's cleanup section lists them.
+  - Everything S2 does not depend on is gone from the branch (2026-10-07, D-1044-17): the canonical-English harness (`crates/evalsuite`, `crates/evalworld`, `crates/candidates`, `experiments/canon-model`, the `joined-*.jsonl` corpora and its manifest, registry and command declarations), the earlier toolchat rounds `v2` to `v8` and their scripts, and the `afm-spike`, `frontier-probe`, `qwen-mobile` and `qwen-sanity` experiments. They remain in history (`69d89575f` and earlier); #1044 lists them.
   - Val v7.4 refreezes byte-identical on the merged runtime.
   - #1078's product assistant (`crates/assist`, `crates/assist-llama`, `crates/core/src/assist`) is a separate, read-only tool registry of 18 `<app>.<verb>` reads over llama.cpp. Wiring this task's model and its 8 tools into it is integration work that has not started.
 
@@ -51,7 +51,7 @@ No model has been trained or scored on the `transaction` kind, and the shipped m
 
 | piece | where | what it is for |
 | --- | --- | --- |
-| Hard-core audit | receipt; owner rulings in D-1044-16 | the 63 sessions every model fails: model-hard 44, runtime 12, conventions 5, gold 2 |
+| Hard-core audit | #1044; owner rulings in D-1044-16 | the 63 sessions every model fails: model-hard 44, runtime 12, conventions 5, gold 2 |
 | Skill sessions | `authored/sessions/<W>_k1.py`, 21 train worlds, ids `<W>-K###`, tag `i3skill S<n>` | 355 verified sessions for the seven model-hard skills (referent, units/windows, read vs write, no invention, decline after a miss, vocabulary, look then pick). They are in the normal train build from now on. |
 | Fresh prompts + screen set | `eval/sets/roll-screen.jsonl` (2,869 sessions: 2,514 fresh rewordings of train-world messages, new to training, plus the 355 skill sessions) | prompts S2 has never seen, for rejection sampling |
 | Rollout driver | `eval/rollout.py`, `eval/test_rollout.py`; README "Rollouts" | `sets` (screen set; sample set of k copies `<id>-s<k>` of failures and of a seeded fraction of passes) and `export` (RFT records in train.jsonl format, DPO pairs `{id, chosen, rejected}` placed on the first failing turn) |

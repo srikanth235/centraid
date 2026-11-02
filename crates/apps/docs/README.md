@@ -57,4 +57,4 @@ The phone asks `docs_drive`, `docs_search` and `docs_document` through `AppQuery
 ## Fixtures
 
 - `tests/reads.rs` runs every query against a vault the product founds and Docs' own commands fill.
-- `tests/year3.rs` is the `year3-docs` axis: 8,000 documents over 400 folders four levels deep, with a shrunken profile in the same shape that runs by default. Measured numbers and their provenance are in the receipt and `tests/journeys.json`.
+- `tests/year3.rs` is the `year3-docs` axis: 8,000 documents over 400 folders four levels deep, with a shrunken profile in the same shape that runs by default. Measured numbers and their provenance are in `tests/journeys.json`.

@@ -221,7 +221,7 @@ It writes a deterministic year: 365 days of steps, active energy, resting heart 
 
 `dev.centraid.core.CentraidCore` (Kotlin) and `Core` (Swift) are the only things that know the ABI exists. Each opens, runs the handshake, checks the artifact identity, and hands up an answer or a typed refusal, never `null`. Every buffer the library allocates is copied into the host language's bytes and freed in the same `finally`, on every path including the timeout; on the JVM, `buffersHandedOver == buffersFreed` is asserted after two hundred calls. `call` is `suspend` and hops to the core dispatcher before it touches the ABI, and it asserts it is not on the UI thread **after** the hop — because the realistic bug is a shell that passed `Dispatchers.Main` as the core dispatcher, and that is the case the assertion has to catch. Read [`crates/core-ffi/CONTRACT.md`](../crates/core-ffi/CONTRACT.md) before touching any of it: ten clauses, each with a Rust test, and a shell's memory safety depends on claims that are not visible in the signatures.
 
-Above `:core`, Android's `dev.centraid.core.Screens` holds the screen runtime's `navigation`, `views` and `effects` as flows; iOS's `ScreenStore` holds the same over `Core`. `mobile/core` is the JVM binding spike (D-1020-D2-7) grown up; the numbers that fixed the ABI's shape are in the spike's receipt.
+Above `:core`, Android's `dev.centraid.core.Screens` holds the screen runtime's `navigation`, `views` and `effects` as flows; iOS's `ScreenStore` holds the same over `Core`. `mobile/core` is the JVM binding spike (D-1020-D2-7) grown up.
 
 ## Generated files — do not edit
 

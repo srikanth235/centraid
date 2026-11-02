@@ -54,4 +54,4 @@ The manifest's `confirmation: "required"` is what the **dispatching surface** as
 ## Fixtures
 
 - `tests/reads.rs` runs the library, the albums, the places, and the search against a vault the product founds and Photos' own commands fill.
-- `tests/year3.rs` is the `year3-photos` (90,000) and `year3-50k-assets` (50,000) axes, each with a trash shelf wider than its 200-row bound. A shrunken profile in the same shape runs by default. Measured numbers and their provenance are in the receipt and `tests/journeys.json`.
+- `tests/year3.rs` is the `year3-photos` (90,000) and `year3-50k-assets` (50,000) axes, each with a trash shelf wider than its 200-row bound. A shrunken profile in the same shape runs by default. Measured numbers and their provenance are in `tests/journeys.json`.
