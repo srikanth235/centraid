@@ -734,11 +734,14 @@ mod tests {
     #[test]
     fn a_failed_reread_preserves_dirty_words_and_a_refused_save_can_be_retried() {
         let driver = crate::testing::Driver::with_runtime(super::super::runtime());
-        let created = driver.act(act::notes::CreateNote {
+        let mut request: wire::ActRequest = act::notes::CreateNote {
             title: "Keep".into(),
             body: "before".into(),
             ..Default::default()
-        });
+        }
+        .into();
+        request.invoke_key = format!("test:{}", kit_act::fresh());
+        let created = driver.act(request);
         let output: serde_json::Value =
             serde_json::from_slice(&created.output).expect("create output");
         let id = output["id"].as_str().expect("created id");

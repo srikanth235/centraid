@@ -104,8 +104,8 @@ final class ShellModel: ObservableObject {
 
     /// THE LINK AND THE CHARGER, reported to the pass scheduler (`PassFacts.swift`).
     private let links = LinkReporter()
-    private var enteredBackground: NSObjectProtocol?
-    private var memoryWarning: NSObjectProtocol?
+    private var enteredBackground: NotificationObservation?
+    private var memoryWarning: NotificationObservation?
 
     init() {
         // **NOTHING UNDER THIS DIRECTORY GOES INTO iCLOUD BACKUP** (#1029, F5).
@@ -127,28 +127,23 @@ final class ShellModel: ObservableObject {
                 NSLog("centraid: the core did not open: %@", String(describing: error))
             }
         }
-        enteredBackground = NotificationCenter.default.addObserver(
+        enteredBackground = NotificationObservation(NotificationCenter.default.addObserver(
             forName: UIApplication.didEnterBackgroundNotification,
             object: nil,
             queue: .main
         ) { _ in
             VaultFileProtection.secure(directory: directory)
-        }
+        })
         // THE OS ASKING FOR MEMORY BACK IS THE ONLY THING THAT CLOSES A VAULT'S
         // CORE (#1025 S7-13, ruling F): the shelf closes every core but the one
         // in front, and a rested vault reopens on its next use.
-        memoryWarning = NotificationCenter.default.addObserver(
+        memoryWarning = NotificationObservation(NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.screens?.memoryWarning() }
-        }
-    }
-
-    deinit {
-        if let memoryWarning { NotificationCenter.default.removeObserver(memoryWarning) }
-        if let enteredBackground { NotificationCenter.default.removeObserver(enteredBackground) }
+        })
     }
 
     /// WHERE THIS DEVICE'S VAULTS LIVE. Documents and not Caches: a vault is the

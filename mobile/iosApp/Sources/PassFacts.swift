@@ -13,7 +13,7 @@ final class LinkReporter {
     private let queue = DispatchQueue(label: "dev.centraid.link")
     private weak var store: ScreenStore?
     private var path: NWPath?
-    private var observers: [NSObjectProtocol] = []
+    private var observers: [NotificationObservation] = []
 
     /// Start reporting to `store`. Idempotent.
     func start(_ store: ScreenStore) {
@@ -29,9 +29,9 @@ final class LinkReporter {
         monitor.start(queue: queue)
         let center = NotificationCenter.default
         observers = [
-            center.addObserver(forName: UIDevice.batteryStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            NotificationObservation(center.addObserver(forName: UIDevice.batteryStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.report() }
-            },
+            }, center: center),
         ]
         report()
     }

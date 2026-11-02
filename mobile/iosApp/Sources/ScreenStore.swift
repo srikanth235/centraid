@@ -46,7 +46,7 @@ final class ScreenStore: ObservableObject {
     private var claimed: Set<UInt64> = []
     /// The phone stores being watched (`PhoneWatch`), each under the effect that asked.
     private var watches: [UInt64: (instance: UInt64, source: Centraid_Core_V1_ImportSource)] = [:]
-    private var storeObservers: [NSObjectProtocol] = []
+    private var storeObservers: [NotificationObservation] = []
     /// OPEN A PAGE NOW, wherever the member is (`OpenRoute`): the shell pushes the
     /// route as it pushes a tapped row's route. Set by `ShellModel`.
     var onOpenRoute: ((Centraid_Core_V1_Route) -> Void)?
@@ -603,15 +603,15 @@ final class ScreenStore: ObservableObject {
         _ = PhoneCalendar.watcher
         let center = NotificationCenter.default
         storeObservers = [
-            center.addObserver(forName: .EKEventStoreChanged, object: nil, queue: .main) { [weak self] _ in
+            NotificationObservation(center.addObserver(forName: .EKEventStoreChanged, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
                     self?.storeChanged(.calendar)
                     self?.storeChanged(.reminders)
                 }
-            },
-            center.addObserver(forName: .CNContactStoreDidChange, object: nil, queue: .main) { [weak self] _ in
+            }, center: center),
+            NotificationObservation(center.addObserver(forName: .CNContactStoreDidChange, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.storeChanged(.contacts) }
-            },
+            }, center: center),
         ]
     }
 

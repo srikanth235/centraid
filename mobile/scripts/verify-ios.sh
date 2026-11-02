@@ -4,7 +4,8 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 artifacts="${CENTRAID_IOS_ARTIFACTS:-$root/target/ios-verification}"
 mkdir -p "$artifacts"
-export CENTRAID_IOS_DEPLOYMENT_TARGET="$(cat "$root/mobile/ios-deployment-target")"
+CENTRAID_IOS_DEPLOYMENT_TARGET="$(cat "$root/mobile/ios-deployment-target")"
+export CENTRAID_IOS_DEPLOYMENT_TARGET
 cd "$root/mobile/iosApp"
 xcodegen generate
 xcodegen generate --spec HealthSeeder/project.yml

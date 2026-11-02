@@ -240,7 +240,8 @@ jobs:
           CENTRAID_BUILD_DIGEST: ${{ steps.key.outputs.key }}
         run: |
           set -euo pipefail
-          export IPHONEOS_DEPLOYMENT_TARGET="$(cat mobile/ios-deployment-target)"
+          IPHONEOS_DEPLOYMENT_TARGET="$(cat mobile/ios-deployment-target)"
+          export IPHONEOS_DEPLOYMENT_TARGET
           for target in aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios; do
             cargo build --profile dist -p centraid-core-ffi --features llama --target "$target"
           done

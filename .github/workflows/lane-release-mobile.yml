@@ -159,7 +159,8 @@ jobs:
       # Kotlin framework in the app any more (#1135).
       - name: Build the core's iOS slices
         run: |
-          export IPHONEOS_DEPLOYMENT_TARGET="$(cat mobile/ios-deployment-target)"
+          IPHONEOS_DEPLOYMENT_TARGET="$(cat mobile/ios-deployment-target)"
+          export IPHONEOS_DEPLOYMENT_TARGET
           mobile/scripts/ios-core.sh
 
       # `protobuf` and `swift-protobuf` are `protoc` and `protoc-gen-swift`.

@@ -47,7 +47,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p target/ios-verification
-          export IPHONEOS_DEPLOYMENT_TARGET="$(cat mobile/ios-deployment-target)"
+          IPHONEOS_DEPLOYMENT_TARGET="$(cat mobile/ios-deployment-target)"
+          export IPHONEOS_DEPLOYMENT_TARGET
           mobile/scripts/ios-core.sh aarch64-apple-ios-sim 2>&1 | tee target/ios-verification/rust-core.log
       - name: Compile Swift 6 app, run XCTest, and compile HealthSeeder
         run: bash mobile/scripts/verify-ios.sh
