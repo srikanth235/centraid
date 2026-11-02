@@ -1,6 +1,6 @@
 # Rule index
 
-The rule files in [rules/](rules/) are from leonardomso/rust-skills (MIT, commit `fd2a861ab0406a4ac536a55274d14ea6fd1ca9c9`), grouped by prefix. Open one when the task touches its topic; the file has the bad and good example and the reasoning. Where a rule disagrees with this repository, [CENTRAID.md](../CENTRAID.md) names the winner. The pack's `lint-*` category and the rules for stacks this repository does not use were left out ([SOURCES.md](../SOURCES.md)).
+All 265 rule files of leonardomso/rust-skills (MIT, commit `fd2a861ab0406a4ac536a55274d14ea6fd1ca9c9`) are in [rules/](rules/), grouped by prefix. Open one when the task touches its topic. A rule marked **override** contradicts this repository: its file opens with a banner, and [CENTRAID.md](../CENTRAID.md) names the winner. Repository facts and the written topic files are indexed in [SKILL.md](../SKILL.md).
 
 ## Rule Categories by Priority
 
@@ -30,6 +30,7 @@ The rule files in [rules/](rules/) are from leonardomso/rust-skills (MIT, commit
 | 22       | Observability               | MEDIUM    | `obs-`     |
 | 23       | Performance Patterns        | MEDIUM    | `perf-`    |
 | 24       | Project Structure           | LOW       | `proj-`    |
+| 25       | Clippy & Linting            | LOW       | `lint-`    |
 | 26       | Anti-patterns               | REFERENCE | `anti-`    |
 
 ---
@@ -69,13 +70,18 @@ The rule files in [rules/](rules/) are from leonardomso/rust-skills (MIT, commit
 ### 3. Memory Optimization (CRITICAL)
 
 - [`mem-with-capacity`](rules/mem-with-capacity.md) - Use `with_capacity()` when size is known
+- [`mem-smallvec`](rules/mem-smallvec.md) - Use `SmallVec` for usually-small collections **(override: see CENTRAID.md)**
+- [`mem-arrayvec`](rules/mem-arrayvec.md) - Use `ArrayVec<T, N>` for fixed-capacity collections that never heap-allocate **(override: see CENTRAID.md)**
 - [`mem-box-large-variant`](rules/mem-box-large-variant.md) - Box large enum variants to reduce overall enum size
 - [`mem-boxed-slice`](rules/mem-boxed-slice.md) - Use `Box<[T]>` instead of `Vec<T>` for fixed-size heap data
+- [`mem-thinvec`](rules/mem-thinvec.md) - Use `ThinVec<T>` for nullable collections with minimal overhead **(override: see CENTRAID.md)**
 - [`mem-clone-from`](rules/mem-clone-from.md) - Use `clone_from()` to reuse allocations when repeatedly cloning
 - [`mem-reuse-collections`](rules/mem-reuse-collections.md) - Clear and reuse collections instead of creating new ones in loops
 - [`mem-avoid-format`](rules/mem-avoid-format.md) - Avoid `format!()` when string literals work
 - [`mem-write-over-format`](rules/mem-write-over-format.md) - Use `write!()` into existing buffers instead of `format!()` allocations
+- [`mem-arena-allocator`](rules/mem-arena-allocator.md) - Use arena allocators for batch allocations **(override: see CENTRAID.md)**
 - [`mem-zero-copy`](rules/mem-zero-copy.md) - Use zero-copy patterns with slices and `Bytes`
+- [`mem-compact-string`](rules/mem-compact-string.md) - Use compact string types for memory-constrained string storage **(override: see CENTRAID.md)**
 - [`mem-smaller-integers`](rules/mem-smaller-integers.md) - Use appropriately-sized integers to reduce memory footprint
 - [`mem-assert-type-size`](rules/mem-assert-type-size.md) - Use static assertions to guard against accidental type size growth
 - [`mem-take-replace`](rules/mem-take-replace.md) - Use `mem::take` / `mem::replace` to move a value out of a `&mut` without cloning
@@ -107,6 +113,7 @@ The rule files in [rules/](rules/) are from leonardomso/rust-skills (MIT, commit
 - [`api-from-not-into`](rules/api-from-not-into.md) - Implement `From<T>`, not `Into<U>` - From gives you Into for free
 - [`api-default-impl`](rules/api-default-impl.md) - Implement `Default` for types with sensible default values
 - [`api-common-traits`](rules/api-common-traits.md) - Implement standard traits (Debug, Clone, PartialEq, etc.) for public types
+- [`api-serde-optional`](rules/api-serde-optional.md) - Make serde a feature flag, not a hard dependency for library crates **(override: see CENTRAID.md)**
 - [`api-impl-fromiterator`](rules/api-impl-fromiterator.md) - Implement `FromIterator` and `Extend` for collection types, and `IntoIterator` for all three reference forms
 - [`api-operator-overload`](rules/api-operator-overload.md) - Overload operators only when the semantics are natural and unsurprising
 
@@ -133,6 +140,7 @@ The rule files in [rules/](rules/) are from leonardomso/rust-skills (MIT, commit
 
 ### 7. Concurrency (HIGH)
 
+- [`conc-rayon-par-iter`](rules/conc-rayon-par-iter.md) - Use rayon's `par_iter()` for CPU-bound data parallelism **(override: see CENTRAID.md)**
 - [`conc-scoped-threads`](rules/conc-scoped-threads.md) - Use `std::thread::scope` to borrow stack data across threads
 - [`conc-atomic-ordering`](rules/conc-atomic-ordering.md) - Use the weakest correct memory `Ordering` for every atomic operation
 - [`conc-thread-local`](rules/conc-thread-local.md) - Prefer `thread_local!` with `Cell`/`RefCell` over `static mut`
@@ -144,6 +152,10 @@ The rule files in [rules/](rules/) are from leonardomso/rust-skills (MIT, commit
 - [`opt-inline-never-cold`](rules/opt-inline-never-cold.md) - Use `#[inline(never)]` and `#[cold]` for error paths and rarely-executed code
 - [`opt-cold-unlikely`](rules/opt-cold-unlikely.md) - Mark unlikely code paths with `#[cold]` to help compiler optimization
 - [`opt-likely-hint`](rules/opt-likely-hint.md) - Use code structure to hint at likely branches; use intrinsics on nightly
+- [`opt-lto-release`](rules/opt-lto-release.md) - Enable LTO in release builds **(override: see CENTRAID.md)**
+- [`opt-codegen-units`](rules/opt-codegen-units.md) - Set `codegen-units = 1` for maximum optimization in release builds **(override: see CENTRAID.md)**
+- [`opt-pgo-profile`](rules/opt-pgo-profile.md) - Use Profile-Guided Optimization (PGO) for maximum performance **(override: see CENTRAID.md)**
+- [`opt-target-cpu`](rules/opt-target-cpu.md) - Use `target-cpu=native` for maximum performance on known deployment targets **(override: see CENTRAID.md)**
 - [`opt-bounds-check`](rules/opt-bounds-check.md) - Use iterators and patterns that eliminate bounds checks in hot paths
 - [`opt-simd-portable`](rules/opt-simd-portable.md) - Use portable SIMD for vectorized operations across architectures
 - [`opt-cache-friendly`](rules/opt-cache-friendly.md) - Organize data for cache-efficient access patterns
@@ -220,6 +232,9 @@ The rule files in [rules/](rules/) are from leonardomso/rust-skills (MIT, commit
 - [`macro-fragment-specifiers`](rules/macro-fragment-specifiers.md) - Capture with precise fragment specifiers, not raw `:tt`, where you can
 - [`macro-export-crate-path`](rules/macro-export-crate-path.md) - Export declarative macros with `#[macro_export]` and a clean import path
 - [`macro-private-helpers`](rules/macro-private-helpers.md) - Hide macro-generated helper items behind a `#[doc(hidden)] pub mod __private`
+- [`macro-proc-two-crate`](rules/macro-proc-two-crate.md) - Put procedural macros in a dedicated `proc-macro = true` crate and re-export from the facade **(override: see CENTRAID.md)**
+- [`macro-proc-syn-quote`](rules/macro-proc-syn-quote.md) - Build procedural macros with `syn`, `quote`, and `proc-macro2` **(override: see CENTRAID.md)**
+- [`macro-proc-error-spans`](rules/macro-proc-error-spans.md) - Report proc-macro errors as spanned compile errors, never by panicking **(override: see CENTRAID.md)**
 
 ### 17. Closures (MEDIUM)
 
@@ -263,11 +278,15 @@ The rule files in [rules/](rules/) are from leonardomso/rust-skills (MIT, commit
 - [`test-descriptive-names`](rules/test-descriptive-names.md) - Use descriptive test names that explain what is being tested
 - [`test-arrange-act-assert`](rules/test-arrange-act-assert.md) - Structure tests with clear Arrange, Act, Assert sections
 - [`test-proptest-properties`](rules/test-proptest-properties.md) - Use proptest for property-based testing
+- [`test-mockall-mocking`](rules/test-mockall-mocking.md) - Use mockall for trait mocking **(override: see CENTRAID.md)**
 - [`test-mock-traits`](rules/test-mock-traits.md) - Use traits for dependencies to enable mocking in tests
 - [`test-fixture-raii`](rules/test-fixture-raii.md) - Use RAII pattern (Drop trait) for automatic test cleanup
 - [`test-tokio-async`](rules/test-tokio-async.md) - Use `#[tokio::test]` for async tests
 - [`test-should-panic`](rules/test-should-panic.md) - Use `#[should_panic]` to test that code panics as expected
+- [`test-criterion-bench`](rules/test-criterion-bench.md) - Use `criterion` for benchmarking **(override: see CENTRAID.md)**
 - [`test-doctest-examples`](rules/test-doctest-examples.md) - Keep documentation examples as executable doctests
+- [`test-loom-concurrency`](rules/test-loom-concurrency.md) - Use `loom` to exhaustively test lock-free and concurrent code **(override: see CENTRAID.md)**
+- [`test-snapshot-testing`](rules/test-snapshot-testing.md) - Use snapshot testing (insta) for complex or serialized output **(override: see CENTRAID.md)**
 
 ### 21. Documentation (MEDIUM)
 
@@ -281,6 +300,8 @@ The rule files in [rules/](rules/) are from leonardomso/rust-skills (MIT, commit
 - [`doc-hidden-setup`](rules/doc-hidden-setup.md) - Use `# ` prefix to hide example setup code
 - [`doc-intra-links`](rules/doc-intra-links.md) - Use intra-doc links to reference types and items
 - [`doc-link-types`](rules/doc-link-types.md) - Use intra-doc links to connect related types and functions
+- [`doc-cargo-metadata`](rules/doc-cargo-metadata.md) - Fill `Cargo.toml` metadata for published crates **(override: see CENTRAID.md)**
+- [`doc-crate-readme`](rules/doc-crate-readme.md) - Unify the README and crate root docs with `#![doc = include_str!("../README.md")]` **(override: see CENTRAID.md)**
 
 ### 22. Observability (MEDIUM)
 
@@ -302,7 +323,10 @@ The rule files in [rules/](rules/) are from leonardomso/rust-skills (MIT, commit
 - [`perf-extend-batch`](rules/perf-extend-batch.md) - Use extend for batch insertions
 - [`perf-chain-avoid`](rules/perf-chain-avoid.md) - Avoid chain in hot loops
 - [`perf-collect-into`](rules/perf-collect-into.md) - Use collect_into for reusing containers
+- [`perf-black-box-bench`](rules/perf-black-box-bench.md) - Use black_box in benchmarks **(override: see CENTRAID.md)**
+- [`perf-release-profile`](rules/perf-release-profile.md) - Optimize release profile settings **(override: see CENTRAID.md)**
 - [`perf-profile-first`](rules/perf-profile-first.md) - Profile before optimizing
+- [`perf-ahash`](rules/perf-ahash.md) - Use a faster hasher (`ahash` / `FxHashMap`) when DoS resistance is not needed **(override: see CENTRAID.md)**
 - [`perf-io-buffering`](rules/perf-io-buffering.md) - Wrap `Read`/`Write` in `BufReader`/`BufWriter` for many small operations
 
 ### 24. Project Structure (LOW)
@@ -314,6 +338,7 @@ The rule files in [rules/](rules/) are from leonardomso/rust-skills (MIT, commit
 - [`proj-pub-crate-internal`](rules/proj-pub-crate-internal.md) - Use pub(crate) for internal APIs
 - [`proj-pub-super-parent`](rules/proj-pub-super-parent.md) - Use pub(super) for parent-only visibility
 - [`proj-pub-use-reexport`](rules/proj-pub-use-reexport.md) - Use pub use for clean public API
+- [`proj-prelude-module`](rules/proj-prelude-module.md) - Create prelude module for common imports **(override: see CENTRAID.md)**
 - [`proj-bin-dir`](rules/proj-bin-dir.md) - Put multiple binaries in src/bin/
 - [`proj-workspace-large`](rules/proj-workspace-large.md) - Use workspaces for large projects
 - [`proj-workspace-deps`](rules/proj-workspace-deps.md) - Use workspace dependency inheritance for consistent versions across crates
@@ -322,6 +347,20 @@ The rule files in [rules/](rules/) are from leonardomso/rust-skills (MIT, commit
 - [`proj-build-rs-minimal`](rules/proj-build-rs-minimal.md) - Keep `build.rs` minimal, deterministic, and idempotent
 
 ### 25. Clippy & Linting (LOW)
+
+- [`lint-deny-correctness`](rules/lint-deny-correctness.md) - `#![deny(clippy::correctness)]` **(override: see CENTRAID.md)**
+- [`lint-warn-suspicious`](rules/lint-warn-suspicious.md) - Enable clippy::suspicious for likely bugs **(override: see CENTRAID.md)**
+- [`lint-warn-style`](rules/lint-warn-style.md) - Enable clippy::style for idiomatic code **(override: see CENTRAID.md)**
+- [`lint-warn-complexity`](rules/lint-warn-complexity.md) - Enable clippy::complexity for simpler code **(override: see CENTRAID.md)**
+- [`lint-warn-perf`](rules/lint-warn-perf.md) - Enable clippy::perf for performance improvements **(override: see CENTRAID.md)**
+- [`lint-pedantic-selective`](rules/lint-pedantic-selective.md) - Enable clippy::pedantic selectively **(override: see CENTRAID.md)**
+- [`lint-missing-docs`](rules/lint-missing-docs.md) - Warn on missing documentation for public items **(override: see CENTRAID.md)**
+- [`lint-unsafe-doc`](rules/lint-unsafe-doc.md) - Require documentation for unsafe blocks **(override: see CENTRAID.md)**
+- [`lint-cargo-metadata`](rules/lint-cargo-metadata.md) - Enable clippy::cargo for published crates **(override: see CENTRAID.md)**
+- [`lint-rustfmt-check`](rules/lint-rustfmt-check.md) - Run cargo fmt --check in CI **(override: see CENTRAID.md)**
+- [`lint-workspace-lints`](rules/lint-workspace-lints.md) - Configure lints at workspace level for consistent enforcement **(override: see CENTRAID.md)**
+- [`lint-cfg-check`](rules/lint-cfg-check.md) - Enable `unexpected_cfgs` and declare known cfgs to catch feature-gate typos **(override: see CENTRAID.md)**
+- [`lint-clippy-nursery-selected`](rules/lint-clippy-nursery-selected.md) - Enable high-value `clippy::nursery` lints selectively, not the whole group **(override: see CENTRAID.md)**
 
 ### 26. Anti-patterns (REFERENCE)
 

@@ -1,6 +1,6 @@
 # Where this repository departs from the packs
 
-The rule files under [references/](references/) come from open packs written for general Rust. Repository docs win ([#1160](https://github.com/srikanth235/centraid/issues/1160), ruling R5): a skill never overrides [AGENTS.md](../../../AGENTS.md), [docs/](../../../docs/) or [DESIGN.md](../../../DESIGN.md). Each row names the conflict, the winner and the owner. Rows marked **skill ruling** are decisions this skill makes from the code as it stands; they are the first place for the owner to overturn.
+The rule files under [references/](references/) come from open packs written for general Rust. **Every pack rule is copied; a rule that contradicts this repository stays in the tree with an override banner and is listed below, so read the banner and this file before applying any rule whose row says "Override".** Repository docs win ([#1160](https://github.com/srikanth235/centraid/issues/1160), ruling R5): a skill never overrides [AGENTS.md](../../../AGENTS.md), [docs/](../../../docs/) or [DESIGN.md](../../../DESIGN.md). Each row names the conflict, the winner and the owner. Rows marked **skill ruling** are decisions this skill makes from the code as it stands; they are the first place for the owner to overturn.
 
 ## Errors and panics
 
@@ -16,7 +16,7 @@ The rule files under [references/](references/) come from open packs written for
 
 | Pack says | This repository | Owner |
 | --- | --- | --- |
-| `conc-rayon-par-iter` | No `rayon`: the `image` codec is built with `default-features = false` to keep its thread pool out, "a command handler runs inside a SQLite transaction and must not fan out". The rule file is dropped | `Cargo.toml` (the `image` comment) |
+| `conc-rayon-par-iter` | No `rayon`: the `image` codec is built with `default-features = false` to keep its thread pool out, "a command handler runs inside a SQLite transaction and must not fan out". The rule file is overridden | `Cargo.toml` (the `image` comment) |
 | `async-tokio-runtime`: configure one runtime for the application | The core is synchronous and builds one two-worker runtime lazily for the flows that dial a gateway. The gateway binary is `#[tokio::main]` | [references/threads-and-locks.md](references/threads-and-locks.md) |
 | `async-*` assumes an async application | Only `gateway` declares `async fn`. Do not make a library function async to match a pack example | same |
 | `obs-instrument-spans` suggests `#[tracing::instrument]` | No `#[instrument]` in the tree. Events with fields, no spans. Introduce a span only with a reason a log line cannot carry | **skill ruling** |
@@ -33,21 +33,21 @@ The rule files under [references/](references/) come from open packs written for
 
 | Pack says | This repository | Owner |
 | --- | --- | --- |
-| `lint-*` (13 rules) and BeautifulRust's `lints.toml`, `clippy.toml`, "suggest a `[lints]` table", `-W clippy::pedantic` | Dropped. The gate runs `cargo clippy --workspace --all-targets -- -D warnings` and nothing stricter; there is no `[workspace.lints]`. A lint table is a follow-up of the umbrella and is not added in a feature change. `-W clippy::pedantic` may be used locally to inspect, never committed | [#1160](https://github.com/srikanth235/centraid/issues/1160) "Out of scope", [TESTING.md](../../../TESTING.md) |
-| `opt-lto-release`, `opt-codegen-units`, `opt-pgo-profile`, `opt-target-cpu`, `perf-release-profile`, and the pack's `panic = "abort"` | Dropped. Profiles belong to the root `Cargo.toml`. `panic = "unwind"` is required so the FFI can catch a panic; `target-cpu=native` would break artifacts built for phones | `Cargo.toml` `[profile.*]` comments |
-| `mem-smallvec`, `mem-arrayvec`, `mem-thinvec`, `mem-compact-string`, `mem-arena-allocator`, `perf-ahash` | Dropped: they recommend dependencies. Add a crate only through `[workspace.dependencies]`, `deny.toml` and a measured budget | [deny.toml](../../../deny.toml), [TESTING.md](../../../TESTING.md) |
-| `api-serde-optional`: make serde a feature | `serde` is a hard dependency in the crates that use it. Dropped | the crates' manifests |
-| `doc-cargo-metadata`, `doc-crate-readme`, `proj-workspace-large`-style publishing advice | Every crate is `publish = false`. Dropped | `[workspace.package]` |
-| `proj-prelude-module` | No prelude in the tree; go through the crate's public API. Dropped | [coding-standards](../../../docs/coding-standards.md#prefer-existing-seams) |
+| `lint-*` (13 rules) and BeautifulRust's `lints.toml`, `clippy.toml`, "suggest a `[lints]` table", `-W clippy::pedantic` | Override (banner; do not apply). The gate runs `cargo clippy --workspace --all-targets -- -D warnings` and nothing stricter; there is no `[workspace.lints]`. A lint table is a follow-up of the umbrella and is not added in a feature change; the reasoning behind each lint is kept in [references/lint-rationale.md](references/lint-rationale.md) for review by eye. `-W clippy::pedantic` may be used locally to inspect, never committed | [#1160](https://github.com/srikanth235/centraid/issues/1160) "Out of scope", [TESTING.md](../../../TESTING.md) |
+| `opt-lto-release`, `opt-codegen-units`, `opt-pgo-profile`, `opt-target-cpu`, `perf-release-profile`, and the pack's `panic = "abort"` | Override (banner; do not apply). Profiles belong to the root `Cargo.toml`. `panic = "unwind"` is required so the FFI can catch a panic; `target-cpu=native` would break artifacts built for phones | `Cargo.toml` `[profile.*]` comments |
+| `mem-smallvec`, `mem-arrayvec`, `mem-thinvec`, `mem-compact-string`, `mem-arena-allocator`, `perf-ahash` | Override (banner; do not apply): they recommend dependencies. Add a crate only through `[workspace.dependencies]`, `deny.toml` and a measured budget | [deny.toml](../../../deny.toml), [TESTING.md](../../../TESTING.md) |
+| `api-serde-optional`: make serde a feature | `serde` is a hard dependency in the crates that use it. Override (banner; do not apply) | the crates' manifests |
+| `doc-cargo-metadata`, `doc-crate-readme`, `proj-workspace-large`-style publishing advice | Every crate is `publish = false`. Override (banner; do not apply) | `[workspace.package]` |
+| `proj-prelude-module` | No prelude in the tree; go through the crate's public API. Override (banner; do not apply) | [coding-standards](../../../docs/coding-standards.md#prefer-existing-seams) |
 | `proj-mod-rs-dir` vs `foo.rs` + `foo/` | Both layouts exist (59 `mod.rs` files). Follow the neighbouring modules in the crate you are in | **skill ruling** |
-| `macro-proc-*` | No proc-macro crate. Dropped; a new one is an architecture decision | [docs/decisions.md](../../../docs/decisions.md) |
+| `macro-proc-*` | No proc-macro crate. Override (banner; do not apply); a new one is an architecture decision | [docs/decisions.md](../../../docs/decisions.md) |
 | Rules and examples using std APIs newer than 1.94: `std::hint::cold_path` (1.95), `assert_matches!` (1.96), `From<[MaybeUninit<T>; N]>` (1.95) | Unusable until `rust-toolchain.toml` moves. The files still describe them | `rust-toolchain.toml` |
 
 ## Tests
 
 | Pack says | This repository | Owner |
 | --- | --- | --- |
-| `test-mockall-mocking`, `test-snapshot-testing` (`insta`), `test-criterion-bench`, `test-loom-concurrency`, `perf-black-box-bench` | Dropped: none of those crates is in `Cargo.lock`. Seams are hand-written traits and committed fixtures regenerated and diffed; budgets are down-only ledgers and `call-budget` / `search-budget` | [TESTING.md](../../../TESTING.md) |
+| `test-mockall-mocking`, `test-snapshot-testing` (`insta`), `test-criterion-bench`, `test-loom-concurrency`, `perf-black-box-bench` | Override (banner; do not apply): none of those crates is in `Cargo.lock`. Seams are hand-written traits and committed fixtures regenerated and diffed; budgets are down-only ledgers and `call-budget` / `search-budget` | [TESTING.md](../../../TESTING.md) |
 | `test-fixture-raii`, `test-tokio-async` | Kept. Scratch directories remove themselves on drop; `#[tokio::test]` is used in the gateway | [references/testing.md](references/testing.md) |
 | Examples that `.unwrap()` in tests | Fine in tests, and the rest of the rule files assume that too | [references/testing.md](references/testing.md) |
 

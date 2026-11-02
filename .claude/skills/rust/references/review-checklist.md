@@ -1,14 +1,13 @@
 # Rust review
 
-> **In this repository** review against [CENTRAID.md](../CENTRAID.md) first: a poisoned lock recovered with `into_inner` is a documented choice in some places, `anyhow` is for edges only, and the gate (`cargo xtask gate --profile local`) replaces the raw `cargo` commands below.
-
-Review Rust code against the same rules the [best-practices.md](best-practices.md) uses for writing it, and report what to change. The output is a review, not a rewrite: the reader decides what to fix. Only rewrite code when the user asks for that.
+Review Rust code against the same rules the `rust-best-practices` skill uses for writing it, and report what to change. The output is a review, not a rewrite: the reader decides what to fix. Only rewrite code when the user asks for that.
 
 ## 1. Decide the scope
 
 - **What to read.** Review exactly what the user pointed at: a file, a module, a crate, or a diff. For a diff, review the changed lines and anything they break, not the whole file.
 - **Library or application.** Check for a `lib.rs`, `pub` items used by other crates, or a published `Cargo.toml`. Library code is held to the API-design rules strictly. Application code gets the simplicity rules instead: concrete types, `anyhow`-style errors, and no speculative generality. Say which you assumed at the top of the report.
 - **The edition and MSRV**, from `Cargo.toml`, so you don't recommend features the project can't use.
+- **Frameworks.** If the crate depends on `bevy` or `bevy_ecs`, read the Bevy digest (`bevy.md`) in the `rust-best-practices` skill's references first. It lists the Bevy conventions to leave alone (by-value system parameters, the prelude, plain-data components) and the ECS bugs to look for.
 
 ## 2. Run the tools first, if you can
 
@@ -32,6 +31,7 @@ Work through these in order. The first two categories are where real bugs live.
 - Panics on reachable paths: `unwrap()`, `expect()`, indexing, `as` casts that wrap, or integer overflow, wherever input from outside can reach them.
 - Trait contracts: a hand-written `Ord` with a derived `PartialEq`, or `Hash` that disagrees with `Eq`. These silently corrupt `BTreeMap`, `HashMap`, `sort`, and `dedup`.
 - Lock hazards: a `MutexGuard` held across `.await` or returned to a caller, user closures called under a lock, or a poisoned lock recovered with `into_inner`.
+- ECS bugs in Bevy code: two queries that can reach the same component mutably (a B0001 panic on the first frame), systems that read each other's results with no order between them, and deferred `Commands` read back before they apply.
 - Destructors that panic, block, or can fail.
 
 **Error handling**
@@ -55,7 +55,7 @@ Work through these in order. The first two categories are where real bugs live.
 - Check-then-unwrap (`if x.is_some() { x.unwrap() }`), and `match` where a combinator is clearer, or the reverse.
 - String building with `+`, hand loops that are clearer as iterators, or iterator chains long enough to need a loop.
 - `HashMap` iteration order leaking into output or tests.
-- `#![deny(warnings)]` in source, `#[allow]` without a reason, and glob imports of external crates.
+- `#![deny(warnings)]` in source, `#[allow]` without a reason, and glob imports of external crates (a framework's documented prelude, such as `bevy::prelude`, is fine).
 
 **Documentation and tests**
 
@@ -64,7 +64,7 @@ Work through these in order. The first two categories are where real bugs live.
 - Doc examples that use `unwrap()` instead of `?`.
 - Logic with no tests, or tests that only restate constants.
 
-[best-practices.md](best-practices.md), [guides/](guides/) and [rules-index.md](rules-index.md) hold the full rules and their reasoning. Read the relevant one when a finding needs a rule you are unsure of.
+The `rust-best-practices` skill and its `references/` folder hold the full rules and their reasoning. If it is installed, read the relevant reference when a finding needs a rule you're unsure of. Otherwise, rely on the summary above.
 
 ## 4. Write the report
 
@@ -112,3 +112,7 @@ Rules for each finding:
 - **Respect intent.** If something looks deliberate, such as a documented quirk or a comment explaining it, mention it under Consider with the trade-off. Don't mark it Must fix.
 - **Keep it proportionate.** For a short file, five to ten findings is plenty. Don't pad the list, and don't hide a real bug among style nits.
 - **"What's already good" is required.** It tells the author what to keep and makes the rest credible.
+
+## 5. Offer the lints
+
+If the project lacks a `[lints]` table, end the report by suggesting the BeautifulRust lints config (`lints/lints.toml` and `lints/clippy.toml` in the BeautifulRust repo, https://github.com/morganlinton/BeautifulRust). It makes clippy catch most of the mechanical findings above automatically. Name two or three findings from this review that it would have caught.

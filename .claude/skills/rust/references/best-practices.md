@@ -1,8 +1,6 @@
 # Rust best practices
 
-> **In this repository** the gate is `cargo xtask gate --profile local`, not the raw `cargo` commands below; `anyhow`-style errors are for binary and tooling edges only; lint configuration is not changed to go green. [CENTRAID.md](../CENTRAID.md) lists every departure and its owner.
-
-Distilled from five Rust style and design guides, with a digest of each in [guides/](guides/). Where they disagree, this file says which to follow and why.
+Distilled from five Rust style and design guides, with a digest of each in `references/`. Where they disagree, this file says which to follow and why.
 
 ## 1. Mindset
 
@@ -24,7 +22,7 @@ cargo doc --no-deps   # libraries: catches broken doc links and missing docs
 
 - Fix a lint rather than silencing it. When a lint is genuinely wrong for one item, use `#[expect(clippy::name, reason = "...")]` on the narrowest item. `expect` warns when the lint stops firing, so stale suppressions get cleaned up. Use `#[allow]` only in generated code or macro output.
 - Never put `#![deny(warnings)]` in source: new toolchains add warnings and break the build. Enforce warnings-as-errors in CI instead, with `cargo clippy -- -D warnings`.
-- Lint configuration is not yours to change here: the gate's clippy run is the policy ([CENTRAID.md](../CENTRAID.md)).
+- Configure lints once in `Cargo.toml` (`[lints]` or `[workspace.lints]`), not with scattered crate attributes. If a project has none, suggest `lints/lints.toml` and `lints/clippy.toml` from https://github.com/morganlinton/BeautifulRust; the suppression lints in it need `rust-version` 1.81 or later.
 
 ## 3. Ownership and borrowing
 
@@ -189,7 +187,7 @@ Pick the mechanism by contract:
   };
   ```
 
-- **Import style:** one `use` per module path (`use foo::bar::{Bar, Baz};`); types and traits imported and used unqualified (`Regex`); free functions qualified by their module (`mem::take`, `fs::read`). Import a trait inside the function that needs it unless the whole file uses it. No globs except `use super::*` in tests, `use Enum::*` in a function that matches on it.
+- **Import style:** one `use` per module path (`use foo::bar::{Bar, Baz};`); types and traits imported and used unqualified (`Regex`); free functions qualified by their module (`mem::take`, `fs::read`). Import a trait inside the function that needs it unless the whole file uses it. No globs except `use super::*` in tests, `use Enum::*` in a function that matches on it, and a framework's prelude such as `use bevy::prelude::*`.
 - **Magic numbers** become named `const`s with a doc comment saying where the value comes from and what changing it affects.
 - **Logging:** structured events through `tracing` or `log`, not `println!` / `dbg!`, except for a CLI's own stdout output.
 
@@ -223,7 +221,7 @@ Pick the mechanism by contract:
 
 ## 9. Crates, modules, dependencies
 
-- **Prefer small, single-purpose crates** in a flat `crates/` workspace; never nest a crate inside another crate's `src/`. Split when a crate grows a second purpose or a subdirectory. Share versions through `[workspace.dependencies]`.
+- **Prefer small, single-purpose crates** in a flat `crates/` workspace; never nest a crate inside another crate's `src/`. Split when a crate grows a second purpose or a subdirectory. Share versions and lints through `[workspace.dependencies]` and `[workspace.lints]`.
 - **Modules:** name a leaf module after its primary item (`Foo` lives in `foo.rs`). Non-leaf modules contain only `mod` declarations and re-exports. Put the essential items at the crate root and group the rest by use case (`account`, `network`), not by kind (`traits`, `errors`). Don't define a prelude.
 - **Re-export individually** (`pub use foo::{A, B};`), never with a glob.
 - **Dependencies:** every one costs compile time, binary size, and supply-chain exposure, including `build.rs` and proc macros. Use ranges (`"1"`, `"1.4"`), never `"*"` or a needless `"="`. Commit `Cargo.lock` for binaries. Audit with `cargo tree --duplicates`, `cargo deny`, `cargo udeps`, and `cargo audit`.
@@ -271,8 +269,9 @@ Before returning Rust code, confirm:
 
 Read these when you need the reasoning behind a rule or a complete checklist for a task. Each is a condensed digest of one source.
 
-- [guides/rust-api-guidelines.md](guides/rust-api-guidelines.md) (https://rust-lang.github.io/api-guidelines/): designing a public API or crate; all 54 checklist items with conventions.
-- [guides/effective-rust.md](guides/effective-rust.md) (https://www.lurklurk.org/effective-rust/): choosing between alternatives: generics vs `dyn`, `Result` vs panic, iterators vs loops, borrow-checker tactics, dependencies, CI.
-- [guides/rust-design-patterns.md](guides/rust-design-patterns.md) (https://rust-unofficial.github.io/patterns/): idioms, patterns, and anti-patterns with code.
-- [guides/microsoft-rust-guidelines.md](guides/microsoft-rust-guidelines.md) (https://microsoft.github.io/rust-guidelines/): error struct design, panic policy, unsafe policy, async, workspace layout, performance.
-- [guides/google-rust-style-guide.md](guides/google-rust-style-guide.md) (https://google.github.io/styleguide/rustguide.html): formatting, imports, module layout, accessor naming, application vs library.
+- `references/rust-api-guidelines.md` (https://rust-lang.github.io/api-guidelines/): designing a public API or crate; all 54 checklist items with conventions.
+- `references/effective-rust.md` (https://www.lurklurk.org/effective-rust/): choosing between alternatives: generics vs `dyn`, `Result` vs panic, iterators vs loops, borrow-checker tactics, dependencies, CI.
+- `references/rust-design-patterns.md` (https://rust-unofficial.github.io/patterns/): idioms, patterns, and anti-patterns with code.
+- `references/microsoft-rust-guidelines.md` (https://microsoft.github.io/rust-guidelines/): error struct design, panic policy, unsafe policy, async, workspace layout, performance.
+- `references/google-rust-style-guide.md` (https://google.github.io/styleguide/rustguide.html): formatting, imports, module layout, accessor naming, application vs library.
+- `references/bevy.md` (https://docs.rs/bevy/0.20.0): read first if the crate uses Bevy.
