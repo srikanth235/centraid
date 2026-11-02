@@ -1,12 +1,12 @@
 # Places: where the photographs were taken
 
-How Photos answers "where was this", and why a location is a phrase before it is a point. Places is a facet of the Photos library, not an app: there is no separate crate for it ([D-1020-P5](../decisions.md#photos)).
+How Photos answers "where was this", and why a location is a phrase before it is a point. Places is a facet of the Photos library, not an app: there is no separate crate for it.
 
 ## The layers
 
 | Layer | What | Where |
 | --- | --- | --- |
-| **Names** | A coordinate adopts a nearby place the member already named; a place's name is its entity's title, and its pin, locality and zone are `place.locate` | [`crates/vault/src/commands/place.rs`](../../crates/vault/src/commands/place.rs) ([R-1135-5-4](../decisions.md#docs)) |
+| **Names** | A coordinate adopts a nearby place the member already named; a place's name is its entity's title, and its pin, locality and zone are `place.locate` | [`crates/vault/src/commands/place.rs`](../../crates/vault/src/commands/place.rs) |
 | **Phrases** | A place becomes something a person would say out loud | [`crates/apps/photos/src/places.rs`](../../crates/apps/photos/src/places.rs) |
 | **Disclosure** | What a place does, and does not, do when a copy leaves | the share half of the same module |
 
@@ -14,7 +14,7 @@ How Photos answers "where was this", and why a location is a phrase before it is
 
 What the mobile shell _does_ draw is a **zero-egress coordinate plot**: `photos.places` under `PRESENTATION_MAP` plots `place`'s own `lat`/`lon` on a `Canvas` — equirectangular, normalised to the plotted rows' own bounding box, no network of any kind — and says so on the screen ("Nothing is fetched — this is drawn here from your own coordinates"). That is a picture of the member's own rows and not a map of the world; cards and plot are one screen with a `Presentation` parameter, not two.
 
-One more picture is drawn the same way: **a plot pin is the place's newest photograph** with its count in the corner (v0's `places-pin.tsx`). Photographs with no place are a door, not only a count: the footer's sentence opens their shelf (`PhotoShelf.Place.unplaced`). A trip memory's route sketch left with the memories (R-1135-5-18).
+One more picture is drawn the same way: **a plot pin is the place's newest photograph** with its count in the corner (v0's `places-pin.tsx`). Photographs with no place are a door, not only a count: the footer's sentence opens their shelf (`PhotoShelf.Place.unplaced`). A trip memory's route sketch left with the memories.
 
 A place still reaches a member primarily as **words**. The plot is a second reading of rows the cards already show, and a place with no coordinate is omitted from it and counted in the footer rather than silently dropped — `PlaceRow.has_coordinate` is the only honest signal, because proto3 implicit presence puts neither double on the wire for a row at 0.0/0.0 and 0,0 is a real point in the Gulf of Guinea.
 
@@ -33,7 +33,7 @@ Two commands write a place's name, and the split between them is the whole autho
 - **`media.name_place`** is the member's. It writes `name` and `kind` (`home | work | venue | city | region | other`) and nothing else. `kind` is how the ladder learns which place is Home. A blank name is refused, and 120 characters is the ceiling.
 - **`media.set_place_gazetteer`** is the machine's, and nothing in v0 calls it: its only writer, the `place-names` recognition recipe, was deleted with the recognition plane ([#1029](https://github.com/srikanth235/centraid/issues/1029)). It merges a settlement name into `address_json.gazetteer` (source `geonames-cities15000`) and records `{ none: true }` for a miss. It cannot reach `core_place.name` at all, and it carries no media bytes.
 
-So **a member-entered name is authoritative and derived naming never overwrites it** — by construction rather than by convention. Coordinate-to-settlement naming, when a writer exists, stays zero-egress over a vendored open dataset ([P-gazetteer](../decisions.md)).
+So **a member-entered name is authoritative and derived naming never overwrites it** — by construction rather than by convention. Coordinate-to-settlement naming, when a writer exists, stays zero-egress over a vendored open dataset.
 
 ## Layer 2 — the phrase ladder
 
