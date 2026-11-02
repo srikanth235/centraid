@@ -19,14 +19,14 @@
 
 import SwiftUI
 
-public struct CentraidTypeStyle {
+public struct CentraidTypeStyle: Sendable {
     public let family: String
     public let fontSize: CGFloat
     public let lineHeight: CGFloat
     public let weight: Int
 }
 
-public struct CentraidTheme {
+public struct CentraidTheme: Sendable {
     public let scheme: String
     public let colors: [String: Color]
     /// See `NativeTheme.effects` in the Kotlin table: CSS box-shadow strings.

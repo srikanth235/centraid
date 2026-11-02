@@ -35,16 +35,16 @@ enum PairScan {
             let controller = PairScannerController()
             controller.modalPresentationStyle = .fullScreen
             controller.photoLabel = scan.photoLabel
-            controller.onRead = { code in
-                controller.dismiss(animated: true)
+            controller.onRead = { [weak controller] code in
+                controller?.dismiss(animated: true)
                 done(.codeScanned(Self.scanned(code)))
             }
-            controller.onUnread = {
-                controller.dismiss(animated: true)
+            controller.onUnread = { [weak controller] in
+                controller?.dismiss(animated: true)
                 done(.codeScanned(Self.scanned("")))
             }
-            controller.onCancel = {
-                controller.dismiss(animated: true)
+            controller.onCancel = { [weak controller] in
+                controller?.dismiss(animated: true)
                 done(.failed(ScreenStore.failure("scan closed", cancelled: true)))
             }
             // The camera screen's photo choice is the controller's own; Rust is told
@@ -174,6 +174,7 @@ final class PairScannerController: UIViewController, AVCaptureMetadataOutputObje
     private let camera = PairCameraSession()
     private var preview: AVCaptureVideoPreviewLayer?
     private var answered = false
+    private var mayCapture = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -210,7 +211,10 @@ final class PairScannerController: UIViewController, AVCaptureMetadataOutputObje
         // THE GRANT IS ASKED FOR HERE, when the member tapped Scan — never at
         // launch. A refusal closes the camera; the paste field is still there.
         AVCaptureDevice.requestAccess(for: .video) { granted in
-            DispatchQueue.main.async { granted ? self.start() : self.cancel() }
+            DispatchQueue.main.async {
+                self.mayCapture = granted
+                granted ? self.start() : self.cancel()
+            }
         }
     }
 
@@ -221,7 +225,8 @@ final class PairScannerController: UIViewController, AVCaptureMetadataOutputObje
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        if preview != nil, !answered { camera.setRunning(true) }
+        guard mayCapture, !answered else { return }
+        if preview == nil { start() } else { camera.setRunning(true) }
     }
 
     override func viewWillDisappear(_ animated: Bool) {

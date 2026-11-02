@@ -698,7 +698,6 @@ impl Screen for Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::Keyed;
 
     /// The Driver supplies a real vault; only its read/write failure seam is replaced.
     struct Flaky<'a> {

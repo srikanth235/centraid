@@ -9,6 +9,7 @@ if [ ! -d "$developer" ]; then
   exit 1
 fi
 sudo xcode-select --switch "$developer"
-xcodebuild -version
+actual="$(xcodebuild -version)"
+printf '%s\n' "$actual"
 xcrun swift --version
-[ "$(xcodebuild -version | head -1)" = "Xcode $version" ]
+[ "${actual%%$'\n'*}" = "Xcode $version" ]
