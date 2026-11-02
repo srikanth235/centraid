@@ -1137,7 +1137,7 @@ fn run_call_budget(ctx: &Ctx) -> Result<Outcome> {
 /// **A RELEASE build, and `--include-ignored`.** The promise is the shipped
 /// core's: the phone runs an optimised core, and a debug build runs the
 /// correction pass over the word list three to five times slower (measured on
-/// this corpus, `receipts/issue-1135-vault-model.md`), so a debug measurement
+/// this corpus, [#1135](https://github.com/srikanth235/centraid/issues/1135)), so a debug measurement
 /// would hold the product to a promise it was never going to be built under.
 /// The measurement is `#[ignore]`d so the `test` step does not run a minutes-long
 /// suite a second time in a profile it does not measure; this step is where it
@@ -1867,7 +1867,7 @@ fn run_device_lanes(ctx: &Ctx) -> Result<Outcome> {
 /// exists under the names the protocol fixes, is complete, is under 90 days
 /// old, and did not come from a simulator (R-1020-20).
 fn device_backup_evidence(ctx: &Ctx) -> Result<Outcome> {
-    let dir = ctx.root.join("receipts/experiments/backup");
+    let dir = ctx.root.join("mobile/maestro/evidence/backup");
     if !dir.is_dir() {
         return Ok(Outcome::Skipped(format!(
             "no evidence in {}. The protocol is mobile/maestro/backup-measurement.md: an evening, a night and a restore on a NAMED reference device, not a nightly",
@@ -2592,7 +2592,7 @@ mod tests {
     ///
     /// The step is not CALLED here: it starts a Gradle daemon-less build and a
     /// `cargo build`, so invoking it from a unit test would be running the
-    /// profile inside `cargo test -p xtask`. Its wall clock is in the receipt.
+    /// profile inside `cargo test -p xtask`. Its wall clock is on the issue.
     #[test]
     fn the_mobile_jvm_profile_has_one_real_step_and_fails_without_the_mobile_tree() {
         assert_eq!(
@@ -2760,10 +2760,10 @@ mod tests {
         let ctx = scoring_ctx(&root);
         assert!(matches!(
             device_backup_evidence(&ctx).expect("runs"),
-            Outcome::Skipped(why) if why.contains("receipts/experiments/backup")
+            Outcome::Skipped(why) if why.contains("mobile/maestro/evidence/backup")
         ));
 
-        let dir = root.join("receipts/experiments/backup");
+        let dir = root.join("mobile/maestro/evidence/backup");
         fs::create_dir_all(&dir).expect("the evidence dir");
         let restore = serde_json::json!({
             "device": "iPhone 15", "osVersion": "26.0", "build": "1.0.0",

@@ -67,9 +67,9 @@ To exercise the processing window by hand during development (not a substitute f
 One JSON file per claim per device, under fixed names, so the device lane that checks the evidence can name them:
 
 ```
-receipts/experiments/backup/<device>-<osVersion>-evening.json
-receipts/experiments/backup/<device>-<osVersion>-night.json
-receipts/experiments/backup/<device>-<osVersion>-restore.json
+mobile/maestro/evidence/backup/<device>-<osVersion>-evening.json
+mobile/maestro/evidence/backup/<device>-<osVersion>-night.json
+mobile/maestro/evidence/backup/<device>-<osVersion>-restore.json
 ```
 
 - `*-evening.json`: `{device, osVersion, build, corpus: {assets, bytes, videos, partsMax}, pairedAt, completeAt, hours, samples: [{at, contentConfirmed, contentTotal, pendingBytes, spoolBytes}], batteryDelta, gatewayObjects}`

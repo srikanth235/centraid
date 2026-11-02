@@ -117,7 +117,7 @@ Everything under [`contracts/`](contracts/README.md) is generated and diffed, ne
 
 - Without `CENTRAID_DEVICE_RUNNER`, the step is a loud `Skipped` — never a pass.
 - With it set, the step **requires** `xcrun devicectl list devices` (a physical iPhone — not `simctl`, which lists simulators) and `adb devices` to list something. A machine that sets it and has no phone attached goes **red**.
-- `backup-measurement` checks that the evidence under `receipts/experiments/backup/` exists, is complete, is recent and did not come from a simulator; the run itself is the protocol in [`mobile/maestro/backup-measurement.md`](mobile/maestro/backup-measurement.md) — the first evening's backup, the night with the app closed, and the fresh phone's grid ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
+- `backup-measurement` checks that the evidence under `mobile/maestro/evidence/backup/` exists, is complete, is recent and did not come from a simulator; the run itself is the protocol in [`mobile/maestro/backup-measurement.md`](mobile/maestro/backup-measurement.md) — the first evening's backup, the night with the app closed, and the fresh phone's grid ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
 - `battery-per-background-pass` cannot be automated on either platform and always skips with the owner's manual procedure.
 
 What only a device can measure — the absolute mobile targets, the backup measurement's three claims, `kotlinNativeLinkSeconds` — is parked, not gated: the ceilings sit under a leading underscore in [`tests/journeys.json`](tests/journeys.json), where the ratchet cannot see them, until a run on a named reference device promotes them. The hand-offs are in [docs/release/v1-handoffs.md](docs/release/v1-handoffs.md).

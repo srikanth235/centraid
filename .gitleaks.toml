@@ -12,7 +12,6 @@ useDefault = true
 [allowlist]
 description = "Intentional fixtures, mocks, docs, and build artifacts — not production secrets"
 paths = [
-  '''(?i)receipts/''',
   '''(?i)docs/''',
   '''(?i)CHANGELOG\.md''',
   '''(?i)QUALITY\.md''',

@@ -9,7 +9,7 @@
 # Volume control: everything is weekly and grouped, so a normal week is a
 # handful of PRs rather than one per dependency. Security advisories bypass
 # these groups and open immediately (that is Dependabot security updates, a
-# repo setting — see receipts/issue-557-ci-posture.md).
+# repo setting, #557).
 version: 2
 
 updates:

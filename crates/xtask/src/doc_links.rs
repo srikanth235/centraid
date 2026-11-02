@@ -24,10 +24,9 @@
 //! cannot be decided by a scanner, and a scanner that tries trains authors to
 //! phrase around it. It stays a reviewer's principle.
 //!
-//! **What it skips, and why.** Only the append-only records, where a finding
-//! could never be fixed: `receipts/*.md` (evidence of past work — many of its
-//! links point at code that has since gone, which is what such a record looks
-//! like) and `QUALITY.md`'s "Resolved" section.
+//! **What it skips, and why.** Only the append-only record, where a finding
+//! could never be fixed: `QUALITY.md`'s "Resolved" section (its links point at
+//! code that has since gone, which is what such a record looks like).
 //!
 //! None of this is an allowlist of findings. Links *into* a frozen section are
 //! still checked, and every skip is named in the step's own line so it is not
@@ -58,7 +57,7 @@ impl Exclusions {
     /// The append-only records.
     pub fn builtin() -> Self {
         Self {
-            frozen_files: vec!["receipts/*.md".to_owned()],
+            frozen_files: Vec::new(),
             frozen_sections: vec![("QUALITY.md".to_owned(), "Resolved".to_owned())],
         }
     }
@@ -1180,7 +1179,6 @@ mod tests {
         assert!(is_scanned("docs/decisions.md", &skip));
         assert!(is_scanned("README.md", &skip));
         assert!(is_scanned("crates/xtask/README.md", &skip));
-        assert!(!is_scanned("receipts/issue-1-x.md", &skip));
         assert!(!is_scanned("docs/notes.txt", &skip));
         assert!(!is_scanned("web/node_modules/x/README.md", &skip));
         assert!(!is_scanned("target/doc/x.md", &skip));
@@ -1211,9 +1209,9 @@ mod tests {
 
     #[test]
     fn a_glob_star_stays_inside_one_segment_and_a_double_star_does_not() {
-        assert!(glob_matches("receipts/*.md", "receipts/issue-1.md"));
-        assert!(!glob_matches("receipts/*.md", "receipts/sub/issue-1.md"));
-        assert!(!glob_matches("receipts/*.md", "docs/receipts/issue-1.md"));
+        assert!(glob_matches("logs/*.md", "logs/run-1.md"));
+        assert!(!glob_matches("logs/*.md", "logs/sub/run-1.md"));
+        assert!(!glob_matches("logs/*.md", "docs/logs/run-1.md"));
         assert!(glob_matches("a/**/c.md", "a/b/x/c.md"));
         assert!(glob_matches("a/**/c.md", "a/c.md"));
         assert!(!glob_matches("a/*.md", "a/b.txt"));
