@@ -871,8 +871,7 @@ impl HandleState {
                 forwarded.insert(request_id, front.clone());
             }
             let answer = front.call_registered(request, request_id, kind);
-            self.lock_forwarded().remove(&request_id);
-            self.lock_session().settle(request_id);
+            self.finish_forwarded(request_id);
             return answer;
         }
         {
@@ -880,6 +879,15 @@ impl HandleState {
             session.accept(request_id, kind)?;
         }
         self.call_registered(request, request_id, kind)
+    }
+
+    fn finish_forwarded(&self, request_id: u64) {
+        // Match registration and cancellation's lock order. A cancellation
+        // must not see an active parent session after its route disappears,
+        // nor may a reused id replace the route before this cleanup ends.
+        let mut forwarded = self.lock_forwarded();
+        self.lock_session().settle(request_id);
+        forwarded.remove(&request_id);
     }
 
     fn call_registered(
@@ -2496,34 +2504,122 @@ mod tests {
         );
     }
 
+    struct Foreground(Handle);
+    impl crate::vaults::Vaults for Foreground {
+        fn foreground_id(&self) -> Option<String> {
+            Some("new".to_owned())
+        }
+        fn foreground_core(&self) -> Option<Handle> {
+            Some(self.0.clone())
+        }
+        fn held(&self) -> Vec<crate::vaults::HeldVault> {
+            Vec::new()
+        }
+        fn core_of(&self, _: &str) -> Option<Handle> {
+            None
+        }
+        fn awake(&self) -> Vec<Handle> {
+            vec![self.0.clone()]
+        }
+        fn holdings(&self) -> wire::Holdings {
+            wire::Holdings::default()
+        }
+        fn bring_to_front(&self, _: &str) -> bool {
+            false
+        }
+        fn freeze(&self, _: &str, _: &str, _: u64) {}
+        fn close_all(&self) {}
+    }
+
+    #[test]
+    fn forwarded_completion_and_a_reused_id_keep_registration_and_cancellation_together() {
+        let shelf = Scratch::founded();
+        let original = Scratch::founded();
+        let next = Scratch::founded();
+        shelf
+            .handle
+            .attach_vaults(Arc::new(Foreground(next.handle.clone())));
+        shelf
+            .handle
+            .lock_forwarded()
+            .insert(42, original.handle.clone());
+        let mut session = shelf.handle.lock_session();
+        session
+            .accept(42, RequestKind::Bounded)
+            .expect("the original request");
+        // Hold the next read in the vault after its registration, so its
+        // route can be checked before it completes.
+        let vault = next.handle.vault.lock().expect("the next vault lock");
+        let completing = shelf.handle.clone();
+        let completion = std::thread::spawn(move || completing.finish_forwarded(42));
+        let until = |condition: &dyn Fn() -> bool, message: &str| {
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            while !condition() {
+                assert!(std::time::Instant::now() < deadline, "{message}");
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        };
+        // Cleanup must hold the route lock while waiting to settle the
+        // session. Removing the route first exposes a cancellation gap.
+        until(
+            &|| {
+                matches!(
+                    shelf.handle.forwarded.try_lock(),
+                    Err(std::sync::TryLockError::WouldBlock)
+                )
+            },
+            "completion did not hold the route through settlement",
+        );
+        let registering = shelf.handle.clone();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let request = std::thread::spawn(move || {
+            started_tx.send(()).expect("the registrar is observed");
+            registering.call_with_id(
+                &wire::Request {
+                    kind: Some(wire::request::Kind::Page(wire::PageRequest::default())),
+                },
+                42,
+            )
+        });
+        started_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the next request started");
+        drop(session);
+        completion
+            .join()
+            .expect("completion finishes before registration proceeds");
+        until(
+            &|| next.handle.lock_session().is_in_flight(42),
+            "the next request was not registered",
+        );
+        assert_eq!(
+            shelf
+                .handle
+                .lock_forwarded()
+                .get(&42)
+                .expect("the next route is retained")
+                .path(),
+            next.handle.path()
+        );
+        assert!(matches!(
+            shelf.handle.cancel(42),
+            Err(CoreError::NotCancellable { request_id: 42 })
+        ));
+        assert!(
+            shelf.handle.lock_cancelled().is_empty(),
+            "no cancellation was stranded on the shelf"
+        );
+        drop(vault);
+        assert!(
+            request.join().expect("the next request completes").is_err(),
+            "the deliberately empty page is refused after taking the vault"
+        );
+        assert!(!shelf.handle.lock_session().is_in_flight(42));
+        assert!(shelf.handle.lock_forwarded().is_empty());
+    }
+
     #[test]
     fn cancellation_keeps_its_original_vault_and_shelf_requests_stay_on_the_shelf() {
-        struct Foreground(Handle);
-        impl crate::vaults::Vaults for Foreground {
-            fn foreground_id(&self) -> Option<String> {
-                Some("new".to_owned())
-            }
-            fn foreground_core(&self) -> Option<Handle> {
-                Some(self.0.clone())
-            }
-            fn held(&self) -> Vec<crate::vaults::HeldVault> {
-                Vec::new()
-            }
-            fn core_of(&self, _: &str) -> Option<Handle> {
-                None
-            }
-            fn awake(&self) -> Vec<Handle> {
-                vec![self.0.clone()]
-            }
-            fn holdings(&self) -> wire::Holdings {
-                wire::Holdings::default()
-            }
-            fn bring_to_front(&self, _: &str) -> bool {
-                false
-            }
-            fn freeze(&self, _: &str, _: &str, _: u64) {}
-            fn close_all(&self) {}
-        }
         let shelf = Scratch::founded();
         let original = Scratch::founded();
         let current = Scratch::founded();
