@@ -313,7 +313,11 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+        # @testable import CentraidApp also loads its CentraidCoreC module
+        # dependency. Import paths on the app target do not reach this target.
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/CoreBridge
     sources:
       - path: Tests
     dependencies:
       - target: Centraid
+      - package: SwiftProtobuf
