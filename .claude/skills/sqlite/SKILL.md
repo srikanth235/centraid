@@ -150,7 +150,7 @@ There are two databases. **The vault** (`vault.db`) lives on the phone and the R
 - **SQL lives only in the vault, ontology, search and apps-kit crates**; a check (`sql-confinement`) fails on SQL elsewhere. The gateway keeps its statements in `.sql` files loaded with `include_str!`.
 - **One connection, one writer per vault.** Every vault write goes through `Vault::commit` (`BEGIN IMMEDIATE`); reads go through `Vault::read`. Never open a second writable connection or copy the file.
 - **Pragmas are fixed by the vault's opener:** WAL, `synchronous = FULL`, a busy timeout, foreign keys on, `auto_vacuum = NONE`. **`VACUUM` never runs**, because the backup is the file cut into page ranges and a vacuum would make every range new. Backups use the online backup API.
-- **Schema versioning:** `application_id` tags the file, `user_version` counts migration rungs, and a schema digest is checked on open. The baseline (`contracts/migrations/001_baseline.sql`) is edited in place until the first release that must migrate; after that, changes are new rungs. `contracts/schema/vault-ddl.sql` is generated, not edited.
+- **Schema versioning:** `application_id` tags the file, `user_version` counts migration rungs, and a schema digest is checked on open. The baseline (`contracts/migrations/001_baseline.sql`) is the only rung and is edited directly. `contracts/schema/vault-ddl.sql` is generated, not edited.
 - Vault ids are UUIDv7 text and vault timestamps ISO-8601 text; the gateway uses millisecond integers.
 - Upsert, never `OR REPLACE`, in vault writers. Lists page by key, never `OFFSET`.
 

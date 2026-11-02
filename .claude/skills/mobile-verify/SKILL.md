@@ -75,7 +75,6 @@ No workflow here restores a cached AVD RAM snapshot today, but the next emulator
 ### What the `mobile-jvm` gate covers
 
 ```sh
-export CARGO_TARGET_DIR=<private to this worktree>
 cargo xtask gate --profile mobile-jvm
 ```
 
@@ -143,7 +142,7 @@ Say which layers you proved and which you did not, in the PR description. For th
 ## 7. Final checklist
 
 - [ ] Behaviour proven in Rust (`cargo test -p centraid-screens`, `cargo xtask rules`) where it lives there
-- [ ] `cargo xtask gate --profile mobile-jvm` green, taken with a private `CARGO_TARGET_DIR`
+- [ ] `cargo xtask gate --profile mobile-jvm` green
 - [ ] Core rebuilt for each platform you ran (`ios-core.sh`, `android-core.sh`), with the mtime or `nm` check if the change does not show
 - [ ] Emitted design and word files regenerated and committed, not edited by hand
 - [ ] New iOS source or `.proto` file: `xcodegen generate` re-run

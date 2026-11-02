@@ -21,7 +21,7 @@ The vault is one SQLite file on the phone. The Rust core is its only writer. Eve
 ## 2. The steps, in order
 
 1. **Decide the table's place in the model first.** A new thing with a title and a trash is a new _kind_: one value in `entity.kind`'s CHECK, one in `Kind`, a host table (its own, `concept` or `container`), and nothing else. A new relation between entities is a CHECK value, a `Rel`, and `edge_shape` rows saying which kinds it may join. A thing that is none of these is a _child row_ of one kind and cascades from it. A star, a pin or an archive is a `tagged` edge to a flag, never a column. Why: the model has one supertype and one cascade; a parallel mechanism is a second truth.
-2. **Edit the baseline in place.** Until the first release that must migrate, `001_baseline.sql` is the only rung and is edited directly. Do not add a `002` rung to a schema nothing has shipped. Once a release must migrate, the baseline is frozen: the next change is an appended rung (`002_<name>.sql`, an `include_str!` constant and a `Migration` in `LADDER`), never an edit to rung one, and it is proved by winding a founded file back to `user_version = 1`, writing rows the old shape allowed, and opening it. A migration never erases a vault that holds real data.
+2. **Edit the baseline.** `001_baseline.sql` is the schema a new vault founds and the only rung; change it directly.
 3. **Write the DDL to the doctrine** (section 3): generated `kind` column and composite `(id, kind)` foreign key for a kind row, an explicit `ON DELETE` on every foreign key, every FK's first child column leading an index (a partial index `WHERE col IS NOT NULL` when mostly NULL), CHECK values that match the Rust enum, `STRICT` where the neighbours are.
 4. **Run the digest test and paste the value.** `cargo test -p centraid-vault the_schema_digest_is_the_founded_files` fails printing `found: <hex>`; put it in `SCHEMA_DIGEST`. Any baseline change, even a column comment that changes a statement, needs this. Comments and whitespace do not change the digest; statements do.
 5. **Regenerate the generated files.** `cargo run -p centraid-vault --bin export-ladder-ddl` for `vault-ddl.sql`, `export-commands` for `vault-commands.txt` (when commands change), `export-ontology-page` for the page after adding a sentence for the table in `ontology_doc::TABLES`. Never hand-edit them. Add the new table to the list in the "no table outside the spec" commitment test (`crates/vault/tests/commitments.rs`).
@@ -82,8 +82,6 @@ Every app has `crates/apps/<app>/tests/year3.rs` (agenda, docs, health, money, n
 
 ## 7. How to check it
 
-On a Linux cloud session use `CARGO_TARGET_DIR=/home/user/centraid/target` for every cargo command.
-
 ```sh
 cargo test -p centraid-vault the_schema_digest_is_the_founded_files   # prints the new SCHEMA_DIGEST
 cargo run -p centraid-vault --bin export-ladder-ddl
@@ -98,7 +96,7 @@ cargo xtask gate --profile pr           # the real gate; one crate green is not 
 
 ## 8. Final checklist
 
-- [ ] Place in the model decided (kind, relation or child row); baseline edited in place, or a new rung appended only if a release must migrate.
+- [ ] Place in the model decided (kind, relation or child row); the baseline edited directly.
 - [ ] `SCHEMA_DIGEST` updated; `vault-ddl.sql`, `vault-commands.txt` and the ontology page regenerated, not hand-edited; table added to the commitments spec list.
 - [ ] Every FK has an explicit delete rule and an index on its first child column; any no-action pointer has a purge rule.
 - [ ] Commands upsert (no REPLACE), call `ctx.touch`, refuse with sentences, collect blobs and return `released` where they can drop one.
