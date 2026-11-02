@@ -38,7 +38,7 @@ The rule files under [references/](references/) come from open packs written for
 | `mem-smallvec`, `mem-arrayvec`, `mem-thinvec`, `mem-compact-string`, `mem-arena-allocator`, `perf-ahash` | Override (banner; do not apply): they recommend dependencies. Add a crate only through `[workspace.dependencies]`, `deny.toml` and a measured budget | [deny.toml](../../../deny.toml), [TESTING.md](../../../TESTING.md) |
 | `api-serde-optional`: make serde a feature | `serde` is a hard dependency in the crates that use it. Override (banner; do not apply) | the crates' manifests |
 | `doc-cargo-metadata`, `doc-crate-readme`, `proj-workspace-large`-style publishing advice | Every crate is `publish = false`. Override (banner; do not apply) | `[workspace.package]` |
-| `proj-prelude-module` | No prelude in the tree; go through the crate's public API. Override (banner; do not apply) | [coding-standards](../../../docs/coding-standards.md#prefer-existing-seams) |
+| `proj-prelude-module` | No prelude in the tree; go through the crate's public API. Override (banner; do not apply) | [centraid-engineering](../centraid-engineering/SKILL.md#structure) |
 | `proj-mod-rs-dir` vs `foo.rs` + `foo/` | Both layouts exist (59 `mod.rs` files). Follow the neighbouring modules in the crate you are in | **skill ruling** |
 | `macro-proc-*` | No proc-macro crate. Override (banner; do not apply); a new one is an architecture decision | [docs/decisions.md](../../../docs/decisions.md) |
 | Rules and examples using std APIs newer than 1.94: `std::hint::cold_path` (1.95), `assert_matches!` (1.96), `From<[MaybeUninit<T>; N]>` (1.95) | Unusable until `rust-toolchain.toml` moves. The files still describe them | `rust-toolchain.toml` |
@@ -55,7 +55,7 @@ The rule files under [references/](references/) come from open packs written for
 
 | Pack says | This repository | Owner |
 | --- | --- | --- |
-| `doc-all-public`, `doc-examples-section`, `lint-missing-docs`: document every public item with examples | Comments are forward-facing obligations; "deletion is the default disposition", a comment that restates the name fails the deletion test, and a file-level density budget applies. Document what the types cannot say (`# Errors`, `# Panics`, a contract); `# Examples` where a runnable doctest earns its place | [docs/coding-standards.md](../../../docs/coding-standards.md#comments-face-forward) |
+| `doc-all-public`, `doc-examples-section`, `lint-missing-docs`: document every public item with examples | Comments are forward-facing obligations; "deletion is the default disposition", a comment that restates the name fails the deletion test, and a file-level density budget applies. Document what the types cannot say (`# Errors`, `# Panics`, a contract); `# Examples` where a runnable doctest earns its place | [centraid-engineering](../centraid-engineering/SKILL.md#comments) |
 | BeautifulRust "magic numbers become named consts with a doc comment saying where the value comes from" | Kept, but the comment states the obligation, not the history, and cites `(#N)` | same |
 | History in comments ("replaced the old X") | Banned by the tense test | same |
 | `serde-default-compat` | A `#[serde(default)]` that exists only for an older peer is tagged `COMPAT(name): ...` | [docs/protocol.md](../../../docs/protocol.md#c2--compatname-tagging) |

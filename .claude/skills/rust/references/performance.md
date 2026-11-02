@@ -1,6 +1,6 @@
 # Performance and budgets
 
-Open this before optimising, before adding work to a request path, or when a budget step is red. The diff rules are in [docs/coding-standards.md](../../../../docs/coding-standards.md#nothing-ovault-size-on-the-request-path); the pack rules are the `perf-`, `mem-`, `opt-` and `anti-premature-optimize` files in [rules-index.md](rules-index.md) (several are overridden, see [CENTRAID.md](../CENTRAID.md)). Background: [The Rust Performance Book](https://nnethercote.github.io/perf-book/) (MIT/Apache-2.0).
+Open this before optimising, before adding work to a request path, or when a budget step is red. The diff rules are in [centraid-engineering](../../centraid-engineering/SKILL.md#state-and-cost); the pack rules are the `perf-`, `mem-`, `opt-` and `anti-premature-optimize` files in [rules-index.md](rules-index.md) (several are overridden, see [CENTRAID.md](../CENTRAID.md)). Background: [The Rust Performance Book](https://nnethercote.github.io/perf-book/) (MIT/Apache-2.0).
 
 ## How this repository measures
 
@@ -12,7 +12,7 @@ Open this before optimising, before adding work to a request path, or when a bud
 | Did the edit-run loop get slower? | `cargo xtask measure --write` into `contracts/ledgers/compile-time.json` |
 | Does a write cost what it did? | `crates/core/tests/write_costs.rs` |
 
-Both budget steps are in the `pr` gate. A ceiling moves down with the measurement and never up to make a run pass; a ceiling with no stated volume is not a budget ([coding-standards](../../../../docs/coding-standards.md#scale-rigs-are-calibrated-to-year-3-volumes)).
+Both budget steps are in the `pr` gate. A ceiling moves down with the measurement and never up to make a run pass; a ceiling with no stated volume is not a budget ([centraid-engineering](../../centraid-engineering/SKILL.md#state-and-cost)).
 
 ## Always
 

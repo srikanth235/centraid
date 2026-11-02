@@ -13,7 +13,7 @@ The pack files in `references/` are general SQLite advice. [R5 on #1160](https:/
 | `INTEGER PRIMARY KEY` unless a distributed id is needed | Vault ids are TEXT UUIDv7 from an injected clock; `entity.n` is the integer handle | [D-1020-X3-2](../../../docs/decisions.md) |
 | Timestamps: ISO-8601 TEXT or epoch seconds, pick one | Vault: ISO text with milliseconds and `Z`, from the injected clock. Gateway: epoch milliseconds. One per database | [SKILL.md](SKILL.md) |
 | Use `INSERT OR REPLACE` for upserts | Banned on vault writers; `ON CONFLICT DO UPDATE` | [R-1047-R1](../../../docs/decisions.md) |
-| `OFFSET` is acceptable for small tables | Keyset only; no "the table is small" bound | [R8](../../../docs/decisions.md), [docs/coding-standards.md](../../../docs/coding-standards.md) |
+| `OFFSET` is acceptable for small tables | Keyset only; no "the table is small" bound | [R8](../../../docs/decisions.md), [centraid-engineering](../centraid-engineering/SKILL.md) |
 | Plan with `EXPLAIN QUERY PLAN` and ship | Also held by `query_plans.rs` over the year-3 corpus and a down-only ledger; the performance gate is measured work, not plan text | [docs/vault-ontology.md](../../../docs/vault-ontology.md#indexes) |
 | Connection pools; many reader connections | One connection per vault is the single writer; reads toggle `query_only` on it | [D-1020-D1-5](../../../docs/decisions.md) |
 | Statements as string literals in app code | SQL is confined to four crates; the gateway keeps its statements in `.sql` files | `sql-confinement` in `crates/xtask/src/rules.rs`, [R-1080-A2](../../../docs/decisions.md) |

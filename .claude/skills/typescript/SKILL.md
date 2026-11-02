@@ -5,7 +5,7 @@ description: TypeScript and .mjs rules for Centraid's Bun tooling (packages/desi
 
 # TypeScript and .mjs
 
-The code is right when `bun run check` is green: `format:check`, `lint` (oxlint, `--deny-warnings`), `lint:product`, `typecheck` (tsc per package), `test` (vitest) and `scripts:test`. TypeScript here is small and tooling-shaped: the design token registry, the test kit, the emitters, repo scripts. There is no React, Node server or framework code to imitate. The repo's own rules are [docs/coding-standards.md](../../../docs/coding-standards.md), linked below, never restated.
+The code is right when `bun run check` is green: `format:check`, `lint` (oxlint, `--deny-warnings`), `lint:product`, `typecheck` (tsc per package), `test` (vitest) and `scripts:test`. TypeScript here is small and tooling-shaped: the design token registry, the test kit, the emitters, repo scripts. There is no React, Node server or framework code to imitate. The repo's own rules are [centraid-engineering](../centraid-engineering/SKILL.md), linked below, never restated.
 
 ## Compiler assumptions
 
@@ -20,7 +20,7 @@ Root [tsconfig.base.json](../../../tsconfig.base.json) is the floor: `strict`, `
 | --- | --- |
 | States that exclude each other | Discriminated union on a literal field, never optional fields |
 | Closed set of names | `as const` object or string-literal union, then `keyof typeof` / `(typeof X)[number]`; no TS `enum` (the only `enum ` text in the tree is emitted Swift) |
-| Table keyed by a union | `Record<Kind, Handler>`, or `satisfies Record<Kind, T>` to keep literal types; the table is the policy ([coding-standards](../../../docs/coding-standards.md#policy-tables-over-discriminator-branches)) |
+| Table keyed by a union | `Record<Kind, Handler>`, or `satisfies Record<Kind, T>` to keep literal types; the table is the policy ([centraid-engineering](../centraid-engineering/SKILL.md#structure)) |
 | Validate a literal without widening | `satisfies`, not `as T` |
 | Foreign data (JSON, `process.argv`, fs reads, `catch`) | `unknown`, narrow with a guard or parse once at the edge |
 | Narrowing helper | `(x: unknown): x is T`, or `asserts x is T` for a throw-on-fail check |
@@ -30,32 +30,32 @@ Root [tsconfig.base.json](../../../tsconfig.base.json) is the floor: `strict`, `
 | Type-only import | top-level `import type { X } from "..."`; inline `{ type X }` is a lint error |
 
 - Return types on exported functions; inference inside bodies.
-- Function signatures name their units and invariants in types, not comments ([Comments face forward](../../../docs/coding-standards.md#comments-face-forward)).
+- Function signatures name their units and invariants in types, not comments ([Comments face forward](../centraid-engineering/SKILL.md#comments)).
 - Depth, with wrong/right pairs: [references/type-patterns.md](references/type-patterns.md).
 
 ## Null, optionality, errors
 
-- `?.` and `??` only at true optionality, never after a parse or guard; untagged `??` is not a compat shim: [Justify `?.` and `??`](../../../docs/coding-standards.md#justify--and--past-validation).
+- `?.` and `??` only at true optionality, never after a parse or guard; untagged `??` is not a compat shim: [Justify `?.` and `??`](../centraid-engineering/SKILL.md#optional-values).
 - `noUncheckedIndexedAccess` makes `a[i]` `T | undefined`. Narrow with a check that throws with context (`if (!role) throw new Error("missing role")`, the shape in `packages/design/src/stage.test.ts` and `roles.ts`), not `!` and not `?? ""`.
 - `throw new Error(message)` for impossible states and bad input; the message names the offending value. Never throw a non-Error (`no-throw-literal`).
-- `catch` only for recovery, typed translation or a process edge ([No just-in-case try/catch](../../../docs/coding-standards.md#no-just-in-case-trycatch)). The caught binding is named `error` (`unicorn/catch-error-name`) and is `unknown`.
-- UI/IPC-facing failures reach the caller as a structured error, not a log line: [Fallible-action contract](../../../docs/coding-standards.md#fallible-action-contract).
+- `catch` only for recovery, typed translation or a process edge ([No just-in-case try/catch](../centraid-engineering/SKILL.md#errors)). The caught binding is named `error` (`unicorn/catch-error-name`) and is `unknown`.
+- UI/IPC-facing failures reach the caller as a structured error, not a log line: [Fallible-action contract](../centraid-engineering/SKILL.md#errors).
 
 ## Async
 
 - No `await` in a loop (`no-await-in-loop` is an error). Independent work is `Promise.all`; deliberately ordered work goes through a named primitive (`forEachSequentially` in `@centraid/test-kit/sequential`).
 - No `new Promise` executor that returns a value (`no-promise-executor-return`): wrap in braces, `new Promise((resolve) => { setTimeout(resolve, 0); })`.
-- Every timer, listener and poller has a stop path ([Every poller is visibility-gated](../../../docs/coding-standards.md#every-poller-is-visibility-gated)).
-- Work whose cost grows with the vault stays off the request path: [Nothing O(vault-size)](../../../docs/coding-standards.md#nothing-ovault-size-on-the-request-path).
+- Every timer, listener and poller has a stop path ([Every poller is visibility-gated](../centraid-engineering/SKILL.md#state-and-cost)).
+- Work whose cost grows with the vault stays off the request path: [Nothing O(vault-size)](../centraid-engineering/SKILL.md#state-and-cost).
 
 ## Modules and files
 
-- One domain per file, named for the domain. `*-utils.ts`, `*-helpers.ts`, `*-manager.ts` are review smells (`unicorn/filename-case` is off) ([Filename smells](../../../docs/coding-standards.md#filename-smells--utils-and--manager)).
-- A source file stops at **625 lines** (`max-lines`, error). `packages/design/src/roles.ts` is the only exemption; split before adding to it. A new file gets none ([File length](../../../docs/coding-standards.md#file-length-mechanically-enforced)).
+- One domain per file, named for the domain. `*-utils.ts`, `*-helpers.ts`, `*-manager.ts` are review smells (`unicorn/filename-case` is off) ([Filename smells](../centraid-engineering/SKILL.md#structure)).
+- A source file stops at **625 lines** (`max-lines`, error). `packages/design/src/roles.ts` is the only exemption; split before adding to it. A new file gets none ([File length](../../../oxlint.config.ts)).
 - Cross-package imports go through the package barrel or a declared `exports` subpath (`@centraid/design/elements`), never `@centraid/*/src/*` or `/dist/*` (`no-restricted-imports`).
 - Import style follows the tree you are in: `packages/design/src` uses extensionless relative specifiers; `contracts/tools/*.ts` run directly under Bun and use `.ts` specifiers. oxfmt sorts imports (builtin, external, `@centraid/`, relative); never hand-sort.
-- Change a module in place; no `foo-v2.ts`, no dual exports ([Refactors look like edits](../../../docs/coding-standards.md#refactors-look-like-edits-not-new-layers)).
-- Comments: four species, deletion test, `// ─── name ─────` banners if any, suppressions `// oxlint-disable-next-line <rule> -- reason` ([Comments face forward](../../../docs/coding-standards.md#comments-face-forward)).
+- Change a module in place; no `foo-v2.ts`, no dual exports ([Refactors look like edits](../centraid-engineering/SKILL.md#structure)).
+- Comments: four species, deletion test, `// ─── name ─────` banners if any, suppressions `// oxlint-disable-next-line <rule> -- reason` ([Comments face forward](../centraid-engineering/SKILL.md#comments)).
 
 ## Generated output
 
@@ -83,13 +83,13 @@ git diff --exit-code design mobile
 | Property tests | `fc` from `@centraid/test-kit/fast-check` |
 
 - Assertion messages on loops: `expect(x, "concept -> name").toBe(true)` (`valid-expect` allows 2 args). Prefer exact matchers (`toBe(true)`) over `toBeTruthy()`; max 31 `expect` per test.
-- One named law has one owning test file; a second file asserting it is deleted ([One law, one home](../../../docs/coding-standards.md#one-law-one-home)). Test seams rationale: [Test seams](../../../docs/coding-standards.md#test-seams-mechanically-enforced); strategy: [TESTING.md](../../../TESTING.md).
+- One named law has one owning test file; a second file asserting it is deleted ([One law, one home](../centraid-engineering/SKILL.md#structure)). Test seams rationale: [Test seams](../../../oxlint.config.ts); strategy: [TESTING.md](../../../TESTING.md).
 - `.test.mjs` under `node:test` cannot use the kit (it registers vitest hooks); it suppresses `no-restricted-imports` per line with the issue and removes its temp dir in `finally` (see `scripts/lint-copy.test.mjs`).
 - Fixtures: [references/vitest-fixtures.md](references/vitest-fixtures.md); type-level assertions: [references/vitest-type-testing.md](references/vitest-type-testing.md).
 
 ## Bun and .mjs scripts
 
-- Run tools only through `bun run <script>` ([coding-standards](../../../docs/coding-standards.md#prefer-existing-seams)), never `npx`. `bun contracts/tools/x.ts` runs TypeScript directly; there is no build step for tools.
+- Run tools only through `bun run <script>` ([centraid-engineering](../centraid-engineering/SKILL.md#structure)), never `npx`. `bun contracts/tools/x.ts` runs TypeScript directly; there is no build step for tools.
 - `scripts/*.mjs` are plain ESM with a `#!/usr/bin/env node` (or `bun`) shebang, `node:` prefixed builtins, root from `path.resolve(import.meta.dirname, "..")`. `scripts/site-tokens.mjs` is the one that needs Bun.
 - Ratchet scripts (`lint-copy`, `lint-native-controls`) fail when a count is over **or** under its budget, and a number only shrinks. Never raise a budget.
 - No dependency without need: add to the `catalog:` / package.json deliberately; `bun.lock` is audited by the `lockfile` and `osv` gate steps.

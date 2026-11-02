@@ -9,7 +9,7 @@ The code is right when `cargo xtask gate --profile local` is green and the chang
 
 | Need | Owner |
 | --- | --- |
-| House style, comments, performance, atomicity | [docs/coding-standards.md](../../../docs/coding-standards.md) |
+| House style, comments, performance, atomicity | [centraid-engineering](../centraid-engineering/SKILL.md) |
 | The strategy and what each gate step proves | [TESTING.md](../../../TESTING.md), [crates/xtask/README.md](../../../crates/xtask/README.md) |
 | The C ABI | [crates/core-ffi/CONTRACT.md](../../../crates/core-ffi/CONTRACT.md) |
 | Footguns (open the matching one first) | [docs/traps/](../../../docs/traps/README.md): `wal-checkpoint`, `shared-cargo-target`, `stale-core-slice`, `serde-json-preserve-order` |
@@ -36,7 +36,7 @@ Ruling R4 ([#1160](https://github.com/srikanth235/centraid/issues/1160)): `thise
 - Tests, `tests/`, and `fn main` of a throwaway binary may `.unwrap()`.
 - Error text is lowercase, no trailing period, and names the thing (`"there is no vault at this path yet; create one, or restore one"`). Each fallible `pub fn` has an `# Errors` section.
 - `Result<T, String>` exists (mostly in `assist`, where the text is the tool result shown to the model). Do not add it to a library API a caller branches on. `Box<dyn Error>` has no use in `src`; do not introduce one.
-- A failure a member or shell must see is returned, not only logged ([fallible-action contract](../../../docs/coding-standards.md#fallible-action-contract)). Catch only to recover, translate or at a boundary; `let _ = fallible()` needs a comment saying why dropping it is correct.
+- A failure a member or shell must see is returned, not only logged ([fallible-action contract](../centraid-engineering/SKILL.md#errors)). Catch only to recover, translate or at a boundary; `let _ = fallible()` needs a comment saying why dropping it is correct.
 - `catch_unwind` belongs to `crates/core-ffi` and nowhere else. A panic that reaches the ABI poisons the handle by design ([CONTRACT.md clause 9](../../../crates/core-ffi/CONTRACT.md#9-a-rust-panic-never-crosses-the-boundary)); the release profile is `panic = "unwind"` so that works.
 
 ## Async, threads and locks
@@ -66,7 +66,7 @@ Details and the file each idiom lives in: [references/threads-and-locks.md](refe
 - Parse at the boundary into a validated type, then pass the type ([api-parse-dont-validate](references/rules/api-parse-dont-validate.md)). A `serde_json::Value` past the boundary is a smell ([serde-json-preserve-order trap](../../../docs/traps/serde-json-preserve-order.md): its printed text is not canonical).
 - Match owned enums exhaustively; a `_ =>` arm hides the next variant. Prefer `let ... else` for early exit and `if let ... && ...` chains over nesting.
 - Public enums and structs that cross a crate seam: derive `Debug`; add `#[must_use]` on pure functions and result-like types (it is already the house style: ~1,500 uses).
-- Go through a crate's public API, never into a sibling crate's modules. A module named `utils`, `helpers` or `*_manager` is a [filename smell](../../../docs/coding-standards.md#filename-smells--utils-and--manager); name the domain.
+- Go through a crate's public API, never into a sibling crate's modules. A module named `utils`, `helpers` or `*_manager` is a [filename smell](../centraid-engineering/SKILL.md#structure); name the domain.
 - Time and ids in `centraid-vault` come from the `Clock` and `Ids` traits ([references/testing.md](references/testing.md)), never inline.
 - A new dependency: declare the version once in the root `[workspace.dependencies]`, take it with `name.workspace = true`, expect `cargo deny` (`deny.toml`) and review to ask why. Never add a crate for a micro-optimisation.
 
@@ -97,11 +97,11 @@ Where a test goes, the idioms, and what is banned: [references/testing.md](refer
 
 ## Performance
 
-[Nothing O(vault-size) on the request path](../../../docs/coding-standards.md#nothing-ovault-size-on-the-request-path), [no load-bearing "vaults are small"](../../../docs/coding-standards.md#no-load-bearing-vaults-are-small-assumptions), [compute once, share the result](../../../docs/coding-standards.md#compute-once-share-the-result). A `LIMIT`ed query, a paged cursor, a fixed-size digest are bounded; a scan, a whole-blob hash or a per-subscriber recompute is not. A hot path ships with a measured budget (`call-budget`, `search-budget`). Measure before optimising ([perf-profile-first](references/rules/perf-profile-first.md)); the release profile and codegen settings belong to `Cargo.toml`.
+[Nothing O(vault-size) on the request path](../centraid-engineering/SKILL.md#state-and-cost), [no load-bearing "vaults are small"](../centraid-engineering/SKILL.md#state-and-cost), [compute once, share the result](../centraid-engineering/SKILL.md#state-and-cost). A `LIMIT`ed query, a paged cursor, a fixed-size digest are bounded; a scan, a whole-blob hash or a per-subscriber recompute is not. A hot path ships with a measured budget (`call-budget`, `search-budget`). Measure before optimising ([perf-profile-first](references/rules/perf-profile-first.md)); the release profile and codegen settings belong to `Cargo.toml`.
 
 ## Comments and docs
 
-Comments are forward-facing obligations: contract, rationale, warning or orientation; delete the rest and apply the tense test ([coding-standards](../../../docs/coding-standards.md#comments-face-forward)). Put the mental model in a `//!` module header; use a capitalised heading for a named invariant. History is cited by `(#N)`, never narrated. Public items get a one-line `///`; add `# Errors` and `# Panics` where they apply.
+Comments are forward-facing obligations: contract, rationale, warning or orientation; delete the rest and apply the tense test ([centraid-engineering](../centraid-engineering/SKILL.md#comments)). Put the mental model in a `//!` module header; use a capitalised heading for a named invariant. History is cited by `(#N)`, never narrated. Public items get a one-line `///`; add `# Errors` and `# Panics` where they apply.
 
 ## Always
 

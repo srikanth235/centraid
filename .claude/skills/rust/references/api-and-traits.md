@@ -8,7 +8,7 @@ Open this when adding a public type, a trait, a builder, a module or a crate bou
 | --- | --- |
 | A seam a test or a second implementation must fill | A small **port trait** with a real implementation and an in-memory one, proved by one shared conformance suite: `State` in `crates/gateway/src/rules/state.rs`, `memory.rs`, `conformance.rs` (`Target`). Others: `Clock`/`Ids` (`crates/vault/src/clock.rs`), `Model`/`ModelLoader` (`crates/assist`), `Fetch` (`crates/media`), `Screen`/`ScreenCtx` (`crates/core`, `crates/screens`) |
 | An injected fact (time, ids, randomness) | A trait with a system implementation and a fixed one; give `Arc<T>` a blanket impl so a test keeps a handle to the clock it gave away (`impl<T: Clock + ?Sized> Clock for Arc<T>`) |
-| A closed set the compiler must check | An `enum`, matched exhaustively; a **policy table** keyed by the discriminant when the same match recurs ([coding-standards](../../../../docs/coding-standards.md#policy-tables-over-discriminator-branches)) |
+| A closed set the compiler must check | An `enum`, matched exhaustively; a **policy table** keyed by the discriminant when the same match recurs ([centraid-engineering](../../centraid-engineering/SKILL.md#structure)) |
 | A value that must be valid | A newtype with a fallible constructor (`TryFrom`, `FromStr`); the rest of the code takes the type, not the string |
 | A group of rules that must not reach a runtime, file or clock | A separate module with its own dependency list, scanned by a test (`crates/gateway/src/rules`, `tests/pure_rules.rs`); features split `rules` / `client` / `server` |
 | Dispatch | Generics (`impl Trait`) in a hot or sealed path; `dyn Trait` for a stored, swappable collaborator (a `Box<dyn Clock>` in `Vault::create_with`). Do not box to avoid writing a generic |
@@ -21,7 +21,7 @@ Open this when adding a public type, a trait, a builder, a module or a crate bou
 - Derive `Debug` (hand-write it to redact a key), `Clone`, `PartialEq`, `Eq`, `Default` where they are meaningful; `#[must_use]` on pure functions and result-like types (the house style).
 - Put a behaviour a second implementation must keep in the conformance suite, not in a doc comment.
 - Name for the domain: no `utils.rs`, `helpers.rs` or `*_manager`; no `get_` on a getter; `as_`/`to_`/`into_` by cost.
-- Mark the module with a `//!` header that carries the mental model; name an invariant with a capitalised heading ([coding-standards](../../../../docs/coding-standards.md#comments-face-forward)).
+- Mark the module with a `//!` header that carries the mental model; name an invariant with a capitalised heading ([centraid-engineering](../../centraid-engineering/SKILL.md#comments)).
 
 ## Never
 

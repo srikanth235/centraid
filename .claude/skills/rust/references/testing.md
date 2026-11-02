@@ -1,6 +1,6 @@
 # Rust tests in this repository
 
-Open this before writing or moving a Rust test. The strategy is [TESTING.md](../../../../TESTING.md) (read its axiom and "what the machine cannot check" first); the one-law-one-home rule is in [docs/coding-standards.md](../../../../docs/coding-standards.md#one-law-one-home). This file records the idioms the crates actually use. The pack rules are [test-cfg-test-module](rules/test-cfg-test-module.md), [test-integration-dir](rules/test-integration-dir.md), [test-descriptive-names](rules/test-descriptive-names.md), [test-proptest-properties](rules/test-proptest-properties.md) and [test-mock-traits](rules/test-mock-traits.md).
+Open this before writing or moving a Rust test. The strategy is [TESTING.md](../../../../TESTING.md) (read its axiom and "what the machine cannot check" first); the one-law-one-home rule is in [centraid-engineering](../../centraid-engineering/SKILL.md#structure). This file records the idioms the crates actually use. The pack rules are [test-cfg-test-module](rules/test-cfg-test-module.md), [test-integration-dir](rules/test-integration-dir.md), [test-descriptive-names](rules/test-descriptive-names.md), [test-proptest-properties](rules/test-proptest-properties.md) and [test-mock-traits](rules/test-mock-traits.md).
 
 ## Where a test goes
 

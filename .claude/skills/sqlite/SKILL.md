@@ -7,7 +7,7 @@ description: SQLite schema, migrations, queries and their rusqlite access in Cen
 
 Two databases, one rule set. **The vault** (`vault.db`, on the phone) is the member's data; the core is its only writer. **The gateway's `state.db`** is a blind store's bookkeeping. The schema is the product's contract: `docs/vault-ontology.md` says what each table means and which commitments the tests enforce. This skill says how to write the SQL.
 
-Laws that live elsewhere are linked, not restated: [docs/traps/wal-checkpoint.md](../../../docs/traps/wal-checkpoint.md) (pragmas, snapshots, `VACUUM`) · [docs/vault-ontology.md](../../../docs/vault-ontology.md) (indexes, commitments, adding a table) · [docs/coding-standards.md](../../../docs/coding-standards.md) (store atomicity, nothing O(vault-size) on the request path, no "vaults are small", year-3 scale rigs) · [docs/decisions.md](../../../docs/decisions.md) (R-1029-5, D-1020-D1-2, R-1047-R1, R8, R-1146-1B-6).
+Laws that live elsewhere are linked, not restated: [docs/traps/wal-checkpoint.md](../../../docs/traps/wal-checkpoint.md) (pragmas, snapshots, `VACUUM`) · [docs/vault-ontology.md](../../../docs/vault-ontology.md) (indexes, commitments, adding a table) · [centraid-engineering](../centraid-engineering/SKILL.md) (store atomicity, nothing O(vault-size) on the request path, no "vaults are small", year-3 scale rigs) · [docs/decisions.md](../../../docs/decisions.md) (R-1029-5, D-1020-D1-2, R-1047-R1, R8, R-1146-1B-6).
 
 ## Where SQL may live
 
@@ -37,7 +37,7 @@ Laws that live elsewhere are linked, not restated: [docs/traps/wal-checkpoint.md
 | A migration rung | `migrations::run_rungs`: own transaction per rung, `user_version` set inside it |
 | Read-only work | `Vault::read` |
 
-- Callers never read, merge and write across statements outside a transaction ([Store atomicity](../../../docs/coding-standards.md#store-atomicity)).
+- Callers never read, merge and write across statements outside a transaction ([Store atomicity](../centraid-engineering/SKILL.md#state-and-cost)).
 - A transaction holds no network I/O, no sleep, no user wait.
 - Upsert, never `INSERT OR REPLACE`: REPLACE displaces rows without firing the update hook or delete triggers ([R-1047-R1](../../../docs/decisions.md)).
 
@@ -77,7 +77,7 @@ Laws that live elsewhere are linked, not restated: [docs/traps/wal-checkpoint.md
 
 ## Queries and planning
 
-- Nothing O(vault-size) on a request path ([rule](../../../docs/coding-standards.md#nothing-ovault-size-on-the-request-path)): every list is keyset-paged by a stable `(sort_key, pk)` cursor, never `OFFSET`, with a `LIMIT` ([R8](../../../docs/decisions.md)). Never continue a keyset over a nullable sort column.
+- Nothing O(vault-size) on a request path ([rule](../centraid-engineering/SKILL.md#state-and-cost)): every list is keyset-paged by a stable `(sort_key, pk)` cursor, never `OFFSET`, with a `LIMIT` ([R8](../../../docs/decisions.md)). Never continue a keyset over a nullable sort column.
 - Every hand-written statement in the allowed crates is planned by `crates/core/tests/query_plans.rs` over the year-3 corpus. A full scan or a sort after a paged read fails unless `contracts/ledgers/query-plans.json` says why (down-only ledger). A new statement either streams from an index or gets the index in the baseline.
 - Run `EXPLAIN QUERY PLAN` before you ship a statement; the word `COVERING`, no `USE TEMP B-TREE`, no `SCAN` of a large table. Query-planning depth: [references/query-performance.md](references/query-performance.md).
 - Index the question the code asks (equality columns, then the range or sort column, then coverage). A partial index only helps a literal predicate that implies its `WHERE`.
