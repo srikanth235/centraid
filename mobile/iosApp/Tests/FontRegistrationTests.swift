@@ -159,13 +159,13 @@ final class FontRegistrationTests: XCTestCase {
     }
 
     /// `UIAppFonts` and the emitted file list are one fact in two files.
-    func testTheBundleDeclaresEveryEmittedFile() {
-        let declared = Bundle(for: FontRegistrationTests.self)
-            .object(forInfoDictionaryKey: "UIAppFonts") as? [String]
-        // The test bundle carries its own Info.plist, so a nil here is the test
-        // host's arrangement and not a product defect; the app bundle is the one
-        // that matters and `testEveryEmittedFaceResolves` covers it end to end.
-        guard let declared else { return }
+    func testTheBundleDeclaresEveryEmittedFile() throws {
+        // CentraidTests is hosted by Centraid (the application target dependency
+        // in project.yml), so Bundle.main is the app whose fonts UIKit loads.
+        let declared = try XCTUnwrap(
+            Bundle.main.object(forInfoDictionaryKey: "UIAppFonts") as? [String],
+            "the host app does not declare UIAppFonts"
+        )
         for file in centraidFontFiles {
             XCTAssertTrue(
                 declared.contains(file),
