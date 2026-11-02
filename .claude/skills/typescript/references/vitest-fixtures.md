@@ -84,7 +84,7 @@ Tuple form sets options: `fixture: [async ({}, use) => {…}, { scope: 'file' }]
 | `file` | once per file | worker + file fixtures |
 | `worker` | once per worker process | only worker fixtures |
 
-Only `test`-scoped fixtures can access the built-in context (`task`, `expect`, …). In file/worker fixtures use `expect.getState().testPath` for the file path. By default every file is its own worker, so `file` and `worker` behave the same unless [isolation is disabled](features-concurrency.md).
+Only `test`-scoped fixtures can access the built-in context (`task`, `expect`, …). In file/worker fixtures use `expect.getState().testPath` for the file path. By default every file is its own worker, so `file` and `worker` behave the same unless [isolation is disabled](https://github.com/antfu/skills/blob/7de210b51c8d48cc405a4eac3e17cbb1396c653b/skills/vitest/references/features-concurrency.md).
 
 ## Injected Fixtures (per-project values)
 

@@ -16,6 +16,7 @@ Selected after a web search of agent-skill packs for TypeScript. Candidates eval
 - Commit: `7de210b51c8d48cc405a4eac3e17cbb1396c653b` (main)
 - License: MIT, Copyright (c) 2025-PRESENT Anthony Fu: [licenses/antfu-skills-LICENSE](licenses/antfu-skills-LICENSE)
 - Copied (2 files) from `skills/vitest/references/`: `features-context.md` as [references/vitest-fixtures.md](references/vitest-fixtures.md) and `advanced-type-testing.md` as [references/vitest-type-testing.md](references/vitest-type-testing.md). Front matter dropped; the `bench` (v5) context line removed.
+- Link to `features-concurrency.md` repointed to the pack at the pinned commit.
 - Left out: the other 17 vitest references (mocking, snapshots, coverage, projects, benchmarking, CLI, reporters, concurrency, filtering, tags, describe/expect/hooks, environments, vi) because the repo's test conventions are owned by the kit and the lint seams, the pack is written for Vitest 5 while the repo pins 4.1.10, and mocking examples use the timers and randomness the repo bans in tests. Also left out: every non-vitest skill (Vue, Nuxt, UnoCSS, Vite, pnpm, ...), `scripts/`, `sources/`, `meta.ts`.
 
 ## Reformatting
