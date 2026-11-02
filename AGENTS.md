@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Centraid is a personal, local-first superapp: one shell wrapping many first-party apps over a sovereign vault. **The phone is the vault**: the Rust core on the phone is the vault's only writer, and any machine the member controls (a laptop, a VPS, a NAS) runs `centraid-gateway` as a blind store for its sealed backup ([#1029](https://github.com/srikanth235/centraid/issues/1029), [#1080](https://github.com/srikanth235/centraid/issues/1080)).
+Centraid is a personal, local-first superapp: one shell wrapping many first-party apps over a sovereign vault. **The phone is the vault**: the Rust core on the phone is the vault's only writer, and any machine the member controls (a laptop, a VPS, a NAS) runs `centraid-gateway` as a blind store for its sealed backup.
 
 ## Layout
 
