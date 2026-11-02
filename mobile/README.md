@@ -171,7 +171,7 @@ The simulator bundle is the one route, and it is the right one: `FontRegistratio
 
 **A decode that fails renders the screen's loading state**, never an empty one: an empty `.data` case would be a screen claiming an empty vault before it had read one.
 
-**`.xcode-version` is `26.6`**, confirmed by the first real iOS compile (D-1020-E5a: the first compile confirms or replaces the pin).
+**Xcode is pinned to `26.6`** (`XCODE_VERSION` in `.github/workflows/lane-release-mobile.yml`), confirmed by the first real iOS compile.
 
 ### What iOS performs
 

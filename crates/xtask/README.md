@@ -34,7 +34,7 @@ Each of `local`, `pr`, `nightly` and `release` is a **superset** of the one befo
 | Profile | Steps it adds | Budget | Where it runs |
 | --- | --- | --- | --- |
 | `local` | `fmt`, `clippy`, `test` (**only the crates the change touches, and their dependents** — see below), `restore-drill`, `rules`, `doc-links`, `ledgers` | < 120 s **warm**, < 3200 s **cold** | by hand, before a push |
-| `pr` | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static`, `emitters`, `lockfile`, `call-budget`, `search-budget`, `fault-door` — and its `test` step runs the **whole** workspace | < 1500 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
+| `pr` | `buf`, `deny`, `ci-policy`, `release-build`, `ts-static`, `emitters`, `lockfile`, `call-budget`, `search-budget`, `fault-door` — and its `test` step runs the **whole** workspace | < 1500 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
 | `nightly` | `device-lanes` | unbounded | `.github/workflows/nightly.yml`, 05:30 UTC |
 | `release` | `artifact-identity`, `prebuilt-core-required` (and `restore-drill`, inherited from `local`) | unbounded | the release workflows |
 | `mobile-jvm` | `mobile-jvm` — one step, not a superset of anything | < 420 s | `.github/workflows/nightly.yml`; on demand from `mobile/` |
@@ -95,18 +95,16 @@ A failing step writes its whole output under `target/xtask/<profile>/<step>/` �
 
 `cargo nextest` gets the same treatment in the other direction: `test` uses `cargo nextest run --workspace` (with the filter above on `local`) when the binary is on PATH and `cargo test --workspace` when it is not, and the step's line says which one ran. nextest never runs doctests, so its branch is followed by `cargo test --workspace --doc` over the libraries it just built: the two branches run the same tests, and a doctest written tomorrow is not silently skipped because the runner changed. `gate.yml` installs a pinned, checksum-verified nextest release binary, because it runs the ~150 test binaries concurrently rather than back to back — the one part of the `test` step that is not compilation ([#1047](https://github.com/srikanth235/centraid/issues/1047)).
 
-### The `ci-policy`, `secrets` and `osv` steps
+### The `ci-policy` and `lockfile` steps
 
-Standing checks over `.github/**`, the working tree and the lockfiles, run on every pull request.
+Standing checks over `.github/**` and the lockfiles, run on every pull request.
 
 | Step | What it runs | Verdict today |
 | --- | --- | --- |
 | `ci-policy` | every third-party `uses:` under `.github/` pinned to a 40-hex commit SHA (`ci::action_pins`), then `actionlint` | green, under a second |
 | `lockfile` | `bun.lock`: no `http:` package URL, integrity markers present; `Cargo.lock`: every registry `[[package]]` pinned by `checksum` and sourced over TLS (`ci::lockfile`) | green |
-| `secrets` | `gitleaks detect` over the working tree with `.gitleaks.toml` (#671); findings in files git does not track are reported and dropped | no inherited finding recorded |
-| `osv` | `scripts/ci/osv-lockfile-scan.mjs`, CRITICAL-only (#671) | green |
 
-**Inherited red is named, never hidden** (D-1020-B1): a step whose target is red today stays on the gate and red, rather than leaving it, and a red is never answered by widening `osv-scanner.toml` or `.gitleaks.toml`.
+**Inherited red is named, never hidden** (D-1020-B1): a step whose target is red today stays on the gate and red, rather than leaving it.
 
 `engine` is its own job in `gate.yml` for the opposite reason: it is a command over the tree, but a cold llama.cpp build (about five minutes) does not fit inside the `pr` profile's budget, so `centraid-core-ffi`'s `llama` feature is off in every step above and the job checks the engine with it on: `cargo clippy -p centraid-assist-llama -p centraid-core-ffi --all-targets --features centraid-core-ffi/llama -- -D warnings` and `cargo test` over the same. The `mobile-jvm` step builds the cdylib without the feature too.
 

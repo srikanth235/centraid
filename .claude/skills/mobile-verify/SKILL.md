@@ -103,7 +103,7 @@ Without the flag `:androidApp` is not in the build at all; with the flag and no 
 
 ### iOS simulator
 
-Needs a Mac with Xcode (`.xcode-version` pins it) and XcodeGen:
+Needs a Mac with Xcode (`XCODE_VERSION` in `lane-release-mobile.yml` pins it) and XcodeGen:
 
 ```sh
 IPHONEOS_DEPLOYMENT_TARGET=$(cat mobile/ios-deployment-target) mobile/scripts/ios-core.sh aarch64-apple-ios-sim

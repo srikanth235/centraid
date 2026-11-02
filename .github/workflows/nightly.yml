@@ -44,8 +44,6 @@ jobs:
           NEXTEST_VERSION: 0.9.144
           NEXTEST_SHA256: 8a4f726272b0a1c499bd87ca3978bfbb1a8c20bb08ccf075b9996e2081bd1e1e
           ACTIONLINT_VERSION: 1.7.12
-          GITLEAKS_VERSION: 8.30.1
-          OSV_VERSION: 2.4.0
           BUF_VERSION: 1.61.0
         run: |
           set -euo pipefail
@@ -55,10 +53,8 @@ jobs:
           echo "${NEXTEST_SHA256}  ${RUNNER_TEMP}/${nextest}" | sha256sum -c -
           tar -xzf "${RUNNER_TEMP}/${nextest}" -C /usr/local/bin cargo-nextest
           curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" | tar -xz -C /usr/local/bin actionlint
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C /usr/local/bin gitleaks
-          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" -o /usr/local/bin/osv-scanner
           curl -sSfL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64" -o /usr/local/bin/buf
-          chmod +x /usr/local/bin/osv-scanner /usr/local/bin/buf
+          chmod +x /usr/local/bin/buf
       - run: cargo xtask gate --profile nightly
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()

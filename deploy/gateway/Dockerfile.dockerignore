@@ -1,4 +1,6 @@
-# Build context for gateway Dockerfile (issue #504 packaging).
+# Build context for deploy/gateway/Dockerfile. BuildKit reads a
+# `<Dockerfile>.dockerignore` beside the Dockerfile in place of a root
+# `.dockerignore`; the context is still the monorepo root.
 # Also covers #501 release image context; keep package.json for lockfile workspaces.
 
 .git
@@ -49,7 +51,6 @@ dist
 # Large / non-runtime docs and ledgers
 *.md
 !packages/server/README.md
-CHANGELOG.md
 CONTRIBUTING.md
 AGENTS.md
 CLAUDE.md

@@ -141,11 +141,12 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      # ONE TOOLCHAIN FILE, READ AND NOT RETYPED. `.xcode-version` is the pin
-      # nix cannot carry, and this is the only place CI reads it.
+      # The Xcode pin nix cannot carry; this is the only place it is written.
       - name: Select Xcode
+        env:
+          XCODE_VERSION: "26.6"
         run: |
-          version="$(cat .xcode-version)"
+          version="${XCODE_VERSION}"
           echo "Selecting Xcode ${version}"
           sudo xcode-select --switch "/Applications/Xcode_${version}.app" ||
             echo "OWNER HAND-OFF: ${version} is not on this runner image."
