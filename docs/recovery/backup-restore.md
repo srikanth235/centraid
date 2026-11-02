@@ -79,7 +79,7 @@ Every change that creates a durable table or column completes this in the same P
 
 ## What not to do
 
-- `cp` the phone's live `vault.db` as a backup. A snapshot is taken with the online backup API under the vault's write lock — see [../traps/wal-checkpoint.md](../traps/wal-checkpoint.md).
+- `cp` the phone's live `vault.db` as a backup. A snapshot is taken with the online backup API under the vault's write lock — see the pitfall in `.claude/skills/sqlite/SKILL.md`.
 - Delete files from a gateway's `objects/` to "clean up". Retention is the phone's and goes through `delete`, with a week's grace; a file removed by hand reads as missing, and the phone can send it again only while it still holds the bytes — an original it already evicted cannot come back.
 - Edit a gateway's `state.db`, or replace its `tls.key`, `tls.crt` or `gateway.id`: every paired phone refuses a gateway whose certificate changed.
 - Treat a gateway as a second copy of the vault. It holds nothing that opens one without the 24 words.

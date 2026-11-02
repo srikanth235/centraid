@@ -100,7 +100,7 @@ cargo xtask repo-root                 # which tree the path-based rules will sca
 cargo xtask measure --write           # the edit-run loop, into the compile-time ledger
 ```
 
-Budgets and what each profile proves: [TESTING.md](TESTING.md#the-v1-gate-profiles-1020) and [docs/toolchain.md](docs/toolchain.md#v1-cargo-xtask-gate-1020). **Give every worktree its own `CARGO_TARGET_DIR`** — sharing one silently hands generated Rust between them ([docs/traps/shared-cargo-target.md](docs/traps/shared-cargo-target.md)).
+Budgets and what each profile proves: [TESTING.md](TESTING.md#the-v1-gate-profiles-1020) and [docs/toolchain.md](docs/toolchain.md#v1-cargo-xtask-gate-1020). **Give every worktree its own `CARGO_TARGET_DIR`** — sharing one silently hands generated Rust between them (`.claude/skills/rust/SKILL.md`, Pitfalls).
 
 The product's binaries:
 

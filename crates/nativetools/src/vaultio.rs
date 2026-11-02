@@ -114,7 +114,7 @@ pub fn blobs_dir(vault: &Path) -> PathBuf {
 }
 
 /// Copy a CLOSED vault and everything beside it: the file, its WAL pair
-/// (`docs/traps/wal-checkpoint.md`) and its content store.
+/// (`.claude/skills/sqlite/SKILL.md`) and its content store.
 pub fn copy_vault(from: &Path, to: &Path) -> Result<(), String> {
     if to.exists() {
         return Err(format!("{} already exists", to.display()));
@@ -478,7 +478,7 @@ impl Handle {
 impl Handle {
     /// Move the write-ahead log into the vault file and truncate it, so a
     /// seeded vault's file is the whole vault before it is copied
-    /// (`docs/traps/wal-checkpoint.md`).
+    /// (`.claude/skills/sqlite/SKILL.md`).
     pub fn checkpoint(&self) -> Result<(), String> {
         self.vault
             .read(|connection| Ok(connection.pragma_update(None, "wal_checkpoint", "TRUNCATE")?))

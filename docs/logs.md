@@ -60,7 +60,7 @@ The job log itself is on GitHub Actions; every gate step prints exactly one line
 
 | Path | Role |
 | --- | --- |
-| The phone's `vault.db` | Data plus the audit band — query a copy with tools, or `centraid doctor`; never treat it as a greppable log, and never copy the live file ([traps/wal-checkpoint.md](traps/wal-checkpoint.md)) |
+| The phone's `vault.db` | Data plus the audit band — query a copy with tools, or `centraid doctor`; never treat it as a greppable log, and never copy the live file (`.claude/skills/sqlite/SKILL.md`) |
 | The phone's `<stem>.backup.db` | The backup ledger — destinations, the queue, confirmations, snapshots. A cache of the gateways' truth, and it holds the gateways' tokens: never copy it into a ticket |
 | A gateway's `state.db` | Its index — vaults, epochs, heads, the object list. Read it with `pairings`, not by hand |
 | A gateway's `tls.key` | Its identity: every paired phone pins the certificate it signs. Never copy it into a ticket |

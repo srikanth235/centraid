@@ -1,7 +1,7 @@
 // The only lowering of shared design values into custom properties. Two axes
 // no component may re-own: density (row height and padding, never control
 // size) and reduced motion. No surface-tone axis — one page colour, `--bg`
-// (docs/traps/design-tokens.md).
+// (.claude/skills/typescript/SKILL.md).
 
 import {
   DENSITY_TIERS,

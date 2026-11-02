@@ -98,7 +98,7 @@ export const STAGE_SUNKEN = "#1A1A19";
  *  axis is dead by decision — retuning `--bg` alone inverts the paper metaphor,
  *  and the measured spread was imperceptible. If a page tone ever returns it
  *  must carry its whole surface SET, never `--bg` alone
- *  (docs/traps/design-tokens.md). */
+ *  (.claude/skills/typescript/SKILL.md). */
 export const PAGE = { dark: "#0E0E0E", light: "#FDFDFC" } as const;
 /** The deepest paper in the system, and why the ink ramp is solved against it
  *  rather than the page. Not a tone an app may declare. The desktop stem paints

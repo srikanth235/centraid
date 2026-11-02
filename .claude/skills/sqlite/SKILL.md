@@ -103,10 +103,21 @@ There are two databases. **The vault** (`vault.db`) lives on the phone and the R
 
 - **SQL lives only in the vault, ontology, search and apps-kit crates**; a check (`sql-confinement`) fails on SQL elsewhere. The gateway keeps its statements in `.sql` files loaded with `include_str!`.
 - **One connection, one writer per vault.** Every vault write goes through `Vault::commit` (`BEGIN IMMEDIATE`); reads go through `Vault::read`. Never open a second writable connection or copy the file.
-- **Pragmas are fixed by the vault's opener:** WAL, `synchronous = FULL`, a busy timeout, foreign keys on, `auto_vacuum = NONE`. **`VACUUM` never runs**, because the backup is the file cut into page ranges and a vacuum would make every range new. Backups use the online backup API. Read `docs/traps/wal-checkpoint.md` before changing any of this.
+- **Pragmas are fixed by the vault's opener:** WAL, `synchronous = FULL`, a busy timeout, foreign keys on, `auto_vacuum = NONE`. **`VACUUM` never runs**, because the backup is the file cut into page ranges and a vacuum would make every range new. Backups use the online backup API.
 - **Schema versioning:** `application_id` tags the file, `user_version` counts migration rungs, and a schema digest is checked on open. The baseline (`contracts/migrations/001_baseline.sql`) is edited in place until the first release that must migrate; after that, changes are new rungs. `contracts/schema/vault-ddl.sql` is generated, not edited.
 - Vault ids are UUIDv7 text and vault timestamps ISO-8601 text; the gateway uses millisecond integers.
 - Upsert, never `OR REPLACE`, in vault writers. Lists page by key, never `OFFSET`.
+
+### Pitfall: copying a live vault
+
+A byte copy (`cp`, a filesystem snapshot) of `vault.db` while the core has it open yields a torn, incomplete or empty file. Committed rows live in the `-wal` until a checkpoint, and a copy that reads some pages before a commit and some after holds two states at once. It opens, or opens empty, and nothing says it is wrong.
+
+- **The only copy of a live vault is a snapshot:** SQLite's online backup API, in one step on the vault's own connection under the write lock, so it holds exactly the commits made before it, checkpointed or not. A copy asked for from inside a commit is refused.
+- **Page-identical matters.** Backup copies page N to page N, so an unchanged 64 KiB range keeps its bytes and name between snapshots. `VACUUM` or a changed `auto_vacuum` renumbers pages and makes the next backup upload the whole file.
+- **`synchronous = FULL` is explicit, never inherited.** Under WAL the compiled default is `NORMAL`, which acknowledges a commit before its frames reach disk, so a snapshot could carry a commit the phone then loses.
+- **A second writable connection** is not heard by the commit guard (receipts, change events, the command registry); its rows are real and nothing in the vault knows.
+- **A fixture whose artifact is the file** (`seed-demo-vault`) must end with `Vault::finish`, which checkpoints `TRUNCATE` and closes. Without it the `.db` is a few KB beside a large `-wal`, and whoever copies only the `.db` (as `mobile/scripts/demo-vault.sh` rightly does) gets an empty vault.
+- **To look at a vault file:** `centraid doctor --data-dir <dir> [--json]` is read-only and lock-free, on a copy or a restore. Tests use temp directories, never a live vault. A gateway holds no key and no vault; `centraid-gateway health|scrub --data-dir <dir>` checks its store.
 
 ## References
 
