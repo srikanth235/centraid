@@ -1901,7 +1901,7 @@ fn export() -> CommandDefinition {
             // A MASS UNSEAL IS A COMMAND AND NOT A QUERY, twice over, and both
             // reasons survive the custody change: it is confirmed and run
             // before any cell opens, so a core that opened them first would
-            // have skipped the member's consent, and a replica read returns
+            // have skipped the member's confirmation. Ordinary app reads return
             // sealed columns as placeholders.
             //
             // WHAT CHANGED (D-1020-L7): v0 unsealed every cell here and

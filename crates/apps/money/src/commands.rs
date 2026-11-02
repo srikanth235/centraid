@@ -27,9 +27,7 @@ pub struct Invocation {
     pub input: BTreeMap<String, Value>,
     /// Which of this handler's calls this is. Mandatory; see the module note.
     pub invoke_key: String,
-    /// "This decorates the answer": a seat with no gateway settles an optional
-    /// invocation as failed rather than refusing the whole run
-    /// (`centraid.d.ts:77-84`). The gateway ignores the field.
+    /// Whether a failed invocation may leave the rest of the run usable.
     pub optional: bool,
 }
 

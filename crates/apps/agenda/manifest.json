@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "agenda",
   "name": "Agenda",
-  "description": "Your calendar and your tasks as a projection of the personal vault: upcoming events from the vault's events, proposals, answers and cancellation asks, and the task board from the vault's own tasks, all through consent-checked typed commands. No data of its own — revoke the grant and the app goes dark.",
+  "description": "Your calendar and your tasks as a projection of the personal vault: upcoming events from the vault's events, proposals, answers and cancellation asks, and the task board from the vault's own tasks, all through contract-checked typed commands. The app stores no separate copy of the data.",
   "version": "0.7.0",
   "iconKey": "Calendar",
   "colorKey": "forest",

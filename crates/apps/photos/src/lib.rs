@@ -55,7 +55,7 @@ pub use manifest::{APP_ID, manifest};
 pub use places::{PlacePhrase, PlacePhraseSource, PlaceRow, place_phrase};
 pub use queries::{SearchData, load_search_term};
 
-/// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by
+/// A read refusal, as the payload carries it: the kit's one type, shared by
 /// every app so the core settles all of them through one door.
 pub use centraid_apps_kit::Denial;
 

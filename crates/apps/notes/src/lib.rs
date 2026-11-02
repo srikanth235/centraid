@@ -6,8 +6,8 @@
 //! - **NOTHING IS STORED HERE.** A note is an `entity` of kind `note` whose words
 //!   sit on its `note` row; a notebook is a `container`; a pin or a tag is a
 //!   `tagged` edge; a link, a memo and an attachment are `links`, `about` and
-//!   `attached` edges; a past version is a `revision` (#1135). Revoke the grant
-//!   and the app goes dark while the notes and the journal remain the owner's.
+//!   `attached` edges; a past version is a `revision` (#1135). Notes and journal
+//!   entries live in the personal vault.
 //! - **THE LIBRARY IS A BOUNDED RECENT WINDOW PLUS *EVERY* PINNED NOTE.** A pin
 //!   survives the note ageing out of the window, so the pinned shelf is read
 //!   beside the recent one and not out of it ([`queries::load_library`]).
@@ -71,7 +71,7 @@ pub use shelves::{
     LibraryFilter, NotebookEntry, NotebooksData, Sort, load_notebooks, load_trash, shape_library,
 };
 
-/// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by
+/// A read refusal, as the payload carries it: the kit's one type, shared by
 /// every app so the core settles all of them through one door.
 pub use centraid_apps_kit::Denial;
 

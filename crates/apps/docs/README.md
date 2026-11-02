@@ -52,7 +52,7 @@ The phone asks `docs_drive`, `docs_search` and `docs_document` through `AppQuery
 | A write from a query | `queries` holds statements and a `PageDoor`, whose one method reads |
 | An invocation with no `invoke_key` | the field is required (D-1020-D3-5) |
 | A denial turned into an error | `Reading` and `Outcome::Denied` are states a surface renders; the kit's `KitError` has no denial variant |
-| A widened scope | the manifest declares one `act` scope per distinct command an action names, so the consent a member grants is the commands Docs sends and no wider |
+| A widened scope | the manifest declares one `act` scope per distinct command an action names, so the build checks exactly the commands Docs sends |
 
 ## Fixtures
 

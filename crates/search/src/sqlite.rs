@@ -66,12 +66,8 @@
 //! of the cap. A test (`the_tail_leg_streams_the_index_and_does_not_sort_its_matches`)
 //! keeps that true: a plan that sorted every match would make the cap a cosmetic.
 //!
-//! ## What this door does not stand behind
-//!
-//! It is the OWNER's view. The consent walls a granted caller would meet (the
-//! read decision of every entity whose text the index folds in, a field mask that
-//! hides an indexed column, a receipt) are `crates/vault`'s paged-door work and
-//! are written down in `crates/search/README.md` rather than stubbed here.
+//! This door searches the personal vault. First-party apps share its trust
+//! boundary, and the index excludes sealed values regardless of the caller.
 
 use centraid_apps_kit::page::{Page, PageCursor, page_of, probe_limit};
 use centraid_apps_kit::spelling::{

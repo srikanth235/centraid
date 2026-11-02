@@ -38,14 +38,9 @@ pub trait PageDoor {
 
 /// One page.
 ///
-/// **The one read an app should reach for**, and it is a PLAIN READ. There is
-/// no pending write to compose over the mirrored rows: a seat APPLIES its own
-/// predicted write to the replica, through the same applier the gateway's pages
-/// go through. What a member is looking at IS the replica.
-///
-/// That is the whole of the change and it removes a class rather than a
-/// function: a composition is a second description of what a write does, and
-/// the first one — the handler — already exists.
+/// **The one read an app should reach for.** It reads the personal vault through
+/// the core's page door. Writes use typed commands through the commit guard;
+/// this read does not compose predicted writes over stored rows.
 pub fn read_page(
     door: &dyn PageDoor,
     query: &PageQuery,

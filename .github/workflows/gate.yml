@@ -10,6 +10,7 @@ name: gate
 #   engine             the on-device chat's llama.cpp build, too slow for the
 #                      `pr` profile's budget (R-CHAT-10).
 #   native-python      the native tool task's CPU suite (#1044).
+#   ios                Swift 6 app/XCTest, HealthSeeder, and the Rust simulator core.
 #   dependency-review  the PR's dependency diff, read through the API.
 #   pr-title           the squash subject, checked by `.githooks/commit-msg`.
 

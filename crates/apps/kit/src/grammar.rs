@@ -11,15 +11,10 @@
 //! — and **anything outside it is refused rather than repaired**. A subquery, a
 //! second statement, a comment, a function the list does not name: all refused.
 //!
-//! **Where this lives, and why it is in the kit rather than the vault.** The
-//! grammar is a property of the statement, not of the file: a seat holding the
-//! vault, a seat holding none, and the gateway must all refuse the same shapes,
-//! and the refusal is what makes the port's statement-as-data checkable at
-//! every one of those ends. What the vault owns is the half that needs the
-//! file: which physical tables are entities, what each caller's access decision
-//! is, which columns are sealed. That half enters here as [`TableFacts`] and
-//! [`check_columns`] — the door's splice point, and the only thing lane D1 has
-//! to hand over.
+//! **The grammar lives in the kit** so production reads and fixture doors parse
+//! the same statement shapes. File-specific facts — which physical tables are
+//! entities and which columns are sealed — enter as [`TableFacts`] and
+//! [`check_columns`]. The gateway holds sealed backups and runs no app queries.
 //!
 //! **The grammar refuses by construction, not by scanning.** [`parse`] returns
 //! a `StatementShape` or an error; there is no path that returns a shape for a

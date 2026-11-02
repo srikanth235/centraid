@@ -1,10 +1,8 @@
-//! A CONSENT DENIAL, as an app's payload carries it — one type for every app.
+//! A read refusal, as an app's payload carries it — one type for every app.
 //!
-//! Every v0 app query wraps its body and answers `{…empty, vaultDenied:
-//! {code, message}}` rather than throwing. A denial is a value in the payload,
-//! never a [`crate::KitError`]. `revoked_at` comes from the HOST, because a
-//! revoked app cannot read the consent tables to date its own revocation — so
-//! it is an `Option` no app crate fills in.
+//! Door failures are values in the payload; bounded-read and validation errors
+//! remain [`crate::KitError`] values. `revoked_at` is retained in the payload
+//! shape and stays absent for personal-vault reads.
 //!
 //! One type rather than one per app so the core answers every app's denial
 //! through one `settle`, with no field-for-field conversion between copies.

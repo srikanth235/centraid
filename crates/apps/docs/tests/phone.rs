@@ -14,7 +14,7 @@ use centraid_apps_kit::row::Row;
 use centraid_apps_kit::statement::PageQuery;
 use centraid_vault::time::zone::FireZone;
 
-/// A door that refuses every read, as a revoked grant would.
+/// A door that refuses every read.
 struct Refusing;
 
 impl PageDoor for Refusing {

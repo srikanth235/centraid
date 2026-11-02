@@ -27,7 +27,7 @@
 //!   count and a next due date, both from the one engine
 //!   ([`centraid_vault::time::recurrence::collapse_missed`]), so no surface
 //!   ever sees an RRULE string or re-counts a missed period for itself (#834).
-//! - **NO DATA OF ITS OWN** — revoke the grant and the app goes dark.
+//! - **NO DATA OF ITS OWN** — tasks live in the personal vault.
 //! - **THE PHONE READS IT IN THE CORE** (#1046): `crates/core`'s `app_query`
 //!   runs [`load_board`], [`load_task`] and [`load_search_term`] and answers
 //!   `agenda.proto`. Every civil reading a screen draws — a due's local day and
