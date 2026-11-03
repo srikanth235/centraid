@@ -182,5 +182,18 @@ class MentionTest(unittest.TestCase):
         self.assertFalse(score.args_match({"target": "sunset", "title": "beach"}, gold, {"target"}))
 
 
+class AltsTest(unittest.TestCase):
+    def test_symmetric_args_via_alts(self):
+        import score
+        cat = {"money.link-transfer": {"id": "money.link-transfer", "type": "action", "params": {
+            "target": {"type": "mention", "required": True}, "other": {"type": "mention", "required": True}}}}
+        item = {"id": "m", "app": "money", "gold": {"tool": "act", "name": "money.link-transfer",
+                "args": {"target": "a", "other": "b"}, "optional": {}, "alts": [{"args": {"target": "b", "other": "a"}}]}}
+        row = {"call": {"tool": "act", "name": "money.link-transfer", "args": {"target": "b", "other": "a"}, "error": None}}
+        res = score.score_item(item, row, cat)
+        self.assertTrue(res["correct"])
+        self.assertFalse(res["wrong_write"])
+
+
 if __name__ == "__main__":
     unittest.main()

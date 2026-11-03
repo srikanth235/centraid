@@ -193,10 +193,12 @@ def has_loop(think: str | None) -> bool:
     return any(c >= LOOP_REPEATS for c in seen.values())
 
 
-def _target_ok(pred_args: dict, gold_args: dict) -> bool:
-    if "target" not in gold_args:
-        return True
-    return "target" in pred_args and value_ok(pred_args["target"], gold_args["target"], True)
+def _target_ok(pred_args: dict, gold: dict) -> bool:
+    for g in [gold, *gold.get("alts", [])]:
+        gold_args = g.get("args", {})
+        if "target" not in gold_args or ("target" in pred_args and value_ok(pred_args["target"], gold_args["target"], True)):
+            return True
+    return False
 
 
 def score_item(item: dict, row: dict | None, catalog: dict) -> dict[str, Any]:
@@ -215,11 +217,13 @@ def score_item(item: dict, row: dict | None, catalog: dict) -> dict[str, Any]:
     elif gold["tool"] == "ask":
         args_ok = True
     else:
-        args_ok = args_match(call["args"], gold, mention_keys(catalog.get(gold.get("name") or "")))
+        mentions = mention_keys(catalog.get(gold.get("name") or ""))
+        # `alts`: other complete arg sets that are equally right (e.g. a symmetric pair such as link-transfer)
+        args_ok = any(args_match(call["args"], g, mentions) for g in [gold, *gold.get("alts", [])])
     pargs = call.get("args") if parsed and isinstance(call.get("args"), dict) else {}
     wrong_write = bool(
         ptool == "act"
-        and not (gold["tool"] == "act" and call.get("name") == gold.get("name") and _target_ok(pargs, gold.get("args", {})))
+        and not (gold["tool"] == "act" and call.get("name") == gold.get("name") and _target_ok(pargs, gold))
     )
     cands = (row or {}).get("candidates") or []
     gname = gold.get("name") if gold["tool"] in ("act", "load") else None

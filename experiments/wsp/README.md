@@ -8,7 +8,7 @@ you hand to Astra is `ASTRA.md`.
 | --- | --- |
 | `catalog.py` → `catalog/schemas.json` | the model-facing catalog, generated from `crates/apps/*/manifest.json`: 154 actions and 55 views, of which 29 are cards |
 | `retrieve.py`, `prompt.py` | BM25 top-8 candidates; the prompt rendered with Qwen's chat template, thinking off by default |
-| `probe/src/*.jsonl` → `split.py` → `probe/dev.jsonl`, `probe/hold.jsonl`, `probe/sets.json` | 318 hand-authored member messages with gold calls across the 8 apps, split by hash into 177 dev and 141 hold |
+| `probe/src/*.jsonl` → `split.py` → `probe/dev.jsonl`, `probe/hold.jsonl`, `probe/sets.json` | 992 member messages with gold calls, about 124 per app, every action and view at least twice; stratified by app and tool into 496 dev and 496 hold |
 | `run.py`, `parse.py`, `score.py` | generation (HF or GGUF; thinking on by default, `--think-cap 0` off; seeded sampling), call parsing, and scoring with paired comparison |
 | `lab.py`, `budget.py` | Astra's sandbox: dev only, a forward-pass budget, live tensors, activation and attention capture |
 | `apply_edit.py`, `edits/` | an edit is a script; applying one records the sha256 before and after and the elements changed |
@@ -59,7 +59,7 @@ python3 gguf.py --model out/<name> --out out/<name>-Q4_0.gguf
 python3 run.py --backend gguf --gguf out/<name>-Q4_0.gguf --model out/<name> --items probe/hold.jsonl --out runs/<name>-hold-q4.jsonl --think-cap <same>
 ```
 
-Keep an edit only if all three hold:
+Keep an edit only if both hold:
 - hold `correct` improves with |z| ≥ 2 against the starting model, thinking on;
 - the gain survives Q4_0.
 

@@ -40,7 +40,7 @@ catalog and the scoring rules are fixed: `DESIGN.md` §1 to §5, `prompt.py`, `s
 import sys; sys.path.insert(0, "experiments/wsp")
 from lab import Lab
 lab = Lab("<starting model dir>", run="<run name>", budget=50)   # attn_implementation="eager" for attention weights
-items = lab.dev()                           # 177 dev items: all you may see
+items = lab.dev()                           # 496 dev items: all you may see
 rows = lab.generate(items)                  # scored rows; one pass = up to 512 items
 out = lab.forward(texts, capture=["model.layers.15.mlp"], attn_layers=[3])   # one pass = up to 1,024 texts
 lab.tensors["model.language_model.layers.15.mlp.down_proj.weight"]          # read freely, edit in place

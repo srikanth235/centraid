@@ -90,8 +90,12 @@ prompt.render(item, catalog, tokenizer, k=8) -> tuple[str, list[str]]    # (prom
 - `history`: earlier turns as `{"user": ..., "call": {"tool", "name", "args"}}`; most items have none.
 - `gold.args`: every arg the call must carry. A list value means any-of. `optional`: args the call
   may carry or leave out (with their accepted values). For `ask`, `args` is `{}`; for `decline`,
-  `{"reason": "..."}`.
-- Split: dev or hold by `sha256(id)` parity, decided after authoring. Astra sees dev only.
+  `{"reason": "..."}`. `alts` (rare): other complete `{args, optional}` sets that are equally right,
+  e.g. the two sides of a symmetric pair (`money.link-transfer`).
+- Split: stratified by app and gold tool, and decided by `sha256(id)` after authoring (`split.py`).
+  Astra sees dev only.
+- Size: 992 items, about 124 per app, 496 dev and 496 hold. Every action and view appears at least
+  twice. Each batch was authored and then independently reviewed (Sonnet agents).
 
 ## 4. Generation (`run.py`)
 

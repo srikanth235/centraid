@@ -4,28 +4,28 @@
  "sets": {
   "dev": {
    "by_app": {
-    "agenda": 62,
-    "docs": 62,
+    "agenda": 61,
+    "docs": 61,
     "health": 63,
     "locker": 64,
     "money": 62,
     "notes": 62,
-    "people": 62,
+    "people": 60,
     "photos": 63
    },
    "by_tool": {
     "act": 274,
-    "ask": 46,
-    "decline": 48,
-    "load": 132
+    "ask": 45,
+    "decline": 47,
+    "load": 130
    },
-   "n": 500,
-   "sha256": "ee5eca118fb4110bf306f36774ceb5e45967bb78215ddcfd68e751584b7e4811"
+   "n": 496,
+   "sha256": "5dc66f3271c090914348a3e98baf41a70c1daf5f017568be6c076440b94a61dc"
   },
   "hold": {
    "by_app": {
-    "agenda": 63,
-    "docs": 63,
+    "agenda": 62,
+    "docs": 62,
     "health": 62,
     "locker": 61,
     "money": 62,
@@ -34,13 +34,13 @@
     "photos": 62
    },
    "by_tool": {
-    "act": 277,
-    "ask": 47,
+    "act": 278,
+    "ask": 45,
     "decline": 43,
-    "load": 131
+    "load": 130
    },
-   "n": 498,
-   "sha256": "bc6eeffadce15c816ac9716b39615d18b2255af48a5986248aaed7e11d09946c"
+   "n": 496,
+   "sha256": "3097251f9723e3217724a0e1781efbcff7ce805c9838591d4333cdccf8d50b0f"
   }
  }
 }
