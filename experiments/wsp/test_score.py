@@ -165,5 +165,22 @@ class SummaryTest(unittest.TestCase):
         self.assertEqual(score.pair(a, a)["z"], 0.0)
 
 
+
+
+class MentionTest(unittest.TestCase):
+    def test_kind_noun_and_lead_fold(self):
+        import score
+        for a, b in [("sunset pic", "sunset"), ("one of mum at the lake", "mum at the lake"),
+                     ("checking account", "checking"), ("scan of the 2019 receipt", "2019 receipt")]:
+            self.assertEqual(score.mention_norm(a), score.mention_norm(b), (a, b))
+
+    def test_never_empties_and_text_params_stay_strict(self):
+        import score
+        self.assertEqual(score.mention_norm("pic"), "pic")
+        gold = {"args": {"target": "sunset", "title": "beach pic"}, "optional": {}}
+        self.assertTrue(score.args_match({"target": "sunset pic", "title": "beach pic"}, gold, {"target"}))
+        self.assertFalse(score.args_match({"target": "sunset", "title": "beach"}, gold, {"target"}))
+
+
 if __name__ == "__main__":
     unittest.main()

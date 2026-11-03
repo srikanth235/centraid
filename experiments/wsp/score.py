@@ -45,21 +45,45 @@ def norm(value: Any) -> Any:
     return _ARTICLE.sub("", text, count=1)
 
 
+# A mention names a row; the runtime resolves it by fuzzy name match, so a kind noun or a "pic of" lead
+# does not change which row it reaches. Mentions compare after removing them (the probe review, #1044).
+KIND_NOUNS = ("task", "tasks", "note", "notes", "list", "folder", "pic", "pics", "photo", "photos", "picture",
+              "album", "category", "account", "login", "item", "rule", "event", "doc", "document", "file",
+              "notebook", "budget", "entry", "project", "calendar", "card", "contact")
+_MENTION_LEAD = re.compile(r"^(?:(?:the )?one of|pic of|photo of|picture of|scan of|the one with) ")
+
+
+def mention_norm(value: Any) -> Any:
+    """`norm`, then drop a "pic of"-style lead and one trailing kind noun (never the whole mention)."""
+    text = norm(value)
+    if not isinstance(text, str):
+        return text
+    text = _MENTION_LEAD.sub("", text, count=1)
+    text = _ARTICLE.sub("", text, count=1)
+    words = text.split()
+    if len(words) > 1 and words[-1] in KIND_NOUNS:
+        words = words[:-1]
+    return " ".join(words)
+
+
 def _is_punct(ch: str) -> bool:
     import unicodedata
 
     return unicodedata.category(ch).startswith("P")
 
 
-def _same(pred: Any, cand: Any) -> bool:
+def _same(pred: Any, cand: Any, mention: bool = False) -> bool:
     if isinstance(cand, list) or isinstance(pred, list):
         if not (isinstance(cand, list) and isinstance(pred, list)):
             return False
-        return sorted(map(_key, pred)) == sorted(map(_key, cand))
+        key = _mkey if mention else _key
+        return sorted(map(key, pred)) == sorted(map(key, cand))
     if isinstance(pred, bool) or isinstance(cand, bool):
         return isinstance(pred, bool) and isinstance(cand, bool) and pred == cand
     if isinstance(pred, (int, float)) and isinstance(cand, (int, float)):
         return pred == cand
+    if mention:
+        return mention_norm(pred) == mention_norm(cand)
     return norm(pred) == norm(cand)
 
 
@@ -67,14 +91,18 @@ def _key(value: Any) -> str:
     return json.dumps(norm(value), sort_keys=True)
 
 
-def value_ok(pred: Any, accepted: Any) -> bool:
+def _mkey(value: Any) -> str:
+    return json.dumps(mention_norm(value), sort_keys=True)
+
+
+def value_ok(pred: Any, accepted: Any, mention: bool = False) -> bool:
     """`accepted` a list means any-of its members (a member may itself be a list). When the prediction is a list,
     a flat accepted list also counts as that exact list (a list-typed param written as `["Ann", "Bo"]`)."""
     if not isinstance(accepted, list):
-        return _same(pred, accepted)
-    if any(_same(pred, option) for option in accepted):
+        return _same(pred, accepted, mention)
+    if any(_same(pred, option, mention) for option in accepted):
         return True
-    return isinstance(pred, list) and _same(pred, accepted)
+    return isinstance(pred, list) and _same(pred, accepted, mention)
 
 
 def check_valid(call: dict | None, catalog: dict) -> tuple[bool, str | None]:
@@ -135,15 +163,22 @@ def _type_error(value: Any, spec: dict) -> str | None:
     return None  # unknown param type in the catalog: accept
 
 
-def args_match(pred: dict, gold: dict) -> bool:
+def mention_keys(entry: dict | None) -> set[str]:
+    """The params of a catalog entry that hold mentions (a `mention`, or a `list` of them)."""
+    params = (entry or {}).get("params", {})
+    return {k for k, p in params.items()
+            if p.get("type") == "mention" or (p.get("type") == "list" and p.get("items") == "mention")}
+
+
+def args_match(pred: dict, gold: dict, mentions: set[str] | frozenset[str] = frozenset()) -> bool:
     gold_args, optional = gold.get("args", {}), gold.get("optional", {})
     for key, accepted in gold_args.items():
-        if key not in pred or not value_ok(pred[key], accepted):
+        if key not in pred or not value_ok(pred[key], accepted, key in mentions):
             return False
     for key, value in pred.items():
         if key in gold_args:
             continue
-        if key not in optional or not value_ok(value, optional[key]):
+        if key not in optional or not value_ok(value, optional[key], key in mentions):
             return False
     return True
 
@@ -161,7 +196,7 @@ def has_loop(think: str | None) -> bool:
 def _target_ok(pred_args: dict, gold_args: dict) -> bool:
     if "target" not in gold_args:
         return True
-    return "target" in pred_args and value_ok(pred_args["target"], gold_args["target"])
+    return "target" in pred_args and value_ok(pred_args["target"], gold_args["target"], True)
 
 
 def score_item(item: dict, row: dict | None, catalog: dict) -> dict[str, Any]:
@@ -180,7 +215,7 @@ def score_item(item: dict, row: dict | None, catalog: dict) -> dict[str, Any]:
     elif gold["tool"] == "ask":
         args_ok = True
     else:
-        args_ok = args_match(call["args"], gold)
+        args_ok = args_match(call["args"], gold, mention_keys(catalog.get(gold.get("name") or "")))
     pargs = call.get("args") if parsed and isinstance(call.get("args"), dict) else {}
     wrong_write = bool(
         ptool == "act"

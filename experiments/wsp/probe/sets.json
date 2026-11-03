@@ -15,12 +15,12 @@
    },
    "by_tool": {
     "act": 109,
-    "ask": 13,
+    "ask": 12,
     "decline": 16,
-    "load": 39
+    "load": 40
    },
    "n": 177,
-   "sha256": "3de4b890d0776f965fde065fb731183f161c18090b0886728b70e7c1faa4f1ec"
+   "sha256": "98b2dcc91c6ab6f4b0799fd60a0f23faa5f53ab55811dd3e2fda87aa8c2b37bd"
   },
   "hold": {
    "by_app": {
@@ -28,19 +28,19 @@
     "docs": 10,
     "health": 18,
     "locker": 19,
-    "money": 23,
+    "money": 22,
     "notes": 22,
-    "people": 20,
+    "people": 19,
     "photos": 13
    },
    "by_tool": {
-    "act": 87,
-    "ask": 11,
+    "act": 86,
+    "ask": 10,
     "decline": 8,
     "load": 37
    },
-   "n": 143,
-   "sha256": "e96ed0c10455a2ef3efaf9e8f9d3ee703745505ed27b3e31720237b8f2948188"
+   "n": 141,
+   "sha256": "98e77e6c8c42801b581c190515c431e410971f77ba3325c87c6c285dc35890ff"
   }
  }
 }
