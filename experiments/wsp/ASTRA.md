@@ -6,7 +6,7 @@ it turns a member's phone message into the right **call on the Centraid catalog*
 ## The task the model must do
 
 The model sees a system prompt with up to 8 candidate actions and views, then the member's message.
-It thinks in `<think>`, then emits **one** call:
+It emits **one** call, directly. Thinking is off: the goal is the call itself, not reasoning.
 
 | tool | meaning |
 | --- | --- |
@@ -18,9 +18,12 @@ It thinks in `<think>`, then emits **one** call:
 Arguments are copied as the member said them: names stay mentions and dates stay phrases. The
 runtime resolves them later. The exact rules are in `DESIGN.md`, §1 to §5.
 
-**What the base model does today:** it thinks until the 200-token cap, then **asks** instead of
-acting, even when the message is clear and the right action is among the candidates. Check this
-yourself with a baseline generate pass.
+**The objective is the call:**
+- the right tool: act, load, ask or decline;
+- the right action or view among the candidates;
+- the right arguments, as spans of the member's words.
+
+Every metric you steer by is about the emitted call.
 
 ## Your lab
 
@@ -38,10 +41,9 @@ lab.save_edit("<name>", code, notes)    # writes edits/<name>/edit.py + NOTES.md
 
 - Reading weights is free. Running the model costs passes, and every pass is logged in
   `runs/<run>/ledger.jsonl`.
-- Pass `think_cap=` to `lab.generate` to study how thinking behaves past 200 tokens. The phone's
-  current cap is 200, but that number is open.
+- Thinking is off by default (`think_cap=0`). Do not optimise reasoning traces; only the call is scored.
 - A row's `score` carries `correct`, `valid`, `tool_ok`, `name_ok`, `args_ok`, `wrong_write`,
-  `over_ask`, `under_ask`, `capped`, `think_tokens` and `loop`.
+  `over_ask` and `under_ask`.
 
 ## Rules
 
@@ -61,20 +63,23 @@ lab.save_edit("<name>", code, notes)    # writes edits/<name>/edit.py + NOTES.md
 
 ## What a good result looks like
 
-On dev, compared with the unedited model under the same think cap:
-- `correct` goes up,
-- `wrong_write` does not go up,
-- `capped` and `loop` go down, or stay level when the edit is about something else.
+On dev, compared with the unedited model:
+- `correct` goes up, and with it `tool_ok`, `name_ok` and `args_ok`;
+- `wrong_write` does not go up;
+- `over_ask` and `under_ask` do not grow.
 
 The owner then applies your edit with `apply_edit.py` and judges it on hold, in bf16 and in the
 phone's Q4_0 GGUF. You will not see that result before the owner decides.
 
 ## Starting points
 
-These are leads, not instructions.
-- **Over-asking:** is there a direction in the residual stream that separates "ask" from "act" at
-  the first call token? Does it fire on clear messages?
-- **Runaway thinks:** the published edit
-  (`RikiyaT/Qwen3.5-0.8B-weight-space-programming`) removed a looping direction from the MLPs of
-  layers 15 and 19 for math. Does the same direction drive our capped thinks?
-- **Copying spans:** does the model copy the member's words into args, or paraphrase them?
+These are leads, not instructions. Look at where calls go wrong first: a generate pass shows which
+of `tool_ok`, `name_ok` and `args_ok` fails most.
+- **Tool choice:** is there a direction that separates act, load, ask and decline at the first
+  call token? Is it biased toward one tool on clear messages?
+- **Action choice:** the candidates are in the prompt. Does the model attend to the candidate line
+  that fits the message? Where does the right id lose to a neighbour, for example edit vs reschedule?
+- **Argument copying:** does the model copy the member's span verbatim into the arg, or
+  paraphrase, translate or invent it (ISO dates, ids)? Which heads copy from the user turn?
+- **Format:** are calls well-formed: one `<tool_call>`, valid JSON in `input` or `params`, and
+  param names from the entry?

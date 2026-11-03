@@ -49,7 +49,7 @@ Derivation rules (the generator applies them and lists every dropped field per e
 
 ## 2. Tools the model sees (`prompt.py`)
 
-Four tools, Qwen's native tool format, thinking on (`enable_thinking=True`):
+Four tools, Qwen's native tool format, thinking off by default (`enable_thinking=False`):
 
 | tool | parameters |
 | --- | --- |
@@ -95,8 +95,10 @@ prompt.render(item, catalog, tokenizer, k=8) -> tuple[str, list[str]]    # (prom
 
 ## 4. Generation (`run.py`)
 
-Regime of the phone: greedy, thinking on, think cap 200 tokens (when the cap is hit without
-`</think>`, the harness appends `\n</think>\n\n` and continues), 512 new tokens in all.
+Greedy, **thinking off** by default: the objective is the emitted call, so the template closes an empty
+think and the model writes the call directly (512 new tokens). `--think-cap N` turns thinking on with
+a cap of N tokens (when the cap is hit without `</think>`, the harness appends `\n</think>\n\n` and
+continues), for comparison only.
 Backends: `hf` (transformers, batched, left padding) and `gguf` (llama-cpp-python, same prompt
 text, same cap logic). Output: one JSON line per item with the raw text, the think, the parsed
 call, think token count, `capped`, candidates, wall time.
@@ -108,9 +110,8 @@ of that entry, required present, enum values legal), `tool_ok`, `name_ok`, `args
 Strings compare after casefold, whitespace fold, and stripping punctuation and a leading
 "the/a/an/my". Extra args not in `gold.args` or `gold.optional` fail `args_ok`.
 
-Report (JSON + a markdown table, overall and per app): n, correct, valid, think capped rate, mean
-think tokens, repeat-loop rate (a 20-token span repeated 3+ times in the think), retrieval
-recall, **wrong write** (an `act` where gold is not that act on that target: the guardrail),
+Report (JSON + a markdown table, overall and per app): n, correct, valid, retrieval recall,
+(with thinking on: think capped rate, mean think tokens, repeat-loop rate), **wrong write** (an `act` where gold is not that act on that target: the guardrail),
 over-ask (asked where gold did not), under-ask (gold asked, the model did not).
 A paired comparison of two runs: items won, lost, z = (w - l) / sqrt(w + l).
 

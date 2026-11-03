@@ -81,6 +81,8 @@ class Render(unittest.TestCase):
         tok = FakeTokenizer()
         text, ids = prompt.render(ITEM, CAT, tok)
         self.assertEqual(text, "system|user<gen>")
+        self.assertEqual(tok.kwargs["enable_thinking"], False)  # off by default: the call is the target
+        prompt.render(ITEM, CAT, tok, thinking=True)
         self.assertEqual(tok.kwargs["enable_thinking"], True)
         self.assertEqual(tok.kwargs["add_generation_prompt"], True)
         self.assertEqual(tok.kwargs["tokenize"], False)

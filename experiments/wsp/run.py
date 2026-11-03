@@ -3,8 +3,10 @@
     python3 run.py --model DIR_OR_HF_ID --items probe/dev.jsonl --out runs/x.jsonl
         [--backend hf|gguf] [--gguf FILE] [--batch 16] [--limit N] [--dtype bf16|fp32] [--device auto] [--k 8]
 
-Greedy. Phase 1 generates up to 200 tokens and stops at `</think>`; if it did not stop (and the model did not end
-its turn), "\\n</think>\\n\\n" is appended and the row is `capped`. Phase 2 continues so that the new tokens total at most
+Greedy. By default thinking is off (`--think-cap 0`): the template closes an empty think and the model emits the
+call directly; the target is the call, not the reasoning. With `--think-cap N`, phase 1 generates up to N tokens and
+stops at `</think>`; if it did not stop (and the model did not end its turn), "\\n</think>\\n\\n" is appended and the
+row is `capped`. Phase 2 continues so that the new tokens total at most
 512, stopping at `</tool_call>`, EOS or `<|im_end|>`. The chat template normally ends the prompt with `<think>\\n`,
 so `raw` starts inside the think; parse.py accepts both.
 
@@ -30,7 +32,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import parse  # noqa: E402
 
-THINK_CAP = 200
+THINK_CAP = 0  # 0 = thinking off: the call is emitted directly (the default for weight-space work)
 MAX_NEW = 512
 CLOSE = "\n</think>\n\n"
 TURN_END = ("<|im_end|>", "<|endoftext|>")
@@ -121,7 +123,8 @@ def _hf_generate(model: Any, tokenizer: Any, prompts: list[str], limits: list[in
 
 
 def _generate_hf(model, tokenizer, items, catalog, k, batch, think_cap, max_new, progress, render) -> list[dict]:
-    rendered = [render(it, catalog, tokenizer, k) for it in items]
+    thinking = think_cap > 0
+    rendered = [render(it, catalog, tokenizer, k, thinking=thinking) for it in items]
     order = sorted(range(len(items)), key=lambda i: -len(rendered[i][0]))  # longest first: less padding, same results per row
     eos = _eos_ids(tokenizer, model)
     rows: dict[int, dict] = {}
@@ -129,10 +132,11 @@ def _generate_hf(model, tokenizer, items, catalog, k, batch, think_cap, max_new,
         idx = order[start:start + batch]
         t0 = time.perf_counter()
         prompts = [rendered[i][0] for i in idx]
-        p1 = _hf_generate(model, tokenizer, prompts, [think_cap] * len(prompts), ("</think>",), eos)
+        p1 = (_hf_generate(model, tokenizer, prompts, [think_cap] * len(prompts), ("</think>",), eos) if thinking
+              else [("", 0, False)] * len(prompts))
         phase1, capped, ended, used = [], [], [], []
         for text, n, eos_hit in p1:
-            closed = "</think>" in text
+            closed = "</think>" in text or not thinking
             phase1.append(text)
             capped.append(not closed and not eos_hit)
             ended.append(eos_hit and not closed)
@@ -140,7 +144,7 @@ def _generate_hf(model, tokenizer, items, catalog, k, batch, think_cap, max_new,
         cont = [j for j in range(len(idx)) if not ended[j]]
         phase2 = [""] * len(idx)
         if cont:
-            ctx = [prompts[j] + phase1[j] + (CLOSE if capped[j] else "") for j in cont]
+            ctx = [prompts[j] + phase1[j] + (CLOSE if capped[j] else "") for j in cont]  # thinking off: the template closed it
             p2 = _hf_generate(model, tokenizer, ctx, [max_new - used[j] for j in cont], ("</tool_call>",), eos)
             for j, (text, _n, _e) in zip(cont, p2):
                 phase2[j] = text
@@ -179,10 +183,11 @@ def _gguf_stream(llm: Any, prompt: str, max_tokens: int, stops: tuple[str, ...])
 def _generate_gguf(llm, tokenizer, items, catalog, k, think_cap, max_new, progress, render) -> list[dict]:
     rows = []
     for n_done, item in enumerate(items, 1):
-        prompt, cands = render(item, catalog, tokenizer, k)
+        thinking = think_cap > 0
+        prompt, cands = render(item, catalog, tokenizer, k, thinking=thinking)
         t0 = time.perf_counter()
-        text1, used, eos_hit = _gguf_stream(llm, prompt, think_cap, ("</think>",))
-        closed = "</think>" in text1
+        text1, used, eos_hit = _gguf_stream(llm, prompt, think_cap, ("</think>",)) if thinking else ("", 0, False)
+        closed = "</think>" in text1 or not thinking
         capped = not closed and not eos_hit
         text2 = ""
         if closed or capped:
@@ -260,10 +265,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--device", default="auto")
     ap.add_argument("--k", type=int, default=8)
     ap.add_argument("--think-cap", type=int, default=THINK_CAP,
-                    help="think tokens before </think> is forced (a sweep variable, not a fixed choice)")
+                    help="0 (default) = thinking off, the call is emitted directly; N > 0 = think up to N tokens, then </think> is forced")
     ap.add_argument("--max-new", type=int, default=MAX_NEW, help="new tokens in all; raised to think-cap + 312 if lower")
     args = ap.parse_args(argv)
-    args.max_new = max(args.max_new, args.think_cap + 312)
+    args.max_new = max(args.max_new, args.think_cap + 312) if args.think_cap else args.max_new
 
     import catalog as catalog_mod
 

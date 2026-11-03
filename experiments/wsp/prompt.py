@@ -119,10 +119,10 @@ def messages(item: dict, catalog: dict[str, dict], k: int = 8) -> tuple[list[dic
     return msgs, tools(), ids
 
 
-def render(item: dict, catalog: dict[str, dict], tokenizer: Any, k: int = 8) -> tuple[str, list[str]]:
+def render(item: dict, catalog: dict[str, dict], tokenizer: Any, k: int = 8, thinking: bool = False) -> tuple[str, list[str]]:
     msgs, tool_defs, ids = messages(item, catalog, k)
     text = tokenizer.apply_chat_template(
-        msgs, tools=tool_defs, add_generation_prompt=True, enable_thinking=True, tokenize=False
+        msgs, tools=tool_defs, add_generation_prompt=True, enable_thinking=thinking, tokenize=False
     )
     return text, ids
 

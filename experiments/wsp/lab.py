@@ -99,7 +99,7 @@ class Lab:
         """Run `items` in the phone's regime; returns one dict per item: the run row plus its score fields (key `score`)."""
         passes = self.ledger.spend("generate", len(items))
         rows = run_mod.generate_items(self.model, self.tokenizer, items, self.catalog, batch=batch, k=k,
-                                       think_cap=think_cap, max_new=max(max_new, think_cap + 312))
+                                       think_cap=think_cap, max_new=max(max_new, think_cap + 312) if think_cap else max_new)
         by_id = {i["id"]: i for i in items}
         out = []
         for row in rows:
