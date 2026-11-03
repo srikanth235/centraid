@@ -130,7 +130,7 @@ A paired comparison of two runs: items won, lost, z = (w - l) / sqrt(w + l).
 ## 6. The lab Astra works in (`lab.py`, `budget.py`)
 
 ```python
-lab = Lab(model_dir, run="name", budget=50)   # loads weights; opens runs/<name>/ledger.jsonl
+lab = Lab(model_dir, run="name", budget=0)    # loads weights; 0 passes = pure weights (the brief); opens runs/<name>/ledger.jsonl
 lab.dev()                                     # dev items only; there is no hold accessor
 lab.generate(items)                           # 1 pass = up to 512 items; scored output
 lab.forward(texts, capture=["model.layers.15.mlp"], attn_layers=[...])

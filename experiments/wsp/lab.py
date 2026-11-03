@@ -1,6 +1,6 @@
 """The lab Astra works in (DESIGN section 6).
 
-    lab = Lab(model_dir, run="name", budget=50)
+    lab = Lab(model_dir, run="name", budget=0)   # 0 = pure weights: no forward passes
     lab.dev()                       # probe/dev.jsonl; the class holds no path to the hold split
     lab.generate(items)             # scored rows; 1 pass = up to 512 items
     lab.forward(texts, capture=["model.layers.15.mlp"], attn_layers=[3])   # 1 pass = up to 1,024 texts
@@ -54,7 +54,7 @@ def _canon(name: str) -> str:
 
 
 class Lab:
-    def __init__(self, model_dir: str, run: str, budget: int = 50, device: str = "auto", dtype: str = "bf16",
+    def __init__(self, model_dir: str, run: str, budget: int = 0, device: str = "auto", dtype: str = "bf16",
                  attn_implementation: str | None = None) -> None:
         _refuse_hold(model_dir, "model_dir")
         _refuse_hold(run, "run")
