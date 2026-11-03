@@ -9,7 +9,7 @@ you hand to Astra is `ASTRA.md`.
 | `catalog.py` → `catalog/schemas.json` | the model-facing catalog, generated from `crates/apps/*/manifest.json`: 154 actions and 55 views, of which 29 are cards |
 | `retrieve.py`, `prompt.py` | BM25 top-8 candidates; the prompt rendered with Qwen's chat template, thinking off by default |
 | `probe/src/*.jsonl` → `split.py` → `probe/dev.jsonl`, `probe/hold.jsonl`, `probe/sets.json` | 318 hand-authored member messages with gold calls across the 8 apps, split by hash into 177 dev and 141 hold |
-| `run.py`, `parse.py`, `score.py` | generation (HF or GGUF; greedy; thinking off by default, `--think-cap N` turns it on), call parsing, and scoring with paired comparison |
+| `run.py`, `parse.py`, `score.py` | generation (HF or GGUF; thinking on by default, `--think-cap 0` off; seeded sampling), call parsing, and scoring with paired comparison |
 | `lab.py`, `budget.py` | Astra's sandbox: dev only, a forward-pass budget, live tensors, activation and attention capture |
 | `apply_edit.py`, `edits/` | an edit is a script; applying one records the sha256 before and after and the elements changed |
 | `gguf.py` | converts a model directory to Q4_0 GGUF, the phone's format, with the llama.cpp commit the engine vendors |
@@ -25,16 +25,24 @@ python3 split.py --check                 # the probe sets are the frozen ones
 
 ## 1. Baselines
 
-Run every command for both models (base `Qwen/Qwen3.5-0.8B` and edited
-`RikiyaT/Qwen3.5-0.8B-weight-space-programming`), on both sets, with thinking off (`--think-cap 0`,
-the default) and on (`--think-cap 512`). The metric is `correct`, the call accuracy; the base
-model's best regime is the reference every edit is compared with.
+The starting model is `RikiyaT/Qwen3.5-0.8B-weight-space-programming`: the post's edit removed the
+0.8B's thinking-loop direction. Answers hitting the 32k cap fell from 93% to 33%, so thinking is
+usable. The regime is **thinking on** with the post's sampling, over 3 seeds. The plain base model
+and thinking off are reference rows.
 
 ```bash
-python3 run.py --model Qwen/Qwen3.5-0.8B --items probe/dev.jsonl --out runs/base-dev.jsonl
-python3 score.py runs/base-dev.jsonl --items probe/dev.jsonl --json runs/base-dev.score.json
-python3 score.py --pair runs/base-dev.jsonl runs/rikiya-dev.jsonl --items probe/dev.jsonl
+for m in RikiyaT/Qwen3.5-0.8B-weight-space-programming Qwen/Qwen3.5-0.8B; do
+  n=$(basename $m)
+  for cap in 32768 0; do for seed in 0 1 2; do
+    python3 run.py --model $m --items probe/dev.jsonl --out runs/$n-dev-c$cap-s$seed.jsonl --think-cap $cap --seed $seed
+    python3 score.py runs/$n-dev-c$cap-s$seed.jsonl --items probe/dev.jsonl --json runs/$n-dev-c$cap-s$seed.score.json
+  done; done
+done
 ```
+
+Repeat on hold. The metric is `correct`, the call accuracy, averaged over seeds. Every edit is
+compared with the starting model, thinking on. `--greedy` gives one deterministic run when a paired
+comparison needs it.
 
 ## 2. Astra
 
@@ -52,14 +60,14 @@ python3 run.py --backend gguf --gguf out/<name>-Q4_0.gguf --model out/<name> --i
 ```
 
 Keep an edit only if all three hold:
-- hold `correct` improves with |z| ≥ 2 against the base model's best regime;
+- hold `correct` improves with |z| ≥ 2 against the starting model, thinking on;
 - the gain survives Q4_0.
 
 ## Measured here
 
 These come from CPU smoke runs on the base Qwen3.5-0.8B, not from a full baseline.
 
-**First 12 dev items, thinking off:** 0 of 12 calls correct, and 5 of 12 valid.
+**First 12 dev items, thinking off, greedy:** 0 of 12 calls correct, and 5 of 12 valid.
 - The model now acts and loads instead of asking: 2 asks, against 0 gold asks.
 - The right action was among the candidates for 9 of the 11 items that have one.
 - Calls fail on:
@@ -70,7 +78,8 @@ These come from CPU smoke runs on the base Qwen3.5-0.8B, not from a full baselin
   - **Wrong tool:** `load` on an action.
   - **Wrong action:** 4 wrong writes.
 
-**Two items, thinking on with a 200-token cap:** both hit the cap and then asked.
+**Two items, thinking on, greedy, 200-token cap** (an early regime, since replaced): both hit the
+cap and then asked.
 
 **Tooling:**
 - A forward pass with MLP capture and a one-item generate ran through the lab and were logged.

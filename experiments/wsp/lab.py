@@ -95,11 +95,13 @@ class Lab:
 
     # -- passes
     def generate(self, items: list[dict], batch: int = 16, k: int = 8,
-                 think_cap: int = run_mod.THINK_CAP, max_new: int = run_mod.MAX_NEW) -> list[dict]:
+                 think_cap: int = run_mod.THINK_CAP, max_new: int = run_mod.MAX_NEW,
+                 sample: dict | None | str = "default") -> list[dict]:
         """Run `items` in the phone's regime; returns one dict per item: the run row plus its score fields (key `score`)."""
         passes = self.ledger.spend("generate", len(items))
         rows = run_mod.generate_items(self.model, self.tokenizer, items, self.catalog, batch=batch, k=k,
-                                       think_cap=think_cap, max_new=max(max_new, think_cap + 312) if think_cap else max_new)
+                                       think_cap=think_cap, max_new=max(max_new, think_cap + 512) if think_cap else max_new,
+                                       sample=run_mod.sampling_for(think_cap) if sample == "default" else sample)
         by_id = {i["id"]: i for i in items}
         out = []
         for row in rows:
@@ -177,7 +179,7 @@ class Lab:
         target.mkdir(parents=True, exist_ok=True)
         (target / "edit.py").write_text(code if code.endswith("\n") else code + "\n", encoding="utf-8")
         (target / "NOTES.md").write_text(notes if notes.endswith("\n") else notes + "\n", encoding="utf-8")
-        regime = {"think_cap": 0, **(regime or {})}
+        regime = {"think_cap": 0, "greedy": False, **(regime or {})}
         if not isinstance(regime["think_cap"], int) or regime["think_cap"] < 0:
             raise ValueError("regime think_cap: a whole number of tokens, 0 = thinking off")
         (target / "regime.json").write_text(json.dumps(regime, indent=1, sort_keys=True) + "\n", encoding="utf-8")

@@ -1,6 +1,8 @@
 # Brief for Astra
 
-Edit the weights of **Qwen3.5-0.8B** directly, with no gradient training, so that it emits the right
+Edit the weights of **Qwen3.5-0.8B** directly, starting from
+`RikiyaT/Qwen3.5-0.8B-weight-space-programming` (your earlier edit that removed the thinking-loop
+direction), with no gradient training, so that it emits the right
 **tool call** for a member's phone message. **The one objective is call accuracy:** the share of items
 whose call is fully correct (`correct`). Everything else is yours to choose.
 
@@ -25,9 +27,10 @@ catalog and the scoring rules are fixed: `DESIGN.md` §1 to §5, `prompt.py`, `s
 - **Any weights, any size of edit.** Any tensor, any layer, any method that reads the weights or
   forward-pass statistics: directions, rank-1 or low-rank writes, head or neuron edits, scaling,
   merging with the published edited model, or writing new structure.
-- **Thinking, your call.** `lab.generate(items, think_cap=N)`: `N = 0` emits the call directly, and
-  `N > 0` lets the model think up to N tokens first. Analyse the think tokens, steer them, cut them,
-  or ignore them. Declare the regime your edit is meant to run in.
+- **Thinking, your call.** The regime is thinking on: `lab.generate(items)` thinks up to 32768
+  tokens with your post's sampling (temperature 0.6, top-p 0.95, top-k 20), seeded. `think_cap=0`
+  emits the call directly. Analyse the think tokens, steer them, cut them, or turn thinking off.
+  Pass `sample=None` for greedy, deterministic comparisons. Declare the regime your edit runs in.
 - **Any analysis.** Activations, attention, logits, think text, failure classes, comparisons
   between the base and the published edited model.
 
@@ -36,13 +39,13 @@ catalog and the scoring rules are fixed: `DESIGN.md` §1 to §5, `prompt.py`, `s
 ```python
 import sys; sys.path.insert(0, "experiments/wsp")
 from lab import Lab
-lab = Lab("<model dir>", run="<run name>", budget=50)   # attn_implementation="eager" for attention weights
+lab = Lab("<starting model dir>", run="<run name>", budget=50)   # attn_implementation="eager" for attention weights
 items = lab.dev()                           # 177 dev items: all you may see
-rows = lab.generate(items, think_cap=0)     # scored rows; one pass = up to 512 items
+rows = lab.generate(items)                  # scored rows; one pass = up to 512 items
 out = lab.forward(texts, capture=["model.layers.15.mlp"], attn_layers=[3])   # one pass = up to 1,024 texts
 lab.tensors["model.language_model.layers.15.mlp.down_proj.weight"]          # read freely, edit in place
 lab.passes_left
-lab.save_edit("<name>", code, notes, regime={"think_cap": 0})
+lab.save_edit("<name>", code, notes, regime={"think_cap": 0, "greedy": False})
 ```
 
 A scored row carries:
@@ -66,6 +69,6 @@ A scored row carries:
 The owner:
 1. applies your edit with `apply_edit.py`;
 2. runs hold in your declared regime, both in bf16 and in the phone's Q4_0 GGUF;
-3. compares it, paired, with the unedited model in its best regime.
+3. compares it, paired, with the starting model, thinking on.
 
 The edit is kept when hold `correct` rises with |z| ≥ 2 and the gain survives Q4_0.

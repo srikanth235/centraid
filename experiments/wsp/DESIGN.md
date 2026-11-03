@@ -95,13 +95,21 @@ prompt.render(item, catalog, tokenizer, k=8) -> tuple[str, list[str]]    # (prom
 
 ## 4. Generation (`run.py`)
 
-Greedy, **thinking off** by default: the objective is the emitted call, so the template closes an empty
-think and the model writes the call directly (512 new tokens). `--think-cap N` turns thinking on with
-a cap of N tokens (when the cap is hit without `</think>`, the harness appends `\n</think>\n\n` and
-continues). Astra chooses the regime an edit runs in and declares it in `regime.json`.
-Backends: `hf` (transformers, batched, left padding) and `gguf` (llama-cpp-python, same prompt
-text, same cap logic). Output: one JSON line per item with the raw text, the think, the parsed
-call, think token count, `capped`, candidates, wall time.
+The starting model is `RikiyaT/Qwen3.5-0.8B-weight-space-programming`: Qwen3.5-0.8B with the
+thinking-loop direction removed, which is what makes thinking usable at 0.8B. Two modes, seeded
+(`--greedy` for greedy decoding):
+
+| mode | flag | sampling |
+| --- | --- | --- |
+| thinking on (the regime) | `--think-cap 32768` (default) | the post's: temperature 0.6, top-p 0.95, top-k 20, presence penalty 1.5 |
+| thinking off (reference) | `--think-cap 0` | the model card's: temperature 1.0, top-p 1.0, top-k 20, presence penalty 2.0 |
+
+When the cap is hit without `</think>`, the harness appends `\n</think>\n\n` and continues for up to
+512 more tokens. transformers has no presence penalty, so it applies on the gguf backend only.
+Backends: `hf` (transformers, batched, left padding) and `gguf` (llama-cpp-python, the same prompt
+text and cap logic). Output: one JSON line per item with the raw text, the think, the parsed call,
+think token count, `capped`, candidates, and wall time. Astra chooses the regime an edit runs in
+and declares it in `regime.json`.
 
 ## 5. Scoring (`score.py`)
 
@@ -140,8 +148,8 @@ randomness) and `NOTES.md` (Astra's mechanism and evidence).
 
 ## 8. Flow
 
-1. Baseline: `run.py` + `score.py` on base and on `RikiyaT/Qwen3.5-0.8B-weight-space-programming`,
-   dev and hold, bf16; then Q4_0 GGUF.
+1. Baseline: `run.py` + `score.py` on the starting model (thinking on), with the base model and thinking
+   off as reference rows; dev and hold, bf16; then Q4_0 GGUF.
 2. Astra in the lab on dev, 50 passes, proposes one edit.
 3. `apply_edit.py`, then dev and hold on bf16 and Q4_0. Keep an edit only if hold improves outside
    noise and wrong writes do not rise.

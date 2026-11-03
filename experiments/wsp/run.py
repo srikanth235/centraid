@@ -3,11 +3,13 @@
     python3 run.py --model DIR_OR_HF_ID --items probe/dev.jsonl --out runs/x.jsonl
         [--backend hf|gguf] [--gguf FILE] [--batch 16] [--limit N] [--dtype bf16|fp32] [--device auto] [--k 8]
 
-Greedy. By default thinking is off (`--think-cap 0`): the template closes an empty think and the model emits the
-call directly; the target is the call, not the reasoning. With `--think-cap N`, phase 1 generates up to N tokens and
-stops at `</think>`; if it did not stop (and the model did not end its turn), "\\n</think>\\n\\n" is appended and the
-row is `capped`. Phase 2 continues so that the new tokens total at most
-512, stopping at `</tool_call>`, EOS or `<|im_end|>`. The chat template normally ends the prompt with `<think>\\n`,
+Sampling, seeded (`--seed`; `--greedy` turns it off): thinking uses the weight-space post's settings for its
+loop-fixed model (temperature 0.6, top-p 0.95, top-k 20, presence penalty 1.5); thinking off uses the model card's. transformers
+has no presence penalty, so it applies on the gguf backend only. By default the model thinks: phase 1 generates up to
+`--think-cap` tokens (32768, the card's length) and stops at `</think>`; if it did not stop (and the model did not end its turn), "\\n</think>\\n\\n" is appended and the
+row is `capped`. `--think-cap 0` turns thinking off (the card says the 0.8B runs that way by
+default): the template closes an empty think and the call is emitted directly. Phase 2 continues so that the new
+tokens total at most 512 beyond the think, stopping at `</tool_call>`, EOS or `<|im_end|>`. The chat template normally ends the prompt with `<think>\\n`,
 so `raw` starts inside the think; parse.py accepts both.
 
 Output rows (JSONL, sorted keys): id, raw, think, think_tokens, capped, call, candidates, seconds. `seconds` is the
@@ -32,7 +34,19 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import parse  # noqa: E402
 
-THINK_CAP = 0  # 0 = thinking off: the call is emitted directly (the default for weight-space work)
+THINK_CAP = 32768  # the model card's output length for most queries. 0 = thinking off, the call is emitted directly
+# Thinking: the sampling the weight-space post evaluated its loop-fixed Qwen3.5-0.8B with (the starting model; the
+# card warns the plain 0.8B loops in thinking). Thinking off: the model card's non-thinking sampling
+# (huggingface.co/Qwen/Qwen3.5-0.8B; min_p 0, repetition penalty 1). Runs are seeded; `--greedy` turns sampling off.
+START_MODEL = "RikiyaT/Qwen3.5-0.8B-weight-space-programming"
+SAMPLE_THINK = {"temperature": 0.6, "top_p": 0.95, "top_k": 20, "presence_penalty": 1.5, "seed": 0}
+SAMPLE_DIRECT = {"temperature": 1.0, "top_p": 1.0, "top_k": 20, "presence_penalty": 2.0, "seed": 0}
+SAMPLE = SAMPLE_THINK
+
+
+def sampling_for(think_cap: int, seed: int = 0) -> dict:
+    """The card's sampling for the mode `think_cap` selects."""
+    return {**(SAMPLE_THINK if think_cap else SAMPLE_DIRECT), "seed": seed}
 MAX_NEW = 512
 CLOSE = "\n</think>\n\n"
 TURN_END = ("<|im_end|>", "<|endoftext|>")
@@ -62,6 +76,14 @@ def _row(item: dict, candidates: list[str], phase1: str, capped: bool, phase2: s
 
 
 # ---------------------------------------------------------------- hf backend
+
+def _batch_sample(sample: dict | None, position: int, phase: int) -> dict | None:
+    """The run's sampling settings with a seed derived from the run seed, the batch (or item) position and the phase,
+    so a rerun with the same items, batch and seed gives the same text."""
+    if not sample:
+        return None
+    return {**sample, "seed": int(sample.get("seed", 0)) * 1_000_003 + position * 10 + phase}
+
 
 def _eos_ids(tokenizer: Any, model: Any) -> set[int]:
     ids: set[int] = set()
@@ -93,8 +115,10 @@ def _make_stopper(tokenizer: Any, prompt_len: int, stops: tuple[str, ...], eos: 
     return TextStop()
 
 
-def _hf_generate(model: Any, tokenizer: Any, prompts: list[str], limits: list[int], stops: tuple[str, ...], eos: set[int]) -> list[tuple[str, int, bool]]:
-    """Greedy continuation of each prompt: (new text cut after the first stop string, new token count, ended by EOS)."""
+def _hf_generate(model: Any, tokenizer: Any, prompts: list[str], limits: list[int], stops: tuple[str, ...], eos: set[int],
+                 sample: dict | None = None) -> list[tuple[str, int, bool]]:
+    """Continuation of each prompt, greedy or (with `sample`) seeded sampling: (new text cut after the first stop string,
+    new token count, ended by EOS). transformers has no presence penalty; it is applied on the gguf backend only."""
     import torch
     from transformers import StoppingCriteriaList
 
@@ -103,8 +127,13 @@ def _hf_generate(model: Any, tokenizer: Any, prompts: list[str], limits: list[in
         tokenizer.pad_token = tokenizer.eos_token
     enc = tokenizer(prompts, return_tensors="pt", padding=True, add_special_tokens=False).to(model.device)
     plen = enc["input_ids"].shape[1]
+    if sample:
+        torch.manual_seed(int(sample.get("seed", 0)))
+        decoding = {"do_sample": True, "temperature": sample["temperature"], "top_p": sample["top_p"], "top_k": sample["top_k"]}
+    else:
+        decoding = {"do_sample": False, "temperature": None, "top_p": None, "top_k": None}
     with torch.no_grad():
-        out = model.generate(**enc, max_new_tokens=max(limits), do_sample=False, temperature=None, top_p=None, top_k=None,
+        out = model.generate(**enc, max_new_tokens=max(limits), **decoding,
                              stopping_criteria=StoppingCriteriaList([_make_stopper(tokenizer, plen, stops, eos, limits)]),
                              pad_token_id=tokenizer.pad_token_id)
     results = []
@@ -122,7 +151,7 @@ def _hf_generate(model: Any, tokenizer: Any, prompts: list[str], limits: list[in
     return results
 
 
-def _generate_hf(model, tokenizer, items, catalog, k, batch, think_cap, max_new, progress, render) -> list[dict]:
+def _generate_hf(model, tokenizer, items, catalog, k, batch, think_cap, max_new, progress, render, sample=None) -> list[dict]:
     thinking = think_cap > 0
     rendered = [render(it, catalog, tokenizer, k, thinking=thinking) for it in items]
     order = sorted(range(len(items)), key=lambda i: -len(rendered[i][0]))  # longest first: less padding, same results per row
@@ -132,7 +161,8 @@ def _generate_hf(model, tokenizer, items, catalog, k, batch, think_cap, max_new,
         idx = order[start:start + batch]
         t0 = time.perf_counter()
         prompts = [rendered[i][0] for i in idx]
-        p1 = (_hf_generate(model, tokenizer, prompts, [think_cap] * len(prompts), ("</think>",), eos) if thinking
+        p1 = (_hf_generate(model, tokenizer, prompts, [think_cap] * len(prompts), ("</think>",), eos,
+                            _batch_sample(sample, start, 1)) if thinking
               else [("", 0, False)] * len(prompts))
         phase1, capped, ended, used = [], [], [], []
         for text, n, eos_hit in p1:
@@ -145,7 +175,8 @@ def _generate_hf(model, tokenizer, items, catalog, k, batch, think_cap, max_new,
         phase2 = [""] * len(idx)
         if cont:
             ctx = [prompts[j] + phase1[j] + (CLOSE if capped[j] else "") for j in cont]  # thinking off: the template closed it
-            p2 = _hf_generate(model, tokenizer, ctx, [max_new - used[j] for j in cont], ("</tool_call>",), eos)
+            p2 = _hf_generate(model, tokenizer, ctx, [max_new - used[j] for j in cont], ("</tool_call>",), eos,
+                              _batch_sample(sample, start, 2))
             for j, (text, _n, _e) in zip(cont, p2):
                 phase2[j] = text
         per = (time.perf_counter() - t0) / len(idx)
@@ -158,12 +189,16 @@ def _generate_hf(model, tokenizer, items, catalog, k, batch, think_cap, max_new,
 
 # ---------------------------------------------------------------- gguf backend
 
-def _gguf_stream(llm: Any, prompt: str, max_tokens: int, stops: tuple[str, ...]) -> tuple[str, int, bool]:
-    """Greedy stream from llama.cpp: (text cut after the first stop string, tokens, ended by EOS)."""
+def _gguf_stream(llm: Any, prompt: str, max_tokens: int, stops: tuple[str, ...],
+                 sample: dict | None = None) -> tuple[str, int, bool]:
+    """Stream from llama.cpp, greedy or seeded sampling: (text cut after the first stop string, tokens, ended by EOS)."""
     toks = llm.tokenize(prompt.encode("utf-8"), add_bos=False, special=True)
     text, n, ended = "", 0, True
-    for chunk in llm.create_completion(toks, max_tokens=max_tokens, temperature=0.0, top_k=1, top_p=1.0, repeat_penalty=1.0,
-                                       seed=0, stream=True):
+    decoding = ({"temperature": sample["temperature"], "top_k": sample["top_k"], "top_p": sample["top_p"],
+                 "presence_penalty": sample["presence_penalty"], "seed": int(sample.get("seed", 0))} if sample
+                else {"temperature": 0.0, "top_k": 1, "top_p": 1.0, "seed": 0})
+    # llama.cpp's min_p defaults to 0.05; the card's is 0
+    for chunk in llm.create_completion(toks, max_tokens=max_tokens, repeat_penalty=1.0, min_p=0.0, stream=True, **decoding):
         choice = chunk["choices"][0]
         text += choice["text"]
         n += 1
@@ -180,19 +215,19 @@ def _gguf_stream(llm: Any, prompt: str, max_tokens: int, stops: tuple[str, ...])
     return text, n, ended
 
 
-def _generate_gguf(llm, tokenizer, items, catalog, k, think_cap, max_new, progress, render) -> list[dict]:
+def _generate_gguf(llm, tokenizer, items, catalog, k, think_cap, max_new, progress, render, sample=None) -> list[dict]:
     rows = []
     for n_done, item in enumerate(items, 1):
         thinking = think_cap > 0
         prompt, cands = render(item, catalog, tokenizer, k, thinking=thinking)
         t0 = time.perf_counter()
-        text1, used, eos_hit = _gguf_stream(llm, prompt, think_cap, ("</think>",)) if thinking else ("", 0, False)
+        text1, used, eos_hit = _gguf_stream(llm, prompt, think_cap, ("</think>",), _batch_sample(sample, n_done, 1)) if thinking else ("", 0, False)
         closed = "</think>" in text1 or not thinking
         capped = not closed and not eos_hit
         text2 = ""
         if closed or capped:
             ctx = prompt + text1 + (CLOSE if capped else "")
-            text2, _, _ = _gguf_stream(llm, ctx, max_new - used, ("</tool_call>",))
+            text2, _, _ = _gguf_stream(llm, ctx, max_new - used, ("</tool_call>",), _batch_sample(sample, n_done, 2))
         rows.append(_row(item, cands, text1, capped, text2, tokenizer, time.perf_counter() - t0))
         if progress:
             progress(n_done, len(items))
@@ -203,14 +238,14 @@ def _generate_gguf(llm, tokenizer, items, catalog, k, think_cap, max_new, progre
 
 def generate_items(model: Any, tokenizer: Any, items: list[dict], catalog: dict, *, backend: str = "hf", k: int = 8,
                    batch: int = 16, think_cap: int = THINK_CAP, max_new: int = MAX_NEW,
-                   progress: Callable[[int, int], None] | None = None) -> list[dict]:
+                   progress: Callable[[int, int], None] | None = None, sample: dict | None = None) -> list[dict]:
     """Rows (see module doc) for `items`, in order. `model` is an HF model (hf) or a llama_cpp.Llama (gguf)."""
     import prompt as prompt_mod
 
     if backend == "hf":
-        return _generate_hf(model, tokenizer, items, catalog, k, batch, think_cap, max_new, progress, prompt_mod.render)
+        return _generate_hf(model, tokenizer, items, catalog, k, batch, think_cap, max_new, progress, prompt_mod.render, sample)
     if backend == "gguf":
-        return _generate_gguf(model, tokenizer, items, catalog, k, think_cap, max_new, progress, prompt_mod.render)
+        return _generate_gguf(model, tokenizer, items, catalog, k, think_cap, max_new, progress, prompt_mod.render, sample)
     raise ValueError(f"backend {backend!r}: hf or gguf")
 
 
@@ -265,10 +300,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--device", default="auto")
     ap.add_argument("--k", type=int, default=8)
     ap.add_argument("--think-cap", type=int, default=THINK_CAP,
-                    help="0 (default) = thinking off, the call is emitted directly; N > 0 = think up to N tokens, then </think> is forced")
-    ap.add_argument("--max-new", type=int, default=MAX_NEW, help="new tokens in all; raised to think-cap + 312 if lower")
+                    help="think up to N tokens, then </think> is forced (default 32768, the card's length); 0 = thinking off (the 0.8B's own default)")
+    ap.add_argument("--greedy", action="store_true", help="greedy decoding (default: the model card's sampling for the mode, seeded)")
+    ap.add_argument("--seed", type=int, default=SAMPLE["seed"])
+    ap.add_argument("--max-new", type=int, default=MAX_NEW, help="new tokens in all; raised to think-cap + 512 if lower")
     args = ap.parse_args(argv)
-    args.max_new = max(args.max_new, args.think_cap + 312) if args.think_cap else args.max_new
+    args.max_new = max(args.max_new, args.think_cap + 512) if args.think_cap else args.max_new
+    sample = None if args.greedy else sampling_for(args.think_cap, args.seed)
 
     import catalog as catalog_mod
 
@@ -283,12 +321,12 @@ def main(argv: list[str] | None = None) -> int:
         from llama_cpp import Llama
         from transformers import AutoTokenizer
 
-        model = Llama(model_path=args.gguf, n_ctx=8192, n_gpu_layers=0, seed=0, verbose=False)
+        model = Llama(model_path=args.gguf, n_ctx=40960, n_gpu_layers=0, seed=0, verbose=False)
         tokenizer = AutoTokenizer.from_pretrained(args.model)
     else:
         model, tokenizer = load_hf(args.model, args.dtype, args.device)
     rows = generate_items(model, tokenizer, items, catalog, backend=args.backend, k=args.k, batch=args.batch,
-                          think_cap=args.think_cap, max_new=args.max_new,
+                          think_cap=args.think_cap, max_new=args.max_new, sample=sample,
                           progress=lambda d, n: print(f"{d}/{n}", file=sys.stderr, flush=True))
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -296,7 +334,7 @@ def main(argv: list[str] | None = None) -> int:
     meta = {"model": args.model, "weights_sha256": weight_hashes(args.model, args.gguf),
             "args": {k: v for k, v in sorted(vars(args).items())},
             "catalog_sha256": sha256_file(catalog_path), "items_sha256": sha256_file(Path(args.items)), "n": len(rows),
-            "regime": {"think_cap": args.think_cap, "max_new": args.max_new, "greedy": True}}
+            "regime": {"think_cap": args.think_cap, "max_new": args.max_new, "sample": sample}}
     Path(str(out) + ".meta.json").write_text(json.dumps(meta, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     return 0
 
