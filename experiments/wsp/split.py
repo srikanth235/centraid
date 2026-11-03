@@ -3,8 +3,11 @@
     python3 split.py           # write the sets
     python3 split.py --check   # fail if the committed sets differ from a fresh split
 
-An item goes to hold when the first byte of sha256(id) is odd, else to dev: decided by the id
-alone, after authoring, so nobody chooses which items Astra sees. Every item is checked against
+The split is stratified by app and gold tool, and decided by hash alone, after authoring, so nobody
+chooses which items Astra sees. Within each (app, tool) stratum the items are ordered by
+sha256(id) and dealt alternately to dev and hold, starting on the side the stratum's own hash picks, so the extra
+item of an odd stratum does not always land in dev. Each app and each tool is then split
+about evenly. Every item is checked against
 the catalog first (the same checks the scorer's `valid` makes on a call), and the split refuses
 an item whose gold is not a valid call. `sets.json` records each set's sha256 and counts.
 """
@@ -28,8 +31,17 @@ SRC = HERE / "probe" / "src"
 OUT = HERE / "probe"
 
 
-def side(item_id: str) -> str:
-    return "hold" if hashlib.sha256(item_id.encode()).digest()[0] % 2 else "dev"
+def sides(items: list[dict]) -> dict[str, str]:
+    """id -> "dev" | "hold": per (app, gold tool), ordered by sha256(id), alternating."""
+    strata: dict[tuple[str, str], list[str]] = {}
+    for it in items:
+        strata.setdefault((it["app"], it["gold"]["tool"]), []).append(it["id"])
+    out = {}
+    for key in sorted(strata):
+        for rank, item_id in enumerate(sorted(strata[key], key=lambda i: hashlib.sha256(i.encode()).hexdigest())):
+            first = hashlib.sha256("/".join(key).encode()).digest()[0] % 2  # which side an odd stratum's extra goes to
+            out[item_id] = "hold" if (rank + first) % 2 else "dev"
+    return out
 
 
 def load_items() -> list[dict]:
@@ -84,11 +96,12 @@ def main() -> int:
         print("gold that is not a valid call:", *problems, sep="\n  ")
         return 1
 
-    sets = {"dev": [it for it in items if side(it["id"]) == "dev"],
-            "hold": [it for it in items if side(it["id"]) == "hold"]}
+    side = sides(items)
+    sets = {"dev": [it for it in items if side[it["id"]] == "dev"],
+            "hold": [it for it in items if side[it["id"]] == "hold"]}
     texts = {name: render(rows) for name, rows in sets.items()}
     meta = {"catalog_sha256": hashlib.sha256((HERE / "catalog" / "schemas.json").read_bytes()).hexdigest(),
-            "rule": "hold iff sha256(id)[0] is odd",
+            "rule": "per (app, gold tool): ordered by sha256(id), alternating from the side sha256(stratum) picks",
             "sets": {name: {"sha256": hashlib.sha256(texts[name].encode()).hexdigest(),
                             "n": len(rows),
                             "by_app": dict(sorted(Counter(r["app"] for r in rows).items())),

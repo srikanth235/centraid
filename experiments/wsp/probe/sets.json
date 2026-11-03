@@ -1,46 +1,46 @@
 {
  "catalog_sha256": "d9455325e7f7973a51fbb8207555519de543726c342ee6b5463a510da35246ea",
- "rule": "hold iff sha256(id)[0] is odd",
+ "rule": "per (app, gold tool): ordered by sha256(id), alternating from the side sha256(stratum) picks",
  "sets": {
   "dev": {
    "by_app": {
-    "agenda": 22,
-    "docs": 30,
-    "health": 22,
+    "agenda": 20,
+    "docs": 21,
+    "health": 20,
     "locker": 21,
-    "money": 17,
-    "notes": 18,
-    "people": 20,
-    "photos": 27
+    "money": 19,
+    "notes": 20,
+    "people": 19,
+    "photos": 21
    },
    "by_tool": {
-    "act": 109,
-    "ask": 12,
-    "decline": 16,
-    "load": 40
+    "act": 97,
+    "ask": 11,
+    "decline": 14,
+    "load": 39
    },
-   "n": 177,
-   "sha256": "98b2dcc91c6ab6f4b0799fd60a0f23faa5f53ab55811dd3e2fda87aa8c2b37bd"
+   "n": 161,
+   "sha256": "ebd90a2cf5993e3750c86d70cf6ef04361706ed0a95721dcd8feddcac0562717"
   },
   "hold": {
    "by_app": {
-    "agenda": 18,
-    "docs": 10,
-    "health": 18,
+    "agenda": 20,
+    "docs": 19,
+    "health": 20,
     "locker": 19,
-    "money": 22,
-    "notes": 22,
-    "people": 19,
-    "photos": 13
+    "money": 20,
+    "notes": 20,
+    "people": 20,
+    "photos": 19
    },
    "by_tool": {
-    "act": 86,
-    "ask": 10,
-    "decline": 8,
-    "load": 37
+    "act": 98,
+    "ask": 11,
+    "decline": 10,
+    "load": 38
    },
-   "n": 141,
-   "sha256": "98e77e6c8c42801b581c190515c431e410971f77ba3325c87c6c285dc35890ff"
+   "n": 157,
+   "sha256": "cc18dc7e4762b5e8aa084504a8c89c2a682037a1967e59366014381f6eafe700"
   }
  }
 }
