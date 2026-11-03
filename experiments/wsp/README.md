@@ -10,18 +10,24 @@ you hand to Astra is `ASTRA.md`.
 | `retrieve.py`, `prompt.py` | BM25 top-8 candidates; the prompt rendered with Qwen's chat template, thinking off by default |
 | `probe/src/*.jsonl` → `split.py` → `probe/dev.jsonl`, `probe/hold.jsonl`, `probe/sets.json` | 992 member messages with gold calls, about 124 per app, every action and view at least twice; stratified by app and tool into 496 dev and 496 hold |
 | `run.py`, `parse.py`, `score.py` | generation (HF or GGUF; thinking on by default, `--think-cap 0` off; seeded sampling), call parsing, and scoring with paired comparison |
-| `lab.py`, `budget.py` | Astra's sandbox: dev only, a forward-pass budget, live tensors, activation and attention capture |
+| `lab.py`, `budget.py` | Astra's sandbox: dev only, live tensors and the tokenizer; forward passes only under a budget (0 in the pure-weights brief) |
 | `apply_edit.py`, `edits/` | an edit is a script; applying one records the sha256 before and after and the elements changed |
 | `gguf.py` | converts a model directory to Q4_0 GGUF, the phone's format, with the llama.cpp commit the engine vendors |
 
-## Set up (the Codex machine; a GPU helps)
+## Set up (CPU is enough)
 
 ```bash
 cd experiments/wsp
-pip install -r requirements.txt          # plus llama-cpp-python for the gguf backend
-python3 -m unittest                      # 66 tests, no weights needed
+pip install -r requirements.txt llama-cpp-python huggingface_hub
+python3 -m unittest                      # 67 tests, no weights needed
 python3 split.py --check                 # the probe sets are the frozen ones
+huggingface-cli download RikiyaT/Qwen3.5-0.8B-weight-space-programming --local-dir models/start
+huggingface-cli download Qwen/Qwen3.5-0.8B --local-dir models/base
 ```
+
+Both repositories are public, so no token is needed. `models/start` is the starting model and
+`models/base` is the reference. If `models/start` lacks the tokenizer or chat-template files, copy
+them from `models/base`. `models/` is git-ignored.
 
 ## 1. Baselines
 
@@ -46,8 +52,9 @@ comparison needs it.
 
 ## 2. Astra
 
-Give Astra `ASTRA.md`, this directory without `probe/hold.jsonl`, and a model directory. It works
-through `lab.py` and returns `edits/<name>/`.
+Pure weight manipulation: give Astra `ASTRA.md`, this directory without `probe/hold.jsonl`, and
+`Lab("models/start", run=..., budget=0)`. It reads and writes `lab.tensors`, runs no forward
+passes, and returns `edits/<name>/`.
 
 ## 3. Judge an edit
 
