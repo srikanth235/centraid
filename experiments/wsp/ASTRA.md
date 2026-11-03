@@ -1,12 +1,13 @@
 # Brief for Astra
 
-You are editing the weights of **Qwen3.5-0.8B** directly, with no gradients and no training, so that
-it turns a member's phone message into the right **call on the Centraid catalog**.
+Edit the weights of **Qwen3.5-0.8B** directly, with no gradient training, so that it emits the right
+**tool call** for a member's phone message. **The one objective is call accuracy:** the share of items
+whose call is fully correct (`correct`). Everything else is yours to choose.
 
-## The task the model must do
+## The task
 
-The model sees a system prompt with up to 8 candidate actions and views, then the member's message.
-It emits **one** call, directly. Thinking is off: the goal is the call itself, not reasoning.
+The model sees a system prompt with up to 8 candidate actions and views from the Centraid catalog,
+then the member's message (sometimes after earlier turns). It must emit one call:
 
 | tool | meaning |
 | --- | --- |
@@ -15,71 +16,56 @@ It emits **one** call, directly. Thinking is off: the goal is the call itself, n
 | `ask(question)` | the message does not decide |
 | `decline(reason)` | out_of_scope · never_mind · fabricated_secret · unbounded_destruction |
 
-Arguments are copied as the member said them: names stay mentions and dates stay phrases. The
-runtime resolves them later. The exact rules are in `DESIGN.md`, §1 to §5.
+A call is correct when the tool, the action or view, and every argument match the gold. Arguments
+are spans of the member's words: names stay mentions and dates stay phrases. The prompt, the
+catalog and the scoring rules are fixed: `DESIGN.md` §1 to §5, `prompt.py`, `score.py`.
 
-**The objective is the call:**
-- the right tool: act, load, ask or decline;
-- the right action or view among the candidates;
-- the right arguments, as spans of the member's words.
+## Your freedom
 
-Every metric you steer by is about the emitted call.
+- **Any weights, any size of edit.** Any tensor, any layer, any method that reads the weights or
+  forward-pass statistics: directions, rank-1 or low-rank writes, head or neuron edits, scaling,
+  merging with the published edited model, or writing new structure.
+- **Thinking, your call.** `lab.generate(items, think_cap=N)`: `N = 0` emits the call directly, and
+  `N > 0` lets the model think up to N tokens first. Analyse the think tokens, steer them, cut them,
+  or ignore them. Declare the regime your edit is meant to run in.
+- **Any analysis.** Activations, attention, logits, think text, failure classes, comparisons
+  between the base and the published edited model.
 
 ## Your lab
 
 ```python
 import sys; sys.path.insert(0, "experiments/wsp")
 from lab import Lab
-lab = Lab("<model dir>", run="<your run name>", budget=50)   # add attn_implementation="eager" for attention
-items = lab.dev()                       # 177 dev items; this is all you may see
-rows = lab.generate(items)              # costs passes: one pass = up to 512 items. Returns scored rows
+lab = Lab("<model dir>", run="<run name>", budget=50)   # attn_implementation="eager" for attention weights
+items = lab.dev()                           # 177 dev items: all you may see
+rows = lab.generate(items, think_cap=0)     # scored rows; one pass = up to 512 items
 out = lab.forward(texts, capture=["model.layers.15.mlp"], attn_layers=[3])   # one pass = up to 1,024 texts
-W = lab.tensors["model.language_model.layers.15.mlp.down_proj.weight"]      # read freely, edit in place
+lab.tensors["model.language_model.layers.15.mlp.down_proj.weight"]          # read freely, edit in place
 lab.passes_left
-lab.save_edit("<name>", code, notes)    # writes edits/<name>/edit.py + NOTES.md
+lab.save_edit("<name>", code, notes, regime={"think_cap": 0})
 ```
 
-- Reading weights is free. Running the model costs passes, and every pass is logged in
-  `runs/<run>/ledger.jsonl`.
-- Thinking is off by default (`think_cap=0`). Do not optimise reasoning traces; only the call is scored.
-- A row's `score` carries `correct`, `valid`, `tool_ok`, `name_ok`, `args_ok`, `wrong_write`,
-  `over_ask` and `under_ask`.
+A scored row carries:
+- the call: `raw`, `call` and `candidates`;
+- the think: `think` and `think_tokens`;
+- `score`: `correct`, `tool_ok`, `name_ok`, `args_ok`, `valid`, `wrong_write`, `over_ask`,
+  `under_ask`, `capped` and `loop`.
 
-## Rules
+## The only rules
 
-1. **No gradients.** No optimiser, no training loop, no fitting on data. You may compute
-   statistics from forward passes (activations, attention, means, differences, SVD, projections).
-2. **Dev only.** Never open, request or infer `probe/hold.jsonl`. Hold is the judge.
-3. **Budget: 50 passes** per run, unless the owner gives a different number.
-4. **An edit is a deterministic script.** `edits/<name>/edit.py` defines
-   `apply(tensors: dict[str, torch.Tensor]) -> None`, edits in place, and uses no data files and no
-   randomness. Any direction or vector it needs is written into the script as literal numbers, or
-   computed from the weights alone.
-5. **Small and explained.** State every tensor and column you touch. `NOTES.md` says what
-   mechanism you found, the evidence for it (which passes showed what), and the dev numbers before
-   and after.
-6. **The guardrail is wrong writes.** An edit that turns asks into acts must not create wrong
-   writes: an `act` on the wrong action or the wrong target is worse than an ask.
+1. **No gradient training.** No optimiser, no loss backpropagated into the weights. Reading,
+   forward passes and arithmetic on weights and activations are all allowed.
+2. **Dev only.** Never open, request or infer `probe/hold.jsonl`: hold is the judge.
+3. **Budget:** 50 forward passes per run, unless the owner gives more. Reading weights is free.
+4. **Reproducible.** `edits/<name>/edit.py` defines `apply(tensors) -> None`, deterministic, with any
+   vectors it needs written in or computed from the weights. `regime.json` says how to run it.
+   `NOTES.md` gives the mechanism, the evidence, and dev accuracy before and after.
 
-## What a good result looks like
+## How it is judged
 
-On dev, compared with the unedited model:
-- `correct` goes up, and with it `tool_ok`, `name_ok` and `args_ok`;
-- `wrong_write` does not go up;
-- `over_ask` and `under_ask` do not grow.
+The owner:
+1. applies your edit with `apply_edit.py`;
+2. runs hold in your declared regime, both in bf16 and in the phone's Q4_0 GGUF;
+3. compares it, paired, with the unedited model in its best regime.
 
-The owner then applies your edit with `apply_edit.py` and judges it on hold, in bf16 and in the
-phone's Q4_0 GGUF. You will not see that result before the owner decides.
-
-## Starting points
-
-These are leads, not instructions. Look at where calls go wrong first: a generate pass shows which
-of `tool_ok`, `name_ok` and `args_ok` fails most.
-- **Tool choice:** is there a direction that separates act, load, ask and decline at the first
-  call token? Is it biased toward one tool on clear messages?
-- **Action choice:** the candidates are in the prompt. Does the model attend to the candidate line
-  that fits the message? Where does the right id lose to a neighbour, for example edit vs reschedule?
-- **Argument copying:** does the model copy the member's span verbatim into the arg, or
-  paraphrase, translate or invent it (ISO dates, ids)? Which heads copy from the user turn?
-- **Format:** are calls well-formed: one `<tool_call>`, valid JSON in `input` or `params`, and
-  param names from the entry?
+The edit is kept when hold `correct` rises with |z| ≥ 2 and the gain survives Q4_0.

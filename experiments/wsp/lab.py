@@ -164,8 +164,9 @@ class Lab:
         return result
 
     # -- edits
-    def save_edit(self, name: str, code: str, notes: str) -> Path:
-        """Write edits/<name>/edit.py and NOTES.md. The code must parse and define apply(tensors)."""
+    def save_edit(self, name: str, code: str, notes: str, regime: dict | None = None) -> Path:
+        """Write edits/<name>/edit.py, NOTES.md and regime.json (how the edit is meant to run: `think_cap`,
+        default 0). The code must parse and define apply(tensors)."""
         _refuse_hold(name, "edit name")
         if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", name):
             raise ValueError("edit name: lowercase letters, digits, - and _")
@@ -176,4 +177,8 @@ class Lab:
         target.mkdir(parents=True, exist_ok=True)
         (target / "edit.py").write_text(code if code.endswith("\n") else code + "\n", encoding="utf-8")
         (target / "NOTES.md").write_text(notes if notes.endswith("\n") else notes + "\n", encoding="utf-8")
+        regime = {"think_cap": 0, **(regime or {})}
+        if not isinstance(regime["think_cap"], int) or regime["think_cap"] < 0:
+            raise ValueError("regime think_cap: a whole number of tokens, 0 = thinking off")
+        (target / "regime.json").write_text(json.dumps(regime, indent=1, sort_keys=True) + "\n", encoding="utf-8")
         return target

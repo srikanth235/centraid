@@ -26,7 +26,9 @@ python3 split.py --check                 # the probe sets are the frozen ones
 ## 1. Baselines
 
 Run every command for both models (base `Qwen/Qwen3.5-0.8B` and edited
-`RikiyaT/Qwen3.5-0.8B-weight-space-programming`), on both sets. Thinking is off: the call is the target.
+`RikiyaT/Qwen3.5-0.8B-weight-space-programming`), on both sets, with thinking off (`--think-cap 0`,
+the default) and on (`--think-cap 512`). The metric is `correct`, the call accuracy; the base
+model's best regime is the reference every edit is compared with.
 
 ```bash
 python3 run.py --model Qwen/Qwen3.5-0.8B --items probe/dev.jsonl --out runs/base-dev.jsonl
@@ -43,15 +45,14 @@ through `lab.py` and returns `edits/<name>/`.
 
 ```bash
 python3 apply_edit.py --base MODEL_DIR --edit edits/<name> --out out/<name>
-python3 run.py --model out/<name> --items probe/hold.jsonl --out runs/<name>-hold.jsonl
+python3 run.py --model out/<name> --items probe/hold.jsonl --out runs/<name>-hold.jsonl --think-cap $(python3 -c "import json;print(json.load(open('edits/<name>/regime.json'))['think_cap'])")
 python3 score.py --pair runs/base-hold.jsonl runs/<name>-hold.jsonl --items probe/hold.jsonl
 python3 gguf.py --model out/<name> --out out/<name>-Q4_0.gguf
-python3 run.py --backend gguf --gguf out/<name>-Q4_0.gguf --model out/<name> --items probe/hold.jsonl --out runs/<name>-hold-q4.jsonl
+python3 run.py --backend gguf --gguf out/<name>-Q4_0.gguf --model out/<name> --items probe/hold.jsonl --out runs/<name>-hold-q4.jsonl --think-cap <same>
 ```
 
 Keep an edit only if all three hold:
-- hold improves with |z| ≥ 2;
-- `wrong_write` does not rise;
+- hold `correct` improves with |z| ≥ 2 against the base model's best regime;
 - the gain survives Q4_0.
 
 ## Measured here

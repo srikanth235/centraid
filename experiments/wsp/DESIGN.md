@@ -98,7 +98,7 @@ prompt.render(item, catalog, tokenizer, k=8) -> tuple[str, list[str]]    # (prom
 Greedy, **thinking off** by default: the objective is the emitted call, so the template closes an empty
 think and the model writes the call directly (512 new tokens). `--think-cap N` turns thinking on with
 a cap of N tokens (when the cap is hit without `</think>`, the harness appends `\n</think>\n\n` and
-continues), for comparison only.
+continues). Astra chooses the regime an edit runs in and declares it in `regime.json`.
 Backends: `hf` (transformers, batched, left padding) and `gguf` (llama-cpp-python, same prompt
 text, same cap logic). Output: one JSON line per item with the raw text, the think, the parsed
 call, think token count, `capped`, candidates, wall time.
