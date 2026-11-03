@@ -1,0 +1,9 @@
+# Pinned to the versions experiments/toolchat/native/requirements-ci.in/.txt use; transformers 5.17.0 is the
+# release known to load Qwen3.5. The tests (test_parse, test_score, test_budget) need none of these.
+torch==2.13.0
+transformers==5.17.0
+safetensors==0.8.0
+numpy==2.4.6
+# Optional, for `run.py --backend gguf` (CPU build; needs a C++ toolchain):
+# llama-cpp-python==0.3.16
+# gguf.py also needs, for llama.cpp's converter: sentencepiece, pyyaml, requests, cmake (to build llama-quantize).

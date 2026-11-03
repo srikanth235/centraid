@@ -1,0 +1,5732 @@
+{
+ "entries": [
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {
+    "id": "id minted by the vault",
+    "position": "ordering key computed by the runtime",
+    "zone": "IANA zone resolved by the runtime from the phone"
+   },
+   "id": "agenda.add-task",
+   "kind": "task",
+   "params": {
+    "anchor": {
+     "required": false,
+     "type": "enum",
+     "values": [
+      "scheduled",
+      "completion"
+     ]
+    },
+    "description": {
+     "required": false,
+     "type": "text"
+    },
+    "due": {
+     "required": false,
+     "type": "when"
+    },
+    "effort_min": {
+     "required": false,
+     "type": "number"
+    },
+    "parent": {
+     "of": "task",
+     "required": false,
+     "type": "mention"
+    },
+    "priority": {
+     "required": false,
+     "type": "number"
+    },
+    "project": {
+     "of": "list",
+     "required": false,
+     "type": "mention"
+    },
+    "remind_before_min": {
+     "required": false,
+     "type": "number"
+    },
+    "repeat": {
+     "required": false,
+     "type": "when"
+    },
+    "section": {
+     "of": "section",
+     "required": false,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "remind me to call the plumber tomorrow",
+    "add a task to buy milk",
+    "put 'file taxes' on my list for April 15"
+   ],
+   "summary": "Add a task: dated, prioritized, estimated, repeating, reminded, filed in a project and section, or as a subtask of an open top-level task.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.add-task-tag",
+   "kind": "task",
+   "params": {
+    "label": {
+     "required": true,
+     "type": "text"
+    },
+    "target": {
+     "of": "task",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "tag the plumber task as home",
+    "label buy milk errands",
+    "add the tag urgent to the taxes task"
+   ],
+   "summary": "Tag a task: a free-form label shared with every other app that tags; minted on first use.",
+   "type": "action",
+   "verb": "tag"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {
+    "rel": "edge relation fixed by the action"
+   },
+   "id": "agenda.attach",
+   "kind": "event",
+   "params": {
+    "from": {
+     "required": true,
+     "type": "mention"
+    },
+    "to": {
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "attach the menu to Friday's dinner",
+    "add the boarding pass to my flight event",
+    "attach the agenda doc to the team sync"
+   ],
+   "summary": "Attach or detach any Agenda item (an event or a task) through the shared edge verbs.",
+   "type": "action",
+   "verb": "attach"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.board",
+   "kind": "task",
+   "params": {
+    "limit": {
+     "required": false,
+     "type": "number"
+    },
+    "project": {
+     "of": "list",
+     "required": false,
+     "type": "mention"
+    },
+    "view": {
+     "required": false,
+     "type": "enum",
+     "values": [
+      "today",
+      "upcoming",
+      "inbox",
+      "anytime",
+      "all",
+      "logbook",
+      "reminders",
+      "project"
+     ]
+    }
+   },
+   "phrasings": [],
+   "summary": "The task board as a bounded window, each row carrying its tags and what it is about, plus the distinct tag list seen within the window.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.cancel-event",
+   "kind": "event",
+   "params": {
+    "target": {
+     "of": "event",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "cancel the dentist appointment",
+    "call off Friday's dinner",
+    "cancel my 3pm meeting"
+   ],
+   "summary": "Cancel an event: a status its guests see, not a deletion (the trash is entity.trash).",
+   "type": "action",
+   "verb": "cancel"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.cancel-task",
+   "kind": "task",
+   "params": {
+    "target": {
+     "of": "task",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "cancel the plumber task",
+    "I'm not buying milk anymore, drop it",
+    "cancel this week's repeat of the laundry task"
+   ],
+   "summary": "Cancel a task: it ends this occurrence with no successor (the Logbook's Won't do).",
+   "type": "action",
+   "verb": "cancel"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.catch-up",
+   "kind": "task",
+   "params": {},
+   "phrasings": [],
+   "summary": "What fell behind while the member was away: dated work past due, repeating work that missed occurrences, and undated work sitting too long, each as a pile.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.complete-task",
+   "kind": "task",
+   "params": {
+    "target": {
+     "of": "task",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "mark call the plumber done",
+    "I finished the taxes",
+    "check off buy milk"
+   ],
+   "summary": "Complete a task: the one completion operation Tasks, People and automations share.",
+   "type": "action",
+   "verb": "complete"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {
+    "id": "id minted by the vault",
+    "position": "ordering key computed by the runtime"
+   },
+   "id": "agenda.create-project",
+   "kind": "list",
+   "params": {
+    "color": {
+     "required": false,
+     "type": "text"
+    },
+    "kind": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "project",
+      "area"
+     ]
+    },
+    "parent": {
+     "of": "list",
+     "required": false,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "make a project called Home renovation",
+    "create a list named Errands",
+    "start a Finance project in the Personal area"
+   ],
+   "summary": "Create a project or an area.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {
+    "id": "id minted by the vault",
+    "kind": "constant 'section', filled by the runtime",
+    "position": "ordering key computed by the runtime"
+   },
+   "id": "agenda.create-section",
+   "kind": "section",
+   "params": {
+    "parent": {
+     "of": "list",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "add a section called Kitchen to Home renovation",
+    "create a Waiting section in Errands",
+    "add a Q4 section to Finance"
+   ],
+   "summary": "Create a section within a task project (the project is its parent).",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.day-context",
+   "kind": "event",
+   "params": {
+    "from": {
+     "required": false,
+     "type": "when"
+    },
+    "to": {
+     "required": false,
+     "type": "when"
+    }
+   },
+   "phrasings": [],
+   "summary": "The cross-app facts that decorate a calendar day, as one read-only projection: birthdays recurring inside the window, and holidays.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.delete-task",
+   "kind": "task",
+   "params": {
+    "target": {
+     "of": "task",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "delete the plumber task",
+    "trash buy milk",
+    "remove the old taxes task"
+   ],
+   "summary": "Move a task and its subtasks to the 30-day trash; the Logbook keeps nothing.",
+   "type": "action",
+   "verb": "delete"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {
+    "rel": "edge relation fixed by the action"
+   },
+   "id": "agenda.detach",
+   "kind": "event",
+   "params": {
+    "from": {
+     "required": true,
+     "type": "mention"
+    },
+    "to": {
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "detach the menu from Friday's dinner",
+    "remove the boarding pass from my flight event",
+    "take the agenda doc off the team sync"
+   ],
+   "summary": "Attach or detach any Agenda item (an event or a task) through the shared edge verbs.",
+   "type": "action",
+   "verb": "detach"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {
+    "timing": "zoned/floating/all-day inferred from the date phrase",
+    "zone": "IANA zone resolved by the runtime from the phone"
+   },
+   "id": "agenda.edit-event",
+   "kind": "event",
+   "params": {
+    "attendees": {
+     "items": "mention",
+     "of": "person",
+     "required": false,
+     "type": "list"
+    },
+    "busy": {
+     "required": false,
+     "type": "bool"
+    },
+    "calendar": {
+     "of": "calendar",
+     "required": false,
+     "type": "mention"
+    },
+    "description": {
+     "required": false,
+     "type": "text"
+    },
+    "ends": {
+     "required": false,
+     "type": "when"
+    },
+    "place": {
+     "of": "place",
+     "required": false,
+     "type": "mention"
+    },
+    "reminders": {
+     "items": "number",
+     "required": false,
+     "type": "list"
+    },
+    "repeat": {
+     "required": false,
+     "type": "when"
+    },
+    "starts": {
+     "required": false,
+     "type": "when"
+    },
+    "status": {
+     "required": false,
+     "type": "enum",
+     "values": [
+      "confirmed",
+      "tentative",
+      "cancelled"
+     ]
+    },
+    "target": {
+     "of": "event",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": false,
+     "type": "text"
+    },
+    "url": {
+     "required": false,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "rename the dentist event to checkup",
+    "move the team sync to 4pm",
+    "add a note to Friday's dinner that it's at Luigi's"
+   ],
+   "summary": "Revise an event.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {
+    "timing": "zoned/floating/all-day inferred from the date phrase",
+    "zone": "IANA zone resolved by the runtime from the phone"
+   },
+   "id": "agenda.edit-occurrence",
+   "kind": "event",
+   "params": {
+    "action": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "skip",
+      "override",
+      "restore"
+     ]
+    },
+    "description": {
+     "required": false,
+     "type": "text"
+    },
+    "ends": {
+     "required": false,
+     "type": "when"
+    },
+    "original_start": {
+     "required": true,
+     "type": "when"
+    },
+    "scope": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "occurrence",
+      "future",
+      "series"
+     ]
+    },
+    "starts": {
+     "required": false,
+     "type": "when"
+    },
+    "target": {
+     "of": "event",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": false,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "skip this week's standup",
+    "move Thursday's yoga to Friday",
+    "rename tomorrow's call to planning"
+   ],
+   "summary": "Skip, move, rename or put back one day of a repeating event, keyed by the series-local wall clock the rule produced (original_start).",
+   "type": "action",
+   "verb": "reschedule"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.edit-task",
+   "kind": "task",
+   "params": {
+    "description": {
+     "required": false,
+     "type": "text"
+    },
+    "due": {
+     "required": false,
+     "type": "when"
+    },
+    "effort_min": {
+     "required": false,
+     "type": "number"
+    },
+    "priority": {
+     "required": false,
+     "type": "number"
+    },
+    "remind_before_min": {
+     "required": false,
+     "type": "number"
+    },
+    "repeat": {
+     "required": false,
+     "type": "when"
+    },
+    "target": {
+     "of": "task",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": false,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "rename the plumber task",
+    "make buying milk high priority",
+    "add a note to the taxes task"
+   ],
+   "summary": "Edit a task's title, note, due date, priority, effort, reminder lead time or repeat rule.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {
+    "instance_key": "occurrence key computed by the runtime"
+   },
+   "id": "agenda.event",
+   "kind": "event",
+   "params": {
+    "event": {
+     "of": "event",
+     "required": true,
+     "type": "mention"
+    },
+    "original_start_local": {
+     "required": false,
+     "type": "when"
+    }
+   },
+   "phrasings": [],
+   "summary": "One event, or one occurrence of a repeating one: the row the detail screen draws, with its calendar.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "agenda",
+   "card": true,
+   "dropped": {
+    "complete": "sync flag: whether the read was complete",
+    "origin": "sync origin handle",
+    "records": "sync payload"
+   },
+   "id": "agenda.follow-calendar",
+   "kind": "event",
+   "params": {
+    "since": {
+     "required": false,
+     "type": "when"
+    }
+   },
+   "phrasings": [
+    "import my phone's calendar",
+    "sync events from the calendar on this phone",
+    "pull in this week's events from my calendars"
+   ],
+   "summary": "Follow the phone's calendars, one calendar at a time: a field the member never changed follows the phone, one they changed stands.",
+   "type": "action",
+   "verb": "import"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {
+    "position": "ordering key computed by the runtime",
+    "zone": "IANA zone resolved by the runtime from the phone"
+   },
+   "id": "agenda.organize-task",
+   "kind": "task",
+   "params": {
+    "anchor": {
+     "required": false,
+     "type": "enum",
+     "values": [
+      "scheduled",
+      "completion"
+     ]
+    },
+    "project": {
+     "of": "list",
+     "required": false,
+     "type": "mention"
+    },
+    "section": {
+     "of": "section",
+     "required": false,
+     "type": "mention"
+    },
+    "target": {
+     "of": "task",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "put the plumber task in the Home project",
+    "file buy milk under Errands",
+    "move the taxes task to the Finance project"
+   ],
+   "summary": "File a task: its project and section (null is the Inbox), its place in the list, and what a repeat counts from.",
+   "type": "action",
+   "verb": "add_to"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.parties",
+   "kind": "person",
+   "params": {},
+   "phrasings": [],
+   "summary": "Pickable people for the invite picker, each {party_id, name, is_you}, you sorted first.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.projects",
+   "kind": "list",
+   "params": {},
+   "phrasings": [],
+   "summary": "The live projects and their sections, with open counts, in their order.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {
+    "id": "id minted by the vault",
+    "timing": "zoned/floating/all-day inferred from the date phrase",
+    "zone": "IANA zone resolved by the runtime from the phone"
+   },
+   "id": "agenda.propose",
+   "kind": "event",
+   "params": {
+    "attendees": {
+     "items": "mention",
+     "of": "person",
+     "required": false,
+     "type": "list"
+    },
+    "busy": {
+     "required": false,
+     "type": "bool"
+    },
+    "calendar": {
+     "of": "calendar",
+     "required": false,
+     "type": "mention"
+    },
+    "description": {
+     "required": false,
+     "type": "text"
+    },
+    "ends": {
+     "required": false,
+     "type": "when"
+    },
+    "place": {
+     "of": "place",
+     "required": false,
+     "type": "mention"
+    },
+    "reminders": {
+     "items": "number",
+     "required": false,
+     "type": "list"
+    },
+    "repeat": {
+     "required": false,
+     "type": "when"
+    },
+    "starts": {
+     "required": true,
+     "type": "when"
+    },
+    "status": {
+     "required": false,
+     "type": "enum",
+     "values": [
+      "confirmed",
+      "tentative",
+      "cancelled"
+     ]
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    },
+    "url": {
+     "required": false,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "put lunch with Sam on Friday at noon",
+    "add a dentist appointment next Tuesday at 3pm",
+    "schedule a team sync every Monday morning"
+   ],
+   "summary": "Propose an event: its title, when (an instant, or a wall clock in a zone), an optional repeat rule, guests, place, link and reminders.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "agenda",
+   "card": true,
+   "dropped": {},
+   "id": "agenda.purge-task",
+   "kind": "task",
+   "params": {
+    "target": {
+     "of": "task",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "erase the plumber task forever",
+    "permanently delete the trashed milk task",
+    "purge the old taxes task"
+   ],
+   "summary": "Delete a trashed task and the subtasks trashed with it forever; a subtask restored on its own is promoted to a top-level task first.",
+   "type": "action",
+   "verb": "purge"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.remove-task-tag",
+   "kind": "task",
+   "params": {
+    "label": {
+     "required": true,
+     "type": "text"
+    },
+    "target": {
+     "of": "task",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "remove the home tag from the plumber task",
+    "untag buy milk",
+    "take the urgent label off the taxes task"
+   ],
+   "summary": "Remove one tag from a task; the tag survives for other things.",
+   "type": "action",
+   "verb": "untag"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.rename-list",
+   "kind": "list",
+   "params": {
+    "target": {
+     "of": "list",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "rename the Home renovation project to House projects",
+    "call the Errands list Chores",
+    "retitle the Finance project"
+   ],
+   "summary": "Retitle a project or an area.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.reopen-task",
+   "kind": "task",
+   "params": {
+    "target": {
+     "of": "task",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "reopen call the plumber",
+    "the taxes aren't done after all",
+    "uncheck buy milk"
+   ],
+   "summary": "Reopen a completed or cancelled task; it spawns nothing.",
+   "type": "action",
+   "verb": "reopen"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.restore-event",
+   "kind": "event",
+   "params": {
+    "target": {
+     "of": "event",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "restore the dentist event",
+    "bring back the team offsite",
+    "undo deleting the Friday lunch"
+   ],
+   "summary": "Bring a trashed event back.",
+   "type": "action",
+   "verb": "restore"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.restore-task",
+   "kind": "task",
+   "params": {
+    "target": {
+     "of": "task",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "bring back the plumber task",
+    "restore the task I deleted",
+    "undelete buy milk"
+   ],
+   "summary": "Bring a trashed task back, with the subtasks trashed with it; a subtask trashed on its own stays where it was.",
+   "type": "action",
+   "verb": "restore"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.rsvp",
+   "kind": "event",
+   "params": {
+    "person": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    },
+    "state": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "accepted",
+      "declined",
+      "tentative"
+     ]
+    },
+    "target": {
+     "of": "event",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "accept the Friday dinner invite",
+    "decline Sam's party",
+    "mark me tentative for the offsite"
+   ],
+   "summary": "Record one guest's answer to an event: accepted, declined or tentative.",
+   "type": "action",
+   "verb": "respond"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.search",
+   "kind": "event",
+   "params": {
+    "term": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [],
+   "summary": "Full-text search over events and tasks through the vault's one index, the ranked non-cancelled events in the upcoming row shape.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.task",
+   "kind": "task",
+   "params": {
+    "task": {
+     "of": "task",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [],
+   "summary": "One task by id, whether or not any board window holds it: the task with its subtasks, tags, project and section, and its parent when it is a subtask.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.trash",
+   "kind": "task",
+   "params": {},
+   "phrasings": [],
+   "summary": "The tasks in the 30-day trash, most recently trashed first, each with when it was deleted and when it is erased.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.trash-event",
+   "kind": "event",
+   "params": {
+    "target": {
+     "of": "event",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "delete the dentist event",
+    "remove the team offsite from my calendar",
+    "trash the Friday lunch"
+   ],
+   "summary": "Move an event to the trash; restore-event brings it back.",
+   "type": "action",
+   "verb": "delete"
+  },
+  {
+   "app": "agenda",
+   "card": false,
+   "dropped": {},
+   "id": "agenda.upcoming",
+   "kind": "event",
+   "params": {
+    "from": {
+     "required": false,
+     "type": "when"
+    },
+    "to": {
+     "required": false,
+     "type": "when"
+    }
+   },
+   "phrasings": [],
+   "summary": "Non-cancelled events, soonest first, with the calendars they could land on, each event's calendar_id, link, reminders, its attachments and its guest list.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {
+    "id": "id minted by the vault",
+    "kind": "constant 'folder', filled by the runtime"
+   },
+   "id": "docs.create-folder",
+   "kind": "folder",
+   "params": {
+    "parent": {
+     "of": "folder",
+     "required": false,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "make a folder called Taxes",
+    "create a Travel folder inside Home",
+    "add a new folder named Receipts"
+   ],
+   "summary": "Create a folder, at the top level or inside another folder.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {
+    "id": "id minted by the vault",
+    "media_type": "detected from the bytes"
+   },
+   "id": "docs.create-text",
+   "kind": "document",
+   "params": {
+    "body_text": {
+     "required": false,
+     "type": "text"
+    },
+    "folder": {
+     "of": "folder",
+     "required": false,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "write a doc called meeting notes",
+    "start a new text document named packing list",
+    "create a document titled budget ideas"
+   ],
+   "summary": "Write a new text document, the Add sheet's Text.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {},
+   "id": "docs.delete-folder",
+   "kind": "folder",
+   "params": {
+    "target": {
+     "of": "folder",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "delete the Taxes folder",
+    "remove the Receipts folder",
+    "trash the empty Travel folder"
+   ],
+   "summary": "Move a folder to the trash, the documents and folders filed in it go with it and come back with it on restore.",
+   "type": "action",
+   "verb": "delete"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {},
+   "id": "docs.drive",
+   "kind": "document",
+   "params": {
+    "ascending": {
+     "required": false,
+     "type": "bool"
+    },
+    "folder": {
+     "of": "folder",
+     "required": false,
+     "type": "mention"
+    },
+    "label": {
+     "required": false,
+     "type": "text"
+    },
+    "limit": {
+     "required": false,
+     "type": "number"
+    },
+    "modified": {
+     "required": false,
+     "type": "text"
+    },
+    "shelf": {
+     "required": false,
+     "type": "text"
+    },
+    "sort": {
+     "required": false,
+     "type": "text"
+    },
+    "type": {
+     "required": false,
+     "type": "text"
+    }
+   },
+   "phrasings": [],
+   "summary": "The drive as a bounded recent window: every folder, plus the most recently changed documents newest first, caller-sized via limit, default 200.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {},
+   "id": "docs.edit",
+   "kind": "document",
+   "params": {
+    "body_text": {
+     "required": false,
+     "type": "text"
+    },
+    "target": {
+     "of": "document",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": false,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "change the second line of my packing list",
+    "add milk to the grocery doc",
+    "fix the typo in the meeting notes"
+   ],
+   "summary": "Edit a text document's body in place (media_type text/* only, anything else refuses; use replace instead).",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "docs",
+   "card": true,
+   "dropped": {
+    "kind": "constant 'document', filled by the runtime"
+   },
+   "id": "docs.empty-trash",
+   "kind": "document",
+   "params": {
+    "due_only": {
+     "required": false,
+     "type": "bool"
+    }
+   },
+   "phrasings": [
+    "empty the document trash",
+    "clear out the Docs trash for good",
+    "permanently delete everything in the trash"
+   ],
+   "summary": "Empty the document trash.",
+   "type": "action",
+   "verb": "purge"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {},
+   "id": "docs.history",
+   "kind": "document",
+   "params": {
+    "document": {
+     "of": "document",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [],
+   "summary": "A document's versions, newest first: the current bytes, then each revision a replace put down.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {},
+   "id": "docs.move",
+   "kind": "document",
+   "params": {
+    "folder": {
+     "of": "folder",
+     "required": false,
+     "type": "mention"
+    },
+    "target": {
+     "of": "document",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "put the lease in the Home folder",
+    "move the tax return to Finance",
+    "file this doc under Travel"
+   ],
+   "summary": "Refile a document into a folder, omit folder_id to move it to the drive's top level.",
+   "type": "action",
+   "verb": "add_to"
+  },
+  {
+   "app": "docs",
+   "card": true,
+   "dropped": {},
+   "id": "docs.purge",
+   "kind": "document",
+   "params": {
+    "target": {
+     "of": "document",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "delete the old lease forever",
+    "permanently erase the scan in the trash",
+    "purge that trashed document"
+   ],
+   "summary": "Delete one ALREADY-TRASHED document forever, the path Photos' purge takes.",
+   "type": "action",
+   "verb": "purge"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {},
+   "id": "docs.rename",
+   "kind": "document",
+   "params": {
+    "target": {
+     "of": "document",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "rename the lease doc to apartment lease",
+    "call the scan tax return 2025",
+    "retitle my notes doc to ideas"
+   ],
+   "summary": "Rename a document (refuses a trashed document).",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {},
+   "id": "docs.rename-folder",
+   "kind": "folder",
+   "params": {
+    "target": {
+     "of": "folder",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "rename the Taxes folder to Finance",
+    "call the Travel folder Trips",
+    "retitle Receipts to Expenses"
+   ],
+   "summary": "Rename a folder.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {
+    "blob": "staged bytes, never spoken",
+    "media_type": "detected from the bytes"
+   },
+   "id": "docs.replace",
+   "kind": "document",
+   "params": {
+    "target": {
+     "of": "document",
+     "required": true,
+     "type": "mention"
+    },
+    "text": {
+     "required": false,
+     "type": "text"
+    },
+    "title": {
+     "required": false,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "replace the lease with the new scan",
+    "swap in the corrected PDF",
+    "update the tax return file with this version"
+   ],
+   "summary": "Replace a document's bytes (any media type), the door for scanned PDFs, images and anything else edit cannot touch.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {},
+   "id": "docs.restore",
+   "kind": "document",
+   "params": {
+    "target": {
+     "of": "document",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "bring back the lease doc",
+    "restore the document I just deleted",
+    "undelete the tax return"
+   ],
+   "summary": "Bring a document back from the trash; it returns to the folder it was filed in.",
+   "type": "action",
+   "verb": "restore"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {
+    "seq": "version sequence number, resolved by the runtime from 'previous' or 'yesterday'"
+   },
+   "id": "docs.restore-version",
+   "kind": "document",
+   "params": {
+    "target": {
+     "of": "document",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "go back to yesterday's version of the lease",
+    "restore the previous version of my notes doc",
+    "undo the last change to the budget doc"
+   ],
+   "summary": "Restore an older version, history never rewrites: the bytes it replaces become a version of their own and the chosen version becomes current.",
+   "type": "action",
+   "verb": "restore"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {},
+   "id": "docs.search",
+   "kind": "document",
+   "params": {
+    "term": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [],
+   "summary": "Full-text document search through the vault's one search index, returns only the ranked matches in the drive's document row shape plus a hit snippet.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {
+    "flag": "constant 'starred', filled by the runtime"
+   },
+   "id": "docs.star",
+   "kind": "document",
+   "params": {
+    "target": {
+     "of": "document",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "star the lease",
+    "favorite the tax return",
+    "mark the travel doc as a favorite"
+   ],
+   "summary": "Star a document, one tagged edge to the starred flag, the same star every other surface reads.",
+   "type": "action",
+   "verb": "star"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {},
+   "id": "docs.tag",
+   "kind": "document",
+   "params": {
+    "label": {
+     "required": true,
+     "type": "text"
+    },
+    "target": {
+     "of": "document",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "tag the lease as home",
+    "label the tax return finance",
+    "add the tag travel to my itinerary doc"
+   ],
+   "summary": "Add a free-form label to a document, additive and idempotent; the label is minted once and shared by everything wearing it.",
+   "type": "action",
+   "verb": "tag"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {},
+   "id": "docs.trash",
+   "kind": "document",
+   "params": {
+    "target": {
+     "of": "document",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "delete the old lease doc",
+    "trash the scan from last week",
+    "remove the draft document"
+   ],
+   "summary": "Move a document to the trash; it keeps its folder, its star and every version, and is purged about 30 days later.",
+   "type": "action",
+   "verb": "delete"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {
+    "flag": "constant 'starred', filled by the runtime"
+   },
+   "id": "docs.unstar",
+   "kind": "document",
+   "params": {
+    "target": {
+     "of": "document",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "unstar the lease",
+    "remove the star from the tax return",
+    "unfavorite the travel doc"
+   ],
+   "summary": "Remove a document's star.",
+   "type": "action",
+   "verb": "unstar"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {},
+   "id": "docs.untag",
+   "kind": "document",
+   "params": {
+    "label": {
+     "required": true,
+     "type": "text"
+    },
+    "target": {
+     "of": "document",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "remove the home tag from the lease",
+    "untag the tax return",
+    "take the travel label off my itinerary"
+   ],
+   "summary": "Remove one free-form label from a document, the other half of tag's additive gesture.",
+   "type": "action",
+   "verb": "untag"
+  },
+  {
+   "app": "docs",
+   "card": false,
+   "dropped": {
+    "blob": "staged bytes, never spoken",
+    "id": "id minted by the vault",
+    "media_type": "detected from the bytes",
+    "size": "byte count computed by the stage door"
+   },
+   "id": "docs.upload",
+   "kind": "document",
+   "params": {
+    "folder": {
+     "of": "folder",
+     "required": false,
+     "type": "mention"
+    },
+    "text": {
+     "required": false,
+     "type": "text"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "upload this PDF to my drive",
+    "add the scanned receipt to documents",
+    "save this file in Docs"
+   ],
+   "summary": "Add a file: the bytes (already staged, so identical bytes are one blob) become a document, filed into a folder or left at the top level.",
+   "type": "action",
+   "verb": "import"
+  },
+  {
+   "app": "health",
+   "card": false,
+   "dropped": {},
+   "id": "health.delete-workout",
+   "kind": "workout",
+   "params": {
+    "target": {
+     "of": "workout",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "delete this morning's run",
+    "remove the duplicate workout",
+    "trash yesterday's swim"
+   ],
+   "summary": "Move a workout to the trash, like any entity: the vault keeps it thirty days.",
+   "type": "action",
+   "verb": "delete"
+  },
+  {
+   "app": "health",
+   "card": false,
+   "dropped": {},
+   "id": "health.follow-view",
+   "kind": "daily_figure",
+   "params": {},
+   "phrasings": [],
+   "summary": "What the follower reads before a pass: the newest day and the newest workout the vault holds, and every daily total since a day, so it sends only what moved.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "health",
+   "card": true,
+   "dropped": {
+    "complete": "sync flag: whether the read was complete",
+    "origin": "sync origin handle",
+    "records": "sync payload"
+   },
+   "id": "health.follow-workouts",
+   "kind": "workout",
+   "params": {
+    "since": {
+     "required": false,
+     "type": "when"
+    }
+   },
+   "phrasings": [
+    "pull in my latest workouts",
+    "sync workouts from the health store",
+    "import this week's runs"
+   ],
+   "summary": "Follow the store's workouts: each is an activity of a workout kind and what the store measured, written or corrected in place under the store's own id.",
+   "type": "action",
+   "verb": "import"
+  },
+  {
+   "app": "health",
+   "card": true,
+   "dropped": {
+    "days": "flattened to one reading: day, metric, value"
+   },
+   "id": "health.record-days",
+   "kind": "daily_figure",
+   "params": {
+    "day": {
+     "required": true,
+     "type": "when"
+    },
+    "metric": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "steps",
+      "active_energy_kcal",
+      "exercise_min",
+      "sleep_min",
+      "resting_hr_bpm",
+      "weight_kg"
+     ]
+    },
+    "person": {
+     "of": "person",
+     "required": false,
+     "type": "mention"
+    },
+    "value": {
+     "required": true,
+     "type": "number"
+    }
+   },
+   "phrasings": [
+    "log 8000 steps for today",
+    "record last night's sleep as seven hours",
+    "note my weight as 70 kilos this morning"
+   ],
+   "summary": "Record a batch of the store's daily totals: a value the vault already holds is not written, a changed one is replaced, a new one added.",
+   "type": "action",
+   "verb": "log"
+  },
+  {
+   "app": "health",
+   "card": false,
+   "dropped": {},
+   "id": "health.series",
+   "kind": "daily_figure",
+   "params": {
+    "metric": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "steps",
+      "sleep_min",
+      "active_energy_kcal",
+      "exercise_min",
+      "resting_hr_bpm",
+      "weight_kg"
+     ]
+    },
+    "range": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "week",
+      "month",
+      "year"
+     ]
+    }
+   },
+   "phrasings": [],
+   "summary": "One metric over a week, a month or a year: its buckets, the period's per-day average against the one before, the typical, the best day or month.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "health",
+   "card": false,
+   "dropped": {
+    "ref": "opaque follow handle held by the runtime"
+   },
+   "id": "health.stop-following",
+   "kind": "daily_figure",
+   "params": {
+    "system": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "contacts",
+      "calendar",
+      "files",
+      "health",
+      "statement"
+     ]
+    }
+   },
+   "phrasings": [
+    "stop reading my health app",
+    "disconnect Apple Health",
+    "stop following Health Connect"
+   ],
+   "summary": "Stop following the phone's health store: the store's origin is retired and its workouts forget their source.",
+   "type": "action",
+   "verb": "detach"
+  },
+  {
+   "app": "health",
+   "card": false,
+   "dropped": {},
+   "id": "health.today",
+   "kind": "daily_figure",
+   "params": {},
+   "phrasings": [],
+   "summary": "Today: each metric's figure against your own typical and its usual range, today's workouts, whether a store is connected and which metrics have any data.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "health",
+   "card": false,
+   "dropped": {},
+   "id": "health.trends",
+   "kind": "daily_figure",
+   "params": {
+    "range": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "days_30",
+      "days_90",
+      "year"
+     ]
+    }
+   },
+   "phrasings": [],
+   "summary": "Every metric over 30 days, 90 days or a year: the period's per-day average against the one before, and a sparkline's buckets.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "health",
+   "card": false,
+   "dropped": {},
+   "id": "health.workout",
+   "kind": "workout",
+   "params": {
+    "activity": {
+     "of": "workout",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [],
+   "summary": "One workout: its kind, span and everything the store measured.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "health",
+   "card": false,
+   "dropped": {
+    "after": "paging cursor"
+   },
+   "id": "health.workouts",
+   "kind": "workout",
+   "params": {
+    "kind": {
+     "of": "workout_kind",
+     "required": false,
+     "type": "mention"
+    },
+    "limit": {
+     "required": true,
+     "type": "number"
+    }
+   },
+   "phrasings": [],
+   "summary": "A page of every workout, newest first, or one kind's, with each kind's count for the filter.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "locker",
+   "card": true,
+   "dropped": {
+    "card_number": "sealed secret: entered on the card, never by the model",
+    "content": "sealed secret: entered on the card, never by the model",
+    "cvv": "sealed secret: entered on the card, never by the model",
+    "item_id": "id minted by the vault",
+    "otp_seed": "sealed secret: entered on the card, never by the model",
+    "password": "sealed secret: entered on the card, never by the model"
+   },
+   "id": "locker.add-item",
+   "kind": "locker_item",
+   "params": {
+    "address": {
+     "required": false,
+     "type": "text"
+    },
+    "alias": {
+     "required": false,
+     "type": "text"
+    },
+    "brand": {
+     "required": false,
+     "type": "text"
+    },
+    "cardholder": {
+     "required": false,
+     "type": "text"
+    },
+    "compromised": {
+     "required": false,
+     "type": "bool"
+    },
+    "email": {
+     "required": false,
+     "type": "text"
+    },
+    "expiry": {
+     "required": false,
+     "type": "text"
+    },
+    "fullname": {
+     "required": false,
+     "type": "text"
+    },
+    "network": {
+     "required": false,
+     "type": "text"
+    },
+    "notes": {
+     "required": false,
+     "type": "text"
+    },
+    "phone": {
+     "required": false,
+     "type": "text"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    },
+    "type": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "login",
+      "card",
+      "note",
+      "identity",
+      "wifi",
+      "password",
+      "ssh_key",
+      "api_credential",
+      "passport",
+      "bank_account",
+      "driving_licence",
+      "software_licence",
+      "crypto_wallet",
+      "membership",
+      "document"
+     ]
+    },
+    "url": {
+     "required": false,
+     "type": "text"
+    },
+    "username": {
+     "required": false,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "save my Netflix login",
+    "add a new card item for my Visa",
+    "store the wifi password for home"
+   ],
+   "summary": "Save a new item, any of the fifteen item types.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {},
+   "id": "locker.add-tag",
+   "kind": "locker_item",
+   "params": {
+    "label": {
+     "required": true,
+     "type": "text"
+    },
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "tag my bank login as finance",
+    "label the home wifi household",
+    "add the tag travel to my passport"
+   ],
+   "summary": "Put a word on an item, a vault tag, the same one every other surface reads.",
+   "type": "action",
+   "verb": "tag"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {
+    "flag": "constant 'archived', filled by the runtime"
+   },
+   "id": "locker.archive-item",
+   "kind": "locker_item",
+   "params": {
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "archive my old Netflix login",
+    "keep the expired card but hide it",
+    "archive the guest wifi item"
+   ],
+   "summary": "Archive an item, keep it forever, out of the lists.",
+   "type": "action",
+   "verb": "archive"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {},
+   "id": "locker.clear-passkey",
+   "kind": "locker_passkey",
+   "params": {
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "remove the passkey from my GitHub login",
+    "clear the passkey on my bank login",
+    "delete the Google passkey"
+   ],
+   "summary": "Remove an item's passkey slot, metadata and sealed key material together.",
+   "type": "action",
+   "verb": "delete"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {},
+   "id": "locker.duplicate-item",
+   "kind": "locker_item",
+   "params": {
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "clone my Netflix login for my sister's account",
+    "duplicate my Visa item",
+    "copy the bank login as a template"
+   ],
+   "summary": "Clone an item for a sibling account.",
+   "type": "action",
+   "verb": "duplicate"
+  },
+  {
+   "app": "locker",
+   "card": true,
+   "dropped": {
+    "card_number": "sealed secret: entered on the card, never by the model",
+    "content": "sealed secret: entered on the card, never by the model",
+    "cvv": "sealed secret: entered on the card, never by the model",
+    "otp_seed": "sealed secret: entered on the card, never by the model",
+    "password": "sealed secret: entered on the card, never by the model"
+   },
+   "id": "locker.edit-item",
+   "kind": "locker_item",
+   "params": {
+    "address": {
+     "required": false,
+     "type": "text"
+    },
+    "alias": {
+     "required": false,
+     "type": "text"
+    },
+    "brand": {
+     "required": false,
+     "type": "text"
+    },
+    "cardholder": {
+     "required": false,
+     "type": "text"
+    },
+    "compromised": {
+     "required": false,
+     "type": "bool"
+    },
+    "email": {
+     "required": false,
+     "type": "text"
+    },
+    "expiry": {
+     "required": false,
+     "type": "text"
+    },
+    "fullname": {
+     "required": false,
+     "type": "text"
+    },
+    "network": {
+     "required": false,
+     "type": "text"
+    },
+    "notes": {
+     "required": false,
+     "type": "text"
+    },
+    "phone": {
+     "required": false,
+     "type": "text"
+    },
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": false,
+     "type": "text"
+    },
+    "url": {
+     "required": false,
+     "type": "text"
+    },
+    "username": {
+     "required": false,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "change my Netflix username",
+    "update the URL on my bank login",
+    "fix the cardholder name on my Visa"
+   ],
+   "summary": "Replace an item's type fields.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "locker",
+   "card": true,
+   "dropped": {
+    "confirm": "confirmation is the card's job"
+   },
+   "id": "locker.export",
+   "kind": "locker_item",
+   "params": {
+    "include_history": {
+     "required": false,
+     "type": "bool"
+    },
+    "include_trashed": {
+     "required": false,
+     "type": "bool"
+    }
+   },
+   "phrasings": [
+    "export my whole locker",
+    "download every item with its secrets",
+    "export the locker including the trash"
+   ],
+   "summary": "Run the mass reveal an export is, before the phone core opens every live and archived secret and renders the file (1Password CSV or Locker JSON).",
+   "type": "action",
+   "verb": "reveal"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {},
+   "id": "locker.item",
+   "kind": "locker_item",
+   "params": {
+    "item": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [],
+   "summary": "One item's browsable fields for the detail pane, trashed or not: its connector alias, memo, owner-defined sections and fields.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {},
+   "id": "locker.items",
+   "kind": "locker_item",
+   "params": {
+    "archived": {
+     "required": false,
+     "type": "bool"
+    },
+    "limit": {
+     "required": false,
+     "type": "number"
+    }
+   },
+   "phrasings": [],
+   "summary": "A bounded window of non-trashed, non-archived items, newest-updated first, each with its favorite star, free-form tags.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "locker",
+   "card": true,
+   "dropped": {},
+   "id": "locker.purge-item",
+   "kind": "locker_item",
+   "params": {
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "erase the old Netflix login forever",
+    "permanently delete the expired card",
+    "purge that trashed item"
+   ],
+   "summary": "Erase a trashed item for good, permanent and irreversible, so it is confirmed.",
+   "type": "action",
+   "verb": "purge"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {},
+   "id": "locker.remove-field",
+   "kind": "locker_field",
+   "params": {
+    "field": {
+     "of": "locker_field",
+     "required": true,
+     "type": "mention"
+    },
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "remove the security question from my bank login",
+    "delete the PIN field on my card",
+    "drop the recovery email field"
+   ],
+   "summary": "Delete one owner-defined field from an item.",
+   "type": "action",
+   "verb": "delete"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {},
+   "id": "locker.remove-tag",
+   "kind": "locker_item",
+   "params": {
+    "label": {
+     "required": true,
+     "type": "text"
+    },
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "remove the finance tag from my bank login",
+    "untag the home wifi",
+    "take the travel label off my passport"
+   ],
+   "summary": "Take a word off an item.",
+   "type": "action",
+   "verb": "untag"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {},
+   "id": "locker.restore-item",
+   "kind": "locker_item",
+   "params": {
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "bring back my Netflix login",
+    "restore the card I just deleted",
+    "undelete the guest wifi item"
+   ],
+   "summary": "Bring an item back from the trash.",
+   "type": "action",
+   "verb": "restore"
+  },
+  {
+   "app": "locker",
+   "card": true,
+   "dropped": {},
+   "id": "locker.reveal",
+   "kind": "locker_item",
+   "params": {
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "show me the password for my bank login",
+    "copy the card number of my Visa",
+    "reveal the wifi password"
+   ],
+   "summary": "Stamp the item as used, before the phone core reveals ONE sealed field of it.",
+   "type": "action",
+   "verb": "reveal"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {},
+   "id": "locker.review",
+   "kind": "locker_item",
+   "params": {},
+   "phrasings": [],
+   "summary": "What deserves a second look, from metadata alone: items the member flagged compromised, logins whose address is not https.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {},
+   "id": "locker.search",
+   "kind": "locker_item",
+   "params": {
+    "term": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [],
+   "summary": "Match items by title, username or url, case-insensitively, over every item not in the trash, returning the same secret-free row shape as items.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {},
+   "id": "locker.set-addresses",
+   "kind": "locker_item",
+   "params": {
+    "addresses": {
+     "items": "text",
+     "required": true,
+     "type": "list"
+    },
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "add a second website to my Google login",
+    "set the extra addresses on my bank login",
+    "replace the other URLs on my Netflix login"
+   ],
+   "summary": "Replace a login's ADDITIONAL addresses.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "locker",
+   "card": true,
+   "dropped": {
+    "position": "ordering key computed by the runtime",
+    "value": "sealed secret: entered on the card, never by the model"
+   },
+   "id": "locker.set-field",
+   "kind": "locker_field",
+   "params": {
+    "field": {
+     "of": "locker_field",
+     "required": false,
+     "type": "mention"
+    },
+    "kind": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "text",
+      "sealed",
+      "url",
+      "date",
+      "otp"
+     ]
+    },
+    "label": {
+     "required": true,
+     "type": "text"
+    },
+    "section": {
+     "required": false,
+     "type": "text"
+    },
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "add a security question field to my bank login",
+    "set the PIN field on my card",
+    "add a recovery email field"
+   ],
+   "summary": "Create or rewrite ONE owner-defined field on an item.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {},
+   "id": "locker.set-memo",
+   "kind": "locker_item",
+   "params": {
+    "note": {
+     "required": true,
+     "type": "text"
+    },
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "write a memo on my bank login",
+    "clear the memo on my Netflix item",
+    "note that the wifi router is in the hall"
+   ],
+   "summary": "Write or clear an item's memo, the member's own plaintext remark, a knowledge.annotation on the item: searchable in the vault and never sealed.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "locker",
+   "card": true,
+   "dropped": {
+    "algorithm": "passkey credential material",
+    "credential_id": "passkey credential material",
+    "private_key": "sealed secret: entered on the card, never by the model",
+    "user_handle": "passkey credential material"
+   },
+   "id": "locker.set-passkey",
+   "kind": "locker_passkey",
+   "params": {
+    "display_name": {
+     "required": false,
+     "type": "text"
+    },
+    "rp": {
+     "of": "rp",
+     "required": true,
+     "type": "mention"
+    },
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "save a passkey on my GitHub login",
+    "replace the passkey on my bank login",
+    "restate the passkey for my Google account"
+   ],
+   "summary": "Restate an item's passkey slot: relying-party id, user handle, display name, credential id and algorithm, with the sealed key kept by sending «sealed» back.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {
+    "flag": "constant 'starred', filled by the runtime"
+   },
+   "id": "locker.star-item",
+   "kind": "locker_item",
+   "params": {
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "star my bank login",
+    "favorite the home wifi",
+    "mark my passport as a favorite"
+   ],
+   "summary": "Star an item, the vault's one canonical star, the same every other surface reads.",
+   "type": "action",
+   "verb": "star"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {},
+   "id": "locker.trash",
+   "kind": "locker_item",
+   "params": {},
+   "phrasings": [],
+   "summary": "Trashed items with their purge dates (secret-free row shape); on the phone the kit's one trash screen reads them.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {},
+   "id": "locker.trash-item",
+   "kind": "locker_item",
+   "params": {
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "delete my old Netflix login",
+    "trash the expired card",
+    "remove the guest wifi item"
+   ],
+   "summary": "Move an item to the trash, the vault's one trash verb; it keeps its star, its tags and its archive and is purged about 30 days later.",
+   "type": "action",
+   "verb": "delete"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {
+    "flag": "constant 'archived', filled by the runtime"
+   },
+   "id": "locker.unarchive-item",
+   "kind": "locker_item",
+   "params": {
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "unarchive my old Netflix login",
+    "bring the expired card back into the list",
+    "unarchive the guest wifi item"
+   ],
+   "summary": "Bring an archived item back into the lists.",
+   "type": "action",
+   "verb": "unarchive"
+  },
+  {
+   "app": "locker",
+   "card": false,
+   "dropped": {
+    "flag": "constant 'starred', filled by the runtime"
+   },
+   "id": "locker.unstar-item",
+   "kind": "locker_item",
+   "params": {
+    "target": {
+     "of": "locker_item",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "unstar my bank login",
+    "remove the star from the home wifi",
+    "unfavorite my passport"
+   ],
+   "summary": "Remove an item's star.",
+   "type": "action",
+   "verb": "unstar"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.accounts",
+   "kind": "account",
+   "params": {},
+   "phrasings": [],
+   "summary": "Accounts on and off budget with derived balances, the newest checkpoint against each, and net worth per currency.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {
+    "after": "paging cursor"
+   },
+   "id": "money.activity",
+   "kind": "transaction",
+   "params": {
+    "account": {
+     "of": "account",
+     "required": false,
+     "type": "mention"
+    },
+    "category": {
+     "of": "category",
+     "required": false,
+     "type": "mention"
+    },
+    "category_filter": {
+     "required": false,
+     "type": "text"
+    },
+    "limit": {
+     "required": false,
+     "type": "number"
+    },
+    "month": {
+     "required": true,
+     "type": "when"
+    }
+   },
+   "phrasings": [],
+   "summary": "A page of a month's transactions, newest first, filtered by account and category, with the count that still need a category.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {
+    "id": "id minted by the vault"
+   },
+   "id": "money.add-account",
+   "kind": "account",
+   "params": {
+    "currency": {
+     "required": false,
+     "type": "text"
+    },
+    "external_ref": {
+     "required": false,
+     "type": "text"
+    },
+    "on_budget": {
+     "required": false,
+     "type": "bool"
+    },
+    "opening": {
+     "required": false,
+     "type": "amount"
+    },
+    "opening_on": {
+     "required": false,
+     "type": "when"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    },
+    "type": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "checking",
+      "savings",
+      "credit_card",
+      "cash"
+     ]
+    }
+   },
+   "phrasings": [
+    "add a savings account in euros",
+    "create a checking account called Everyday",
+    "open a cash account"
+   ],
+   "summary": "Add an account the member imports statements into, with its currency, type, (optionally) an opening balance and the bank's own account number.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.add-category",
+   "kind": "category",
+   "params": {
+    "parent": {
+     "of": "category",
+     "required": false,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "add a category called Pets under Living",
+    "create a Gifts category",
+    "make a new category for Subscriptions"
+   ],
+   "summary": "Add a category, under a group.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {
+    "id": "id minted by the vault",
+    "position": "ordering key computed by the runtime"
+   },
+   "id": "money.add-rule",
+   "kind": "rule",
+   "params": {
+    "account": {
+     "of": "account",
+     "required": false,
+     "type": "mention"
+    },
+    "category": {
+     "of": "category",
+     "required": true,
+     "type": "mention"
+    },
+    "display_name": {
+     "required": false,
+     "type": "text"
+    },
+    "match": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "is",
+      "contains",
+      "matches"
+     ]
+    },
+    "max": {
+     "required": false,
+     "type": "amount"
+    },
+    "min": {
+     "required": false,
+     "type": "amount"
+    },
+    "text": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "always file Starbucks under coffee",
+    "put anything with Uber in transport",
+    "make a rule for Netflix as subscriptions"
+   ],
+   "summary": "Add a rule: a line whose words match goes in a category and, when display_name is sent, shows that name (the payee) instead of the bank's words.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "money",
+   "card": true,
+   "dropped": {},
+   "id": "money.apply-rule-to-history",
+   "kind": "rule",
+   "params": {
+    "overwrite": {
+     "required": false,
+     "type": "bool"
+    },
+    "target": {
+     "of": "rule",
+     "required": false,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "apply my rules to everything already imported",
+    "run the Starbucks rule on old transactions",
+    "file past lines by my rules"
+   ],
+   "summary": "File the lines already in the vault by the rules (one rule's, or all of them).",
+   "type": "action",
+   "verb": "apply"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.archive-category",
+   "kind": "category",
+   "params": {
+    "flag": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "starred",
+      "pinned",
+      "archived"
+     ]
+    },
+    "target": {
+     "of": "category",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "archive the Pets category",
+    "retire the Gifts category",
+    "archive Subscriptions"
+   ],
+   "summary": "Archive a category: it stays on the lines it holds and cannot be chosen again.",
+   "type": "action",
+   "verb": "archive"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.cashflow",
+   "kind": "transaction",
+   "params": {
+    "through": {
+     "required": true,
+     "type": "when"
+    }
+   },
+   "phrasings": [],
+   "summary": "Twelve months of money in, out and net per currency, with the savings rate.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.categories",
+   "kind": "category",
+   "params": {},
+   "phrasings": [],
+   "summary": "The categories: groups, then categories, archived ones marked.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "money",
+   "card": true,
+   "dropped": {},
+   "id": "money.categorize",
+   "kind": "transaction",
+   "params": {
+    "category": {
+     "of": "category",
+     "required": true,
+     "type": "mention"
+    },
+    "targets": {
+     "items": "mention",
+     "of": "transaction",
+     "required": true,
+     "type": "list"
+    }
+   },
+   "phrasings": [
+    "file that Starbucks charge under coffee",
+    "put yesterday's Uber in transport",
+    "clear the category on the Amazon line"
+   ],
+   "summary": "File transactions under a category, or clear it.",
+   "type": "action",
+   "verb": "categorize"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.close-account",
+   "kind": "account",
+   "params": {
+    "flag": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "starred",
+      "pinned",
+      "archived"
+     ]
+    },
+    "target": {
+     "of": "account",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "close my old checking account",
+    "archive the Visa account",
+    "close the cash account"
+   ],
+   "summary": "Close an account: it is marked archived, keeps every line, and leaves net worth.",
+   "type": "action",
+   "verb": "archive"
+  },
+  {
+   "app": "money",
+   "card": true,
+   "dropped": {},
+   "id": "money.delete-rule",
+   "kind": "rule",
+   "params": {
+    "target": {
+     "of": "rule",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "delete the Starbucks rule",
+    "remove the Uber rule",
+    "get rid of the Netflix rule"
+   ],
+   "summary": "Delete a rule.",
+   "type": "action",
+   "verb": "delete"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.edit-account",
+   "kind": "account",
+   "params": {
+    "external_ref": {
+     "required": false,
+     "type": "text"
+    },
+    "on_budget": {
+     "required": false,
+     "type": "bool"
+    },
+    "target": {
+     "of": "account",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": false,
+     "type": "text"
+    },
+    "type": {
+     "required": false,
+     "type": "enum",
+     "values": [
+      "checking",
+      "savings",
+      "credit_card",
+      "cash"
+     ]
+    }
+   },
+   "phrasings": [
+    "rename my savings account to Rainy Day",
+    "change Everyday to a savings account",
+    "take my cash account off budget"
+   ],
+   "summary": "Rename an account, change its type (checking and savings are one class), move it on or off budget, or set or clear the bank's account number.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {
+    "position": "ordering key computed by the runtime"
+   },
+   "id": "money.edit-rule",
+   "kind": "rule",
+   "params": {
+    "account": {
+     "of": "account",
+     "required": false,
+     "type": "mention"
+    },
+    "category": {
+     "of": "category",
+     "required": false,
+     "type": "mention"
+    },
+    "display_name": {
+     "required": false,
+     "type": "text"
+    },
+    "match": {
+     "required": false,
+     "type": "enum",
+     "values": [
+      "is",
+      "contains",
+      "matches"
+     ]
+    },
+    "max": {
+     "required": false,
+     "type": "amount"
+    },
+    "min": {
+     "required": false,
+     "type": "amount"
+    },
+    "target": {
+     "of": "rule",
+     "required": true,
+     "type": "mention"
+    },
+    "text": {
+     "required": false,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "change the Starbucks rule to dining",
+    "make the Uber rule match Uber Eats too",
+    "move the Netflix rule to entertainment"
+   ],
+   "summary": "Change a rule.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.home-tile",
+   "kind": "transaction",
+   "params": {
+    "month": {
+     "required": true,
+     "type": "when"
+    }
+   },
+   "phrasings": [],
+   "summary": "This month's spending per currency, for Home.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {
+    "content": "statement bytes picked on the phone"
+   },
+   "id": "money.import-plan",
+   "kind": "transaction",
+   "params": {
+    "account": {
+     "of": "account",
+     "required": false,
+     "type": "mention"
+    },
+    "date_order": {
+     "required": false,
+     "type": "enum",
+     "values": [
+      "mdy",
+      "dmy",
+      "ymd"
+     ]
+    },
+    "sign": {
+     "required": false,
+     "type": "enum",
+     "values": [
+      "debits_negative",
+      "debits_positive"
+     ]
+    },
+    "source": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "csv",
+      "ofx"
+     ]
+    }
+   },
+   "phrasings": [],
+   "summary": "What a bank statement would do if it were imported: every row's verdict, the totals, the balance it states and the command input that publishes it.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "money",
+   "card": true,
+   "dropped": {
+    "complete": "sync flag: whether the read was complete",
+    "origin": "sync origin handle",
+    "records": "sync payload"
+   },
+   "id": "money.import-transactions",
+   "kind": "transaction",
+   "params": {
+    "since": {
+     "required": false,
+     "type": "when"
+    }
+   },
+   "phrasings": [
+    "import this bank statement",
+    "load the CSV from my checking account",
+    "add the lines from last month's statement"
+   ],
+   "summary": "Write the new lines of a statement the member reviewed: a line already in the account is left as it is, so importing the same file twice writes nothing.",
+   "type": "action",
+   "verb": "import"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.link-transfer",
+   "kind": "transaction",
+   "params": {
+    "other": {
+     "of": "transaction",
+     "required": true,
+     "type": "mention"
+    },
+    "target": {
+     "of": "transaction",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "those two lines are a transfer between my accounts",
+    "link the 500 out of checking with the 500 into savings",
+    "treat these two transactions as one transfer"
+   ],
+   "summary": "Accept two transactions in two accounts as the two halves of one transfer.",
+   "type": "action",
+   "verb": "link"
+  },
+  {
+   "app": "money",
+   "card": true,
+   "dropped": {},
+   "id": "money.merge-category",
+   "kind": "category",
+   "params": {
+    "from": {
+     "of": "category",
+     "required": true,
+     "type": "mention"
+    },
+    "into": {
+     "of": "category",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "fold Eating Out into Dining",
+    "merge Coffee into Food",
+    "combine Gas and Transport"
+   ],
+   "summary": "Fold one category into another: its lines, rules and plans move, and it goes.",
+   "type": "action",
+   "verb": "merge"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.record-checkpoint",
+   "kind": "account",
+   "params": {
+    "balance": {
+     "required": true,
+     "type": "amount"
+    },
+    "day": {
+     "required": true,
+     "type": "when"
+    },
+    "target": {
+     "of": "account",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "my checking account had 1520 on the first",
+    "record a balance of 300 on savings today",
+    "the bank says Everyday was 842 yesterday"
+   ],
+   "summary": "Record a balance the bank stated on a day; a derived balance is compared with it.",
+   "type": "action",
+   "verb": "log"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.recurring",
+   "kind": "transaction",
+   "params": {},
+   "phrasings": [],
+   "summary": "Recurring charges detected over thirteen months: cadence, amount, next due and status.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.reopen-account",
+   "kind": "account",
+   "params": {
+    "flag": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "starred",
+      "pinned",
+      "archived"
+     ]
+    },
+    "target": {
+     "of": "account",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "reopen my old checking account",
+    "bring the Visa account back",
+    "reopen the cash account"
+   ],
+   "summary": "Reopen a closed account.",
+   "type": "action",
+   "verb": "unarchive"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.rules",
+   "kind": "rule",
+   "params": {},
+   "phrasings": [],
+   "summary": "The rules in the order they apply, with their specificity.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {
+    "layout": "structured payload, not speakable"
+   },
+   "id": "money.save-import-profile",
+   "kind": "account",
+   "params": {
+    "target": {
+     "of": "account",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "remember how this bank's CSV is laid out",
+    "save the column layout for Everyday",
+    "use this layout for future statements"
+   ],
+   "summary": "Remember how this account's CSV statements are laid out, so the next one needs no questions.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.search",
+   "kind": "transaction",
+   "params": {
+    "limit": {
+     "required": false,
+     "type": "number"
+    },
+    "month": {
+     "required": true,
+     "type": "when"
+    },
+    "term": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [],
+   "summary": "Searches the newest twelve months of transactions by description, the member's name, category and memo, forgiving a slipped letter.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.set-carry",
+   "kind": "budget",
+   "params": {
+    "carry": {
+     "required": true,
+     "type": "bool"
+    },
+    "category": {
+     "of": "category",
+     "required": true,
+     "type": "mention"
+    },
+    "month": {
+     "required": true,
+     "type": "when"
+    }
+   },
+   "phrasings": [
+    "carry what's left of groceries into next month",
+    "stop carrying over the coffee budget",
+    "let the dining plan roll over"
+   ],
+   "summary": "Carry what a category's plan left unused into the next month, or stop.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.set-display-name",
+   "kind": "transaction",
+   "params": {
+    "target": {
+     "of": "transaction",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "call the SQ *BLUE BOTTLE line Blue Bottle",
+    "rename that charge to Rent",
+    "set the name of the Amazon line to Books"
+   ],
+   "summary": "Name a transaction.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "money",
+   "card": true,
+   "dropped": {},
+   "id": "money.set-opening-balance",
+   "kind": "account",
+   "params": {
+    "opening": {
+     "required": true,
+     "type": "amount"
+    },
+    "opening_on": {
+     "required": false,
+     "type": "when"
+    },
+    "target": {
+     "of": "account",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "set the opening balance of Everyday to 500",
+    "this account started with 1200 euros",
+    "correct the starting balance on savings"
+   ],
+   "summary": "State where an account stood on a day; every balance after that day is derived from it, and lines on or before it are already in it.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.set-target",
+   "kind": "budget",
+   "params": {
+    "amount": {
+     "required": true,
+     "type": "amount"
+    },
+    "carry": {
+     "required": false,
+     "type": "bool"
+    },
+    "category": {
+     "of": "category",
+     "required": true,
+     "type": "mention"
+    },
+    "currency": {
+     "required": false,
+     "type": "text"
+    },
+    "month": {
+     "required": true,
+     "type": "when"
+    }
+   },
+   "phrasings": [
+    "plan 400 for groceries in November",
+    "budget 120 for coffee this month",
+    "remove my dining out plan for October"
+   ],
+   "summary": "Plan an amount for a category in a month; an amount of null removes the plan.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.spending",
+   "kind": "transaction",
+   "params": {
+    "month": {
+     "required": true,
+     "type": "when"
+    }
+   },
+   "phrasings": [],
+   "summary": "The Spending screen for a month: spent per currency against the plan, each category's planned, carried-in, spent and left, uncategorised rows, in/out/net.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {
+    "typing_amount_minor": "keystroke-level draft state",
+    "typing_carry": "keystroke-level draft state"
+   },
+   "id": "money.target-sheet",
+   "kind": "budget",
+   "params": {
+    "category": {
+     "of": "category",
+     "required": true,
+     "type": "mention"
+    },
+    "currency": {
+     "required": true,
+     "type": "text"
+    },
+    "month": {
+     "required": true,
+     "type": "when"
+    }
+   },
+   "phrasings": [],
+   "summary": "The target sheet for a category in a month: the plan, what carried in, the six-month average and next month's preview.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.transaction",
+   "kind": "transaction",
+   "params": {
+    "transaction": {
+     "of": "transaction",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [],
+   "summary": "One transaction with its flags, a transfer it may be half of, the rule the app would propose.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.unarchive-category",
+   "kind": "category",
+   "params": {
+    "flag": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "starred",
+      "pinned",
+      "archived"
+     ]
+    },
+    "target": {
+     "of": "category",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "bring the Pets category back",
+    "unarchive the Gifts category",
+    "restore the Subscriptions category"
+   ],
+   "summary": "Bring an archived category back: it can be chosen again.",
+   "type": "action",
+   "verb": "unarchive"
+  },
+  {
+   "app": "money",
+   "card": false,
+   "dropped": {},
+   "id": "money.unlink-transfer",
+   "kind": "transaction",
+   "params": {
+    "target": {
+     "of": "transaction",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "that wasn't a transfer, unlink it",
+    "undo the transfer between checking and savings",
+    "split those two lines apart"
+   ],
+   "summary": "Undo a transfer.",
+   "type": "action",
+   "verb": "unlink"
+  },
+  {
+   "app": "money",
+   "card": true,
+   "dropped": {},
+   "id": "money.void-transaction",
+   "kind": "transaction",
+   "params": {
+    "target": {
+     "of": "transaction",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "void the duplicate Netflix charge",
+    "remove that charge from my figures",
+    "void the Amazon line from Tuesday"
+   ],
+   "summary": "Remove a transaction from every figure.",
+   "type": "action",
+   "verb": "void"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.about",
+   "kind": "note",
+   "params": {
+    "about": {
+     "of": "about",
+     "required": true,
+     "type": "mention"
+    },
+    "limit": {
+     "required": false,
+     "type": "number"
+    }
+   },
+   "phrasings": [],
+   "summary": "The live notes written about one thing, a person, an event, a task, a document, newest first, each with a short preview, a checklist tally, its notebook.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.add-tag",
+   "kind": "note",
+   "params": {
+    "label": {
+     "required": true,
+     "type": "text"
+    },
+    "target": {
+     "of": "note",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "tag the trip note as travel",
+    "label my book ideas reading",
+    "add the tag home to the plumber note"
+   ],
+   "summary": "Tag a note, a free-form label shared with every other app that tags; minted on first use.",
+   "type": "action",
+   "verb": "tag"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {
+    "rel": "edge relation fixed by the action"
+   },
+   "id": "notes.attach",
+   "kind": "note",
+   "params": {
+    "from": {
+     "required": true,
+     "type": "mention"
+    },
+    "to": {
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "attach the itinerary PDF to my trip note",
+    "add the photo to the plumber note",
+    "attach the receipt to my book ideas"
+   ],
+   "summary": "Attach a document or photo to a note; the bytes are the document's or photo's own, found by hash.",
+   "type": "action",
+   "verb": "attach"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {
+    "id": "id minted by the vault"
+   },
+   "id": "notes.create-note",
+   "kind": "note",
+   "params": {
+    "body": {
+     "required": true,
+     "type": "text"
+    },
+    "format": {
+     "required": false,
+     "type": "enum",
+     "values": [
+      "markdown",
+      "plain"
+     ]
+    },
+    "notebook": {
+     "of": "notebook",
+     "required": false,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "jot down that I need to call the plumber",
+    "start a note called book ideas",
+    "write a note about the trip itinerary"
+   ],
+   "summary": "Create a note (optionally filed into a notebook); the body is the note's own column and any [[wikilink]] in it compiles to a link edge.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {
+    "id": "id minted by the vault",
+    "kind": "constant 'notebook', filled by the runtime"
+   },
+   "id": "notes.create-notebook",
+   "kind": "notebook",
+   "params": {
+    "parent": {
+     "of": "notebook",
+     "required": false,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "make a notebook called Travel",
+    "create a Reading notebook",
+    "start a notebook for work"
+   ],
+   "summary": "Create a notebook; the vault assigns sibling order.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "notes",
+   "card": true,
+   "dropped": {},
+   "id": "notes.delete-note",
+   "kind": "note",
+   "params": {
+    "target": {
+     "of": "note",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "delete the plumber note",
+    "trash my book ideas",
+    "remove the old trip itinerary"
+   ],
+   "summary": "Move a note to the 30-day trash; its links, tags and attachments stay.",
+   "type": "action",
+   "verb": "delete"
+  },
+  {
+   "app": "notes",
+   "card": true,
+   "dropped": {},
+   "id": "notes.delete-notebook",
+   "kind": "notebook",
+   "params": {
+    "target": {
+     "of": "notebook",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "delete the Travel notebook",
+    "remove my Reading notebook",
+    "trash the Work notebook"
+   ],
+   "summary": "Move a notebook to the 30-day trash, the notes filed in it go with it and come back with it on restore.",
+   "type": "action",
+   "verb": "delete"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {
+    "rel": "edge relation fixed by the action"
+   },
+   "id": "notes.detach",
+   "kind": "note",
+   "params": {
+    "from": {
+     "required": true,
+     "type": "mention"
+    },
+    "to": {
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "detach the itinerary PDF from my trip note",
+    "remove the photo from the plumber note",
+    "take the receipt off my book ideas"
+   ],
+   "summary": "Detach a document or photo from a note; the document or photo is kept.",
+   "type": "action",
+   "verb": "detach"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.edit-note",
+   "kind": "note",
+   "params": {
+    "body": {
+     "required": false,
+     "type": "text"
+    },
+    "format": {
+     "required": false,
+     "type": "enum",
+     "values": [
+      "markdown",
+      "plain"
+     ]
+    },
+    "target": {
+     "of": "note",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": false,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "add oat milk to my shopping note",
+    "retitle the book ideas note",
+    "fix the first line of the trip itinerary"
+   ],
+   "summary": "Edit a note's title, body or format, partial update, only the fields sent change; the body it replaces is kept as a revision.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.flag-note",
+   "kind": "note",
+   "params": {
+    "flag": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "pinned",
+      "starred"
+     ]
+    },
+    "target": {
+     "of": "note",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "pin the trip itinerary",
+    "star my book ideas",
+    "pin the plumber note to the top"
+   ],
+   "summary": "Pin or star a note, a tagged edge to the flag, shared with every app that flags.",
+   "type": "action",
+   "verb": "star"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.history",
+   "kind": "note",
+   "params": {
+    "note": {
+     "of": "note",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [],
+   "summary": "The selected note's body versions, newest first: the current words, then each version they replaced (newest 200; truncated says more exist).",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.journal",
+   "kind": "note",
+   "params": {
+    "limit": {
+     "required": false,
+     "type": "number"
+    }
+   },
+   "phrasings": [],
+   "summary": "The Journal place: a bounded, read-only window over the memos this vault holds, the set the library, search and link-target projections exclude.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.library",
+   "kind": "note",
+   "params": {
+    "limit": {
+     "required": false,
+     "type": "number"
+    },
+    "notebook": {
+     "of": "notebook",
+     "required": false,
+     "type": "mention"
+    },
+    "pinned_only": {
+     "required": false,
+     "type": "bool"
+    },
+    "sort": {
+     "required": false,
+     "type": "text"
+    },
+    "tags": {
+     "items": "mention",
+     "of": "tag",
+     "required": false,
+     "type": "list"
+    },
+    "unfiled_only": {
+     "required": false,
+     "type": "bool"
+    }
+   },
+   "phrasings": [],
+   "summary": "A bounded recent window of notes with their notebook names, a short body preview and checklist tally, and tags.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {
+    "anchor": "structured payload, not speakable",
+    "rel": "edge relation fixed by the action"
+   },
+   "id": "notes.link",
+   "kind": "note",
+   "params": {
+    "from": {
+     "required": true,
+     "type": "mention"
+    },
+    "to": {
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "link my trip note to Sam",
+    "connect the book ideas note to the reading list task",
+    "link the plumber note to Friday's event"
+   ],
+   "summary": "Link a note to anything it names, with an optional anchor naming the text range the link points at.",
+   "type": "action",
+   "verb": "link"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.link-targets",
+   "kind": "note",
+   "params": {
+    "term": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [],
+   "summary": "FTS5 powerbox search across notes, people, events, tasks, documents and photos; returns secret-free entity-aware link targets.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.move-note",
+   "kind": "note",
+   "params": {
+    "notebook": {
+     "of": "notebook",
+     "required": false,
+     "type": "mention"
+    },
+    "target": {
+     "of": "note",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "put the trip itinerary in the Travel notebook",
+    "file my book ideas under Reading",
+    "move the plumber note to Home"
+   ],
+   "summary": "Refile a note into a notebook (or unfile it by sending no notebook_id), one notebook per note.",
+   "type": "action",
+   "verb": "add_to"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.note",
+   "kind": "note",
+   "params": {
+    "note": {
+     "of": "note",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [],
+   "summary": "One note's body, the editor's on-open pull.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.notebooks",
+   "kind": "notebook",
+   "params": {},
+   "phrasings": [],
+   "summary": "Every notebook with how many notes it holds and how many notes sit in none: what a notebook picker and the sidebar draw, whatever window the library holds.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.remove-tag",
+   "kind": "note",
+   "params": {
+    "label": {
+     "required": true,
+     "type": "text"
+    },
+    "target": {
+     "of": "note",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "remove the travel tag from the trip note",
+    "untag my book ideas",
+    "take the home label off the plumber note"
+   ],
+   "summary": "Remove one tag from a note; the tag survives for other things.",
+   "type": "action",
+   "verb": "untag"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.rename-notebook",
+   "kind": "notebook",
+   "params": {
+    "target": {
+     "of": "notebook",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "rename the Travel notebook to Trips",
+    "call my Reading notebook Books",
+    "retitle Work to Office"
+   ],
+   "summary": "Rename a notebook; the one verb that renames every kind of thing.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.restore-note",
+   "kind": "note",
+   "params": {
+    "target": {
+     "of": "note",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "bring back the plumber note",
+    "restore the note I deleted",
+    "undelete my book ideas"
+   ],
+   "summary": "Restore a trashed note in place.",
+   "type": "action",
+   "verb": "restore"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {
+    "seq": "version sequence number, resolved by the runtime from 'previous' or 'yesterday'"
+   },
+   "id": "notes.restore-note-version",
+   "kind": "note",
+   "params": {
+    "target": {
+     "of": "note",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "go back to the earlier version of my trip note",
+    "restore yesterday's text of book ideas",
+    "undo my last edit to the plumber note"
+   ],
+   "summary": "Restore one prior body from this note's history; the words it replaces are kept as the newest version.",
+   "type": "action",
+   "verb": "restore"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.search",
+   "kind": "note",
+   "params": {
+    "term": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [],
+   "summary": "Full-text note search through the vault's FTS5 index, returns only the ranked matches in the library row shape plus a hit snippet, never a whole-table pull.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {
+    "exact": "verbatim line used to locate the checklist item; the title already carries it"
+   },
+   "id": "notes.send-to-tasks",
+   "kind": "task",
+   "params": {
+    "due": {
+     "required": false,
+     "type": "when"
+    },
+    "note": {
+     "of": "note",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "turn this checklist line into a task",
+    "send 'call the plumber' to Tasks",
+    "make the first checklist item a task"
+   ],
+   "summary": "Hand one checklist line to Tasks: mints the task (undated unless the line carried a date) and joins it back to the note with an about edge.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.trash",
+   "kind": "note",
+   "params": {},
+   "phrasings": [],
+   "summary": "Notes in reversible trash with their purge dates and safe display metadata.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "notes",
+   "card": false,
+   "dropped": {},
+   "id": "notes.unflag-note",
+   "kind": "note",
+   "params": {
+    "flag": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "pinned",
+      "starred"
+     ]
+    },
+    "target": {
+     "of": "note",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "unpin the trip itinerary",
+    "unstar my book ideas",
+    "take the plumber note off the top"
+   ],
+   "summary": "Unpin or unstar a note.",
+   "type": "action",
+   "verb": "unstar"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.add-gift",
+   "kind": "gift",
+   "params": {
+    "target": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    },
+    "text": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "gift idea for Sam: a hiking book",
+    "Maria would like a scarf",
+    "add a gift for Priya: tea set"
+   ],
+   "summary": "Add a gift idea for a person: a task about them tagged gift.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.add-important-date",
+   "kind": "important_date",
+   "params": {
+    "label": {
+     "required": true,
+     "type": "text"
+    },
+    "month_day": {
+     "required": true,
+     "type": "when"
+    },
+    "reminder_on": {
+     "required": false,
+     "type": "bool"
+    },
+    "target": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "add Sam's anniversary on June 5",
+    "Maria's graduation is May 20",
+    "remember Priya's naming day"
+   ],
+   "summary": "Add an important date.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {
+    "tz": "IANA zone resolved by the runtime from the phone"
+   },
+   "id": "people.add-journal-entry",
+   "kind": "journal_entry",
+   "params": {
+    "entry_date": {
+     "required": false,
+     "type": "when"
+    },
+    "mood": {
+     "required": true,
+     "type": "text"
+    },
+    "text": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "journal: today was a good day",
+    "write a journal entry, feeling tired",
+    "log my mood as happy with a note about the park"
+   ],
+   "summary": "Add an owner-level journal entry with a mood and a line about your day: a note about you, titled by the mood, filed on its own day.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.add-note",
+   "kind": "note",
+   "params": {
+    "target": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    },
+    "text": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "add a note about Sam: loves hiking",
+    "note that Maria moved to Lisbon",
+    "write down Priya's gift preferences"
+   ],
+   "summary": "Add a note about a person: a note with an about edge, found with them in search.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {
+    "id": "id minted by the vault"
+   },
+   "id": "people.add-person",
+   "kind": "person",
+   "params": {
+    "birthday": {
+     "required": false,
+     "type": "when"
+    },
+    "cadence_days": {
+     "required": false,
+     "type": "number"
+    },
+    "list": {
+     "of": "people_list",
+     "required": false,
+     "type": "mention"
+    },
+    "met": {
+     "required": false,
+     "type": "when"
+    },
+    "nickname": {
+     "required": false,
+     "type": "text"
+    },
+    "role": {
+     "required": false,
+     "type": "text"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "add Sam Lee to my people",
+    "save a contact called Maria, my dentist",
+    "add my cousin Priya and remind me to call monthly"
+   ],
+   "summary": "Add a person to your circle, optionally filed into a list.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.add-relationship",
+   "kind": "person",
+   "params": {
+    "kind": {
+     "required": true,
+     "type": "text"
+    },
+    "name": {
+     "required": true,
+     "type": "text"
+    },
+    "pet": {
+     "required": false,
+     "type": "text"
+    },
+    "related": {
+     "of": "person",
+     "required": false,
+     "type": "mention"
+    },
+    "target": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "Sam is Maria's brother",
+    "Priya is my cousin",
+    "link Sam as Maria's manager"
+   ],
+   "summary": "Record a related edge to another person, labelled by how they are related; related_id reuses a person, else one of that name is reused or founded.",
+   "type": "action",
+   "verb": "link"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.add-task",
+   "kind": "task",
+   "params": {
+    "target": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    },
+    "text": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "remind me to send Sam the photos",
+    "add a follow-up for Maria",
+    "task: ask Priya about the move"
+   ],
+   "summary": "Add a follow-up task about a person.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.complete-task",
+   "kind": "task",
+   "params": {
+    "target": {
+     "of": "task",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "mark the follow-up with Sam done",
+    "I sent Maria the invoice, finish that task",
+    "complete the Priya gift task"
+   ],
+   "summary": "Complete a task about a person, the one completion operation Tasks and automations also call; a gift idea is such a task.",
+   "type": "action",
+   "verb": "complete"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {
+    "id": "id minted by the vault",
+    "kind": "constant 'list', filled by the runtime"
+   },
+   "id": "people.create-list",
+   "kind": "people_list",
+   "params": {
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "make a list called Family",
+    "create a Work list for people",
+    "start a list for college friends"
+   ],
+   "summary": "Create a list, like a Docs folder.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.dashboard",
+   "kind": "person",
+   "params": {},
+   "phrasings": [],
+   "summary": "The keep-in-touch summary: who is overdue to reconnect with, upcoming reminders, recent logged touches, and the headline counts.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "people",
+   "card": true,
+   "dropped": {},
+   "id": "people.delete-contact-channel",
+   "kind": "contact_point",
+   "params": {
+    "target": {
+     "of": "contact_point",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "remove Sam's old phone number",
+    "delete Maria's work email",
+    "drop Priya's old address"
+   ],
+   "summary": "Delete one contact point.",
+   "type": "action",
+   "verb": "delete"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.delete-list",
+   "kind": "people_list",
+   "params": {
+    "target": {
+     "of": "people_list",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "delete the Family list",
+    "remove the Work list",
+    "trash the college friends list"
+   ],
+   "summary": "Move a list to the trash; the people in it are not touched and are in it again if it is restored.",
+   "type": "action",
+   "verb": "delete"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.edit-person",
+   "kind": "person",
+   "params": {
+    "birthday": {
+     "required": false,
+     "type": "when"
+    },
+    "cadence_days": {
+     "required": false,
+     "type": "number"
+    },
+    "met": {
+     "required": false,
+     "type": "when"
+    },
+    "nickname": {
+     "required": false,
+     "type": "text"
+    },
+    "role": {
+     "required": false,
+     "type": "text"
+    },
+    "sort_name": {
+     "required": false,
+     "type": "text"
+    },
+    "target": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": false,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "change Sam's role to manager",
+    "set Maria's birthday to March 3",
+    "note that I met Priya at a wedding"
+   ],
+   "summary": "Revise a person's name, role line, nickname, birthday, sort name, how-you-met note or cadence.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "people",
+   "card": true,
+   "dropped": {
+    "complete": "sync flag: whether the read was complete",
+    "origin": "sync origin handle",
+    "records": "sync payload"
+   },
+   "id": "people.follow-contacts",
+   "kind": "person",
+   "params": {
+    "since": {
+     "required": false,
+     "type": "when"
+    }
+   },
+   "phrasings": [
+    "import my phone's contacts",
+    "sync people from the address book on this phone",
+    "pull in my contacts"
+   ],
+   "summary": "Follow the phone's address book, one account at a time: a field the member never changed follows the phone, one they changed stands.",
+   "type": "action",
+   "verb": "import"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.log-interaction",
+   "kind": "person",
+   "params": {
+    "kind": {
+     "required": true,
+     "type": "text"
+    },
+    "target": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    },
+    "text": {
+     "required": false,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "I called Sam today",
+    "log a coffee with Maria yesterday",
+    "I messaged Priya this morning"
+   ],
+   "summary": "Log a touch (message, call, met up, note): an activity with the person, and a note about it when you wrote something.",
+   "type": "action",
+   "verb": "log"
+  },
+  {
+   "app": "people",
+   "card": true,
+   "dropped": {},
+   "id": "people.merge-people",
+   "kind": "person",
+   "params": {
+    "from": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    },
+    "into": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "Sam Lee and S. Lee are the same person",
+    "merge the two Priyas",
+    "fold the duplicate Maria into the real one"
+   ],
+   "summary": "Fold a duplicate person into a survivor: every reference re-points and the merged person is purged.",
+   "type": "action",
+   "verb": "merge"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.move-person",
+   "kind": "person",
+   "params": {
+    "list": {
+     "of": "people_list",
+     "required": false,
+     "type": "mention"
+    },
+    "target": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "put Sam in my Family list",
+    "move Maria to Work",
+    "take Priya out of her list"
+   ],
+   "summary": "Move a person into a list; omit list_id to un-list them.",
+   "type": "action",
+   "verb": "add_to"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.people",
+   "kind": "person",
+   "params": {
+    "filter": {
+     "required": false,
+     "type": "text"
+    },
+    "limit": {
+     "required": false,
+     "type": "number"
+    },
+    "sort": {
+     "required": false,
+     "type": "text"
+    }
+   },
+   "phrasings": [],
+   "summary": "The people window as a bounded recent view, newest first, decorated with the star, the list, the reminders that are on and when they were last touched.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.person",
+   "kind": "person",
+   "params": {
+    "person": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [],
+   "summary": "One person's sheet: the roster row, nickname, how you met, contact points with who else holds the same value, dates, notes and the touch log.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "people",
+   "card": true,
+   "dropped": {},
+   "id": "people.purge-person",
+   "kind": "person",
+   "params": {
+    "target": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "erase Sam Lee forever",
+    "permanently delete Maria",
+    "purge the trashed Priya"
+   ],
+   "summary": "Delete a trashed person forever: what went to the trash with them goes too; a task about them stays as the member's.",
+   "type": "action",
+   "verb": "purge"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.rename-list",
+   "kind": "people_list",
+   "params": {
+    "target": {
+     "of": "people_list",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "rename Family to Relatives",
+    "call the Work list Colleagues",
+    "retitle college friends to Alumni"
+   ],
+   "summary": "Rename a list.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.reopen-task",
+   "kind": "task",
+   "params": {
+    "target": {
+     "of": "task",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "reopen the follow-up with Sam",
+    "the invoice task for Maria isn't done",
+    "reopen the gift for Priya"
+   ],
+   "summary": "Reopen a completed task about a person; a gift idea given is such a task.",
+   "type": "action",
+   "verb": "reopen"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.restore-person",
+   "kind": "person",
+   "params": {
+    "target": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "bring Sam Lee back",
+    "restore Maria",
+    "undelete Priya"
+   ],
+   "summary": "Restore a trashed person, and what went with them.",
+   "type": "action",
+   "verb": "restore"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.save-contact-channel",
+   "kind": "contact_point",
+   "params": {
+    "kind": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "phone",
+      "email",
+      "address",
+      "url",
+      "handle"
+     ]
+    },
+    "label": {
+     "required": false,
+     "type": "text"
+    },
+    "point": {
+     "of": "contact_point",
+     "required": false,
+     "type": "mention"
+    },
+    "preferred": {
+     "required": false,
+     "type": "bool"
+    },
+    "target": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    },
+    "value": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "add Sam's phone number",
+    "set Maria's email",
+    "update Priya's address"
+   ],
+   "summary": "Create or edit a phone, email, address, link or handle, with label and preferred status (one preferred per kind).",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.search",
+   "kind": "person",
+   "params": {
+    "term": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [],
+   "summary": "Full-text people search over the one vault index, name, nickname, role, how you met, contact points and the notes about them, ranked, with a snippet.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.set-birthday-reminder",
+   "kind": "person",
+   "params": {
+    "on": {
+     "required": true,
+     "type": "bool"
+    },
+    "target": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "stop reminding me of Maria's birthday",
+    "turn off the birthday reminder for Sam",
+    "remind me of Priya's birthday again"
+   ],
+   "summary": "Turn a person's birthday reminder on or off: the birthday is the person's own column, so the switch is theirs and event.edit does not reach it.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.set-cadence",
+   "kind": "person",
+   "params": {
+    "cadence_days": {
+     "required": true,
+     "type": "number"
+    },
+    "target": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "remind me to reach out to Sam every month",
+    "call Priya every two weeks",
+    "stop reminding me about Maria"
+   ],
+   "summary": "Set how often you want to reach out to a person; 0 is no cadence.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.set-reminder",
+   "kind": "important_date",
+   "params": {
+    "reminders": {
+     "items": "number",
+     "required": true,
+     "type": "list"
+    },
+    "target": {
+     "of": "important_date",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "remind me a week before Sam's anniversary",
+    "turn off the reminder for Maria's graduation",
+    "remind me the day of Priya's birthday"
+   ],
+   "summary": "Turn a date's reminder on or off: the reminders are the event's, in minutes before it starts.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {
+    "flag": "constant 'starred', filled by the runtime"
+   },
+   "id": "people.star-person",
+   "kind": "person",
+   "params": {
+    "target": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "favorite Sam",
+    "star Maria",
+    "mark Priya as a favorite"
+   ],
+   "summary": "Favorite a person: the one canonical star, shared across your vault.",
+   "type": "action",
+   "verb": "star"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {},
+   "id": "people.trash",
+   "kind": "person",
+   "params": {},
+   "phrasings": [],
+   "summary": "People profiles in reversible trash, with purge dates and safe display metadata.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "people",
+   "card": true,
+   "dropped": {},
+   "id": "people.trash-person",
+   "kind": "person",
+   "params": {
+    "target": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "delete Sam Lee",
+    "remove Maria from my people",
+    "trash the duplicate Priya"
+   ],
+   "summary": "Move a person to the 30-day trash; the notes, touches and yearly dates written about them alone go with them and come back with them.",
+   "type": "action",
+   "verb": "delete"
+  },
+  {
+   "app": "people",
+   "card": false,
+   "dropped": {
+    "flag": "constant 'starred', filled by the runtime"
+   },
+   "id": "people.unstar-person",
+   "kind": "person",
+   "params": {
+    "target": {
+     "of": "person",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "unfavorite Sam",
+    "remove Maria's star",
+    "unstar Priya"
+   ],
+   "summary": "Remove a person's favorite star.",
+   "type": "action",
+   "verb": "unstar"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {
+    "position": "ordering key computed by the runtime",
+    "rel": "edge relation fixed by the action"
+   },
+   "id": "photos.add-to-album",
+   "kind": "photo",
+   "params": {
+    "from": {
+     "of": "photo",
+     "required": true,
+     "type": "mention"
+    },
+    "to": {
+     "of": "album",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "add the beach photo to Italy 2026",
+    "put this picture in the Family album",
+    "file these in the wedding album"
+   ],
+   "summary": "Put a photograph in an album: it goes after the photographs the album has, and adding it twice changes nothing.",
+   "type": "action",
+   "verb": "add_to"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {},
+   "id": "photos.albums",
+   "kind": "album",
+   "params": {},
+   "phrasings": [],
+   "summary": "The collections overview: every album with its exact count and cover, the albums in the trash waiting for a restore, and the standing shelves, the library.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {
+    "flag": "constant 'archived', filled by the runtime"
+   },
+   "id": "photos.archive-photo",
+   "kind": "photo",
+   "params": {
+    "target": {
+     "of": "photo",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "archive the blurry photo",
+    "put this picture away from my library",
+    "archive the duplicate screenshot"
+   ],
+   "summary": "Put a photograph in the archive, out of the library and the lists, kept forever.",
+   "type": "action",
+   "verb": "archive"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {
+    "id": "id minted by the vault",
+    "kind": "constant 'album', filled by the runtime"
+   },
+   "id": "photos.create-album",
+   "kind": "album",
+   "params": {
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "make an album called Italy 2026",
+    "create a Family album",
+    "start an album for the wedding"
+   ],
+   "summary": "Start a new album.",
+   "type": "action",
+   "verb": "create"
+  },
+  {
+   "app": "photos",
+   "card": true,
+   "dropped": {},
+   "id": "photos.delete-album",
+   "kind": "album",
+   "params": {
+    "target": {
+     "of": "album",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "delete the Italy 2026 album",
+    "remove the Family album",
+    "trash the wedding album"
+   ],
+   "summary": "Delete an album; its photographs stay in the library, and the album comes back with its ordered photographs through restore-album.",
+   "type": "action",
+   "verb": "delete"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {},
+   "id": "photos.delete-photo",
+   "kind": "photo",
+   "params": {
+    "target": {
+     "of": "photo",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "delete the blurry photo",
+    "trash this picture",
+    "remove the duplicate beach shot"
+   ],
+   "summary": "Move a photograph to the trash; it keeps its albums, its heart and its bytes until it is purged about 30 days later.",
+   "type": "action",
+   "verb": "delete"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {
+    "edited_from": "provenance link set by the editor, not said",
+    "offset_min": "UTC offset computed from the capture time"
+   },
+   "id": "photos.edit-photo",
+   "kind": "photo",
+   "params": {
+    "taken_at": {
+     "required": false,
+     "type": "when"
+    },
+    "target": {
+     "of": "photo",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "fix the date on this photo",
+    "this was taken on the 5th, not the 6th",
+    "correct the time offset on the beach photo"
+   ],
+   "summary": "Fix a photograph's capture time or offset, or what it was edited from,; a field given as null is cleared.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {
+    "flag": "constant 'starred', filled by the runtime"
+   },
+   "id": "photos.flag-photo",
+   "kind": "photo",
+   "params": {
+    "target": {
+     "of": "photo",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "heart the beach photo",
+    "favorite this picture",
+    "star the sunset photo"
+   ],
+   "summary": "Heart a photograph, one tagged edge to the starred flag.",
+   "type": "action",
+   "verb": "star"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {},
+   "id": "photos.name-place",
+   "kind": "place",
+   "params": {
+    "target": {
+     "of": "place",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "call this place Grandma's house",
+    "name that spot The Lake",
+    "rename the Lisbon place to Alfama"
+   ],
+   "summary": "Name a place, the member's own name for somewhere the vault knows only as a coordinate.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {},
+   "id": "photos.photo",
+   "kind": "photo",
+   "params": {
+    "target": {
+     "of": "photo",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [],
+   "summary": "Everything one photograph's screens show: its cell, whether it is in the trash and when it purges, the albums that hold it by name, its labels.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {},
+   "id": "photos.places",
+   "kind": "place",
+   "params": {},
+   "phrasings": [],
+   "summary": "Every place that is not in the trash with the number of live photographs in it, its newest live photograph and how to say where it is.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "photos",
+   "card": true,
+   "dropped": {},
+   "id": "photos.purge-photo",
+   "kind": "photo",
+   "params": {
+    "target": {
+     "of": "photo",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "erase the blurry photo forever",
+    "permanently delete this picture",
+    "purge the trashed beach shot"
+   ],
+   "summary": "Delete one ALREADY-TRASHED photograph forever.",
+   "type": "action",
+   "verb": "purge"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {
+    "rel": "edge relation fixed by the action"
+   },
+   "id": "photos.remove-from-album",
+   "kind": "photo",
+   "params": {
+    "from": {
+     "of": "photo",
+     "required": true,
+     "type": "mention"
+    },
+    "to": {
+     "of": "album",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "take the beach photo out of Italy 2026",
+    "remove this picture from the Family album",
+    "pull it out of the wedding album"
+   ],
+   "summary": "Take a photograph out of an album; the photograph stays in the library.",
+   "type": "action",
+   "verb": "remove_from"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {},
+   "id": "photos.rename-album",
+   "kind": "album",
+   "params": {
+    "target": {
+     "of": "album",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "rename Italy 2026 to Summer in Italy",
+    "call the Family album Relatives",
+    "retitle the wedding album"
+   ],
+   "summary": "Retitle an album.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {},
+   "id": "photos.restore-album",
+   "kind": "album",
+   "params": {
+    "target": {
+     "of": "album",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "bring back the Italy 2026 album",
+    "restore the Family album",
+    "undelete the wedding album"
+   ],
+   "summary": "Restore a deleted album, with its ordered photographs.",
+   "type": "action",
+   "verb": "restore"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {},
+   "id": "photos.restore-photo",
+   "kind": "photo",
+   "params": {
+    "target": {
+     "of": "photo",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "bring back the blurry photo",
+    "restore the picture I deleted",
+    "undelete the beach shot"
+   ],
+   "summary": "Bring a trashed photograph back; its albums and its heart come back with it.",
+   "type": "action",
+   "verb": "restore"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {},
+   "id": "photos.retitle-photo",
+   "kind": "photo",
+   "params": {
+    "target": {
+     "of": "photo",
+     "required": true,
+     "type": "mention"
+    },
+    "title": {
+     "required": true,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "caption this photo sunset at the pier",
+    "rename the beach photo to Day one",
+    "call this picture Grandma's garden"
+   ],
+   "summary": "Recaption a photograph; a photograph's caption may be empty.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {
+    "correct": "spell-correction switch of the search box"
+   },
+   "id": "photos.search",
+   "kind": "photo",
+   "params": {
+    "limit": {
+     "required": false,
+     "type": "number"
+    },
+    "term": {
+     "required": false,
+     "type": "text"
+    }
+   },
+   "phrasings": [],
+   "summary": "Search the whole live library: the vault's one search index plus the places a word names, no location for the photographs that have none.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {},
+   "id": "photos.set-album-cover",
+   "kind": "album",
+   "params": {
+    "photo": {
+     "of": "photo",
+     "required": false,
+     "type": "mention"
+    },
+    "target": {
+     "of": "album",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "use the beach photo as the Italy cover",
+    "make this picture the cover of Family",
+    "clear the wedding album's cover"
+   ],
+   "summary": "Choose one of an album's photographs as its cover; omit photo_id to let the album show its first.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {},
+   "id": "photos.set-place",
+   "kind": "place",
+   "params": {
+    "place": {
+     "of": "place",
+     "required": false,
+     "type": "mention"
+    },
+    "target": {
+     "of": "photo",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "this photo was taken in Lisbon",
+    "clear the place on the beach photo",
+    "set the place of these pictures to home"
+   ],
+   "summary": "Correct or clear a photograph's place, points it at an existing place, or clears it back to unknown.",
+   "type": "action",
+   "verb": "edit"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {
+    "after": "paging cursor"
+   },
+   "id": "photos.shelf",
+   "kind": "photo",
+   "params": {
+    "limit": {
+     "required": true,
+     "type": "number"
+    },
+    "target": {
+     "of": "photo",
+     "required": false,
+     "type": "mention"
+    },
+    "view": {
+     "required": true,
+     "type": "enum",
+     "values": [
+      "live",
+      "favorites",
+      "videos",
+      "archive",
+      "trash",
+      "album",
+      "place",
+      "unplaced"
+     ]
+    }
+   },
+   "phrasings": [],
+   "summary": "One page of one photo shelf, newest taken first and then the photographs with no capture time.",
+   "type": "view",
+   "verb": "read"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {},
+   "id": "photos.tag-photo",
+   "kind": "photo",
+   "params": {
+    "label": {
+     "required": true,
+     "type": "text"
+    },
+    "target": {
+     "of": "photo",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "tag the beach photo as summer",
+    "label this picture family",
+    "add the tag wedding to these photos"
+   ],
+   "summary": "Add a free-form label to a photograph, additive and idempotent; the label is minted once and shared by everything wearing it.",
+   "type": "action",
+   "verb": "tag"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {
+    "flag": "constant 'archived', filled by the runtime"
+   },
+   "id": "photos.unarchive-photo",
+   "kind": "photo",
+   "params": {
+    "target": {
+     "of": "photo",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "bring the blurry photo back from the archive",
+    "unarchive this picture",
+    "take the duplicate screenshot out of the archive"
+   ],
+   "summary": "Bring an archived photograph back into the library.",
+   "type": "action",
+   "verb": "unarchive"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {
+    "flag": "constant 'starred', filled by the runtime"
+   },
+   "id": "photos.unflag-photo",
+   "kind": "photo",
+   "params": {
+    "target": {
+     "of": "photo",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "unheart the beach photo",
+    "remove the favorite from this picture",
+    "unstar the sunset photo"
+   ],
+   "summary": "Take a photograph's heart away.",
+   "type": "action",
+   "verb": "unstar"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {},
+   "id": "photos.untag-photo",
+   "kind": "photo",
+   "params": {
+    "label": {
+     "required": true,
+     "type": "text"
+    },
+    "target": {
+     "of": "photo",
+     "required": true,
+     "type": "mention"
+    }
+   },
+   "phrasings": [
+    "remove the summer tag from the beach photo",
+    "untag this picture",
+    "take the wedding label off these photos"
+   ],
+   "summary": "Remove one free-form label from a photograph, by label, the one edge.",
+   "type": "action",
+   "verb": "untag"
+  },
+  {
+   "app": "photos",
+   "card": false,
+   "dropped": {
+    "blob": "staged bytes, never spoken",
+    "burst": "burst group computed by the camera",
+    "duration_s": "media metadata computed from the bytes",
+    "edited_from": "provenance link set by the editor, not said",
+    "exif": "structured payload, not speakable",
+    "form": "photo/video/scan detected from the bytes",
+    "height": "image metadata computed from the bytes",
+    "id": "id minted by the vault",
+    "lat": "coordinate read from the photo",
+    "lon": "coordinate read from the photo",
+    "media_type": "detected from the bytes",
+    "offset_min": "UTC offset computed from the capture time",
+    "phash": "perceptual hash computed from the bytes",
+    "size": "byte count computed by the stage door",
+    "thumbhash": "thumbnail hash computed from the bytes",
+    "width": "image metadata computed from the bytes"
+   },
+   "id": "photos.upload",
+   "kind": "photo",
+   "params": {
+    "place": {
+     "of": "place",
+     "required": false,
+     "type": "mention"
+    },
+    "taken_at": {
+     "required": false,
+     "type": "when"
+    },
+    "title": {
+     "required": false,
+     "type": "text"
+    }
+   },
+   "phrasings": [
+    "add this photo to my library",
+    "upload these pictures",
+    "save this image"
+   ],
+   "summary": "Add one file to the library; identical bytes are one photograph (the existing one is adopted), and re-uploading a deleted photograph brings it back.",
+   "type": "action",
+   "verb": "import"
+  }
+ ],
+ "manifests": {
+  "crates/apps/agenda/manifest.json": "deec375f37504dfee735ed8331ac531b49add4b95318ad3491e10c03eee6792a",
+  "crates/apps/docs/manifest.json": "93756bd57913ae3ee83951c5220aaf257026168442df9d402031fdd2e2c2fa11",
+  "crates/apps/health/manifest.json": "838673d6e5f818f01b0c833bb7623217e1e26f850eafd5e9d3778eb4a290e1da",
+  "crates/apps/locker/manifest.json": "d2cc6136341f4ee271d2cb9867dc9cc67119f3a42a3fc942bddfca7909ae08d5",
+  "crates/apps/money/manifest.json": "b7ac7d5490b3300fd34cb7466077ed919375a42815523925f2078b64873a0cf5",
+  "crates/apps/notes/manifest.json": "325210f8c06cec536d8e6c9120696242b8ab2f436d8f6ddec673848ea8a84f84",
+  "crates/apps/people/manifest.json": "a8eb3bd0cc955218c21b7beebda0e620e6624fc1ca1ad7fbb9c05ef474e42fa3",
+  "crates/apps/photos/manifest.json": "cdac5018520fafeec12c61dec254c27f1d2c6e414838c7cd56f1959de6539e51"
+ }
+}

@@ -1,0 +1,46 @@
+{
+ "catalog_sha256": "d9455325e7f7973a51fbb8207555519de543726c342ee6b5463a510da35246ea",
+ "rule": "hold iff sha256(id)[0] is odd",
+ "sets": {
+  "dev": {
+   "by_app": {
+    "agenda": 22,
+    "docs": 30,
+    "health": 22,
+    "locker": 21,
+    "money": 17,
+    "notes": 18,
+    "people": 20,
+    "photos": 27
+   },
+   "by_tool": {
+    "act": 109,
+    "ask": 13,
+    "decline": 16,
+    "load": 39
+   },
+   "n": 177,
+   "sha256": "3de4b890d0776f965fde065fb731183f161c18090b0886728b70e7c1faa4f1ec"
+  },
+  "hold": {
+   "by_app": {
+    "agenda": 18,
+    "docs": 10,
+    "health": 18,
+    "locker": 19,
+    "money": 23,
+    "notes": 22,
+    "people": 20,
+    "photos": 13
+   },
+   "by_tool": {
+    "act": 87,
+    "ask": 11,
+    "decline": 8,
+    "load": 37
+   },
+   "n": 143,
+   "sha256": "e96ed0c10455a2ef3efaf9e8f9d3ee703745505ed27b3e31720237b8f2948188"
+  }
+ }
+}
