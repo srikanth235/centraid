@@ -57,8 +57,22 @@ Keep an edit only if all three hold:
 
 ## Measured here
 
-These numbers are from a CPU smoke run, not a baseline.
-- The base model on two items hit the 200-token think cap both times, then asked instead of acting.
+These come from CPU smoke runs on the base Qwen3.5-0.8B, not from a full baseline.
+
+**First 12 dev items, thinking off:** 0 of 12 calls correct, and 5 of 12 valid.
+- The model now acts and loads instead of asking: 2 asks, against 0 gold asks.
+- The right action was among the candidates for 9 of the 11 items that have one.
+- Calls fail on:
+  - **Parameter names:** `task` where the catalog says `target`.
+  - **Invented arguments:** "moved to 5", `currency: USD`.
+  - **Pasting a summary** into an argument.
+  - **Malformed JSON.**
+  - **Wrong tool:** `load` on an action.
+  - **Wrong action:** 4 wrong writes.
+
+**Two items, thinking on with a 200-token cap:** both hit the cap and then asked.
+
+**Tooling:**
 - A forward pass with MLP capture and a one-item generate ran through the lab and were logged.
 - The no-op edit reproduced the base weights byte for byte.
-- `gguf.py` and the gguf backend have not been run yet.
+- `gguf.py` and the gguf backend have not run yet.
