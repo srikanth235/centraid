@@ -24,7 +24,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::EvalError;
-use crate::args::{ArgClass, ArgVerdict, bucket, judge_args, tool_name_ok, turn_constraints};
+use crate::args::{
+    ArgClass, ArgVerdict, bucket, cell_of, judge_args, tool_name_ok, turn_constraints,
+};
 use crate::effect::{effect_rows, turn_effect};
 use crate::gold::{Accept, Session, Turn};
 use crate::judge::{Ids, judge_turn};
@@ -127,6 +129,13 @@ pub struct TurnResult {
     pub think_cut: usize,
     /// The calls the runtime read out of the model's messages.
     pub calls: Vec<Value>,
+    /// The messages the model wrote this turn, one per step, each cut after its first call as the runtime read it. A
+    /// rollout's record is rendered from these (`rollout::records`).
+    #[serde(default)]
+    pub said: Vec<String>,
+    /// The grid cell of the turn ([`crate::args::cell_of`]): the reference call's tool, kind and verb or op.
+    #[serde(default)]
+    pub cell: String,
     pub run: bool,
 }
 
@@ -310,6 +319,7 @@ impl<'a> Runner<'a> {
             let dates_line = user["dates"].as_str();
             let mut responses: Vec<Value> = Vec::new();
             let mut calls: Vec<Value> = Vec::new();
+            let mut said: Vec<String> = Vec::new();
             let mut think_cut = 0;
             // A RETRACTION ENDS THE TURN IN THE RUNTIME, before any call: no message is asked of the model
             let ended = user.get("ended").filter(|v| v.is_object());
@@ -334,6 +344,7 @@ impl<'a> Runner<'a> {
                 if response["call"].is_object() {
                     calls.push(response["call"].clone());
                 }
+                said.push(sent.to_owned());
                 log.assistant(sent);
                 log.tool(
                     response["obs"]
@@ -403,6 +414,8 @@ impl<'a> Runner<'a> {
                 steps: verdict.effect.steps,
                 think_cut,
                 calls,
+                said,
+                cell: cell_of(turn),
                 run: true,
             });
         }
@@ -457,6 +470,8 @@ fn not_run(turn: &Turn, constraints: usize, apps: Vec<String>) -> TurnResult {
         steps: 0,
         think_cut: 0,
         calls: Vec::new(),
+        said: Vec::new(),
+        cell: cell_of(turn),
         run: false,
     }
 }

@@ -5,11 +5,11 @@
 
 use std::collections::BTreeMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 /// One session of a set: one JSON object per line of `sets/val.jsonl`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Session {
     pub id: String,
     pub world: String,
@@ -34,7 +34,7 @@ impl Session {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Turn {
     pub user: String,
     pub gold: Vec<Accept>,
@@ -45,7 +45,7 @@ pub struct Turn {
     pub tags: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RefCall {
     pub tool: String,
     #[serde(default)]
@@ -55,7 +55,7 @@ pub struct RefCall {
     pub bad: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AcceptKind {
     Rows,
@@ -79,7 +79,7 @@ impl AcceptKind {
 }
 
 /// One acceptable effect of a turn.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Accept {
     #[serde(rename = "type")]
     pub kind: AcceptKind,
@@ -112,14 +112,14 @@ pub struct Accept {
     pub reveal: Vec<Reveal>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Money {
     pub amount: f64,
     #[serde(default)]
     pub unit: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Diff {
     #[serde(default)]
     pub rows: Vec<RowSpec>,
@@ -128,7 +128,7 @@ pub struct Diff {
 }
 
 /// A row the turn changes: an existing one by `key`, or a new one of kind `new`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RowSpec {
     #[serde(default)]
     pub key: Option<String>,
@@ -141,14 +141,14 @@ pub struct RowSpec {
     pub fields: Map<String, Value>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LinkSpec {
     pub change: String,
     pub from: String,
     pub to: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Reveal {
     pub key: String,
     pub contains: String,

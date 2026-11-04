@@ -107,6 +107,49 @@ M6 (#1171) has its own kernel, `experiments/toolchat/native/train/kaggle/` (trai
 
 Two T4s run two shards; the `shard-*.sessions.jsonl` files of a stopped run, added to the input dataset, are copied into the output directory first, so the same command resumes. Put the numbers in this section when the run is done.
 
+## Rollouts and a second round (M7, [#1171](https://github.com/srikanth235/centraid/issues/1171))
+
+Stage 11 of the pipeline: sample `k` decodes of a model over datagen sessions, let the runtime check each turn against gold (the same judge as above), and cut the records a second round of training reads. **Built and tested with a scripted model only. Nothing here has run on a GPU, against weights, or on Kaggle** (no Kaggle credentials exist, and nothing was trained).
+
+```bash
+# 1. sample: 4 decodes of every session, the per-step grammar on, the eight tools
+assist-eval rollout --model m6.gguf --set train/sessions.jsonl --worlds worlds --out runs/r1 \
+    --k 4 --temperature 0.6 --top-p 0.95 --seed 1 --grammar full --tools sig
+#    -> runs/r1.rollouts.jsonl (one rollout a line), runs/r1.rollout.json (the report)
+# 2. what the model still fails, cut into records
+assist-eval rollout-records --rollouts runs/r1.rollouts.jsonl --set train/sessions.jsonl --worlds worlds \
+    --needs runs/r1.rollout.json --out runs/r1-records      # rft.jsonl, dpo.jsonl, stats.json
+# 3. after the second round, sample the same sessions again and compare
+assist-eval rollout --model m7.gguf … --out runs/r2
+assist-eval rollout-compare runs/r1.rollout.json runs/r2.rollout.json --out runs/compare.json
+```
+
+`rollout-report --rollouts FILE… --out PREFIX` rebuilds a report from rollout files (shards merge). `rollout` takes the flags of a plain run (`--worlds`, `--only`, `--limit`, `--shard K/N`, `--resume`, `--threads`, `--gpu-layers`, `--label`, `--stub`) plus `--k`, `--temperature` (default 0.6), `--top-p` (0.95), `--seed`, and `--grammar off|handles|full` (default `full`; `StepOptions::grammar`, which the step turns into `handles` under `--tools s2`). `--resume` counts a session as done only with all its `k` samples.
+
+**Sampling is in the engine, behind the `engine` feature.** `centraid-assist-llama` decoded greedily only; `Config` now has `top_p` and `seed`, and a generation with `temperature > 0` draws from the tokens the grammar allows (`assist-llama/src/sampling.rs`: temperature, top-p over the best 256 tokens, a seeded generator; unit-tested without llama.cpp). The phone's `temperature == 0.0` takes the greedy path unchanged. One seed repeats a whole run in order; each generation takes its own stream, so the `k` decodes of one prompt differ. The engine wiring (`engine.rs`) is **unverified**: it needs the llama.cpp build, and no weights were available to run it.
+
+**A rollout is a whole session run free** (`rollout::Rollout`: a `SessionResult` and its sample number): the model's own calls are the history its later turns see. A turn after a failed one is downstream of the failure, so every rate below counts a rollout's turns up to and including its first failure (the eval's clean turns). Each turn result also keeps `said` (the messages the model wrote) and `cell`.
+
+### Reports
+
+`rollout.json` (`rollout::report::RolloutReport`): session pass over rollouts and pass@k over sessions; turn pass; and for each **grid cell** (`tool/kind/verb`, read off the reference calls: `answer/task`, `do/task/complete`, `compute/transaction/sum`; datagen's primary cells), each **tag** (datagen's `outcome:…`, `reference:…`, `pair:…`), each **constraint count**, each **app** and each **argument class** (rows, date, filters, amount): passing samples over samples with a 95% interval, how many distinct turns the slice holds, how many some sample solved (`solved`) and how many one sample solved and another failed (`mixed`, what a DPO pair can be cut from). `rollout-compare BEFORE AFTER` puts two reports side by side per measure: both rates, the change in points, and `*` where the intervals do not overlap; the biggest losses sort first so a regression is not buried. A cell only one report has is shown with the other side empty.
+
+### Records
+
+Both are in the data version's record shape (`id, world, today, me, tags, turns[{user, gold, ref, tags}]`, then `render`). On the assistant side of each turn **`ref` holds the calls the model made and `said` the messages it wrote**; a renderer renders `said` where a turn has it, `ref` otherwise. `gold` and `user` come from the source set (`--set`, the datagen `sessions.jsonl` or the frozen set; a `.zst` set must be decompressed first, `JsonlSource` reads plain JSONL).
+
+- **RFT** (`rft.jsonl`): each rollout's passing prefix (every turn before its first failure; a rollout that fails its first turn gives nothing), deduplicated among a session's samples by the messages. **Weighting is by duplication:** a record's `weight` is `1 + 2·(worst fail rate among the cell and tags of its turns, from `--needs`) + 2·(mean fail rate of the argument classes its turns state)`, the largest over its turns; the line is written `round(weight)` times (at least 1, at most `--max-copies`, default 4; ids `S~s0`, `S~s0~d1`, …) and also carries `weight` for a trainer that would rather sample. `--needs` is a rollout report or an `assist-eval` report; an entry with fewer than `--min-samples` (5) samples is ignored; with no `--needs` every weight is 1.
+- **DPO** (`dpo.jsonl`): `{"id", "chosen": R, "rejected": R, "decides": [...], "cell", "turn"}`, `R` a record cut after the turn the pair is about. The pair is **placed on the first failing turn** of the rejected rollout and its chosen side is another sample that passed that turn **on the same prompt**: both passed every earlier turn with identical messages (a different history is a different prompt, so no pair). The failing turn must have chosen the right act (`tool_name_ok`: a decline where a read was wanted is not an argument failure), and the two calls must **differ in a deciding argument**, one of the eval's four classes (rows, date, filters, amount), compared as the scorer compares them. Among passing samples the one that differs in the classes the rejected turn got wrong is taken, then the fewest steps. At most `--pairs-per-turn` (2) pairs per turn, each from a different failing message. `stats.json` counts what was left out and why (no passing sample on the same prompt, wrong act, no deciding argument, duplicates).
+
+**Records are written without `render`.** The data version's renderer is M4's; `rollout::records::RenderRecord` is the trait it implements (`render(&Record) -> Rendered {input_ids, weights, text}`) and `records::render_all` fills every record, but `rollout-records` has no renderer to call yet (TODO in `rollout_cmd.rs`). Until it is wired the files cannot be trained on. The loss weights of a model's own turn (weight 1 on the think and call, extra on the deciding tokens) are the renderer's to set as for a datagen record.
+
+### The Kaggle steps (not run)
+
+Both steps need Kaggle credentials and the owner's go-ahead to upload data; neither exists yet, and `kaggle kernels push` was never run.
+
+1. **Sampling on GPU.** A script kernel like the eval kit's (`kaggle/`): build `assist-eval --features cuda`, then run `assist-eval rollout --model <the chosen M6 arm's Q4_0 GGUF> --set <train sessions> --worlds <worlds> --gpu-layers 999 --shard K/N --k 4 --temperature 0.6 --seed <N+K> --out /kaggle/working/shard-K`, one process per GPU (use a different `--seed` per shard), `--resume`. The sessions and worlds come from the M4 data version in the same private dataset as the model; decompress `train.jsonl.zst` first. Then `rollout-report --rollouts shard-*.rollouts.jsonl` for one report and `rollout-records … --needs <report>` for `rft.jsonl` and `dpo.jsonl`. **Rendering is the gap:** it needs the M4 renderer, so until it is wired in, records are cut on a machine that has it (the same `rollout-records` command) before they go to the trainer. Sampling a training split with a model that saw it is the point (the cells it still fails); the **test split is not touched**.
+2. **Second-round training.** The M6 trainer (`experiments/toolchat/native/train/train.py`) continues from the chosen arm's checkpoint: RFT is SFT on `rft.jsonl` (mixed with, or after, the original data; the weights are already in the duplicated lines), DPO is its `--dpo` mode on `dpo.jsonl` (`chosen`/`rejected` records, the shared prefix being the pair's earlier turns). Both read `render.input_ids` and `render.weights`. Export to GGUF as in M6 (`--no-mtp`, Q4_0, output tensor Q8_0), then step 3 above: sample the same sessions again, compare with `rollout-compare`, and score val with the plain `assist-eval` run against the M6 winner. Test is checked only at the milestone.
+
 ## Tests
 
-`cargo test -p centraid-assist-eval`: the scorer on hand-made gold and effects (`judge.rs`, `effect.rs`), the constraint count and argument classes (`args.rs`), the sources (`source.rs`), and `tests/smoke.rs`, which seeds a small world into a real vault and replays sessions through the real runtime with a stub in place of the model (no weights).
+`cargo test -p centraid-assist-eval`: the scorer on hand-made gold and effects (`judge.rs`, `effect.rs`), the constraint count and argument classes (`args.rs`), the sources (`source.rs`), `tests/rollout.rs` (a scripted model plays several samples through the real runtime; the rollout report and its comparison, the RFT weights and the DPO pairs are checked on what it said), and `tests/smoke.rs`, which seeds a small world into a real vault and replays sessions through the real runtime with a stub in place of the model (no weights).

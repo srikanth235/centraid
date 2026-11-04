@@ -9,7 +9,8 @@
 //! |---|---|---|
 //! | [`generate`] | The generation loop — cancel polling, chunked prefill, images as prefill, stop strings, UTF-8 — over a [`generate::Backend`] a test can fake. | always |
 //! | [`wire`] | The JSON lines `assist-step` speaks: request, reply, error, ready. | always |
-//! | `engine` | llama.cpp as that backend: weights, an optional vision projector (`mtmd`), a fresh context per generation, the grammar + greedy sampler chain. | `engine` feature |
+//! | `engine` | llama.cpp as that backend: weights, an optional vision projector (`mtmd`), a fresh context per generation, the grammar + greedy sampler chain (a sampled generation, `temperature > 0`, draws through `sampling`). | `engine` feature |
+//! | `sampling` | temperature and top-p picking with a seeded generator, for rollouts (#1171); the phone decodes greedily and never calls it. | always |
 //!
 //! # THE `engine` FEATURE: LLAMA.CPP BUILDS WHERE THE PHONE'S CORE IS BUILT
 //!
@@ -53,6 +54,7 @@
 #[cfg(feature = "engine")]
 pub mod engine;
 pub mod generate;
+pub mod sampling;
 pub mod wire;
 
 #[cfg(feature = "engine")]
@@ -98,6 +100,12 @@ pub struct Config {
     /// Let llama.cpp write its own log to stderr. Off in a shell; on for
     /// an engine run by hand, where a grammar it refuses is the finding.
     pub logs: bool,
+    /// Nucleus for a sampled generation (`GenerateRequest::temperature > 0`, a rollout's): `1.0` keeps every token.
+    /// A greedy generation, the phone's, ignores it.
+    pub top_p: f32,
+    /// The seed of sampled generations. Each generation draws its own stream from it and a count of generations, so one
+    /// seed repeats a whole run in order and its decodes of the same prompt still differ.
+    pub seed: u64,
 }
 
 impl Default for Config {
@@ -112,6 +120,8 @@ impl Default for Config {
             },
             threads: None,
             logs: false,
+            top_p: 1.0,
+            seed: 0,
         }
     }
 }
