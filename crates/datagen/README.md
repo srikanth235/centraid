@@ -48,7 +48,6 @@ Constraints are weighted toward three and more in the draw; what is realised dep
 | Cell | Why |
 | --- | --- |
 | `find/budget/read`, `find/daily figure/read` | The seed document keys no budget or daily figure, so an eval cannot name the rows an answer shows. (Their values, through `compute`, are all live.) |
-| `create/workout`, `create/daily figure`, `edit/workout`, `edit/daily figure` | Read-only on the runtime this was built against. The owner approved Health writes; they are not on `claude/assist-tool-regroup-d53912` yet, so these cells are live-pending and no intent is drawn for them (there is nothing to verify one against). |
 | `create/photo`, `create/transaction`, `create/budget`, `create/rule`; `edit/budget`, `edit/category` | The runtime has no such write. |
 | `edit/rule` | The runtime answers `edit does not apply to rule`. |
 | `do/*/reveal` | Reveal opens a sealed value; a world carries only a placeholder, which must not reach a prompt. |
