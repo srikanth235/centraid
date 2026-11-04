@@ -352,6 +352,12 @@ pub struct Session {
     /// What each result handle's selector called its rows (`Selector::what`), for the ask a write
     /// over the handle ends in (nt11 R5).
     pub(crate) result_whats: BTreeMap<usize, String>,
+    /// The results a `find` by `name` made: a write on one of them that holds several rows is the
+    /// by-name write, with the same safety check (`act::settle_rows`).
+    pub(crate) result_named: BTreeSet<usize>,
+    /// The results of a `find` that matched nothing, with how it says so: `answer rows=@n` on one
+    /// ends the turn on "nothing" (the eight tools' `answer` has no selector to say it with).
+    pub(crate) result_empty: BTreeMap<usize, String>,
     pub(crate) observations: Vec<Obs>,
     pub(crate) references: Vec<(usize, BTreeSet<usize>)>,
     pub(crate) directory: Vec<usize>,
@@ -667,6 +673,8 @@ impl Session {
             results: Vec::new(),
             result_notes: BTreeMap::new(),
             result_whats: BTreeMap::new(),
+            result_named: BTreeSet::new(),
+            result_empty: BTreeMap::new(),
             observations: Vec::new(),
             references: Vec::new(),
             directory: Vec::new(),
@@ -2732,7 +2740,30 @@ impl Session {
                 .as_ref()
                 .map(|(_, numbers)| vec![(numbers.clone(), String::new())])
                 .unwrap_or_default();
-            self.push_obs(true, None, text.clone(), text, lines, &mut outcome);
+            if self.lenient() {
+                self.push_obs(true, None, text.clone(), text, lines, &mut outcome);
+            } else {
+                // an empty result is a result: `answer rows=@n` is how the turn says "nothing"
+                self.results.push(ResultSet {
+                    kinds: selector.kinds.clone(),
+                    keys: Vec::new(),
+                    value: None,
+                });
+                let handle = self.results.len();
+                self.result_empty.insert(handle, text.clone());
+                let header = format!("@{handle} · {text}");
+                self.push_obs(
+                    true,
+                    Some(handle),
+                    header.clone(),
+                    header,
+                    lines,
+                    &mut outcome,
+                );
+                outcome
+                    .effect
+                    .insert("result".to_owned(), json!(format!("@{handle}")));
+            }
             if let Some((line, _)) = hint {
                 self.pending_notes.push(line);
                 self.read_misses += 1;
@@ -2748,6 +2779,9 @@ impl Session {
                 &mut outcome,
             );
             self.result_whats.insert(handle, selector.what());
+            if selector.name.is_some() {
+                self.result_named.insert(handle);
+            }
             if !selector.conds.is_empty()
                 || selector.when.is_some()
                 || !selector.linked_to.is_empty()
@@ -2995,6 +3029,16 @@ impl Session {
             outcome.ends_turn = !(outcome.effect.contains_key("recovery") || opened);
             return Ok(outcome);
         }
+        if let Some(text) = self.empty_result(args) {
+            let text = format!("answered: {text}");
+            let mut outcome = Outcome::text("");
+            self.push_obs(false, None, text.clone(), text, Vec::new(), &mut outcome);
+            outcome.ends_turn = true;
+            outcome
+                .effect
+                .insert("answer".to_owned(), json!({"rows": []}));
+            return Ok(outcome);
+        }
         let mut outcome = Outcome::text("");
         let mut what: Option<String> = None;
         let (kinds, keys, when, ordered) = if let Some(keys) = self.rows_arg(
@@ -3153,7 +3197,13 @@ impl Session {
         for (unit, left) in &one {
             if let Some((_, right)) = two.iter().find(|(other, _)| other == unit) {
                 let amount = ((left - right) * 100.0).round() / 100.0;
-                difference.push(json!({"amount": amount, "unit": unit}));
+                // a count or a whole number stays an integer, as every other value is
+                let shown = if amount.fract() == 0.0 && amount.abs() < 1e15 {
+                    json!(amount as i64)
+                } else {
+                    json!(amount)
+                };
+                difference.push(json!({"amount": shown, "unit": unit}));
                 said.push(show(amount, unit, true));
             }
         }
@@ -3225,6 +3275,17 @@ impl Session {
             .effect
             .insert("result".to_owned(), json!(format!("@{handle}")));
         Ok(outcome)
+    }
+
+    /// How a `find` that matched nothing says so, when `args` is `rows=@n` of that result alone.
+    fn empty_result(&self, args: &Map<String, Value>) -> Option<String> {
+        match crate::native::session::handle_list(args.get("rows")?).as_slice() {
+            [only] => self
+                .result_empty
+                .get(&only.strip_prefix('@')?.parse::<usize>().ok()?)
+                .cloned(),
+            _ => None,
+        }
     }
 
     /// `compute` and `answer op=…` (SPEC §4.3).

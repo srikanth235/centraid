@@ -363,7 +363,7 @@ fn compare_sets_two_values_side_by_side() {
     );
     assert_eq!(
         compared["effect"]["value"]["values"],
-        json!([{"amount": 3.0, "unit": null}]),
+        json!([{"amount": 3, "unit": null}]),
         "{compared}"
     );
     assert!(
@@ -448,5 +448,123 @@ fn a_think_compiles_to_the_shape_of_the_tools_it_was_trained_on() {
             TraceMode::V4
         )
         .is_ok()
+    );
+}
+
+// ---- what the selector's move from `answer` and `do` to `find` must not lose ----
+
+#[test]
+fn a_find_that_matches_nothing_is_a_result_the_turn_ends_on() {
+    let world = seeded();
+    let mut session = world.strict_session();
+    session.user("what is due in 2031");
+    let found = call(
+        &mut session,
+        "find",
+        json!({"kind": "task", "when": {"date": "2031-01-04"}}),
+    );
+    let handle = found["effect"]["result"]
+        .as_str()
+        .expect("an empty result has a handle");
+    assert_eq!(found["ends_turn"], false, "{found}");
+    let answered = call(&mut session, "answer", json!({"rows": handle}));
+    assert_eq!(answered["ends_turn"], true, "{answered}");
+    assert_eq!(
+        answered["effect"]["answer"]["rows"],
+        json!([]),
+        "{answered}"
+    );
+    assert!(
+        answered["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("answered: 0 tasks match"),
+        "{answered}"
+    );
+    // S2's empty find has no handle, as before
+    let mut s2 = world.session();
+    s2.user("what is due in 2031");
+    let found = call(
+        &mut s2,
+        "find",
+        json!({"kind": "task", "when": {"date": "2031-01-04"}}),
+    );
+    assert!(found["effect"].get("result").is_none(), "{found}");
+}
+
+#[test]
+fn a_write_on_the_several_rows_of_a_find_by_name_asks_which_one() {
+    let world = seeded();
+    let mut session = world.strict_session();
+    session.user("delete the benedikt thing");
+    let found = call(
+        &mut session,
+        "find",
+        json!({"kind": "task,event", "name": "Benedikt"}),
+    );
+    let handle = found["effect"]["result"].as_str().unwrap().to_owned();
+    assert!(ids(&found["effect"]["rows"]).len() > 1, "{found}");
+    let cancelled = call(
+        &mut session,
+        "do",
+        json!({"verb": "delete", "rows": handle}),
+    );
+    assert_eq!(cancelled["ends_turn"], true, "{cancelled}");
+    assert_eq!(cancelled["effect"]["tool"], "ask", "{cancelled}");
+    assert!(cancelled["effect"].get("diff").is_none(), "{cancelled}");
+    // a message that says every row takes them all, as a selector's did
+    let mut every = world.strict_session();
+    every.user("delete all the benedikt things");
+    let found = call(
+        &mut every,
+        "find",
+        json!({"kind": "task,event", "name": "Benedikt"}),
+    );
+    let handle = found["effect"]["result"].as_str().unwrap().to_owned();
+    let cancelled = call(&mut every, "do", json!({"verb": "delete", "rows": handle}));
+    assert!(cancelled["effect"].get("diff").is_some(), "{cancelled}");
+}
+
+#[test]
+fn a_find_of_a_container_reads_the_active_rows() {
+    let world = seeded();
+    let mut session = world.strict_session();
+    session.user("what's left on the home list");
+    let home = number(&mut session, "list", "Home");
+    let found = call(
+        &mut session,
+        "find",
+        json!({"kind": "task", "linked_to": home}),
+    );
+    let text = found["text"].as_str().unwrap();
+    assert!(text.contains("active rows"), "{text}");
+    assert!(!text.contains("status completed"), "{text}");
+}
+
+#[test]
+fn a_by_name_write_is_a_find_step_in_the_trace() {
+    // the lookup step states the selector and the intent it prepares; the verb slot is not read
+    let call = compile_think_for(
+        "intent: write\nverb: complete\nvia: find\nkind: task\nname: Pay rent",
+        None,
+        TraceMode::V4,
+        ToolsMode::Sig,
+    );
+    // `via` comes before `verb` in the slot order
+    assert!(call.is_err(), "{call:?}");
+    let call = compile_think_for(
+        "intent: write\nvia: find\nkind: task\nname: Pay rent",
+        None,
+        TraceMode::V4,
+        ToolsMode::Sig,
+    )
+    .unwrap();
+    assert_eq!(call.tool, "find");
+    assert_eq!(
+        call.args,
+        [
+            ("kind".to_owned(), "task".to_owned()),
+            ("name".to_owned(), "Pay rent".to_owned())
+        ]
     );
 }
