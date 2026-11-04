@@ -67,8 +67,7 @@ fn without_a_unique_focus_the_name_stays_ambiguous() {
 #[test]
 fn a_date_the_message_states_overrides_a_contradicting_when() {
     let world = seeded();
-    let mut session =
-        world.session_with("2026-09-23T09:00", centraid_nativetools::Flags::default());
+    let mut session = world.session_with("2026-09-23T09:00", common::s2_flags());
     session.user("what's on tomorrow");
     let wrong = text(
         &mut session,

@@ -198,7 +198,9 @@ fn the_tools_flag_picks_the_spelling_and_rejects_an_unknown_one() {
     assert_eq!(sig["system"], compact["system"]);
     let bad = prompt(Some("tiny"));
     assert!(!bad.status.success());
-    assert!(String::from_utf8_lossy(&bad.stderr).contains("--tools takes sig, compact or full"));
+    assert!(
+        String::from_utf8_lossy(&bad.stderr).contains("--tools takes sig, compact, full or s2")
+    );
 }
 
 #[test]

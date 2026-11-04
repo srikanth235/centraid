@@ -323,7 +323,7 @@ const SIGNATURES: [(&str, &[&str], &str); 8] = [
     (
         "compute",
         &["op", "field", "group", "rows|selector"],
-        "a value as @n, or one per group value; group: a field, or a period of the date: day, week, month, year",
+        "a value as @n, or one per group value; group: a field, or a period of the date: day, week, month, year; op compare takes rows=@a,@b, two values, and sets them side by side",
     ),
     (
         "create",

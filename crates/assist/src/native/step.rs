@@ -30,7 +30,8 @@
 
 use crate::model::{Cancel, Control, Finish, GenerateRequest, Generation, Model, ModelError};
 use crate::native::identity::MODEL;
-use crate::native::think::{TraceMode, compile_think};
+use crate::native::prompt::ToolsMode;
+use crate::native::think::{TraceMode, compile_think_for};
 use crate::native::transcript::{assistant_header, assistant_open, call_text_of, py_strip};
 
 /// Think tokens before `</think>` is forced.
@@ -47,6 +48,10 @@ pub struct StepOptions {
     pub max_new: u32,
     /// `0.0` is greedy; rollouts sample (Python: 0.6).
     pub temperature: f32,
+    /// The tools the model was trained on, which fix the shape of the call its think states
+    /// (`compile_think_for`). The default is S2, the model the phone ships; a model trained on the
+    /// regrouped tools sets `Sig` (#1166).
+    pub tools: ToolsMode,
 }
 
 impl Default for StepOptions {
@@ -55,6 +60,7 @@ impl Default for StepOptions {
             think_limit: THINK_LIMIT,
             max_new: MAX_NEW,
             temperature: 0.0,
+            tools: ToolsMode::S2,
         }
     }
 }
@@ -201,7 +207,7 @@ pub fn decode_step(
 
     // 2. the call the think states, written by the compiler
     let stated = format!("{prefix}{think}");
-    if let Ok(call) = compile_think(py_strip(&stated), dates, mode) {
+    if let Ok(call) = compile_think_for(py_strip(&stated), dates, mode, opts.tools) {
         text.push_str("\n\n");
         text.push_str(&call_text_of(&call));
         info.rendered_call = true;
@@ -246,6 +252,7 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
+    use crate::native::think::compile_think;
     use crate::testing::ScriptedModel;
 
     /// A think that states a whole call: `train/test_trace3.py`'s `StepRendersTheCall`.

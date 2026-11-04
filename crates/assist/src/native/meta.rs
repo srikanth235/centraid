@@ -732,7 +732,7 @@ pub fn reveal_synonym(word: &str) -> Option<&'static str> {
 pub const PRIORITY_SCALE: &str = "9 highest..1 lowest, 0 none";
 
 /// Value operations (SPEC §4.3).
-pub const OPS: &[&str] = &["count", "sum", "avg", "min", "max"];
+pub const OPS: &[&str] = &["count", "sum", "avg", "min", "max", "compare"];
 
 /// Decline reasons (SPEC §4).
 pub const DECLINE_REASONS: &[&str] = &[

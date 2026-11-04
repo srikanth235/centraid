@@ -369,7 +369,7 @@ fn without_pre_grounding_the_turn_has_no_block() {
         common::TODAY,
         Flags {
             preground: false,
-            ..Flags::default()
+            ..common::s2_flags()
         },
     );
     session.user("make a notebook called Lisboa");

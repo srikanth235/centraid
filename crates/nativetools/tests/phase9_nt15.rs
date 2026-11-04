@@ -42,7 +42,7 @@ fn replay(world: &World) -> Session {
         world,
         Flags {
             normalize: false,
-            ..Flags::default()
+            ..common::s2_flags()
         },
     )
 }
@@ -53,7 +53,7 @@ fn uncomposed(world: &World) -> Session {
         world,
         Flags {
             compose: false,
-            ..Flags::default()
+            ..common::s2_flags()
         },
     )
 }
@@ -1020,7 +1020,7 @@ fn nt15_r2b_other_fields_and_empty_text_are_refused() {
 #[test]
 fn nt15_r2b_the_append_is_one_line_of_the_prompt() {
     let world = common::seeded();
-    let mut session = world.session();
+    let mut session = world.strict_session();
     let prompt = centraid_nativetools::prompt::prompt(&mut session);
     let rendered = prompt["rendered"].as_str().expect("a prompt");
     let lines: Vec<&str> = rendered

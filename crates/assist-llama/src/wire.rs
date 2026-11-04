@@ -46,6 +46,7 @@ impl Request {
             think_limit: self.think_limit.unwrap_or(phone.think_limit),
             max_new: self.max_new.unwrap_or(phone.max_new),
             temperature: phone.temperature,
+            tools: phone.tools,
         }
     }
 }

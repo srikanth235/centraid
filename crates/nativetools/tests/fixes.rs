@@ -230,7 +230,7 @@ fn issue_2_the_previous_turn_stays_whole_and_acted_rows_stay_addressable() {
         Flags {
             directory: false,
             preground: false,
-            ..Flags::default()
+            ..common::s2_flags()
         },
     );
     session.user("make a honeymoon list");

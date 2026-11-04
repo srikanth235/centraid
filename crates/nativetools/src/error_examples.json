@@ -873,9 +873,7 @@
         "tool": "find",
         "args": {
           "kind": "task",
-          "limit": [
-            1
-          ]
+          "limit": [1]
         }
       }
     ]
@@ -1178,9 +1176,7 @@
     "calls": [
       {
         "tool": "find",
-        "args": [
-          1
-        ]
+        "args": [1]
       }
     ]
   },
@@ -1865,6 +1861,192 @@
           "rows": "#6",
           "args": "to: {\"unit\":\"day\",\"rel\":1}\nname: x"
         }
+      }
+    ]
+  },
+  "session.answer_has_no_parameter_param_compute": {
+    "tool": "answer",
+    "argument": "op",
+    "calls": [
+      {
+        "tool": "answer",
+        "args": {
+          "op": "count",
+          "kind": "task"
+        },
+        "strict": true
+      }
+    ]
+  },
+  "session.answer_has_no_parameter_param_answer": {
+    "tool": "answer",
+    "argument": "kind",
+    "calls": [
+      {
+        "tool": "answer",
+        "args": {
+          "kind": "task",
+          "where": "status = open"
+        },
+        "strict": true
+      }
+    ]
+  },
+  "session.tool_has_no_parameter_param_tool": {
+    "tool": "edit",
+    "argument": "name",
+    "calls": [
+      {
+        "tool": "edit",
+        "args": {
+          "name": "Book the cabin",
+          "args": "effort: 5"
+        },
+        "strict": true
+      }
+    ]
+  },
+  "session.compare_takes_rows_a_b_and": {
+    "tool": "compute",
+    "argument": "rows",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "op": "count",
+          "kind": "task"
+        },
+        "strict": true
+      },
+      {
+        "tool": "compute",
+        "args": {
+          "op": "count",
+          "kind": "task"
+        },
+        "strict": true
+      },
+      {
+        "tool": "compute",
+        "args": {
+          "op": "compare",
+          "rows": "@1, @2",
+          "kind": "task"
+        },
+        "strict": true
+      }
+    ]
+  },
+  "session.compare_takes_exactly_two_values_rows": {
+    "tool": "compute",
+    "argument": "rows",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "op": "count",
+          "kind": "task"
+        },
+        "strict": true
+      },
+      {
+        "tool": "compute",
+        "args": {
+          "op": "compare",
+          "rows": "@1"
+        },
+        "strict": true
+      }
+    ]
+  },
+  "session.number_holds_rows_not_a_value": {
+    "tool": "compute",
+    "argument": "rows",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task"
+        },
+        "strict": true
+      },
+      {
+        "tool": "compute",
+        "args": {
+          "op": "count",
+          "kind": "task"
+        },
+        "strict": true
+      },
+      {
+        "tool": "compute",
+        "args": {
+          "op": "compare",
+          "rows": "@1, @2"
+        },
+        "strict": true
+      }
+    ]
+  },
+  "session.number_is_a_value_per_group": {
+    "tool": "compute",
+    "argument": "rows",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "op": "count",
+          "kind": "task",
+          "group": "status"
+        },
+        "strict": true
+      },
+      {
+        "tool": "compute",
+        "args": {
+          "op": "count",
+          "kind": "task"
+        },
+        "strict": true
+      },
+      {
+        "tool": "compute",
+        "args": {
+          "op": "compare",
+          "rows": "@1, @2"
+        },
+        "strict": true
+      }
+    ]
+  },
+  "session.x_and_x_share_no_unit": {
+    "tool": "compute",
+    "argument": "rows",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "op": "count",
+          "kind": "task"
+        },
+        "strict": true
+      },
+      {
+        "tool": "compute",
+        "args": {
+          "op": "sum",
+          "field": "amount",
+          "kind": "transaction"
+        },
+        "strict": true
+      },
+      {
+        "tool": "compute",
+        "args": {
+          "op": "compare",
+          "rows": "@1, @2"
+        },
+        "strict": true
       }
     ]
   }
