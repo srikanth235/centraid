@@ -17,11 +17,15 @@ pub const MANIFEST_JSON: &str = include_str!("../manifest.json");
 pub const APP_ID: &str = "health";
 
 /// The action each vault command is declared as.
-pub const ACTIONS: [ActionRow; 4] = [
+pub const ACTIONS: [ActionRow; 8] = [
     act("record-days", "measurement.record"),
     act("follow-workouts", "follow.health"),
     act("delete-workout", "entity.trash"),
     act("stop-following", "follow.stop"),
+    act("log-workout", "workout.log"),
+    act("edit-workout", "workout.edit"),
+    act("restore-workout", "entity.restore"),
+    act("edit-figure", "measurement.log"),
 ];
 
 /// The parsed manifest.
@@ -55,7 +59,7 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_six_queries_and_four_actions() {
+    fn it_declares_six_queries_and_its_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 6);
         for name in [
@@ -76,6 +80,20 @@ mod tests {
         }
     }
 
+    /// The input without the words only the conversation surface reads: the names chat says a
+    /// property under (`aliases`) and the ids it leaves for the core (`x-minted`, `x-target`).
+    fn chat_words_removed(schema: &serde_json::Value) -> serde_json::Value {
+        match schema {
+            serde_json::Value::Object(map) => serde_json::Value::Object(
+                map.iter()
+                    .filter(|(key, _)| !matches!(key.as_str(), "aliases" | "x-minted" | "x-target"))
+                    .map(|(key, value)| (key.clone(), chat_words_removed(value)))
+                    .collect(),
+            ),
+            other => other.clone(),
+        }
+    }
+
     #[test]
     fn every_action_is_a_vault_command_with_its_schema() {
         let registry = centraid_vault::commands::Registry::with_system_commands()
@@ -88,17 +106,18 @@ mod tests {
                 .get(command)
                 .unwrap_or_else(|| panic!("{command} is not a vault command"));
             assert_eq!(
-                &manifest().action(action).expect("declared").input,
+                &chat_words_removed(&manifest().action(action).expect("declared").input),
                 registered.schema(),
                 "{action}'s input is not {command}'s schema"
             );
         }
     }
 
-    /// HEALTH READS THE VAULT'S OWN TABLES AND WRITES THROUGH FOUR COMMANDS: its days, the health
-    /// follow, the stop of a follow and the shared trash. It reaches no other app's verbs.
+    /// HEALTH READS THE VAULT'S OWN TABLES AND WRITES THROUGH ITS OWN COMMANDS: its days, the health
+    /// follow, the stop of a follow, what the member logs by hand and the shared trash and
+    /// restore. It reaches no other app's verbs.
     #[test]
-    fn health_reads_the_vaults_tables_and_acts_through_four_commands() {
+    fn health_reads_the_vaults_tables_and_acts_through_its_commands() {
         use centraid_apps_kit::manifest::ScopeVerbs;
         let vault = manifest().vault.as_ref().expect("a vault block");
         for scope in &vault.scopes {

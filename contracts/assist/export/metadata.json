@@ -395,6 +395,78 @@
       "verb": "delete"
     },
     {
+      "action": "delete-workout",
+      "app": "health",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "workout",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "log-workout",
+      "app": "health",
+      "command": "workout.log",
+      "id_param": "id",
+      "kind": "workout",
+      "names": [
+        "climb",
+        "distance",
+        "end",
+        "energy",
+        "heart_rate",
+        "moving",
+        "date",
+        "name",
+        "type"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "edit-workout",
+      "app": "health",
+      "command": "workout.edit",
+      "id_param": "id",
+      "kind": "workout",
+      "names": [
+        "climb",
+        "distance",
+        "end",
+        "energy",
+        "heart_rate",
+        "moving",
+        "date",
+        "name",
+        "type"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "restore-workout",
+      "app": "health",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "workout",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "edit-figure",
+      "app": "health",
+      "command": "measurement.log",
+      "id_param": "id",
+      "kind": "daily figure",
+      "names": [
+        "value"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
       "action": "add-item",
       "app": "locker",
       "command": "locker.add_item",
@@ -1853,9 +1925,9 @@
         "also": [],
         "app": "health",
         "bulk": false,
-        "chat": "card",
+        "chat": "direct",
         "command": "entity.trash",
-        "inverse": null,
+        "inverse": "restore-workout",
         "kind": "workout",
         "phrasings": [
           "delete this morning's run",
@@ -1883,6 +1955,78 @@
         "qualifier": null,
         "sealed": [],
         "verb": "detach"
+      },
+      {
+        "action": "log-workout",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "direct",
+        "command": "workout.log",
+        "inverse": "delete-workout",
+        "kind": "workout",
+        "phrasings": [
+          "log a 5k run this morning",
+          "add a 30 minute swim for yesterday",
+          "I did yoga at 7"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "edit-workout",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "direct",
+        "command": "workout.edit",
+        "inverse": "edit-workout",
+        "kind": "workout",
+        "phrasings": [
+          "make it 6k",
+          "rename the run to morning run",
+          "it was 45 minutes"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "restore-workout",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "direct",
+        "command": "entity.restore",
+        "inverse": "delete-workout",
+        "kind": "workout",
+        "phrasings": [
+          "restore the run I deleted",
+          "bring back yesterday's swim",
+          "undo deleting that workout"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
+        "action": "edit-figure",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "direct",
+        "command": "measurement.log",
+        "inverse": "edit-figure",
+        "kind": "daily_figure",
+        "phrasings": [
+          "make today's weight 70 kilos",
+          "set yesterday's steps to 8000",
+          "change my sleep for monday to seven hours"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "edit"
       },
       {
         "action": "add-item",
@@ -5353,7 +5497,7 @@
       ]
     },
     {
-      "card": "daily figure: name, date (day), metric (steps|active_energy_kcal|exercise_min|sleep_min|resting_hr_bpm|weight_kg), value",
+      "card": "daily figure: name, date (day), metric (steps|active_energy_kcal|exercise_min|sleep_min|resting_hr_bpm|weight_kg), value · verbs: edit",
       "container": false,
       "date": {
         "label": "day",
@@ -5421,14 +5565,16 @@
       "plural": "daily figures",
       "table": "measurement",
       "trash": false,
-      "verbs": [],
+      "verbs": [
+        "edit"
+      ],
       "where_fields": [
         "metric",
         "value"
       ]
     },
     {
-      "card": "workout: name, date (start), moving (s), distance (m), energy (kcal), heart_rate (bpm), climb (m)",
+      "card": "workout: name, date (start), moving (s), distance (m), energy (kcal), heart_rate (bpm), climb (m) · verbs: create edit delete restore",
       "container": false,
       "date": {
         "label": "start",
@@ -5501,7 +5647,12 @@
       "plural": "workouts",
       "table": "workout",
       "trash": true,
-      "verbs": [],
+      "verbs": [
+        "create",
+        "edit",
+        "delete",
+        "restore"
+      ],
       "where_fields": [
         "moving",
         "distance",
@@ -5867,6 +6018,7 @@
     "locker.add_item",
     "locker.edit_item",
     "locker.mark_used",
+    "measurement.log",
     "note.create",
     "note.edit",
     "note.move",
@@ -5882,7 +6034,9 @@
     "task.edit",
     "task.organize",
     "task.reopen",
-    "txn.unlink_transfer"
+    "txn.unlink_transfer",
+    "workout.edit",
+    "workout.log"
   ],
   "multi_kind_params": [
     "kind",
@@ -5992,6 +6146,10 @@
           "container.create"
         ],
         [
+          "workout",
+          "workout.log"
+        ],
+        [
           "account",
           "account.add"
         ],
@@ -6055,6 +6213,14 @@
         [
           "transaction",
           "entity.retitle"
+        ],
+        [
+          "daily_figure",
+          "measurement.log"
+        ],
+        [
+          "workout",
+          "workout.edit"
         ],
         [
           "account",
@@ -6172,6 +6338,10 @@
         [
           "folder",
           "entity.trash"
+        ],
+        [
+          "workout",
+          "entity.trash"
         ]
       ],
       "done": "deleted",
@@ -6212,6 +6382,10 @@
         ],
         [
           "locker_item",
+          "entity.restore"
+        ],
+        [
+          "workout",
           "entity.restore"
         ]
       ],

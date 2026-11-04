@@ -7,7 +7,7 @@
   "iconKey": "Activity",
   "colorKey": "olive",
   "vault": {
-    "why": "Reads the daily totals and workouts the phone's health store holds, which it follows into the vault one way, and nothing else.",
+    "why": "Reads the daily totals and workouts the phone's health store holds, which it follows into the vault one way, and the workouts and figures the member logs by hand; nothing is written back to the store.",
     "scopes": [
       {
         "schema": "vault",
@@ -62,6 +62,26 @@
       {
         "schema": "entity",
         "table": "trash",
+        "verbs": "act"
+      },
+      {
+        "schema": "workout",
+        "table": "log",
+        "verbs": "act"
+      },
+      {
+        "schema": "workout",
+        "table": "edit",
+        "verbs": "act"
+      },
+      {
+        "schema": "measurement",
+        "table": "log",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "restore",
         "verbs": "act"
       }
     ]
@@ -236,7 +256,7 @@
       "name": "delete-workout",
       "verb": "delete",
       "kind": "workout",
-      "inverse": null,
+      "inverse": "restore-workout",
       "sealed": [],
       "command": "entity.trash",
       "phrasings": [
@@ -298,6 +318,284 @@
           "ref": {
             "type": "string",
             "minLength": 1
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "log-workout",
+      "verb": "create",
+      "kind": "workout",
+      "inverse": "delete-workout",
+      "sealed": [],
+      "command": "workout.log",
+      "phrasings": [
+        "log a 5k run this morning",
+        "add a 30 minute swim for yesterday",
+        "I did yoga at 7"
+      ],
+      "description": "Log a workout by hand through workout.log: an activity of a workout kind and what was measured, with no store behind it. A workout the health store follows is the store's to state.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "aliases": ["type"]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "aliases": ["name"]
+          },
+          "starts": {
+            "type": "string",
+            "minLength": 1,
+            "aliases": ["date", "start"]
+          },
+          "ends": {
+            "type": "string",
+            "minLength": 1,
+            "aliases": ["end"]
+          },
+          "moving_s": {
+            "type": "integer",
+            "minimum": 1,
+            "aliases": ["moving"]
+          },
+          "distance_m": {
+            "type": "number",
+            "minimum": 0,
+            "aliases": ["distance"]
+          },
+          "energy_kcal": {
+            "type": "number",
+            "minimum": 0,
+            "aliases": ["energy"]
+          },
+          "heart_bpm": {
+            "type": "integer",
+            "minimum": 1,
+            "aliases": ["heart_rate"]
+          },
+          "climb_m": {
+            "type": "number",
+            "minimum": 0,
+            "aliases": ["climb"]
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "x-minted": true
+          }
+        },
+        "required": ["starts"],
+        "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "edit-workout",
+      "verb": "edit",
+      "kind": "workout",
+      "inverse": "edit-workout",
+      "sealed": [],
+      "command": "workout.edit",
+      "phrasings": [
+        "make it 6k",
+        "rename the run to morning run",
+        "it was 45 minutes"
+      ],
+      "description": "Change a workout the member logged by hand through workout.edit: its title, kind, span or a figure. One the health store follows is refused, naming the store.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "aliases": ["type"]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "aliases": ["name"]
+          },
+          "starts": {
+            "type": "string",
+            "minLength": 1,
+            "aliases": ["date", "start"]
+          },
+          "ends": {
+            "type": "string",
+            "minLength": 1,
+            "aliases": ["end"]
+          },
+          "moving_s": {
+            "type": ["integer", "null"],
+            "minimum": 1,
+            "aliases": ["moving"]
+          },
+          "distance_m": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "aliases": ["distance"]
+          },
+          "energy_kcal": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "aliases": ["energy"]
+          },
+          "heart_bpm": {
+            "type": ["integer", "null"],
+            "minimum": 1,
+            "aliases": ["heart_rate"]
+          },
+          "climb_m": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "aliases": ["climb"]
+          }
+        },
+        "required": ["id"],
+        "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "restore-workout",
+      "verb": "restore",
+      "kind": "workout",
+      "inverse": "delete-workout",
+      "sealed": [],
+      "command": "entity.restore",
+      "phrasings": [
+        "restore the run I deleted",
+        "bring back yesterday's swim",
+        "undo deleting that workout"
+      ],
+      "description": "Bring a workout back from the trash through entity.restore.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["id"],
+        "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "edit-figure",
+      "verb": "edit",
+      "kind": "daily_figure",
+      "inverse": "edit-figure",
+      "sealed": [],
+      "command": "measurement.log",
+      "phrasings": [
+        "make today's weight 70 kilos",
+        "set yesterday's steps to 8000",
+        "change my sleep for monday to seven hours"
+      ],
+      "description": "Set a daily figure the member states by hand through measurement.log: the day's value of one metric. Refused while a health store is followed, which states them each read.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["value"],
+        "additionalProperties": false,
+        "properties": {
+          "person_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "day": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "metric": {
+            "enum": [
+              "steps",
+              "active_energy_kcal",
+              "exercise_min",
+              "sleep_min",
+              "resting_hr_bpm",
+              "weight_kg"
+            ]
+          },
+          "value": {
+            "type": "number",
+            "minimum": 0,
+            "aliases": ["value"]
           }
         }
       },
@@ -468,7 +766,7 @@
       "name": "daily figure",
       "plural": "daily figures",
       "order": 12,
-      "live": "read",
+      "live": "write",
       "entity": "measurement",
       "table": "measurement",
       "pk": "day",
@@ -506,7 +804,7 @@
       "name": "workout",
       "plural": "workouts",
       "order": 13,
-      "live": "read",
+      "live": "write",
       "entity": "activity",
       "table": "workout",
       "pk": "id",

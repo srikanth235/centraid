@@ -56,6 +56,7 @@ locker.set_field
 locker.set_memo
 locker.set_passkey
 locker.totp_code
+measurement.log
 measurement.record
 note.create
 note.edit
@@ -100,3 +101,5 @@ txn.link_transfer
 txn.unlink_transfer
 txn.void
 vault.rename
+workout.edit
+workout.log

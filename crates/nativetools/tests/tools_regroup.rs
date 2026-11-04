@@ -40,6 +40,31 @@ fn the_prompt_carries_the_eight_tools_and_s2_its_own() {
         .map(|verb| verb.as_str().unwrap())
         .collect();
     assert!(!verbs.contains(&"create") && !verbs.contains(&"edit"));
+    // the issue's table, exactly (#1166): a catalog change cannot add or drop a verb unseen
+    let mut table = vec![
+        "complete",
+        "reopen",
+        "cancel",
+        "delete",
+        "restore",
+        "star",
+        "unstar",
+        "archive",
+        "unarchive",
+        "unlink",
+        "undo",
+        "reschedule",
+        "add_to",
+        "remove_from",
+        "tag",
+        "untag",
+        "log",
+        "reveal",
+    ];
+    let mut offered = verbs.clone();
+    table.sort_unstable();
+    offered.sort_unstable();
+    assert_eq!(offered, table);
     for verb in [
         "complete",
         "reschedule",

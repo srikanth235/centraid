@@ -2049,5 +2049,34 @@
         "strict": true
       }
     ]
+  },
+  "act.create_workout_needs_date_date_expression": {
+    "tool": "create",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "create",
+        "args": {
+          "kind": "workout",
+          "args": "name: Swim"
+        },
+        "strict": true
+      }
+    ]
+  },
+  "act.sentence_nothing_was_done": {
+    "tool": "edit",
+    "argument": "rows",
+    "why_none": "the fixture world holds no Health rows to refuse; tests/health_kind.rs drives it on a world that follows a store"
+  },
+  "act.at_is_not_a_time_in": {
+    "tool": "create",
+    "argument": "args",
+    "why_none": "only a zone with no such clock reaches it (an hour a DST change skips); the fixture world's days are UTC, which skips none"
+  },
+  "whr.x_is_kept_as_a_whole": {
+    "tool": "edit",
+    "argument": "args",
+    "why_none": "the fixture world holds no Health rows to edit; tests/health_kind.rs says it on a world that holds a figure"
   }
 }

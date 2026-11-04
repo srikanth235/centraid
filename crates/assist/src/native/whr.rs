@@ -745,6 +745,16 @@ pub fn number_arg(field: &meta::Field, text: &str) -> Result<i64, String> {
         [word] if unit_word(field.unit, word) => {}
         _ => return Err(refuse()),
     }
+    // HEALTH'S FIGURES ARE KEPT WHOLE IN CHAT: a weight of 70.5 saved as 71 is a figure the member
+    // did not state, so a fraction is said back and not rounded (#1166)
+    if matches!(field.source.table, "measurement" | "workout") && parsed.fract() != 0.0 {
+        return Err(format!(
+            "error: {} is kept as a whole number here; {value} would be saved as {}. Say it as {}.",
+            field.name,
+            parsed.round(),
+            parsed.round()
+        ));
+    }
     Ok(parsed.round() as i64)
 }
 

@@ -233,7 +233,7 @@ enum Plan {
         command: &'static str,
         input: Value,
         predicate: &'static str,
-        reason: &'static str,
+        reason: String,
     },
 }
 
@@ -1547,6 +1547,23 @@ impl Session {
                 }
                 return Err(refusal);
             }
+            // WHAT THE HEALTH STORE STATES is the store's: the turn ends in its sentence (the
+            // vault says the same words, but only after a tap on a card that could not land)
+            if verb == Verb::Edit
+                && let Some(sentence) = self.store_states(&row)
+            {
+                let refusal = format!("error: {sentence} Nothing was done.");
+                if self.flags.compose {
+                    return Ok(self.compose_declined_write(
+                        verb,
+                        key,
+                        &refusal,
+                        "store_states",
+                        "out_of_scope",
+                    ));
+                }
+                return Err(refusal);
+            }
             if row.trashed && !matches!(verb, Verb::Restore | Verb::Delete) {
                 let name = self.named(key);
                 let refusal =
@@ -2731,7 +2748,7 @@ impl Session {
                         command: action.command,
                         input: json!({"id": row.id}),
                         predicate: "event_exists_not_cancelled",
-                        reason: "That event is not here to change.",
+                        reason: "That event is not here to change.".to_owned(),
                     });
                 }
                 let (old_start, old_end) = event_span(row);
@@ -2893,7 +2910,38 @@ impl Session {
         Ok(out)
     }
 
+    /// What the health store states, if `row` is one of it: a workout the store follows, or a
+    /// daily figure while a store is followed (figures carry no source of their own). The words
+    /// are the vault's.
+    fn store_states(&self, row: &Row) -> Option<String> {
+        match row.kind {
+            Kind::Workout => row.extra.get("followed_by").map(|store| {
+                format!("This workout comes from {store}; change it there, not here.")
+            }),
+            Kind::DailyFigure => self.world.health_store.as_ref().map(|store| {
+                format!("These figures come from {store}; change them there, not here.")
+            }),
+            _ => None,
+        }
+    }
+
     fn plan_edit(&mut self, row: &Row, args: &Map<String, Value>) -> Result<Plan, String> {
+        // WHAT THE HEALTH STORE STATES is not written here: a workout it follows, and the daily
+        // figures while a store is followed. The vault refuses both in these words; the runtime
+        // says them first, so no card parks for a write that cannot land.
+        if let Some(sentence) = self.store_states(row) {
+            let (command, predicate) = if row.kind == Kind::Workout {
+                ("workout.edit", "a_workout_the_member_logged")
+            } else {
+                ("measurement.log", "a_figure_no_store_states")
+            };
+            return Ok(Plan::Refused {
+                command,
+                input: json!({"id": row.id}),
+                predicate,
+                reason: sentence,
+            });
+        }
         let kind = row.kind;
         let spec = kind.spec();
         if args.is_empty() {
@@ -3628,6 +3676,43 @@ impl Session {
                     json!({"id": mint(), "title": name, "type": kind_value}),
                     action.id_param,
                 )
+            }
+            // A WORKOUT THE MEMBER LOGS: a title, when it started (and when it ended, for a span)
+            // and the figures they state, in the units the kind shows (seconds, metres, kcal, bpm)
+            Kind::Workout => {
+                let resolved =
+                    date.ok_or("error: create workout needs date: <date expression>.")?;
+                // the time they say is on their clock; the vault keeps the instant it is
+                let zone = self.world.zone.clone();
+                let spell = |at: jiff::civil::DateTime| {
+                    crate::native::world::utc_instant(&zone, at)
+                        .ok_or_else(|| format!("error: {at} is not a time in {zone}."))
+                };
+                let (starts, ends) = match resolved {
+                    dates::Resolved::Between { from, to } => (spell(from)?, Some(spell(to)?)),
+                    dates::Resolved::At(at) => (spell(at)?, None),
+                    // a day alone is that day's midnight, which is what the vault keeps of it
+                    dates::Resolved::Days { from, .. } => (spell(from.at(0, 0, 0, 0))?, None),
+                };
+                let mut input = json!({"id": mint(), "title": name, "starts": starts});
+                if let Some(ends) = ends {
+                    input["ends"] = json!(ends);
+                }
+                if let Some(word) = text("type") {
+                    input["type"] = json!(word);
+                }
+                for (field, column) in [
+                    ("moving", "moving_s"),
+                    ("distance", "distance_m"),
+                    ("energy", "energy_kcal"),
+                    ("heart_rate", "heart_bpm"),
+                    ("climb", "climb_m"),
+                ] {
+                    if let Some(figure) = number(field)? {
+                        input[column] = json!(figure);
+                    }
+                }
+                (input, action.id_param)
             }
             // A CATEGORY'S ID IS ITS NAME: the core derives it, so there is none to mint.
             Kind::Category => (json!({"title": name}), "id"),

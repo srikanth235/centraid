@@ -1016,3 +1016,212 @@ fn the_words_the_code_reads_are_the_checks_the_file_holds() {
         "a rule's `match` words are the schema's enum, which the next test reads"
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// what a member logs by hand (#1166)
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_member_logs_a_workout_by_hand_and_changes_it() {
+    let world = World::new();
+    let logged = world.ok(
+        "workout.log",
+        json!({"type": "run", "starts": "2026-03-04", "moving_s": 1_800, "distance_m": 5_000}),
+    );
+    let id = logged["workout_id"].as_str().expect("an id").to_owned();
+    assert_eq!(
+        world
+            .text(
+                "SELECT a.type_id || ' ' || e.title || ' ' || w.moving_s || ' ' || w.distance_m
+                   FROM activity a JOIN entity e ON e.id = a.id JOIN workout w ON w.id = a.id
+                  WHERE a.id = ?1",
+                &[&id]
+            )
+            .as_deref(),
+        Some("workout_kind:run Run 1800 5000.0")
+    );
+    // no source: the health store follows nothing of it
+    assert_eq!(
+        world.count("SELECT COUNT(*) FROM source WHERE entity_id = ?1", &[&id]),
+        0
+    );
+    world.ok(
+        "workout.edit",
+        json!({"id": id, "title": "Morning run", "distance_m": 5_500, "heart_bpm": null, "moving_s": null}),
+    );
+    assert_eq!(
+        world
+            .text(
+                "SELECT e.title || ' ' || w.distance_m || ' ' || ifnull(w.moving_s, 'none')
+                   FROM entity e JOIN workout w ON w.id = e.id WHERE e.id = ?1",
+                &[&id]
+            )
+            .as_deref(),
+        Some("Morning run 5500.0 none")
+    );
+    // a workout that ends before it starts, and one that is not a day, are refused in words
+    assert!(
+        world
+            .refused(
+                "workout.log",
+                json!({"starts": "2026-03-04T08:00:00Z", "ends": "2026-03-04T07:00:00Z"})
+            )
+            .contains("cannot end before it starts")
+    );
+    assert!(
+        world
+            .refused("workout.log", json!({"starts": "last tuesday"}))
+            .contains("is not a day or an instant")
+    );
+    // trashing one is the shared verb
+    world.ok("entity.trash", json!({"id": id}));
+}
+
+#[test]
+fn a_workout_the_health_store_follows_is_not_edited_here() {
+    let world = World::new();
+    follow_health(
+        &world,
+        "phone-a",
+        &[workout("local:1", "run", "2026-03-04T07:00:00Z", 5_000.0)],
+        false,
+    );
+    let id = world.line("local:1");
+    let refused = world.refused("workout.edit", json!({"id": id, "title": "Mine"}));
+    assert_eq!(
+        refused,
+        "This workout comes from Apple Health; change it there, not here."
+    );
+    // gone from a complete read, the row stays and the store forgets it: it is the member's now
+    follow_health(&world, "phone-a", &[], true);
+    world.ok("workout.edit", json!({"id": id, "title": "Mine"}));
+}
+
+#[test]
+fn a_member_logs_a_daily_figure_unless_a_store_states_them() {
+    let world = World::new();
+    world.ok(
+        "measurement.log",
+        json!({"day": "2026-03-04", "metric": "weight_kg", "value": 70.5}),
+    );
+    world.ok(
+        "measurement.log",
+        json!({"id": "2026-03-04:weight_kg", "value": 70}),
+    );
+    assert_eq!(
+        world.count(
+            "SELECT CAST(value AS INTEGER) FROM measurement WHERE day = '2026-03-04'",
+            &[]
+        ),
+        70
+    );
+    assert!(
+        world
+            .refused(
+                "measurement.log",
+                json!({"day": "2026-02-30", "metric": "steps", "value": 1})
+            )
+            .contains("not a calendar day")
+    );
+    // `mood` is no daily figure: the schema refuses it before the command does
+    let outcome = world.run(
+        "measurement.log",
+        json!({"day": "2026-03-04", "metric": "mood", "value": 1}),
+    );
+    assert_ne!(outcome.status, CommandStatus::Executed);
+    // once a store is followed it states them each read: the figure is not written by hand
+    follow_health(&world, "phone-a", &[], false);
+    assert_eq!(
+        world.refused(
+            "measurement.log",
+            json!({"day": "2026-03-05", "metric": "steps", "value": 9_000})
+        ),
+        "These figures come from Apple Health; change them there, not here."
+    );
+}
+
+#[test]
+fn disconnecting_the_health_store_hands_its_rows_and_figures_to_the_member() {
+    let world = World::new();
+    follow_health(
+        &world,
+        "phone-a",
+        &[workout("local:1", "run", "2026-03-04T07:00:00Z", 5_000.0)],
+        false,
+    );
+    let id = world.line("local:1");
+    assert!(
+        world
+            .refused("workout.edit", json!({"id": id, "title": "Mine"}))
+            .contains("Apple Health")
+    );
+    world.ok(
+        "follow.stop",
+        json!({"system": "health", "ref": "store:apple-health"}),
+    );
+    world.ok("workout.edit", json!({"id": id, "title": "Mine"}));
+    world.ok(
+        "measurement.log",
+        json!({"day": "2026-03-05", "metric": "steps", "value": 9_000}),
+    );
+}
+
+#[test]
+fn a_watch_sync_adopts_the_workout_the_member_logged_at_the_same_start_and_keeps_their_figures() {
+    // the follower matches a new record by kind and start against rows nothing follows yet
+    // (`follow.rs`): the hand-logged run becomes the followed one, no second row, and the figure
+    // the member stated stands where it differs from the store's
+    let world = World::new();
+    let logged = world.ok(
+        "workout.log",
+        json!({"type": "run", "starts": "2026-03-04T07:00:00Z", "distance_m": 4_000}),
+    );
+    let id = logged["workout_id"].as_str().expect("an id").to_owned();
+    follow_health(
+        &world,
+        "phone-a",
+        &[workout("local:1", "run", "2026-03-04T07:00:00Z", 5_000.0)],
+        false,
+    );
+    assert_eq!(world.count("SELECT COUNT(*) FROM activity", &[]), 1);
+    assert_eq!(
+        world.count("SELECT COUNT(*) FROM source WHERE entity_id = ?1", &[&id]),
+        1,
+        "it is followed now"
+    );
+    assert_eq!(
+        world.count(
+            "SELECT CAST(distance_m AS INTEGER) FROM workout WHERE id = ?1",
+            &[&id]
+        ),
+        4_000,
+        "the member's figure stands"
+    );
+    // and from then on it is the store's: an edit here is refused
+    assert!(
+        world
+            .refused("workout.edit", json!({"id": id, "title": "Mine"}))
+            .contains("Apple Health")
+    );
+}
+
+#[test]
+fn a_store_workout_found_again_after_it_was_forgotten_takes_the_stores_correction() {
+    let world = World::new();
+    let run = workout("local:1", "run", "2026-03-04T07:00:00Z", 5_000.0);
+    follow_health(&world, "phone-a", std::slice::from_ref(&run), false);
+    let id = world.line("local:1");
+    // gone from a complete read: the row stays, the store forgets it
+    follow_health(&world, "phone-a", &[], true);
+    // a new phone finds it again with a corrected distance (the store stated who recorded it)
+    let corrected = workout("local:1", "run", "2026-03-04T07:00:00Z", 5_300.0);
+    follow_health(&world, "phone-b", std::slice::from_ref(&corrected), false);
+    assert_eq!(
+        world.count(
+            "SELECT CAST(distance_m AS INTEGER) FROM workout WHERE id = ?1",
+            &[&id]
+        ),
+        5_300,
+        "the store's correction lands on a workout the store stated"
+    );
+}

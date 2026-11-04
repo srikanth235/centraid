@@ -45,6 +45,7 @@ use serde_json::{Value, json};
 use crate::native::dates::Stamp;
 use crate::native::door::{Call, Ran};
 use crate::native::meta::{Kind, Verb, Via};
+use crate::native::world::local_stamp;
 use crate::native::world::{Edge, Key, Row, Val, World};
 
 /// What a session does with a write.
@@ -474,6 +475,9 @@ pub(crate) fn apply(
         "locker.mark_used" => Ok(ok(
             json!({"item_id": text(input, "item_id").unwrap_or_default()}),
         )),
+        "workout.log" => workout_log(world, cx, input),
+        "workout.edit" => workout_edit(world, cx, input),
+        "measurement.log" => measurement_log(world, cx, input),
         "account.add" => account_add(world, cx, input),
         "category.add" => category_add(world, cx, input),
         "account.edit" => account_edit(world, cx, input),
@@ -1788,6 +1792,134 @@ fn locker_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> 
 }
 
 /// A new account: its type, its currency (the vault's when it names none) and a zero opening.
+/// The figures of a workout as the world shows them (whole numbers), by the columns that hold them.
+const WORKOUT_FIGURES: [(&str, &str); 5] = [
+    ("moving", "moving_s"),
+    ("distance", "distance_m"),
+    ("energy", "energy_kcal"),
+    ("heart_rate", "heart_bpm"),
+    ("climb", "climb_m"),
+];
+
+/// Set the figures `input` states on a workout row: a number, or `null` to clear one.
+fn workout_figures(row: &mut Row, input: &Value) {
+    for (field, column) in WORKOUT_FIGURES {
+        match input.get(column) {
+            Some(Value::Number(number)) => {
+                let figure = number.as_f64().unwrap_or_default().round() as i64;
+                row.fields.insert(field, Val::Num(figure));
+            }
+            Some(Value::Null) => {
+                row.fields.remove(field);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// A workout the member logs: an activity and its figures, with no store behind it.
+fn workout_log(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").map_or_else(|| cx.id("id"), str::to_owned);
+    let title = text(input, "title")
+        .or_else(|| text(input, "type"))
+        .unwrap_or("workout")
+        .trim()
+        .to_owned();
+    let mut row = new_row(Kind::Workout, &id, &title, cx);
+    row.date = text(input, "starts").and_then(|starts| local_stamp(&world.zone, starts));
+    workout_figures(&mut row, input);
+    world.rows.insert(row.key(), row);
+    Ok(ok(json!({"id": id, "workout_id": id})))
+}
+
+fn workout_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    let zone = world.zone.clone();
+    let Some(row) = world
+        .rows
+        .get_mut(&(Kind::Workout, id.to_owned()))
+        .filter(|row| !row.trashed)
+    else {
+        return Ok(refused(
+            "a_workout_the_member_logged",
+            "There is no such workout.",
+        ));
+    };
+    if let Some(store) = row.extra.get("followed_by") {
+        return Ok(refused(
+            "a_workout_the_member_logged",
+            &format!("This workout comes from {store}; change it there, not here."),
+        ));
+    }
+    if let Some(title) = text(input, "title") {
+        row.name = title.trim().to_owned();
+    }
+    if let Some(starts) = text(input, "starts") {
+        row.date = local_stamp(&zone, starts);
+    }
+    workout_figures(row, input);
+    row.updated = cx.now.clone();
+    Ok(ok(json!({"id": id, "workout_id": id})))
+}
+
+/// A daily figure the member states by hand: the value of one metric on one day.
+fn measurement_log(world: &mut World, _: &Cx, input: &Value) -> Result<Ran, String> {
+    let (day, metric) = match (text(input, "day"), text(input, "metric")) {
+        (Some(day), Some(metric)) => (day.to_owned(), metric.to_owned()),
+        _ => match text(input, "id").and_then(|id| id.split_once(':')) {
+            Some((day, metric)) => (day.to_owned(), metric.to_owned()),
+            None => {
+                return Ok(refused(
+                    "a_figure_names_a_day_and_a_metric",
+                    "Name the day and the metric.",
+                ));
+            }
+        },
+    };
+    if let Some(store) = &world.health_store {
+        return Ok(refused(
+            "a_figure_no_store_states",
+            &format!("These figures come from {store}; change them there, not here."),
+        ));
+    }
+    let value = input
+        .get("value")
+        .and_then(Value::as_f64)
+        .unwrap_or_default();
+    let key = (Kind::DailyFigure, format!("{day}:{metric}"));
+    match world.rows.get_mut(&key) {
+        Some(row) => {
+            row.fields.insert("value", Val::Num(value.round() as i64));
+        }
+        None => {
+            let mut fields = BTreeMap::new();
+            if let Some(model) = Kind::DailyFigure
+                .spec()
+                .field("metric")
+                .and_then(|field| field.model_value(&metric))
+            {
+                fields.insert("metric", Val::Enum(model));
+            }
+            fields.insert("value", Val::Num(value.round() as i64));
+            world.rows.insert(
+                key.clone(),
+                Row {
+                    kind: Kind::DailyFigure,
+                    id: key.1.clone(),
+                    name: metric,
+                    date: Stamp::parse(&day),
+                    fields,
+                    trashed: false,
+                    created: String::new(),
+                    updated: String::new(),
+                    extra: BTreeMap::new(),
+                },
+            );
+        }
+    }
+    Ok(ok(json!({"day": day})))
+}
+
 fn account_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
     let id = text(input, "id").map_or_else(|| cx.id("id"), str::to_owned);
     let title = text(input, "title")

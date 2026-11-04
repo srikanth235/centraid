@@ -118,16 +118,105 @@ fn record(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     Ok(json!({ "written": written, "unchanged": unchanged }))
 }
 
+/// The store that states these figures, when the vault follows one: a figure in a store's window
+/// is stated again at the next read, so a hand-written value would not last.
+fn followed_by(connection: &rusqlite::Connection) -> Result<Option<String>> {
+    Ok(connection
+        .query_row(
+            "SELECT label FROM origin WHERE system = 'health' ORDER BY created_at LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
+/// The `(day, metric)` a `measurement.log` names: `day` and `metric`, or the `id` chat reads a
+/// figure's row by, `<day>:<metric>`.
+fn named(ctx: &CommandCtx<'_, '_>) -> Option<(String, String)> {
+    if let (Some(day), Some(metric)) = (ctx.optional_str("day"), ctx.optional_str("metric")) {
+        return Some((day.to_owned(), metric.to_owned()));
+    }
+    let (day, metric) = ctx.optional_str("id")?.split_once(':')?;
+    Some((day.to_owned(), metric.to_owned()))
+}
+
+fn pre_log(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let connection = ctx.connection();
+    let Some((day, metric)) = named(ctx) else {
+        return Ok(Some("Name the day and the metric.".to_owned()));
+    };
+    if !METRICS.contains(&metric.as_str()) {
+        return Ok(Some(format!(
+            "`{metric}` is not a daily figure; they are {}.",
+            METRICS.join(", ")
+        )));
+    }
+    if !is_day(connection, &day)? {
+        return Ok(Some(format!("`{day}` is not a calendar day.")));
+    }
+    if let Some(store) = followed_by(connection)? {
+        return Ok(Some(format!(
+            "These figures come from {store}; change them there, not here."
+        )));
+    }
+    Ok(None)
+}
+
+fn log(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let (day, metric) = named(ctx).unwrap_or_default();
+    let person = subject(ctx)?;
+    let value = ctx
+        .input
+        .get("value")
+        .and_then(Json::as_f64)
+        .unwrap_or_default();
+    let connection = ctx.connection();
+    connection.execute(
+        "INSERT INTO measurement (person_id, day, metric, value) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT (person_id, day, metric) DO UPDATE SET value = excluded.value",
+        rusqlite::params![person, day, metric, value],
+    )?;
+    ctx.touch(&person)?;
+    Ok(json!({ "day": day, "metric": metric, "value": value }))
+}
+
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
+    const LOG: &[CommandCondition] = &[CommandCondition {
+        predicate: "a_figure_names_a_day_and_a_metric_and_no_store_states_it",
+        check: pre_log,
+    }];
     const RECORD: &[CommandCondition] = &[CommandCondition {
         predicate: "days_are_calendar_days_named_once",
         check: pre_record,
     }];
-    vec![CommandDefinition::plain(
-        "measurement.record",
-        "measurement",
-        r#"{
+    vec![
+        CommandDefinition::plain(
+            "measurement.log",
+            "measurement",
+            r#"{
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "person_id": { "type": "string", "minLength": 1 },
+            "id": { "type": "string", "minLength": 1 },
+            "day": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+            "metric": {
+              "enum": ["steps", "active_energy_kcal", "exercise_min", "sleep_min",
+                       "resting_hr_bpm", "weight_kg"]
+            },
+            "value": { "type": "number", "minimum": 0 }
+          }
+        }"#,
+            Idempotency::Idempotent,
+            LOG,
+            log,
+        ),
+        CommandDefinition::plain(
+            "measurement.record",
+            "measurement",
+            r#"{
           "type": "object",
           "required": ["days"],
           "additionalProperties": false,
@@ -152,8 +241,9 @@ pub fn definitions() -> Vec<CommandDefinition> {
             }
           }
         }"#,
-        Idempotency::Idempotent,
-        RECORD,
-        record,
-    )]
+            Idempotency::Idempotent,
+            RECORD,
+            record,
+        ),
+    ]
 }

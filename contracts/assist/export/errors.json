@@ -332,6 +332,16 @@
       "why_no_example": "needs an event the vault repeats (a series read as its occurrences, World::read_event_window); the fixture world has none and no call makes one, so tests/events_local.rs drives it"
     },
     {
+      "argument": "rows",
+      "example": null,
+      "family": "value",
+      "id": "act.sentence_nothing_was_done",
+      "source": "act.rs",
+      "template": "error: {sentence} Nothing was done.",
+      "tool": "edit",
+      "why_no_example": "the fixture world holds no Health rows to refuse; tests/health_kind.rs drives it on a world that follows a store"
+    },
+    {
       "argument": "name",
       "example": [
         {
@@ -1188,6 +1198,37 @@
       "template": "error: create account needs type: checking | savings | credit card | cash.",
       "tool": "create",
       "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
+            "args": "name: Swim",
+            "kind": "workout"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "create",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.create_workout_needs_date_date_expression",
+      "source": "act.rs",
+      "template": "error: create workout needs date: <date expression>.",
+      "tool": "create",
+      "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": null,
+      "family": "value",
+      "id": "act.at_is_not_a_time_in",
+      "source": "act.rs",
+      "template": "error: {at} is not a time in {zone}.",
+      "tool": "create",
+      "why_no_example": "only a zone with no such clock reaches it (an hour a DST change skips); the fixture world's days are UTC, which skips none"
     },
     {
       "argument": "verb",
@@ -2620,6 +2661,16 @@
       "template": "error: {} is {shape}; \"{}\" is not.",
       "tool": "create",
       "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": null,
+      "family": "value",
+      "id": "whr.x_is_kept_as_a_whole",
+      "source": "whr.rs",
+      "template": "error: {} is kept as a whole number here; {value} would be saved as {}. Say it as {}.",
+      "tool": "edit",
+      "why_no_example": "the fixture world holds no Health rows to edit; tests/health_kind.rs says it on a world that holds a figure"
     },
     {
       "argument": "args",
