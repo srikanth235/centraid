@@ -579,6 +579,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "centraid-assist-eval"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "anyhow",
+ "centraid-assist",
+ "centraid-assist-llama",
+ "centraid-nativetools",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "centraid-assist-llama"
 version = "1.0.0-alpha.0"
 dependencies = [
