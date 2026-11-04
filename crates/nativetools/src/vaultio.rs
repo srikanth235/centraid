@@ -570,7 +570,7 @@ pub fn open_session_in(
     let clock = SetClock::at(millis_of(now));
     // A probe handle counts the vault's entities, which names this session's id sequence.
     let probe = Handle::open(path, clock.clone(), "nativetools:probe")?;
-    let count = probe.table("entity", "n, id", "n", "id")?.len();
+    let count = probe.table("entity", "id", "id", "id")?.len();
     drop(probe);
     let handle = Handle::open(path, clock, &format!("nativetools:session:{count}:{now}"))?;
     Session::with_door_in(Box::new(handle), now, tz, me, flags)

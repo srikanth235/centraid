@@ -12,6 +12,7 @@ use serde::Serialize;
 
 use crate::args::ArgClass;
 use crate::run::{SessionResult, TurnResult};
+use crate::source::Exclusion;
 
 /// `k` of `n`, with its 95% Wilson interval.
 #[derive(Debug, Clone, Copy, Default, Serialize)]
@@ -92,6 +93,8 @@ pub struct Slice {
     pub turn_pass: Rate,
     pub clean_turn_pass: Rate,
     pub tool_accuracy: Rate,
+    /// The model's last call names the act a reference call names (reads collapse; a write is its tool and verb).
+    pub tool_name_accuracy: Rate,
     pub arguments: BTreeMap<String, ArgRate>,
     /// `0`, `1`, `2`, `3`, `4+`, and `0-1` (the census's "k<=1").
     pub by_constraints: BTreeMap<&'static str, Bucket>,
@@ -99,7 +102,10 @@ pub struct Slice {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Overall {
+    /// Sessions scored.
     pub sessions: usize,
+    /// Sessions in the set, those left out included.
+    pub set_sessions: usize,
     pub session_pass: Rate,
     /// Sessions not blocked by a logged runtime issue.
     pub session_pass_unblocked: Rate,
@@ -129,6 +135,8 @@ pub struct Report {
     pub model: String,
     pub set: String,
     pub overall: Overall,
+    /// Sessions of the set that were not asked, and why: a subset result must not read as the whole set.
+    pub excluded: Vec<Exclusion>,
     #[serde(flatten)]
     pub all: Slice,
     /// Turn pass by the type of the first accepted gold.
@@ -167,6 +175,10 @@ fn slice(rows: &[Row<'_>]) -> Slice {
     let clean: Vec<&Row<'_>> = rows.iter().filter(|r| r.clean).collect();
     out.clean_turn_pass = Rate::of(clean.iter().filter(|r| r.turn.pass).count(), clean.len());
     out.tool_accuracy = Rate::of(rows.iter().filter(|r| r.turn.tool_ok).count(), rows.len());
+    out.tool_name_accuracy = Rate::of(
+        rows.iter().filter(|r| r.turn.tool_name_ok).count(),
+        rows.len(),
+    );
     for class in ArgClass::ALL {
         let word = class.word();
         let count = |label: &str| {
@@ -214,7 +226,13 @@ fn slice(rows: &[Row<'_>]) -> Slice {
 
 /// Aggregate a run.
 #[must_use]
-pub fn build(model: &str, set: &str, sessions: &[SessionResult]) -> Report {
+pub fn build(
+    model: &str,
+    set: &str,
+    sessions: &[SessionResult],
+    excluded: &[Exclusion],
+    set_total: usize,
+) -> Report {
     let mut rows: Vec<Row<'_>> = Vec::new();
     for session in sessions {
         let clean = clean_count(&session.turns);
@@ -299,8 +317,10 @@ pub fn build(model: &str, set: &str, sessions: &[SessionResult]) -> Report {
     Report {
         model: model.to_owned(),
         set: set.to_owned(),
+        excluded: excluded.to_vec(),
         overall: Overall {
             sessions: sessions.len(),
+            set_sessions: set_total,
             session_pass: Rate::of(passed, sessions.len()),
             session_pass_unblocked: Rate::of(
                 unblocked.iter().filter(|s| s.pass()).count(),
@@ -354,6 +374,19 @@ pub fn text(report: &Report) -> String {
     let o = &report.overall;
     let a = &report.all;
     let mut out = format!("# {} on {}\n\n", report.model, report.set);
+    out += &format!(
+        "Scored:           {} of {} sessions{}\n",
+        o.sessions,
+        o.set_sessions,
+        if report.excluded.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " ({} left out, listed in the JSON report)",
+                report.excluded.len()
+            )
+        }
+    );
     out += &format!("Session pass:     {}\n", o.session_pass.pct());
     out += &format!("Turn pass:        {}\n", a.turn_pass.pct());
     out += &format!(
@@ -363,6 +396,10 @@ pub fn text(report: &Report) -> String {
     out += &format!(
         "Tool accuracy:    {}  (the turn ended in the act gold wants)\n",
         a.tool_accuracy.pct()
+    );
+    out += &format!(
+        "Tool name:        {}  (last call names a reference act)\n",
+        a.tool_name_accuracy.pct()
     );
     out += &format!("Arguments:        {}\n", args_line(a));
     out += &format!("Wrong writes:     {}\n", o.wrong_write.pct());

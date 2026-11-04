@@ -21,11 +21,14 @@ path = "src/bin/assist-eval.rs"
 # asks for it compiles it. Without it the binary scores the `--stub` model only.
 default = []
 engine = ["dep:centraid-assist-llama", "centraid-assist-llama/engine"]
+# CUDA llama.cpp for a Linux GPU box (the Kaggle kit). Cargo unifies the feature into the engine's own llama-cpp-2.
+cuda = ["engine", "dep:llama-cpp-2"]
 
 [dependencies]
 centraid-assist = { path = "../assist" }
 centraid-assist-llama = { path = "../assist-llama", optional = true }
 centraid-nativetools = { path = "../nativetools" }
+llama-cpp-2 = { version = "=0.1.158", default-features = false, features = ["cuda"], optional = true }
 serde.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true

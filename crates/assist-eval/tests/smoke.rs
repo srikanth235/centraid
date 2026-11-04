@@ -5,6 +5,7 @@
 
 use std::sync::Mutex;
 
+use centraid_assist::native::prompt::ToolsMode;
 use centraid_assist_eval::report;
 use centraid_assist_eval::run::{DeclineStepper, Runner, SessionResult, StepOut, Stepper};
 use centraid_assist_eval::source::MemorySource;
@@ -54,7 +55,12 @@ fn call(tool: &str, params: &[(&str, &str)]) -> String {
 struct Script(Mutex<Vec<String>>);
 
 impl Stepper for Script {
-    fn step(&self, _prompt: &str, _dates: Option<&str>) -> Result<StepOut, String> {
+    fn step(
+        &self,
+        _prompt: &str,
+        _dates: Option<&str>,
+        _tools: ToolsMode,
+    ) -> Result<StepOut, String> {
         let mut said = self.0.lock().expect("lock");
         let text = if said.len() > 1 {
             said.remove(0)
@@ -68,8 +74,15 @@ impl Stepper for Script {
     }
 }
 
+/// Runs under S2's tools block, the prompt the frozen sets were written for.
 fn run(source: &MemorySource, stepper: &dyn Stepper) -> Vec<SessionResult> {
-    let mut runner = Runner::new(source, stepper).expect("runner");
+    run_with(source, stepper, ToolsMode::S2)
+}
+
+fn run_with(source: &MemorySource, stepper: &dyn Stepper, tools: ToolsMode) -> Vec<SessionResult> {
+    let mut runner = Runner::new(source, stepper)
+        .expect("runner")
+        .with_tools(tools);
     source
         .sessions
         .iter()
@@ -154,7 +167,7 @@ fn a_write_lands_in_the_vault_and_a_later_turn_sees_it() {
 fn a_failing_engine_stops_the_session_and_the_rest_is_not_run() {
     struct Broken;
     impl Stepper for Broken {
-        fn step(&self, _: &str, _: Option<&str>) -> Result<StepOut, String> {
+        fn step(&self, _: &str, _: Option<&str>, _: ToolsMode) -> Result<StepOut, String> {
             Err("the model failed".to_owned())
         }
     }
@@ -175,7 +188,7 @@ fn the_report_counts_sessions_turns_apps_and_constraints_and_survives_json() {
         session("S2", vec![who_is_neha()]),
     ]);
     let results = run(&source, &DeclineStepper);
-    let report = report::build("stub", "smoke", &results);
+    let report = report::build("stub", "smoke", &results, &[], results.len());
     assert_eq!(report.overall.sessions, 2);
     assert_eq!(
         (report.overall.session_pass.k, report.overall.session_pass.n),
@@ -220,7 +233,8 @@ fn the_report_counts_sessions_turns_apps_and_constraints_and_survives_json() {
         .map(|r| serde_json::from_str(&serde_json::to_string(r).expect("ser")).expect("de"))
         .collect();
     assert_eq!(
-        serde_json::to_value(report::build("stub", "smoke", &again)).expect("json"),
+        serde_json::to_value(report::build("stub", "smoke", &again, &[], again.len()))
+            .expect("json"),
         json
     );
 
@@ -236,7 +250,7 @@ fn a_look_then_answer_that_passes_gets_its_arguments_right() {
         call("find", &[("kind", "person"), ("name", "Neha")]),
         call("answer", &[("rows", "@1")]),
     ]));
-    let turn = &run(&source, &script)[0].turns[0];
+    let turn = &run_with(&source, &script, ToolsMode::Sig)[0].turns[0];
     assert!(turn.pass, "{:?} ended {}", turn.problems, turn.ending);
     assert_eq!(turn.calls.len(), 2);
     assert_eq!(
@@ -244,4 +258,132 @@ fn a_look_then_answer_that_passes_gets_its_arguments_right() {
         "the effect passed, so the argument was right"
     );
     assert!(turn.tool_ok);
+}
+
+#[test]
+fn the_new_contract_finds_then_does_by_handle_and_names_the_right_tool() {
+    let complete = json!({"user": "tick off the cabin", "gold": [{"type": "diff", "diff": {"rows": [
+        {"key": "cabin", "change": "updated", "fields": {"status": "completed", "completed": {"any": true}}}], "links": []}}],
+        "ref": [{"tool": "act", "args": {"verb": "complete", "kind": "task", "name": "Book the cabin"}}]});
+    let source = source(vec![session("S", vec![complete])]);
+    let script = Script(Mutex::new(vec![
+        call("find", &[("kind", "task"), ("name", "Book the cabin")]),
+        call("do", &[("verb", "complete"), ("rows", "@1")]),
+    ]));
+    let turn = &run_with(&source, &script, ToolsMode::Sig)[0].turns[0];
+    assert!(turn.pass, "{:?} ended {}", turn.problems, turn.ending);
+    assert!(turn.tool_name_ok && turn.tool_ok);
+    assert_eq!(turn.args["rows"], "right");
+    // the wrong verb is a failed turn, a wrong tool name, and the right tool by effect-class (it still wrote)
+    let script = Script(Mutex::new(vec![
+        call("find", &[("kind", "task"), ("name", "Book the cabin")]),
+        call("do", &[("verb", "cancel"), ("rows", "@1")]),
+    ]));
+    let turn = &run(&source, &script)[0].turns[0];
+    assert!(!turn.pass && !turn.tool_name_ok && turn.tool_ok);
+    assert_eq!(turn.args["rows"], "wrong", "another verb is another act");
+}
+
+/// Remembers the first prompt it was shown.
+struct Seen(Mutex<Option<String>>);
+
+impl Stepper for Seen {
+    fn step(
+        &self,
+        prompt: &str,
+        _dates: Option<&str>,
+        tools: ToolsMode,
+    ) -> Result<StepOut, String> {
+        self.0
+            .lock()
+            .expect("lock")
+            .get_or_insert_with(|| prompt.to_owned());
+        DeclineStepper.step(prompt, None, tools)
+    }
+}
+
+#[test]
+fn the_tools_block_the_model_reads_is_the_one_the_run_names() {
+    let source = source(vec![session("S", vec![declines()])]);
+    let shown = |tools: ToolsMode| {
+        let seen = Seen(Mutex::new(None));
+        let mut runner = Runner::new(&source, &seen)
+            .expect("runner")
+            .with_tools(tools);
+        runner.run_session(&source.sessions[0]).expect("session");
+        seen.0.lock().expect("lock").take().expect("a prompt")
+    };
+    let (s2, new) = (shown(ToolsMode::S2), shown(ToolsMode::Sig));
+    assert_ne!(s2, new);
+    assert!(s2.contains("act("), "S2 learned act");
+    assert!(!new.contains("act("), "the eight tools have no act");
+}
+
+#[test]
+fn a_count_is_compute_then_answer_value_and_ends_in_a_value() {
+    let count = json!({"user": "how many tasks", "gold": [{"type": "value", "values": [{"amount": 1, "unit": null}]}],
+        "ref": [{"tool": "answer", "args": {"kind": "task", "op": "count"}}]});
+    let source = source(vec![session("S", vec![count])]);
+    for tools in [ToolsMode::Sig, ToolsMode::S2] {
+        let script = Script(Mutex::new(vec![
+            call("compute", &[("op", "count"), ("kind", "task")]),
+            call("answer", &[("value", "@1")]),
+        ]));
+        let mut runner = Runner::new(&source, &script)
+            .expect("runner")
+            .with_tools(tools);
+        let result = runner.run_session(&source.sessions[0]).expect("session");
+        let turn = &result.turns[0];
+        assert!(
+            turn.pass,
+            "{tools:?}: {:?} ended {}",
+            turn.problems, turn.ending
+        );
+        assert_eq!(turn.ending, "value", "{tools:?}");
+        assert!(turn.tool_name_ok, "{tools:?}");
+    }
+}
+
+/// Remembers the tools mode the runner passed with each step.
+struct Tools(Mutex<Vec<ToolsMode>>);
+
+impl Stepper for Tools {
+    fn step(
+        &self,
+        prompt: &str,
+        _dates: Option<&str>,
+        tools: ToolsMode,
+    ) -> Result<StepOut, String> {
+        self.0.lock().expect("lock").push(tools);
+        DeclineStepper.step(prompt, None, tools)
+    }
+}
+
+#[test]
+fn a_default_runner_shows_the_eight_tools_and_a_chosen_mode_reaches_the_step() {
+    let source = source(vec![session("S", vec![declines()])]);
+    let seen = Seen(Mutex::new(None));
+    Runner::new(&source, &seen)
+        .expect("runner")
+        .run_session(&source.sessions[0])
+        .expect("session");
+    let prompt = seen.0.lock().expect("lock").clone().expect("prompt");
+    assert!(
+        !prompt.contains("act("),
+        "the default block is the eight tools'"
+    );
+    let tools = Tools(Mutex::new(Vec::new()));
+    Runner::new(&source, &tools)
+        .expect("runner")
+        .run_session(&source.sessions[0])
+        .expect("session");
+    Runner::new(&source, &tools)
+        .expect("runner")
+        .with_tools(ToolsMode::S2)
+        .run_session(&source.sessions[0])
+        .expect("session");
+    assert_eq!(
+        *tools.0.lock().expect("lock"),
+        vec![ToolsMode::Sig, ToolsMode::S2]
+    );
 }

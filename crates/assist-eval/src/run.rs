@@ -14,6 +14,7 @@ use std::time::Instant;
 use centraid_assist::model::{Cancel, Model};
 use centraid_assist::native::Flags;
 use centraid_assist::native::meta::{Kind, STEP_CAP};
+use centraid_assist::native::prompt::ToolsMode;
 use centraid_assist::native::step::{StepOptions, decode_step};
 use centraid_assist::native::think::TraceMode;
 use centraid_assist::native_turn::cards::app_of;
@@ -23,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::EvalError;
-use crate::args::{ArgClass, ArgVerdict, bucket, judge_args, turn_constraints};
+use crate::args::{ArgClass, ArgVerdict, bucket, judge_args, tool_name_ok, turn_constraints};
 use crate::effect::{effect_rows, turn_effect};
 use crate::gold::{Accept, Session, Turn};
 use crate::judge::{Ids, judge_turn};
@@ -38,11 +39,13 @@ pub struct StepOut {
     pub think_cut: bool,
 }
 
-/// The model, as the loop needs it: a rendered prompt in, one message out.
+/// The model, as the loop needs it: a rendered prompt in, one message out. `tools` is the tools block the prompt
+/// shows, which also fixes the shape of the call the think states (`StepOptions::tools`): the runner passes the one
+/// value it rendered the prompt with, so the two cannot differ.
 pub trait Stepper {
     /// # Errors
     /// The engine's words when it fails; the session stops there.
-    fn step(&self, prompt: &str, dates: Option<&str>) -> Result<StepOut, String>;
+    fn step(&self, prompt: &str, dates: Option<&str>, tools: ToolsMode) -> Result<StepOut, String>;
 }
 
 /// The phone's step over any [`Model`]: `decode_step` with `TraceMode::V4` and the phone's [`StepOptions`], exactly
@@ -63,13 +66,16 @@ impl<'a> ModelStepper<'a> {
 }
 
 impl Stepper for ModelStepper<'_> {
-    fn step(&self, prompt: &str, dates: Option<&str>) -> Result<StepOut, String> {
+    fn step(&self, prompt: &str, dates: Option<&str>, tools: ToolsMode) -> Result<StepOut, String> {
         decode_step(
             self.model,
             prompt,
             dates,
             TraceMode::V4,
-            self.options,
+            StepOptions {
+                tools,
+                ..self.options
+            },
             &Cancel::new(),
         )
         .map(|out| StepOut {
@@ -84,7 +90,12 @@ impl Stepper for ModelStepper<'_> {
 pub struct DeclineStepper;
 
 impl Stepper for DeclineStepper {
-    fn step(&self, _prompt: &str, _dates: Option<&str>) -> Result<StepOut, String> {
+    fn step(
+        &self,
+        _prompt: &str,
+        _dates: Option<&str>,
+        _tools: ToolsMode,
+    ) -> Result<StepOut, String> {
         Ok(StepOut {
             text: "<think>\nintent: decline\n</think>\n\n<tool_call>\n<function=decline>\n<parameter=reason>\nout_of_scope\n</parameter>\n</function>\n</tool_call>".to_owned(),
             think_cut: false,
@@ -103,6 +114,9 @@ pub struct TurnResult {
     /// How the turn ended (`rows`, `value`, `act`, `ask`, `decline`, `cap`, `loop`, `error`, `none`).
     pub ending: String,
     pub tool_ok: bool,
+    /// Did the model's last call name the act a reference call names ([`crate::args::tool_name_ok`])?
+    #[serde(default)]
+    pub tool_name_ok: bool,
     /// Constraints on the reference call ([`crate::args::turn_constraints`]).
     pub constraints: usize,
     /// The apps the turn is in (by the kinds of its reference calls and gold rows).
@@ -150,6 +164,7 @@ pub struct Runner<'a> {
     scratch: tempfile::TempDir,
     worlds: HashMap<String, SeededWorld>,
     copies: usize,
+    tools: ToolsMode,
 }
 
 fn first_call(text: &str) -> &str {
@@ -208,7 +223,16 @@ impl<'a> Runner<'a> {
             scratch: tempfile::tempdir().map_err(runtime)?,
             worlds: HashMap::new(),
             copies: 0,
+            tools: ToolsMode::Sig,
         })
+    }
+
+    /// Which tools block the system prompt shows, and the shape of call the step reads: `S2` for the model shipping
+    /// today, `Sig` for one trained on the eight tools. Defaults to `Sig`; `S2` scores the model shipping today.
+    #[must_use]
+    pub fn with_tools(mut self, tools: ToolsMode) -> Self {
+        self.tools = tools;
+        self
     }
 
     /// Seed a world once; every session copies the result.
@@ -254,8 +278,16 @@ impl<'a> Runner<'a> {
             .join(format!("session-{}.vault", self.copies));
         vaultio::copy_vault(&base, &vault).map_err(runtime)?;
         let now = dates::parse_now(&session.today).map_err(runtime)?;
-        let mut live =
-            vaultio::open_session(&vault, now, &session.me, Flags::default()).map_err(runtime)?;
+        let mut live = vaultio::open_session(
+            &vault,
+            now,
+            &session.me,
+            Flags {
+                tools: self.tools,
+                ..Flags::default()
+            },
+        )
+        .map_err(runtime)?;
         let prompt = live.prompt();
         let system = prompt["rendered"]
             .as_str()
@@ -286,7 +318,7 @@ impl<'a> Runner<'a> {
             }
             for _ in 0..(if ended.is_some() { 0 } else { STEP_CAP + 2 }) {
                 let prompt = log.prompt().map_err(runtime)?;
-                let out = match self.stepper.step(&prompt, dates_line) {
+                let out = match self.stepper.step(&prompt, dates_line, self.tools) {
                     Ok(out) => out,
                     Err(message) => {
                         error = Some(message);
@@ -337,6 +369,12 @@ impl<'a> Runner<'a> {
             };
             // A turn that passes by effect got every argument it carries right, however it looked first; only a
             // failed turn needs the call comparison, which says which argument to blame.
+            // a retraction ends the turn in the runtime: no message was asked of the model, so its tool is the effect's
+            let name_ok = if ended.is_some() {
+                verdict.pass || verdict.tool_ok
+            } else {
+                tool_name_ok(turn, &calls)
+            };
             let args = judge_args(turn, &calls, &handle)
                 .into_iter()
                 .map(|(class, v)| {
@@ -357,6 +395,7 @@ impl<'a> Runner<'a> {
                 ending: verdict.effect.ending.word().to_owned(),
                 // a write that landed and then looped still chose the right act
                 tool_ok: verdict.pass || verdict.tool_ok,
+                tool_name_ok: name_ok,
                 constraints,
                 apps,
                 args,
@@ -407,6 +446,7 @@ fn not_run(turn: &Turn, constraints: usize, apps: Vec<String>) -> TurnResult {
             .to_owned(),
         ending: "none".to_owned(),
         tool_ok: false,
+        tool_name_ok: false,
         constraints,
         apps,
         args: ArgClass::ALL

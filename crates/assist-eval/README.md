@@ -18,12 +18,16 @@ It prints the summary and writes `runs/val-s2-q4.json` (the report) and `runs/va
 | flag | meaning |
 | --- | --- |
 | `--model GGUF` / `ASSIST_EVAL_MODEL` | the model; greedy, trace v4, think limit 200, 512 tokens, context 8192: the phone's `StepOptions` |
+| `--tools s2\|sig\|compact\|full` | the tools block the system prompt shows, and the shape of call the step reads. **Default `sig`**, the eight tools; `s2` is the prompt the shipping model was trained on (`contracts/assist/export/prompt.s2.txt`). The report's `model` names it |
 | `--stub` | no weights: a model that declines everything. The floor, and a way to check the rig |
 | `--set FILE` | the JSONL set (default `experiments/toolchat/native/eval/sets/val.jsonl`) |
 | `--worlds DIR` | where the sessions' world JSON lives; repeatable, searched in order (default `eval/worlds`, then `authored/worlds`, as `lib.py`) |
 | `--out PREFIX` | write `PREFIX.json` and `PREFIX.sessions.jsonl` |
 | `--threads N` / `ASSIST_EVAL_THREADS` | CPU threads (default: up to four cores, as the phone) |
 | `--limit N`, `--only ID,ID`, `--shard K/N` | a subset; `--shard` lets several processes share a set (each loads ~0.6 GB at Q4_0) |
+| `--resume` | continue a run from its `.sessions.jsonl`; one session the data cannot seed is left out and counted, it does not end the run |
+| `--gpu-layers N` / `ASSIST_EVAL_GPU_LAYERS` | layers offloaded (the default is the engine's: all on a Mac, none elsewhere; the Kaggle kernel passes 999) |
+| `--label TEXT` | the report's model label when rescoring (the Kaggle kernel names the model and tools block this way) |
 | `--rescore FILE…` | build the report from `.sessions.jsonl` files (merges shards, or re-reports a run) without running anything |
 
 Each session runs on a private copy of its world's vault: the world is seeded once with the same seeder the Python rig uses (`nativetools seed`), copied per session, and deleted afterwards.
@@ -37,7 +41,7 @@ Sessions and worlds come through `source::EvalSource` (`sessions()`, `world(name
 `report.json` has, over all turns and again for each app (`by_app`, with `single_app_session_pass`):
 
 - `overall`: `session_pass` (every turn passes), `wrong_write`, loop/cap/think-cut counts, engine errors.
-- `turn_pass`, `clean_turn_pass`, `tool_accuracy`.
+- `turn_pass`, `clean_turn_pass`, `tool_accuracy`, `tool_name_accuracy`.
 - `arguments`: `rows`, `date`, `filters`, `amount`, each `{right, scored, unscorable, rate}`.
 - `by_constraints`: `0`, `1`, `2`, `3`, `4+` and `0-1` (the census's "k≤1"), each with `fail_rate` over all turns and `clean_fail_rate` over clean turns.
 - `by_gold_type`, `by_tag`, and `failed` (every failed turn: the problems, the calls).
@@ -45,8 +49,10 @@ Sessions and worlds come through `source::EvalSource` (`sessions()`, `world(name
 ### What the new measures mean
 
 - **Constraints** are counted on the turn's reference calls, exactly as `authored/hardness.py` counts them (the census behind the issue's 13% / 22% / 37% / 67%): the row selector, `when`, `linked_to`, `within`, `exclude`, `status`, `text`, each `where` clause, `order`+`limit`, `op`+`field`+`group`; the widest accepted, non-`bad` reference call. `ask`, `decline` and `open` carry 0.
+- **S2 and the eight tools.** The runtime renames S2's `search`, `open` and `act` itself (`native::legacy::modernize`, at `Session::step`), so S2's calls run as `find`, `create`, `edit` and `do`. The scorer puts the reference calls and the model's calls through the same table before comparing, so both sides speak the eight tools. A read is `find`, `answer` or `compute` alike; a write is its tool and verb, and a write by `@k` takes its selector from the read before it.
+- **Tool name accuracy** (`tool_name_accuracy`) sits beside the effect-based one: the model's last call names an act some reference call names (reads collapse to one act; a write is its tool and verb, so `do complete` is not `do cancel`).
 - **Tool accuracy** is read off the effect: the turn ended in the act some accepted gold wants (rows, value, write, ask or decline; a write that also answers its row counts as a write; a turn that passes counts whatever it ended in). A wrong set of rows or a wrong amount is not a wrong tool.
-- **Arguments** are the one measure the effect cannot isolate, so they are read off the calls. For each class, a turn counts when a reference call states it; a turn that passes by effect is right on every class it carries (it may have looked first); on a failed turn the model is right when one of its calls has the same tool (and verb) and states the same arguments of that class, which says which argument to blame. Classes: *rows* = `rows`, `name`, `within`, `linked_to`; *date* = `when`, and a date written in `args`; *filters* = `where` clauses that are not amounts, `status`, `exclude`, `text`, `order`, `limit`, `op`, `field`, `group`; *amount* = a `where` clause or `args` line on a money field of the call's kind. Values compare as the runtime reads them (case-folded, whitespace-collapsed; date expressions as JSON). A reference's `$key` is compared as the `#n` the runtime showed; when the runtime never showed that row the argument is `unscorable` and left out of the rate, not counted as a miss.
+- **Arguments** are the one measure the effect cannot isolate, so they are read off the calls. For each class, a turn counts when a reference call states it; a turn that passes by effect is right on every class it carries (it may have looked first); on a failed turn the model is right when one of its calls has the same tool (and verb) and states the same arguments of that class, which says which argument to blame. Classes: _rows_ = `rows`, `name`, `within`, `linked_to`; _date_ = `when`, and a date written in `args`; _filters_ = `where` clauses that are not amounts, `status`, `exclude`, `text`, `order`, `limit`, `op`, `field`, `group`; _amount_ = a `where` clause or `args` line on a money field of the call's kind. Values compare as the runtime reads them (case-folded, whitespace-collapsed; date expressions as JSON). A reference's `$key` is compared as the `#n` the runtime showed; when the runtime never showed that row the argument is `unscorable` and left out of the rate, not counted as a miss.
 - **App** of a turn: the apps of the kinds its reference calls name and of the rows its gold names. A cross-app turn is in each of its apps.
 
 ## Differences from `score.py` / `metrics.py` / `slices.py`
@@ -62,27 +68,42 @@ Kept: the matching rules (`match_value`, `diff_match`, `value_match`; the same p
 - **Tool accuracy, arguments, constraints and apps** have no Python counterpart.
 - **Writes run** (`Writes::Run`), as in the Python eval, not the phone's `Park` (a write waiting for a tap); the effect is the vault's.
 
-## Baseline: S2 on val
+## Baseline
 
-**Not run here.** Three things are missing from the machine this was built on:
+**The baseline run is deferred (owner, 2026-11-04): no model is scored, here or on Kaggle, until the owner says so.** The kit below is ready and untested.
 
-1. **The val set and its worlds.** `eval/sets/val.jsonl` and `eval/worlds/` are held out in the private data version `srikanth235/centraid-native-data` (`data-v7`); `python3 experiments/toolchat/native/artefacts.py fetch` brings them back and needs `HF_TOKEN`.
-2. **S2's GGUF.** No GGUF of S2 is published or recorded: `artefacts.json` pins the data version only, and the README's `publish-gguf` step has no repository named. S2 is the soup `soups/soup2` of the private checkpoint store (`HANDOFF.md`); `train/to_gguf.py` makes the Q4_0 file from it. The only GGUF on the machine is stock `~/.cache/centraid/models/Qwen3.5-0.8B-Q4_0.gguf`, which is not S2.
-3. **Time.** The only speed measured is the stock (untuned) `Qwen3.5-0.8B-Q4_0.gguf` through this binary on this Mac (Metal): one two-turn session took 93 s, the untuned model running into the step cap (about 10 s a step). S2 ends most turns in one to three steps, so 655 sessions / 2,055 turns is plausibly several hours on one process; split it with `--shard K/N` (each shard loads the model).
+**Not scored yet.** Two things are settled, one is not.
 
-To run it:
+_What the val set can be asked._ The held-out val (data-v7, 655 sessions) predates the vault rebuild (#1135) and Tally's removal (#1099): its worlds carry Tally sections and a task status the vault no longer has, and the seeder refuses both, so neither this runner nor the Python rig can seed them as they are. The frozen files are not edited. `tally::WithoutTally` and `WithoutInProgress` read both out as a world is loaded and leave out the sessions that need them: **510 of 655 are scored, 145 left out** (118 that name or create a Tally row, 27 that ask about `in_progress`), each listed with its reason in the report's `excluded`. The gold of the 510 was last regenerated before the vault rebuild and before the tool regroup and has not been checked against today's runtime, so its turn pass is a measure for a floor near 0%, not for a model near S2's 82%. A refreeze of val on today's runtime is the real fix (data-version work). The check "the reference calls still reach 100%" cannot be made by `build_sets.py ref` as it stands (see "Precondition" above). `nativetools::vaultio::open_session` also failed on any world over 500 entities (its probe ordered by a nullable column); fixed.
+
+_The floor._ A model that declines everything (`--stub`, eight-tools block) scores **10/510 sessions (2.0%)** and 111/1,552 turns (7.2%): the turns whose gold is a decline. A model has to beat that.
+
+_Which model is the baseline._ The owner named **`RikiyaT/Qwen3.5-0.8B-weight-space-programming`** in chat (the base with two tensors edited, never trained on these tools: `--tools sig`, expected near the floor). A later instruction, relayed from another session, asks for **S2** (`--tools s2`) instead. The two disagree and nothing has been scored; the kit runs either, and `make_bundle.sh` makes you choose. Local runs are off by the owner's instruction (a probe of the RikiyaT model on this Mac took about 30 s a session alone and twice that with four shards, so roughly 4 hours for the 510). The RikiyaT GGUF was built here with `train/to_gguf.py` (llama.cpp `26394b4e6`), is kept at `~/.cache/centraid/models/wsp-base-Q4_0.gguf` (sha256 `058068a4f952b59acccf9610e2f07e2b51d1c9e144d01678d1d5bab270f7be4d`) and stays outside git; S2's is public: `srikanth235/centraid-native-gguf` tag `s2-q4_0`, `centraid-native-s2-Q4_0.gguf`, sha256 `b1be1e45024c8e98f670d456edfdf261c786878dd8260117806e285af8e9f668`.
+
+For comparison only: the Python scorer's last S2 figure is 537/655 sessions (82.0%) live on nt12 / v7.3, 541 rescored on v7.4 (`HANDOFF.md`): the Hugging Face checkpoint, all 655 sessions, an older runtime. It is not reproducible on today's runtime without the same filtering, and it is a different set of sessions. The issue's fail rates by constraints to compare with are 13% / 22% / 37% / 67% at 1 / 2 / 3 / 4.
+
+### The Kaggle kit (`crates/assist-eval/kaggle/`)
+
+A Kaggle **script kernel** (GPU, internet on, private) builds `assist-eval` with `--features cuda` (CUDA llama.cpp, Rust from rustup, from the repository at the commit the bundle was cut from), fetches the model, runs the shards (one process per GPU, `--gpu-layers 999`, `--resume`), then rescores their session files into one `report.json`. **Untested on Kaggle**: nothing here could build CUDA, so the first run is also the test of the build.
+
+**Private data: a private Kaggle dataset, no token.** `make_bundle.sh` packs `src.tar.gz`, `val.jsonl`, the worlds and `kit.json` from a checkout where `artefacts.py fetch` has run; the kernel reads them from `/kaggle/input`. No `HF_TOKEN` is baked in or read. (The alternative, a Kaggle secret `HF_TOKEN` and a fetch in the kernel, needs the secret attached by hand in the Kaggle UI after every push, and the held-out data would then pass through the kernel's internet; the dataset keeps it to one upload the owner makes.) Uploading held-out data to Kaggle, even private, is the owner's call.
+
+The model is in `kit.json`, with its sha256 (checked by the kernel). S2 is a public URL. The RikiyaT model has no GGUF on the Hub, so `make_bundle.sh WSP` copies the local one into the same dataset: one dataset, one upload, one attach. The kernel labels the final report with the model's sha256 prefix and the tools block.
 
 ```bash
-export HF_TOKEN=…
-python3 experiments/toolchat/native/artefacts.py fetch
-python3 experiments/toolchat/native/train/to_gguf.py CKPT --out OUT --name native-s2 \
-    --source-repo OWNER/NAME --source-tag S2 --source-revision SHA        # CKPT = the S2 soup
-RUSTFLAGS='-C target-cpu=native' cargo build --release -p centraid-assist-eval --features engine --bin assist-eval
-target/release/assist-eval --model OUT/native-s2-Q4_0.gguf \
-    --set experiments/toolchat/native/eval/sets/val.jsonl --out runs/val-s2-q4 --threads 4
+# on a machine with Kaggle credentials (~/.kaggle/kaggle.json), after committing and fetching the data
+python3 experiments/toolchat/native/artefacts.py fetch                 # needs HF_TOKEN, once
+crates/assist-eval/kaggle/make_bundle.sh /tmp/kit KAGGLE_OWNER WSP     # the baseline the owner named; S2 is the other choice
+kaggle datasets create -p /tmp/kit                                     # private
+mkdir -p /tmp/kit-kernel
+sed 's/KAGGLE_OWNER/your-kaggle-name/' crates/assist-eval/kaggle/kernel-metadata.json > /tmp/kit-kernel/kernel-metadata.json
+cp crates/assist-eval/kaggle/kernel.py /tmp/kit-kernel/
+kaggle kernels push -p /tmp/kit-kernel                                 # starts the run; private
+kaggle kernels status KAGGLE_OWNER/centraid-assist-eval
+kaggle kernels output KAGGLE_OWNER/centraid-assist-eval -p out         # report.json, summary.txt, shard-*.sessions.jsonl
 ```
 
-The Python scorer's last known S2 number is **537 / 655 sessions (82.0%)** live on nt12 / val v7.3, 541 rescored on v7.4, 542 by replay on nt15 / v7.4 (`HANDOFF.md`); those are the Hugging Face checkpoint, not the Q4_0 GGUF, and nothing has been scored live on nt15 yet. The Rust runner on S2's GGUF is therefore expected to land near but not exactly on them (quantisation, and the runtime changes since). The constraint-count fail rates to compare with are the issue's 13% / 22% / 37% / 67% at 1 / 2 / 3 / 4.
+Two T4s run two shards; the `shard-*.sessions.jsonl` files of a stopped run, added to the input dataset, are copied into the output directory first, so the same command resumes. Put the numbers in this section when the run is done.
 
 ## Tests
 

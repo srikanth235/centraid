@@ -586,6 +586,7 @@ dependencies = [
  "centraid-assist",
  "centraid-assist-llama",
  "centraid-nativetools",
+ "llama-cpp-2",
  "serde",
  "serde_json",
  "tempfile",
