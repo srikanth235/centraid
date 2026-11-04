@@ -228,19 +228,15 @@ mod tests {
     fn a_value_with_lines_and_the_order_of_the_arguments_are_kept() {
         let raw = said(
             "plan: write",
-            "act",
-            &[
-                ("verb", "create"),
-                ("kind", "task"),
-                ("args", "name: x\ndate: y"),
-            ],
+            "create",
+            &[("kind", "task"), ("args", "name: x\ndate: y")],
         );
         let Some(Message::Assistant { args, .. }) = assistant_record(&raw) else {
             panic!("a record");
         };
         let keys: Vec<&str> = args.iter().map(|(k, _)| k.as_str()).collect();
-        assert_eq!(keys, ["verb", "kind", "args"]);
-        assert_eq!(args[2].1.arg_text(), "name: x\ndate: y");
+        assert_eq!(keys, ["kind", "args"]);
+        assert_eq!(args[1].1.arg_text(), "name: x\ndate: y");
     }
 
     #[test]

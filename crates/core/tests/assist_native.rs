@@ -535,7 +535,7 @@ fn a_write_parks_behind_a_card_and_nothing_is_written_until_the_member_taps() {
         story(&sample.drain_assist_events()),
         [
             "activity:agenda/find",
-            "activity:agenda/act",
+            "activity:agenda/do",
             "pending:1",
             "answer"
         ],

@@ -731,7 +731,7 @@ fn a_log_that_ends_the_turn_also_answers_the_row() {
         json!({"verb": "log", "kind": "person", "name": "Ray", "args": "kind: call"}),
     );
     assert_eq!(reply["ends_turn"], true, "{reply}");
-    assert_eq!(reply["effect"]["tool"], "act", "{reply}");
+    assert_eq!(reply["effect"]["tool"], "do", "{reply}");
     // the effect an `answer rows: [#n]` makes, beside the diff
     assert_eq!(answered(&reply), sorted(&world, &["ray"]), "{reply}");
     assert_eq!(reply["effect"]["answer"]["ordered"], false);

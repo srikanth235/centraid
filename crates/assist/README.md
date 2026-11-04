@@ -19,7 +19,7 @@ This crate is the plane, and none of the engine or the vault. The vault side is 
 
 ## What a turn is
 
-1. **Steps.** The model writes one message at a time — a think, then one call — and the runtime runs it (`find`, `search`, `open`, `compute`, `act`, `answer`, `ask`, `decline`), up to `STEP_CAP` messages, a stop checked between them.
+1. **Steps.** The model writes one message at a time — a think, then one call — and the runtime runs it (`find`, `compute`, `create`, `edit`, `do`, `answer`, `ask`, `decline`; the names S2 was trained on, `search`, `open` and `act`, are renamed as a call enters, [`legacy`](src/native/legacy.rs)), up to `STEP_CAP` messages, a stop checked between them.
 2. **Cards and a line.** The turn ends in the rows it found, drawn as cards (the first six), and a line composed from the final effect out of the chat's copy. A write ends in a pending card instead, and nothing is written until the tap.
 3. **A free reply** for a decline `out_of_scope`, in place of the canned sentence.
 

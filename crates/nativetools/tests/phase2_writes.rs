@@ -170,7 +170,7 @@ fn rows_at_the_cap_run_and_one_more_asks() {
         if runs {
             assert_eq!(diff_rows(&done).len(), count, "{done}");
             assert_eq!(done["ends_turn"], true);
-            assert_eq!(tool_of(&done), "act");
+            assert_eq!(tool_of(&done), "do");
             assert!(
                 done["effect"].get("bulk").is_none(),
                 "under the cap: {done}"
@@ -296,7 +296,7 @@ fn a_yes_in_the_next_turn_performs_the_same_write() {
     // the confirming call is the same write; paging is not part of it
     session.user("yes");
     let done = call(&mut session, "act", json!({"verb": "delete", "rows": list}));
-    assert_eq!(tool_of(&done), "act", "{done}");
+    assert_eq!(tool_of(&done), "do", "{done}");
     assert_eq!(done["ends_turn"], true, "the write ends the turn");
     assert_eq!(diff_rows(&done).len(), 20, "{done}");
     assert!(
@@ -437,7 +437,7 @@ fn a_write_under_the_cap_is_unchanged() {
         "act",
         json!({"verb": "complete", "rows": list}),
     );
-    assert_eq!(tool_of(&done), "act");
+    assert_eq!(tool_of(&done), "do");
     assert_eq!(done["ends_turn"], true);
     assert_eq!(diff_rows(&done).len(), 3);
     assert!(reply(&done).starts_with("completed: #"), "{}", reply(&done));
@@ -543,7 +543,7 @@ fn a_restore_past_the_window_still_restores_every_kind() {
             "act",
             json!({"verb": "restore", "kind": kind, "name": name, "trashed": true}),
         );
-        assert_eq!(tool_of(&restored), "act", "{kind}: {restored}");
+        assert_eq!(tool_of(&restored), "do", "{kind}: {restored}");
         assert_eq!(
             diff_rows(&restored)[0]["change"],
             "restored",
@@ -566,7 +566,7 @@ fn a_restore_inside_the_window_is_unchanged() {
         "act",
         json!({"verb": "restore", "kind": "document", "name": "Recent scan", "trashed": true}),
     );
-    assert_eq!(tool_of(&restored), "act", "{restored}");
+    assert_eq!(tool_of(&restored), "do", "{restored}");
     assert_eq!(restored["ends_turn"], true);
     assert_eq!(diff_rows(&restored)[0]["change"], "restored", "{restored}");
 }
@@ -587,7 +587,7 @@ fn a_folder_that_holds_documents_takes_them_to_the_trash_with_it_and_undo_brings
         "act",
         json!({"verb": "delete", "kind": "folder", "name": "Taxes"}),
     );
-    assert_eq!(tool_of(&done), "act", "{done}");
+    assert_eq!(tool_of(&done), "do", "{done}");
     assert_eq!(done["ends_turn"], true, "{done}");
     let rows = diff_rows(&done);
     assert!(
@@ -636,7 +636,7 @@ fn a_document_already_in_the_trash_stays_there_when_its_folder_comes_back() {
         "act",
         json!({"verb": "delete", "kind": "folder", "name": "Taxes"}),
     );
-    assert_eq!(tool_of(&done), "act", "{done}");
+    assert_eq!(tool_of(&done), "do", "{done}");
     let moved: Vec<String> = diff_rows(&done)
         .iter()
         .filter(|row| row["kind"] == "document")
@@ -677,7 +677,7 @@ fn an_empty_folder_deletes_as_before() {
         "act",
         json!({"verb": "delete", "kind": "folder", "name": "Empty drawer"}),
     );
-    assert_eq!(tool_of(&done), "act", "{done}");
+    assert_eq!(tool_of(&done), "do", "{done}");
     assert_eq!(diff_rows(&done)[0]["change"], "removed", "{done}");
 }
 
@@ -748,7 +748,7 @@ fn a_notebook_that_holds_notebooks_takes_them_with_it() {
         "act",
         json!({"verb": "delete", "kind": "notebook", "name": "Recipes"}),
     );
-    assert_eq!(tool_of(&done), "act", "{done}");
+    assert_eq!(tool_of(&done), "do", "{done}");
     session.user("");
     let left = call(&mut session, "find", json!({"kind": "notebook"}));
     let names: Vec<&str> = left["effect"]["rows"]
@@ -816,7 +816,7 @@ fn a_write_by_name_takes_the_one_row_a_word_start_fits() {
         "act",
         json!({"verb": "complete", "kind": "task", "name": "mend ree"}),
     );
-    assert_eq!(tool_of(&done), "act", "{done}");
+    assert_eq!(tool_of(&done), "do", "{done}");
     assert_eq!(
         diff_rows(&done)[0]["fields"]["status"],
         json!(["open", "completed"])

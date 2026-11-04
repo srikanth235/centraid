@@ -698,5 +698,6 @@ pub fn export(dir: &Path) -> Result<Vec<&'static str>, String> {
         "prompt.sig.txt",
         "prompt.compact.txt",
         "prompt.full.txt",
+        "prompt.s2.txt",
     ])
 }

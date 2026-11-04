@@ -1,12 +1,11 @@
 {
   "act.args_are_field_value_lines_not": {
-    "tool": "act",
+    "tool": "edit",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "edit",
         "args": {
-          "verb": "edit",
           "kind": "task",
           "name": "Book the cabin",
           "args": 5
@@ -44,13 +43,12 @@
     ]
   },
   "whr.x_is_shape_x_is_not": {
-    "tool": "act",
+    "tool": "create",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "create",
         "args": {
-          "verb": "create",
           "kind": "task",
           "args": "name: x\neffort: lots"
         }
@@ -71,13 +69,12 @@
     ]
   },
   "act.could_not_read_the_args_line": {
-    "tool": "act",
+    "tool": "edit",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "edit",
         "args": {
-          "verb": "edit",
           "kind": "task",
           "name": "Book the cabin",
           "args": "no colon here"
@@ -86,11 +83,11 @@
     ]
   },
   "act.no_verb_verb_text_verbs_x": {
-    "tool": "act",
+    "tool": "do",
     "argument": "verb",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "frobnicate",
           "kind": "task",
@@ -100,11 +97,11 @@
     ]
   },
   "act.undo_takes_no_rows_selector_or": {
-    "tool": "act",
+    "tool": "do",
     "argument": "rows",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "undo",
           "rows": "#6"
@@ -113,13 +110,12 @@
     ]
   },
   "act.create_takes_no_rows_parameter_a": {
-    "tool": "act",
+    "tool": "create",
     "argument": "rows",
     "calls": [
       {
-        "tool": "act",
+        "tool": "create",
         "args": {
-          "verb": "create",
           "kind": "note",
           "rows": "#6",
           "args": "name: x"
@@ -128,13 +124,12 @@
     ]
   },
   "act.create_takes_no_param_parameter_the": {
-    "tool": "act",
+    "tool": "create",
     "argument": "name",
     "calls": [
       {
-        "tool": "act",
+        "tool": "create",
         "args": {
-          "verb": "create",
           "kind": "note",
           "name": "x",
           "args": "body: y"
@@ -143,29 +138,28 @@
     ]
   },
   "act.create_takes_kind_as_the_top": {
-    "tool": "act",
+    "tool": "create",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "create",
         "args": {
-          "verb": "create",
           "args": "kind: note\nname: x"
         }
       }
     ]
   },
   "act.act_takes_rows_or_a_selector": {
-    "tool": "act",
+    "tool": "do",
     "argument": "rows",
     "why_none": "normalised away before the call runs: rows beside a selector run on the rows and the reply notes the selector left out (normalize.rs, rule 6); answer and compute still say this"
   },
   "act.act_needs_rows_n_or_a": {
-    "tool": "act",
+    "tool": "do",
     "argument": "rows",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "complete"
         }
@@ -173,11 +167,11 @@
     ]
   },
   "act.act_needs_exactly_one_kind_fields": {
-    "tool": "act",
+    "tool": "do",
     "argument": "kind",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "complete",
           "kind": "task,event",
@@ -187,11 +181,11 @@
     ]
   },
   "act.what_fits_x": {
-    "tool": "act",
+    "tool": "do",
     "argument": "name",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "reschedule",
           "kind": "task",
@@ -202,26 +196,26 @@
     ]
   },
   "act.what_nothing_was_done": {
-    "tool": "act",
+    "tool": "do",
     "argument": "",
     "why_none": "the summary line of the ambiguous: reply above, never a reply of its own"
   },
   "act.that_row_no_longer_exists": {
-    "tool": "act",
+    "tool": "do",
     "argument": "rows",
     "why_none": "defensive: rows are re-read after every write, so a numbered row is always there"
   },
   "act.x_does_not_apply_to_x": {
-    "tool": "act",
+    "tool": "do",
     "argument": "verb",
     "why_none": "defensive: add_to and remove_from apply only to kinds that have a container, and the verb table already refuses the other kinds with the family below"
   },
   "act.x_does_not_apply_to_x_2": {
-    "tool": "act",
+    "tool": "do",
     "argument": "verb",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "complete",
           "kind": "person",
@@ -231,11 +225,11 @@
     ]
   },
   "act.name_is_in_the_trash_restore": {
-    "tool": "act",
+    "tool": "do",
     "argument": "name",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "complete",
           "kind": "task",
@@ -246,11 +240,11 @@
     ]
   },
   "act.name_state": {
-    "tool": "act",
+    "tool": "do",
     "argument": "verb",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "complete",
           "kind": "task",
@@ -260,21 +254,21 @@
     ]
   },
   "act.restore_name_was_refused_it_is": {
-    "tool": "act",
+    "tool": "do",
     "argument": "verb",
     "why_none": "reaches the reply as the refused: restore line below; this error form is the vault's refusal with no named predicate"
   },
   "act.x_name_was_refused_reason": {
-    "tool": "act",
+    "tool": "do",
     "argument": "verb",
     "why_none": "a vault refusal with no named predicate; the fixture vault always names one (see the refused: families)"
   },
   "act.x_takes_x_not_key": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "log",
           "kind": "person",
@@ -285,11 +279,11 @@
     ]
   },
   "act.log_takes_kind_x": {
-    "tool": "act",
+    "tool": "do",
     "argument": "kind",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "log",
           "kind": "person",
@@ -300,11 +294,11 @@
     ]
   },
   "act.x_takes_slot_n_not_key": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "add_to",
           "kind": "task",
@@ -315,11 +309,11 @@
     ]
   },
   "act.x_needs_slot_n": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "add_to",
           "kind": "task",
@@ -329,11 +323,11 @@
     ]
   },
   "act.x_needs_name_text": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "tag",
           "kind": "task",
@@ -343,11 +337,11 @@
     ]
   },
   "act.slot_is_exactly_one_n": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "add_to",
           "kind": "task",
@@ -358,11 +352,11 @@
     ]
   },
   "act.a_x_goes_into_a_x": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "add_to",
           "kind": "task",
@@ -373,11 +367,11 @@
     ]
   },
   "act.reveal_takes_field_not_key": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "reveal",
           "kind": "locker item",
@@ -388,11 +382,11 @@
     ]
   },
   "act.reveal_takes_field_one_of_this": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "reveal",
           "kind": "locker item",
@@ -403,12 +397,12 @@
     ]
   },
   "act.first_was_asked_for_first_and": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "calls": [
       {
         "user": "what is the cvv of the home wifi",
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "reveal",
           "kind": "locker item",
@@ -417,7 +411,7 @@
         }
       },
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "reveal",
           "kind": "locker item",
@@ -428,13 +422,12 @@
     ]
   },
   "act.only_a_body_or_a_description": {
-    "tool": "act",
+    "tool": "edit",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "edit",
         "args": {
-          "verb": "edit",
           "kind": "task",
           "name": "Pay rent",
           "args": "effort+: 5"
@@ -443,13 +436,12 @@
     ]
   },
   "act.base_and_base_in_one_edit": {
-    "tool": "act",
+    "tool": "edit",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "edit",
         "args": {
-          "verb": "edit",
           "kind": "note",
           "name": "Dal",
           "args": "body: lentils\nbody+: oat milk"
@@ -458,13 +450,12 @@
     ]
   },
   "act.base_needs_the_text_to_add": {
-    "tool": "act",
+    "tool": "edit",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "edit",
         "args": {
-          "verb": "edit",
           "kind": "note",
           "name": "Dal",
           "args": "body+: "
@@ -473,11 +464,11 @@
     ]
   },
   "act.name_has_no_field_it_holds": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "reveal",
           "kind": "locker item",
@@ -488,11 +479,11 @@
     ]
   },
   "act.reschedule_takes_to_date_expression_not": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "reschedule",
           "kind": "event",
@@ -503,11 +494,11 @@
     ]
   },
   "act.reschedule_needs_a_day_an_instant": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "reschedule",
           "kind": "task",
@@ -518,16 +509,16 @@
     ]
   },
   "act.a_task_is_due_at_one": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "why_none": "normalised away before the call runs: a task due on a closed range (a month, a week) is due on its first day and the reply notes it (act.rs, first_day_of; nt14 N5); only a session that does not normalise says this"
   },
   "act.an_event_moves_to_one_day": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "reschedule",
           "kind": "event",
@@ -538,11 +529,11 @@
     ]
   },
   "act.reschedule_does_not_apply_to_x": {
-    "tool": "act",
+    "tool": "do",
     "argument": "kind",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "reschedule",
           "kind": "person",
@@ -552,13 +543,12 @@
     ]
   },
   "act.edit_needs_field_value_lines_x": {
-    "tool": "act",
+    "tool": "edit",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "edit",
         "args": {
-          "verb": "edit",
           "kind": "note",
           "name": "Dal"
         }
@@ -566,13 +556,12 @@
     ]
   },
   "act.name_cannot_be_empty": {
-    "tool": "act",
+    "tool": "edit",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "edit",
         "args": {
-          "verb": "edit",
           "kind": "note",
           "name": "Dal",
           "args": "name: "
@@ -581,13 +570,12 @@
     ]
   },
   "act.a_date_changes_with_reschedule_to": {
-    "tool": "act",
+    "tool": "edit",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "edit",
         "args": {
-          "verb": "edit",
           "kind": "task",
           "name": "Pay rent",
           "args": "date: 2026-10-10\ndescription: pay by transfer"
@@ -596,13 +584,12 @@
     ]
   },
   "act.x_have_no_field_field_x": {
-    "tool": "act",
+    "tool": "edit",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "edit",
         "args": {
-          "verb": "edit",
           "kind": "task",
           "name": "Pay rent",
           "args": "colour: red"
@@ -611,13 +598,12 @@
     ]
   },
   "act.field_cannot_be_edited_hint": {
-    "tool": "act",
+    "tool": "edit",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "edit",
         "args": {
-          "verb": "edit",
           "kind": "task",
           "name": "Pay rent",
           "args": "completed: 2026-09-01"
@@ -626,18 +612,17 @@
     ]
   },
   "act.field_cannot_be_edited": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "why_none": "a Money or Date field with an edit command; the metadata has none"
   },
   "act.that_duration_is_out_of_range": {
-    "tool": "act",
+    "tool": "edit",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "edit",
         "args": {
-          "verb": "edit",
           "kind": "event",
           "name": "Dentist",
           "args": "duration: 99999999999999"
@@ -646,13 +631,12 @@
     ]
   },
   "act.a_item_type_item_keeps_no_field": {
-    "tool": "act",
+    "tool": "edit",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "edit",
         "args": {
-          "verb": "edit",
           "kind": "locker item",
           "name": "Home wifi",
           "args": "url: https://x.example"
@@ -661,31 +645,29 @@
     ]
   },
   "act.create_needs_the_kind_parameter_set": {
-    "tool": "act",
+    "tool": "create",
     "argument": "kind",
     "calls": [
       {
-        "tool": "act",
+        "tool": "create",
         "args": {
-          "verb": "create",
           "args": "name: x"
         }
       }
     ]
   },
   "act.create_x_args_take_x_not": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "why_none": "normalised away before the call runs: a create arg the kind does not take is dropped and the reply notes it (normalize.rs, rule 1)"
   },
   "act.create_x_needs_name_in_args": {
-    "tool": "act",
+    "tool": "create",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "create",
         "args": {
-          "verb": "create",
           "kind": "note",
           "args": "body: x"
         }
@@ -693,18 +675,17 @@
     ]
   },
   "act.key_is_a_number": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "why_none": "every numeric key of a create has a metadata field, so the field-specific number message answers first"
   },
   "act.key_is_one_x_n": {
-    "tool": "act",
+    "tool": "create",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "create",
         "args": {
-          "verb": "create",
           "kind": "task",
           "args": "name: x\nlist: #6, #4"
         }
@@ -712,13 +693,12 @@
     ]
   },
   "act.a_new_row_s_date_is": {
-    "tool": "act",
+    "tool": "create",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "create",
         "args": {
-          "verb": "create",
           "kind": "event",
           "args": "name: x\ndate: {\"from\":{\"unit\":\"day\",\"rel\":1}}"
         }
@@ -726,13 +706,12 @@
     ]
   },
   "act.create_event_needs_date_date_expression": {
-    "tool": "act",
+    "tool": "create",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "create",
         "args": {
-          "verb": "create",
           "kind": "event",
           "args": "name: x"
         }
@@ -740,13 +719,12 @@
     ]
   },
   "act.create_account_needs_type_checking_savings": {
-    "tool": "act",
+    "tool": "create",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "create",
         "args": {
-          "verb": "create",
           "kind": "account",
           "args": "name: x"
         }
@@ -754,13 +732,12 @@
     ]
   },
   "act.a_kind_value_item_keeps_no_field": {
-    "tool": "act",
+    "tool": "create",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "create",
         "args": {
-          "verb": "create",
           "kind": "locker item",
           "args": "name: x\ntype: wifi\nurl: https://x.example"
         }
@@ -768,26 +745,26 @@
     ]
   },
   "act.x_name_said": {
-    "tool": "act",
+    "tool": "do",
     "argument": "verb",
     "why_none": "composed only: the vault refuses a delete no more (a container's members go to the trash with it, #1135), so the ask this line leads is the one a cancelled event's reschedule ends in, and the asks the runtime composes are not said to the model uncomposed"
   },
   "act.restore_name_it_is_in_the": {
-    "tool": "act",
+    "tool": "do",
     "argument": "verb",
     "why_none": "the vault no longer refuses a restore past the window: the launch pass empties an overdue row, and until it runs the row restores (#1146); no fixture row reaches this line"
   },
   "act.create_x_was_refused_x": {
-    "tool": "act",
+    "tool": "do",
     "argument": "verb",
     "why_none": "the vault's own reason, as the vault words it; the fixture has no create the vault refuses with a named predicate"
   },
   "act.nothing_to_undo": {
-    "tool": "act",
+    "tool": "do",
     "argument": "verb",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "undo"
         }
@@ -896,17 +873,19 @@
         "tool": "find",
         "args": {
           "kind": "task",
-          "limit": [1]
+          "limit": [
+            1
+          ]
         }
       }
     ]
   },
   "session.handle_is_not_a_row_rows": {
-    "tool": "act",
+    "tool": "do",
     "argument": "rows",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "star",
           "rows": "foo"
@@ -915,11 +894,11 @@
     ]
   },
   "session.number_was_never_shown": {
-    "tool": "act",
+    "tool": "do",
     "argument": "rows",
     "calls": [
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "star",
           "rows": "#999"
@@ -928,7 +907,7 @@
     ]
   },
   "session.number_no_longer_exists_in_the": {
-    "tool": "act",
+    "tool": "do",
     "argument": "rows",
     "why_none": "defensive: a numbered row stays in the world, trashed rows included"
   },
@@ -1100,9 +1079,8 @@
     "argument": "",
     "calls": [
       {
-        "tool": "act",
+        "tool": "create",
         "args": {
-          "verb": "create",
           "kind": "note",
           "args": "name: x",
           "more": true
@@ -1200,7 +1178,9 @@
     "calls": [
       {
         "tool": "find",
-        "args": [1]
+        "args": [
+          1
+        ]
       }
     ]
   },
@@ -1223,28 +1203,6 @@
         "args": {
           "kind": "task",
           "colour": "red"
-        }
-      }
-    ]
-  },
-  "session.open_needs_row_n": {
-    "tool": "open",
-    "argument": "row",
-    "calls": [
-      {
-        "tool": "open",
-        "args": {}
-      }
-    ]
-  },
-  "session.open_takes_exactly_one_row_n": {
-    "tool": "open",
-    "argument": "row",
-    "calls": [
-      {
-        "tool": "open",
-        "args": {
-          "row": "#6, #5"
         }
       }
     ]
@@ -1303,7 +1261,7 @@
     ]
   },
   "session.number_is_a_value_not_rows": {
-    "tool": "act",
+    "tool": "compute",
     "argument": "rows",
     "calls": [
       {
@@ -1314,7 +1272,7 @@
         }
       },
       {
-        "tool": "act",
+        "tool": "do",
         "args": {
           "verb": "complete",
           "rows": "@1"
@@ -1682,21 +1640,23 @@
     ]
   },
   "search.search_needs_text": {
-    "tool": "search",
+    "tool": "find",
     "argument": "text",
     "calls": [
       {
-        "tool": "search",
-        "args": {}
+        "tool": "find",
+        "args": {
+          "text": ""
+        }
       }
     ]
   },
   "search.no_kind_part_kinds_any_x": {
-    "tool": "search",
+    "tool": "find",
     "argument": "kind",
     "calls": [
       {
-        "tool": "search",
+        "tool": "find",
         "args": {
           "text": "x",
           "kind": "spaceship"
@@ -1705,11 +1665,11 @@
     ]
   },
   "search.kind_is_text_not_other": {
-    "tool": "search",
+    "tool": "find",
     "argument": "kind",
     "calls": [
       {
-        "tool": "search",
+        "tool": "find",
         "args": {
           "text": "x",
           "kind": 5
@@ -1806,23 +1766,22 @@
     "why_none": "needs a vault that holds two currencies of one symbol (USD and CAD for a dollar sign); the fixture vault holds one"
   },
   "whr.amounts_are_in_currency_here_x": {
-    "tool": "act",
+    "tool": "do",
     "argument": "args",
     "why_none": "defensive: a currency symbol is checked only against an amount field, and no kind the assistant reads has one until Money is read again (symbol_conflict has no caller)"
   },
   "act.name_is_one_occurrence_of_a": {
-    "tool": "act",
+    "tool": "do",
     "argument": "rows",
     "why_none": "needs an event the vault repeats (a series read as its occurrences, World::read_event_window); the fixture world has none and no call makes one, so tests/events_local.rs drives it"
   },
   "act.a_item_type_item_has_no_place": {
-    "tool": "act",
+    "tool": "edit",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "edit",
         "args": {
-          "verb": "edit",
           "kind": "locker item",
           "name": "Home wifi",
           "args": "code: 123456"
@@ -1831,16 +1790,80 @@
     ]
   },
   "act.a_secret_the_member_types_in": {
-    "tool": "act",
+    "tool": "edit",
     "argument": "args",
     "calls": [
       {
-        "tool": "act",
+        "tool": "edit",
         "args": {
-          "verb": "edit",
           "kind": "locker item",
           "name": "Bank login",
           "args": "password: \nusername: sam2"
+        }
+      }
+    ]
+  },
+  "session.find_rows_takes_exactly_one_row": {
+    "tool": "find",
+    "argument": "rows",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "rows": "#6, #5"
+        }
+      }
+    ]
+  },
+  "session.find_takes_text_or_rows_not": {
+    "tool": "find",
+    "argument": "rows",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "text": "cabin",
+          "rows": "#6"
+        }
+      }
+    ]
+  },
+  "session.find_x_takes_no_other_use": {
+    "tool": "find",
+    "argument": "text",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "text": "cabin",
+          "name": "cabin"
+        }
+      }
+    ]
+  },
+  "act.x_is_a_tool_of_its": {
+    "tool": "do",
+    "argument": "verb",
+    "calls": [
+      {
+        "tool": "do",
+        "args": {
+          "verb": "edit",
+          "rows": "#6"
+        }
+      }
+    ]
+  },
+  "act.do_takes_at_most_one_argument": {
+    "tool": "do",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "do",
+        "args": {
+          "verb": "reschedule",
+          "rows": "#6",
+          "args": "to: {\"unit\":\"day\",\"rel\":1}\nname: x"
         }
       }
     ]

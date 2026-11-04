@@ -387,7 +387,7 @@ mod tests {
 
     #[test]
     fn a_think_that_states_no_call_leaves_the_call_to_the_model() {
-        // an act with no verb, and no trace at all
+        // a write with no verb, and no trace at all
         for think in ["intent: write\nkind: event", "what is on friday"] {
             let call = "\n\n<tool_call>\n<function=answer>\n<parameter=rows>\n#1\n</parameter>\n</function>\n";
             let engine = Engine::new(&[(think, Finish::Stop, 9), (call, Finish::Stop, 20)]);

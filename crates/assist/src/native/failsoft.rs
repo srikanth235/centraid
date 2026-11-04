@@ -82,7 +82,7 @@ fn head(error: &str) -> String {
 /// name, a condition, a date, a link or a scope. A kind alone is the whole
 /// kind, which is not what the person asked.
 fn selective(tool: &str, args: &Map<String, Value>) -> bool {
-    if tool == "search" {
+    if is_search(tool, args) {
         return true;
     }
     ["rows", "name", "where", "when", "linked_to", "within"]
@@ -94,6 +94,11 @@ fn selective(tool: &str, args: &Map<String, Value>) -> bool {
         })
 }
 
+/// `find text=…`: the fuzzy name search.
+fn is_search(tool: &str, args: &Map<String, Value>) -> bool {
+    tool == "find" && args.contains_key("text")
+}
+
 impl Session {
     /// The typed ending of the call just refused and sent again, or `None`
     /// when a write landed this turn (it stays a `loop`).
@@ -102,9 +107,12 @@ impl Session {
             return None;
         }
         let rejected = self.last_rejected.clone()?;
+        let opening = rejected.tool == "find"
+            && rejected.args.contains_key("rows")
+            && !rejected.args.contains_key("text");
         let (fix, mut outcome) = match rejected.tool.as_str() {
-            "act" => self.failsoft_write(rejected),
-            "answer" | "find" | "search" | "compute" => self.failsoft_read(rejected),
+            "create" | "edit" | "do" => self.failsoft_write(rejected),
+            "answer" | "find" | "compute" if !opening => self.failsoft_read(rejected),
             "ask" => self.failsoft_ask_options(rejected),
             _ => {
                 let why = head(&rejected.text);
@@ -168,7 +176,7 @@ impl Session {
             };
             let family = *family.get_or_insert(fix.family);
             self.pending_notes.push(note);
-            let ran = if tool == "search" {
+            let ran = if is_search(&tool, &args) {
                 crate::native::search::search(self, &args).map(Self::search_as_answer)
             } else {
                 self.answer(&args)
@@ -279,7 +287,7 @@ impl Session {
         // A KIND THAT IS NOT ONE (or `any` outside a search).
         if error.contains("no kind \"") || error.contains("kind=any is only for search") {
             let kind = arg_str(args, "kind").unwrap_or_default();
-            if tool == "search" {
+            if is_search(tool, args) {
                 args.insert("kind".to_owned(), json!("any"));
                 let note = format!("note: ignored kind \"{kind}\" ({reason}); searched every kind");
                 return rerun("no_kind", "kind_any", note);
@@ -487,7 +495,7 @@ impl Session {
     // -----------------------------------------------------------------
 
     fn failsoft_write(&mut self, rejected: Rejected) -> (Fix, Outcome) {
-        let Rejected { args, text, .. } = rejected;
+        let Rejected { tool, args, text } = rejected;
         let why = head(&text);
         // ROWS AND A SELECTOR with rows named: the rows are what was meant.
         if text.contains("rows or a selector, not both")
@@ -501,7 +509,7 @@ impl Session {
             }
             self.pending_notes
                 .push("note: ignored the selector; the rows were named".to_owned());
-            if let Ok(mut outcome) = self.act(&fixed) {
+            if let Ok(mut outcome) = self.act(&tool, &fixed) {
                 let wrote =
                     outcome.effect.contains_key("diff") || outcome.effect.contains_key("already");
                 // an `ambiguous:` reply is no end of the turn; the ask the runtime composed is

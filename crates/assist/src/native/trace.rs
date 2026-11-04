@@ -14,7 +14,7 @@
 //! `refer`. A call that contradicts its own trace is answered with an error observation (a step
 //! that counts, like a repeated call) and does nothing:
 //!
-//! - `intent: write` with an `answer` call, or `act` under any other intent;
+//! - `intent: write` with an `answer` call, or a write (`create`, `edit`, `do`) under any other intent;
 //! - `scope: one` with a write that names several rows;
 //! - `refer ... -> @k` (or `#n`) with rows that are not the referent's (`both` must be all of it).
 //!
@@ -249,17 +249,17 @@ impl Session {
             (Intent::Write, "answer") => {
                 return Some(contradiction("intent is write, the call is an answer"));
             }
-            (Intent::Write, "act") => {}
-            (intent, "act") => {
+            (Intent::Write, write) if crate::native::meta::is_write(write) => {}
+            (intent, write) if crate::native::meta::is_write(write) => {
                 return Some(contradiction(&format!(
-                    "intent is {}, the call is a write (act)",
+                    "intent is {}, the call is a write ({write})",
                     intent.name()
                 )));
             }
             _ => {}
         }
         let args = args.as_object()?;
-        if tool == "act"
+        if crate::native::meta::is_write(tool)
             && trace.scope == Some(Scope::One)
             && let Some(rows) = args.get("rows").filter(|value| !value.is_null())
             && let Ok(keys) = self.resolve_rows(rows)
