@@ -1,4 +1,4 @@
-//! `act` (SPEC §4.2): every write through the vault's typed commands, the
+//! The writes `create`, `edit` and `do` (SPEC §4.2): every write through the vault's typed commands, the
 //! call-only ambiguity check (§3.3), already-so writes, and `undo`.
 //!
 //! Two things end a turn here that the model would otherwise have to settle,
@@ -354,10 +354,22 @@ fn plural_weekday(word: &str) -> bool {
         .is_some_and(|day| crate::native::ground::weekday_of(day).is_some())
 }
 
+/// The verbs `do` runs: every verb but `create` and `edit`, which are tools of their own.
+#[must_use]
+pub(crate) fn do_verbs() -> Vec<&'static str> {
+    meta::VERBS
+        .iter()
+        .map(|spec| spec.name)
+        .filter(|name| !matches!(*name, "create" | "edit"))
+        .collect()
+}
+
 impl Session {
-    pub(crate) fn act(&mut self, args: &Map<String, Value>) -> Result<Outcome, String> {
+    /// A write: `create`, `edit` or `do` (#1166). The verb is the tool's own for `create` and
+    /// `edit`, the `verb` argument for `do`.
+    pub(crate) fn act(&mut self, tool: &str, args: &Map<String, Value>) -> Result<Outcome, String> {
         let mut decided = None;
-        let outcome = self.act_run(args, &mut decided)?;
+        let outcome = self.act_run(tool, args, &mut decided)?;
         Ok(self.say_decided(outcome, decided))
     }
 
@@ -397,22 +409,35 @@ impl Session {
 
     fn act_run(
         &mut self,
+        tool: &str,
         args: &Map<String, Value>,
         decided: &mut Option<Decided>,
     ) -> Result<Outcome, String> {
-        let verb_text = match args.get("verb") {
-            Some(Value::String(text)) => text.clone(),
-            _ => String::new(),
-        };
+        let verb_text = meta::write_verb(tool, args).unwrap_or_default().to_owned();
         let verb = Verb::parse(&verb_text).ok_or_else(|| {
-            let names: Vec<&str> = meta::VERBS.iter().map(|spec| spec.name).collect();
             format!(
                 "error: no verb \"{verb_text}\". verbs: {}.",
-                names.join(", ")
+                do_verbs().join(", ")
             )
         })?;
+        if tool == "do" && matches!(verb, Verb::Create | Verb::Edit) {
+            return Err(format!(
+                "error: {} is a tool of its own; send {}(…), not do(verb={}).",
+                verb.spec().name,
+                verb.spec().name,
+                verb.spec().name
+            ));
+        }
         let more = arg_bool(args, "more")?.unwrap_or(false);
         let extra = act_args(args.get("args"))?;
+        if tool == "do" && extra.len() > 1 {
+            return Err(format!(
+                "error: do takes at most one argument; {} got {}: {}.",
+                verb.spec().name,
+                extra.len(),
+                extra.keys().cloned().collect::<Vec<_>>().join(", ")
+            ));
+        }
         let (verb, extra, redirected) = self.redirect_verb(verb, args, extra);
         let mut logged: Vec<Key> = Vec::new();
         let mut outcome = match verb {

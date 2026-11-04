@@ -5,6 +5,7 @@
 //! `authored/compile_oracle.py` runs every think of the train data through the compiler and compares two runs.
 
 use centraid_nativetools::compile::CALL_ORDER;
+use centraid_nativetools::legacy;
 use centraid_nativetools::think::{Call, TraceMode, compile_think, v4_think};
 use serde_json::Value;
 
@@ -19,9 +20,23 @@ fn golden() -> Vec<Value> {
 
 /// The call of a golden row, its arguments in the order a call writes them.
 fn want(row: &Value) -> Call {
-    let args = row["call"]["args"].as_object().expect("args");
+    // the golden holds the calls of S2's data, in the names S2 wrote; the compiler states them in
+    // the eight tools (#1166)
+    let (tool, args) = match legacy::modernize(
+        row["call"]["tool"].as_str().expect("tool"),
+        &row["call"]["args"],
+    ) {
+        Some((tool, args)) => (tool, args),
+        None => ("", row["call"]["args"].clone()),
+    };
+    let tool = if tool.is_empty() {
+        row["call"]["tool"].as_str().expect("tool")
+    } else {
+        tool
+    };
+    let args = args.as_object().expect("args");
     Call {
-        tool: row["call"]["tool"].as_str().expect("tool").to_owned(),
+        tool: tool.to_owned(),
         args: CALL_ORDER
             .iter()
             .filter_map(|key| {
@@ -53,7 +68,7 @@ fn every_golden_v4_think_compiles_to_the_same_call() {
     let mut said = 0;
     for row in golden() {
         let Some(think4) = row["think4"].as_str() else {
-            // v4 has no lookup step: `find`
+            // the golden was made when v4 had no lookup step: `find`
             assert_eq!(row["call"]["tool"], "find", "{}", row["shape"]);
             continue;
         };
@@ -71,7 +86,13 @@ fn every_golden_v31_think_rewrites_to_its_v4_think() {
         let think = row["think"].as_str().expect("think");
         match (v4_think(think, dates(&row), None), row["think4"].as_str()) {
             (Ok(rewritten), Some(think4)) => assert_eq!(rewritten, think4, "{}", row["shape"]),
-            (Err(skip), None) => assert_eq!(skip.reason, "find", "{}", row["shape"]),
+            // a lookup step is a `find` in v4 too, and states the same call
+            (Ok(rewritten), None) => {
+                assert_eq!(row["call"]["tool"], "find", "{}", row["shape"]);
+                let got = compile_think(&rewritten, dates(&row), TraceMode::V4)
+                    .unwrap_or_else(|refusal| panic!("{}: {refusal:?}", row["shape"]));
+                assert_eq!(got, want(&row), "{}", row["shape"]);
+            }
             (got, think4) => panic!("{}: {got:?} against {think4:?}", row["shape"]),
         }
     }

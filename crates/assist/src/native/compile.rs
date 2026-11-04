@@ -63,12 +63,11 @@ use crate::native::session::Session;
 use crate::native::whr;
 
 /// The order the arguments are written in a call.
-pub const CALL_ORDER: [&str; 23] = [
+pub const CALL_ORDER: [&str; 22] = [
     "verb",
     "op",
     "field",
     "rows",
-    "row",
     "kind",
     "group",
     "name",
@@ -196,27 +195,30 @@ impl Session {
             }
             None => return refuse("intent", "every trace has an intent"),
         };
+        let verb = slots.get("verb").and_then(Value::as_str);
+        // `search` and `open` are the `find` of text and of one row (S2 wrote them as `via`)
         let tool = match slots.get("via").and_then(Value::as_str) {
-            Some(via @ ("find" | "search" | "open" | "compute")) => via,
+            Some("find" | "search" | "open") => "find",
+            Some("compute") => "compute",
             Some(other) => {
-                return refuse(
-                    "via",
-                    format!("via is find, search, open or compute, not \"{other}\""),
-                );
+                return refuse("via", format!("via is find or compute, not \"{other}\""));
             }
-            None => default_tool(intent),
+            None => default_tool(intent, verb),
         };
         let mut resolved = Resolved::default();
         let mut args: Map<String, Value> = Map::new();
 
-        if tool == "act" {
-            let Some(verb) = slots.get("verb").and_then(Value::as_str) else {
-                return refuse("verb", "an act needs a verb");
+        if intent == "write" && crate::native::meta::is_write(tool) {
+            let Some(verb) = verb else {
+                return refuse("verb", "a write needs a verb");
             };
             if Verb::parse(verb).is_none() {
                 return refuse("verb", format!("no verb \"{verb}\""));
             }
-            args.insert("verb".to_owned(), json!(verb));
+            // `create` and `edit` are tools; every other verb is named to `do`
+            if tool == "do" {
+                args.insert("verb".to_owned(), json!(verb));
+            }
         }
         for key in ["op", "field", "group", "name", "text", "question", "reason"] {
             if let Some(value) = slots.get(key).filter(|value| !value.is_null()) {
@@ -280,13 +282,19 @@ impl Session {
             };
             let handles = self.compile_handles(key, value, &mut resolved)?;
             let scalar = matches!(key, "row" | "within" | "value");
+            // the row a `find` opens is its `rows`
+            let name = if key == "row" && tool == "find" {
+                "rows"
+            } else {
+                key
+            };
             if scalar {
                 if handles.len() != 1 {
                     return refuse(key, format!("{key} is exactly one handle"));
                 }
-                args.insert(key.to_owned(), json!(handles[0]));
+                args.insert(name.to_owned(), json!(handles[0]));
             } else {
-                args.insert(key.to_owned(), json!(handles));
+                args.insert(name.to_owned(), json!(handles));
             }
         }
         let explicit = HANDLE_SLOTS.iter().any(|key| args.contains_key(*key));
@@ -299,11 +307,11 @@ impl Session {
         }
         // a v3.1 pick states the rows only when no other handle slot does; a v4 pick always does
         if pick_states_rows(v4, explicit) && !picked.rows.is_empty() {
-            let key = rows_key(tool);
-            if tool == "open" {
-                args.insert(key.to_owned(), json!(picked.rows[0]));
+            // a `find` with rows opens one row
+            if tool == "find" {
+                args.insert("rows".to_owned(), json!(picked.rows[0]));
             } else {
-                args.insert(key.to_owned(), json!(picked.rows));
+                args.insert("rows".to_owned(), json!(picked.rows));
             }
         }
 
@@ -781,19 +789,15 @@ impl Session {
     }
 }
 
-/// The tool a trace's intent calls when no `via` says otherwise (`read` and `count` an `answer`, a write an `act`).
-pub(crate) fn default_tool(intent: &str) -> &'static str {
+/// The tool a trace's intent calls when no `via` says otherwise (`read` and `count` an `answer`, a
+/// write the tool of its verb: `create`, `edit`, else `do`).
+pub(crate) fn default_tool(intent: &str, verb: Option<&str>) -> &'static str {
     match intent {
         "read" | "count" => "answer",
-        "write" => "act",
+        "write" => verb.map_or("do", crate::native::meta::tool_of_verb),
         "ask" => "ask",
         _ => "decline",
     }
-}
-
-/// The argument a call states its rows under: `row` for an `open`, else `rows`.
-pub(crate) fn rows_key(tool: &str) -> &'static str {
-    if tool == "open" { "row" } else { "rows" }
 }
 
 /// Does a pick state the rows of the call? A v4 pick always does; a v3.1 pick only when no other handle slot is explicit.
@@ -818,7 +822,7 @@ pub(crate) fn infers_kind(
     has_name: bool,
     has_handle_slot: bool,
 ) -> bool {
-    tool == "act" && !has_kind && has_name && !has_handle_slot
+    crate::native::meta::is_write(tool) && !has_kind && has_name && !has_handle_slot
 }
 
 /// v4: an act that names a row by `name` alone (no rows, no other handle slot) and says no `kind` takes the one kind its verb
@@ -867,7 +871,7 @@ impl Session {
             .and_then(Value::as_str)
             .unwrap_or_default();
         let count = rows.and_then(|rows| self.resolve_rows(rows).ok().map(|keys| keys.len()));
-        if tool == "act" && !matches!(verb, "create" | "undo") {
+        if crate::native::meta::is_write(tool) && !matches!(verb, "create" | "undo") {
             let scope = match (count, Self::has_selector(args)) {
                 (Some(1), _) => Some("one"),
                 (Some(_), _) => Some("all"),

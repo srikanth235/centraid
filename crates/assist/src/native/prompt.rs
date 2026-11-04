@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use crate::native::dates::Unit;
 use crate::native::identity::MODEL;
-use crate::native::meta::{self, Kind, LOOKUP_CAP, VERBS};
+use crate::native::meta::{self, Kind, LOOKUP_CAP};
 use crate::native::render;
 use crate::native::session::Session;
 
@@ -34,10 +34,10 @@ pub fn date_expr_property(description: &str) -> Value {
     })
 }
 
-/// THE PROMPT'S BUDGET: the selector is ten parameters and four tools take
+/// THE PROMPT'S BUDGET: the selector is ten parameters and `find` and `compute` take
 /// it. `find` carries it with its descriptions and the nested date schema;
-/// `compute`, `answer` and `act` carry name and type only and point at
-/// `find`. The interface is the same either way, so the parser and the
+/// `compute` carries name and type only and points at `find`. (`edit`, `do` and `answer` name
+/// rows and offer no selector, though the runtime still reads one from S2.) The interface is the same either way, so the parser and the
 /// runtime do not change; `full` is the spelling `tools.full.json` exports.
 fn selector_properties(described: bool) -> serde_json::Map<String, Value> {
     let text = |description: &str| {
@@ -128,46 +128,60 @@ fn tools_with(full: bool) -> Vec<Value> {
     let rows = json!({"type": "string", "description": "#n, @n list"});
     let op = json!({"type": "string", "enum": meta::OPS});
     let field = json!({"type": "string"});
-    let mut search = serde_json::Map::new();
-    search.insert("text".into(), json!({"type": "string"}));
-    search.insert(
-        "kind".into(),
-        json!({"type": "string", "description": "any, a kind or a comma list"}),
+    // `find`: a selector, or `text`, or `rows` (one row to open)
+    let mut find = selector_properties(true);
+    find.insert(
+        "text".into(),
+        json!({"type": "string", "description": "fuzzy name search across the vault; kind narrows it"}),
     );
-    let find = selector_properties(true);
-    let mut open = serde_json::Map::new();
-    open.insert("row".into(), json!({"type": "string", "description": "#n"}));
+    find.insert(
+        "rows".into(),
+        json!({"type": "string", "description": "#n: every fact and link of one row"}),
+    );
     let mut compute = serde_json::Map::new();
     compute.insert("op".into(), op.clone());
     compute.insert("field".into(), field.clone());
     compute.insert(
         "group".into(),
-        json!({"type": "string", "description": "field to group by"}),
+        json!({"type": "string", "description": "a field to group by, or a period of the kind's date: day, week, month, year"}),
     );
     compute.insert("rows".into(), rows.clone());
     compute.extend(selector_properties(full));
-    let verbs: Vec<&str> = VERBS.iter().map(|spec| spec.name).collect();
-    let mut act = serde_json::Map::new();
-    act.insert("verb".into(), json!({"type": "string", "enum": verbs}));
-    act.insert("rows".into(), rows.clone());
-    act.insert(
+    let more = json!({"type": "boolean", "description": "another call follows"});
+    let mut create = serde_json::Map::new();
+    create.insert(
+        "kind".into(),
+        json!({"type": "string", "description": "the kind of the new row"}),
+    );
+    create.insert(
         "args".into(),
-        json!({"type": "string", "description": "field: value lines, dates as date expressions (create: name and fields, kind as the kind param · edit: field: value, or body+: / description+: text to add · reschedule, add_to: to · remove_from: from · log: kind · reveal: field)"}),
+        json!({"type": "string", "description": "field: value lines, name first, dates as date expressions"}),
     );
-    act.insert(
-        "more".into(),
-        json!({"type": "boolean", "description": "another call follows"}),
+    create.insert("more".into(), more.clone());
+    let mut edit = serde_json::Map::new();
+    edit.insert("rows".into(), rows.clone());
+    edit.insert(
+        "args".into(),
+        json!({"type": "string", "description": "only the fields that change, as field: value lines, dates as date expressions; body+: or description+: adds text"}),
     );
-    act.extend(selector_properties(full));
+    edit.insert("more".into(), more.clone());
+    let mut verb_do = serde_json::Map::new();
+    verb_do.insert(
+        "verb".into(),
+        json!({"type": "string", "enum": crate::native::act::do_verbs()}),
+    );
+    verb_do.insert("rows".into(), rows.clone());
+    verb_do.insert(
+        "args".into(),
+        json!({"type": "string", "description": "at most one argument: reschedule to · add_to to · remove_from from · tag, untag label · log kind · reveal field; the other verbs take none"}),
+    );
+    verb_do.insert("more".into(), more);
     let mut answer = serde_json::Map::new();
     answer.insert("rows".into(), rows);
-    answer.insert("op".into(), op);
-    answer.insert("field".into(), field);
     answer.insert(
         "value".into(),
         json!({"type": "string", "description": "@n"}),
     );
-    answer.extend(selector_properties(full));
     let mut ask = serde_json::Map::new();
     ask.insert("question".into(), json!({"type": "string"}));
     ask.insert(
@@ -181,18 +195,11 @@ fn tools_with(full: bool) -> Vec<Value> {
     );
     vec![
         tool(
-            "search",
-            "Fuzzy name search across the vault, any kind.",
-            search,
-            &["text"],
-        ),
-        tool(
             "find",
-            "Rows a selector matches, numbered #n, as result @n.",
+            "Rows a selector matches, numbered #n, as result @n; text searches names; rows=#n opens one row.",
             find,
-            &["kind"],
+            &[],
         ),
-        tool("open", "Every fact and link of one row.", open, &["row"]),
         tool(
             "compute",
             &shared(
@@ -202,16 +209,26 @@ fn tools_with(full: bool) -> Vec<Value> {
             &["op"],
         ),
         tool(
-            "act",
-            &shared("Change the vault. Ends the turn unless more; selector params as in find."),
-            act,
-            &["verb"],
+            "create",
+            "Add a new row. Ends the turn unless more.",
+            create,
+            &["kind"],
+        ),
+        tool(
+            "edit",
+            "Change fields on rows. Ends the turn unless more.",
+            edit,
+            &["rows", "args"],
+        ),
+        tool(
+            "do",
+            "Run a verb on rows. Ends the turn unless more.",
+            verb_do,
+            &["verb", "rows"],
         ),
         tool(
             "answer",
-            &shared(
-                "Answer with rows, a value (op) or value=@n. Ends the turn; selector params as in find.",
-            ),
+            "End the turn with rows or a value already shown.",
             answer,
             &[],
         ),
@@ -233,7 +250,7 @@ fn tools_with(full: bool) -> Vec<Value> {
 /// example. `Sig` keeps Qwen's native `<tools>` block but gives each tool a
 /// one-line signature and no parameter schema; `Compact` is the described
 /// JSON schema (`tools.json`); `Full` repeats the described selector in every
-/// tool (`tools.full.json`). The call format, the parser and the runtime are
+/// tool (`tools.full.json`); `S2` is the block of the model trained before the regroup. The call format, the parser and the runtime are
 /// the same in all three.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum ToolsMode {
@@ -241,10 +258,12 @@ pub enum ToolsMode {
     Sig,
     Compact,
     Full,
+    /// The prompt S2 was trained on, the tools before the regroup (#1166).
+    S2,
 }
 
 impl ToolsMode {
-    pub const ALL: [Self; 3] = [Self::Sig, Self::Compact, Self::Full];
+    pub const ALL: [Self; 4] = [Self::Sig, Self::Compact, Self::Full, Self::S2];
 
     #[must_use]
     pub fn name(self) -> &'static str {
@@ -252,6 +271,7 @@ impl ToolsMode {
             Self::Sig => "sig",
             Self::Compact => "compact",
             Self::Full => "full",
+            Self::S2 => "s2",
         }
     }
 
@@ -268,6 +288,7 @@ pub fn tools_for(mode: ToolsMode) -> Vec<Value> {
         ToolsMode::Sig => tools_sig(),
         ToolsMode::Compact => tools(),
         ToolsMode::Full => tools_full(),
+        ToolsMode::S2 => tools_s2(),
     }
 }
 
@@ -295,30 +316,34 @@ const DATE_FIELDS: [&str; 9] = [
 /// optional names) and the one-line gloss after the dash.
 const SIGNATURES: [(&str, &[&str], &str); 8] = [
     (
-        "search",
-        &["text", "kind"],
-        "fuzzy name search; kind: any, a kind or a comma list",
-    ),
-    (
         "find",
-        &["selector"],
-        "rows a selector matches, numbered #n, as @n",
+        &["selector", "text", "rows"],
+        "rows a selector matches, numbered #n, as @n; text: fuzzy name search; rows: every fact and link of one row",
     ),
-    ("open", &["row"], "every fact and link of one row"),
     (
         "compute",
         &["op", "field", "group", "rows|selector"],
-        "a value as @n, or one per group value",
+        "a value as @n, or one per group value; group: a field, or a period of the date: day, week, month, year",
     ),
     (
-        "act",
-        &["verb", "rows|selector", "args", "more"],
-        "change the vault; ends the turn unless more; edit body+: or description+: adds text",
+        "create",
+        &["kind", "args", "more"],
+        "add a row; args: name first, then its fields; ends the turn unless more",
+    ),
+    (
+        "edit",
+        &["rows", "args", "more"],
+        "change fields on rows; args: only the fields that change, body+: or description+: adds text; ends the turn unless more",
+    ),
+    (
+        "do",
+        &["verb", "rows", "args", "more"],
+        "run a verb on rows; args: at most one (reschedule to, add_to to, remove_from from, tag and untag label, log kind, reveal field); ends the turn unless more",
     ),
     (
         "answer",
-        &["rows|selector", "op", "field", "value"],
-        "rows, a value or value=@n; ends the turn",
+        &["rows", "value"],
+        "rows or value=@n already shown; ends the turn",
     ),
     ("ask", &["question", "options"], "ends the turn"),
     ("decline", &["reason"], "ends the turn"),
@@ -385,6 +410,57 @@ pub fn signature(tool: &Value) -> String {
         line.push_str(&format!("; when: {{{}}}", fields.join(", ")));
     }
     line
+}
+
+/// THE TOOLS BLOCK S2 WAS TRAINED ON (#1166): `search`, `find`, `open`, `compute`, `act`, `answer`,
+/// `ask`, `decline`, as signatures. Frozen text, not generated: the verb list and the enums are
+/// the ones that model saw. A run of S2 passes `--tools s2` so its prompt is the one it learned;
+/// the runtime renames its calls (`legacy.rs`).
+const S2_SIGNATURES: [(&str, &str); 8] = [
+    (
+        "search",
+        "search(text, kind?) — fuzzy name search; kind: any, a kind or a comma list",
+    ),
+    (
+        "find",
+        "find(kind, name?, where?, when?, linked_to?, within?, exclude?, order?, limit?, trashed?) — rows a selector matches, numbered #n, as @n; when: {unit: minute|hour|day|week|month|year, rel, name, weekday, time, date, from, to, anchor: today|row}",
+    ),
+    ("open", "open(row) — every fact and link of one row"),
+    (
+        "compute",
+        "compute(op: count|sum|min|max, field?, group?, rows? | selector) — a value as @n, or one per group value",
+    ),
+    (
+        "act",
+        "act(verb: create|edit|reschedule|complete|reopen|cancel|delete|restore|star|unstar|add_to|remove_from|log|reveal|undo|tag|untag|unlink|archive|unarchive, rows? | selector, args?, more?) — change the vault; ends the turn unless more; edit body+: or description+: adds text",
+    ),
+    (
+        "answer",
+        "answer(rows? | selector, op?: count|sum|min|max, field?, value?) — rows, a value or value=@n; ends the turn",
+    ),
+    ("ask", "ask(question, options?) — ends the turn"),
+    (
+        "decline",
+        "decline(reason: out_of_scope|unbounded_destruction|fabricated_secret|never_mind|not_found) — ends the turn",
+    ),
+];
+
+/// The eight tools of S2's prompt: Qwen's function form, empty parameters.
+#[must_use]
+pub fn tools_s2() -> Vec<Value> {
+    S2_SIGNATURES
+        .iter()
+        .map(|(name, description)| {
+            json!({
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "description": description,
+                    "parameters": {"type": "object", "properties": {}},
+                }
+            })
+        })
+        .collect()
 }
 
 /// The eight tools as signatures: Qwen's function form, empty parameters.

@@ -91,7 +91,7 @@ impl Outcome {
 pub(crate) struct Obs {
     pub turn: usize,
     pub seq: usize,
-    /// A result block (`find`, `search`, `answer` rows, `open`): compacted.
+    /// A result block (`find` of any form, `answer` rows): compacted.
     pub result: bool,
     pub handle: Option<usize>,
     pub summary: String,
@@ -174,7 +174,7 @@ impl Obs {
     }
 }
 
-/// The longest result (`find`, `search`, `answer`) whose rows are in focus
+/// The longest result (`find`, `answer`) whose rows are in focus
 /// (`Session::focus`). A short list is on screen as a whole ("what's on
 /// tomorrow" then "push training to 7"); a longer one is a search result, not
 /// a subject. Four is the largest that keeps the held-out sessions' score:
@@ -284,7 +284,7 @@ fn is_invalid(tool: &str, outcome: &Outcome) -> bool {
     let recovery = outcome.effect.get("recovery").and_then(Value::as_str);
     (outcome.effect.contains_key("error") && !outcome.effect.contains_key("diff"))
         || recovery == Some("no_link")
-        || (tool == "act" && recovery == Some("empty"))
+        || (meta::is_write(tool) && recovery == Some("empty"))
 }
 
 /// The call the runtime last refused as invalid, as it ran (grounded), and
@@ -297,7 +297,7 @@ pub(crate) struct Rejected {
     pub text: String,
 }
 
-/// The `#n` a line opens with (`open`'s row line).
+/// The `#n` a line opens with (the row line of `find rows`).
 fn lead_number(text: &str) -> Option<usize> {
     text.strip_prefix('#')
         .and_then(|rest| rest.split_whitespace().next())
@@ -549,18 +549,27 @@ pub(crate) fn is_row_handle(part: &str) -> bool {
 
 pub(crate) fn tool_params(tool: &str) -> Vec<&'static str> {
     let mut out: Vec<&'static str> = match tool {
-        "search" => vec!["text", "kind"],
         "find" => Vec::new(),
-        "open" => vec!["row"],
         "compute" => vec!["op", "field", "group", "rows"],
-        "act" => vec!["verb", "rows", "args", "more"],
+        // `create` takes a kind and fields; the parameters it refuses it refuses by name, in a
+        // sentence that says where the value goes (`act_run`)
+        "create" => vec!["rows", "args", "more"],
+        "edit" => vec!["rows", "args", "more"],
+        "do" => vec!["verb", "rows", "args", "more"],
         "answer" => vec!["rows", "op", "field", "value"],
         "ask" => vec!["question", "options"],
         "decline" => vec!["reason"],
         _ => return Vec::new(),
     };
-    if matches!(tool, "find" | "compute" | "act" | "answer") {
+    // `create` names its kind (a selector parameter) and nothing else of it
+    if matches!(
+        tool,
+        "find" | "compute" | "create" | "edit" | "do" | "answer"
+    ) {
         out.extend(meta::SELECTOR_PARAMS);
+    }
+    if tool == "find" {
+        out.extend(["text", "rows"]);
     }
     out
 }
@@ -1960,6 +1969,12 @@ impl Session {
         unreadable: Option<String>,
         think: Option<&str>,
     ) -> Value {
+        // a call in a name S2 wrote is renamed once, here (`legacy.rs`)
+        let renamed = crate::native::legacy::modernize(tool, args);
+        let (tool, args) = match &renamed {
+            Some((tool, args)) => (*tool, args),
+            None => (tool, args),
+        };
         if self.turn == 0 {
             self.user("");
         }
@@ -2187,7 +2202,7 @@ impl Session {
     }
 
     /// `rows you can still use: #9 task "Pay rent", …` after a step that was
-    /// rejected (an `error:`) or empty (a find or search with no rows, an act
+    /// rejected (an `error:`) or empty (a find with no rows, a write
     /// that matched none) and names no row itself: this turn's rows, newest
     /// block first, then the turn's pre-grounded rows, then the previous turn's.
     /// At most `RESTATE_ROWS` rows.
@@ -2204,7 +2219,7 @@ impl Session {
             && ["#", "@", "row", "shown"]
                 .iter()
                 .any(|word| lower.contains(word));
-        let empty = (matches!(tool, "find" | "search")
+        let empty = (tool == "find"
             && outcome
                 .effect
                 .get("rows")
@@ -2533,6 +2548,11 @@ impl Session {
     /// asks before sending, to resample a repeat instead of spending it.
     #[must_use]
     pub fn peek_repeat(&self, tool: &str, args: &Value) -> Option<usize> {
+        let renamed = crate::native::legacy::modernize(tool, args);
+        let (tool, args) = match &renamed {
+            Some((tool, args)) => (*tool, args),
+            None => (tool, args),
+        };
         let canonical = format!("{tool} {}", canonical_json(args));
         (!self.turn_over && self.last_call.as_deref() == Some(canonical.as_str()))
             .then_some(self.repeats)
@@ -2542,11 +2562,12 @@ impl Session {
     fn run_tool(&mut self, tool: &str, args: &Map<String, Value>) -> Result<Outcome, String> {
         self.sealed_moves.clear();
         match tool {
-            "search" => crate::native::search::search(self, args),
+            "find" if args.contains_key("text") || args.contains_key("rows") => {
+                self.find_by_text_or_rows(args)
+            }
             "find" => self.find(args),
-            "open" => self.open_row(args),
             "compute" => self.compute(args, false),
-            "act" => self.act(args),
+            "create" | "edit" | "do" => self.act(tool, args),
             "answer" => self.answer(args),
             "ask" => self.ask(args),
             "decline" => self.decline(args),
@@ -2608,6 +2629,27 @@ impl Session {
                     current = fix.args;
                 }
             }
+        }
+    }
+
+    /// `find text=…` (fuzzy name search; `kind` narrows it) or `find rows=#n` (every fact and link
+    /// of one row): the two forms of `find` that carry no selector.
+    fn find_by_text_or_rows(&mut self, args: &Map<String, Value>) -> Result<Outcome, String> {
+        let text = args.contains_key("text");
+        if text && args.contains_key("rows") {
+            return Err("error: find takes text or rows, not both.".to_owned());
+        }
+        let own: &[&str] = if text { &["text", "kind"] } else { &["rows"] };
+        if let Some(other) = args.keys().find(|key| !own.contains(&key.as_str())) {
+            return Err(format!(
+                "error: find {} takes no {other}; use find with a selector, and no text or rows, to narrow.",
+                if text { "text" } else { "rows" }
+            ));
+        }
+        if text {
+            crate::native::search::search(self, args)
+        } else {
+            self.open_row(args)
         }
     }
 
@@ -2686,11 +2728,14 @@ impl Session {
     }
 
     fn open_row(&mut self, args: &Map<String, Value>) -> Result<Outcome, String> {
-        let handle = arg_str(args, "row").ok_or("error: open needs row=#n.")?;
-        if handle.contains(',') || handle.starts_with('@') {
-            return Err("error: open takes exactly one row, #n.".to_owned());
+        let handles = args.get("rows").map(handle_list).unwrap_or_default();
+        let [handle] = handles.as_slice() else {
+            return Err("error: find rows takes exactly one row, #n.".to_owned());
+        };
+        if !is_row_handle(handle) {
+            return Err("error: find rows takes exactly one row, #n.".to_owned());
         }
-        let key = self.resolve_row(&handle)?;
+        let key = self.resolve_row(handle)?;
         let row = self.world.rows[&key].clone();
         let number = self.number(&key);
         let header = render::row_line(number, None, &row, self.today());
@@ -3055,6 +3100,7 @@ impl Session {
             }
             if let Some(group) = group.as_deref()
                 && kind.spec().field(group).is_none()
+                && !(crate::native::values::PERIODS.contains(&group) && kind.spec().date.is_some())
             {
                 return Err(whr::no_field(kind, group));
             }

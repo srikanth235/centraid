@@ -282,7 +282,7 @@ fn the_prompt_describes_the_selector_once_and_the_full_schemas_match_its_interfa
             assert_eq!(schema["type"], b[param]["type"], "{name}.{param}");
             assert_eq!(schema["enum"], b[param]["enum"], "{name}.{param}");
         }
-        if ["compute", "act", "answer"].contains(&name) {
+        if name == "compute" {
             assert!(
                 short["function"]["description"]
                     .as_str()
@@ -296,10 +296,10 @@ fn the_prompt_describes_the_selector_once_and_the_full_schemas_match_its_interfa
                 serde_json::json!({"type": "object", "description": "date expression, as in find"}),
                 "{name}"
             );
-            assert_eq!(b["when"], props(&full[1])["when"], "{name}");
+            assert_eq!(b["when"], props(&full[0])["when"], "{name}");
         }
     }
-    let find = props(&compact[1]);
+    let find = props(&compact[0]);
     assert!(find["where"]["description"].is_string());
     assert!(find["when"]["properties"]["unit"]["enum"].is_array());
 }
@@ -369,7 +369,7 @@ fn a_signature_names_every_parameter_its_schema_has() {
             "{name}: the signature and the schema differ"
         );
     }
-    let find = sig[1]["function"]["description"].as_str().unwrap();
+    let find = sig[0]["function"]["description"].as_str().unwrap();
     assert!(
         find.contains("when: {unit: minute|hour|day|week|month|year, rel,"),
         "{find}"

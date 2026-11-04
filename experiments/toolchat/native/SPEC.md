@@ -51,20 +51,24 @@ Non-goals: the model never writes SQL; no reference operators (`the other one`, 
 
 ## 4. Tools
 
-`rows` accepts a comma list of `#n` and `@n` (mixed). `kind` accepts one kind or a comma list; `any` is allowed only in `search`. `find`'s selection parameters are called the **selector** and are shared by `answer` and `act`, so the common case is one step.
+Eight tools ([#1166](https://github.com/srikanth235/centraid/issues/1166)): `find`, `compute`, `create`, `edit`, `do`, `answer`, `ask`, `decline`. The regroup replaced `search`, `open` and `act` of the first design: `search` and `open` are the `text` and `rows` forms of `find`; `act` is `create`, `edit` and `do`, the last naming the verb. Where a later section says "an act", "a write" or "act verbs" it means a call to `create`, `edit` or `do`; where it says `search` or `open` it means `find text=…` or `find rows=#n`. The model S2 was trained on writes the old names; `crates/assist/src/native/legacy.rs` renames them as a call enters, and `--tools s2` gives it the tools block it learned.
+
+`rows` accepts a comma list of `#n` and `@n` (mixed). `kind` accepts one kind or a comma list; `any` is allowed only in `find text=…`. `find`'s selection parameters are called the **selector**.
 
 | tool | parameters | returns | ends turn |
 | --- | --- | --- | --- |
-| `search` | `text`, `kind?` | ranked, fuzzy rows of any kind, with their numbered links | no |
-| `find` | selector | the matching rows as `@n`; a name that reaches nothing is a plain miss with a hint, never an answer (§4.8) | no |
-| `open` | `row` (one `#n`) | every fact of the row and its links, with counts | no |
-| `compute` | `op`, `field?`, `group`, `rows` or selector | `@n` = one number per group | no |
-| `act` | `verb`, `rows` or selector, `args?`, `more?` | what changed, dates resolved | yes, unless `more=true`; the runtime also ends it itself for a write over the cap, for a refusal of the vault (§4.6) and for a selector that fits several rows or none (§4.8) |
-| `answer` | `rows` or selector; or `op`, `field?`, `rows` or selector; or `value=@n` | — | yes |
+| `find` | a selector; or `text` (+ `kind?`); or `rows` (one `#n`) | the matching rows as `@n`, a name that reaches nothing being a plain miss with a hint, never an answer (§4.8); `text` is ranked, fuzzy rows of any kind with their numbered links; `rows` is every fact of the row and its links, with counts | no |
+| `compute` | `op` (count · sum · avg · min · max), `field?`, `group?` (a field, or `day` · `week` · `month` · `year` of the kind's date), `rows` or selector | `@n` = one number per group | no |
+| `create` | `kind`, `args` (that kind's fields, `name` first), `more?` | what was added, dates resolved | yes, unless `more=true`; the runtime also ends it itself for a refusal of the vault (§4.6) |
+| `edit` | `rows`, `args` (only the fields that change), `more?` | what changed, dates resolved | as `create`; also for a selector that fits several rows or none (§4.8) |
+| `do` | `verb`, `rows`, `args?` (at most one argument), `more?` | what changed | as `edit`; also for a write over the cap (§4.6) |
+| `answer` | `rows` or `value=@n` | — | yes |
 | `ask` | `question`, `options?` (rows); the model's asks have no options (§4.8) | — | yes |
 | `decline` | `reason` (out_of_scope · unbounded_destruction · fabricated_secret · never_mind · not_found); the model's declines are the first four (§4.8) | — | yes |
 
-`more=true` on `act` means "another call follows" — another `act`, or an `answer` ("mark it done and tell me what's left"), or a `find`. Without it the turn ends. A turn the runtime ends itself (§4.6) ends whatever `more` says.
+`more=true` on a write means "another call follows" — another write, or an `answer` ("mark it done and tell me what's left"), or a `find`. Without it the turn ends. A turn the runtime ends itself (§4.6) ends whatever `more` says.
+
+The runtime still reads what S2 sent to `edit`, `do`, `answer` and `compute` besides these parameters: a selector in place of `rows`, and `answer` with `op`. The tools block does not offer them and a model trained on the new data does not write them; the per-step grammar is where they stop being decodable.
 
 ### 4.1 Selector
 
@@ -82,7 +86,7 @@ Non-goals: the model never writes SQL; no reference operators (`the other one`, 
 
 ### 4.2 Verbs
 
-`act` verbs — one per effect, dispatched by the kind of `rows`. The table is GENERATED from the domain commands the gold corpus uses; this is the expected shape:
+The verbs — one per effect, dispatched by the kind of `rows`. `create` and `edit` are tools of their own; every other verb is named to `do`, with at most one argument, by what the argument is: none (`complete` · `reopen` · `cancel` · `delete` · `restore` · `star` · `unstar` · `archive` · `unarchive` · `unlink` · `undo`), a date (`reschedule`), a row (`add_to` · `remove_from`), a label (`tag` · `untag`), a choice (`log` · `reveal`). The table is GENERATED from the app manifests (`contracts/assist/verbs.json`); this is the expected shape. A new action uses an existing verb or an `edit` of a field wherever it can (re-categorising a transaction is `edit category`, logging a workout is `create workout`); a new verb is for an action that is no field change and has its own command.
 
 | verb | applies to | args |
 | --- | --- | --- |
@@ -98,7 +102,7 @@ Non-goals: the model never writes SQL; no reference operators (`the other one`, 
 | `reveal` | locker item | `field: password · code …` |
 | `undo` | the previous turn's writes | — |
 
-- Several writes in one message: each `act` but the last has `more=true`. One write names every row it applies to.
+- Several writes in one message: each write but the last has `more=true`. One write names every row it applies to.
 - **`undo`** reverts every write of the immediately previous turn of this session, as one unit, once. A turn whose writes were all already-so (`already: …`, nothing changed) is not a write and is looked past: `restore`, `restore` again, `undo` undoes the first restore, and so do two already-so turns in a row. A turn that read, asked, declined or undid something between ends it, as before. A second `undo`, or an `undo` with no write to revert, returns `error: nothing to undo`. Undo across sessions is out of scope.
 - **Already-so writes** (`complete` on a completed task, `restore` on a live row, `star` on a starred row, `cancel` on a cancelled event) are not errors: the runtime changes nothing and returns `already: #12 task "Book the cabin" is completed (2026-06-01)`. The model answers with that. Gold for such turns is "no vault change, answer states the current state".
 - **Impossible writes** (`complete` on an event, `reschedule` on a person) are schema errors (§5).

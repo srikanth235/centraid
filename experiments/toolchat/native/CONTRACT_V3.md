@@ -1,6 +1,6 @@
 # Contract v3: the slot trace
 
-Status: current. The trace is the only think format: `authored/build.py` writes it, `train/fmt.py` and `train/decode.py` read it, and the current model is trained on it. Issue [#1044](https://github.com/srikanth235/centraid/issues/1044). Section 7 (v3.1) adds the picks, the typed `where` and the runtime's compile step; section 8 (v4) cuts the slots the model writes to the ones the harness cannot infer.
+Status: current. The trace is the only think format: `authored/build.py` writes it, `train/fmt.py` and `train/decode.py` read it, and the current model is trained on it. Issue [#1044](https://github.com/srikanth235/centraid/issues/1044). Section 7 (v3.1) adds the picks, the typed `where` and the runtime's compile step; section 8 (v4) cuts the slots the model writes to the ones the harness cannot infer; section 9 regroups the tools ([#1166](https://github.com/srikanth235/centraid/issues/1166)) and says what that changed in every section above.
 
 ## 1. Why
 
@@ -13,7 +13,7 @@ One `label: value` line per slot, in a fixed order; a slot that the call does no
 ```
 retry: rejected                               only after a rejected call
 intent: read|count|write|ask|decline "<deciding phrase>"
-via:    find|search|open|compute              the tool, when it is not the intent's own (read, count -> answer; write -> act)
+via:    find|compute                          the tool, when it is not the intent's own (read, count -> answer; write -> the tool of its verb: create, edit, else do); S2 wrote search and open (section 9)
 verb:   <verb>                                writes: create edit reschedule complete reopen cancel delete restore star unstar add_to remove_from log reveal undo
 scope:  one|some|all "<qualifier>"            a write on rows that already exist
 refer:  it|both|that|nth "<phrase>" -> @k|#n  the call names rows an earlier turn showed
@@ -31,7 +31,7 @@ rows: row: value: options: question: reason:  the argument; `rows` / `row` are l
 ```
 
 - Every value is a closed word, a quoted span of the user message, or an argument as the call carries it. Nothing the runtime can compute: no row lists, no resolved dates. A slot depends only on the message, the context and the slots above it.
-- `intent`: what the call is for; the quote is the deciding phrase. A lookup (`find`, `search`, `open`) carries the intent of the call it prepares, read off the turn's own next call. When an `ask` or a `decline` follows, the message alone decides.
+- `intent`: what the call is for; the quote is the deciding phrase. A lookup (`find`) carries the intent of the call it prepares, read off the turn's own next call. When an `ask` or a `decline` follows, the message alone decides.
 - `scope`: written on an `act` that names existing rows, not on `create` or `undo`. One row is `one`. More than `ROW_CAP` (12) rows is `all`. A qualifier such as "except the padel one" is `some`.
 - `refer`: written when the call names rows an earlier turn showed and the message does not name them. `refer: both "both" -> @3` makes the call `rows=@3`, not two `#n` the model has to guess.
 - `target`: also carries attribute spans and new values ("over fifty dollars", "Dr Patel"). A value the message does not say but the context does is sourced there.
@@ -44,7 +44,7 @@ A date is written key by key in the call's own order: `{"unit":"week","rel":1,"w
 
 The compiler from a think to its call is ONE implementation, the runtime's (`crates/assist/src/native/think.rs`, `think::compile_think(think, dates, mode)`; the Python side calls it through `nativetools think`, `runtime_think.compile_think`, and keeps no compiler of its own). It returns `{"tool", "args"}` and is a pure function of the think text (and, for a `dates[i]`, of the prompt's `dates:` line). The tool is `via`, else the intent's own. The arguments come out in `CALL_ORDER`, the majority order of the authored calls (the arguments of a record are written in that order). The rows argument is the explicit `rows`/`row` slot, else the `ok` rows of `pick`, else the handles of a real `refer`, and only when no other handle slot (`linked_to`, `within`, `value`, `exclude`, `options`) is explicit.
 
-- Data: `derive_trace3` makes the text and refuses (reason `roundtrip`, or `tool`, `date-form`, `raw-arg`, `body-line`) a call whose compiled call is not the authored one. `build.py` reports the refusal and leaves the session out; it also calls `fmt.call_of_think`, the decoder's function, on every record; `derive_trace3` round-trips its own text through the same compiler (`runtime_think.compile_think`).
+- Data: (Section 9: `via` and the tool of a write name the regrouped tools; the round trip below is unchanged.) `derive_trace3` makes the text and refuses (reason `roundtrip`, or `tool`, `date-form`, `raw-arg`, `body-line`) a call whose compiled call is not the authored one. `build.py` reports the refusal and leaves the session out; it also calls `fmt.call_of_think`, the decoder's function, on every record; `derive_trace3` round-trips its own text through the same compiler (`runtime_think.compile_think`).
 - Inference: `decode.Decoder` writes the call after `</think>` with `fmt.call_of_think`, one forced token at a time; a think that does not state a whole call leaves the call to the model (decoding is free, SPEC §9).
 - Golden: `authored/golden_v3.json` holds one (think, call) per distinct call shape of the train data it was generated from (937 shapes); `crates/nativetools/tests/think.rs`, `authored/test_trace.py` and `train/test_trace3.py` compile each (the decoder renders each as the data does). Regenerate with `python3 authored/trace3_check.py golden DATA.jsonl.gz`.
 
@@ -104,7 +104,7 @@ A session passes only if every turn does, so each slot the model writes is a dec
 ```
 retry: rejected | <slot>                       as in v3.1
 intent: read|count|write|ask|decline "<phrase>"
-via:   search|open|compute                     `find` is gone: a write, count or read that names a selector is looked up by the call itself
+via:   find|compute                            a lookup step; a write, count or read may also name its selector in the call itself (S2: search|open, section 9)
 verb:  <verb>                                  writes
 pick:  #n (<reason>)                           ONE row, and why it is the one: name | kind | date | focus | created | asked | nick
 rows:  @n | #a, #b                             a result, or several rows (`row:` for `open`); never beside a pick
@@ -129,7 +129,7 @@ The slot order is `trace.SLOT_ORDER4`: the row decision (`pick`, `rows`, `row`) 
 
 **One version per think.** `think::parse_any(text, mode)` (the compiler's; `trace.parse_any` reads the same text for the data side): a think with a construct of one version only (v3.1: `scope`, `refer`, `target`, `via: find`, a candidate pick; v4: a one-row pick) is that version whatever the mode, so data of both is readable and the old model's thinks still compile; any other think is read in the mode (`NATIVE_TRACE`, `trace.default_mode()`, default `v4`). The two versions differ only in what the compile step infers. A parsed v4 trace carries `v: 4` (`pick_reason`), `slots_json` sends it as `"trace": "v4"`, and the runtime reads no `trace` as v3.1.
 
-**The converter and the round trip.** `think::v4_think(think, dates, context)` (the runtime's; Python: `runtime_think.v4_think(think, history, dates)`, which passes the conversation's minimal context: the turn's message, the `focus:` line and the rows the think names) rewrites a v3.1 think: the rows the v3.1 trace states (its `rows` slot, else the `ok` rows of the pick, else the handles of the refer) become a pick when they are one `#n` and a `rows` slot otherwise, and an act's `kind` goes when the verb fixes it. It then compiles both thinks and skips (`V4Skip`) unless the calls are the same, so a v4 think in the data always compiles to the v3.1 call. A lookup (`via: find`, 4.7% of the steps measured below) has no v4 form: v4 has no lookup step, and the step keeps its v3.1 think until the sessions that use it are regenerated with the selector in the call itself. `trace3_check.py v4 DATA` converts the first N turns of a built file, compiles both thinks with the stateless compiler and through the runtime's `compile` op over the session's own world (`stated` of the v4 think must be the record's call, `call` the v3.1 think's), and measures the tokens. `trace3_check.py golden4` adds `think4` to every row of `golden_v3.json` (the pick reason is the runtime's hint, there being no context; `golden` from data writes the real one).
+**The converter and the round trip.** `think::v4_think(think, dates, context)` (the runtime's; Python: `runtime_think.v4_think(think, history, dates)`, which passes the conversation's minimal context: the turn's message, the `focus:` line and the rows the think names) rewrites a v3.1 think: the rows the v3.1 trace states (its `rows` slot, else the `ok` rows of the pick, else the handles of the refer) become a pick when they are one `#n` and a `rows` slot otherwise, and an act's `kind` goes when the verb fixes it. It then compiles both thinks and skips (`V4Skip`) unless the calls are the same, so a v4 think in the data always compiles to the v3.1 call. A lookup (`via: find`) converts like any other step; the 30 lookups of the first measure below were skipped when v4 had no lookup step (section 9 gives `find` back). `trace3_check.py v4 DATA` converts the first N turns of a built file, compiles both thinks with the stateless compiler and through the runtime's `compile` op over the session's own world (`stated` of the v4 think must be the record's call, `call` the v3.1 think's), and measures the tokens. `trace3_check.py golden4` adds `think4` to every row of `golden_v3.json` (the pick reason is the runtime's hint, there being no context; `golden` from data writes the real one).
 
 **Decoding.** The v4 think is the v3.1 slots in the v4 order, with no `scope`, `refer` or `target`, `via` of `search|open|compute`, and `pick: #n (reason)`; `fmt.call_of_think` follows `fmt.trace_mode()`. `hf_backend` sends the slots of either version to `compile` (`parse_any`). Decision tokens: `THINK_LABELS` stand, the hard tier of the think is the row number of `pick` (`scope` and `refer` words are no longer there).
 
@@ -145,3 +145,23 @@ The slot order is `trace.SLOT_ORDER4`: the row decision (`pick`, `rows`, `row`) 
 | Think hard-tier tokens per turn | 6.15 | 1.76 (-71.4%) |
 | Call decision tokens per turn | 13.57 | 13.57 |
 | Trained tokens per turn | 121.34 | 105.85 (-12.8%) |
+
+## 9. The tools regrouped ([#1166](https://github.com/srikanth235/centraid/issues/1166))
+
+The runtime has eight tools: `find`, `compute`, `create`, `edit`, `do`, `answer`, `ask`, `decline` (`meta::TOOLS`). The model S2 and the data it was trained on (sections 1 to 8) use the first design. Nothing in sections 1 to 8 changes except the tool a call names:
+
+| S2 wrote | Now | Through |
+| --- | --- | --- |
+| `search text kind?` | `find text kind?` | `via: search` compiles to it |
+| `open row` | `find rows` (one `#n`) | `via: open` and the `row` slot compile to it |
+| `find <selector>` | `find <selector>` | unchanged; `via: find` is valid in v4 again |
+| `act verb=create` | `create kind args` | the tool of the verb; `verb` is not an argument |
+| `act verb=edit` | `edit rows args` | as `create` |
+| `act verb=<any other>` | `do verb rows args` | `do` takes at most one argument |
+| `answer op field` or a selector | `compute` then `answer rows` or `answer value=@n` | S2's form still runs (`Session::answer`) |
+| `compute` | `compute` (`op` adds `avg`; `group` adds `day` · `week` · `month` · `year`) | |
+
+- **Compile.** `intent: write` with `verb: create` is `create`, `edit` is `edit`, any other verb `do`; a write with no verb slot is refused (`a write without a verb slot`). `think::compile_think` and `compile.rs` give the same call for either spelling of `via`. `CALL_ORDER` has no `row`: the row a `find` opens is `rows`, the `row` slot of S2 thinks being kept as an input spelling.
+- **Verbs.** The catalog's live verbs are unchanged: `do` runs every verb but `create` and `edit` (`act::do_verbs`), which takes the issue's table: none (complete, reopen, cancel, delete, restore, star, unstar, archive, unarchive, unlink, undo), a date (`reschedule`), a row (`add_to`, `remove_from`), a label (`tag`, `untag`), a choice (`log`, `reveal`). No verb was added or removed.
+- **S2.** `legacy::modernize` renames a call in S2's names as it enters `Session::step`; `--tools s2` (`prompt::ToolsMode::S2`) renders the tools block S2 learned. What S2 loses: nothing it was trained to do fails. What differs: its errors and `Send` repairs name the new tools, and `find` by text or row no longer passes through the selector repairs.
+- **Not yet strict.** `edit`, `do` and `answer` still read a selector, and `answer` an `op`, as S2 sends them; the tools block offers only `rows`, `value` and the fields. The per-step grammar is where the rest stops being decodable.

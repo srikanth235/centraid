@@ -5,7 +5,7 @@ What the model sees and how its tokens are written, as the Rust runtime states i
 | File | What it is | Who reads it |
 | --- | --- | --- |
 | `identity.json` | The model's identity: the tokenizer id and the chat and tool-call markers (`<\|im_start\|>`, `<\|im_end\|>`, `<think>`, `<tool_call>`, `<function=`, `<parameter=`, `<tool_response>`, `<tools>`). One Rust constant, `identity::MODEL`. | `experiments/toolchat/native/render.py`, and through it every trainer and scorer module |
-| `tools.json` | The eight tools in Qwen's function form, compact schemas. | `authored/cells.py`, `train/train.py`, `train/smoke.py` |
+| `tools.json` | The eight tools (`find`, `compute`, `create`, `edit`, `do`, `answer`, `ask`, `decline`) in Qwen's function form, compact schemas. | `authored/cells.py`, `train/train.py`, `train/smoke.py` |
 | `tools.full.json` | The same tools with the long descriptions. | No script today; the runtime's `full` tools mode and review |
 | `kind_card.txt` | One line per kind: its fields, links, verbs and balance. | `authored/cells.py`, `authored/gen/drills.py` |
 | `date_expr.schema.json` | The JSON Schema of a date expression. | The authoring brief (`authored/BRIEF.md`) |
@@ -14,6 +14,7 @@ What the model sees and how its tokens are written, as the Rust runtime states i
 | `errors.json` | The error table: every observation a bad call earns, with its example. | `authored/gen/common.py`, `authored/gen/recover.py` |
 | `prompt.sig.txt` | The system turn over the fixture world in the default (`sig`) tools mode. | `authored/cells.py` |
 | `prompt.compact.txt`, `prompt.full.txt` | The same turn in the other two tools modes. | No script today; review |
+| `prompt.s2.txt` | The same turn with the tools block the model S2 was trained on (`search`, `find`, `open`, `compute`, `act`, `answer`, `ask`, `decline`), frozen text (`--tools s2`). | No script today; review |
 
 ## Regenerate
 
