@@ -110,20 +110,21 @@ fn a_model_that_declines_everything_passes_the_declines_and_fails_the_reads() {
 
 #[test]
 fn a_scripted_read_is_scored_by_its_effect_and_its_arguments() {
-    let answer = call("answer", &[("kind", "person"), ("name", "Neha")]);
+    let find = call("find", &[("kind", "person"), ("name", "Neha")]);
+    let answer = call("answer", &[("rows", "@1")]);
     let source = source(vec![session("S", vec![who_is_neha()])]);
-    let results = run(&source, &Script(Mutex::new(vec![answer])));
+    let results = run(&source, &Script(Mutex::new(vec![find, answer.clone()])));
     let turn = &results[0].turns[0];
     assert!(turn.pass, "{:?} ended {}", turn.problems, turn.ending);
     assert!(turn.tool_ok);
     assert_eq!(turn.constraints, 1);
     assert_eq!(turn.args["rows"], "right");
     assert_eq!(turn.args["date"], "absent");
-    assert_eq!(turn.calls.len(), 1);
+    assert_eq!(turn.calls.len(), 2);
 
     // the same effect from the wrong person is a failed turn and a wrong `rows` argument
-    let wrong = call("answer", &[("kind", "person"), ("name", "Ravi")]);
-    let results = run(&source, &Script(Mutex::new(vec![wrong])));
+    let wrong = call("find", &[("kind", "person"), ("name", "Ravi")]);
+    let results = run(&source, &Script(Mutex::new(vec![wrong, answer])));
     let turn = &results[0].turns[0];
     assert!(!turn.pass && turn.tool_ok);
     assert_eq!(turn.args["rows"], "wrong");

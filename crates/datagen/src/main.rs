@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use centraid_datagen::ambiguity::{self, Ambiguity};
 use centraid_datagen::world::{World, WorldSpec, plan, plan_sized};
-use centraid_datagen::{Catalog, Split};
+use centraid_datagen::{Catalog, Split, run};
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 
@@ -41,6 +41,25 @@ enum Command {
         /// Also seed every world into a vault file `<out>/<split>/<id>.vault`.
         #[arg(long)]
         vaults: bool,
+    },
+    /// Draw intents and solve them against the runtime (stages 2 and 3): sessions in the shape
+    /// `assist-eval` reads, plus a coverage report.
+    Intents {
+        #[arg(long)]
+        seed: u64,
+        #[arg(long)]
+        out: PathBuf,
+        /// Worlds per split as `train,val,test` (default 48,6,6).
+        #[arg(long, value_delimiter = ',')]
+        counts: Option<Vec<usize>>,
+        /// Sessions to keep per world, one number or `train,val,test`; never fewer than one per
+        /// live grid cell.
+        #[arg(long, value_delimiter = ',')]
+        per_world: Option<Vec<usize>>,
+        /// Sessions to keep per split as `train,val,test` (the first run: 18000,1000,1000);
+        /// sets `--per-world` from the world counts.
+        #[arg(long, value_delimiter = ',')]
+        sessions: Option<Vec<usize>>,
     },
     /// Print how ambiguous each world is under its settings.
     Ambiguity {
@@ -124,6 +143,41 @@ fn main() -> Result<()> {
                 out.join("manifest.json"),
                 serde_json::to_string_pretty(&manifest)?,
             )?;
+        }
+        Command::Intents {
+            seed,
+            out,
+            counts,
+            per_world,
+            sessions,
+        } => {
+            let catalog = Catalog::build()?;
+            let counts: [usize; 3] = match counts.as_deref() {
+                None => [48, 6, 6],
+                Some([a, b, c]) => [*a, *b, *c],
+                Some(_) => anyhow::bail!("--counts takes three numbers: train,val,test"),
+            };
+            let per_world: [usize; 3] = match (sessions.as_deref(), per_world.as_deref()) {
+                (Some([a, b, c]), _) => {
+                    let per = |total: usize, worlds: usize| total.div_ceil(worlds.max(1));
+                    [per(*a, counts[0]), per(*b, counts[1]), per(*c, counts[2])]
+                }
+                (Some(_), _) => anyhow::bail!("--sessions takes three numbers: train,val,test"),
+                (None, Some([n])) => [*n; 3],
+                (None, Some([a, b, c])) => [*a, *b, *c],
+                (None, Some(_)) => anyhow::bail!("--per-world takes one number or three"),
+                (None, None) => [0; 3],
+            };
+            let scratch = tempfile::tempdir()?;
+            let config = run::Config {
+                seed,
+                counts,
+                per_world,
+                cell_limit: None,
+            };
+            let generated = run::generate(&config, &catalog, scratch.path())?;
+            let report = run::write(&out, &config, &catalog, &generated)?;
+            print!("{report}");
         }
         Command::Ambiguity { seed, counts, json } => {
             let rows: Vec<(World, Ambiguity)> = specs(seed, counts.as_deref())?

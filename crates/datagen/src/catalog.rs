@@ -68,8 +68,12 @@ const TOOLS: &[(&str, &str)] = &[
     ("decline", "reason"),
 ];
 
-/// The compute ops of #1166. `live` as for tools.
+/// The compute ops of #1166. `live` as for tools, except `group`: the runtime runs it as the
+/// `group` argument of `compute` (by a field or a period of the date), not as an op of its own.
 const OPS: &[&str] = &["count", "sum", "avg", "min", "max", "group", "compare"];
+
+/// Ops the runtime runs as an argument of `compute`, not as a value of `op`.
+const OP_ARGUMENTS: &[&str] = &["group"];
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Field {
@@ -133,6 +137,9 @@ pub struct Catalog {
     pub tools: Vec<Tool>,
     /// Stock lists the vault founds: `category` notations and `workout_kind` keys.
     pub lists: BTreeMap<String, Vec<String>>,
+    /// The title each stock key is shown under (`food.groceries` is `Groceries`), which a budget's
+    /// name and a group's key carry.
+    pub titles: BTreeMap<String, String>,
     /// The Locker fields `reveal` opens. They are sealed: no world, prompt or record carries one.
     pub sealed: Vec<String>,
 }
@@ -164,6 +171,24 @@ fn stock_list(prefix: &str) -> Vec<String> {
         };
         if tail.contains(&format!("', '{key}'")) && !found.iter().any(|k| k == key) {
             found.push(key.to_owned());
+        }
+    }
+    found
+}
+
+/// `key -> title` of the stock concepts under `prefix`: the title rows of the founding schema read
+/// `('category:food.groceries', 'category', 'Groceries', <stamp>, <stamp>)`.
+fn stock_titles(prefix: &str) -> BTreeMap<String, String> {
+    let mut found = BTreeMap::new();
+    for line in BASELINE.lines() {
+        let Some(rest) = line.trim().strip_prefix("('") else {
+            continue;
+        };
+        let fields: Vec<&str> = rest.split("', '").collect();
+        if let [id, _, title, _, _] = fields.as_slice()
+            && let Some(key) = id.strip_prefix(prefix)
+        {
+            found.insert(key.to_owned(), (*title).to_owned());
         }
     }
     found
@@ -268,6 +293,8 @@ impl Catalog {
         let mut lists = BTreeMap::new();
         lists.insert("category".to_owned(), stock_list("category:"));
         lists.insert("workout_kind".to_owned(), stock_list("workout_kind:"));
+        let mut titles = stock_titles("category:");
+        titles.extend(stock_titles("workout_kind:"));
         Ok(Self {
             apps,
             kinds,
@@ -276,7 +303,7 @@ impl Catalog {
                 .iter()
                 .map(|name| Op {
                     name: (*name).to_owned(),
-                    live: meta::OPS.contains(name),
+                    live: meta::OPS.contains(name) || OP_ARGUMENTS.contains(name),
                 })
                 .collect(),
             tools: TOOLS
@@ -288,6 +315,7 @@ impl Catalog {
                 })
                 .collect(),
             lists,
+            titles,
             sealed,
         })
     }
