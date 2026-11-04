@@ -37,10 +37,12 @@ struct Args {
     rescore: Vec<PathBuf>,
     tools: ToolsMode,
     resume: bool,
+    gpu_layers: Option<u32>,
+    label: Option<String>,
 }
 
 const USAGE: &str = "usage: assist-eval (--model GGUF | --stub) --set SET.jsonl [--worlds DIR]… [--out PREFIX] \
-[--tools s2|sig|compact|full] [--threads N] [--limit N] [--only ID,ID] [--shard K/N] [--resume]\n       assist-eval --rescore RUN.sessions.jsonl… --set SET.jsonl [--out PREFIX]";
+[--tools s2|sig|compact|full] [--threads N] [--limit N] [--only ID,ID] [--shard K/N] [--resume] [--gpu-layers N] [--label TEXT]\n       assist-eval --rescore RUN.sessions.jsonl… --set SET.jsonl [--out PREFIX]";
 
 fn args() -> Result<Args> {
     let native = PathBuf::from("experiments/toolchat/native");
@@ -60,6 +62,10 @@ fn args() -> Result<Args> {
         // the eight tools; `--tools s2` scores the model shipping today
         tools: ToolsMode::Sig,
         resume: false,
+        label: None,
+        gpu_layers: std::env::var("ASSIST_EVAL_GPU_LAYERS")
+            .ok()
+            .and_then(|n| n.parse().ok()),
     };
     let mut argv = std::env::args().skip(1);
     while let Some(flag) = argv.next() {
@@ -99,6 +105,10 @@ fn args() -> Result<Args> {
                 };
             }
             "--resume" => out.resume = true,
+            "--label" => out.label = Some(value("--label")?),
+            "--gpu-layers" => {
+                out.gpu_layers = Some(value("--gpu-layers")?.parse().context("--gpu-layers N")?)
+            }
             "--rescore" => out.rescore.push(value("--rescore")?.into()),
             other => bail!("unknown argument {other}\n{USAGE}"),
         }
@@ -113,16 +123,20 @@ fn args() -> Result<Args> {
 fn engine(
     path: &std::path::Path,
     threads: Option<i32>,
+    gpu_layers: Option<u32>,
 ) -> Result<std::sync::Arc<dyn centraid_assist::Model>> {
     use centraid_assist::host::ModelLoader;
     use centraid_assist_llama::{Config, LlamaLoader};
     // the phone's context for a step is the eval's: the longest rendered prompt plus a message must fit
-    let config = Config {
+    let mut config = Config {
         context: 8192,
         threads,
         logs: false,
         ..Config::default()
     };
+    if let Some(layers) = gpu_layers {
+        config.gpu_layers = layers;
+    }
     LlamaLoader::new(config)
         .load(path)
         .map_err(|error| anyhow::anyhow!("loading {}: {error}", path.display()))
@@ -169,7 +183,7 @@ fn run() -> Result<()> {
                 .context("give --model GGUF (or ASSIST_EVAL_MODEL), or --stub")?;
             #[cfg(feature = "engine")]
             {
-                loaded = engine(&path, args.threads)?;
+                loaded = engine(&path, args.threads, args.gpu_layers)?;
                 let sha = std::process::Command::new("shasum")
                     .args(["-a", "256"])
                     .arg(&path)
@@ -192,7 +206,7 @@ fn run() -> Result<()> {
             }
             #[cfg(not(feature = "engine"))]
             {
-                let _ = (path, args.threads);
+                let _ = (path, args.threads, args.gpu_layers);
                 bail!("built without llama.cpp: rebuild with --features engine, or pass --stub");
             }
         };
@@ -268,7 +282,9 @@ fn run() -> Result<()> {
             }
         }
         (
-            format!("rescored:{}", args.rescore.len()),
+            args.label
+                .clone()
+                .unwrap_or_else(|| format!("rescored:{}", args.rescore.len())),
             results,
             Vec::new(),
         )

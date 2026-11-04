@@ -1,0 +1,13 @@
+{
+  "id": "KAGGLE_OWNER/centraid-assist-eval",
+  "title": "centraid-assist-eval",
+  "code_file": "kernel.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["KAGGLE_OWNER/centraid-assist-eval-input"],
+  "competition_sources": [],
+  "kernel_sources": []
+}
