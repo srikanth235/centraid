@@ -19,7 +19,7 @@ use crate::native::world::{Key, Row, Val, World};
 pub struct Flags {
     /// The vault directory of the system prompt.
     pub directory: bool,
-    /// The block of every user turn: the `vault:`, `focus:` and `dates:` lines.
+    /// The block of every user turn: the `vault:`, `focus:`, `dates:` and `nums:` lines.
     pub preground: bool,
     pub tools: crate::native::prompt::ToolsMode,
     /// Which conventions of `crate::native::ground` run.

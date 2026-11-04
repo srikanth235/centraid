@@ -234,6 +234,70 @@ mod tests {
         assert_eq!(value["prompt_tokens"], Value::Null);
     }
 
+    /// A request line through the step and back to a reply line, over a model that only says what it was scripted to: what
+    /// `assist-step` does, without llama.cpp.
+    fn through_the_step(line: &str) -> Result<(String, Vec<Option<String>>), String> {
+        use centraid_assist::model::Cancel;
+        use centraid_assist::native::step::decode_step;
+        use centraid_assist::native::think::TraceMode;
+        use centraid_assist::testing::ScriptedModel;
+        let request = parse_request(line)?;
+        let options = request.options()?;
+        let model = ScriptedModel::new(["intent: read \"what is on\"\nkind: task\n"]);
+        let step = decode_step(
+            &model,
+            &request.prompt,
+            request.dates.as_deref(),
+            TraceMode::V4,
+            options,
+            &Cancel::new(),
+        )
+        .map_err(|error| error.to_string())?;
+        let grammars = model
+            .requests()
+            .into_iter()
+            .map(|seen| seen.grammar)
+            .collect();
+        Ok((Reply::of(step, Some(10), 1).line(), grammars))
+    }
+
+    #[test]
+    fn a_request_names_the_grammar_and_the_tools_and_the_reply_says_what_ran() {
+        let prompt = "<|im_start|>user\nwhat is on\n<|im_end|>\n<|im_start|>assistant\n<think>\n";
+        let request = |grammar: &str, tools: &str| {
+            json!({"prompt": prompt, "grammar": grammar, "tools": tools}).to_string()
+        };
+        let (reply, grammars) = through_the_step(&request("full", "sig")).unwrap();
+        let reply: Value = serde_json::from_str(&reply).unwrap();
+        assert_eq!(reply["grammar"], "full", "{reply}");
+        assert!(
+            grammars[0]
+                .as_deref()
+                .unwrap()
+                .starts_with("root ::= think\n")
+        );
+        assert_eq!(reply["unspanned"], json!([]));
+        // S2's tools get the handle rule only, and off sends no grammar at all
+        let (reply, grammars) = through_the_step(&request("full", "s2")).unwrap();
+        let reply: Value = serde_json::from_str(&reply).unwrap();
+        assert_eq!(reply["grammar"], "handles", "{reply}");
+        assert!(
+            grammars[0]
+                .as_deref()
+                .unwrap()
+                .starts_with("root ::= any-s0\n")
+        );
+        let (reply, grammars) = through_the_step(&json!({"prompt": prompt}).to_string()).unwrap();
+        let reply: Value = serde_json::from_str(&reply).unwrap();
+        assert_eq!(reply["grammar"], "off", "{reply}");
+        assert_eq!(grammars[0], None);
+        // a mode that is none is an error line, not a guess
+        let error = through_the_step(&request("bogus", "sig")).unwrap_err();
+        assert!(error.contains("grammar is off, handles or full"), "{error}");
+        let error = through_the_step(&request("full", "nope")).unwrap_err();
+        assert!(error.contains("tools is"), "{error}");
+    }
+
     #[test]
     fn errors_and_the_ready_line_are_objects_a_harness_can_tell_apart() {
         let error: Value = serde_json::from_str(&error_line("it \"broke\"\n")).unwrap();

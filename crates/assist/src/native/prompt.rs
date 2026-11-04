@@ -682,7 +682,7 @@ pub fn focus_line(session: &Session) -> Option<String> {
 }
 
 /// The block that leads a user turn: the lines that exist (`vault:`,
-/// `focus:`, `answer:`, `dates:`), one per line, in that order. The Python renderer puts
+/// `focus:`, `answer:`, `dates:`, `nums:` (regrouped tools only), `picks:`), one per line, in that order. The Python renderer puts
 /// a blank line between it and the message (`render.user_content`).
 #[must_use]
 pub fn user_block(lines: &[&Option<String>]) -> Option<String> {

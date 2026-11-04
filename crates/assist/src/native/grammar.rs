@@ -1176,13 +1176,30 @@ mod tests {
     #[test]
     fn every_golden_think_is_inside_the_full_grammar() {
         let mut refused = Vec::new();
-        for text in golden().into_iter().filter(|text| in_the_catalog(text)) {
+        let all = golden();
+        let current: Vec<String> = all
+            .iter()
+            .filter(|text| in_the_catalog(text))
+            .cloned()
+            .collect();
+        eprintln!(
+            "golden thinks: {}, current catalog: {}",
+            all.len(),
+            current.len()
+        );
+        for text in current.iter().cloned() {
             let grammar = full(&showing(&text));
             if !grammar.accepts(&think(&text)) {
                 refused.push(text);
             }
         }
+        let refused_all = refused.len();
         refused.retain(|text| !stale(text));
+        eprintln!(
+            "refused by Full: {refused_all}, of them stale: {}, unexplained: {}",
+            refused_all - refused.len(),
+            refused.len()
+        );
         assert!(
             refused.is_empty(),
             "{} refused: {:#?}",
