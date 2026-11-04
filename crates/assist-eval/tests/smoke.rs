@@ -55,7 +55,12 @@ fn call(tool: &str, params: &[(&str, &str)]) -> String {
 struct Script(Mutex<Vec<String>>);
 
 impl Stepper for Script {
-    fn step(&self, _prompt: &str, _dates: Option<&str>) -> Result<StepOut, String> {
+    fn step(
+        &self,
+        _prompt: &str,
+        _dates: Option<&str>,
+        _tools: ToolsMode,
+    ) -> Result<StepOut, String> {
         let mut said = self.0.lock().expect("lock");
         let text = if said.len() > 1 {
             said.remove(0)
@@ -162,7 +167,7 @@ fn a_write_lands_in_the_vault_and_a_later_turn_sees_it() {
 fn a_failing_engine_stops_the_session_and_the_rest_is_not_run() {
     struct Broken;
     impl Stepper for Broken {
-        fn step(&self, _: &str, _: Option<&str>) -> Result<StepOut, String> {
+        fn step(&self, _: &str, _: Option<&str>, _: ToolsMode) -> Result<StepOut, String> {
             Err("the model failed".to_owned())
         }
     }
@@ -282,12 +287,17 @@ fn the_new_contract_finds_then_does_by_handle_and_names_the_right_tool() {
 struct Seen(Mutex<Option<String>>);
 
 impl Stepper for Seen {
-    fn step(&self, prompt: &str, _dates: Option<&str>) -> Result<StepOut, String> {
+    fn step(
+        &self,
+        prompt: &str,
+        _dates: Option<&str>,
+        tools: ToolsMode,
+    ) -> Result<StepOut, String> {
         self.0
             .lock()
             .expect("lock")
             .get_or_insert_with(|| prompt.to_owned());
-        DeclineStepper.step(prompt, None)
+        DeclineStepper.step(prompt, None, tools)
     }
 }
 
@@ -331,4 +341,52 @@ fn a_count_is_compute_then_answer_value_and_ends_in_a_value() {
         assert_eq!(turn.ending, "value", "{tools:?}");
         assert!(turn.tool_name_ok, "{tools:?}");
     }
+}
+
+/// Remembers the tools mode the runner passed with each step.
+struct Tools(Mutex<Vec<ToolsMode>>);
+
+impl Stepper for Tools {
+    fn step(
+        &self,
+        prompt: &str,
+        _dates: Option<&str>,
+        tools: ToolsMode,
+    ) -> Result<StepOut, String> {
+        self.0.lock().expect("lock").push(tools);
+        DeclineStepper.step(prompt, None, tools)
+    }
+}
+
+#[test]
+fn a_default_runner_shows_s2_and_steps_under_s2_and_a_chosen_mode_reaches_both() {
+    let source = source(vec![session("S", vec![declines()])]);
+    let seen = Seen(Mutex::new(None));
+    Runner::new(&source, &seen)
+        .expect("runner")
+        .run_session(&source.sessions[0])
+        .expect("session");
+    assert!(
+        seen.0
+            .lock()
+            .expect("lock")
+            .clone()
+            .expect("prompt")
+            .contains("act("),
+        "the default block is S2's"
+    );
+    let tools = Tools(Mutex::new(Vec::new()));
+    Runner::new(&source, &tools)
+        .expect("runner")
+        .run_session(&source.sessions[0])
+        .expect("session");
+    Runner::new(&source, &tools)
+        .expect("runner")
+        .with_tools(ToolsMode::Sig)
+        .run_session(&source.sessions[0])
+        .expect("session");
+    assert_eq!(
+        *tools.0.lock().expect("lock"),
+        vec![ToolsMode::S2, ToolsMode::Sig]
+    );
 }

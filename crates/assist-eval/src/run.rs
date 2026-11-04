@@ -39,11 +39,13 @@ pub struct StepOut {
     pub think_cut: bool,
 }
 
-/// The model, as the loop needs it: a rendered prompt in, one message out.
+/// The model, as the loop needs it: a rendered prompt in, one message out. `tools` is the tools block the prompt
+/// shows, which also fixes the shape of the call the think states (`StepOptions::tools`): the runner passes the one
+/// value it rendered the prompt with, so the two cannot differ.
 pub trait Stepper {
     /// # Errors
     /// The engine's words when it fails; the session stops there.
-    fn step(&self, prompt: &str, dates: Option<&str>) -> Result<StepOut, String>;
+    fn step(&self, prompt: &str, dates: Option<&str>, tools: ToolsMode) -> Result<StepOut, String>;
 }
 
 /// The phone's step over any [`Model`]: `decode_step` with `TraceMode::V4` and the phone's [`StepOptions`], exactly
@@ -63,24 +65,17 @@ impl<'a> ModelStepper<'a> {
     }
 }
 
-impl ModelStepper<'_> {
-    /// The tools the model was trained on, which fix the shape of the call its think states
-    /// (`StepOptions::tools`). Keep it equal to the tools block the run shows ([`Runner::with_tools`]).
-    #[must_use]
-    pub fn with_tools(mut self, tools: ToolsMode) -> Self {
-        self.options.tools = tools;
-        self
-    }
-}
-
 impl Stepper for ModelStepper<'_> {
-    fn step(&self, prompt: &str, dates: Option<&str>) -> Result<StepOut, String> {
+    fn step(&self, prompt: &str, dates: Option<&str>, tools: ToolsMode) -> Result<StepOut, String> {
         decode_step(
             self.model,
             prompt,
             dates,
             TraceMode::V4,
-            self.options,
+            StepOptions {
+                tools,
+                ..self.options
+            },
             &Cancel::new(),
         )
         .map(|out| StepOut {
@@ -95,7 +90,12 @@ impl Stepper for ModelStepper<'_> {
 pub struct DeclineStepper;
 
 impl Stepper for DeclineStepper {
-    fn step(&self, _prompt: &str, _dates: Option<&str>) -> Result<StepOut, String> {
+    fn step(
+        &self,
+        _prompt: &str,
+        _dates: Option<&str>,
+        _tools: ToolsMode,
+    ) -> Result<StepOut, String> {
         Ok(StepOut {
             text: "<think>\nintent: decline\n</think>\n\n<tool_call>\n<function=decline>\n<parameter=reason>\nout_of_scope\n</parameter>\n</function>\n</tool_call>".to_owned(),
             think_cut: false,
@@ -223,12 +223,12 @@ impl<'a> Runner<'a> {
             scratch: tempfile::tempdir().map_err(runtime)?,
             worlds: HashMap::new(),
             copies: 0,
-            tools: ToolsMode::default(),
+            tools: ToolsMode::S2,
         })
     }
 
-    /// Which tools block the system prompt shows: `S2` for the model shipping today, `Sig` (the default) for one
-    /// trained on the eight tools.
+    /// Which tools block the system prompt shows, and the shape of call the step reads: `S2` for the model shipping
+    /// today, `Sig` for one trained on the eight tools. Defaults to `S2`, the model the frozen sets were written for.
     #[must_use]
     pub fn with_tools(mut self, tools: ToolsMode) -> Self {
         self.tools = tools;
@@ -318,7 +318,7 @@ impl<'a> Runner<'a> {
             }
             for _ in 0..(if ended.is_some() { 0 } else { STEP_CAP + 2 }) {
                 let prompt = log.prompt().map_err(runtime)?;
-                let out = match self.stepper.step(&prompt, dates_line) {
+                let out = match self.stepper.step(&prompt, dates_line, self.tools) {
                     Ok(out) => out,
                     Err(message) => {
                         error = Some(message);
