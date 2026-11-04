@@ -29,6 +29,9 @@ import "centraid/core/v1/route.proto";
 // Shared pieces
 // ---------------------------------------------------------------------------
 
+// The roster's three filters. No message carries them any more (a pick is a
+// `FilterMenuPicked` under the `show` section); the screen holds the current one
+// as its state, and a Touch tile lands on People under one.
 enum PeopleChipKey {
   PEOPLE_CHIP_KEY_UNSPECIFIED = 0;
   PEOPLE_CHIP_KEY_ALL = 1;
@@ -36,6 +39,8 @@ enum PeopleChipKey {
   PEOPLE_CHIP_KEY_DUE = 3;
 }
 
+// The roster's order, held as the screen's state (a pick is a `FilterMenuPicked`
+// under the `sort` section).
 enum PeopleOrder {
   PEOPLE_ORDER_UNSPECIFIED = 0;
   // Newest-added first.
@@ -76,30 +81,33 @@ message PeopleHomeState {
     PeopleRosterData roster = 8;
     PeopleTouchData touch = 9;
   }
-  // THE CHIP ROW (R-CHROME-3): the roster's filters with their counts, the
-  // current one selected. EMPTY on Touch, over search and while denied.
-  repeated PeopleChip chips = 10;
-  // The row's last chip, the sort; absent exactly when `chips` is empty.
-  optional PeopleSortChip sort_chip = 11;
+  // 10 was `chips`, 11 `sort_chip` and 15 `order_choices`: the roster's filters
+  // with their counts and its order are `filter_menu`.
+  reserved 10, 11, 15;
+  reserved "chips", "sort_chip", "order_choices";
   // Search is the field under the title; while a term is answered its rows
   // replace the surface.
   PeopleSearchState search = 12;
   // SHEET_MORE's rows: Trash alone (R-CHROME-4).
   repeated PeopleMoreRow more_rows = 13;
   Sheet sheet = 14;
-  // SHEET_ORDER's choices.
-  repeated PeopleOrderChoice order_choices = 15;
   // What a write did, a refusal's sentence, or how an import went; the screen
   // under it stays.
   StatusLine status = 16;
   // The header's one action: the editor on a new person.
   Route add_person = 17;
+  // THE HEADER'S FILTER BUTTON (R-CHROME-3): the roster's filters with their
+  // counts (All · Starred · Overdue, one picked) and its order (Recently added ·
+  // Name). Unset on Touch, over search and while denied.
+  optional FilterMenu filter_menu = 18;
 
   enum Sheet {
     // No sheet is open.
     SHEET_UNSPECIFIED = 0;
     SHEET_MORE = 1;
-    SHEET_ORDER = 2;
+    // 2 was SHEET_ORDER: the order is a section of the filter menu.
+    reserved 2;
+    reserved "SHEET_ORDER";
   }
 }
 
@@ -121,35 +129,13 @@ message PeopleHomeChrome {
   string retry = 5;
   string loading = 6;
   string more_title = 7;
-  // SHEET_ORDER's title.
-  string sort_heading = 8;
+  // 8 was `sort_heading`, the order sheet's title.
+  reserved 8;
+  reserved "sort_heading";
   string home = 9;
   string cancel = 10;
   // The day-one empty state's import, "Import contacts".
   string import_contacts = 11;
-}
-
-// One filter chip, with its count over the whole window.
-message PeopleChip {
-  PeopleChipKey key = 1;
-  string label = 2;
-  uint32 count = 3;
-  bool selected = 4;
-  string accessibility_label = 5;
-}
-
-// THE SORT CHIP, last in the chip row: the current order's name; a tap opens
-// SHEET_ORDER.
-message PeopleSortChip {
-  string label = 1;
-  // "Sort, Recently added".
-  string spoken = 2;
-}
-
-message PeopleOrderChoice {
-  PeopleOrder order = 1;
-  string label = 2;
-  bool selected = 3;
 }
 
 message PeopleMoreRow {
@@ -290,33 +276,30 @@ message PeopleHomeEvent {
     // The failure's "Try again".
     Refreshed refreshed = 1;
     BandPicked band = 2;
-    ChipPicked chip = 3;
-    OrderPicked order = 4;
     SearchOpened search_opened = 5;
     SearchTermChanged search_term = 6;
     SearchClosed search_closed = 7;
-    SheetOpened sheet_opened = 8;
     SheetClosed sheet_closed = 9;
     StarToggled star = 10;
     TilePicked tile = 11;
     // The member tapped the day-one "Import contacts": Rust asks the shell to
     // read the address book (the OS asks its own permission then).
     ImportContactsTapped import_contacts = 12;
+    // ---- the header's filter menu ----
+    FilterMenuPicked filter_menu_picked = 13;
+    FilterMenuCleared filter_menu_cleared = 14;
   }
+
+  // 3 was `chip`, 4 `order` and 8 `sheet_opened`: a pick in the filter menu is
+  // `filter_menu_picked`.
+  reserved 3, 4, 8;
+  reserved "chip", "order", "sheet_opened";
 
   message Refreshed {}
 
   // A band tab by `PeopleBandTab.key`; `more` opens the sheet.
   message BandPicked {
     string key = 1;
-  }
-
-  message ChipPicked {
-    PeopleChipKey chip = 1;
-  }
-
-  message OrderPicked {
-    PeopleOrder order = 1;
   }
 
   message SearchOpened {}
@@ -326,10 +309,6 @@ message PeopleHomeEvent {
   }
 
   message SearchClosed {}
-
-  message SheetOpened {
-    PeopleHomeState.Sheet sheet = 1;
-  }
 
   message SheetClosed {}
 

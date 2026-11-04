@@ -100,13 +100,23 @@ struct PhotosEditorView: View {
     @ViewBuilder
     private func editor(_ data: Centraid_Core_V1_PhotosEditorData) -> some View {
         VStack(spacing: 8) {
-            // THE STAMP: what this is and where it came from.
-            VStack(spacing: 2) {
-                Text(state.title).centraidType("control")
-                    .foregroundStyle(Theme.color("onStage", scheme))
-                Text(data.meta).centraidType("small")
-                    .foregroundStyle(Theme.color("onStageSoft", scheme))
+            // THE TOP BAR: the way out and the commit at its ends, and between them the stamp,
+            // what this is and where it came from.
+            HStack(alignment: .center, spacing: 8) {
+                barButton(state.words.cancel, identifier: "photos.editor.cancel", live: isEditing) {
+                    send(.cancel(.init()))
+                }
+                VStack(spacing: 2) {
+                    Text(state.title).centraidType("control")
+                        .foregroundStyle(Theme.color("onStage", scheme))
+                    Text(data.meta).centraidType("small")
+                        .foregroundStyle(Theme.color("onStageSoft", scheme))
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity)
+                commit
             }
+            .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.top, 8)
 
             GeometryReader { geometry in
@@ -265,49 +275,42 @@ struct PhotosEditorView: View {
     private var editBar: some View {
         let editing = isEditing
         return VStack(alignment: .leading, spacing: 8) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    // "CROP" IS ALWAYS SELECTED: it is the mode this editor is in,
-                    // and pressing it returns the crop to the whole frame.
-                    tool(state.words.crop, selected: true, enabled: editing) {
-                        send(.ratio(.with {
-                            $0.ratio = .original
-                            $0.frameRatio = 0
-                        }))
-                    }
-                    tool(state.words.rotate, enabled: editing) { send(.rotate(.init())) }
-                    tool(state.straightenLabel, enabled: editing) { send(.straighten(.init())) }
-                    tool(state.flipLabel, selected: plan.flip != .unspecified, enabled: editing) {
-                        send(.flip(.init()))
-                    }
+            // TWO ORDERLY ROWS, every tool the same width: what to do, then what shape.
+            HStack(spacing: 6) {
+                // "CROP" IS ALWAYS SELECTED: it is the mode this editor is in,
+                // and pressing it returns the crop to the whole frame.
+                tool(state.words.crop, selected: true, enabled: editing) {
+                    send(.ratio(.with {
+                        $0.ratio = .original
+                        $0.frameRatio = 0
+                    }))
+                }
+                tool(state.words.rotate, enabled: editing) { send(.rotate(.init())) }
+                tool(state.straightenLabel, enabled: editing) { send(.straighten(.init())) }
+                tool(state.flipLabel, selected: plan.flip != .unspecified, enabled: editing) {
+                    send(.flip(.init()))
                 }
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(state.ratios, id: \.ratio.rawValue) { ratio in
-                        // ORIGINAL IS NEVER DRAWN SELECTED, as in v0: it is the
-                        // absence of a ratio.
-                        tool(
-                            ratio.label,
-                            selected: ratio.selected && ratio.ratio != .original,
-                            enabled: editing
-                        ) {
-                            send(.ratio(.with {
-                                $0.ratio = ratio.ratio
-                                $0.frameRatio = frameRatio
-                            }))
-                        }
+            HStack(spacing: 6) {
+                ForEach(state.ratios, id: \.ratio.rawValue) { ratio in
+                    // ORIGINAL IS NEVER DRAWN SELECTED, as in v0: it is the
+                    // absence of a ratio.
+                    tool(
+                        ratio.label,
+                        selected: ratio.selected && ratio.ratio != .original,
+                        enabled: editing
+                    ) {
+                        send(.ratio(.with {
+                            $0.ratio = ratio.ratio
+                            $0.frameRatio = frameRatio
+                        }))
                     }
-                    tool(state.words.reset, enabled: editing && state.edited) { send(.reset(.init())) }
                 }
+                tool(state.words.reset, enabled: editing && state.edited) { send(.reset(.init())) }
             }
             Text(state.words.saveExplanation)
                 .centraidType("small")
                 .foregroundStyle(Theme.color("onStageSoft", scheme))
-            HStack(spacing: 8) {
-                tool(state.words.cancel, enabled: editing) { send(.cancel(.init())) }
-                commit
-            }
             // THE REFUSAL IS VISIBLE TEXT, never only an accessibility hint, and
             // a save that did not land says so in the same place.
             if let refusal = refusalLine {
@@ -316,11 +319,13 @@ struct PhotosEditorView: View {
                     .foregroundStyle(Theme.color("onStage", scheme))
                     .accessibilityIdentifier("photos.editor.refusal")
             }
-            // THE ONE STATUS LINE.
-            Text(state.statusLine)
-                .centraidType("mono")
-                .foregroundStyle(Theme.color("onStageSoft", scheme))
-                .accessibilityIdentifier("photos.editor.status")
+            // THE ONE STATUS LINE, drawn when there is something to say.
+            if !state.statusLine.isEmpty {
+                Text(state.statusLine)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("onStageSoft", scheme))
+                    .accessibilityIdentifier("photos.editor.status")
+            }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.bottom, 8)
@@ -345,7 +350,7 @@ struct PhotosEditorView: View {
             Text(state.words.save)
                 .centraidType("control")
                 .foregroundStyle(Theme.color(live ? "stage" : "onStageSoft", scheme))
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 16)
                 .frame(minHeight: 44)
                 .background(live ? Theme.color("onStage", scheme) : Color.clear, in: shape)
                 .overlay(shape.strokeBorder(Theme.color(live ? "onStage" : "stageLine", scheme), lineWidth: 1))
@@ -355,6 +360,21 @@ struct PhotosEditorView: View {
         .accessibilityLabel(state.words.save)
         .accessibilityHint(state.saveRefusal)
         .accessibilityIdentifier("photos.editor.save")
+    }
+
+    /// A WORD IN THE TOP BAR: Cancel, with the commit's target and none of its plate.
+    private func barButton(_ label: String, identifier: String, live: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .centraidType("control")
+                .foregroundStyle(Theme.color(live ? "onStage" : "onStageSoft", scheme))
+                .padding(.horizontal, 4)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!live)
+        .accessibilityIdentifier(identifier)
     }
 
     private func tool(
@@ -371,8 +391,10 @@ struct PhotosEditorView: View {
             Text(label)
                 .centraidType("control")
                 .foregroundStyle(Theme.color(enabled ? "onStage" : "onStageSoft", scheme))
-                .padding(.horizontal, 12)
-                .frame(minHeight: 44)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .padding(.horizontal, 6)
+                .frame(maxWidth: .infinity, minHeight: 44)
                 .overlay(
                     shape.strokeBorder(
                         Theme.color(selected ? "onStage" : "stageLine", scheme),

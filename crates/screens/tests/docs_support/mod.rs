@@ -226,6 +226,27 @@ pub fn choose(d: &mut Driver, i: u64, key: &str) {
     );
 }
 
+/// A pick in the header's filter menu.
+pub fn menu_pick(d: &mut Driver, i: u64, section: &str, option: &str) {
+    drive_send(
+        d,
+        i,
+        wire::docs_drive_event::Kind::FilterMenuPicked(wire::FilterMenuPicked {
+            section_key: section.to_owned(),
+            option_key: option.to_owned(),
+        }),
+    );
+}
+
+/// The menu's Clear row.
+pub fn menu_clear(d: &mut Driver, i: u64) {
+    drive_send(
+        d,
+        i,
+        wire::docs_drive_event::Kind::FilterMenuCleared(wire::FilterMenuCleared {}),
+    );
+}
+
 pub fn open_sheet(d: &mut Driver, i: u64, kind: wire::docs_sheet::Kind) {
     drive_send(
         d,

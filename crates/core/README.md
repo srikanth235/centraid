@@ -76,8 +76,4 @@ A gateway that answers `MOVED` freezes the vault on this phone: every later pass
 
 `Vault` keeps its commit-guard depth in a `Cell` and is therefore `!Sync`. Real concurrent reads need a pool of read connections, which needs `PRAGMA` statements, which is SQL — and `sql-confinement` confines SQL to five crates this is not one of. So every call is serialised through one mutex, and the reader pool is an owner hand-off to `crates/vault`. See `handle.rs`'s module docs for the three options and what option 3 costs.
 
-## The `call` budget
-
-`cargo test -p centraid-core --test call_budget` measures p95 over 200 calls of one page of 100 rows and fails above `contracts/ledgers/call-budget.json`'s ceiling. `cargo xtask gate --profile pr`'s `call-budget` step runs the same target as `cargo test --workspace --test call_budget`, so it reuses the `test` step's build rather than re-resolving features for one package.
-
 `cargo test -p centraid-core`.

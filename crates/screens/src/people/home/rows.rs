@@ -3,6 +3,7 @@
 
 use centraid_api_proto::core_v1 as wire;
 
+use crate::kit::menu;
 use crate::people::{fold, routes};
 use crate::strings::{Locale, fill, people as words};
 
@@ -30,56 +31,99 @@ fn chip_empty(locale: Locale) -> wire::EmptyState {
     }
 }
 
-fn chip(
-    locale: Locale,
-    key: wire::PeopleChipKey,
-    label: String,
-    count: u32,
-    selected: bool,
-) -> wire::PeopleChip {
-    wire::PeopleChip {
-        key: key as i32,
-        accessibility_label: fill(
-            &words::chip_a11y(locale),
-            &[("label", &label), ("count", &count.to_string())],
-        ),
-        label,
-        count,
-        selected,
-    }
-}
+/// The filter section's key (`people-filter-show-starred` on a screen) and its
+/// options' keys.
+pub const FILTER: &str = "show";
+pub const FILTER_ALL: &str = "all";
+pub const FILTER_STARRED: &str = "starred";
+pub const FILTER_DUE: &str = "due";
 
-/// The roster's chips (All, Starred, Overdue) with their counts over the whole
-/// window, `current` selected.
-pub fn chips(
+/// The sort section's options (`people-filter-sort-recent`).
+pub const SORT_RECENT: &str = "recent";
+pub const SORT_NAME: &str = "name";
+
+/// THE HEADER'S MENU for the roster: All · Starred · Overdue with their counts
+/// over the whole window (one picked, `current`), then the order (Recently added
+/// · Name). Lit while Starred or Overdue narrows the roster; the order is no
+/// filter.
+pub fn filter_menu(
     locale: Locale,
     answer: &wire::PeopleRoster,
     current: wire::PeopleChipKey,
-) -> Vec<wire::PeopleChip> {
+    order: wire::PeopleOrder,
+) -> wire::FilterMenu {
     use wire::PeopleChipKey as K;
-    vec![
-        chip(
-            locale,
-            K::All,
-            words::chip_all(locale),
-            answer.count_all,
-            current == K::All,
-        ),
-        chip(
-            locale,
-            K::Starred,
-            words::chip_starred(locale),
-            answer.count_starred,
-            current == K::Starred,
-        ),
-        chip(
-            locale,
-            K::Due,
-            words::chip_due(locale),
-            answer.count_due,
-            current == K::Due,
-        ),
-    ]
+    let show = |key: &str, label: String, count: u32, chip: K| {
+        menu::counted(key, label, count, current == chip)
+    };
+    menu::menu(
+        locale,
+        vec![
+            menu::single(
+                FILTER,
+                words::filter_title(locale),
+                vec![
+                    show(
+                        FILTER_ALL,
+                        words::chip_all(locale),
+                        answer.count_all,
+                        K::All,
+                    ),
+                    show(
+                        FILTER_STARRED,
+                        words::chip_starred(locale),
+                        answer.count_starred,
+                        K::Starred,
+                    ),
+                    show(
+                        FILTER_DUE,
+                        words::chip_due(locale),
+                        answer.count_due,
+                        K::Due,
+                    ),
+                ],
+            ),
+            menu::single(
+                menu::SORT,
+                words::sort_heading(locale),
+                vec![
+                    menu::option(
+                        SORT_RECENT,
+                        words::sort_recent(locale),
+                        order != wire::PeopleOrder::Name,
+                    ),
+                    menu::option(
+                        SORT_NAME,
+                        words::sort_name(locale),
+                        order == wire::PeopleOrder::Name,
+                    ),
+                ],
+            ),
+        ],
+        matches!(current, K::Starred | K::Due),
+    )
+}
+
+/// The filter a pick of the filter section means, or None for any other pick.
+#[must_use]
+pub fn chip_of(pick: menu::Pick<'_>) -> Option<wire::PeopleChipKey> {
+    use wire::PeopleChipKey as K;
+    match (pick.section, pick.option) {
+        (FILTER, FILTER_ALL) => Some(K::All),
+        (FILTER, FILTER_STARRED) => Some(K::Starred),
+        (FILTER, FILTER_DUE) => Some(K::Due),
+        _ => None,
+    }
+}
+
+/// The order a pick of the sort section means, or None for any other pick.
+#[must_use]
+pub fn order_of(pick: menu::Pick<'_>) -> Option<wire::PeopleOrder> {
+    match (pick.section, pick.option) {
+        (menu::SORT, SORT_RECENT) => Some(wire::PeopleOrder::Recent),
+        (menu::SORT, SORT_NAME) => Some(wire::PeopleOrder::Name),
+        _ => None,
+    }
 }
 
 fn people_count(locale: Locale, n: u32) -> String {

@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import centraid.core.v1.FilterMenuCleared
+import centraid.core.v1.FilterMenuPicked
 import centraid.core.v1.MoneyHomeEvent
 import centraid.core.v1.MoneyHomeState
 import centraid.core.v1.MoneyRecurringEvent
@@ -30,8 +32,8 @@ import centraid.core.v1.Route
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
+import dev.centraid.android.kit.BandSearchField
 import dev.centraid.android.kit.CentraidRow
-import dev.centraid.android.kit.CentraidSearchField
 import dev.centraid.android.kit.ChoiceStack
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
@@ -46,7 +48,8 @@ import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
-import dev.centraid.android.kit.RoomChip
+import dev.centraid.android.kit.RoomFilter
+import dev.centraid.android.kit.RoomSubtitle
 import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetPrimary
@@ -90,14 +93,22 @@ internal fun MoneyHomeScreen(
                 onOpen = { chrome?.search_route?.let(onOpen) },
             )
         },
-        // THE FILTER ROW is month, account and category; no sort chip (R-CHROME-3).
-        chips = state.chips.map { chip ->
-            RoomChip(
-                testTag = "money-chip-${chip.key}",
-                label = chip.label,
-                selected = chip.active,
-                chevron = true,
-                onPress = { onEvent(MoneyHomeEvent(chip = MoneyHomeEvent.ChipTapped(key = chip.key))) },
+        // THE HEADER'S FILTER BUTTON is account and category, no sort (R-CHROME-3): Rust's menu, a
+        // pick or the clear row an event, what is checked the next state's.
+        filter = state.filter_menu?.let { menu ->
+            RoomFilter(
+                menu = menu,
+                onPick = { section, option ->
+                    onEvent(MoneyHomeEvent(filter_menu_picked = FilterMenuPicked(section_key = section, option_key = option)))
+                },
+                onClear = { onEvent(MoneyHomeEvent(filter_menu_cleared = FilterMenuCleared())) },
+            )
+        },
+        // THE MONTH IN VIEW stays under the title and opens its sheet.
+        subtitle = state.subtitle?.let { subtitle ->
+            RoomSubtitle(
+                subtitle = subtitle,
+                onTap = { onEvent(MoneyHomeEvent(month_tapped = MoneyHomeEvent.MonthTapped())) },
             )
         },
         band = {
@@ -143,20 +154,6 @@ internal fun MoneyHomeScreen(
             title = chrome?.month_sheet_title.orEmpty(),
             options = data?.month_options.orEmpty().map { SheetOption(key = it.key, label = it.label, selected = it.selected) },
             onPick = { key -> onEvent(MoneyHomeEvent(month_picked = MoneyHomeEvent.MonthPicked(month = key))) },
-            onDismiss = close,
-        )
-        MoneyHomeState.Sheet.SHEET_ACCOUNT -> OptionSheet(
-            title = chrome?.account_sheet_title.orEmpty(),
-            options = data?.activity?.account_options.orEmpty()
-                .map { SheetOption(key = it.key, label = it.label, detail = it.detail, selected = it.selected) },
-            onPick = { key -> onEvent(MoneyHomeEvent(account_picked = MoneyHomeEvent.AccountPicked(account_id = key))) },
-            onDismiss = close,
-        )
-        MoneyHomeState.Sheet.SHEET_CATEGORY -> OptionSheet(
-            title = chrome?.category_sheet_title.orEmpty(),
-            options = data?.activity?.category_options.orEmpty()
-                .map { SheetOption(key = it.key, label = it.label, detail = it.detail, selected = it.selected) },
-            onPick = { key -> onEvent(MoneyHomeEvent(category_picked = MoneyHomeEvent.CategoryPicked(key = key))) },
             onDismiss = close,
         )
         else -> Unit
@@ -537,40 +534,47 @@ internal fun MoneySearchScreen(
     val chrome = state.chrome
     PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back_label.orEmpty(), onBack = onBack) {
         androidx.compose.foundation.layout.Column {
-            CentraidSearchField(
+            val resting = state.resting
+            // THE BODY TAKES THE HEIGHT the field at the foot does not (R-CHROME-2).
+            androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.weight(1f)) {
+                if (resting != null) {
+                    EmptyStateView(resting, onAction = null)
+                } else {
+                    ReadStateView(
+                        content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+                        onRetry = { onEvent(MoneySearchEvent(refreshed = MoneySearchEvent.Refreshed())) },
+                        retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
+                    ) { search ->
+                        val empty = search.empty
+                        if (search.rows.isEmpty() && empty != null) {
+                            androidx.compose.foundation.layout.Column {
+                                EmptyStateView(empty, onAction = null)
+                                SearchAskRow(search.ask, onOpen)
+                            }
+                        } else {
+                            LazyColumn {
+                                item(key = "count") { StatusLine(search.count_label) }
+                                items(search.rows, key = { "t-${it.txn_id}" }) { row ->
+                                    MoneyRowView(row) { row.route?.let(onOpen) }
+                                }
+                                // THE ASK ROW closes the answer (#1097).
+                                item(key = "ask") { SearchAskRow(search.ask, onOpen) }
+                            }
+                        }
+                    }
+                }
+            }
+            // THE FIELD IS AT THE FOOT, over the keyboard, like every app's search (R-CHROME-2); its
+            // close only clears the query, so it keeps the keyboard.
+            BandSearchField(
                 field = SearchField(open_ = true, term = state.term),
                 placeholder = state.placeholder,
                 onTerm = { onEvent(MoneySearchEvent(term = MoneySearchEvent.TermChanged(term = it))) },
                 onClose = { onEvent(MoneySearchEvent(cleared = MoneySearchEvent.Cleared())) },
                 closeLabel = state.clear_label.ifEmpty { KitWords.CLOSE_SEARCH },
+                testTag = "money-search",
+                keepsFocusOnClose = true,
             )
-            val resting = state.resting
-            if (resting != null) {
-                EmptyStateView(resting, onAction = null)
-            } else {
-                ReadStateView(
-                    content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
-                    onRetry = { onEvent(MoneySearchEvent(refreshed = MoneySearchEvent.Refreshed())) },
-                    retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-                ) { search ->
-                    val empty = search.empty
-                    if (search.rows.isEmpty() && empty != null) {
-                        androidx.compose.foundation.layout.Column {
-                            EmptyStateView(empty, onAction = null)
-                            SearchAskRow(search.ask, onOpen)
-                        }
-                    } else {
-                        LazyColumn {
-                            item(key = "count") { StatusLine(search.count_label) }
-                            items(search.rows, key = { "t-${it.txn_id}" }) { row ->
-                                MoneyRowView(row) { row.route?.let(onOpen) }
-                            }
-                            // THE ASK ROW closes the answer (#1097).
-                            item(key = "ask") { SearchAskRow(search.ask, onOpen) }
-                        }
-                    }
-                }
-            }
         }
     }
 }

@@ -163,7 +163,7 @@ public fun AgendaHomeScreen(
             // SEARCH IS THE BAR UNDER THE TITLE (R-CHROME-2), above the day
             // bar; a tap opens the field through the machine.
             search = RoomSearch(
-                field = SearchField(open_ = state.search_open, term = state.search_term, corrected = state.search_corrected),
+                field = SearchField(open_ = state.search_open, term = state.search_term, corrected = state.search_corrected, corrected_label = state.search_corrected),
                 placeholder = chrome.search_placeholder,
                 onTerm = { onEvent(AgendaHomeEvent(search_term = AgendaHomeEvent.SearchTermChanged(term = it))) },
                 onClose = { onEvent(AgendaHomeEvent(search_closed = AgendaHomeEvent.SearchClosed())) },

@@ -1021,6 +1021,40 @@ pub fn walker_platform_law(root: &Path) -> RuleReport {
             "an edited asset marked at the stage door",
         );
     }
+    // A hand-off the member asked for (Share, Download, Edit) may copy a library original
+    // into a temporary file, through the one function each shell keeps for it. The walker
+    // never does: a call from any other file is a copy the member did not ask for.
+    let hand_offs: [(&[PathBuf], &str, &str, &[&str]); 2] = [
+        (
+            &swift,
+            "iOS",
+            "exportOriginal(",
+            &["ShelfCopyExport.swift", "PhotoEffects.swift"],
+        ),
+        (
+            &compose,
+            "Android",
+            "copyLibraryOriginal(",
+            &["PhotoShelfCopies.kt", "PhotosEditRender.kt"],
+        ),
+    ];
+    for (paths, platform, call, allowed) in hand_offs {
+        for path in paths {
+            let text = code(std::slice::from_ref(path));
+            let calls = text.matches(call).count()
+                - text.matches(&format!("func {call}")).count()
+                - text.matches(&format!("fun {call}")).count();
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default();
+            if calls > 0 && !allowed.contains(&name) {
+                findings.push(format!(
+                    "{platform}: `{call}` in {name} — a library original is copied only for a hand-off the member asked for"
+                ));
+            }
+        }
+    }
     let performs = |text: &str| {
         text.contains("rollPage") || text.contains("RollPage") || text.contains("roll_page")
     };

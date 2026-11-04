@@ -6,7 +6,7 @@ import SwiftUI
 /// there, because a confirm with one way out is not a question.
 struct ConfirmSheet: View {
     /// Its detents, named so a host that shields it can state them again.
-    static let detents: Set<PresentationDetent> = [.height(280), .medium]
+    static let detents: Set<PresentationDetent> = [.height(320), .medium]
 
     let confirm: Centraid_Core_V1_Confirm
     var cancelLabel: String = KitWords.CANCEL
@@ -28,9 +28,11 @@ struct ConfirmSheet: View {
     }
 
     var body: some View {
+        // THE VERB, THEN ITS WAY OUT UNDER IT: the same order as every sheet's answers.
         SheetRoom(
             title: confirm.title,
             primary: SheetPrimary(label: confirm.confirmLabel, destructive: confirm.destructive, action: onConfirm),
+            outlines: [SheetOutline(label: cancelLabel, identifier: "kit-confirm-cancel", action: onDismiss)],
             titleIdentifier: "kit-confirm"
         ) {
             if !confirm.body.isEmpty {
@@ -38,15 +40,6 @@ struct ConfirmSheet: View {
                     .centraidType("body")
                     .foregroundStyle(Theme.color("textSoft", scheme))
             }
-            Button(action: onDismiss) {
-                Text(cancelLabel)
-                    .centraidType("labelOn")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("kit-confirm-cancel")
         }
         .presentationDetents(Self.detents)
         // NO IDENTIFIER ON THE CONTAINER (#1047): one there is handed down to
@@ -91,6 +84,8 @@ struct SheetRow: View {
     let label: String
     var destructive: Bool = false
     var selected: Bool = false
+    /// A row that opens another sheet or page says so with a trailing chevron.
+    var chevron: Bool = false
     var identifier: String = ""
     let onTap: () -> Void
 
@@ -115,6 +110,9 @@ struct SheetRow: View {
                 Spacer(minLength: 0)
                 if selected {
                     CentraidIconView(iconKey: "Check", tint: Theme.color(enabled ? "text" : "textDisabled", scheme), size: 16)
+                }
+                if chevron {
+                    CentraidIconView(iconKey: "ChevronRight", tint: Theme.color(enabled ? "textFaint" : "textDisabled", scheme), size: 16)
                 }
             }
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)

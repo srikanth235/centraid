@@ -6,11 +6,12 @@
 //! any one of them, so it lives here: `cargo xtask gate --profile <local|pr|
 //! nightly|release>` is the single command CI runs and the single command the
 //! local loop runs. A fifth profile, `mobile-jvm`, runs the Kotlin/Gradle JVM
-//! suites; it is not a superset of any other and is not charged to `pr`, for
-//! the reason in its ledger row (#1020, D-1020-B2-3). See `crates/xtask/README.md` for the profiles, the budgets,
-//! and where failure artifacts land.
+//! suites; it is not a superset of any other and is not charged to `pr`
+//! (#1020, D-1020-B2-3). No profile is failed for taking long: the wall-clock
+//! budgets were removed by the owner's ruling of 2026-11-04. See
+//! `crates/xtask/README.md` for the profiles and where failure artifacts land.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -20,7 +21,6 @@ mod ci;
 mod doc_links;
 mod gate;
 mod ledger;
-mod measure;
 mod native_parity;
 mod native_parity_register;
 mod native_rules;
@@ -43,17 +43,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Run a gate profile: every step, buffered, with a timing table and a budget.
+    /// Run a gate profile: every step, buffered, with a timing table.
     Gate {
         /// Which profile to run.
         #[arg(long, value_enum)]
         profile: Profile,
-        /// Score this run as a first build even if artifacts are on disk.
-        ///
-        /// `local` detects warm and cold trees on its own; this is for proving
-        /// the cold branch without deleting `target/` (#1020, D-1020-B2-1).
-        #[arg(long)]
-        cold: bool,
         /// Run only one step of the profile, by name — or one of the four
         /// device lanes, which narrows the run to `device-lanes`. A name that
         /// matches nothing is an error, never an empty run that reports PASS
@@ -112,19 +106,6 @@ enum Command {
         #[arg(long)]
         explain: bool,
     },
-    /// Measure the edit-run loop and print (or write) the compile-time ledger.
-    Measure {
-        /// Write the measurements into `contracts/ledgers/compile-time.json`.
-        #[arg(long)]
-        write: bool,
-        /// Measure only these keys (comma-separated). Every key by default.
-        ///
-        /// The keys cost minutes each and two of them delete `target/`, so a
-        /// re-measurement of one number must not force a re-measurement of all
-        /// of them (#1020).
-        #[arg(long, value_delimiter = ',')]
-        only: Vec<String>,
-    },
 }
 
 /// The four profiles, in ascending cost. Each is a superset of the one before.
@@ -133,7 +114,7 @@ pub enum Profile {
     /// The edit-run loop: format, lint, test, structural rules, ledgers.
     Local,
     /// What every pull request must satisfy. `local` plus supply chain, a
-    /// release build, the v1 tree's TypeScript, and the budget.
+    /// release build, and the v1 tree's TypeScript.
     Pr,
     /// `pr` plus the deeper simulation sweep, the display-bound e2e runs and
     /// the device lanes.
@@ -143,8 +124,7 @@ pub enum Profile {
     /// The Kotlin/Gradle JVM suite: `:core:jvmTest` — a real ABI round trip
     /// against the real cdylib — and the generated-artifact
     /// drift check. NOT a superset of any other profile and not charged to
-    /// `pr`: a different toolchain with a different cold cost, and one number
-    /// answering for two build systems answers for neither (D-1020-B2-3).
+    /// `pr`: a different toolchain with a different cold cost (D-1020-B2-3).
     MobileJvm,
 }
 
@@ -201,45 +181,6 @@ fn repo_root() -> PathBuf {
     baked
 }
 
-/// Where a linked artifact actually lands — `CARGO_TARGET_DIR`, else
-/// `<root>/target`.
-///
-/// Resolved the way cargo itself resolves it, and for the same reason
-/// [`repo_root`] is resolved at run time: wave 3's lanes share ONE target
-/// directory because the disk does not hold four, and code that assumes
-/// `<root>/target` under a shared one reads an empty directory. Two places did.
-/// `tree_state` called a fully linked workspace **cold** — harmless on its own,
-/// except that it means the warm 120 s promise is never the number scored, and
-/// the mirror case is not harmless at all: a stale `<root>/target` left behind
-/// by an older build reads as **warm** while the tree the run actually compiles
-/// in has never been built. And `measure`'s cold keys removed `<root>/target/
-/// {debug,release}`, which under a shared directory removes nothing, so the
-/// next command timed a warm build and the number went into a down-only
-/// ledger as a first build (#1020 wave 3 lane X3).
-///
-/// A relative `CARGO_TARGET_DIR` is resolved against the directory cargo is
-/// invoked in; every caller here invokes cargo with `current_dir(root)`, so a
-/// relative value is joined onto the root.
-pub fn target_dir(root: &Path) -> PathBuf {
-    target_dir_from(std::env::var("CARGO_TARGET_DIR").ok().as_deref(), root)
-}
-
-/// [`target_dir`]'s decision, with the environment passed in so it is testable
-/// without mutating a process-wide variable other threads are reading.
-fn target_dir_from(configured: Option<&str>, root: &Path) -> PathBuf {
-    match configured.map(str::trim) {
-        Some(dir) if !dir.is_empty() => {
-            let path = PathBuf::from(dir);
-            if path.is_absolute() {
-                path
-            } else {
-                root.join(path)
-            }
-        }
-        _ => root.join("target"),
-    }
-}
-
 /// The manifest path cargo baked in, two levels up: `crates/xtask` → the root.
 fn baked_root() -> PathBuf {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -287,11 +228,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let root = repo_root();
     let ok = match cli.command {
-        Command::Gate {
-            profile,
-            cold,
-            lane,
-        } => match gate::run(profile, &root, cold, lane) {
+        Command::Gate { profile, lane } => match gate::run(profile, &root, lane) {
             Ok(ok) => ok,
             Err(error) => {
                 eprintln!("xtask: {error:#}");
@@ -366,13 +303,6 @@ fn main() -> ExitCode {
                 }
             }
         }
-        Command::Measure { write, only } => match measure::run(&root, write, &only) {
-            Ok(()) => true,
-            Err(error) => {
-                eprintln!("xtask: {error:#}");
-                false
-            }
-        },
     };
     if ok {
         ExitCode::SUCCESS
@@ -414,39 +344,5 @@ mod root_tests {
             "and it is not the path baked in when this test binary was compiled"
         );
         let _ = std::fs::remove_dir_all(&scratch);
-    }
-
-    /// `CARGO_TARGET_DIR` wins over `<root>/target`, absolute or relative, and
-    /// an empty or whitespace value is treated as unset — the way cargo treats
-    /// it. The case this exists for is a shared target directory: under one,
-    /// `<root>/target` is either absent (a fully built tree read as cold) or
-    /// stale (an unbuilt tree read as warm), and the second answer is the
-    /// dangerous one (#1020 wave 3 lane X3).
-    #[test]
-    fn the_target_directory_follows_cargo_target_dir_and_not_the_repository_root() {
-        let root = Path::new("/w/tree");
-        assert_eq!(
-            target_dir_from(None, root),
-            PathBuf::from("/w/tree/target"),
-            "unset means the root's own target/"
-        );
-        assert_eq!(
-            target_dir_from(Some(""), root),
-            PathBuf::from("/w/tree/target")
-        );
-        assert_eq!(
-            target_dir_from(Some("  "), root),
-            PathBuf::from("/w/tree/target")
-        );
-        assert_eq!(
-            target_dir_from(Some("/shared/cargo-target"), root),
-            PathBuf::from("/shared/cargo-target"),
-            "an absolute value is the answer, whatever the root is"
-        );
-        assert_eq!(
-            target_dir_from(Some("../shared"), root),
-            PathBuf::from("/w/tree/../shared"),
-            "a relative value is resolved against the root, because every caller runs cargo there"
-        );
     }
 }

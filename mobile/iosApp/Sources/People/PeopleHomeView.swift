@@ -3,9 +3,10 @@ import SwiftUI
 /// `people.home` — People (the roster) and Touch under one band, with Search a
 /// field over the destination and More a sheet (#1135).
 ///
-/// **THE VIEW DECIDES NOTHING.** The destination, the band, the chip row and its
-/// sort chip, every row's words, hue, star and route, the tiles, the rails, the
-/// sheets and every empty sentence are on `PeopleHomeState`, which Rust makes
+/// **THE VIEW DECIDES NOTHING.** The destination, the band, the header's filter
+/// menu (the filters with their counts, then the order), every row's words, hue,
+/// star and route, the tiles, the rails, the sheet and every empty sentence are
+/// on `PeopleHomeState`, which Rust makes
 /// (`crates/screens`, module `people`). A tap on the band is an event and swaps
 /// the destination; a row that opens a page carries its `Route` and a tap hands
 /// it to `open`.
@@ -34,7 +35,7 @@ struct PeopleHomeView: View {
                 action: { if state.hasAddPerson { open(state.addPerson) } }
             ),
             search: denied ? nil : searchSlot,
-            chips: chips,
+            filter: filter,
             showsBand: !denied && !state.band.isEmpty
         ) {
             AppBand(
@@ -67,7 +68,7 @@ struct PeopleHomeView: View {
             }
         }
         .sheet(isPresented: Binding(
-            get: { state.sheet == .more || state.sheet == .order },
+            get: { state.sheet == .more },
             set: { shown in
                 guard !shown, state.sheet != .unspecified else { return }
                 send(PeopleEvents.home { $0.sheetClosed = .init() })
@@ -84,6 +85,8 @@ struct PeopleHomeView: View {
         field.open = state.search.open
         field.term = state.search.term
         field.corrected = state.search.corrected
+        // Rust's `corrected` here is the finished sentence, so the field says it as it is.
+        field.correctedLabel = state.search.corrected
         return SearchSlot(
             field: field,
             placeholder: state.chrome.searchPlaceholder,
@@ -94,29 +97,23 @@ struct PeopleHomeView: View {
         )
     }
 
-    /// THE CHIP ROW (R-CHROME-3): Rust's filters with their counts, then its
-    /// sort chip, last, whose tap opens the order sheet.
-    private var chips: [RoomChip] {
-        var out = state.chips.map { chip in
-            RoomChip(
-                identifier: "people-chip-\(chip.label.lowercased())",
-                label: chip.label,
-                count: chip.count > 0 ? "\(chip.count)" : "",
-                selected: chip.selected,
-                spoken: chip.accessibilityLabel,
-                action: { send(PeopleEvents.home { $0.chip = .with { $0.chip = chip.key } }) }
-            )
-        }
-        if state.hasSortChip {
-            out.append(RoomChip(
-                identifier: "people-chip-sort",
-                label: state.sortChip.label,
-                chevron: true,
-                spoken: state.sortChip.spoken,
-                action: { send(PeopleEvents.home { $0.sheetOpened = .with { $0.sheet = .order } }) }
-            ))
-        }
-        return out
+    /// THE HEADER'S FILTER BUTTON (R-CHROME-3): Rust's menu, the roster's filters with their
+    /// counts and then its order. A pick or the clear row is an event; which is checked, and
+    /// whether the funnel is lit, is on the state.
+    private var filter: FilterSlot? {
+        guard state.hasFilterMenu else { return nil }
+        return FilterSlot(
+            menu: state.filterMenu,
+            onPick: { section, option in
+                send(PeopleEvents.home {
+                    $0.filterMenuPicked = .with {
+                        $0.sectionKey = section
+                        $0.optionKey = option
+                    }
+                })
+            },
+            onClear: { send(PeopleEvents.home { $0.filterMenuCleared = .init() }) }
+        )
     }
 
     // MARK: content
@@ -397,34 +394,18 @@ private struct PeopleTouchList: View {
 
 // MARK: - Sheets
 
-/// More (Rust's rows: Trash — never search, sort or a filter) and the sort
-/// chip's order sheet.
+/// More: Rust's rows (Trash — never search, sort or a filter).
 private struct PeopleHomeSheet: View {
     let state: Centraid_Core_V1_PeopleHomeState
     let send: (Centraid_Core_V1_PeopleHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
 
     var body: some View {
-        let chrome = state.chrome
-        if state.sheet == .order {
-            OptionSheet(title: chrome.sortHeading) {
-                ForEach(state.orderChoices, id: \.label) { choice in
-                    SheetRow(
-                        label: choice.label,
-                        selected: choice.selected,
-                        identifier: "people-order-\(choice.label.lowercased())"
-                    ) {
-                        send(PeopleEvents.home { $0.order = .with { $0.order = choice.order } })
-                    }
-                }
-            }
-        } else {
-            OptionSheet(title: chrome.moreTitle) {
-                ForEach(state.moreRows, id: \.key) { row in
-                    SheetRow(iconKey: row.iconKey, label: row.label, identifier: "people-more-\(row.key)") {
-                        send(PeopleEvents.home { $0.sheetClosed = .init() })
-                        open(row.route)
-                    }
+        OptionSheet(title: state.chrome.moreTitle) {
+            ForEach(state.moreRows, id: \.key) { row in
+                SheetRow(iconKey: row.iconKey, label: row.label, identifier: "people-more-\(row.key)") {
+                    send(PeopleEvents.home { $0.sheetClosed = .init() })
+                    open(row.route)
                 }
             }
         }

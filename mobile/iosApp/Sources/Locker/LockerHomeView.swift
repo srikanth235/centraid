@@ -11,10 +11,10 @@ enum LockerHomeEvents {
 
 /// LOCKER'S HOME — Items · Review · Generate, More as a sheet (#1047; the
 /// handoff's Locker §1). Search is the room's bar (R-CHROME-2), never a tab;
-/// the Items filters are the room's chip row (R-CHROME-3).
+/// the Items filter is the header's menu (R-CHROME-3).
 ///
 /// **THE VIEW DECIDES NOTHING.** The band (empty while locked), the filter
-/// pills, the rows, the review verdicts, the generator, the search note, every
+/// menu, the rows, the review verdicts, the generator, the search note, every
 /// empty and every word are `LockerHomeState`'s (Rust); the wall is its `wall`.
 /// A row, the add control and a More row carry the `Route` to push.
 struct LockerHomeView: View {
@@ -63,7 +63,7 @@ struct LockerHomeView: View {
                 onTerm: { term in send(LockerHomeEvents.make { $0.searchTyped = .with { $0.term = term } }) },
                 onClose: { send(LockerHomeEvents.make { $0.searchClosed = .init() }) }
             ),
-            chips: covered ? [] : filterChips(content),
+            filter: covered ? nil : filterSlot(content),
             showsBand: !content.isDenied
         ) {
             AppBand(
@@ -195,20 +195,23 @@ struct LockerHomeView: View {
         }
     }
 
-    /// THE ITEMS FILTERS AS THE ROOM'S CHIP ROW (R-CHROME-3): only Items' data
-    /// carries them, so the row is there on Items and nowhere else.
-    private func filterChips(_ content: ScreenContent<Centraid_Core_V1_LockerHomeData>) -> [RoomChip] {
-        guard case let .data(home) = content else { return [] }
-        return home.filters.map { choice in
-            RoomChip(
-                identifier: "locker-filter-\(choice.key)",
-                label: choice.label,
-                count: choice.detail,
-                selected: choice.selected
-            ) {
-                send(LockerHomeEvents.make { $0.filter = .with { $0.key = choice.key } })
-            }
-        }
+    /// THE ITEMS FILTER AS THE HEADER'S MENU (R-CHROME-3): only Items' data carries it, so the
+    /// button is there on Items and nowhere else. A pick or the clear row is an event; which
+    /// option is checked, and whether the funnel is lit, is Rust's.
+    private func filterSlot(_ content: ScreenContent<Centraid_Core_V1_LockerHomeData>) -> FilterSlot? {
+        guard case let .data(home) = content, home.hasFilterMenu else { return nil }
+        return FilterSlot(
+            menu: home.filterMenu,
+            onPick: { section, option in
+                send(LockerHomeEvents.make {
+                    $0.filterMenuPicked = .with {
+                        $0.sectionKey = section
+                        $0.optionKey = option
+                    }
+                })
+            },
+            onClear: { send(LockerHomeEvents.make { $0.filterMenuCleared = .init() }) }
+        )
     }
 
     // MARK: Intents

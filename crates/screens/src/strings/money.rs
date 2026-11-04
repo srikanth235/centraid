@@ -22,7 +22,6 @@ catalog! {
     plain account_remove_number_body = ("Bank files will no longer find this account by its number.", "Bank files will no longer find this account by its number.");
     plain account_remove_number_confirm = ("Remove", "Remove");
     plain account_remove_number_title = ("Remove the bank number?", "Remove the bank number?");
-    plain account_sheet_title = ("Account", "Account");
     plain action_archive = ("Archive", "Archive");
     plain action_category = ("Set category", "Set category");
     plain action_merge = ("Merge into another", "Merge into another");
@@ -139,6 +138,8 @@ catalog! {
     plain fact_posted = ("Posted", "Posted");
     plain file_in = ("In", "In");
     plain file_out = ("Out", "Out");
+    plain filter_account = ("Account", "Account");
+    plain filter_category = ("Category", "Category");
     plain filter_empty = ("Nothing matches these filters.", "Nothing matches these filters.");
     plain from_you = ("set by you", "set by you");
     plain import_account = ("Into", "Into");
@@ -184,6 +185,7 @@ catalog! {
     plain money_in = ("Money in", "Money in");
     plain money_out = ("Money out", "Money out");
     plain month_sheet_title = ("Month", "Month");
+    plain month_spoken = ("Month, {month}", "Month, {month}");
     plain more_accounts = ("Accounts", "Accounts");
     plain more_accounts_meta = ("Balances and statement checks", "Balances and statement checks");
     plain more_categories = ("Categories", "Categories");

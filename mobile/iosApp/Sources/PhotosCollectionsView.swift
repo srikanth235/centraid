@@ -6,8 +6,7 @@ import SwiftUI
 /// reached from this list.
 ///
 /// **LAID OUT AS THE SYSTEM PHOTOS APP LAYS OUT ITS COLLECTIONS TAB** (iOS 26): a
-/// run of titled sections, each foldable — Pinned as a strip of square covers with
-/// the name printed on the photograph, Albums as covers with the name and count
+/// run of titled sections, each foldable — Pinned and Albums as strips of covers with the name and count
 /// beneath, Utilities as a grouped list, and the albums in the trash with their
 /// Restore. A member who knows that screen knows this one. What is NOT borrowed is
 /// the system's own look: the type, colour and icons are the emitted tables'
@@ -74,12 +73,15 @@ struct PhotosCollectionsBody: View {
                     .foregroundStyle(Theme.color("text", scheme))
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)
-                KitIconKey(iconKey: "ChevronDown", label: section.toggleLabel, framed: true) {
+                // THE ROUND PLATE THE ROOMS USE, its right edge on the page margin: the 36 plate
+                // sits inside a 44 target, so the target hangs 4 past the margin.
+                KitIconKey(iconKey: "ChevronDown", label: section.toggleLabel, framed: true, round: true) {
                     withAnimation(.easeInOut(duration: CentraidGeometry.durationOne / 1000)) {
                         send(PhotosHomeEvents.make { $0.sectionToggled = section.key })
                     }
                 }
                 .rotationEffect(.degrees(section.folded ? -90 : 0))
+                .padding(.trailing, -4)
             }
             if !section.folded { sectionBody(section) }
         }
@@ -90,7 +92,7 @@ struct PhotosCollectionsBody: View {
     private func sectionBody(_ section: Centraid_Core_V1_PhotosCollectionsSection) -> some View {
         switch section.key {
         case "pinned":
-            strip { ForEach(section.cards, id: \.id) { PinnedCard(card: $0, open: open) } }
+            strip { ForEach(section.cards, id: \.id) { AlbumCard(card: $0, open: open, onDelete: nil) } }
         case "albums":
             if section.hasEmpty {
                 EmptySectionCard(
@@ -135,13 +137,8 @@ struct PhotosCollectionsBody: View {
 private func cardRadius(_ scheme: ColorScheme) -> CGFloat { Theme.radius("lg", scheme) }
 /// The gap between cards in a strip — the system's, measured on its Pinned row.
 private let cardGap: CGFloat = 12
-/// A Pinned card's side. The system shows three and a sliver on a 402pt phone.
-private let pinnedSide: CGFloat = 110
-/// An album cover's side: larger than Pinned's, because an album is read by its
-/// picture and a pinned shelf by its name.
+/// A card's side, pinned shelf or album: one size, so every strip reads the same.
 private let albumSide: CGFloat = 150
-/// An empty section's card height.
-private let wideCardHeight: CGFloat = 150
 
 /// A cover, or the ground a card without one stands on.
 ///
@@ -174,47 +171,14 @@ private struct CoverGround: View {
     }
 }
 
-/// ONE PINNED CARD: a square, the name printed on the picture over a dark wash, so
-/// it reads on any photograph.
-private struct PinnedCard: View {
-    let card: Centraid_Core_V1_PhotosCollectionCard
-    let open: (Centraid_Core_V1_Route) -> Void
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        Button {
-            if card.hasRoute { open(card.route) }
-        } label: {
-            ZStack(alignment: .bottomLeading) {
-                CoverGround(card: card, iconKey: card.iconKey)
-                LinearGradient(
-                    colors: [.black.opacity(0), .black.opacity(0.45)],
-                    startPoint: .center,
-                    endPoint: .bottom
-                )
-                Text(card.title)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                    .padding(10)
-            }
-            .frame(width: pinnedSide, height: pinnedSide)
-            .clipShape(RoundedRectangle(cornerRadius: cardRadius(scheme)))
-            .contentShape(RoundedRectangle(cornerRadius: cardRadius(scheme)))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(card.accessibilityLabel)
-        .accessibilityIdentifier("photos.collections.shelf")
-    }
-}
-
-/// ONE ALBUM: the cover, then the name and the count beneath it. A long press is
-/// the system's way to the album's own verbs — here, Delete, which Rust confirms
-/// before it writes.
+/// ONE CARD FOR EVERY STRIP, pinned shelves and albums alike: the cover, then the name
+/// and the count beneath it. A long press on an album is the system's way to its own
+/// verbs — here, Delete, which Rust confirms before it writes.
 private struct AlbumCard: View {
     let card: Centraid_Core_V1_PhotosCollectionCard
     let open: (Centraid_Core_V1_Route) -> Void
-    let onDelete: () -> Void
+    /// Nil for a standing shelf, which has no delete.
+    let onDelete: (() -> Void)?
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -222,7 +186,7 @@ private struct AlbumCard: View {
             if card.hasRoute { open(card.route) }
         } label: {
             VStack(alignment: .leading, spacing: 6) {
-                CoverGround(card: card, iconKey: "album")
+                CoverGround(card: card, iconKey: card.iconKey.isEmpty ? "album" : card.iconKey)
                     .frame(width: albumSide, height: albumSide)
                     .clipShape(RoundedRectangle(cornerRadius: cardRadius(scheme)))
                 VStack(alignment: .leading, spacing: 0) {
@@ -242,17 +206,34 @@ private struct AlbumCard: View {
         // THE SYSTEM'S LONG-PRESS ON AN ALBUM. Only an album: a standing shelf is
         // carries no `deleteLabel`, and never reaches this card.
         .contextMenu {
-            Button(card.deleteLabel, role: .destructive, action: onDelete)
-                .accessibilityIdentifier("photos.collections.delete-album")
+            if let onDelete {
+                Button(card.deleteLabel, role: .destructive, action: onDelete)
+                    .accessibilityIdentifier("photos.collections.delete-album")
+            }
         }
         .accessibilityLabel(card.accessibilityLabel)
         .accessibilityIdentifier("photos.collections.shelf")
-        .accessibilityAction(named: card.deleteLabel, onDelete)
+        .modifier(DeleteAction(label: card.deleteLabel, action: onDelete))
     }
 }
 
-/// AN EMPTY SECTION'S CARD: icon and verb across the top, the sentence at the
-/// foot. The verb is a real control — the same sheet the toolbar's plus opens.
+/// The delete as a VoiceOver action, only where there is one.
+private struct DeleteAction: ViewModifier {
+    let label: String
+    let action: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if let action {
+            content.accessibilityAction(named: label, action)
+        } else {
+            content
+        }
+    }
+}
+
+/// AN EMPTY SECTION'S CARD, laid out as any empty state: the mark, the sentence, the
+/// line under it, then the verb. The verb is a real control — the same sheet the
+/// toolbar's plus opens.
 private struct EmptySectionCard: View {
     let iconKey: String
     let title: String
@@ -262,23 +243,22 @@ private struct EmptySectionCard: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top) {
-                CentraidIconView(iconKey: iconKey, tint: Theme.color("textFaint", scheme), size: 28)
-                Spacer()
-                KitOutlineButton(label: verb, action: onVerb)
-                    .accessibilityIdentifier("photos.collections.create-album-card")
-            }
-            Spacer(minLength: 12)
+        VStack(spacing: 8) {
+            CentraidIconView(iconKey: iconKey, tint: Theme.color("textFaint", scheme), size: 28)
             Text(title)
                 .centraidType("smallStrong")
                 .foregroundStyle(Theme.color("textSoft", scheme))
+                .multilineTextAlignment(.center)
             Text(caption)
                 .centraidType("small")
                 .foregroundStyle(Theme.color("textFaint", scheme))
+                .multilineTextAlignment(.center)
+            KitOutlineButton(label: verb, action: onVerb)
+                .accessibilityIdentifier("photos.collections.create-album-card")
+                .padding(.top, 4)
         }
         .padding(18)
-        .frame(maxWidth: .infinity, minHeight: wideCardHeight, alignment: .topLeading)
+        .frame(maxWidth: .infinity)
         .background(RoundedRectangle(cornerRadius: cardRadius(scheme)).fill(Theme.color("bgElev", scheme)))
     }
 }

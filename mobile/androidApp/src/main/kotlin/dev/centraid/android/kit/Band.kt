@@ -20,8 +20,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
@@ -42,6 +47,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -208,24 +214,67 @@ internal fun Modifier.bandFloor(): Modifier {
 }
 
 /**
+ * THE BAND'S GROUND, ONCE FOR EVERY BAND: Material 3 Expressive's floating pill — a SOLID tonal
+ * surface, not glass. The plate is `bgElev` (raised paper, this theme's nearest token to Material's
+ * surfaceContainer) at full opacity, on the shape's own rounded corners, lifted by a soft shadow
+ * ([BandPolicy.BAND_ELEVATION]). Nothing is translucent and nothing is blurred: what the page
+ * scrolls under the band is hidden by the plate, and shows only around it. iOS draws the same
+ * controls as real Liquid Glass (`BandGround`); parity is the same behaviour, words and ids, not
+ * the same pixels.
+ *
+ * Callers must not clip before this, which would cut the shadow off; clip after it when a child
+ * needs the shape (a ripple, a press ground).
+ *
+ * Under high-contrast text ([rememberHighTextContrast]) the plate keeps its tone and takes the
+ * hairline edge back (`lineStrong`) — the nearest thing Android has to iOS's Reduce Transparency
+ * and Increase Contrast, which it has no setting for — and [bandStrip] puts the page colour back
+ * under the strip.
+ */
+@Composable
+internal fun Modifier.bandGround(shape: Shape): Modifier {
+    val plate = this
+        .shadow(BandPolicy.BAND_ELEVATION.dp, shape, clip = false)
+        .background(centraidColor("bgElev"), shape)
+    return if (rememberHighTextContrast()) {
+        plate.border(CentraidGeometry.HAIRLINE.dp, centraidColor("lineStrong"), shape)
+    } else {
+        plate
+    }
+}
+
+/**
+ * WHAT THE BAND STANDS ON: nothing, so what scrolls beneath shows around the floating plates; the
+ * page colour under high-contrast text, so the strip is the slab it was.
+ */
+@Composable
+internal fun Modifier.bandStrip(): Modifier =
+    if (rememberHighTextContrast()) this.background(centraidColor("bg")) else this
+
+/**
  * THE BAND'S PRESS: `bgPress` under the finger on the pill rung, and no
  * ripple — a ground and not a splash, a scale or an opacity, which DESIGN.md
  * refuses. The tab stays where it was and only its floor answers.
  */
 @Composable
-internal fun Modifier.bandPress(onPress: () -> Unit, resting: androidx.compose.ui.graphics.Color? = null): Modifier {
+internal fun Modifier.bandPress(onPress: () -> Unit): Modifier {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val ground = when {
-        pressed -> centraidColor("bgPress")
-        resting != null -> resting
-        else -> androidx.compose.ui.graphics.Color.Transparent
-    }
+    val ground = if (pressed) centraidColor("bgPress") else androidx.compose.ui.graphics.Color.Transparent
     return this
         .clip(RoundedCornerShape(BandPolicy.BAND_RADIUS.dp))
         .background(ground)
         .clickable(interactionSource = interaction, indication = null, onClick = onPress)
 }
+
+/**
+ * THE BAND'S SEARCH KEY, as an `AppPlace` hands it to the band it draws: the words a screen reader
+ * says for it and the open. Absent where the app has no search (the Compose twin of iOS's
+ * `BandSearchKey`).
+ */
+public class BandSearchKey(public val label: String, public val onOpen: () -> Unit)
+
+/** The app's search for the band to draw as its trailing key; null draws none. */
+public val LocalBandSearchKey: ProvidableCompositionLocal<BandSearchKey?> = compositionLocalOf { null }
 
 /** One of an app band's destinations, as the band draws it. */
 public data class AppBandTab(
@@ -234,6 +283,9 @@ public data class AppBandTab(
     val iconKey: String,
     val selected: Boolean,
 )
+
+/** One segment of a band's segmented control: the machine's key, its word, whether it is lit. */
+public data class BandSegment(val id: String, val label: String, val selected: Boolean)
 
 /** The state-change curve, `--ease` at `--dur-1`. */
 private val STATE_CHANGE = tween<Dp>(
@@ -245,13 +297,16 @@ private val STATE_CHANGE = tween<Dp>(
  * AN APP'S BAND — the `AppPlace` room's band, the Compose twin of iOS's
  * `AppBand` in `Band.swift` (which carries the full argument).
  *
- * Two plates: the HOME CIRCLE on the page colour, because home is the one
- * thing an app may not take away (#883), and one plate of the app's own
- * destinations beside it. The lit tab is said three ways at once — the held
+ * Two plates and a key at each end: the HOME CIRCLE on the page colour, because home is the one
+ * thing an app may not take away (#883), one plate of the app's own destinations beside it and,
+ * where the app has search, the round SEARCH KEY at the trailing edge ([LocalBandSearchKey]). The lit tab is said three ways at once — the held
  * pair (`band` → `control`), the ink step, and a mark-wide rule inside the
  * plate that slides from tab to tab on the state-change curve. A change of
  * place is one selection tick. More is a tab in the plate when the app has a
  * More sheet, and absent when it has none.
+ *
+ * Both plates are solid tonal floating pills ([bandGround]) and what the page scrolls runs under
+ * the band (`AppPlace`), showing around the pills.
  */
 @Composable
 public fun AppBand(
@@ -261,8 +316,19 @@ public fun AppBand(
     onHome: () -> Unit,
     modifier: Modifier = Modifier,
     onMore: (() -> Unit)? = null,
+    /**
+     * A segmented control the page asks the band to carry (Photos' Years · Months · All). Empty is
+     * none, and the plate of places is what the band draws. With some, the places FOLD into one
+     * leading key and the control stands between that key and the search key; the key brings the
+     * plate back, and a pick of a place puts the control back (the twin of iOS's `AppBand`).
+     */
+    segments: List<BandSegment> = emptyList(),
+    onSegment: (String) -> Unit = {},
 ) {
+    var placesOpen by remember { mutableStateOf(false) }
+    val folded = segments.isNotEmpty() && !placesOpen
     val lit = tabs.indexOfFirst { it.selected }
+    val searchKey = LocalBandSearchKey.current
     val haptics = LocalHapticFeedback.current
     val first = remember { booleanArrayOf(true) }
     LaunchedEffect(lit) {
@@ -285,36 +351,29 @@ public fun AppBand(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // A CIRCLE, as wide as the plate is tall.
-        Box(
-            Modifier
-                .size(height)
-                .bandPress(onHome, resting = centraidColor("bg"))
-                .border(CentraidGeometry.HAIRLINE.dp, centraidColor("lineStrong"), CircleShape)
-                .testTag("$app-band-home")
-                .semantics {
-                    contentDescription = KitWords.BAND_HOME
-                    role = Role.Button
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            CentraidIcon(
-                iconKey = "Home",
-                tint = centraidColor("textSoft"),
-                size = BandPolicy.BAND_ICON_SIZE.dp,
-            )
-        }
+        BandKey(
+            iconKey = "Home",
+            spoken = KitWords.BAND_HOME,
+            testTag = "$app-band-home",
+            onPress = onHome,
+        )
         val count = tabs.size + if (onMore != null) 1 else 0
-        BoxWithConstraints(
+        val plate = RoundedCornerShape(BandPolicy.BAND_RADIUS.dp)
+        if (folded) {
+            // THE PLACES, FOLDED: one key for where the member is, the same circle as Home and
+            // search, and the segments in the middle.
+            BandKey(
+                iconKey = tabs.getOrNull(lit)?.iconKey ?: tabs.firstOrNull()?.iconKey ?: "Image",
+                spoken = tabs.getOrNull(lit)?.label ?: tabs.firstOrNull()?.label.orEmpty(),
+                testTag = "$app-band-places",
+                onPress = { placesOpen = true },
+            )
+            BandSegmented(segments, onSegment, Modifier.weight(1f))
+        } else BoxWithConstraints(
             Modifier
                 .weight(1f)
                 .height(height)
-                .clip(RoundedCornerShape(BandPolicy.BAND_RADIUS.dp))
-                .background(centraidColor("bgElev"))
-                .border(
-                    CentraidGeometry.HAIRLINE.dp,
-                    centraidColor("lineStrong"),
-                    RoundedCornerShape(BandPolicy.BAND_RADIUS.dp),
-                ),
+                .bandGround(plate),
         ) {
             val pad = BandPolicy.BAND_PLATE_PAD.dp
             val tabWidth = (maxWidth - pad * 2) / maxOf(count, 1)
@@ -325,7 +384,10 @@ public fun AppBand(
                         label = tab.label,
                         selected = tab.selected,
                         testTag = "$app-band-${tab.key}",
-                        onPress = { onSelect(tab.key) },
+                        onPress = {
+                            placesOpen = false
+                            onSelect(tab.key)
+                        },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -358,6 +420,91 @@ public fun AppBand(
                 )
             }
         }
+        // THE APP'S SEARCH, at the trailing end: the Home circle's twin (same size, same pill), with
+        // the magnifier Home's own search key wears. An app with no search slot hands none, and draws
+        // none. One id on every app, because the key is the kit's and not the app's.
+        if (searchKey != null) {
+            BandKey(
+                iconKey = "Search",
+                spoken = searchKey.label,
+                testTag = "band-search",
+                onPress = searchKey.onOpen,
+            )
+        }
+    }
+}
+
+/**
+ * THE BAND'S SEGMENTED CONTROL: a plate of words between the folded place key and the search key,
+ * the plate's own height and ground, each segment at least 44dp wide. The lit one takes the held
+ * pair (`band` to `control`, one rung, so a press reflows nothing) and the selected ground,
+ * `bgSunken`, never an accent. Each segment's test tag is its `id`.
+ */
+@Composable
+internal fun BandSegmented(
+    segments: List<BandSegment>,
+    onPick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val plate = RoundedCornerShape(BandPolicy.BAND_RADIUS.dp)
+    Row(
+        modifier
+            .height(BandPolicy.BAND_HEIGHT.dp)
+            .bandGround(plate)
+            .padding(BandPolicy.BAND_PLATE_PAD.dp),
+    ) {
+        segments.forEach { segment ->
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(plate)
+                    .background(if (segment.selected) centraidColor("bgSunken") else androidx.compose.ui.graphics.Color.Transparent)
+                    .clickable { onPick(segment.id) }
+                    .testTag(segment.id)
+                    .semantics {
+                        contentDescription = segment.label
+                        role = Role.Tab
+                        selected = segment.selected
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    segment.label,
+                    style = centraidType(if (segment.selected) "control" else "band", scales = false),
+                    color = centraidColor(if (segment.selected) "text" else "textSoft"),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * A ROUND KEY ON THE BAND: Home at the leading end and the app's search at the trailing end are
+ * this one composable — as wide as the plate is tall, on the same tonal pill ([bandGround]), and
+ * `bgPress` while held like every other press on the band.
+ */
+@Composable
+internal fun BandKey(iconKey: String, spoken: String, testTag: String, onPress: () -> Unit) {
+    Box(
+        Modifier
+            .size(BandPolicy.BAND_HEIGHT.dp)
+            .bandGround(CircleShape)
+            .bandPress(onPress)
+            .testTag(testTag)
+            .semantics {
+                contentDescription = spoken
+                role = Role.Button
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        CentraidIcon(
+            iconKey = iconKey,
+            tint = centraidColor("textSoft"),
+            size = BandPolicy.BAND_ICON_SIZE.dp,
+        )
     }
 }
 

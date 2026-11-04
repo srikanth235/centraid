@@ -97,7 +97,6 @@ cargo xtask gate --profile release    # nightly + the artifact-identity checks
 cargo xtask gate --profile mobile-jvm # the Kotlin JVM suites and the generated-artifact drift check
 cargo xtask rules                     # the structural rules alone
 cargo xtask repo-root                 # which tree the path-based rules will scan
-cargo xtask measure --write           # the edit-run loop, into the compile-time ledger
 ```
 
 **Give every worktree its own `CARGO_TARGET_DIR`** — sharing one silently hands generated Rust between them (`.claude/skills/rust/SKILL.md`, Pitfalls).

@@ -77,6 +77,15 @@ impl AlbumChoice {
         self.open
     }
 
+    /// The title of a listed album, for the receipt that names it.
+    #[must_use]
+    pub fn title_of(&self, album_id: &str) -> Option<&str> {
+        self.albums
+            .iter()
+            .find(|album| album.album_id == album_id)
+            .map(|album| album.title.as_str())
+    }
+
     /// Close the sheet (the mode it served ended).
     pub fn close(&mut self) {
         self.open = false;

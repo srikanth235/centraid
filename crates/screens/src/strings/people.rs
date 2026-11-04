@@ -84,6 +84,7 @@ catalog! {
     plain field_nickname = ("Nickname", "Nickname");
     plain field_role = ("Role", "Role");
     plain field_role_placeholder = ("One line", "One line");
+    plain filter_title = ("Show", "Show");
     plain gone_body = (
         "They were moved to the trash or merged into someone else.",
         "They were moved to the trash or merged into someone else."
@@ -177,7 +178,6 @@ catalog! {
     plain section_reconnect = ("Reconnect", "Reconnect");
     plain section_touches = ("Touches", "Touches");
     plain section_upcoming = ("Upcoming", "Upcoming");
-    plain sort_chip_spoken = ("Sort, {order}", "Sort, {order}");
     plain sort_heading = ("Sort", "Sort");
     plain sort_name = ("Name", "Name");
     plain sort_recent = ("Recently added", "Recently added");

@@ -11,10 +11,10 @@ import SwiftUI
 ///
 /// **THE ROOT'S CHROME IS RUST'S (R-CHROME-1…5).** "Photos" has ONE trailing
 /// action — Select on the library (the app with nothing to create), New album on
-/// Collections — the search bar under the title (it opens Search, whose body is
-/// the hits), the library's filter chips, the body, and the band at the foot. The
+/// Collections — beside the filter button's menu, the body, and the band at the foot, the one
+/// floating bar, which carries the library's zoom (Years · Months · All) as a segmented control. The
 /// band's places are Library and Collections, then More (a tab whose press opens
-/// a sheet — `more` is a sheet, never a destination). While selecting, the bar
+/// a sheet — `more` is a sheet, never a destination), and its trailing key is search. While selecting, the bar
 /// takes the band's place (Apple Photos'), so a tap aimed at Trash cannot land on
 /// a destination.
 ///
@@ -43,11 +43,11 @@ struct PhotosHomeView: View {
             app: "photos",
             title: selecting ? (selection.title.isEmpty ? chrome.selectingTitle : selection.title) : chrome.title,
             trailing: trailing,
-            // SEARCH IS THE FIELD UNDER THE TITLE (R-CHROME-2): the bar's press moves
-            // Photos to Search, whose body is the hits, and the field opens where the
-            // bar stood; closing clears the query and returns to the library. Not while
-            // selecting — the header is the selection's then.
-            search: selecting ? nil : SearchSlot(
+            // SEARCH IS THE BAND'S TRAILING KEY (R-CHROME-2): its press moves Photos to
+            // Search, whose body is the hits, and the field opens at the foot where the
+            // band stood; closing clears the query and returns to the library. While
+            // selecting the selection bar stands in the band's place and carries no key.
+            search: SearchSlot(
                 field: searchField,
                 placeholder: chrome.searchPlaceholder,
                 closeLabel: chrome.closeSearchLabel,
@@ -55,17 +55,63 @@ struct PhotosHomeView: View {
                 onTerm: { term in send(PhotosHomeEvents.make { $0.searchTerm = term }) },
                 onClose: { send(PhotosHomeEvents.make { $0.searchClosed = .init() }) }
             ),
-            chips: state.chips.map { chip in
-                RoomChip(
-                    identifier: chip.filter == .favorites ? "photos-filter-favorites" : "photos-filter-all",
-                    label: chip.label,
-                    selected: chip.selected
-                ) { send(PhotosHomeEvents.make { $0.filter = chip.filter }) }
-            },
+            filter: filter,
             band: { foot },
             content: { pageBody }
         )
         .modifier(PhotosHomeSheets(state: state, send: send))
+    }
+
+    /// THE HEADER'S FILTER BUTTON (R-CHROME-3): All photos · Favorites, Rust's menu. A pick or the
+    /// clear row is an event; which is checked, and whether the funnel is lit, is on the state.
+    private var filter: FilterSlot? {
+        guard state.hasFilterMenu else { return nil }
+        return FilterSlot(
+            menu: state.filterMenu,
+            onPick: { section, option in
+                send(PhotosHomeEvents.make {
+                    $0.filterMenuPicked = .with {
+                        $0.sectionKey = section
+                        $0.optionKey = option
+                    }
+                })
+            },
+            onClear: { send(PhotosHomeEvents.make { $0.filterMenuCleared = .init() }) }
+        )
+    }
+
+    /// THE ZOOM, IN THE BAND: Years · Months · All as a segmented control. Whether it is there,
+    /// its words and which segment is lit are Rust's; a pick carries the day the member is
+    /// standing on (`visibleDay`), so the switch lands there.
+    private var grainSegments: [BandSegment] {
+        state.grainSegments.map { segment in
+            BandSegment(
+                id: "photos-grain-\(Self.grainName(segment.grain))",
+                label: segment.label,
+                selected: segment.selected
+            )
+        }
+    }
+
+    private func pickGrain(_ id: String) {
+        guard let segment = state.grainSegments.first(where: {
+            "photos-grain-\(Self.grainName($0.grain))" == id
+        }) else { return }
+        send(PhotosHomeEvents.make {
+            $0.grain = .with {
+                $0.grain = segment.grain
+                $0.atDay = visibleDay
+            }
+        })
+    }
+
+    /// The id a flow taps a zoom segment by.
+    private static func grainName(_ grain: Centraid_Core_V1_PhotosGrain) -> String {
+        switch grain {
+        case .years: return "years"
+        case .months: return "months"
+        default: return "all"
+        }
     }
 
     /// THE HEADER'S ONE TRAILING ACTION (R-CHROME-1), a glyph and its words.
@@ -92,49 +138,40 @@ struct PhotosHomeView: View {
         field.open = searching
         field.term = state.hasSearch ? state.search.query : ""
         field.corrected = state.hasSearch ? state.search.corrected : ""
+        // Rust's `corrected` here is the finished sentence, so the field says it as it is.
+        field.correctedLabel = field.corrected
         return field
     }
 
-    /// THE FOOT: the band, or what stands in its place. The content ends above it
-    /// BY LAYOUT (v0's rule), so the last row of photographs scrolls clear of it.
+    /// THE FOOT: the band, or what stands in its place — and nothing else, so there is ONE
+    /// floating bar. The photographs run under its glass and the scroll's own foot margin
+    /// lets the last row clear it.
     @ViewBuilder
     private var foot: some View {
         if selecting {
             PhotosSelectionBar(selection: selection, sendCopyLabel: chrome.sendCopyLabel, send: send)
         } else {
-            VStack(spacing: 0) {
-                // YEARS · MONTHS · ALL, PERMANENT while the library has photographs
-                // (v0) — above the band, never on a timer.
-                if !collecting, !searching, hasTiles, state.hasLibrary {
-                    LibraryGrainControl(grain: state.library.grain, chrome: chrome) { next in
-                        send(PhotosHomeEvents.make {
-                            $0.grain = .with {
-                                $0.grain = next
-                                $0.atDay = visibleDay
-                            }
-                        })
-                    }
-                }
-                // PLACES, THEN MORE — an ordinary tab of the band, whose press opens
-                // the sheet.
-                AppBand(
-                    app: "photos",
-                    tabs: state.band.map { tab in
-                        BandView(
-                            label: tab.label,
-                            event: Data(tab.key.utf8),
-                            iconKey: tab.iconKey,
-                            selected: tab.current,
-                            key: tab.key
-                        )
-                    },
-                    onSelect: { picked in
-                        let key = String(decoding: picked, as: UTF8.self)
-                        send(PhotosHomeEvents.make { $0.band = key })
-                    },
-                    onHome: onHome
-                )
-            }
+            // PLACES, THEN MORE — an ordinary tab of the band, whose press opens
+            // the sheet.
+            AppBand(
+                app: "photos",
+                tabs: state.band.map { tab in
+                    BandView(
+                        label: tab.label,
+                        event: Data(tab.key.utf8),
+                        iconKey: tab.iconKey,
+                        selected: tab.current,
+                        key: tab.key
+                    )
+                },
+                onSelect: { picked in
+                    let key = String(decoding: picked, as: UTF8.self)
+                    send(PhotosHomeEvents.make { $0.band = key })
+                },
+                segments: grainSegments,
+                onSegment: pickGrain,
+                onHome: onHome
+            )
         }
     }
 
@@ -223,12 +260,12 @@ struct PhotosBackupBanner: View {
     }
 }
 
-/// THE SHEETS PHOTOS' HOME OPENS: More, the tile sizes, the camera roll's detail,
-/// the location a copy carries, "New album", "Add to album" and the confirms.
+/// THE SHEETS PHOTOS' HOME OPENS: More, the tile sizes, the location a copy carries, "New album", "Add to album" and the confirms.
 /// WHICH ONE IS OPEN IS STATE — `isPresented` is derived from `state.sheet` and a
 /// swipe-to-dismiss is WRITTEN as an event, or the state would still say `MORE`
 /// with nothing on screen and the next press on `···` would be a no-op.
 private struct PhotosHomeSheets: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
     let state: Centraid_Core_V1_PhotosHomeState
     let send: (Centraid_Core_V1_PhotosHomeEvent) -> Void
 
@@ -262,9 +299,6 @@ private struct PhotosHomeSheets: ViewModifier {
                     .presentationDetents([.medium])
                 }
             }
-            .sheet(isPresented: binding(.backupDetail)) {
-                if state.hasBackupDetail { PhotosBackupDetailSheet(detail: state.backupDetail, send: send) }
-            }
             // HOW MUCH OF THE PLACE TRAVELS, asked every time (#816): a place NAME is
             // one sentence per photograph, and a batch has as many places as photographs.
             .sheet(isPresented: binding(.copyPlace)) {
@@ -288,12 +322,16 @@ private struct PhotosHomeSheets: ViewModifier {
                     SheetRoom(
                         title: state.chrome.newAlbumLabel,
                         status: state.hasStatus ? state.status.sentence : "",
-                        primary: state.collections.newAlbumCanSubmit
-                            ? SheetPrimary(
-                                label: state.collections.createLabel,
-                                identifier: "photos.collections.create-album"
-                            ) { send(PhotosHomeEvents.make { $0.newAlbumSubmitted = .init() }) }
-                            : nil
+                        // CREATE IS ALWAYS THERE, greyed until there is a name: an empty name
+                        // is not a write. Cancel is the same full-width outline as every sheet.
+                        primary: SheetPrimary(
+                            label: state.collections.createLabel,
+                            enabled: state.collections.newAlbumCanSubmit,
+                            identifier: "photos.collections.create-album"
+                        ) { send(PhotosHomeEvents.make { $0.newAlbumSubmitted = .init() }) },
+                        outlines: [SheetOutline(label: state.chrome.cancelLabel, identifier: "photos.collections.cancel-album") {
+                            send(PhotosHomeEvents.sheet(.none))
+                        }]
                     ) {
                         MachineTextField(
                             placeholder: state.collections.newAlbumPlaceholder,
@@ -307,9 +345,16 @@ private struct PhotosHomeSheets: ViewModifier {
                             }
                         )
                         .centraidType("body")
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                                .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
+                        )
                         .accessibilityLabel(state.collections.newAlbumPlaceholder)
                         .accessibilityIdentifier("photos.collections.album-name")
                     }
+                    .presentationDetents([.height(340)])
                 }
             }
             // "ADD TO ALBUM" — the shared sheet. `isPresented` is the state's, so a
@@ -364,7 +409,7 @@ private struct PhotosHomeSheets: ViewModifier {
     }
 }
 
-/// THE MORE SHEET: the camera roll, the tile size, and the "Free up space" row.
+/// THE MORE SHEET: the tile size and the "Free up space" row.
 /// More is a tab of the band whose press opens this; every other surface is
 /// reached from Collections, so the foot says so in one clause. Rows, sentences and
 /// the free-up row are Rust's.
@@ -379,10 +424,11 @@ private struct PhotosMoreSheetView: View {
                 SheetRow(
                     iconKey: row.iconKey,
                     label: row.meta.isEmpty ? row.label : "\(row.label) \u{00B7} \(row.meta)",
+                    chevron: true,
                     identifier: "photos.more.\(row.key)"
                 ) {
-                    // `tile_size` opens its choice; the camera roll opens its detail.
-                    send(PhotosHomeEvents.sheet(row.key == "tile_size" ? .tileSize : .backupDetail))
+                    // `tile_size` is the one row, and it opens its choice.
+                    send(PhotosHomeEvents.sheet(.tileSize))
                 }
             }
             if more.hasFreeUp {
@@ -416,57 +462,33 @@ private struct FreeUpSpaceRow: View {
                 }
             }
             .accessibilityElement(children: .combine)
-            if !row.reason.isEmpty {
-                Text(row.reason)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
+            // THE FOOTNOTES START UNDER THE ROW'S WORDS, not under its mark: a 24 mark and a 12 gap.
+            VStack(alignment: .leading, spacing: 4) {
+                if !row.reason.isEmpty {
+                    Text(row.reason)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("textFaint", scheme))
+                }
+                if !row.actionLabel.isEmpty {
+                    KitLink(label: row.actionLabel, identifier: "photos.more.freeUp.action", action: onFree)
+                        .disabled(!row.enabled)
+                }
+                if !row.notice.isEmpty {
+                    Text(row.notice)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                }
+                // WHAT A PHOTO DELETED FOR GOOD COSTS THE BACKUP DEVICE (#1080 F5).
+                if !row.retention.isEmpty {
+                    Text(row.retention)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("textFaint", scheme))
+                }
             }
-            if !row.actionLabel.isEmpty {
-                KitLink(label: row.actionLabel, identifier: "photos.more.freeUp.action", action: onFree)
-                    .disabled(!row.enabled)
-            }
-            if !row.notice.isEmpty {
-                Text(row.notice)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-            }
-            // WHAT A PHOTO DELETED FOR GOOD COSTS THE BACKUP DEVICE (#1080 F5).
-            if !row.retention.isEmpty {
-                Text(row.retention)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
-            }
+            .padding(.leading, 36)
         }
         .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
         .padding(.vertical, 6)
         .accessibilityIdentifier("photos.more.freeUp")
-    }
-}
-
-/// WHAT THIS DEVICE'S CAMERA-ROLL IMPORT IS DOING, IN FULL: the banner says the
-/// phase in one sentence; this says the rest — how many, and why it is not moving.
-///
-/// **An IMPORT, and only that** (#1080). It brings the camera roll into this vault;
-/// it says nothing about a gateway, and it carries no transport row. An import
-/// already running has nothing to start, so the ink button is drawn greyed, not
-/// hidden.
-private struct PhotosBackupDetailSheet: View {
-    let detail: Centraid_Core_V1_PhotosBackupDetailSheet
-    let send: (Centraid_Core_V1_PhotosHomeEvent) -> Void
-
-    var body: some View {
-        SheetRoom(
-            title: detail.title,
-            status: detail.status,
-            primary: SheetPrimary(label: detail.importLabel, enabled: detail.importEnabled) {
-                send(PhotosHomeEvents.make { $0.importNow = .init() })
-            }
-        ) {
-            VStack(spacing: 0) {
-                ForEach(detail.rows, id: \.key) { row in
-                    FieldRow(key: row.key, value: row.value)
-                }
-            }
-        }
     }
 }

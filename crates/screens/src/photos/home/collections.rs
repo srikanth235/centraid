@@ -211,7 +211,8 @@ impl Collections {
             };
             wire::PhotosCollectionCard {
                 kind: Kind::Shelf as i32,
-                id: String::new(),
+                // A stable identity for the strip: shelves carry no row id of their own.
+                id: format!("shelf-{}", kind.as_str_name()),
                 accessibility_label: format!(
                     "{title}, {}",
                     cells::count_phrase(locale, tile.count, false)
@@ -238,6 +239,7 @@ impl Collections {
                 };
                 wire::PhotosCollectionCard {
                     kind: kind as i32,
+                    id: format!("door-{}", kind.as_str_name()),
                     accessibility_label: format!("{title}, {count_label}"),
                     title,
                     count_label,

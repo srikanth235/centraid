@@ -139,7 +139,6 @@ pub fn move_choices(
             wire::DocsChoice {
                 key: node.id.clone(),
                 label: path,
-                detail: String::new(),
                 selected: node.id == current,
             }
         })
@@ -150,7 +149,6 @@ pub fn move_choices(
         wire::DocsChoice {
             key: TOP_LEVEL.to_owned(),
             label: words::move_top(locale),
-            detail: String::new(),
             selected: current.is_empty(),
         },
     );

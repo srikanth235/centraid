@@ -49,6 +49,7 @@ struct PhotoShelfView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 header
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
 
                 if state.hasAlbum, state.album.trashed {
                     // A TRASHED ALBUM OFFERS ITS WAY BACK, and none of the verbs
@@ -63,6 +64,7 @@ struct PhotoShelfView: View {
                         }
                         .accessibilityIdentifier("photos.shelf.restoreAlbum")
                     }
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
                 }
 
                 if state.hasKeepOriginals {
@@ -84,37 +86,47 @@ struct PhotoShelfView: View {
                     .accessibilityLabel(state.keepOriginals.label)
                     .accessibilityHint(state.keepOriginals.meta)
                     .accessibilityIdentifier("photos.shelf.keepOriginals")
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
                 }
 
                 if !state.purgeWindow.isEmpty {
                     Text(state.purgeWindow)
                         .centraidType("small")
                         .foregroundStyle(Theme.color("textSoft", scheme))
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
                 }
 
                 // A REFUSED WRITE, ABOVE THE CELLS AND NEVER INSTEAD OF THEM: it
                 // lands in `status`, not in the read's `failure`, so the shelf
                 // and the pick stay.
-                if state.hasStatus {
+                if state.hasStatus, state.status.refused {
                     ScreenFailureView(sentence: state.status.sentence, remedy: "")
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
                         .accessibilityIdentifier("photos.shelf.writeFailure")
+                } else if state.hasStatus {
+                    // WHAT THE LAST BATCH DID, said once where the member made it.
+                    StatusLineView(status: state.status, onAct: {})
+                        .accessibilityIdentifier("photos.shelf.receipt")
                 }
 
                 if !state.notice.isEmpty {
                     Text(state.notice)
                         .centraidType("small")
                         .foregroundStyle(Theme.color("textSoft", scheme))
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
                         .accessibilityIdentifier("photos.shelf.exportNotice")
                 }
 
                 switch state.content {
                 case .loading?, nil:
-                    RowSkeleton()
+                    RowSkeleton().padding(.horizontal, CentraidGeometry.pageMargin)
                 case let .failure(failure)?:
                     ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
                 case let .data(data)?:
                     if data.hasEmpty {
                         ScreenEmptyView(sentence: data.empty.headline, remedy: data.empty.body)
+                            .padding(.horizontal, CentraidGeometry.pageMargin)
                     } else {
                         PhotoCellsGrid(
                             cells: data.cells.map(\.tile),
@@ -129,13 +141,16 @@ struct PhotoShelfView: View {
                         )
                         if data.canShowMore {
                             KitLink(label: data.showMoreLabel) { shelf { $0.loadMore = .init() } }
+                                .padding(.horizontal, CentraidGeometry.pageMargin)
                         }
                     }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .contentMargins(.horizontal, CentraidGeometry.pageMargin, for: .scrollContent)
+        .contentMargins(.bottom, 24, for: .scrollContent)
+        // THE LIBRARY'S GROUND: the page colour, the photographs edge to edge.
+        .background(Theme.color("bg", scheme))
         .navigationTitle(state.title)
         .toolbar {
             if state.hasAlbum, !state.album.trashed {
@@ -168,13 +183,13 @@ struct PhotoShelfView: View {
             }
             if selecting {
                 ToolbarItem(placement: .primaryAction) {
-                    ToolbarVerb(label: state.chrome.doneLabel, identifier: "photos.shelf.done") {
+                    ToolbarIcon(iconKey: "X", label: state.chrome.doneLabel, identifier: "photos.shelf.done") {
                         select { $0.mode = .with { $0.selecting = false } }
                     }
                 }
             } else if !cells.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
-                    ToolbarVerb(label: state.chrome.selectLabel, identifier: "photos.shelf.select") {
+                    ToolbarIcon(iconKey: "CheckCircle", label: state.chrome.selectLabel, identifier: "photos.shelf.select") {
                         select { $0.mode = .with { $0.selecting = true } }
                     }
                 }
@@ -291,18 +306,6 @@ struct PhotoShelfView: View {
         return ""
     }
 
-    /// The icon key for a bar verb, one the catalog has.
-    private func icon(_ kind: Centraid_Core_V1_PhotosBatchAction.Kind) -> String {
-        switch kind {
-        case .favorite, .unfavorite: return "heart"
-        case .addToAlbum: return "album"
-        case .archive: return "Archive"
-        case .unarchive, .restore: return "restore"
-        case .trash, .deleteForever: return "trash"
-        default: return "MoreHoriz"
-        }
-    }
-
     /// THE BAR: the verbs Rust offered for this shelf, in its order, disabled
     /// with nothing picked rather than hidden. The album's Remove and a second
     /// Favorite/Unfavorite sit in the menu with the hand-off verbs.
@@ -321,7 +324,7 @@ struct PhotoShelfView: View {
             }
             ForEach(actions.filter { !inMenu($0) }, id: \.kind) { action in
                 verb(
-                    icon: icon(action.kind),
+                    icon: action.iconKey,
                     label: action.label,
                     identifier: "photos.shelf.\(action.kind)",
                     enabled: action.enabled
@@ -331,17 +334,16 @@ struct PhotoShelfView: View {
             }
             if !trash { moreMenu(actions.filter(inMenu)) }
         }
-        // THE LIBRARY'S SELECTION BAR, IN THE SHELF'S PLACE: one elevated plate
-        // on the pill rung with a hairline, a mark over a word per verb.
+        // THE LIBRARY'S SELECTION BAR, IN THE SHELF'S PLACE: one plate on the pill
+        // rung — the band's glass — a mark over a word per verb.
         .padding(BandMetrics.platePad)
         .frame(maxWidth: .infinity)
-        .background(Theme.color("bgElev", scheme), in: Capsule())
-        .overlay(Capsule().strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline))
+        .bandGround(Capsule(), solid: "bgElev")
         .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, BandMetrics.inset)
         .padding(.top, BandMetrics.topGap)
         .padding(.bottom, BandMetrics.floorPadding)
-        .background(Theme.color("bg", scheme).ignoresSafeArea(edges: .bottom))
+        .bandStrip()
         .accessibilityIdentifier("photos-selection-bar")
     }
 

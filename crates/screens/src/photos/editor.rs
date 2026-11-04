@@ -265,35 +265,45 @@ fn next_flip(flip: i32) -> i32 {
     }
 }
 
-/// `Crop Square · rotation +90° · flip ↔`.
+/// What the plan has changed, in words a member would say: `Cropped to Square,
+/// rotated +90°`. Nothing changed is nothing said.
 #[must_use]
 pub fn editor_status(locale: Locale, plan: &wire::PhotosEditPlan) -> String {
-    let flip = Flip::try_from(plan.flip).unwrap_or(Flip::Unspecified);
-    let flip_part = if flip == Flip::Unspecified {
-        String::new()
-    } else {
-        fill(
-            &own::edit_status_flip(locale),
-            &[("flip", &flip_label(locale, flip).to_lowercase())],
-        )
-    };
-    fill(
-        &own::edit_status(locale),
-        &[
-            (
-                "ratio",
-                &ratio_name(
-                    locale,
-                    Ratio::try_from(plan.ratio).unwrap_or(Ratio::Unspecified),
-                ),
-            ),
-            (
-                "degrees",
-                &signed_degrees(total_rotation(plan.quarters, plan.straighten)),
-            ),
-            ("flip", &flip_part),
-        ],
-    )
+    let mut parts = Vec::new();
+    let ratio = Ratio::try_from(plan.ratio).unwrap_or(Ratio::Unspecified);
+    if !matches!(ratio, Ratio::Original | Ratio::Unspecified) {
+        parts.push(fill(
+            &own::edit_status_crop(locale),
+            &[("ratio", &ratio_name(locale, ratio))],
+        ));
+    }
+    let turned = total_rotation(plan.quarters, plan.straighten);
+    if turned != 0 {
+        parts.push(fill(
+            &own::edit_status_rotate(locale),
+            &[("degrees", &signed_degrees(turned))],
+        ));
+    }
+    match Flip::try_from(plan.flip).unwrap_or(Flip::Unspecified) {
+        Flip::Horizontal => parts.push(own::edit_status_flip_horizontal(locale)),
+        Flip::Vertical => parts.push(own::edit_status_flip_vertical(locale)),
+        Flip::Unspecified => {}
+    }
+    // One sentence: only the first clause keeps its capital.
+    let mut sentence = String::new();
+    for (at, part) in parts.iter().enumerate() {
+        if at > 0 {
+            sentence.push_str(", ");
+            let mut letters = part.chars();
+            if let Some(first) = letters.next() {
+                sentence.extend(first.to_lowercase());
+                sentence.push_str(letters.as_str());
+            }
+        } else {
+            sentence.push_str(part);
+        }
+    }
+    sentence
 }
 
 /// The lightbox's Edit button: live, or refused with the sentence that says why
@@ -344,6 +354,9 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
 struct Source {
     cell: wire::PhotosCell,
     original_path: String,
+    /// The operating system's library holds the original (no file in the store):
+    /// the shell resolves it by this reference.
+    os_ref: String,
     absent_reason: String,
 }
 
@@ -385,10 +398,11 @@ impl Editor {
         match reading {
             Reading::Data(found) => match found.photo.and_then(|detail| detail.cell) {
                 Some(cell) => {
-                    let (original_path, absent_reason) = locate(ctx, &cell);
+                    let (original_path, os_ref, absent_reason) = locate(ctx, &cell);
                     self.content = Content::Data(Box::new(Source {
                         cell,
                         original_path,
+                        os_ref,
                         absent_reason,
                     }));
                 }
@@ -414,7 +428,7 @@ impl Editor {
         if !matches!(source.cell.form.as_deref(), Some("photo" | "scan")) {
             return Some(words::photos_edit_not_a_photo(locale));
         }
-        if source.original_path.is_empty() {
+        if source.original_path.is_empty() && source.os_ref.is_empty() {
             return Some(if source.absent_reason.is_empty() {
                 words::photos_edit_not_on_phone(locale)
             } else {
@@ -477,6 +491,7 @@ impl Editor {
         vec![wire::Effect {
             kind: Some(wire::effect::Kind::RenderEdit(wire::RenderEdit {
                 source_path: source.original_path.clone(),
+                os_ref: source.os_ref.clone(),
                 plan: Some(plan),
                 jpeg_quality_percent: JPEG_QUALITY_PERCENT,
             })),
@@ -556,9 +571,9 @@ fn save_key(photo_id: &str, plan: &wire::PhotosEditPlan) -> String {
 }
 
 /// The original's file on this phone, and the door's reason when it is not here.
-fn locate(ctx: &Ctx, cell: &wire::PhotosCell) -> (String, String) {
+fn locate(ctx: &Ctx, cell: &wire::PhotosCell) -> (String, String, String) {
     if cell.content_id.is_empty() {
-        return (String::new(), String::new());
+        return (String::new(), String::new(), String::new());
     }
     let request = wire::ContentUrlRequest {
         refs: vec![wire::ContentRef {
@@ -572,8 +587,8 @@ fn locate(ctx: &Ctx, cell: &wire::PhotosCell) -> (String, String) {
         .ok()
         .and_then(|urls| urls.urls.into_iter().next())
     {
-        Some(url) => (url.path.unwrap_or_default(), url.absent_reason),
-        None => (String::new(), String::new()),
+        Some(url) => (url.path.unwrap_or_default(), url.os_ref, url.absent_reason),
+        None => (String::new(), String::new(), String::new()),
     }
 }
 

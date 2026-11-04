@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // THE ROOMS (K5; DESIGN.md "The seven rooms (mobile)").
 //
@@ -12,14 +13,16 @@ import SwiftUI
 // `SystemPlace` is the vault/settings sheets; the four every app port needs
 // live here.
 
-/// THE SEARCH SLOT an `AppPlace` draws under its header. The field's state is
-/// the machine's `SearchField`; the words are the app's copy.
+/// THE SEARCH SLOT an `AppPlace` carries. The field's state is the machine's `SearchField`;
+/// the words are the app's copy.
 ///
-/// **SEARCH IS ALWAYS IN THE SAME PLACE** (R-CHROME-2): closed, the slot is a
-/// field-shaped bar reading the placeholder, and a tap sends `onOpen`; open,
-/// it is the field. Never a More row, a bar glyph or a band tab. An app whose
-/// search is a page of its own (Photos) pushes it from `onOpen` and
-/// never sets `field.open`.
+/// **SEARCH IS ALWAYS IN THE SAME PLACE** (R-CHROME-2): a round key at the trailing end of the
+/// app's band, the way the system Photos app has it. Closed, the band draws the key
+/// (`BandSearchKey`, handed to `AppBand` through the environment) and a tap sends `onOpen`;
+/// open, the field takes the band's place at the foot, over the keyboard (`BandSearchField`),
+/// and its close key brings the band back. Never a More row, a header glyph or a band tab; an
+/// app with no search slot gets no key. An app whose search is a page of its own (Photos)
+/// pushes it from `onOpen` and never sets `field.open`.
 struct SearchSlot {
     let field: KitSearchField
     let placeholder: String
@@ -27,6 +30,62 @@ struct SearchSlot {
     let onOpen: () -> Void
     let onTerm: (String) -> Void
     let onClose: () -> Void
+}
+
+/// THE BAND'S SEARCH KEY, as an `AppPlace` hands it to the band it draws: the words a screen
+/// reader says for it and the open. Nil in the environment where the app has no search.
+struct BandSearchKey {
+    let label: String
+    let onOpen: () -> Void
+}
+
+private struct BandSearchKeyKey: EnvironmentKey {
+    static var defaultValue: BandSearchKey? { nil }
+}
+
+extension EnvironmentValues {
+    var bandSearchKey: BandSearchKey? {
+        get { self[BandSearchKeyKey.self] }
+        set { self[BandSearchKeyKey.self] = newValue }
+    }
+}
+
+/// THE FOOT OF A PAGE THAT HAS SEARCH BUT NO BAND (Docs' folder page, a pushed page under an
+/// app): the search key alone at the trailing edge — `AppBand`'s own circle, in the same place —
+/// and, once opened, the field in its place at the foot. A pushed page stands under its parent
+/// and has no band to hang the key on, so the key stands where it would have been.
+struct SearchFoot: View {
+    let search: SearchSlot
+    let identifier: String
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if search.field.open {
+                BandSearchField(
+                    field: search.field,
+                    placeholder: search.placeholder,
+                    closeLabel: search.closeLabel,
+                    identifier: identifier,
+                    onTerm: search.onTerm,
+                    onClose: search.onClose
+                )
+            } else {
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    BandKey(
+                        iconKey: "Search",
+                        spoken: search.placeholder,
+                        identifier: "band-search",
+                        action: search.onOpen
+                    )
+                }
+                .padding(.horizontal, BandMetrics.inset)
+                .padding(.top, BandMetrics.topGap)
+                .padding(.bottom, BandMetrics.floorPadding)
+            }
+        }
+        .bandStrip()
+    }
 }
 
 /// THE HEADER'S ONE TRAILING ACTION (R-CHROME-1): a glyph from the catalog and
@@ -42,24 +101,9 @@ struct RoomAction {
     let action: () -> Void
 }
 
-/// ONE CHIP IN THE ROOM'S FILTER ROW (R-CHROME-3): a filter (`selected` says
-/// whether it narrows the list now) or the sort, which carries `chevron` and
-/// opens an `OptionSheet` of its choices. The row sits under search, before
-/// the content, in every app.
-struct RoomChip: Identifiable {
-    let identifier: String
-    let label: String
-    var count: String = ""
-    var selected: Bool = false
-    var chevron: Bool = false
-    var spoken: String = ""
-    let action: () -> Void
-
-    var id: String { identifier }
-}
-
-/// The search bar while search is closed: field-shaped, so it reads as the
-/// place to type before it is one.
+/// The search bar while search is closed, for a page that keeps its own field under its
+/// header (Chat's drawer): field-shaped, so it reads as the place to type before it is one.
+/// An app place's search is the band's key instead (`BandSearchKey`).
 struct SearchOpener: View {
     let placeholder: String
     var identifier: String = "search-opener"
@@ -95,33 +139,6 @@ struct SearchOpener: View {
     }
 }
 
-/// The filter row: chips in one line, scrolling sideways when they overflow.
-struct RoomChipRow: View {
-    let app: String
-    let chips: [RoomChip]
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(chips) { chip in
-                    KitChip(
-                        label: chip.label,
-                        count: chip.count,
-                        selected: chip.selected,
-                        chevron: chip.chevron,
-                        spoken: chip.spoken,
-                        identifier: chip.identifier,
-                        action: chip.action
-                    )
-                }
-            }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("\(app)-chips")
-    }
-}
-
 /// THE TRAILING SLOT, drawn: the bar's glyph for the one action, or nothing.
 struct RoomTrailing: View {
     let action: RoomAction?
@@ -134,10 +151,20 @@ struct RoomTrailing: View {
     }
 }
 
-/// AN APP'S ROOT: the app's name in the system navigation bar with at most one
-/// trailing action, search under it, the filter row under that, the content,
-/// and the app's band at the foot as a render prop. The order is the same in
-/// every app (R-CHROME-1…4): add top right, search, chips, list, band.
+/// AN APP'S ROOT: the app's name in the system navigation bar with at most two trailing items
+/// (the filter menu, then the app's one verb), the content, and the app's band at the foot as a
+/// render prop. The order is the same in every app (R-CHROME-1…4): filter and add top right, list,
+/// band, with search as the band's trailing key.
+///
+/// **SEARCH LIVES AT THE FOOT.** With a `search` slot the band carries a round key at its
+/// trailing end (`BandSearchKey`); a tap opens the field IN THE BAND'S PLACE, over the keyboard,
+/// and its close key puts the band back. Nothing is drawn under the header for it, so the
+/// content is the first thing under the bar.
+///
+/// **THE BAND IS GLASS AND THE CONTENT RUNS UNDER IT.** The band stands in the bottom safe-area
+/// inset on nothing (`BandStrip`), so a scroll view in the content scrolls beneath it and the
+/// inset is what holds its last row clear. Under Reduce Transparency or Increase Contrast the
+/// strip is the page colour again and the plates are solid (`BandGround`).
 ///
 /// **THE SYSTEM BAR, NOT A DRAWN HEADER** — the same bar Photos and Agenda
 /// stand under, so every app's back and trailing verb are the platform's glass
@@ -168,7 +195,11 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
     let app: String
     let title: String
     var search: SearchSlot? = nil
-    var chips: [RoomChip] = []
+    /// THE HEADER'S FILTER BUTTON (R-CHROME-3): Rust's `FilterMenu`, drawn as a menu beside the
+    /// app's one trailing action. Nil where the app has nothing to filter or sort.
+    var filter: FilterSlot? = nil
+    /// The scope the page is in, under the app's name (Notes' notebook, Money's month).
+    var subtitle: SubtitleSlot? = nil
     var showsBand: Bool = true
     let trailing: () -> Trailing
     let band: () -> Band
@@ -176,6 +207,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.shellStatusLine) private var shellLine
+    @State private var keyboardUp = false
 
     /// File-private: an app passes its one action as a `RoomAction` value
     /// (R-CHROME-1), through the init below.
@@ -183,7 +215,8 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         app: String,
         title: String,
         search: SearchSlot? = nil,
-        chips: [RoomChip] = [],
+        filter: FilterSlot? = nil,
+        subtitle: SubtitleSlot? = nil,
         showsBand: Bool = true,
         @ViewBuilder trailing: @escaping () -> Trailing,
         @ViewBuilder band: @escaping () -> Band,
@@ -192,7 +225,8 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         self.app = app
         self.title = title
         self.search = search
-        self.chips = chips
+        self.filter = filter
+        self.subtitle = subtitle
         self.showsBand = showsBand
         self.trailing = trailing
         self.band = band
@@ -201,29 +235,6 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let search {
-                Group {
-                    if search.field.open {
-                        CentraidSearchField(
-                            field: search.field,
-                            placeholder: search.placeholder,
-                            closeLabel: search.closeLabel,
-                            identifier: "\(app)-search",
-                            onTerm: search.onTerm,
-                            onClose: search.onClose
-                        )
-                    } else {
-                        SearchOpener(placeholder: search.placeholder, identifier: "\(app)-search-open", onOpen: search.onOpen)
-                    }
-                }
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .padding(.top, 4)
-                .padding(.bottom, 8)
-            }
-            if !chips.isEmpty {
-                RoomChipRow(app: app, chips: chips)
-                    .padding(.bottom, 4)
-            }
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
@@ -232,20 +243,55 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) { trailing() }
+            // THE HEADER'S TWO TRAILING ITEMS: the filter menu, then the app's one verb.
+            ToolbarItemGroup(placement: .primaryAction) {
+                if let filter { FilterMenuButton(app: app, slot: filter) }
+                trailing()
+            }
+            if let subtitle {
+                ToolbarItem(placement: .principal) { RoomTitle(title: title, slot: subtitle) }
+            }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
                 // THE SHELL'S LINE SITS ON THE BAND, never under it: the band
                 // is the foot of every app, and the line reads as its own.
                 if let shellLine { shellLine }
-                if showsBand {
+                if let search, search.field.open {
+                    // OPEN SEARCH TAKES THE BAND'S PLACE, and stays there while the keyboard
+                    // goes (the Search key) so the foot is never a blank: it rides the keyboard
+                    // while typing and sits where the band sat when not.
+                    BandSearchField(
+                        field: search.field,
+                        placeholder: search.placeholder,
+                        closeLabel: search.closeLabel,
+                        identifier: "\(app)-search",
+                        onTerm: search.onTerm,
+                        onClose: search.onClose
+                    )
+                } else if showsBand, !keyboardUp {
+                    // THE BAND IS PUT AWAY WHILE THE KEYBOARD IS UP: riding the keyboard it sat
+                    // clipped above the keys, and a member typing is not choosing a destination.
+                    // Its trailing key is the app's search, when the app has one.
                     band()
+                        .environment(
+                            \.bandSearchKey,
+                            search.map { BandSearchKey(label: $0.placeholder, onOpen: $0.onOpen) }
+                        )
                 }
             }
-            .background(Theme.color("bg", scheme).ignoresSafeArea(edges: .bottom))
+            // GLASS STANDS ON NOTHING: the content scrolls under the plates and shows
+            // through them. Under Reduce Transparency or Increase Contrast the strip is the
+            // page's colour again (`BandStrip`).
+            .bandStrip()
         }
         .preference(key: PlaceDrawsShellLine.self, value: shellLine != nil)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardUp = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardUp = false
+        }
     }
 }
 
@@ -256,7 +302,8 @@ extension AppPlace where Trailing == RoomTrailing {
         title: String,
         trailing: RoomAction?,
         search: SearchSlot? = nil,
-        chips: [RoomChip] = [],
+        filter: FilterSlot? = nil,
+        subtitle: SubtitleSlot? = nil,
         showsBand: Bool = true,
         @ViewBuilder band: @escaping () -> Band,
         @ViewBuilder content: @escaping () -> Content
@@ -265,7 +312,8 @@ extension AppPlace where Trailing == RoomTrailing {
             app: app,
             title: title,
             search: search,
-            chips: chips,
+            filter: filter,
+            subtitle: subtitle,
             showsBand: showsBand,
             trailing: { RoomTrailing(action: trailing) },
             band: band,

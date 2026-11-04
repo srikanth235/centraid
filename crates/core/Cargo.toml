@@ -124,7 +124,3 @@ centraid-gateway = { path = "../gateway" }
 # asks the core's door the same questions.
 centraid-nativetools = { path = "../nativetools" }
 tempfile.workspace = true
-
-[[test]]
-name = "call_budget"
-path = "tests/call_budget.rs"

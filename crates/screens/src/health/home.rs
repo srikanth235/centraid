@@ -7,8 +7,8 @@
 //!   foot that names the store and no time (R-1129-13).
 //! - **Trends** is every metric over 30 days, 90 days or a year against the equal
 //!   period before.
-//! - **Workouts** is every workout, newest first, a kind chip row, a page at a
-//!   time.
+//! - **Workouts** is every workout, newest first, a kind filter in the header's
+//!   menu, a page at a time.
 //! - **More** holds "What Health may read" (which names a chosen type that read
 //!   nothing or that the OS refused, R-1129-6), "Choose what to read" (Connect's
 //!   page), and "Stop reading", behind a confirm.
@@ -32,6 +32,7 @@ use super::follow::HealthFollow;
 use super::{Metric, Phase, Store, Units, denied, routes};
 use crate::catalog::load;
 use crate::kit::civil;
+use crate::kit::menu;
 use crate::kit::read;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, health as words, shared};
@@ -49,6 +50,11 @@ const BAND_MORE: &str = "more";
 const MORE_READS: &str = "reads";
 const MORE_CHOOSE: &str = "choose";
 const MORE_STOP: &str = "stop";
+
+/// The kind section's key and its All option's key (`health-filter-kind-all` on a
+/// screen); every other option is keyed by the kind's concept.
+const KIND: &str = "kind";
+const KIND_ALL: &str = "all";
 
 const RANGE_DAYS_30: &str = "days_30";
 const RANGE_DAYS_90: &str = "days_90";
@@ -463,22 +469,29 @@ impl Home {
         }
     }
 
-    fn chips(&self, ctx: &Ctx, loaded: &Loaded) -> Vec<wire::HealthChip> {
+    /// THE HEADER'S FILTER BUTTON: Workouts' kind, one single-choice section (All,
+    /// then each kind with a workout), lit while a kind narrows the list.
+    fn filter_menu(&self, ctx: &Ctx, loaded: &Loaded) -> Option<wire::FilterMenu> {
         let locale = ctx.locale();
-        let Some(workouts) = &loaded.workouts else {
-            return Vec::new();
-        };
-        let mut chips = vec![wire::HealthChip {
-            key: String::new(),
-            label: words::kind_all(locale),
-            active: self.kind_concept_id.is_empty(),
-        }];
-        chips.extend(workouts.kinds.iter().map(|kind| wire::HealthChip {
-            key: kind.kind_concept_id.clone(),
-            label: figures::kind_chip(locale, &kind.kind_key, &kind.kind_label),
-            active: kind.kind_concept_id == self.kind_concept_id,
+        let workouts = loaded.workouts.as_ref()?;
+        let filtering = !self.kind_concept_id.is_empty();
+        // With no kind to choose there is nothing to filter: no button.
+        if workouts.kinds.is_empty() && !filtering {
+            return None;
+        }
+        let mut options = vec![menu::option(KIND_ALL, words::kind_all(locale), !filtering)];
+        options.extend(workouts.kinds.iter().map(|kind| {
+            menu::option(
+                kind.kind_concept_id.clone(),
+                figures::kind_chip(locale, &kind.kind_key, &kind.kind_label),
+                kind.kind_concept_id == self.kind_concept_id,
+            )
         }));
-        chips
+        Some(menu::menu(
+            locale,
+            vec![menu::single(KIND, words::kind_title(locale), options)],
+            filtering,
+        ))
     }
 
     fn segments(&self, locale: Locale) -> Vec<wire::HealthChip> {
@@ -758,7 +771,18 @@ impl Screen for Home {
                 }
                 Some(H::Band(band)) => self.band(ctx, &band.key),
                 Some(H::Range(range)) => self.range(ctx, &range.key),
-                Some(H::KindPicked(kind)) => self.kind(ctx, &kind.kind_concept_id),
+                Some(H::FilterMenuPicked(picked)) => {
+                    let pick = menu::Pick::of(&picked);
+                    if pick.section == KIND {
+                        let kind = if pick.option == KIND_ALL {
+                            ""
+                        } else {
+                            pick.option
+                        };
+                        self.kind(ctx, kind);
+                    }
+                }
+                Some(H::FilterMenuCleared(_)) => self.kind(ctx, ""),
                 Some(H::ShowMore(_)) => self.show_more(ctx),
                 Some(H::SheetClosed(_)) => self.sheet = Sheet::None,
                 Some(H::More(more)) => self.more(&more.key),
@@ -813,16 +837,13 @@ impl Screen for Home {
                         stop_cancel: words::stop_cancel(locale),
                         show_more: words::show_more(locale),
                     }),
-                    kind_concept_id: self.kind_concept_id.clone(),
-                    chips: if drawing
+                    filter_menu: if drawing
                         && connected
                         && self.destination == wire::HealthDestination::Workouts
                     {
-                        loaded
-                            .map(|loaded| self.chips(ctx, loaded))
-                            .unwrap_or_default()
+                        loaded.and_then(|loaded| self.filter_menu(ctx, loaded))
                     } else {
-                        Vec::new()
+                        None
                     },
                     segments: if drawing
                         && connected

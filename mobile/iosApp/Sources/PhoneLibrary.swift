@@ -246,6 +246,35 @@ enum PhoneLibrary {
         return staged
     }
 
+    /// THE ORIGINAL OF A LIBRARY REF, AS A FILE (#1135): a photograph whose bytes the operating
+    /// system's library holds has no path in the store, so a hand-off (a copy to send, an edit to
+    /// render) reads the resource's bytes and writes the one file the hand-off needs, in the
+    /// temporary directory. Nil when the library no longer answers for it. Nothing is downloaded
+    /// from iCloud. The walker's staging never goes through here.
+    static func exportOriginal(ref: String) async -> URL? {
+        guard let resource = resource(for: ref) else { return nil }
+        let options = PHAssetResourceRequestOptions()
+        options.isNetworkAccessAllowed = false
+        let sink = ResourceBytes()
+        let bytes: Data? = await withCheckedContinuation { (done: CheckedContinuation<Data?, Never>) in
+            PHAssetResourceManager.default().requestData(
+                for: resource,
+                options: options,
+                dataReceivedHandler: { sink.append($0) },
+                completionHandler: { error in done.resume(returning: error == nil ? sink.bytes : nil) }
+            )
+        }
+        guard let bytes, !bytes.isEmpty else { return nil }
+        let target = FileManager.default.temporaryDirectory
+            .appendingPathComponent("library-\(UUID().uuidString)-\(resource.originalFilename)")
+        do {
+            try bytes.write(to: target, options: .atomic)
+            return target
+        } catch {
+            return nil
+        }
+    }
+
     /// RENDER the tiers the core lacks, drawn by Photos from the current edit, and stage each as
     /// a derivative of the original. A tier that fails costs nothing but itself.
     static func derivatives(_ asked: Centraid_Core_V1_LibraryDerivatives, core: any ScreenCore) async {
@@ -662,3 +691,21 @@ final class LibraryWatcher: NSObject, PHPhotoLibraryChangeObserver {
     }
 }
 #endif
+
+/// The bytes of one resource as the library hands them over, in pieces, on its own queue.
+private final class ResourceBytes: @unchecked Sendable {
+    private let lock = NSLock()
+    private var buffer = Data()
+
+    func append(_ piece: Data) {
+        lock.lock()
+        buffer.append(piece)
+        lock.unlock()
+    }
+
+    var bytes: Data {
+        lock.lock()
+        defer { lock.unlock() }
+        return buffer
+    }
+}

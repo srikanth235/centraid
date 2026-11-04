@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -66,6 +65,8 @@ import centraid.core.v1.DocsSheet
 import centraid.core.v1.DocsStage
 import centraid.core.v1.DocsVersionsEvent
 import centraid.core.v1.DocsVersionsState
+import centraid.core.v1.FilterMenuCleared
+import centraid.core.v1.FilterMenuPicked
 import centraid.core.v1.Route
 import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.SectionHead
@@ -75,7 +76,6 @@ import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.CentraidRow
-import dev.centraid.android.kit.CentraidSearchField
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EditorRoom
@@ -90,9 +90,8 @@ import dev.centraid.android.kit.ProgressStatusLine
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
-import dev.centraid.android.kit.RoomChip
-import dev.centraid.android.kit.RoomChipRow
-import dev.centraid.android.kit.RoomSearchOpener
+import dev.centraid.android.kit.RoomFilter
+import dev.centraid.android.kit.SearchFoot
 import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SearchContainerRow
@@ -146,7 +145,7 @@ internal fun DocsSheetView(sheet: DocsSheet?, actions: DocsSheetActions) {
     when {
         choices != null -> OptionSheet(
             title = sheet.title,
-            options = choices.choices.map { SheetOption(key = it.key, label = it.label, detail = it.detail, selected = it.selected) },
+            options = choices.choices.map { SheetOption(key = it.key, label = it.label, selected = it.selected) },
             onPick = actions.onChoice,
             onDismiss = actions.onClose,
         )
@@ -284,26 +283,16 @@ internal fun DocsDriveScreen(
     val add = chrome?.add?.takeIf { it.isNotEmpty() }?.let { label ->
         RoomAction("Plus", label, "docs-add") { onEvent(DocsDriveEvent(sheet_opened = DocsDriveEvent.SheetOpened(kind = DocsSheet.Kind.KIND_ADD))) }
     }
-    // THE CHIP ROW (R-CHROME-3), Rust's pills as they come: the
-    // filters, Clear while one is set, the sort last.
-    val chips = if (state.denied != null) {
-        emptyList<RoomChip>()
-    } else {
-        state.pills.map { pill ->
-            RoomChip(
-                testTag = if (pill.clears) "docs-clear-filters" else "docs-pill-${pill.key.value}",
-                label = pill.label,
-                selected = pill.active,
-                chevron = pill.chevron,
-                spoken = pill.accessibility_label,
-            ) {
-                if (pill.clears) {
-                    onEvent(DocsDriveEvent(filters_cleared = DocsDriveEvent.FiltersCleared()))
-                } else {
-                    onEvent(DocsDriveEvent(sheet_opened = DocsDriveEvent.SheetOpened(kind = pill.key)))
-                }
-            }
-        }
+    // THE HEADER'S FILTER BUTTON (R-CHROME-3), Rust's menu as it comes: the filters, the sort and
+    // the layout. A pick or the clear row is an event; what is checked is the next state's.
+    val filter = state.filter_menu?.let { menu ->
+        RoomFilter(
+            menu = menu,
+            onPick = { section, option ->
+                onEvent(DocsDriveEvent(filter_menu_picked = FilterMenuPicked(section_key = section, option_key = option)))
+            },
+            onClear = { onEvent(DocsDriveEvent(filter_menu_cleared = FilterMenuCleared())) },
+        )
     }
     val search = RoomSearch(
         field = SearchField(open_ = state.search?.open_ ?: false, term = state.search?.term.orEmpty(), corrected = state.search?.corrected.orEmpty(), corrected_label = state.search?.corrected_label.orEmpty()),
@@ -315,25 +304,13 @@ internal fun DocsDriveScreen(
         onOpen = { onEvent(DocsDriveEvent(search_opened = DocsDriveEvent.SearchOpened())) },
     )
     if (folderPage) {
-        // A FOLDER PAGE IS NOT A ROOM, so it draws the room's search bar and
-        // chip row itself, in the room's order.
+        // A FOLDER PAGE IS NOT A ROOM: its header holds the filter button and the Plus, and — with
+        // no band to hang the search key on — the key stands alone at its foot.
         val body: @Composable () -> Unit = {
             Column(Modifier.fillMaxSize()) {
-                if (search.field.open_) {
-                    CentraidSearchField(
-                        field = search.field,
-                        placeholder = search.placeholder,
-                        onTerm = search.onTerm,
-                        onClose = search.onClose,
-                        label = search.label,
-                        closeLabel = search.closeLabel,
-                    )
-                } else if (state.denied == null) {
-                    RoomSearchOpener(search.placeholder, testTag = "docs-search-open", onOpen = search.onOpen)
-                }
-                if (chips.isNotEmpty()) RoomChipRow("docs", chips)
                 Box(Modifier.weight(1f)) { DriveBody(state, onEvent, onOpen) }
                 SearchAskRow(state.search?.ask_row, onOpen)
+                if (state.denied == null || search.field.open_) SearchFoot(search, testTag = "docs-search")
             }
         }
         PushedPage(
@@ -342,6 +319,8 @@ internal fun DocsDriveScreen(
             parentTitle = chrome?.back.orEmpty(),
             onBack = onBack,
             trailing = add,
+            filter = filter,
+            app = "docs",
             status = state.status?.sentence.orEmpty(),
             statusLine = adding,
             content = body,
@@ -353,7 +332,7 @@ internal fun DocsDriveScreen(
             meta = state.head_meta,
             trailing = add,
             search = search,
-            chips = chips,
+            filter = filter,
             status = state.status?.sentence.orEmpty(),
             statusLine = adding,
             band = {
@@ -408,15 +387,6 @@ internal fun DocsDriveScreen(
 private fun DriveBody(state: DocsDriveState, onEvent: (DocsDriveEvent) -> Unit, onOpen: (Route) -> Unit) {
     val chrome = state.chrome
     Column(Modifier.fillMaxSize()) {
-        // THE LAYOUT TOGGLE, at the list's head. Search and the chips are
-        // the room's (R-CHROME-2/3), drawn above.
-        if (state.denied == null && chrome?.layout_toggle.orEmpty().isNotEmpty()) {
-            Row(Modifier.fillMaxWidth().padding(end = 4.dp), horizontalArrangement = Arrangement.End) {
-                IconKey(chrome!!.layout_icon_key.ifEmpty { "Grid" }, chrome.layout_toggle, "docs-layout", bordered = false) {
-                    onEvent(DocsDriveEvent(layout_toggled = DocsDriveEvent.LayoutToggled()))
-                }
-            }
-        }
         RenameLine(
             state.rename,
             chrome?.rename_placeholder.orEmpty(),
@@ -451,7 +421,7 @@ private fun DriveData(
                     { onEvent(DocsDriveEvent(sheet_opened = DocsDriveEvent.SheetOpened(kind = DocsSheet.Kind.KIND_ADD))) }
                 }
                 DocsDriveData.EmptyAction.EMPTY_ACTION_CLEAR_FILTERS -> {
-                    { onEvent(DocsDriveEvent(filters_cleared = DocsDriveEvent.FiltersCleared())) }
+                    { onEvent(DocsDriveEvent(filter_menu_cleared = FilterMenuCleared())) }
                 }
                 DocsDriveData.EmptyAction.EMPTY_ACTION_NEW_FOLDER -> {
                     { onEvent(DocsDriveEvent(sheet_opened = DocsDriveEvent.SheetOpened(kind = DocsSheet.Kind.KIND_NEW_FOLDER))) }

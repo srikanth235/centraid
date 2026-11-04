@@ -6,7 +6,7 @@
 # A VAULT-HOLDING INSTALL, as `home-search.yaml`. Re-runnable: it relaunches
 # between apps and leaves nothing behind. LOCKER may open on its own gate
 # before it shows a search (a vault with no lock set up offers to make one):
-# the last step runs only once the search opener is on screen, and a locked
+# the last step runs only once the band's search key is on screen, and a locked
 # Locker has no search to draw Ask in, which is the same guarantee.
 #
 # THE ASSISTANT NEEDS A MODEL. On a phone with no model file the Chat tab

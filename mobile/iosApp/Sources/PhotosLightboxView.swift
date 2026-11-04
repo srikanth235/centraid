@@ -148,11 +148,14 @@ struct PhotosLightboxView: View {
             // A WRITE THAT WAS REFUSED, OR A RECEIPT, AS A LINE OVER THE CHROME:
             // over it and never instead of the photograph.
             if state.hasStatus, !state.status.sentence.isEmpty {
+                // ON ITS OWN PLATE, clear of the photograph's pixels beneath it.
                 Text(state.status.sentence)
                     .centraidType("small")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Theme.color("onStage", scheme))
-                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Theme.color("stageSunken", scheme), in: Capsule())
                     .padding(.horizontal, CentraidGeometry.pageMargin)
                     .padding(.bottom, 8)
                     .accessibilityIdentifier("photos.lightbox.status")
@@ -167,7 +170,6 @@ struct PhotosLightboxView: View {
                 // goes away with the rest of the chrome.
                 LightboxFilmstrip(state: PhotosLightboxModel(state: state), send: send)
                     .padding(.bottom, 4)
-                pager
                 toolbar
             }
         }
@@ -208,20 +210,6 @@ struct PhotosLightboxView: View {
         }
     }
 
-    /// THE POINTER EQUIVALENT FOR SWIPE: nothing here is reachable by gesture
-    /// alone. The ids are Rust's `previous_id` and `next_id`, empty at either end.
-    @ViewBuilder
-    private var pager: some View {
-        if !state.previousID.isEmpty || !state.nextID.isEmpty {
-            HStack {
-                pagerButton(icon: "ChevronLeft", label: state.words.previous, target: state.previousID)
-                Spacer()
-                pagerButton(icon: "ChevronRight", label: state.words.next, target: state.nextID)
-            }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-        }
-    }
-
     private func pagerButton(icon: String, label: String, target: String) -> some View {
         Button {
             if !target.isEmpty { send(.moved(.with { $0.photoID = target })) }
@@ -243,10 +231,23 @@ struct PhotosLightboxView: View {
     /// a VISIBLE sentence and not only an accessibility hint.
     private var toolbar: some View {
         let reasons = Array(Set(state.toolbar.filter { !$0.enabled && !$0.why.isEmpty }.map(\.why))).sorted()
+        var trashed = false
+        if case let .photo(photo)? = state.content { trashed = photo.trashed }
+        // THE POINTER EQUIVALENT FOR SWIPE: nothing here is reachable by gesture alone.
+        // The arrows are the ends of the one row, so they line up with the verbs between
+        // them; the ids are Rust's `previous_id` and `next_id`, empty at either end.
+        let paged = !state.previousID.isEmpty || !state.nextID.isEmpty
         return VStack(spacing: 4) {
-            HStack(spacing: 8) {
+            HStack(spacing: 0) {
+                if paged {
+                    pagerButton(icon: "ChevronLeft", label: state.words.previous, target: state.previousID)
+                }
                 ForEach(state.toolbar, id: \.kind.rawValue) { verb in
-                    toolbarKey(verb)
+                    toolbarKey(verb, labelled: trashed)
+                        .frame(maxWidth: .infinity)
+                }
+                if paged {
+                    pagerButton(icon: "ChevronRight", label: state.words.next, target: state.nextID)
                 }
             }
             ForEach(reasons, id: \.self) { reason in
@@ -259,19 +260,32 @@ struct PhotosLightboxView: View {
         .padding(.horizontal, CentraidGeometry.pageMargin)
     }
 
-    private func toolbarKey(_ verb: Centraid_Core_V1_PhotosLightboxVerb) -> some View {
+    /// ONE VERB OF THE BAR. A toggle that is ON is drawn solid (a filled star) and is
+    /// announced as selected; over a trashed photograph the verbs carry their words, because
+    /// a restore and a delete-forever side by side are two marks a member must tell apart.
+    private func toolbarKey(_ verb: Centraid_Core_V1_PhotosLightboxVerb, labelled: Bool = false) -> some View {
         Button {
             guard verb.enabled else { return }
             // Edit is a page: the shell pushes the route Rust built.
             if verb.hasRoute { open(verb.route) } else { send(verbEvent(verb)) }
         } label: {
-            CentraidIconView(
-                iconKey: verb.iconKey,
-                // A REFUSED TARGET IS GREYED WITH THE STAGE'S OWN SOFT INK, never
-                // the page's disabled ink.
-                tint: Theme.color(verb.enabled ? "onStage" : "onStageSoft", scheme),
-                size: 24
-            )
+            let ink = Theme.color(verb.enabled ? (verb.destructive ? "net" : "onStage") : "onStageSoft", scheme)
+            VStack(spacing: 2) {
+                CentraidIconView(
+                    iconKey: verb.iconKey,
+                    // A REFUSED TARGET IS GREYED WITH THE STAGE'S OWN SOFT INK, never
+                    // the page's disabled ink.
+                    tint: ink,
+                    size: 24,
+                    solid: verb.on
+                )
+                if labelled {
+                    Text(verb.label)
+                        .centraidType("small")
+                        .foregroundStyle(ink)
+                        .lineLimit(1)
+                }
+            }
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(Rectangle())
         }
@@ -279,6 +293,7 @@ struct PhotosLightboxView: View {
         .disabled(!verb.enabled)
         .accessibilityLabel(verb.label)
         .accessibilityHint(verb.enabled ? "" : verb.why)
+        .accessibilityAddTraits(verb.on ? .isSelected : [])
         .accessibilityIdentifier("photos.lightbox.\(verb.iconKey)")
     }
 
@@ -333,7 +348,7 @@ struct PhotosLightboxView: View {
         case .info:
             if case let .photo(photo)? = state.content {
                 PhotosLightboxInfoSheet(state: state, photo: photo, send: send)
-                    .presentationDetents([.fraction(0.64), .large])
+                    .modifier(SheetPresentation(detents: [.fraction(0.64), .large]))
             }
         case .share:
             OptionSheet(title: state.words.shareTitle) {
@@ -372,7 +387,7 @@ struct PhotosLightboxView: View {
             PhotosLightboxPlaceSheet(state: state, send: send)
                 .presentationDetents([.medium, .large])
         case .album:
-            PhotosLightboxAlbumSheet(choice: state.albumChoice) { event in
+            PhotosAlbumChoiceSheet(choice: state.albumChoice) { event in
                 send(.albumChoice(event))
             }
         case .confirm:
@@ -475,74 +490,6 @@ private struct PhotosLightboxPlaceSheet: View {
     }
 }
 
-/// "ADD TO ALBUM": Rust's list and its words, and the create row that keeps the
-/// sheet open with the new album in the list. The typed name is the one piece of
-/// state that lives here: it exists nowhere else before it is sent.
-private struct PhotosLightboxAlbumSheet: View {
-    @Environment(\.colorScheme) private var scheme
-    let choice: Centraid_Core_V1_PhotosAlbumChoice
-    let send: (Centraid_Core_V1_PhotosAlbumChoiceEvent) -> Void
-
-    @State private var naming = false
-    @State private var name = ""
-
-    private func event(_ kind: Centraid_Core_V1_PhotosAlbumChoiceEvent.OneOf_Kind) {
-        var event = Centraid_Core_V1_PhotosAlbumChoiceEvent()
-        event.kind = kind
-        send(event)
-    }
-
-    var body: some View {
-        SheetRoom(title: choice.title) {
-            VStack(alignment: .leading, spacing: 0) {
-                if naming {
-                    HStack {
-                        TextField(choice.namePlaceholder, text: $name)
-                            .centraidType("body")
-                            .submitLabel(.done)
-                            .onSubmit(create)
-                        KitLink(label: choice.createLabel, action: create)
-                    }
-                    .padding(.vertical, 8)
-                } else {
-                    SheetRow(iconKey: "add", label: choice.newAlbumLabel, onTap: { naming = true })
-                }
-                if !choice.empty.isEmpty {
-                    Text(choice.empty)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
-                        .padding(.vertical, 8)
-                }
-                ForEach(choice.entries, id: \.albumID) { entry in
-                    Button {
-                        event(.chosen(.with { $0.albumID = entry.albumID }))
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(entry.title).centraidType("control").foregroundStyle(Theme.color("text", scheme))
-                            Text(entry.countLabel).centraidType("small").foregroundStyle(Theme.color("textSoft", scheme))
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(KitRowPress())
-                }
-                KitOutlineButton(label: choice.cancelLabel, tone: "text", iconKey: "") {
-                    event(.dismissed(.init()))
-                }
-                .padding(.vertical, 8)
-            }
-        }
-    }
-
-    private func create() {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        event(.created(.with { $0.title = trimmed }))
-        name = ""
-        naming = false
-    }
-}
-
 // MARK: - The info sheet
 
 /// THE INFO SHEET — everything the vault knows about this photograph, and the four
@@ -564,14 +511,14 @@ private struct PhotosLightboxInfoSheet: View {
         let words = state.words
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text(words.infoTitle).centraidType("title")
+                Text(words.infoTitle).centraidType("title").padding(.top, 8)
 
                 // A REFUSED EDIT IS SAID HERE, where the member made it.
                 if state.hasStatus, state.status.refused, !state.status.sentence.isEmpty {
                     Text(state.status.sentence).centraidType("small").foregroundStyle(Theme.color("net", scheme))
                 }
 
-                label(words.captionLabel)
+                heading(words.captionLabel, icon: "FileEdit")
                 TextField(words.captionPlaceholder, text: $caption)
                     .centraidType("body")
                     .focused($captionFocused)
@@ -586,7 +533,7 @@ private struct PhotosLightboxInfoSheet: View {
 
                 ForEach(photo.facts, id: \.label) { fact in
                     VStack(alignment: .leading, spacing: 2) {
-                        label(fact.label)
+                        heading(fact.label, icon: fact.iconKey)
                         Text(fact.text).centraidType("body")
                     }
                 }
@@ -606,7 +553,10 @@ private struct PhotosLightboxInfoSheet: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(CentraidGeometry.pageMargin)
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.top, CentraidGeometry.pageMargin)
+            // NOTHING UNDER THE SHEET'S CORNERS: the last line scrolls clear of the radius.
+            .padding(.bottom, 48)
         }
         .onAppear(perform: resetCaption)
         .onChange(of: state.photoID) { _, _ in resetCaption() }
@@ -626,7 +576,7 @@ private struct PhotosLightboxInfoSheet: View {
 
     private func place(_ words: Centraid_Core_V1_PhotosLightboxWords) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            label(words.placeTitle)
+            heading(words.placeTitle, icon: "MapPin")
             Text(photo.placePhrase).centraidType("body")
             HStack(spacing: 16) {
                 KitLink(label: photo.hasPlace_p ? words.change : words.addPlace) {
@@ -644,13 +594,7 @@ private struct PhotosLightboxInfoSheet: View {
 
     private func labels(_ words: Centraid_Core_V1_PhotosLightboxWords) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label {
-                Text(words.labelsTitle)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-            } icon: {
-                CentraidIconView(iconKey: "Tag", tint: Theme.color("textSoft", scheme))
-            }
+            heading(words.labelsTitle, icon: "Tag")
             if !photo.labelsLine.isEmpty {
                 Text(photo.labelsLine)
                     .centraidType("small")
@@ -687,10 +631,15 @@ private struct PhotosLightboxInfoSheet: View {
         }
     }
 
-    private func label(_ text: String) -> some View {
-        Text(text)
-            .centraidType("small")
-            .foregroundStyle(Theme.color("textSoft", scheme))
+    /// ONE HEADING STYLE for every section of the sheet: the mark, then the word.
+    private func heading(_ text: String, icon: String) -> some View {
+        HStack(spacing: 6) {
+            CentraidIconView(iconKey: icon, tint: Theme.color("textSoft", scheme), size: 14)
+            Text(text)
+                .centraidType("small")
+                .foregroundStyle(Theme.color("textSoft", scheme))
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

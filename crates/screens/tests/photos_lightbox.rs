@@ -849,10 +849,54 @@ fn exported(status: wire::originals_exported::Status) -> wire::effect_result::Ou
 }
 
 #[test]
+fn a_photo_with_no_place_is_sent_without_asking_which_location() {
+    let mut d = driver();
+    let id = photo(&d, Shot::new("lb-send-bare"));
+    let at = open(&mut d, &id, &[], "");
+    d.effects.clear();
+    tap(&mut d, at, V::Share);
+    assert_eq!(view(&d, at).sheet, Sheet::None as i32);
+    let export = export_of(effects_of(&mut d));
+    assert_eq!(export.mode, wire::export_originals::Mode::Send as i32);
+    assert!(!export.keep_location);
+}
+
+#[test]
+fn favorite_archive_and_trash_each_say_what_they_did() {
+    let mut d = driver();
+    let id = photo(&d, Shot::new("lb-receipts"));
+    let at = open(&mut d, &id, &[], "");
+    tap(&mut d, at, V::Favorite);
+    assert_eq!(
+        view(&d, at).status.expect("receipt").sentence,
+        "Added to Favorites."
+    );
+    assert!(verb(&view(&d, at), V::Favorite).on);
+    tap(&mut d, at, V::Archive);
+    assert_eq!(
+        view(&d, at).status.expect("receipt").sentence,
+        "Moved to the archive."
+    );
+    tap(&mut d, at, V::Trash);
+    let state = view(&d, at);
+    let receipt = state.status.expect("receipt");
+    assert!(!receipt.refused);
+    assert_eq!(receipt.sentence, "Moved to Trash. Restore brings it back.");
+    let kinds: Vec<i32> = state.toolbar.iter().map(|v| v.kind).collect();
+    assert_eq!(kinds, [V::Restore as i32, V::DeleteForever as i32]);
+}
+
+#[test]
 fn a_send_is_a_decision_about_bytes_and_every_receipt_says_what_went_none_included() {
     use wire::originals_exported::Status;
     let mut d = driver();
-    let id = photo(&d, Shot::new("lb-send"));
+    let id = photo(
+        &d,
+        Shot {
+            lat_lon: Some((50.7, -2.9)),
+            ..Shot::new("lb-send")
+        },
+    );
     let at = open(&mut d, &id, &[], "");
     tap(&mut d, at, V::Share);
     let state = view(&d, at);
@@ -870,10 +914,7 @@ fn a_send_is_a_decision_about_bytes_and_every_receipt_says_what_went_none_includ
         rows,
         [
             ("No location", "No location in the copy."),
-            (
-                "Exact location",
-                "The original file, as the camera recorded it."
-            )
+            ("Exact location", "The original file, with its coordinates.")
         ]
     );
     d.effects.clear();

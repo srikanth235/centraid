@@ -38,16 +38,11 @@ pub const DEVICE_LANES: [&str; 4] = [
     "battery-per-background-pass",
 ];
 
-/// The hardware class this container is, matching `tests/journeys.json`'s
-/// vocabulary. Overridable so the self-hosted device runner can score itself.
-pub const DEFAULT_HARDWARE: &str = "ci-linux-x64-4c";
-
 /// Everything a step needs to know about the run it is part of.
 pub struct Ctx {
     pub root: PathBuf,
     /// `--lane <name>`: run only this step, or one device cell (D-1020-G4).
     pub lane: Option<String>,
-    pub hardware: String,
     /// True under `CI`. A tool that is merely absent is a skip locally and an
     /// infrastructure failure in CI, because the workflow installs it.
     pub ci: bool,
@@ -154,8 +149,8 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // D-1020-CL7). `design/` and the shells' design tables (Tokens, Catalog
         // and the kit's words, Kotlin and Swift, #1135) are GENERATED, and the
         // only other step that regenerates them is `mobile-jvm` — which
-        // D-1020-B2-3 keeps out of `pr` because it is a second toolchain with a
-        // 420 s cold cost. Without this a `packages/design` token or a
+        // D-1020-B2-3 keeps out of `pr` because it is a second toolchain with an
+        // expensive cold build. Without this a `packages/design` token or a
         // `strings/shared.rs` word shipped a committed artifact nobody
         // re-derived, merged green and unexercised. Two bun scripts and a
         // clean-tree assertion, on the profile that runs on a pull request.
@@ -169,13 +164,14 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // deleted and so is `Principal::Agent`, so there is no assistant to
         // hold an answer and no grant to exceed.
         // NO SIMULATION STEP: there is one writer, the phone, and nothing to
-        // converge (#1029 §1). D-1020-D2-6's responsiveness half is
-        // `call-budget`, below.
-        step("call-budget", run_call_budget),
-        // THE SEARCH HALF OF THE SAME PROMISE (#1135). `call-budget` is a floor
-        // over a few hundred rows; this is the core's own search answers over a
-        // year-3 vault, one p95 per (surface, query), against its own ledger.
-        step("search-budget", run_search_budget),
+        // converge (#1029 §1).
+        //
+        // NO PERFORMANCE OR TIMING STEP: `call-budget` and `search-budget`
+        // stood here, p95 ceilings on the core's calls. They are removed by the
+        // owner's ruling of 2026-11-04 — a wall-clock check flakes on a shared
+        // or loaded machine and blocks unrelated changes. Work is still bounded
+        // by construction (keyset pages, `LIMIT`s) and counted by tests that
+        // count calls and statements, not seconds.
         // CLAUSE 9 AGAINST A REAL PANIC (#1020 wave 3, lane E finding 4). The
         // `debug-fault` feature is off in every other step and in every release
         // profile, so this is the one place the tree is compiled with it — and
@@ -207,135 +203,6 @@ pub fn steps(profile: Profile) -> Vec<Step> {
     release
 }
 
-/// Was the profile's own build output on disk before the run started?
-///
-/// The `local` budget is the developer's feedback time after an edit, and the
-/// edit-run loop runs on a tree that has been built before (D-1020-B2-1). The
-/// first run after `cargo clean` or a fresh clone is a different measurement
-/// with its own ledgered ceiling, so the two are told apart rather than averaged
-/// into a number that is wrong for both.
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum Tree {
-    Warm,
-    Cold,
-}
-
-/// The workspace members' package names, read off `crates/*/Cargo.toml` and
-/// `crates/apps/*/Cargo.toml` — the two globs the root manifest lists.
-pub fn member_packages(root: &Path) -> Vec<String> {
-    let mut names = Vec::new();
-    for parent in ["crates", "crates/apps"] {
-        let Ok(entries) = fs::read_dir(root.join(parent)) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let manifest = entry.path().join("Cargo.toml");
-            let Ok(text) = fs::read_to_string(&manifest) else {
-                continue;
-            };
-            let mut in_package = false;
-            for line in text.lines() {
-                let line = line.trim();
-                if line.starts_with('[') {
-                    in_package = line == "[package]";
-                    continue;
-                }
-                if let Some(rest) = line.strip_prefix("name")
-                    && in_package
-                    && let Some(value) = rest.split('=').nth(1)
-                {
-                    names.push(value.trim().trim_matches('"').to_owned());
-                    break;
-                }
-            }
-        }
-    }
-    names.sort();
-    names.dedup();
-    names
-}
-
-/// Warm iff EVERY workspace member has a **linkable or runnable** artifact in
-/// the target directory's `debug/deps` — a `.rlib` or an executable with no
-/// extension.
-///
-/// `target` is [`crate::target_dir`]'s answer, not `<root>/target`: under a
-/// shared `CARGO_TARGET_DIR` the root's own `target/` is absent (and a built
-/// tree read cold) or stale (and an unbuilt tree read WARM, buying the 120 s
-/// budget for a build that has to compile everything). It is passed in rather
-/// than read from the environment here so both answers are testable.
-///
-/// The discriminator is deliberately not "`target/debug` exists" and not
-/// "`target/debug/deps` is non-empty": `cargo check` and `cargo clippy` produce
-/// `.rmeta` only, so a tree that has merely been checked would claim to be warm
-/// for a profile whose `test` step still has to compile and link every crate
-/// from scratch — which is exactly how the 120 s promise would be gamed. A
-/// *stale* incremental tree does read as warm, on purpose: a tree whose sources
-/// moved since the last build is the tree the edit-run loop runs on, and
-/// rebuilding that delta is the thing the budget is promising.
-///
-/// Returns the state and the one line that says how it was decided.
-pub fn tree_state(root: &Path, target: &Path, forced_cold: bool) -> (Tree, String) {
-    if forced_cold {
-        return (
-            Tree::Cold,
-            "cold — `--cold` was passed, so the run is scored as a first build whatever is on disk"
-                .to_owned(),
-        );
-    }
-    let members = member_packages(root);
-    if members.is_empty() {
-        return (
-            Tree::Cold,
-            "cold — no workspace member manifests were readable under crates/, so nothing can be known to be built".to_owned(),
-        );
-    }
-    let deps = target.join("debug/deps");
-    let names: Vec<String> = match fs::read_dir(&deps) {
-        Ok(entries) => entries
-            .flatten()
-            .map(|entry| entry.file_name().to_string_lossy().into_owned())
-            .collect(),
-        Err(_) => Vec::new(),
-    };
-    let missing: Vec<&String> = members
-        .iter()
-        .filter(|member| !has_linked_artifact(&names, member))
-        .collect();
-    if missing.is_empty() {
-        return (
-            Tree::Warm,
-            format!(
-                "warm — all {} workspace member(s) have a linked artifact in {}",
-                members.len(),
-                deps.display()
-            ),
-        );
-    }
-    (
-        Tree::Cold,
-        format!(
-            "cold — {} of {} workspace member(s) have no linked artifact in {} (first: {}); an `.rmeta` from a previous `cargo check` does not count",
-            missing.len(),
-            members.len(),
-            deps.display(),
-            missing[0]
-        ),
-    )
-}
-
-/// Is there a `lib<crate>-*.rlib` or an extensionless `<crate>-*` executable
-/// among `names`? Hyphens in a package name are underscores in an artifact name.
-fn has_linked_artifact(names: &[String], member: &str) -> bool {
-    let snake = member.replace('-', "_");
-    let library = format!("lib{snake}-");
-    let binary = format!("{snake}-");
-    names.iter().any(|name| {
-        (name.starts_with(&library) && name.ends_with(".rlib"))
-            || (name.starts_with(&binary) && !name[binary.len()..].contains('.'))
-    })
-}
-
 /// `mobile-jvm` — the JVM-provable half of `mobile/` (#1020 wave 3 lane E).
 ///
 /// Three things, in one step because they share a Gradle invocation and a
@@ -346,7 +213,7 @@ fn has_linked_artifact(names: &[String], member: &str) -> bool {
 ///      It is not a skip when they are missing — a binding test that skipped
 ///      would read green on a machine where the ABI does not work at all.
 ///      **Without `--features llama`:** no Kotlin spec loads a model, and
-///      llama.cpp's cold `cmake` build would not fit this profile's 420 s
+///      llama.cpp's cold `cmake` build is too slow for this profile
 ///      (R-CHAT-10). The cdylib reports a model file as `NO_ENGINE`, which
 ///      `AssistRoundTripSpec` accepts; the engine-wired answer is asserted in
 ///      Rust by the `engine` job in `gate.yml`.
@@ -513,29 +380,22 @@ fn untracked_message(files: &[String], paths: &[&str]) -> String {
     )
 }
 
-/// Run a profile. Returns `true` when every step passed inside its budget.
-pub fn run(profile: Profile, root: &Path, forced_cold: bool, lane: Option<String>) -> Result<bool> {
-    let hardware =
-        std::env::var("CENTRAID_GATE_HARDWARE").unwrap_or_else(|_| DEFAULT_HARDWARE.to_owned());
+/// Run a profile. Returns `true` when every step passed.
+///
+/// The per-step timing table is printed as information. No profile is failed
+/// for taking long: wall-clock budgets were removed by the owner's ruling of
+/// 2026-11-04, because they flake on a shared or loaded machine and block
+/// unrelated changes. CI's `timeout-minutes` is the backstop against a hang.
+pub fn run(profile: Profile, root: &Path, lane: Option<String>) -> Result<bool> {
     let ctx = Ctx {
         root: root.to_path_buf(),
         lane: lane.clone(),
-        hardware: hardware.clone(),
         ci: std::env::var_os("CI").is_some(),
         artifacts: root.join("target/xtask").join(profile.name()),
         profile,
     };
-    let budget = ledger::budget_seconds(root, profile.name(), &hardware)?;
-    let (tree, why) = tree_state(root, &crate::target_dir(root), forced_cold);
 
-    println!(
-        "xtask gate — profile {} · hardware {hardware} · budget {}\n  tree {why}",
-        profile.name(),
-        budget.map_or_else(
-            || "unbounded".to_owned(),
-            |seconds| format!("{seconds:.0}s")
-        ),
-    );
+    println!("xtask gate — profile {}", profile.name());
 
     // `--lane <name>` narrows the run to ONE step. A device cell is one job per
     // lane over one profile, and a job that ran the whole nightly profile to
@@ -567,99 +427,18 @@ pub fn run(profile: Profile, root: &Path, forced_cold: bool, lane: Option<String
         .filter(|(_, _, outcome)| matches!(outcome, Outcome::Failed(_)))
         .map(|(name, _, _)| *name)
         .collect();
-    let mut ok = failed.is_empty();
 
-    if !score(profile, tree, total.as_secs_f64(), budget, &ctx) {
-        ok = false;
-    }
-
-    // The last line is the verdict, and the verdict includes the budget. Before
-    // this it read `PASS` off the step list alone, so a run whose steps were all
-    // green and whose total blew the budget printed the budget failure and then
-    // `gate local: PASS` — with the process still exiting non-zero. Two
-    // contradicting answers in one output is worse than either (D-1020-B2).
-    if ok {
+    if failed.is_empty() {
         println!("\ngate {}: PASS", profile.name());
-    } else if failed.is_empty() {
-        println!(
-            "\ngate {}: FAIL — over budget (every step was green; see the BUDGET line above)",
-            profile.name()
-        );
-    } else {
-        println!("\ngate {}: FAIL — {}", profile.name(), failed.join(", "));
-        for (name, _, outcome) in &results {
-            if let Outcome::Failed(detail) = outcome {
-                println!("  {name}: {detail}");
-            }
+        return Ok(true);
+    }
+    println!("\ngate {}: FAIL — {}", profile.name(), failed.join(", "));
+    for (name, _, outcome) in &results {
+        if let Outcome::Failed(detail) = outcome {
+            println!("  {name}: {detail}");
         }
     }
-    Ok(ok)
-}
-
-/// The `compile-time.json` key a cold `local` run is charged against.
-pub const COLD_LOCAL_KEY: &str = "coldLocalProfileSeconds";
-
-/// Score a profile's total against the number that applies to the tree it ran
-/// on, print the one line that says which, and return whether it held.
-///
-/// Only `local` has a cold ceiling of its own (D-1020-B2-1). Every other profile
-/// runs in CI on a runner that has never seen this workspace, so a cold tree is
-/// its NORMAL case and its `budgetSeconds` has to hold cold or it is not a
-/// budget — the tree state is printed for those and changes nothing. A cold
-/// `local` run is not let off: it is charged against `coldLocalProfileSeconds`,
-/// its own down-only ledger entry, and a cold run with no ceiling stated fails
-/// rather than passing unscored, because "cold" must never be the answer that
-/// makes a slow gate green.
-fn score(profile: Profile, tree: Tree, total: f64, budget: Option<f64>, ctx: &Ctx) -> bool {
-    if profile == Profile::Local && tree == Tree::Cold {
-        let ceiling = ledger::compile_time_ceiling(&ctx.root, &ctx.hardware, COLD_LOCAL_KEY);
-        return match ceiling {
-            Some(ceiling) if total > ceiling => {
-                println!(
-                    "\n  BUDGET cold — the `local` profile took {total:.1}s against the {ceiling:.0}s `{COLD_LOCAL_KEY}` ceiling in {}. A first build is not charged the warm feedback-time budget, and it is not unbudgeted either (#1020, D-1020-B2-1)",
-                    ledger::COMPILE_TIME
-                );
-                false
-            }
-            Some(ceiling) => {
-                println!(
-                    "  BUDGET cold ok — {total:.1}s of the {ceiling:.0}s `{COLD_LOCAL_KEY}` ceiling in {}; the warm {} budget was not the number scored",
-                    ledger::COMPILE_TIME,
-                    budget.map_or_else(
-                        || "unbounded".to_owned(),
-                        |seconds| format!("{seconds:.0}s")
-                    )
-                );
-                true
-            }
-            None => {
-                println!(
-                    "\n  BUDGET cold — the `local` profile took {total:.1}s and {} states no `{COLD_LOCAL_KEY}` ceiling for {}. An unscored run is not a pass: measure it with `cargo xtask measure --only {COLD_LOCAL_KEY} --write` (#1020)",
-                    ledger::COMPILE_TIME,
-                    ctx.hardware
-                );
-                false
-            }
-        };
-    }
-    let Some(seconds) = budget else {
-        return true;
-    };
-    let state = if tree == Tree::Cold {
-        " (on a cold tree, which is this profile's normal case in CI — the budget holds cold or it is not a budget)"
-    } else {
-        ""
-    };
-    if total > seconds {
-        println!(
-            "\n  BUDGET the `{}` profile took {total:.1}s against a {seconds:.0}s budget{state}. The budget is the product's feedback-time promise, not a target — either the step above it got slower or the profile grew a step it should not carry ({}, #1020)",
-            profile.name(),
-            ledger::BUDGETS
-        );
-        return false;
-    }
-    println!("  BUDGET ok — {total:.1}s of {seconds:.0}s{state}");
-    true
+    Ok(false)
 }
 
 /// The steps a run executes: the whole profile, or the one `--lane` names.
@@ -754,7 +533,6 @@ fn line(name: &str, elapsed: Duration, outcome: &Outcome) -> String {
 /// drill would report "release is green" for a release nobody proved
 /// restorable.
 fn run_restore_drill(ctx: &Ctx) -> Result<Outcome> {
-    let started = Instant::now();
     // **`--workspace --test`, NOT `-p` runs, and the difference is 100 seconds
     // of the local loop.** `cargo test -p <one>` resolves features for
     // that package alone, which is a DIFFERENT feature set from the
@@ -778,29 +556,12 @@ fn run_restore_drill(ctx: &Ctx) -> Result<Outcome> {
     if !matches!(outcome, Outcome::Ok(_)) {
         return Ok(outcome);
     }
-    let seconds = started.elapsed().as_secs_f64();
-    // The wall clock, as evidence rather than as a ceiling. There is no
-    // `restoreDrillSeconds` slot in `contracts/ledgers/gate-budgets.json` —
-    // the release profile's budget is `null` by ruling — so the number is
-    // written to the artifact directory and quoted in the step's line. A
-    // ceiling invented here would be a number this lane ratcheted into a
-    // down-only ledger on the strength of one run.
-    let dir = ctx.artifacts.join("restore-drill");
-    fs::create_dir_all(&dir)?;
-    fs::write(
-        dir.join("timing.json"),
-        format!(
-            "{{\n  \"hardware\": \"{}\",\n  \"restoreDrillSeconds\": {seconds:.1}\n}}\n",
-            ctx.hardware
-        ),
-    )?;
-    Ok(Outcome::Ok(format!(
+    Ok(Outcome::Ok(
         "back a vault up, lose it with its ledger and spool, and restore it \
          row for row; then lose the PHONE, restore from 24 words across the \
-         real gateway, and freeze the old one, in {seconds:.1}s (no budget \
-         slot by ruling) — evidence: {}",
-        display_relative(&ctx.root, &dir)
-    )))
+         real gateway, and freeze the old one"
+            .to_owned(),
+    ))
 }
 
 /// Run a command, buffered. On failure the whole output is written under
@@ -935,8 +696,8 @@ fn cargo_subcommand_available(root: &Path, subcommand: &str) -> bool {
 ///
 /// **`local` runs the crates the change touches, plus their dependents; every
 /// other profile runs the whole workspace** (hand-off 6.5, the owner's ruling
-/// of 2026-10-15). `cargo xtask gate --profile local` took 290 to 500 s against
-/// a 120 s budget and this step was nearly all of it. [`select`] decides which
+/// of 2026-10-15). `cargo xtask gate --profile local` took 290 to 500 s and
+/// this step was nearly all of it. [`select`] decides which
 /// crates, and the step says so loudly: a banner before its line naming every
 /// crate that ran and why, a `NARROWED` prefix on the line itself (which is the
 /// evidence row), and `selection.txt` beside the failure artifacts. What
@@ -961,7 +722,7 @@ fn cargo_subcommand_available(root: &Path, subcommand: &str) -> bool {
 /// **It used to EXCLUDE `crates/sim` in the `local` profile** (D-1020-CL9) and
 /// run it twice everywhere else — once here and once as a `sim` step — because
 /// the deterministic simulation was #1020's primary sync proof and cost ~29 s
-/// of a 120 s budget. The simulation simulated SEATS, and there are none
+/// of the `local` loop. The simulation simulated SEATS, and there are none
 /// (#1029 §1, §6): the crate, the step and the exclusion all go.
 ///
 /// **nextest does not run doctests, so the doctests run after it** (#1047).
@@ -1095,73 +856,6 @@ fn run_whole_workspace_tests(ctx: &Ctx) -> Result<Outcome> {
         Outcome::Ok(doc) => Ok(Outcome::Ok(format!("{nextest}, then {doc}"))),
         other => Ok(other),
     }
-}
-
-/// The `call` budget — the issue's "any request that exceeds it in `pr` profile
-/// fails the gate" (D-1020-D2-6).
-///
-/// `--nocapture` so the measured p50/p95/p99 reach the gate's log: a budget
-/// that only says pass or fail cannot show a number trending towards its
-/// ceiling, and the ledger is down-only precisely so that trend matters.
-///
-/// **`--workspace --test call_budget`, NOT `-p centraid-core`**, for the reason
-/// [`run_restore_drill`] states: `-p` resolves features for one package, so it
-/// rebuilt 157 units the `test` step had just built under the workspace's
-/// resolution (measured with `--message-format=json` against that build), and
-/// on `ci-linux-x64-4c` that was 151.7-195 s of a cold `pr` run for one test
-/// binary. Naming the target across the workspace links the binary `test`
-/// already built. Only `crates/core` has a `call_budget` target, so the set of
-/// tests that runs is the same.
-fn run_call_budget(ctx: &Ctx) -> Result<Outcome> {
-    process(
-        ctx,
-        "call-budget",
-        "cargo",
-        &[
-            "test",
-            "--workspace",
-            "--test",
-            "call_budget",
-            "--",
-            "--nocapture",
-        ],
-    )
-}
-
-/// The search budget — `call-budget`'s promise over the year-3 search vault
-/// (#1135): p95 of each of eleven queries on each of five surfaces, against
-/// `contracts/ledgers/search-budget.json`.
-///
-/// **A RELEASE build, and `--include-ignored`.** The promise is the shipped
-/// core's: the phone runs an optimised core, and a debug build runs the
-/// correction pass over the word list three to five times slower (measured on
-/// this corpus, [#1135](https://github.com/srikanth235/centraid/issues/1135)), so a debug measurement
-/// would hold the product to a promise it was never going to be built under.
-/// The measurement is `#[ignore]`d so the `test` step does not run a minutes-long
-/// suite a second time in a profile it does not measure; this step is where it
-/// runs. `--release` reuses the artefacts `release-build` just built.
-///
-/// Built like [`run_call_budget`] otherwise, for the same reason: `--workspace
-/// --test search_budget` and not `-p`, and only `crates/core` has a
-/// `search_budget` target. `--nocapture` so the table of measured percentiles
-/// reaches the log; the target holds two tests (the measurement and the ledger's
-/// agreement with it) and both are the step.
-fn run_search_budget(ctx: &Ctx) -> Result<Outcome> {
-    process(
-        ctx,
-        "search-budget",
-        "cargo",
-        &[
-            "test",
-            "--release",
-            "--workspace",
-            "--test",
-            "search_budget",
-            "--",
-            "--nocapture",
-            "--include-ignored",
-        ],
-    )
 }
 
 /// `fault-door` — clause 9 over a REAL panic inside `call`.
@@ -1514,49 +1208,16 @@ fn run_ci_policy(ctx: &Ctx) -> Result<Outcome> {
     })
 }
 
-/// The release build, scored against the compile-time ledger.
-///
-/// The measurement is written as evidence and compared with the ledger's
-/// ceiling; it is never written BACK into the ledger. `cargo xtask measure
-/// --write` owns that, so a gate run cannot ratchet its own ceiling upwards by
-/// observing a slow day.
+/// The release build: `cargo build --workspace --release` must compile. How
+/// long it takes is information in the timing table, not a verdict (owner
+/// ruling 2026-11-04).
 fn run_release_build(ctx: &Ctx) -> Result<Outcome> {
-    let started = Instant::now();
-    let outcome = process(
+    process(
         ctx,
         "release-build",
         "cargo",
         &["build", "--workspace", "--release"],
-    )?;
-    let seconds = started.elapsed().as_secs_f64();
-    if matches!(outcome, Outcome::Ok(_)) {
-        let dir = ctx.artifacts.join("release-build");
-        fs::create_dir_all(&dir)?;
-        fs::write(
-            dir.join("timing.json"),
-            format!(
-                "{{\n  \"hardware\": \"{}\",\n  \"releaseBuildSeconds\": {seconds:.1}\n}}\n",
-                ctx.hardware
-            ),
-        )?;
-        let ceiling = ledger::compile_time_ceiling(&ctx.root, &ctx.hardware, "releaseBuildSeconds");
-        let evidence = display_relative(&ctx.root, &dir);
-        return match ceiling {
-            Some(ceiling) if seconds > ceiling => Ok(Outcome::Failed(format!(
-                "cargo build --workspace --release took {seconds:.1}s against the {ceiling:.0}s ceiling in {} — evidence: {evidence}",
-                ledger::COMPILE_TIME
-            ))),
-            Some(ceiling) => Ok(Outcome::Ok(format!(
-                "cargo build --workspace --release in {seconds:.1}s of {ceiling:.0}s — evidence: {evidence}"
-            ))),
-            None => Ok(Outcome::Ok(format!(
-                "cargo build --workspace --release in {seconds:.1}s; {} states no `releaseBuildSeconds` ceiling for {}, so nothing was enforced — evidence: {evidence}",
-                ledger::COMPILE_TIME,
-                ctx.hardware
-            ))),
-        };
-    }
-    Ok(outcome)
+    )
 }
 
 /// The TypeScript workspaces (`packages/design`, `packages/test-kit`) and the
@@ -2092,40 +1753,30 @@ mod tests {
         assert!(!long.contains("mobile/f10.swift"), "{long}");
     }
 
-    /// The `call` budget the `pr` profile owes (#1020).
+    /// The `pr` profile carries no simulation step.
     ///
     /// It used to assert `sim` as well — #1020's primary sync proof, 25 seeds
     /// on every PR. The simulation simulated SEATS and is deleted with them
-    /// (#1029 §1); what it proved about CONVERGENCE has no subject, and what
-    /// it proved about responsiveness is `call-budget`'s, which is why that
-    /// half is asserted by name here rather than left to a step count.
+    /// (#1029 §1). `call-budget` and `search-budget` stood here too and are
+    /// removed by the owner's ruling of 2026-11-04: no gate step is a
+    /// wall-clock verdict, so the test asserts that none came back.
     #[test]
-    fn the_pr_profile_runs_the_call_budget() {
-        let pr = names(Profile::Pr);
-        assert!(
-            !pr.contains(&"sim"),
-            "`sim` came back without a `crates/sim` to run"
-        );
-        assert!(
-            pr.contains(&"call-budget"),
-            "`pr` does not run the `call` budget; the issue's rule is that any request \
-             exceeding it in `pr` fails the gate"
-        );
-        assert!(!names(Profile::Nightly).contains(&"sim-nightly"));
-    }
-
-    /// The search budget (#1135) is the same promise as the `call` budget, over
-    /// the year-3 search vault, and it is owed by the same profile.
-    #[test]
-    fn the_pr_profile_runs_the_search_budget() {
-        assert!(
-            names(Profile::Pr).contains(&"search-budget"),
-            "`pr` does not run the search budget"
-        );
-        assert!(
-            !names(Profile::Local).contains(&"search-budget"),
-            "the search budget founds a year-3 vault; it is `pr`'s, not the edit-run loop's"
-        );
+    fn no_profile_carries_a_simulation_or_a_timing_budget_step() {
+        for profile in [
+            Profile::Local,
+            Profile::Pr,
+            Profile::Nightly,
+            Profile::Release,
+        ] {
+            let listed = names(profile);
+            for banned in ["sim", "sim-nightly", "call-budget", "search-budget"] {
+                assert!(
+                    !listed.contains(&banned),
+                    "`{banned}` came back into the `{}` profile",
+                    profile.name()
+                );
+            }
+        }
     }
 
     #[test]
@@ -2354,7 +2005,6 @@ mod tests {
         let ctx = Ctx {
             root: root.clone(),
             lane: Some("android-macrobenchmark".to_owned()),
-            hardware: DEFAULT_HARDWARE.to_owned(),
             ci: false,
             artifacts: root.join("target"),
             profile: Profile::Nightly,
@@ -2381,7 +2031,6 @@ mod tests {
         let ctx = Ctx {
             root: root.clone(),
             lane: None,
-            hardware: DEFAULT_HARDWARE.to_owned(),
             ci: false,
             artifacts: root.join("target"),
             profile: Profile::Local,
@@ -2392,19 +2041,18 @@ mod tests {
         }
     }
 
-    /// `mobile-jvm` IS A REAL PROFILE NOW, with one step and a measured
-    /// budget (#1020 wave 3 lane E, applied by lane X3).
+    /// `mobile-jvm` IS A REAL PROFILE NOW, with one step (#1020 wave 3 lane E,
+    /// applied by lane X3).
     ///
     /// It replaces `the_mobile_jvm_profile_has_no_steps_and_refuses_to_run`,
     /// which asserted an empty step list and a refusal. That rule was never
     /// about emptiness: it was that the profile cannot pass VACUOUSLY, and a
     /// profile with a step keeps the same rule differently — the step is real,
-    /// it FAILS rather than skips when the mobile tree is not there, and the
-    /// ledger row it is scored against is a number rather than a null.
+    /// it FAILS rather than skips when the mobile tree is not there.
     ///
     /// The step is not CALLED here: it starts a Gradle daemon-less build and a
     /// `cargo build`, so invoking it from a unit test would be running the
-    /// profile inside `cargo test -p xtask`. Its wall clock is on the issue.
+    /// profile inside `cargo test -p xtask`.
     #[test]
     fn the_mobile_jvm_profile_has_one_real_step_and_fails_without_the_mobile_tree() {
         assert_eq!(
@@ -2422,7 +2070,6 @@ mod tests {
         let ctx = Ctx {
             root: root.clone(),
             lane: None,
-            hardware: DEFAULT_HARDWARE.to_owned(),
             ci: false,
             artifacts: root.join("target"),
             profile: Profile::Local,
@@ -2433,134 +2080,6 @@ mod tests {
             }
             _ => panic!("a missing mobile tree must FAIL loudly, not skip or pass"),
         }
-        // And the budget it is scored against is a number now.
-        assert_eq!(
-            ledger::budget_seconds(
-                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .parent()
-                    .and_then(std::path::Path::parent)
-                    .expect("the repository root"),
-                "mobile-jvm",
-                DEFAULT_HARDWARE
-            )
-            .expect("the ledger reads"),
-            Some(420.0),
-            "a null budget would make the profile unscored"
-        );
-    }
-
-    fn build_tree(root: &Path, members: &[&str], linked: &[&str]) {
-        for member in members {
-            let dir = root.join("crates").join(member);
-            fs::create_dir_all(&dir).expect("create the member dir");
-            fs::write(
-                dir.join("Cargo.toml"),
-                format!("[package]\nname = \"centraid-{member}\"\nversion = \"0.1.0\"\n\n[dependencies]\nname = \"not-a-package-name\"\n"),
-            )
-            .expect("write the manifest");
-        }
-        link_artifacts(&root.join("target"), linked);
-    }
-
-    /// Linked artifacts inside a target directory, wherever that directory is.
-    fn link_artifacts(target: &Path, linked: &[&str]) {
-        let deps = target.join("debug/deps");
-        fs::create_dir_all(&deps).expect("create deps");
-        for name in linked {
-            fs::write(deps.join(name), "").expect("write an artifact");
-        }
-    }
-
-    /// The detection is over LINKED artifacts, and this is the case that says
-    /// why: a tree that has only been `cargo check`ed carries `.rmeta` for every
-    /// member and still has to compile and link every test binary, so it is
-    /// cold — otherwise a 5 s `cargo check` would buy a warm 120 s budget.
-    #[test]
-    fn an_rmeta_only_tree_is_cold_and_a_linked_tree_is_warm() {
-        let root = crate::testing::fixture_dir("tree-rmeta");
-        build_tree(
-            &root,
-            &["net", "seat"],
-            &["libcentraid_net-1a.rmeta", "libcentraid_seat-2b.rmeta"],
-        );
-        let (state, why) = tree_state(&root, &root.join("target"), false);
-        assert_eq!(state, Tree::Cold, "{why}");
-        assert!(why.contains("does not count"), "{why}");
-
-        let warm = crate::testing::fixture_dir("tree-linked");
-        build_tree(
-            &warm,
-            &["net", "seat"],
-            &[
-                "libcentraid_net-1a.rlib",
-                "libcentraid_net-1a.rmeta",
-                "centraid_seat-2b",
-            ],
-        );
-        let (state, why) = tree_state(&warm, &warm.join("target"), false);
-        assert_eq!(state, Tree::Warm, "{why}");
-        assert!(why.contains("all 2 workspace member(s)"), "{why}");
-    }
-
-    /// One member built and one not is cold. A partial tree passing as warm is
-    /// how a budget stops covering the crate that was just added.
-    #[test]
-    fn a_partially_built_tree_is_cold_and_names_the_member() {
-        let root = crate::testing::fixture_dir("tree-partial");
-        build_tree(&root, &["net", "seat"], &["libcentraid_net-1a.rlib"]);
-        let (state, why) = tree_state(&root, &root.join("target"), false);
-        assert_eq!(state, Tree::Cold, "{why}");
-        assert!(why.contains("centraid-seat"), "{why}");
-        let (forced, why) = tree_state(&root, &root.join("target"), true);
-        assert_eq!(forced, Tree::Cold);
-        assert!(why.contains("`--cold` was passed"), "{why}");
-    }
-
-    /// The tree scored is the one the TARGET DIRECTORY says was built, not the
-    /// one `<root>/target` says.
-    ///
-    /// Wave 3's lanes share one `CARGO_TARGET_DIR` because the disk does not
-    /// hold four, and this function read `<root>/target/debug/deps` — so a
-    /// fully linked workspace printed `tree cold` (14 of 14 members "have no
-    /// linked artifact") straight after `cargo test --workspace` linked all
-    /// fourteen, which is the observed red. The second half is the direction
-    /// that matters: a STALE `<root>/target` left over from an older build read
-    /// as warm and bought the 120 s budget for a tree whose real target
-    /// directory had never been built (#1020 wave 3 lane X3).
-    #[test]
-    fn the_tree_state_follows_the_target_directory_and_not_the_repository_root() {
-        let root = crate::testing::fixture_dir("tree-shared-target");
-        build_tree(&root, &["net", "seat"], &[]);
-        let shared = crate::testing::fixture_dir("tree-shared-target-dir");
-        link_artifacts(&shared, &["libcentraid_net-1a.rlib", "centraid_seat-2b"]);
-
-        let (state, why) = tree_state(&root, &shared, false);
-        assert_eq!(
-            state,
-            Tree::Warm,
-            "a workspace linked into the shared target directory is warm: {why}"
-        );
-        assert!(
-            why.contains(&shared.join("debug/deps").display().to_string()),
-            "the line names the directory that was actually scanned: {why}"
-        );
-
-        // The dangerous direction: the root's own target/ is fully linked and
-        // the target directory in force is empty. Warm here would be a budget
-        // granted to a build that has to compile everything.
-        let stale = crate::testing::fixture_dir("tree-stale-root-target");
-        build_tree(
-            &stale,
-            &["net", "seat"],
-            &["libcentraid_net-1a.rlib", "centraid_seat-2b"],
-        );
-        let empty = crate::testing::fixture_dir("tree-empty-target-dir");
-        let (state, why) = tree_state(&stale, &empty, false);
-        assert_eq!(
-            state,
-            Tree::Cold,
-            "a stale <root>/target must not buy the warm budget: {why}"
-        );
     }
 
     /// THE BACKUP MEASUREMENT'S EVIDENCE IS CHECKED, NOT TRUSTED (#1080). No
@@ -2606,75 +2125,10 @@ mod tests {
         Ctx {
             root: root.to_path_buf(),
             lane: None,
-            hardware: "h".to_owned(),
             ci: false,
             artifacts: root.join("target/xtask/local"),
             profile: Profile::Local,
         }
-    }
-
-    fn with_cold_ceiling(name: &str, ceiling: Option<f64>) -> PathBuf {
-        let root = crate::testing::fixture_dir(name);
-        fs::create_dir_all(root.join("contracts/ledgers")).expect("create the ledger dir");
-        let body = match ceiling {
-            Some(seconds) => format!(r#"{{"{COLD_LOCAL_KEY}":{{"budgetSeconds":{seconds}}}}}"#),
-            None => "{}".to_owned(),
-        };
-        fs::write(
-            root.join(ledger::COMPILE_TIME),
-            format!(r#"{{"measurements":{{"h":{body}}}}}"#),
-        )
-        .expect("seed the ledger");
-        root
-    }
-
-    /// The two scoring branches, and the one thing that must not be true of
-    /// either: a cold tree cannot pass the WARM budget by being cold, and it
-    /// cannot pass unscored (D-1020-B2-1).
-    #[test]
-    fn a_cold_local_run_is_charged_to_its_own_ceiling_and_never_goes_unscored() {
-        let root = with_cold_ceiling("score-cold", Some(400.0));
-        let ctx = scoring_ctx(&root);
-        // Warm: the gate budget, as before.
-        assert!(score(Profile::Local, Tree::Warm, 90.0, Some(120.0), &ctx));
-        assert!(!score(Profile::Local, Tree::Warm, 130.0, Some(120.0), &ctx));
-        // Cold: the compile-time ceiling, not the 120 s budget — 300 s is over
-        // the warm budget and under the cold ceiling, and holds.
-        assert!(score(Profile::Local, Tree::Cold, 300.0, Some(120.0), &ctx));
-        assert!(
-            !score(Profile::Local, Tree::Cold, 401.0, Some(120.0), &ctx),
-            "over its own cold ceiling is still a failure"
-        );
-
-        let unstated = with_cold_ceiling("score-cold-unstated", None);
-        assert!(
-            !score(
-                Profile::Local,
-                Tree::Cold,
-                1.0,
-                Some(120.0),
-                &scoring_ctx(&unstated)
-            ),
-            "a cold run with no stated ceiling must fail, not pass unscored"
-        );
-    }
-
-    /// Every profile but `local` runs in CI on a runner that has never seen the
-    /// workspace, so its budget has to hold on a cold tree: the state is
-    /// reported and the number scored is still `budgetSeconds`.
-    #[test]
-    fn pr_is_scored_against_its_budget_on_a_cold_tree() {
-        let root = with_cold_ceiling("score-pr", Some(400.0));
-        let ctx = scoring_ctx(&root);
-        assert!(score(Profile::Pr, Tree::Cold, 380.0, Some(900.0), &ctx));
-        assert!(
-            !score(Profile::Pr, Tree::Cold, 901.0, Some(900.0), &ctx),
-            "the cold ceiling belongs to `local` alone"
-        );
-        assert!(
-            score(Profile::Nightly, Tree::Cold, 9_999.0, None, &ctx),
-            "unbounded by ruling"
-        );
     }
 
     #[test]

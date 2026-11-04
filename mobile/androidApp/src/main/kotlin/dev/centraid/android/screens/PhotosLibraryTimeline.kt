@@ -47,14 +47,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.PhotoTile as WireTile
-import centraid.core.v1.PhotosGrain
 import centraid.core.v1.PhotosGrainItem
 import centraid.core.v1.PhotosPeriod
 import centraid.core.v1.PhotosRowKind
@@ -62,19 +60,21 @@ import centraid.core.v1.PhotosTimelineRow
 import dev.centraid.android.kit.ContentImage
 import dev.centraid.android.kit.GAP
 import dev.centraid.android.kit.PhotoTile
-import dev.centraid.android.kit.bandPress
-import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
 import dev.centraid.android.kit.BandPolicy
+import dev.centraid.android.kit.LocalBandClearance
+import dev.centraid.android.kit.bandFootPadding
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /*
  * THE LIBRARY'S DRAWING, IN COMPOSE (#1029, photos port — v0's
- * `PhotoTimeline.tsx`, `PhotoGrainView.tsx`, `ScrubRail.tsx`,
- * `TimelineGrainControl.tsx`; #1135).
+ * `PhotoTimeline.tsx`, `PhotoGrainView.tsx`, `ScrubRail.tsx`; #1135). The
+ * zoom, Years · Months · All, is no control of its own: Rust sends it as chips
+ * (`PhotosHomeState.grain_chips`) and `PhotosHomeScreen` draws them in the room's
+ * one chip row.
  *
  * What is drawn here is arithmetic over a position only the shell knows: where
  * a header sits, which tile is under a finger. WHICH ROWS THE CELLS PACK INTO,
@@ -132,6 +132,8 @@ internal fun LibraryTimeline(
         LazyColumn(
             state = listState,
             userScrollEnabled = !sweeping,
+            // THE PHOTOGRAPHS RUN UNDER THE BAND; the last row scrolls clear of it.
+            contentPadding = bandFootPadding(),
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {
@@ -271,7 +273,7 @@ private fun MonthHeader(title: String) {
     ) {
         Text(
             text = title,
-            style = centraidType("eyebrow"),
+            style = centraidType("title"),
             color = centraidColor("text"),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -383,7 +385,11 @@ private fun ScrubRail(listState: LazyListState, rows: List<PhotosTimelineRow>, w
     // Compose hit-tests pointer input and nothing else, so the tiles under the
     // rest of the edge stay tappable, and the bubble can stand beside the
     // thumb rather than being squeezed into its width.
-    BoxWithConstraints(Modifier.fillMaxSize().padding(vertical = RAIL_TOP.dp)) {
+    // THE RAIL SPANS WHAT THE MEMBER CAN SEE: the list runs under the band, and a thumb that slid
+    // beneath it would be a control nobody could reach.
+    BoxWithConstraints(
+        Modifier.fillMaxSize().padding(top = RAIL_TOP.dp, bottom = RAIL_TOP.dp + LocalBandClearance.current),
+    ) {
         val track = maxHeight - THUMB_HEIGHT.dp
         val trackPx = with(LocalDensity.current) { track.toPx() }.coerceAtLeast(1f)
         val offset = with(LocalDensity.current) { (track * shown).roundToPx() }
@@ -427,7 +433,8 @@ private fun ScrubRail(listState: LazyListState, rows: List<PhotosTimelineRow>, w
             contentAlignment = Alignment.CenterEnd,
         ) {
             // THE THUMB: a hairline-bordered pill on the elevated ground, the
-            // band's grammar at a rail's size. Never glass over a photograph.
+            // band's plate at a rail's size — and solid, not the band's pill: it
+            // carries no label to keep legible.
             Box(
                 Modifier
                     .padding(end = 4.dp)
@@ -506,6 +513,7 @@ internal fun LibraryGrains(
         val stage = maxWidth - (CentraidGeometry.PAGE_MARGIN * 2).dp
         LazyColumn(
             state = listState,
+            contentPadding = bandFootPadding(),
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {
@@ -550,7 +558,7 @@ internal fun LibraryGrains(
                         ) {
                             Text(
                                 entry.header_,
-                                style = centraidType("eyebrow"),
+                                style = centraidType("title"),
                                 color = centraidColor("text"),
                                 modifier = Modifier.padding(bottom = 6.dp).semantics { heading() },
                             )
@@ -643,69 +651,6 @@ internal fun dayOfRow(row: PhotosTimelineRow?): String = row?.day.orEmpty()
 internal fun grainDayAt(items: List<PhotosGrainItem>, index: Int): String {
     val item = items.drop((index - 1).coerceAtLeast(0)).firstOrNull { it.periods.isNotEmpty() }
     return item?.periods?.firstOrNull()?.anchor_day ?: ""
-}
-
-/**
- * THE GRAIN CONTROL (v0's `TimelineGrainControl.tsx`): Years · Months · All,
- * PERMANENT while the library is the destination — never armed by a scroll,
- * never on a timer. The band's grammar: one elevated plate on the pill rung
- * with a hairline, the lit segment in ink with a mark-wide rule over it. The
- * three words are Rust's.
- */
-@Composable
-internal fun GrainControl(
-    grain: PhotosGrain,
-    labels: List<Pair<PhotosGrain, String>>,
-    onGrain: (PhotosGrain) -> Unit,
-) {
-    Box(Modifier.fillMaxWidth().padding(top = BandPolicy.BAND_TOP_GAP.dp), contentAlignment = Alignment.Center) {
-        Row(
-            Modifier
-                .clip(RoundedCornerShape(BandPolicy.BAND_RADIUS.dp))
-                .background(centraidColor("bgElev"))
-                .border(
-                    CentraidGeometry.HAIRLINE.dp,
-                    centraidColor("lineStrong"),
-                    RoundedCornerShape(BandPolicy.BAND_RADIUS.dp),
-                )
-                .padding(BandPolicy.BAND_PLATE_PAD.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            labels.forEach { (key, label) ->
-                val active = key == grain ||
-                    (key == PhotosGrain.PHOTOS_GRAIN_ALL && grain == PhotosGrain.PHOTOS_GRAIN_UNSPECIFIED)
-                Box(
-                    Modifier
-                        .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
-                        .bandPress({ onGrain(key) })
-                        .semantics {
-                            role = Role.Tab
-                            selected = active
-                            contentDescription = label
-                        }
-                        .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (active) {
-                        Box(
-                            Modifier
-                                .align(Alignment.TopCenter)
-                                .padding(top = CentraidGeometry.HAIRLINE.dp)
-                                .size(BandPolicy.BAND_MARK_SIZE.dp, 2.dp)
-                                .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["pill"] ?: 0).dp))
-                                .background(centraidColor("text")),
-                        )
-                    }
-                    Text(
-                        text = label,
-                        style = centraidType(if (active) "control" else "band", scales = false),
-                        color = centraidColor(if (active) "text" else "textSoft"),
-                        maxLines = 1,
-                    )
-                }
-            }
-        }
-    }
 }
 
 /** A month header's height. */

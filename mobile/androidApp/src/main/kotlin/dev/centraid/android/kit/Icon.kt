@@ -41,6 +41,8 @@ public fun CentraidIcon(
     modifier: Modifier = Modifier,
     size: Dp = 16.dp,
     strokeWidth: Float = CentraidGeometry.APP_MARK_STROKE.toFloat(),
+    /** A toggle that is on: the outline is filled in the same ink. */
+    solid: Boolean = false,
 ) {
     // `PathParser` speaks SVG path data directly, so the emitted `d` strings
     // cross unchanged. Remembered because parsing is per-icon work, not
@@ -61,6 +63,7 @@ public fun CentraidIcon(
                 if (filled) {
                     drawPath(path = path, color = tint, style = Fill)
                 } else {
+                    if (solid) drawPath(path = path, color = tint, style = Fill)
                     drawPath(
                         path = path,
                         color = tint,

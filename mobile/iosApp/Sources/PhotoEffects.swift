@@ -22,9 +22,18 @@ enum PhotoEffects {
         _ render: Centraid_Core_V1_RenderEdit,
         core: any ScreenCore
     ) async -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
+        // An original the operating system's library holds is written out for the render.
+        var sourcePath = render.sourcePath
+        var temporary: URL?
+        if sourcePath.isEmpty, !render.osRef.isEmpty {
+            temporary = await PhoneLibrary.exportOriginal(ref: render.osRef)
+            sourcePath = temporary?.path ?? ""
+        }
+        defer { if let temporary { try? FileManager.default.removeItem(at: temporary) } }
+        let source = sourcePath
         let made = await Task.detached(priority: .userInitiated) {
             PhotoEditRenderer.render(
-                sourcePath: render.sourcePath,
+                sourcePath: source,
                 plan: render.plan,
                 quality: Int(render.jpegQualityPercent)
             )

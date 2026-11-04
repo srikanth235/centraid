@@ -4,7 +4,7 @@
 //! or media type is classified here (the core answers `size`, `kind_name` and
 //! `surface`).
 //!
-//! What depends on the SCREEN's state (the band, the pills, which empty state)
+//! What depends on the SCREEN's state (the band, the filter menu, which empty state)
 //! is the screen's; what depends only on the answer is here.
 
 use centraid_api_proto::core_v1 as wire;

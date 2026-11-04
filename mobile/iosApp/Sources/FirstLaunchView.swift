@@ -202,14 +202,14 @@ private struct FirstLaunchSlip<Scene: View>: View {
 
 /// EVERY APP'S MARK AS ONE HOUSE: rooms in one place, not separate products.
 /// The marks are Home's own roster (`HomeFirstLaunch.apps`, #1129), so an app
-/// that gets a tile is in the house too; five to a row at 40pt is the same width
-/// the grid always took, and fits the narrowest phone's slip.
+/// that gets a tile is in the house too; four to a row, each in an equal cell
+/// across the slip, so the roster fills the card evenly (eight marks make two full rows).
 private struct HouseScene: View {
     let apps: [String]
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.fixed(40), spacing: 8), count: 5),
-                  spacing: 12) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 4),
+                  spacing: 16) {
             ForEach(apps, id: \.self) { AppMark(appID: $0, size: 40) }
         }
         .padding(.top, 18)

@@ -268,8 +268,8 @@ Design for usability first, optimize after measuring. For performance changes, s
 reproduce -> measure (optimized build) -> find the line -> fix -> measure again -> commit with the numbers
 ```
 
-1. **Reproduce** with one command: a test, an `--ignored` rig, or the budget step. Write it down.
-2. **Measure an optimized build.** A debug build is several times slower and points at the wrong code (the search budget runs `--release` for exactly that reason). This workspace's `dev` profile optimizes dependencies at `opt-level = 2` but not your crates; `cargo test --release` or `cargo build --release` is the number to trust. `[profile.release]` keeps `panic = "unwind"` because the FFI boundary catches panics, and `dist` adds thin LTO.
+1. **Reproduce** with one command: a test or an `--ignored` rig. Write it down.
+2. **Measure an optimized build.** A debug build is several times slower and points at the wrong code (the year-3 rigs are run `--release` for exactly that reason). This workspace's `dev` profile optimizes dependencies at `opt-level = 2` but not your crates; `cargo test --release` or `cargo build --release` is the number to trust. `[profile.release]` keeps `panic = "unwind"` because the FFI boundary catches panics, and `dist` adds thin LTO.
 3. **Find the line** with the tool for the symptom:
 
    | Symptom | Tool |
@@ -278,7 +278,7 @@ reproduce -> measure (optimized build) -> find the line -> fix -> measure again 
    | CPU hot spot, any function | `perf record -g` then `perf report` on the test binary, if installed (Linux); `cargo flamegraph` if installed; on macOS `xcrun xctrace record --template 'Time Profiler'` |
    | A SQL read is slow | `EXPLAIN QUERY PLAN` (see the sqlite skill); `crates/core/tests/query_plans.rs` plans every page query |
    | Allocation churn | count allocations with a counting `#[global_allocator]` in a test, or `heaptrack` if installed |
-   | Slow incremental build | `cargo build --timings`; `cargo xtask measure --write` records the edit-run loop |
+   | Slow incremental build | `cargo build --timings` |
    | Two implementations, which is faster | a `criterion` or `divan` bench with `std::hint::black_box`; no crate here has `benches/` yet, so adding one is a new dependency to justify |
 
    Profiler traces, flamegraph SVGs and core dumps can contain the process environment, including tokens inherited from the agent's shell. Delete them after reading; never commit them.
@@ -286,10 +286,8 @@ reproduce -> measure (optimized build) -> find the line -> fix -> measure again 
 4. **Fix**, smallest change first: `Vec::with_capacity` or `collect()` over push loops; reuse caller-owned buffers in hot APIs (`fn read_into(&mut self, buf: &mut Vec<u8>)`); `Box<[T]>`, `Box<str>`, `Arc<str>` for long-lived immutable sequences; a faster hasher (`foldhash`, `FxHash`) only for trusted keys; batch work instead of per-item locking. Derive `Copy` for small plain types, never large ones.
 5. **Measure again** with the same command. Put before and after in the commit message: "search p95 41 ms, was 180 ms".
 
-This repo's own budgets, all run by `cargo xtask gate --profile pr`:
+This repo has no gate step or test that asserts on a duration (owner ruling 2026-11-04: they flaked on loaded machines and blocked unrelated changes). Measure by hand, and keep what the gate does check deterministic:
 
-- `call-budget`: `cargo test --workspace --test call_budget -- --nocapture` (`crates/core/tests/call_budget.rs`), p50/p95/p99 of core calls against the ledger; ceilings only go down.
-- `search-budget`: `cargo test --release --workspace --test search_budget -- --nocapture --include-ignored`, p95 of each query on each surface over the year-3 vault, against `contracts/ledgers/search-budget.json`.
 - `tests/journeys.json`: the journey ledger of measured ceilings per surface, volume and hardware. A ceiling is tightened freely; widening one needs an `approvedDeviation` note.
 - Year-3 rigs, `#[ignore]`d from normal runs: `crates/apps/<app>/tests/year3.rs`, e.g. `cargo test -p centraid-apps-notes --test year3 -- --ignored --nocapture` (agenda, docs, health, money, notes, people, photos). Run them in `--release` for numbers you quote.
 - Nothing whose cost grows with the vault runs on a request path: page by keyset cursor with `LIMIT`.

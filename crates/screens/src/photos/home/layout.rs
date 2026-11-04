@@ -1,6 +1,5 @@
 //! THE LIBRARY'S LAYOUT RULES, ONCE (#1029; v0's `justify.ts`, `timeline-rows.ts`,
-//! `PhotoGrainView.tsx`, `photos-rungs.ts`): justified packing from real aspect
-//! ratios, the rows a width makes of the cells, the cards a grain draws, how
+//! `PhotoGrainView.tsx`, `photos-rungs.ts`): uniform square packing, the rows a width makes of the cells, the cards a grain draws, how
 //! months pair, the tile sizes, and the pinch table.
 //!
 //! The cells arrive newest first and already grouped by the read's order, so a
@@ -18,8 +17,6 @@ use crate::strings::{Locale, photos as words};
 pub const GAP: f64 = 2.0;
 /// How far past the width a row packs before it closes.
 pub const OVERSHOOT: f64 = 0.28;
-/// The trailing row's height, as a multiple of the target.
-pub const LAST_ROW_CAP: f64 = 1.25;
 
 /// The phone's tile heights, XS to L (`photos-rungs.ts`).
 pub const RUNG_HEIGHTS: [u32; 4] = [64, 88, 120, 168];
@@ -37,22 +34,12 @@ pub fn clamp_rung(rung: u32) -> u32 {
     rung.min(RUNG_HEIGHTS.len() as u32 - 1)
 }
 
-/// One photograph's pixel box; either side 0 is an unknown box, which packs
-/// SQUARE: a missing record is the one case there is nothing to be faithful to.
+/// One photograph's pixel box. The grid draws every photograph in the same
+/// square, so the box only counts the tile.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Boxed {
     pub width: u32,
     pub height: u32,
-}
-
-impl Boxed {
-    fn aspect(self) -> f64 {
-        if self.width > 0 && self.height > 0 {
-            f64::from(self.width) / f64::from(self.height)
-        } else {
-            1.0
-        }
-    }
 }
 
 /// One packed tile: the input it came from, and its box in the row.
@@ -63,90 +50,53 @@ pub struct Packed {
     pub height: f64,
 }
 
-/// Half rounds up, as both shells' own rounding did for a positive size.
-fn rounded(value: f64) -> f64 {
-    (value + 0.5).floor()
-}
-
-/// The rows `boxes` pack into at `container`, each as wide as the container
-/// (the trailing partial row excepted), in the order given.
+/// The rows `boxes` pack into at `container`: one square size, the same number of
+/// tiles to every row (the last may hold fewer), in the order given.
 #[must_use]
 pub fn justify(boxes: &[Boxed], container: f64, target: f64) -> Vec<Vec<Packed>> {
-    pack(
-        &boxes.iter().map(|b| b.aspect()).collect::<Vec<_>>(),
-        container,
-        target,
-    )
+    pack(boxes.len(), container, target)
 }
 
-fn pack(aspects: &[f64], container: f64, target: f64) -> Vec<Vec<Packed>> {
-    if container <= 0.0 || target <= 0.0 {
+/// THE GRID IS ONE SIZE: every tile is the same square, `columns` to a row, so a
+/// photograph alone in its row is one cell and not a stretched one, and the first
+/// row is the height of every other (the tile's shape is the grid's, never the
+/// photograph's: a photograph is cropped to fill its cell).
+fn pack(count: usize, container: f64, target: f64) -> Vec<Vec<Packed>> {
+    if container <= 0.0 || target <= 0.0 || count == 0 {
         return Vec::new();
     }
-    let mut rows = Vec::new();
-    let mut members: Vec<usize> = Vec::new();
-    let mut sum = 0.0;
-    for (index, ratio) in aspects.iter().enumerate() {
-        members.push(index);
-        sum += ratio;
-        let spare = container - GAP * (members.len() as f64 - 1.0);
-        if sum * target >= spare + target * OVERSHOOT {
-            let height = rounded(spare / sum);
-            let mut widths: Vec<f64> = members
-                .iter()
-                .map(|m| rounded(height * aspects[*m]))
-                .collect();
-            let total: f64 = widths.iter().sum();
-            if let Some(last) = widths.last_mut() {
-                *last += spare - total;
-            }
-            rows.push(
-                members
-                    .iter()
-                    .zip(widths)
-                    .map(|(member, width)| Packed {
-                        index: *member,
-                        width,
-                        height,
-                    })
-                    .collect(),
-            );
-            members.clear();
-            sum = 0.0;
-        }
+    // The fewest columns whose cells are no taller than the target allows.
+    let mut columns = 1usize;
+    while (columns as f64) * target < container - GAP * (columns as f64 - 1.0) + target * OVERSHOOT
+    {
+        columns += 1;
     }
-    if !members.is_empty() {
-        let natural = (container - GAP * (members.len() as f64 - 1.0)) / sum;
-        let height = (target * LAST_ROW_CAP).min(natural);
+    let spare = container - GAP * (columns as f64 - 1.0);
+    let side = (spare / columns as f64).floor();
+    let remainder = spare - side * columns as f64;
+    let mut rows = Vec::new();
+    let mut next = 0;
+    while next < count {
+        let end = (next + columns).min(count);
+        let full = end - next == columns;
         rows.push(
-            members
-                .iter()
-                .map(|member| Packed {
-                    index: *member,
-                    width: rounded(height * aspects[*member]),
-                    height: rounded(height),
+            (next..end)
+                .map(|index| Packed {
+                    index,
+                    // A FULL ROW REACHES THE EDGE: the pixels the division left go to its last tile.
+                    width: if full && index + 1 == end {
+                        side + remainder
+                    } else {
+                        side
+                    },
+                    height: side,
                 })
                 .collect(),
         );
+        next = end;
     }
     rows
 }
-
-/// v0's `SKELETON_ASPECTS`, in order.
-const SKELETON_ASPECTS: [f64; 12] = [
-    1.5,
-    1.0,
-    4.0 / 3.0,
-    0.75,
-    1.5,
-    16.0 / 9.0,
-    1.0,
-    2.0 / 3.0,
-    4.0 / 3.0,
-    1.0,
-    1.5,
-    0.75,
-];
 
 /// THE GRID IS THE LOADING STATE (v0 §14): the placeholders' rows at the rung's
 /// own geometry, so the photographs land where their placeholders stood. The
@@ -157,10 +107,7 @@ pub fn skeleton(container: f64, target: f64, viewport_height: f64) -> Vec<Vec<Pa
     let unit = target.max(1.0);
     let per_row = ((container / unit) as usize).max(1) + 1;
     let row_count = ((viewport_height / unit) as usize + 1).max(1);
-    let aspects: Vec<f64> = (0..per_row * row_count)
-        .map(|at| SKELETON_ASPECTS[at % SKELETON_ASPECTS.len()])
-        .collect();
-    pack(&aspects, container, target)
+    pack(per_row * row_count, container, target)
 }
 
 /// What a row of the All grain is.
@@ -253,6 +200,15 @@ pub fn rows(
         while end < cells.len() && cells[end].day == day {
             end += 1;
         }
+        // A SECTION THAT PACKS TO NOTHING (no width reported yet) DRAWS NO HEADER: a month or
+        // a day with no photographs under it is a title stuck over the next month's.
+        let section = &cells[start..end];
+        let boxes: Vec<Boxed> = section.iter().map(|cell| cell.boxed).collect();
+        let packed = justify(&boxes, width, target);
+        if packed.is_empty() {
+            start = end;
+            continue;
+        }
         let key = month_key(day);
         if month.as_deref() != Some(key.as_str()) {
             out.push(Row {
@@ -265,7 +221,6 @@ pub fn rows(
             });
             month = Some(key);
         }
-        let section = &cells[start..end];
         if !day.is_empty() {
             out.push(Row {
                 kind: RowKind::Day,
@@ -276,8 +231,7 @@ pub fn rows(
                 tiles: Vec::new(),
             });
         }
-        let boxes: Vec<Boxed> = section.iter().map(|cell| cell.boxed).collect();
-        for (at, tiles) in justify(&boxes, width, target).into_iter().enumerate() {
+        for (at, tiles) in packed.into_iter().enumerate() {
             out.push(Row {
                 kind: RowKind::Tiles,
                 id: format!("r:{day}:{at}"),

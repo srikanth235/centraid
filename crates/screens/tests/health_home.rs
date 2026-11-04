@@ -8,6 +8,7 @@ mod health_support;
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_screens::kit::menu;
 use health_support::*;
 use wire::health_home_event as he;
 use wire::health_home_state::Sheet;
@@ -358,13 +359,12 @@ fn trends_are_per_metric_deltas_against_the_period_before_a_sparkline_with_gaps_
     );
 }
 
-#[test]
-fn workouts_are_this_week_then_by_month_newest_first_with_a_chip_per_kind_present() {
-    let mut d = driver();
-    let today = today(&d);
-    connect_store(&d);
+/// A run today and a ride 40 days back, on the Workouts tab.
+fn run_and_ride(d: &mut centraid_screens::testing::Driver) -> u64 {
+    let today = today(d);
+    connect_store(d);
     workout(
-        &d,
+        d,
         "w1",
         "run",
         &format!("{today}T09:00:00.000Z"),
@@ -372,44 +372,189 @@ fn workouts_are_this_week_then_by_month_newest_first_with_a_chip_per_kind_presen
     );
     let old = day_back(&today, 40);
     workout(
-        &d,
+        d,
         "w2",
         "cycle",
         &format!("{old}T16:00:00.000Z"),
         &format!("{old}T17:00:00.000Z"),
     );
-    let i = root(&d);
-    band(&mut d, i, "workouts");
-    let chips: Vec<&str> = home_state(d.view(i))
-        .chips
-        .iter()
-        .map(|chip| chip.label.as_str())
-        .collect();
+    let i = root(d);
+    band(d, i, "workouts");
+    i
+}
+
+fn pick_kind(d: &mut centraid_screens::testing::Driver, i: u64, option: &str) {
+    home_event(
+        d,
+        i,
+        he::Kind::FilterMenuPicked(wire::FilterMenuPicked {
+            section_key: "kind".to_owned(),
+            option_key: option.to_owned(),
+        }),
+    );
+}
+
+#[test]
+fn workouts_are_this_week_then_by_month_newest_first_with_a_menu_option_per_kind_present() {
+    let mut d = driver();
+    let i = run_and_ride(&mut d);
+    let state = home_state(d.view(i));
+    let menu = state.filter_menu.as_ref().expect("the workouts menu");
+    assert_eq!(menu.sections.len(), 1);
+    let kind = menu::find(menu, "kind").expect("the kind section");
+    assert_eq!(kind.title, "Type");
+    assert_eq!(kind.kind, wire::menu_section::Kind::Single as i32);
+    assert!(!kind.nested);
+    let labels: Vec<&str> = kind.options.iter().map(|o| o.label.as_str()).collect();
     // The core orders the kinds most first, then by label.
-    assert_eq!(chips, ["All", "Rides", "Runs"]);
+    assert_eq!(labels, ["All", "Rides", "Runs"]);
+    assert_eq!(kind.options[0].key, "all");
+    assert!(kind.options.iter().all(|option| option.count == 0));
+    assert_eq!(menu::checked(kind), ["all"]);
+    assert!(!menu.filtering);
+    assert_eq!(menu.spoken, "Filter");
+    assert_eq!(menu.clear_label, "Clear filters");
     let workouts = home_data(d.view(i)).workouts.as_ref().unwrap();
     assert_eq!(workouts.sections.len(), 2);
     assert_eq!(workouts.sections[0].heading, "This week");
     assert_eq!(workouts.sections[0].rows[0].title, "Morning run");
     assert_eq!(workouts.sections[1].rows[0].title, "Evening ride");
     assert!(!workouts.more);
-    // A kind chip filters, and the run chip's key is the kind's concept.
-    let run_chip = home_state(d.view(i)).chips[2].key.clone();
-    home_event(
-        &mut d,
-        i,
-        he::Kind::KindPicked(he::KindPicked {
-            kind_concept_id: run_chip.clone(),
-        }),
+}
+
+#[test]
+fn picking_a_kind_filters_lights_the_button_and_the_option_key_is_the_concept() {
+    let mut d = driver();
+    let i = run_and_ride(&mut d);
+    let run = home_state(d.view(i)).filter_menu.as_ref().unwrap().sections[0].options[2]
+        .key
+        .clone();
+    assert_ne!(run, "all");
+    pick_kind(&mut d, i, &run);
+    let state = home_state(d.view(i));
+    let menu = state.filter_menu.as_ref().unwrap();
+    assert!(menu.filtering);
+    assert_eq!(menu.spoken, "Filter, on");
+    assert_eq!(
+        menu::checked(menu::find(menu, "kind").unwrap()),
+        [run.as_str()]
     );
+    // The kinds stay on offer, so the member can switch from one to another.
+    assert_eq!(menu.sections[0].options.len(), 3);
     let filtered = home_data(d.view(i)).workouts.as_ref().unwrap();
     assert_eq!(filtered.sections.len(), 1);
-    assert_eq!(home_state(d.view(i)).kind_concept_id, run_chip);
+    assert_eq!(filtered.sections[0].rows[0].title, "Morning run");
     // The row's route is the workout's page, from this page's title.
     match &filtered.sections[0].rows[0].route.as_ref().unwrap().args {
         Some(wire::route::Args::HealthWorkout(args)) => assert_eq!(args.parent, "Health"),
         other => panic!("{other:?}"),
     }
+}
+
+#[test]
+fn picking_all_and_the_clear_row_both_return_every_kind() {
+    let mut d = driver();
+    let i = run_and_ride(&mut d);
+    let run = home_state(d.view(i)).filter_menu.as_ref().unwrap().sections[0].options[2]
+        .key
+        .clone();
+
+    pick_kind(&mut d, i, &run);
+    assert!(
+        home_state(d.view(i))
+            .filter_menu
+            .as_ref()
+            .unwrap()
+            .filtering
+    );
+    pick_kind(&mut d, i, "all");
+    let state = home_state(d.view(i));
+    let menu = state.filter_menu.as_ref().unwrap();
+    assert!(!menu.filtering);
+    assert_eq!(menu::checked(&menu.sections[0]), ["all"]);
+    assert_eq!(
+        home_data(d.view(i))
+            .workouts
+            .as_ref()
+            .unwrap()
+            .sections
+            .len(),
+        2
+    );
+
+    pick_kind(&mut d, i, &run);
+    home_event(
+        &mut d,
+        i,
+        he::Kind::FilterMenuCleared(wire::FilterMenuCleared {}),
+    );
+    let state = home_state(d.view(i));
+    let menu = state.filter_menu.as_ref().unwrap();
+    assert!(!menu.filtering);
+    assert_eq!(menu::checked(&menu.sections[0]), ["all"]);
+    assert_eq!(
+        home_data(d.view(i))
+            .workouts
+            .as_ref()
+            .unwrap()
+            .sections
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn a_pick_in_another_section_changes_nothing() {
+    let mut d = driver();
+    let i = run_and_ride(&mut d);
+    home_event(
+        &mut d,
+        i,
+        he::Kind::FilterMenuPicked(wire::FilterMenuPicked {
+            section_key: "sort".to_owned(),
+            option_key: "oldest".to_owned(),
+        }),
+    );
+    let state = home_state(d.view(i));
+    assert!(!state.filter_menu.as_ref().unwrap().filtering);
+    assert_eq!(
+        home_data(d.view(i))
+            .workouts
+            .as_ref()
+            .unwrap()
+            .sections
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn the_menu_is_on_workouts_only_and_never_before_a_store_or_without_a_kind() {
+    // Not connected: no tab has a menu.
+    let mut d = driver();
+    let i = root(&d);
+    band(&mut d, i, "workouts");
+    assert!(home_state(d.view(i)).filter_menu.is_none());
+
+    // Connected, no workout yet: there is no kind to choose, so no button.
+    let mut d = driver();
+    connect_store(&d);
+    let i = root(&d);
+    band(&mut d, i, "workouts");
+    assert!(home_state(d.view(i)).filter_menu.is_none());
+
+    // Connected with workouts: Today and Trends have none, Workouts has one.
+    let mut d = driver();
+    let i = run_and_ride(&mut d);
+    assert!(home_state(d.view(i)).filter_menu.is_some());
+    band(&mut d, i, "today");
+    assert!(home_state(d.view(i)).filter_menu.is_none());
+    band(&mut d, i, "trends");
+    assert!(home_state(d.view(i)).filter_menu.is_none());
+    // Trends keeps its range segments, which are not the menu.
+    assert_eq!(home_state(d.view(i)).segments.len(), 3);
+    band(&mut d, i, "workouts");
+    assert!(home_state(d.view(i)).filter_menu.is_some());
 }
 
 #[test]

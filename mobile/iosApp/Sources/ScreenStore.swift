@@ -54,6 +54,9 @@ final class ScreenStore: ObservableObject {
     var onHomeScheme: ((Centraid_Core_V1_HomeScheme) -> Void)?
     /// Home's first view arrived: the shell tells it the phone's scheme.
     var onHomeAppeared: (() -> Void)?
+    /// Rust closed these instances (a screen finished itself, or the stacks were rebuilt
+    /// under it): the shell takes their pages off its path.
+    var onClosed: (([UInt64]) -> Void)?
     private var homeTold: UInt64?
     /// An import over iOS's limited contact access: the shell raises the system's picker.
     var onContactsLimited: (() -> Void)?
@@ -285,6 +288,7 @@ final class ScreenStore: ObservableObject {
             // A BROWSE LASTS AS LONG AS THE SCREEN THAT ASKED FOR IT.
             GatewayBrowsing.shared.stop(id)
         }
+        if !update.closed.isEmpty { onClosed?(update.closed) }
         for view in update.views
         where !closed.contains(view.instance) && view.revision > (views[view.instance]?.revision ?? 0) {
             views[view.instance] = view

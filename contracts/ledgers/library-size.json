@@ -1,5 +1,5 @@
 {
-  "_comment": "THE PREBUILT CORE'S SIZE PER ABI (#1020). Down-only, and written only by `cargo xtask measure --write`. Four ABIs of a core carrying iroh, SQLite, FTS5 and codecs need a size budget, and the first entry lands with the first artifact (wave 3 lane G). Every number is measured from the **stripped** artifact the lane publishes, beside its symbol file — measuring an unstripped or a debug binary would make every later number a lie about the same name. A `null` IS NOT A NUMBER: it gates nothing, it ratchets nothing, and it is the honest value for a triple no machine here has built.",
+  "_comment": "THE PREBUILT CORE'S SIZE PER ABI (#1020). Down-only. Four ABIs of a core carrying iroh, SQLite, FTS5 and codecs need a size budget, and the first entry lands with the first artifact (wave 3 lane G). Every number is measured from the **stripped** artifact the lane publishes, beside its symbol file — measuring an unstripped or a debug binary would make every later number a lie about the same name. A `null` IS NOT A NUMBER: it gates nothing, it ratchets nothing, and it is the honest value for a triple no machine here has built.",
   "abis": {
     "x86_64-unknown-linux-gnu": {
       "strippedBytes": 23067264,

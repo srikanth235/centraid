@@ -190,14 +190,44 @@ fn item_data_title(d: &Driver, id: u64) -> String {
     item_data(d, id).title
 }
 
+fn pick(d: &mut Driver, id: u64, option: &str) {
+    home_event(
+        d,
+        id,
+        H::FilterMenuPicked(wire::FilterMenuPicked {
+            section_key: "show".to_owned(),
+            option_key: option.to_owned(),
+        }),
+    );
+}
+
+/// The options of the menu's one section, as (key, count, checked).
+fn options(d: &Driver, id: u64) -> Vec<(String, u32, bool)> {
+    let data = home_data(d, id);
+    let menu = data.filter_menu.expect("the menu");
+    assert_eq!(menu.sections.len(), 1);
+    let section = &menu.sections[0];
+    assert_eq!(section.key, "show");
+    assert_eq!(section.title, "Show");
+    assert_eq!(section.kind, wire::menu_section::Kind::Single as i32);
+    assert!(!section.nested);
+    section
+        .options
+        .iter()
+        .map(|o| (o.key.clone(), o.count, o.selected))
+        .collect()
+}
+
 #[test]
-fn items_fold_into_chips_rows_and_a_day_one_state() {
+fn items_fold_into_a_menu_rows_and_a_day_one_state() {
     let mut d = driver();
     let id = open_home(&mut d);
     let data = home_data(&d, id);
     assert!(data.rows.is_empty());
     let empty = data.items_empty.expect("day one");
     assert_eq!(empty.headline, "Nothing is kept here yet");
+    // A lone All is nothing to choose between: no button on day one.
+    assert!(data.filter_menu.is_none());
     login(&d, "i1", "Bank");
     arrange(
         &d,
@@ -210,8 +240,24 @@ fn items_fold_into_chips_rows_and_a_day_one_state() {
     d.pump(std::time::Duration::from_millis(300));
     let data = home_data(&d, id);
     assert_eq!(data.rows.len(), 2);
-    let keys: Vec<&str> = data.filters.iter().map(|c| c.key.as_str()).collect();
-    assert_eq!(keys, ["all", "login", "card"]);
+    assert_eq!(
+        options(&d, id),
+        [
+            ("all".to_owned(), 2, true),
+            ("login".to_owned(), 1, false),
+            ("card".to_owned(), 1, false),
+        ]
+    );
+    let menu = data.filter_menu.as_ref().unwrap();
+    assert!(!menu.filtering);
+    assert_eq!(menu.spoken, "Filter");
+    assert_eq!(menu.clear_label, "Clear filters");
+    let labels: Vec<&str> = menu.sections[0]
+        .options
+        .iter()
+        .map(|o| o.label.as_str())
+        .collect();
+    assert_eq!(labels, ["All", "Logins", "Cards"]);
     let bank = data.rows.iter().find(|r| r.title == "Bank").unwrap();
     assert_eq!(bank.type_chip, "LO");
     assert!(bank.meta.starts_with("Login · maya@example.com"));
@@ -219,15 +265,122 @@ fn items_fold_into_chips_rows_and_a_day_one_state() {
         bank.route.as_ref().and_then(|r| r.args.as_ref()),
         Some(wire::route::Args::LockerItem(item)) if item.item_id == "i1"
     ));
-    // A filter re-folds the shelf already held.
+    // A pick re-folds the shelf already held, and lights the button.
+    pick(&mut d, id, "card");
+    let data = home_data(&d, id);
+    assert_eq!(data.rows.len(), 1);
+    assert_eq!(data.rows[0].title, "Visa");
+    let menu = data.filter_menu.as_ref().unwrap();
+    assert!(menu.filtering);
+    assert_eq!(menu.spoken, "Filter, on");
+    assert_eq!(
+        centraid_screens::kit::menu::checked(&menu.sections[0]),
+        ["card"]
+    );
+}
+
+#[test]
+fn starred_and_archived_join_the_menu_when_there_are_some_and_clear_returns_to_all() {
+    let mut d = driver();
+    let id = open_home(&mut d);
+    login(&d, "i1", "Bank");
+    login(&d, "i2", "Mail");
+    login(&d, "i3", "Old");
+    arrange(
+        &d,
+        centraid_screens::catalog::act::locker::StarItem {
+            locker_item_id: "i1".to_owned(),
+        },
+    );
+    arrange(
+        &d,
+        centraid_screens::catalog::act::locker::ArchiveItem {
+            locker_item_id: "i3".to_owned(),
+        },
+    );
+    d.pump(std::time::Duration::from_millis(300));
+    assert_eq!(
+        options(&d, id),
+        [
+            ("all".to_owned(), 2, true),
+            ("starred".to_owned(), 1, false),
+            ("login".to_owned(), 2, false),
+            ("archived".to_owned(), 1, false),
+        ]
+    );
+    pick(&mut d, id, "starred");
+    let data = home_data(&d, id);
+    assert_eq!(data.rows.len(), 1);
+    assert_eq!(data.rows[0].title, "Bank");
+    assert!(data.filter_menu.as_ref().unwrap().filtering);
+
+    // Archived is another read: the shelf of what was set aside.
+    pick(&mut d, id, "archived");
+    d.pump(std::time::Duration::from_millis(300));
+    let data = home_data(&d, id);
+    assert_eq!(data.rows.len(), 1);
+    assert_eq!(data.rows[0].title, "Old");
+    let menu = data.filter_menu.as_ref().unwrap();
+    assert!(menu.filtering);
+    assert_eq!(
+        centraid_screens::kit::menu::checked(&menu.sections[0]),
+        ["archived"]
+    );
+
+    // Clear is All, and the live shelf is back.
+    home_event(&mut d, id, H::FilterMenuCleared(wire::FilterMenuCleared {}));
+    d.pump(std::time::Duration::from_millis(300));
+    let data = home_data(&d, id);
+    assert_eq!(data.rows.len(), 2);
+    let menu = data.filter_menu.as_ref().unwrap();
+    assert!(!menu.filtering);
+    assert_eq!(
+        centraid_screens::kit::menu::checked(&menu.sections[0]),
+        ["all"]
+    );
+}
+
+#[test]
+fn a_pick_in_another_section_changes_nothing_and_search_has_no_menu() {
+    let mut d = driver();
+    let id = open_home(&mut d);
+    login(&d, "i1", "Bank");
+    arrange(
+        &d,
+        centraid_screens::catalog::act::locker::AddItem {
+            title: "Visa".to_owned(),
+            r#type: centraid_screens::catalog::act::locker::AddItemType::Card,
+            ..Default::default()
+        },
+    );
+    d.pump(std::time::Duration::from_millis(300));
     home_event(
         &mut d,
         id,
-        H::Filter(wire::locker_home_event::FilterPicked {
-            key: "card".to_owned(),
+        H::FilterMenuPicked(wire::FilterMenuPicked {
+            section_key: "sort".to_owned(),
+            option_key: "card".to_owned(),
         }),
     );
-    assert_eq!(home_data(&d, id).rows.len(), 1);
+    assert_eq!(home_data(&d, id).rows.len(), 2);
+    // Search and Review are other tabs with other data: no menu on them.
+    home_event(
+        &mut d,
+        id,
+        H::SearchOpened(wire::locker_home_event::SearchOpened {}),
+    );
+    if let Some(wire::locker_home_state::Content::Data(data)) = home(&d, id).content {
+        assert!(data.filter_menu.is_none());
+    }
+}
+
+#[test]
+fn the_menu_is_not_drawn_under_the_wall() {
+    let mut d = driver();
+    d.start();
+    let id = home_instance(&d);
+    assert!(wall_of(&d, id).is_some());
+    assert!(home(&d, id).content.is_none());
 }
 
 #[test]

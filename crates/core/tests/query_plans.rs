@@ -1,10 +1,10 @@
 //! The plan regression (#1135): what SQLite will do for every read the apps hold,
-//! over a year-3 vault, asked before anybody times it.
+//! over a year-3 vault, asked in place of a timing.
 //!
 //! A read that is fast over a few hundred rows and a scan of a table over a
 //! year-three vault is found by a timing only after it has shipped and the corpus
 //! has grown. `EXPLAIN QUERY PLAN` says it at once, so this test plans every
-//! statement the product reads with, on the vault `search_budget` measures, and
+//! statement the product reads with, on the year-3 vault `year3_corpus` founds, and
 //! fails on
 //!
 //! * **a full scan** (`SCAN <table>` with no index) of a table holding more than

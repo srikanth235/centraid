@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -76,6 +77,9 @@ public fun PhotoCellsGrid(
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = minimumCell.dp),
         modifier = modifier,
+        // A GRID UNDER THE BAND (search's hits) scrolls its last row clear of the band; anywhere
+        // else the clearance is zero and the grid is as it was.
+        contentPadding = PaddingValues(bottom = LocalBandClearance.current),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {

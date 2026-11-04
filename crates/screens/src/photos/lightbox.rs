@@ -412,7 +412,7 @@ impl Lightbox {
         let (favorite, archived) = (detail.cell.favorite, detail.cell.archived);
         match kind {
             V::Favorite => {
-                if favorite {
+                let landed = if favorite {
                     self.write(
                         ctx,
                         "unflag-photo",
@@ -420,7 +420,7 @@ impl Lightbox {
                         act::photos::UnflagPhoto {
                             photo_id: id.clone(),
                         },
-                    );
+                    )
                 } else {
                     self.write(
                         ctx,
@@ -429,11 +429,18 @@ impl Lightbox {
                         act::photos::FlagPhoto {
                             photo_id: id.clone(),
                         },
-                    );
+                    )
+                };
+                if landed {
+                    self.receipt(if favorite {
+                        words::photos_receipt_unfavorited(ctx.locale())
+                    } else {
+                        words::photos_receipt_favorited(ctx.locale())
+                    });
                 }
             }
             V::Archive => {
-                if archived {
+                let landed = if archived {
                     self.write(
                         ctx,
                         "unarchive-photo",
@@ -441,7 +448,7 @@ impl Lightbox {
                         act::photos::UnarchivePhoto {
                             photo_id: id.clone(),
                         },
-                    );
+                    )
                 } else {
                     self.write(
                         ctx,
@@ -450,33 +457,57 @@ impl Lightbox {
                         act::photos::ArchivePhoto {
                             photo_id: id.clone(),
                         },
-                    );
+                    )
+                };
+                if landed {
+                    self.receipt(if archived {
+                        words::photos_receipt_unarchived(ctx.locale())
+                    } else {
+                        words::photos_receipt_archived(ctx.locale())
+                    });
                 }
             }
+            // THE PHOTOGRAPH STAYS ON SCREEN, so the move is said, and the bar's
+            // labelled Restore is the way back: undo-able and never a blocking ask.
             V::Trash => {
                 self.sheet = Sheet::None;
-                self.write(
+                if self.write(
                     ctx,
                     "delete-photo",
                     &[&id],
                     act::photos::DeletePhoto {
                         photo_id: id.clone(),
                     },
-                );
+                ) {
+                    self.receipt(words::photos_receipt_trashed(ctx.locale()));
+                }
             }
             V::Restore => {
-                self.write(
+                if self.write(
                     ctx,
                     "restore-photo",
                     &[&id],
                     act::photos::RestorePhoto {
                         photo_id: id.clone(),
                     },
-                );
+                ) {
+                    self.receipt(words::photos_receipt_restored(ctx.locale()));
+                }
             }
             V::DeleteForever => self.confirm = true,
             V::Info => self.sheet = Sheet::Info,
-            V::Share | V::SendCopy => self.sheet = Sheet::Share,
+            // WHICH LOCATION TRAVELS IS ASKED ONLY OF A PHOTOGRAPH THAT HAS ONE;
+            // without a place there is nothing to choose and the copy goes out bare.
+            V::Share | V::SendCopy => {
+                if !self.verb_enabled(ctx.locale(), V::Share) {
+                    return Vec::new();
+                }
+                if detail.place.is_some() {
+                    self.sheet = Sheet::Share;
+                } else {
+                    return self.export(false, Precision::None, ctx);
+                }
+            }
             V::Edit => {} // the shell pushes the verb's route
             V::Slideshow => {
                 // A slideshow needs somewhere to go: on a shelf of one it would
@@ -536,14 +567,23 @@ impl Lightbox {
         match self.albums.update(event, &picked, ctx) {
             AlbumOutcome::Moved => {}
             AlbumOutcome::Added {
-                written: Written { refusal, .. },
-                ..
+                album_id,
+                written: Written {
+                    refusal, committed, ..
+                },
             } => {
                 self.status = refusal.map(|sentence| wire::StatusLine {
                     sentence,
                     action_label: String::new(),
                     refused: true,
                 });
+                if self.status.is_none() && !committed.is_empty() {
+                    let title = self.albums.title_of(&album_id).unwrap_or_default();
+                    self.receipt(fill(
+                        &words::photos_receipt_album(ctx.locale()),
+                        &[("album", title)],
+                    ));
+                }
                 self.reload(ctx);
             }
             AlbumOutcome::Created { refusal } => {
@@ -725,6 +765,7 @@ impl Lightbox {
             let when = format!("{stamp_date} {stamp_line}");
             facts.push(wire::PhotosLightboxFact {
                 label: words::photos_fact_captured(locale),
+                icon_key: "Calendar".to_owned(),
                 text: fill(
                     &own::captured_fact(locale),
                     &[("when", when.trim()), ("zone", &zone)],
@@ -737,6 +778,7 @@ impl Lightbox {
         {
             facts.push(wire::PhotosLightboxFact {
                 label: words::photos_fact_size(locale),
+                icon_key: "Maximize".to_owned(),
                 text: fill(
                     &own::pixel_box(locale),
                     &[("width", &w.to_string()), ("height", &h.to_string())],
@@ -746,18 +788,21 @@ impl Lightbox {
         if video && tile.duration_seconds > 0 {
             facts.push(wire::PhotosLightboxFact {
                 label: words::photos_fact_length(locale),
+                icon_key: "Clock".to_owned(),
                 text: cells::clock(tile.duration_seconds),
             });
         }
         if let Some(size) = cell.byte_size.filter(|size| *size > 0) {
             facts.push(wire::PhotosLightboxFact {
                 label: words::photos_fact_file(locale),
+                icon_key: "FileText".to_owned(),
                 text: media::bytes_phrase(locale, size),
             });
         }
         if let Some((_, camera)) = self.camera.as_ref().filter(|(id, _)| *id == cell.photo_id) {
             facts.push(wire::PhotosLightboxFact {
                 label: words::photos_fact_camera(locale),
+                icon_key: "Camera".to_owned(),
                 text: camera.clone(),
             });
         }
@@ -928,7 +973,7 @@ fn verbs(
                 verb(
                     V::Restore,
                     words::photos_restore(locale),
-                    "Restore",
+                    "restore",
                     refusal,
                     false,
                 ),
@@ -938,14 +983,17 @@ fn verbs(
         );
     }
     let cell = &detail.cell;
-    let mut edit_verb = verb(V::Edit, words::photos_edit(locale), "edit", edit, false);
+    // A COPY IS OF THE ORIGINAL: refused up front, with the reason, when this
+    // phone does not hold it.
+    let send = (!cell.original_held).then(|| words::photos_edit_not_on_phone(locale));
+    let mut edit_verb = verb(V::Edit, words::photos_edit(locale), "Pencil", edit, false);
     edit_verb.route = Some(routes::editor(photo_id));
     let toolbar = vec![
         verb(
             V::Share,
             words::photos_send_copy(locale),
             "share",
-            None,
+            send.as_deref(),
             false,
         ),
         verb(
@@ -968,13 +1016,13 @@ fn verbs(
             } else {
                 words::photos_archive(locale)
             },
-            "archive",
+            "Archive",
             refusal,
             cell.archived,
         ),
         verb(
             V::Trash,
-            words::photos_delete(locale),
+            words::photos_trash(locale),
             "trash",
             refusal,
             false,
@@ -1017,25 +1065,9 @@ fn verbs(
         V::Download,
         words::photos_download(locale),
         "Download",
-        None,
+        send.as_deref(),
         false,
     ));
-    menu.push(verb(
-        V::SendCopy,
-        words::photos_send_copy(locale),
-        "Send",
-        None,
-        false,
-    ));
-    let mut delete = verb(
-        V::Trash,
-        words::photos_delete(locale),
-        "trash",
-        refusal,
-        false,
-    );
-    delete.destructive = true;
-    menu.push(delete);
     (toolbar, menu)
 }
 

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// `health.home` — Today · Trends · Workouts, More a sheet (#1129, #1135), on the kit.
 ///
-/// **THE VIEW DECIDES NOTHING.** `HealthHomeState` carries the band, the segments, the chips,
+/// **THE VIEW DECIDES NOTHING.** `HealthHomeState` carries the band, the segments, the filter menu,
 /// every word, figure and unit, and every length as basis points; this file lays them out and
 /// forwards events (Rust makes them: `crates/screens`, module `health`). `AppPlace` owns the
 /// header and the band; `ReadStateView` owns loading, failure and the denied gate (no band while
@@ -27,20 +27,11 @@ struct HealthHomeView: View {
         let state = state
         let content = state.readContent
         let chrome = state.chrome
-        let chips: [RoomChip] = content.isDenied ? [] : state.chips.map { chip in
-            let key = chip.key
-            return RoomChip(
-                identifier: "health-chip-\(key.isEmpty ? "all" : key)",
-                label: chip.label,
-                selected: chip.active,
-                action: { send(event { $0.kindPicked = .with { $0.kindConceptID = key } }) }
-            )
-        }
         AppPlace(
             app: "health",
             title: chrome.title,
             trailing: nil,
-            chips: chips,
+            filter: filter,
             showsBand: !content.isDenied && !state.band.isEmpty
         ) {
             AppBand(
@@ -88,10 +79,28 @@ struct HealthHomeView: View {
         }
     }
 
+    /// THE HEADER'S FILTER BUTTON: Workouts' kind, Rust's menu. A pick or the clear row is an
+    /// event; which kind is checked, and whether the funnel is lit, is on the state.
+    private var filter: FilterSlot? {
+        guard state.hasFilterMenu else { return nil }
+        return FilterSlot(
+            menu: state.filterMenu,
+            onPick: { section, option in
+                send(event {
+                    $0.filterMenuPicked = .with {
+                        $0.sectionKey = section
+                        $0.optionKey = option
+                    }
+                })
+            },
+            onClear: { send(event { $0.filterMenuCleared = .init() }) }
+        )
+    }
+
     private func segments(_ segments: [Centraid_Core_V1_HealthChip]) -> some View {
         KitSegmented(
             options: segments.map { (key: $0.key, label: $0.label) },
-            selected: segments.first(where: \.active)?.key ?? "",
+            selected: segments.first(where: { $0.active })?.key ?? "",
             identifier: "health-range",
             onSelect: { key in send(event { $0.range = .with { $0.key = key } }) }
         )

@@ -17,11 +17,15 @@ use super::shared::{self, Phase};
 use super::wall::{CLIPBOARD_LIFE, Change, Wall};
 use super::{handoff, routes};
 use crate::catalog::load;
+use crate::kit::menu;
 use crate::kit::read;
 use crate::kit::secret::Secrets;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, locker as words};
 
+/// The filter section's key (`locker-filter-show-starred` on a screen); its
+/// options are keyed `all`, `starred`, `archived` and each type's key.
+pub const FILTER: &str = "show";
 pub const ALL: &str = "all";
 pub const STARRED: &str = "starred";
 pub const ARCHIVED: &str = "archived";
@@ -174,6 +178,22 @@ impl Home {
 
     // --- events --------------------------------------------------------------
 
+    /// Change the Items filter to `key`, an option of the menu's one section.
+    fn set_filter(&mut self, ctx: &Ctx, key: &str) {
+        if key == self.filter {
+            return;
+        }
+        let shelf_changed = (key == ARCHIVED) != (self.filter == ARCHIVED);
+        key.clone_into(&mut self.filter);
+        // THE ARCHIVED SHELF IS ANOTHER READ ("keep forever, hide from lists" --
+        // asked for, never filtered out of the live one); every other filter
+        // re-folds the shelf already held.
+        if shelf_changed {
+            self.items = Phase::Loading;
+            self.read_items(ctx);
+        }
+    }
+
     fn goto(&mut self, ctx: &Ctx, destination: wire::LockerDestination) {
         self.destination = destination;
         self.sheet = wire::locker_home_state::Sheet::None;
@@ -197,19 +217,13 @@ impl Home {
                 "generate" if self.destination != D::Generate => self.goto(ctx, D::Generate),
                 _ => {}
             },
-            Some(H::Filter(filter)) => {
-                if filter.key != self.filter {
-                    let shelf_changed = (filter.key == ARCHIVED) != (self.filter == ARCHIVED);
-                    self.filter = filter.key;
-                    // THE ARCHIVED SHELF IS ANOTHER READ ("keep forever, hide
-                    // from lists" — asked for, never filtered out of the live
-                    // one); every other filter re-folds the shelf already held.
-                    if shelf_changed {
-                        self.items = Phase::Loading;
-                        self.read_items(ctx);
-                    }
+            Some(H::FilterMenuPicked(picked)) => {
+                let pick = menu::Pick::of(&picked);
+                if pick.section == FILTER {
+                    self.set_filter(ctx, pick.option);
                 }
             }
+            Some(H::FilterMenuCleared(_)) => self.set_filter(ctx, ALL),
             Some(H::SheetOpened(opened)) => {
                 self.sheet = wire::locker_home_state::Sheet::try_from(opened.sheet)
                     .unwrap_or(wire::locker_home_state::Sheet::None);
@@ -284,41 +298,47 @@ impl Home {
                 .collect(),
         };
         let total = answer.total;
-        let mut chips = vec![wire::LockerChoice {
-            key: ALL.to_owned(),
-            label: words::filter_all(locale),
-            selected: filter == ALL,
-            detail: total.map(|total| total.to_string()).unwrap_or_default(),
-        }];
+        let mut options = vec![menu::counted(
+            ALL,
+            words::filter_all(locale),
+            total.unwrap_or(0),
+            filter == ALL,
+        )];
         let starred = answer.items.iter().filter(|row| row.starred).count();
         if starred > 0 || filter == STARRED {
-            chips.push(wire::LockerChoice {
-                key: STARRED.to_owned(),
-                label: words::filter_starred(locale),
-                selected: filter == STARRED,
-                detail: starred.to_string(),
-            });
+            options.push(menu::counted(
+                STARRED,
+                words::filter_starred(locale),
+                u32::try_from(starred).unwrap_or(u32::MAX),
+                filter == STARRED,
+            ));
         }
         for by_type in &answer.by_type {
-            chips.push(wire::LockerChoice {
-                key: by_type.r#type.clone(),
-                label: (super::types::of(&by_type.r#type).plural)(locale),
-                selected: filter == by_type.r#type,
-                detail: by_type.count.to_string(),
-            });
+            options.push(menu::counted(
+                by_type.r#type.clone(),
+                (super::types::of(&by_type.r#type).plural)(locale),
+                by_type.count,
+                filter == by_type.r#type,
+            ));
         }
         let archived = answer.archived_count.unwrap_or(0);
         if archived > 0 || filter == ARCHIVED {
-            chips.push(wire::LockerChoice {
-                key: ARCHIVED.to_owned(),
-                label: words::filter_archived(locale),
-                selected: filter == ARCHIVED,
-                detail: answer
-                    .archived_count
-                    .map(|count| count.to_string())
-                    .unwrap_or_default(),
-            });
+            options.push(menu::counted(
+                ARCHIVED,
+                words::filter_archived(locale),
+                archived,
+                filter == ARCHIVED,
+            ));
         }
+        // LIT while anything but All narrows the list. A lone All is nothing to
+        // choose between, so no button.
+        let filter_menu = (options.len() > 1 || filter != ALL).then(|| {
+            menu::menu(
+                locale,
+                vec![menu::single(FILTER, words::filter_title(locale), options)],
+                filter != ALL,
+            )
+        });
         let day_one = filter == ALL && total == Some(0) && archived == 0;
         let empty = if !shown.is_empty() {
             None
@@ -354,7 +374,7 @@ impl Home {
         };
         wire::LockerHomeData {
             status_line: words::items_status(locale),
-            filters: chips,
+            filter_menu,
             rows: shown
                 .into_iter()
                 .map(|row| shared::row(locale, row, &words::app_name(locale)))
@@ -716,7 +736,6 @@ impl Screen for Home {
                         .map(|answer| answer.corrected.clone())
                         .unwrap_or_default(),
                 }),
-                filter: self.filter.clone(),
                 status: self.status.clone(),
             })),
             ..wire::ViewState::default()

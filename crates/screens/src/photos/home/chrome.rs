@@ -1,14 +1,17 @@
-//! THE ROOT'S CHROME, AS DATA (R-CHROME-1…5) and the camera roll's two faces on
-//! it. Every step leaves with its chrome: the band, the chips and the header's
-//! words are derived from the state, so no arm can forget them and neither shell
-//! composes them.
+//! THE ROOT'S CHROME, AS DATA (R-CHROME-1…5) and the camera roll's one face on
+//! it, the banner. Every step leaves with its chrome: the band, the filter menu and the
+//! header's words are derived from the state, so no arm can forget them and
+//! neither shell composes them.
 //!
 //! * **Band:** places only (Library, Collections) then More, an ordinary tab lit
 //!   while its sheet (or the tile-size choice it opened) is up. Search is not a
-//!   place: the bar under the title opens it.
-//! * **Chips:** the library's filter, All photos · Favorites, under the search
-//!   bar. None off the library and none while selecting.
-//! * **Words:** the title, the search bar, Select / Cancel, Collections' New
+//!   place: the band's trailing key opens it.
+//! * **Filter menu:** the header's filter button, All photos · Favorites
+//!   (`filter_menu`). None off the library and none while selecting.
+//! * **Grain:** Years · Months · All (`grain_segments`), a view of the same
+//!   photographs, drawn in the band like the system Photos'. None off the library,
+//!   none while selecting, and none while there is nothing to zoom.
+//! * **Words:** the title, the search key, Select / Cancel, Collections' New
 //!   album, and More's "Tile size", offered only on the library at All, where
 //!   Years and Months draw a cover per period at an aspect the grain fixes, so a
 //!   size there would act on nothing on screen.
@@ -30,13 +33,13 @@ use wire::PhotosMediaPermission as Permission;
 use wire::photos_home_import_banner::Remedy;
 
 use super::layout;
+use crate::kit::menu;
 use crate::strings::{Locale, fill, photos as words};
 
 pub const BAND_LIBRARY: &str = "library";
 pub const BAND_COLLECTIONS: &str = "collections";
 pub const BAND_MORE: &str = "more";
 
-pub const MORE_CAMERA_ROLL: &str = "camera_roll";
 pub const MORE_TILE_SIZE: &str = "tile_size";
 
 /// Is the library what the destination shows?
@@ -68,28 +71,86 @@ pub fn band(locale: Locale, destination: Dest, more_up: bool) -> Vec<wire::Photo
     ]
 }
 
-pub fn chips(
+/// The filter section's key and its two options' keys (`photos-filter-show-all`
+/// on a screen).
+pub const FILTER: &str = "show";
+pub const FILTER_ALL: &str = "all";
+pub const FILTER_FAVORITES: &str = "favorites";
+
+/// THE HEADER'S FILTER BUTTON: All photos · Favorites, one single-choice section,
+/// lit while Favorites narrows the library. None off the library and none while
+/// selecting, when the header's other item is Cancel.
+pub fn filter_menu(
     locale: Locale,
     destination: Dest,
     selecting: bool,
     filter: Filter,
-) -> Vec<wire::PhotosHomeFilterChip> {
+) -> Option<wire::FilterMenu> {
     if !is_library(destination) || selecting {
-        return Vec::new();
+        return None;
     }
     let favorites = filter == Filter::Favorites;
-    vec![
-        wire::PhotosHomeFilterChip {
-            filter: Filter::All as i32,
-            label: words::photos_filter_all(locale),
-            selected: !favorites,
-        },
-        wire::PhotosHomeFilterChip {
-            filter: Filter::Favorites as i32,
-            label: words::photos_filter_favorites(locale),
-            selected: favorites,
-        },
+    Some(menu::menu(
+        locale,
+        vec![menu::single(
+            FILTER,
+            words::photos_filter_title(locale),
+            vec![
+                menu::option(FILTER_ALL, words::photos_filter_all(locale), !favorites),
+                menu::option(
+                    FILTER_FAVORITES,
+                    words::photos_filter_favorites(locale),
+                    favorites,
+                ),
+            ],
+        )],
+        favorites,
+    ))
+}
+
+/// The filter a pick of the filter section means, or None for any other pick.
+#[must_use]
+pub fn filter_of(pick: menu::Pick<'_>) -> Option<Filter> {
+    match (pick.section, pick.option) {
+        (FILTER, FILTER_ALL) => Some(Filter::All),
+        (FILTER, FILTER_FAVORITES) => Some(Filter::Favorites),
+        _ => None,
+    }
+}
+
+/// THE ZOOM, AS THE BAND'S SEGMENTS: Years · Months · All, widest first, the
+/// current one selected (an unset grain is All, as the library draws it). It is
+/// away wherever the library is not what is drawn, while selecting (the
+/// selection bar stands in the band's place) and while there are no photographs
+/// to zoom (`has_photos`: a loading, failed or empty library, or a filter that
+/// matched nothing).
+pub fn grain_segments(
+    locale: Locale,
+    destination: Dest,
+    selecting: bool,
+    has_photos: bool,
+    grain: Grain,
+) -> Vec<wire::PhotosHomeGrainSegment> {
+    if !is_library(destination) || selecting || !has_photos {
+        return Vec::new();
+    }
+    let current = if grain == Grain::Unspecified {
+        Grain::All
+    } else {
+        grain
+    };
+    [
+        (Grain::Years, words::photos_grain_years(locale)),
+        (Grain::Months, words::photos_grain_months(locale)),
+        (Grain::All, words::photos_grain_all(locale)),
     ]
+    .into_iter()
+    .map(|(segment, label)| wire::PhotosHomeGrainSegment {
+        grain: segment as i32,
+        label,
+        selected: segment == current,
+    })
+    .collect()
 }
 
 pub fn words_of(locale: Locale) -> wire::PhotosHomeChrome {
@@ -105,9 +166,6 @@ pub fn words_of(locale: Locale) -> wire::PhotosHomeChrome {
         selecting_title: words::photos_grid_select(locale),
         send_copy_label: words::photos_send_copy(locale),
         search_label: crate::strings::shared::kit_search(locale),
-        grain_years_label: words::photos_grain_years(locale),
-        grain_months_label: words::photos_grain_months(locale),
-        grain_all_label: words::photos_grain_all(locale),
     }
 }
 
@@ -216,8 +274,8 @@ impl Roll {
     /// say or do: a grant's remedy beside the grant's own sentence; an import
     /// moving; a wait or a pause; and "Import now" over an EMPTY library the grant
     /// can fill, when no pass is running. Never over photographs: a library that
-    /// has them was imported, and More's camera-roll sheet is the deliberate place
-    /// to run one again.
+    /// has them was imported, and the roll walks again on its own (a grant, a
+    /// change in the library) without a menu to ask it.
     ///
     /// `empty_library` is KNOWN, NOT GUESSED: both walks ended with no photograph,
     /// under All (Favorites emptied by its filter is not an empty library).
@@ -266,41 +324,6 @@ impl Roll {
             import_now,
             import_now_label: words::photos_import_now(locale),
         })
-    }
-
-    /// The camera roll's sheet: the sentence for the phase, and why it is not
-    /// moving.
-    #[must_use]
-    pub fn detail(&self, locale: Locale) -> wire::PhotosBackupDetailSheet {
-        let mut rows = vec![wire::PhotosBackupDetailRow {
-            key: "Status".to_owned(),
-            value: {
-                let sentence = self.sentence(locale);
-                if sentence.is_empty() {
-                    words::photos_import_done(locale)
-                } else {
-                    sentence
-                }
-            },
-        }];
-        if !self.paused_reason.is_empty() {
-            rows.push(wire::PhotosBackupDetailRow {
-                key: "Paused".to_owned(),
-                value: self.paused_reason.clone(),
-            });
-        }
-        wire::PhotosBackupDetailSheet {
-            title: words::photos_camera_roll(locale),
-            status: if self.running() {
-                words::photos_import_running(locale)
-            } else {
-                words::photos_import_auto(locale)
-            },
-            import_label: words::photos_import_now(locale),
-            // AN IMPORT ALREADY RUNNING HAS NOTHING TO START: greyed, not hidden.
-            import_enabled: !self.running(),
-            rows,
-        }
     }
 }
 

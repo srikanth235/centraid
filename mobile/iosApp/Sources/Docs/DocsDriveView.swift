@@ -5,9 +5,10 @@ import UIKit
 /// THE DRIVE — All · Folders · Starred, More as a sheet; and, pushed over it,
 /// a folder's page (#1046, #1135).
 ///
-/// **THE VIEW DECIDES NOTHING.** The band, the pills and whether they are
-/// lit, the list-or-grid layout, every sheet's rows and enabled flags, the
-/// empty and its one action, the head's subtitle: all `DocsDriveState`, which
+/// **THE VIEW DECIDES NOTHING.** The band, the header's filter menu (the filters,
+/// the sort and the list-or-grid layout) and whether it is lit, every sheet's rows
+/// and enabled flags, the empty and its one action, the head's subtitle: all
+/// `DocsDriveState`, which
 /// Rust makes (`crates/screens/src/docs`). What is here is geometry, the
 /// events, and the platform's half of a capture: the OS grants, reported.
 /// A row, a folder and a sheet row that opens a page carry their `Route`, and
@@ -52,44 +53,41 @@ struct DocsDriveView: View {
         return field
     }
 
+    /// The one search slot both of Docs' places hand the kit: the band's key on the root, the
+    /// folder page's own foot key under it.
+    private func searchSlot(_ state: Centraid_Core_V1_DocsDriveState) -> SearchSlot {
+        SearchSlot(
+            field: searchField(state),
+            placeholder: state.chrome.searchPlaceholder,
+            closeLabel: state.chrome.searchClose,
+            onOpen: { send(Self.event { $0.searchOpened = .init() }) },
+            onTerm: { term in send(Self.event { $0.searchTerm = .with { $0.term = term } }) },
+            onClose: { send(Self.event { $0.searchClosed = .init() }) }
+        )
+    }
+
     var body: some View {
         let state = state
         let content = content(state)
         Group {
             if isFolderPage {
                 PushedPage(title: state.folderName, parentTitle: state.chrome.back, onBack: onBack) {
-                    RoomTrailing(action: addAction(state, content))
+                    // A FOLDER PAGE IS NOT A ROOM, so it puts the header's two items in its
+                    // trailing slot itself: the filter menu, then the Plus.
+                    HStack(spacing: 0) {
+                        if let slot = filter(state) { FilterMenuButton(app: "docs", slot: slot) }
+                        RoomTrailing(action: addAction(state, content))
+                    }
                 } content: {
-                    // A FOLDER PAGE IS NOT A ROOM, so it draws the room's
-                    // search bar and chip row itself, in the room's order.
+                    // With no band to hang the search key on, the key alone stands at its foot.
                     VStack(spacing: 0) {
-                        Group {
-                            if state.search.open {
-                                CentraidSearchField(
-                                    field: searchField(state),
-                                    placeholder: state.chrome.searchPlaceholder,
-                                    closeLabel: state.chrome.searchClose,
-                                    identifier: "docs-search",
-                                    onTerm: { term in send(Self.event { $0.searchTerm = .with { $0.term = term } }) },
-                                    onClose: { send(Self.event { $0.searchClosed = .init() }) }
-                                )
-                            } else if !content.isDenied {
-                                SearchOpener(
-                                    placeholder: state.chrome.searchPlaceholder,
-                                    identifier: "docs-search-open",
-                                    onOpen: { send(Self.event { $0.searchOpened = .init() }) }
-                                )
-                            }
-                        }
-                        .padding(.horizontal, CentraidGeometry.pageMargin)
-                        .padding(.top, 4)
-                        .padding(.bottom, 8)
-                        let row = self.chips(state, content)
-                        if !row.isEmpty {
-                            RoomChipRow(app: "docs", chips: row)
-                                .padding(.bottom, 4)
-                        }
                         page(state, content)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        if !content.isDenied || state.search.open {
+                            SearchFoot(search: searchSlot(state), identifier: "docs-search")
+                        }
                     }
                 }
             } else {
@@ -97,15 +95,8 @@ struct DocsDriveView: View {
                     app: "docs",
                     title: state.chrome.title,
                     trailing: addAction(state, content),
-                    search: SearchSlot(
-                        field: searchField(state),
-                        placeholder: state.chrome.searchPlaceholder,
-                        closeLabel: state.chrome.searchClose,
-                        onOpen: { send(Self.event { $0.searchOpened = .init() }) },
-                        onTerm: { term in send(Self.event { $0.searchTerm = .with { $0.term = term } }) },
-                        onClose: { send(Self.event { $0.searchClosed = .init() }) }
-                    ),
-                    chips: chips(state, content),
+                    search: searchSlot(state),
+                    filter: filter(state),
                     showsBand: !content.isDenied
                 ) {
                     AppBand(
@@ -150,28 +141,23 @@ struct DocsDriveView: View {
         }
     }
 
-    /// THE CHIP ROW (R-CHROME-3), Rust's pills as they come: the filters,
-    /// Clear while one is set, the sort last.
-    private func chips(
-        _ state: Centraid_Core_V1_DocsDriveState,
-        _ content: ScreenContent<Centraid_Core_V1_DocsDriveData>
-    ) -> [RoomChip] {
-        guard !content.isDenied else { return [] }
-        return state.pills.map { pill in
-            RoomChip(
-                identifier: pill.clears ? "docs-clear-filters" : "docs-pill-\(pill.key.rawValue)",
-                label: pill.label,
-                selected: pill.active,
-                chevron: pill.chevron,
-                spoken: pill.accessibilityLabel.isEmpty ? pill.label : pill.accessibilityLabel
-            ) {
-                if pill.clears {
-                    send(Self.event { $0.filtersCleared = .init() })
-                } else {
-                    send(Self.event { $0.sheetOpened = .with { $0.kind = pill.key } })
-                }
-            }
-        }
+    /// THE HEADER'S FILTER BUTTON (R-CHROME-3): Rust's menu as it comes: the filters, the
+    /// sort and the layout. A pick or the clear row is an event; which is checked, and whether
+    /// the funnel is lit, is on the state.
+    private func filter(_ state: Centraid_Core_V1_DocsDriveState) -> FilterSlot? {
+        guard state.hasFilterMenu else { return nil }
+        return FilterSlot(
+            menu: state.filterMenu,
+            onPick: { section, option in
+                send(Self.event {
+                    $0.filterMenuPicked = .with {
+                        $0.sectionKey = section
+                        $0.optionKey = option
+                    }
+                })
+            },
+            onClear: { send(Self.event { $0.filterMenuCleared = .init() }) }
+        )
     }
 
     // MARK: The page
@@ -254,28 +240,17 @@ struct DocsDriveView: View {
         }
     }
 
-    /// The head's subtitle and the layout toggle — one line over the list.
-    /// Search and the chips are the room's (R-CHROME-2/3), drawn above.
+    /// The head's subtitle — one line over the list. Search and the filter menu are the
+    /// room's (R-CHROME-2/3), drawn at the foot and in the header.
     private func controls(_ state: Centraid_Core_V1_DocsDriveState) -> some View {
         HStack(spacing: 6) {
             Text(state.headMeta)
                 .centraidType("annotLabel")
                 .foregroundStyle(Theme.color("textFaint", scheme))
             Spacer(minLength: 0)
-            iconControl(
-                state.chrome.layoutIconKey.isEmpty ? "Grid" : state.chrome.layoutIconKey,
-                state.chrome.layoutToggle,
-                "docs-layout"
-            ) {
-                send(Self.event { $0.layoutToggled = .init() })
-            }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.vertical, 2)
-    }
-
-    private func iconControl(_ icon: String, _ label: String, _ identifier: String, action: @escaping () -> Void) -> some View {
-        KitIconKey(iconKey: icon, label: label, framed: true, identifier: identifier, action: action)
     }
 
     private func crumbs(_ crumbs: [Centraid_Core_V1_DocsCrumb]) -> some View {
@@ -392,7 +367,7 @@ struct DocsDriveView: View {
     private func emptyAction(_ action: Centraid_Core_V1_DocsDriveData.EmptyAction) -> (() -> Void)? {
         switch action {
         case .add: return { send(Self.event { $0.sheetOpened = .with { $0.kind = .add } }) }
-        case .clearFilters: return { send(Self.event { $0.filtersCleared = .init() }) }
+        case .clearFilters: return { send(Self.event { $0.filterMenuCleared = .init() }) }
         case .newFolder: return { send(Self.event { $0.sheetOpened = .with { $0.kind = .newFolder } }) }
         case .none, .unspecified, .UNRECOGNIZED: return nil
         }

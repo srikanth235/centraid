@@ -81,8 +81,33 @@ fn the_band_swaps_the_place_and_never_a_stack_entry() {
             .unwrap()
             .current
     );
-    assert!(state.chips.is_empty() && state.search.is_none());
+    // No menu and no scope off the Notes place: nothing there to filter.
+    assert!(state.filter_menu.is_none() && state.subtitle.is_none());
+    assert!(state.search.is_none());
     assert_eq!(state.new_note, Some(routes::new_note()));
+    // A stale pick from the Notes place changes nothing here.
+    let unchanged = d.view(i).clone();
+    send_home(
+        &mut d,
+        i,
+        H::FilterMenuPicked(wire::FilterMenuPicked {
+            section_key: "show".into(),
+            option_key: "pinned".into(),
+        }),
+    );
+    send_home(&mut d, i, H::FilterMenuCleared(wire::FilterMenuCleared {}));
+    send_home(
+        &mut d,
+        i,
+        H::NotebookScopeCleared(ev::NotebookScopeCleared {}),
+    );
+    assert_eq!(
+        *d.view(i),
+        wire::ViewState {
+            revision: d.view(i).revision,
+            ..unchanged
+        }
+    );
     send_home(
         &mut d,
         i,
@@ -318,7 +343,9 @@ fn a_notebook_row_opens_the_notes_place_filtered_and_unfiled_is_its_own_filter()
     );
     let state = home_state(d.view(i));
     assert_eq!(state.place, wire::NotesPlace::Notes as i32);
-    assert_eq!(state.title, "Cabin");
+    // The title stays "Notes"; the notebook is the subtitle.
+    assert_eq!(state.title, "Notes");
+    assert_eq!(state.subtitle.as_ref().unwrap().label, "Cabin");
     assert_eq!(titles(d.view(i)), ["Plans"]);
     send_home(
         &mut d,
@@ -334,7 +361,11 @@ fn a_notebook_row_opens_the_notes_place_filtered_and_unfiled_is_its_own_filter()
             id: "unfiled".into(),
         }),
     );
-    assert_eq!(home_state(d.view(i)).title, "Unfiled");
+    assert_eq!(home_state(d.view(i)).title, "Notes");
+    assert_eq!(
+        home_state(d.view(i)).subtitle.as_ref().unwrap().label,
+        "Unfiled"
+    );
     assert_eq!(titles(d.view(i)), ["Loose"]);
 }
 

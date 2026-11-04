@@ -98,14 +98,24 @@ private struct HomeRoot: View {
                 homeContent(home)
             }
 
-            // A SIBLING OF THE PAGE, NEVER INSIDE IT: the band is never scrolled away.
+            // A SIBLING OF THE PAGE, NEVER INSIDE IT: the banner is never scrolled away.
             ShellBanner(shell: shell, store: store)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // THE LOCKUP FLOATS TOO, on Home only (Chat and Backup draw their own
+        // headers): the page scrolls under it, and on iOS 26 the system's scroll
+        // edge effect keeps it legible over whatever passes beneath.
+        .floatingTopBar(shown: shell.tab == .home) {
+            VaultHeader(bar: home.bar, shell: shell, store: store)
+        }
+        // THE BAND FLOATS OVER THE PAGE, as every app's band does: the page scrolls under its
+        // glass, and the inset keeps the last tile clear of it. Never scrolled away.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if !(shell.tab == .chat && chatTyping) {
                 // A PLACE IS SELECTED BY RUST; pressed again while Chat shows, it shuts the drawer.
                 HomeBand(places: places) { target in shell.select(place: target) }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // EDGE TO EDGE: the page ground reaches the notch and the home indicator.
         .background(Theme.color("bg", scheme).ignoresSafeArea())
         // THE CHAT BELONGS TO THE VAULT IN FRONT: when it changes the thread,
@@ -147,9 +157,9 @@ private struct HomeRoot: View {
     /// HOME'S OWN PLACE: the lockup, the ribbon and the three branches.
     @ViewBuilder
     private func homeContent(_ home: Centraid_Core_V1_HomeState) -> some View {
-        // THE LOCKUP FIRST, ALWAYS: a Home that failed to read still has to say
+        // THE LOCKUP (`VaultHeader`) FLOATS OVER THE PAGE from `body`, so the
+        // springboard scrolls under it; a Home that failed to read still says
         // which vault failed.
-        VaultHeader(bar: home.bar, shell: shell, store: store)
         if home.hasStatus {
             StatusRibbon(status: home.status, store: store)
         }
@@ -1121,5 +1131,18 @@ private struct VaultSheet: View {
         .buttonStyle(.plain)
         .accessibilityLabel(spoken.isEmpty ? label : spoken)
         .accessibilityIdentifier(id)
+    }
+}
+
+private extension View {
+    /// A bar pinned to the top that the page scrolls under: `safeAreaBar` on iOS 26, which brings
+    /// the system's scroll edge effect behind it, and a plain inset before.
+    @ViewBuilder
+    func floatingTopBar<Bar: View>(shown: Bool, @ViewBuilder bar: () -> Bar) -> some View {
+        if #available(iOS 26, *) {
+            safeAreaBar(edge: .top, spacing: 0) { if shown { bar() } }
+        } else {
+            safeAreaInset(edge: .top, spacing: 0) { if shown { bar() } }
+        }
     }
 }

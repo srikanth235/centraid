@@ -27,9 +27,11 @@ import centraid.core.v1.PhotosSearchDoor
 import centraid.core.v1.PhotosSearchResting
 import centraid.core.v1.PhotosSearchView
 import centraid.core.v1.Route
+import dev.centraid.android.kit.BandPolicy
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.KitLink
+import dev.centraid.android.kit.LocalBandClearance
 import dev.centraid.android.kit.PhotoCellsGrid
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.ScreenFailure
@@ -45,7 +47,7 @@ import dev.centraid.design.CentraidGeometry
  * matched nothing must not read the same words.** The oneof is which one is
  * showing.
  *
- * **THE FIELD IS NOT HERE.** It is the room's search field, under the title
+ * **THE FIELD IS NOT HERE.** It is the room's search field, at the foot
  * where every app's search stands (R-CHROME-2). This screen is only what the
  * query found: the doors (places and albums the words name), the photographs,
  * and the reason line — all finished by Rust.
@@ -164,7 +166,11 @@ private fun DoorRow(door: PhotosSearchDoor, onOpen: (Route) -> Unit) {
 @Composable
 private fun RestingPanel(resting: PhotosSearchResting, onEvent: (PhotosHomeEvent) -> Unit, onOpen: (Route) -> Unit) {
     Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            // THE PANEL RUNS UNDER THE BAND'S GLASS; its last door scrolls clear of it.
+            .padding(bottom = LocalBandClearance.current + BandPolicy.FOOT_MARGIN.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(text = resting.hint, style = centraidType("small"), color = centraidColor("textSoft"))

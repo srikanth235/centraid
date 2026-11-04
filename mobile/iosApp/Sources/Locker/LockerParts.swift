@@ -219,8 +219,7 @@ struct LockerTypeChip: View {
     }
 }
 
-/// A ROW OF PILLS: a choice, lit when selected, its detail (a count) beside the
-/// label. Tapping sends the choice's key.
+/// A ROW OF PILLS: a choice, lit when selected. Tapping sends the choice's key.
 struct LockerChoicePills: View {
     let choices: [Centraid_Core_V1_LockerChoice]
     var identifier: String = "locker-choice"
@@ -232,7 +231,6 @@ struct LockerChoicePills: View {
                 ForEach(choices, id: \.key) { choice in
                     KitChip(
                         label: choice.label,
-                        count: choice.detail,
                         selected: choice.selected,
                         identifier: "\(identifier)-\(choice.key)"
                     ) {

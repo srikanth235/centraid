@@ -110,14 +110,20 @@ message MoneyHomeState {
   MoneyHomeChrome chrome = 9;
   // `YYYY-MM`; the month in view.
   string month = 10;
-  // Activity's filters. Empty account is every account; `category_filter` is
-  // empty (any), `uncategorised`, or a category id.
-  string account_id = 11;
-  // 12 was `category_filter`: nothing read it (#1152).
-  reserved 12;
-  reserved "category_filter";
-  // The chip row under the search bar (Activity only); empty elsewhere.
-  repeated MoneyChip chips = 14;
+  // 11 was `account_id` and 12 was `category_filter`: nothing read them (#1152);
+  // the filters are `filter_menu`'s checks.
+  reserved 11, 12;
+  reserved "account_id", "category_filter";
+  // 14 was `chips`, the chip row under the search bar: the account and the
+  // category are `filter_menu` in the header and the month is `subtitle`.
+  reserved 14;
+  reserved "chips";
+  // THE HEADER'S FILTER BUTTON (R-CHROME-3): Account and Category as nested
+  // sections, no sort. Activity only; unset elsewhere and while denied.
+  optional FilterMenu filter_menu = 15;
+  // THE MONTH IN VIEW, under the app's name: a tap opens the month sheet
+  // (`MonthTapped`). Activity only; unset elsewhere.
+  optional HeaderSubtitle subtitle = 16;
 
   enum Destination {
     DESTINATION_UNSPECIFIED = 0;
@@ -131,8 +137,9 @@ message MoneyHomeState {
     SHEET_NONE = 1;
     SHEET_MORE = 2;
     SHEET_MONTH = 3;
-    SHEET_ACCOUNT = 4;
-    SHEET_CATEGORY = 5;
+    // 4 and 5 were the account and category sheets: they are the filter menu's.
+    reserved 4, 5;
+    reserved "SHEET_ACCOUNT", "SHEET_CATEGORY";
   }
 }
 
@@ -152,14 +159,6 @@ message MoneyMoreRow {
   Route route = 4;
 }
 
-// A filter chip in the chip row. `active` is a value other than the default.
-message MoneyChip {
-  // `month`, `account`, `category`.
-  string key = 1;
-  string label = 2;
-  bool active = 3;
-}
-
 message MoneyHomeChrome {
   string title = 1;
   // The header's one trailing action, the Plus glyph's spoken words.
@@ -173,8 +172,10 @@ message MoneyHomeChrome {
   string previous_month_label = 7;
   string next_month_label = 8;
   string month_sheet_title = 9;
-  string account_sheet_title = 10;
-  string category_sheet_title = 11;
+  // 10 and 11 were the account and category sheets' titles: the filter menu's
+  // section titles are its own.
+  reserved 10, 11;
+  reserved "account_sheet_title", "category_sheet_title";
   string close_label = 12;
   // Where the Plus and the day-one action go, and where the search bar goes.
   Route import_route = 13;
@@ -260,8 +261,10 @@ message MoneyCategoryLine {
 }
 
 message MoneyActivityData {
-  repeated MoneyChoice account_options = 1;
-  repeated MoneyChoice category_options = 2;
+  // 1 and 2 were the account and category sheets' choices: they are the filter
+  // menu's sections.
+  reserved 1, 2;
+  reserved "account_options", "category_options";
   // "Needs a category · 3" and what it comes to, per currency.
   string needs_label = 3;
   repeated MoneyFigure needs_category = 4;
@@ -270,8 +273,8 @@ message MoneyActivityData {
   string window = 6;
   bool more = 7;
   optional EmptyState empty = 8;
-  // The `category_options` key that lists the rows `needs_label` counts; empty
-  // while there are none. A tap on the Needs row sends it as `category_picked`.
+  // The category filter that lists the rows `needs_label` counts; empty while
+  // there are none. A tap on the Needs row sends it as `category_picked`.
   string needs_key = 9;
 }
 
@@ -321,14 +324,21 @@ message MoneyHomeEvent {
     BandPicked band = 3;
     MonthStepped month_stepped = 4;
     MonthPicked month_picked = 5;
-    ChipTapped chip = 6;
-    AccountPicked account_picked = 7;
     CategoryPicked category_picked = 8;
     SheetClosed sheet_closed = 9;
     ShowMore show_more = 10;
     // A More row was tapped: the sheet closes behind the page it opens.
     MoreOpened more_opened = 16;
+    // The subtitle's month was tapped: opens the month sheet.
+    MonthTapped month_tapped = 31;
+    // ---- The header's filter menu ----
+    FilterMenuPicked filter_menu_picked = 32;
+    FilterMenuCleared filter_menu_cleared = 33;
   }
+  // 6 was `chip` (a chip's tap: the month's is `month_tapped`, the account's and
+  // the category's are `filter_menu_picked`) and 7 was `account_picked`.
+  reserved 6, 7;
+  reserved "chip", "account_picked";
 
   message BandPicked {
     string key = 1;
@@ -343,17 +353,10 @@ message MoneyHomeEvent {
     string month = 1;
   }
 
-  // `month`, `account` or `category`: opens that chip's sheet.
-  message ChipTapped {
-    string key = 1;
-  }
+  message MonthTapped {}
 
-  // Empty is every account.
-  message AccountPicked {
-    string account_id = 1;
-  }
-
-  // Empty is any category; `uncategorised`; or a category id.
+  // The Needs row: `uncategorised`, the filter that lists its rows. The menu's
+  // picks are `FilterMenuPicked`.
   message CategoryPicked {
     string key = 1;
   }

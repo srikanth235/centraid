@@ -316,8 +316,14 @@ impl Shelf {
         let picked = self.selection.picked().to_vec();
         match self.choice.update(event, &picked, ctx) {
             album_choice::Outcome::Moved => {}
-            album_choice::Outcome::Added { written, .. } => {
+            album_choice::Outcome::Added { album_id, written } => {
                 self.selection.settle(&written, Verb::AddToAlbum);
+                self.selection.acknowledge(
+                    ctx.locale(),
+                    Verb::AddToAlbum,
+                    &written,
+                    self.choice.title_of(&album_id),
+                );
                 self.reload(ctx);
             }
             album_choice::Outcome::Created { refusal } => self.selection.refuse(refusal),

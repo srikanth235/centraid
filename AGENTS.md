@@ -6,7 +6,7 @@ Centraid is a personal, local-first superapp: one shell wrapping many first-part
 
 - `cargo xtask gate --profile <local|pr|nightly|release|mobile-jvm>` is the gate; `bun run check` covers TypeScript. Run the profile that matches the change before calling it done.
 - On a fresh clone run `git config core.hooksPath .githooks`. Commit subjects read `type(scope): subject (#N)`.
-- Fix the code, not the check. Do not loosen a lint, test, budget or allowlist to get green.
+- Fix the code, not the check. Do not loosen a lint, test, budget or allowlist to get green. The budgets that remain are counts and sizes (the copy and native-controls ratchets, the spool's byte budget, `library-size.json`, the query-plan allowlist). Wall-clock budgets were removed by the owner's ruling of 2026-11-04 (they flaked on loaded machines and blocked unrelated changes), so no gate step or test asserts on seconds. Keep it that way: bound work by construction and assert on counts (statements, calls, rows), never durations.
 
 ## Skills
 

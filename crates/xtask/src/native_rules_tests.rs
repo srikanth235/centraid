@@ -571,6 +571,30 @@ fn a_performer_missing_a_platform_call_is_caught() {
     assert!(report.note.contains("pend Android"), "{}", report.note);
 }
 
+#[test]
+fn a_library_original_is_copied_only_by_a_hand_off() {
+    let root = fixture_dir("native-walker-hand-off");
+    write(
+        &root,
+        "mobile/iosApp/Sources/PhoneLibrary.swift",
+        "static func exportOriginal(ref: String) async -> URL? { nil }\n",
+    );
+    write(
+        &root,
+        "mobile/iosApp/Sources/PhotoEffects.swift",
+        "let file = await PhoneLibrary.exportOriginal(ref: ref)\n",
+    );
+    write(
+        &root,
+        "mobile/iosApp/Sources/Roll.swift",
+        "let file = await PhoneLibrary.exportOriginal(ref: ref)\n",
+    );
+    let report = walker_platform_law(&root);
+    let text = findings(&report);
+    assert_eq!(report.findings.len(), 1, "{text}");
+    assert!(text.contains("in Roll.swift"), "{text}");
+}
+
 // ---- first-launch-asks-nothing ----
 
 #[test]

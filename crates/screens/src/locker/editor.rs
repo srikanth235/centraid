@@ -558,7 +558,6 @@ impl Editor {
                         key: kind.id.to_owned(),
                         label: (kind.label)(locale),
                         selected: kind.id == form.type_id,
-                        detail: String::new(),
                     })
                     .collect()
             } else {

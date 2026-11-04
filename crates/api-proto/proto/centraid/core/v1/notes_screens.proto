@@ -22,8 +22,8 @@ import "centraid/core/v1/route.proto";
 
 message NotesHomeState {
   NotesPlace place = 1;
-  // The page's heading: "Notes", the notebook it is filtered to, "Unfiled",
-  // "Notebooks" or "Journal".
+  // The page's heading: "Notes", "Notebooks" or "Journal". A notebook the
+  // Notes place is scoped to is the `subtitle`, never the title.
   string title = 2;
   // The band: Notes · Notebooks · Journal, then More. EMPTY while denied.
   repeated NotesBandTab band = 3;
@@ -36,8 +36,10 @@ message NotesHomeState {
     NotesNotebooksData notebooks = 9;
     NotesJournalData journal = 10;
   }
-  // The Notes place's filters and sort as ONE chip row (R-CHROME-1..4).
-  repeated NotesChip chips = 11;
+  // 11 was `chips`, the Notes place's filters and sort as a chip row: the
+  // filters and the sort are `filter_menu`, the notebook scope is `subtitle`.
+  reserved 11;
+  reserved "chips";
   // Search is the field under the title; its answer replaces the shelf.
   NotesSearchState search = 12;
   // More holds Trash alone.
@@ -57,18 +59,30 @@ message NotesHomeState {
   Route new_note = 21;
   // The recent window is the library's current window size.
   uint32 window = 22;
+  // The header's filter button: Pinned and the tags (any number, the filter)
+  // and the sort (one of three, never a filter). Unset while denied, over
+  // search and off the Notes place.
+  optional FilterMenu filter_menu = 23;
+  // The notebook (or "Unfiled") the Notes place is scoped to, under the title,
+  // with a close key that shows every note. Unset when the place is not scoped,
+  // while denied, over search and off the Notes place.
+  optional HeaderSubtitle subtitle = 24;
 }
 
 enum NotesSheet {
   // No sheet is open.
   NOTES_SHEET_UNSPECIFIED = 0;
   NOTES_SHEET_MORE = 1;
-  NOTES_SHEET_SORT = 2;
+  // 2 was NOTES_SHEET_SORT: the sort is a section of the filter menu.
+  reserved 2;
+  reserved "NOTES_SHEET_SORT";
   NOTES_SHEET_ROW_MENU = 3;
   NOTES_SHEET_FILE_INTO = 4;
   NOTES_SHEET_NOTEBOOK_MENU = 5;
 }
 
+// The library's order. No message carries it any more (a pick is a
+// `FilterMenuPicked` under the `sort` section); the screen holds it as its state.
 enum NotesLibrarySort {
   NOTES_LIBRARY_SORT_UNSPECIFIED = 0;
   NOTES_LIBRARY_SORT_UPDATED = 1;
@@ -94,7 +108,9 @@ message NotesHomeChrome {
   string loading = 6;
   string more_title = 7;
   string file_title = 8;
-  string sort_title = 9;
+  // 9 was `sort_title`, the sort sheet's heading.
+  reserved 9;
+  reserved "sort_title";
   string home = 10;
   string row_menu_label = 11;
   string new_entry = 12;
@@ -105,17 +121,6 @@ message NotesHomeChrome {
   string close = 17;
   // The header's one action in the Notes place.
   string new_note = 18;
-}
-
-message NotesChip {
-  // `notebook`, `pinned`, `tag-<concept_id>` or `sort`.
-  string key = 1;
-  string label = 2;
-  bool selected = 3;
-  // Draws a chevron: the sort chip.
-  bool chevron = 4;
-  // What a screen reader says in place of the label.
-  string spoken = 5;
 }
 
 message NotesMoreRow {
@@ -130,8 +135,9 @@ message NotesChoice {
   string id = 1;
   string label = 2;
   bool selected = 3;
-  // For the sort sheet: the order this choice sets.
-  NotesLibrarySort sort = 4;
+  // 4 was `sort`, the order a sort-sheet choice set.
+  reserved 4;
+  reserved "sort";
 }
 
 message NotesRowMenu {
@@ -176,15 +182,11 @@ message NotesSectionHead {
   uint32 count = 2;
 }
 
-message NotesTagChip {
-  string concept_id = 1;
-  string label = 2;
-  bool selected = 3;
-}
-
 message NotesLibraryData {
   repeated NotesLibrarySection sections = 1;
-  repeated NotesTagChip tags = 2;
+  // 2 was `tags`, the window's tags as chips: they are the filter menu's options.
+  reserved 2;
+  reserved "tags";
   // "12 notes".
   string count_label = 3;
   EmptyState empty = 4;
@@ -295,12 +297,7 @@ message NotesHomeEvent {
     SearchOpened search_opened = 3;
     SearchTerm search_term = 4;
     SearchClosed search_closed = 5;
-    SortPicked sort = 6;
-    PinnedOnlyToggled pinned_only = 7;
-    TagToggled tag = 8;
     WindowWidened window_widened = 9;
-    ChipPicked chip = 10;
-    SheetOpened sheet_opened = 11;
     SheetClosed sheet_closed = 12;
     RowMenuOpened row_menu = 13;
     PinToggled pin = 14;
@@ -322,7 +319,17 @@ message NotesHomeEvent {
     ComposeEdited compose_edited = 28;
     ComposeClosed compose_closed = 29;
     ComposeSaved compose_saved = 30;
+    // ---- the header ----
+    FilterMenuPicked filter_menu_picked = 31;
+    FilterMenuCleared filter_menu_cleared = 32;
+    // The close key after the notebook under the title: every note again.
+    NotebookScopeCleared notebook_scope_cleared = 33;
   }
+
+  // 6 was `sort`, 7 `pinned_only`, 8 `tag`, 10 `chip` and 11 `sheet_opened`: a
+  // pick in the filter menu is `filter_menu_picked`.
+  reserved 6, 7, 8, 10, 11;
+  reserved "sort", "pinned_only", "tag", "chip", "sheet_opened";
 
   message Refreshed {}
 
@@ -338,25 +345,9 @@ message NotesHomeEvent {
 
   message SearchClosed {}
 
-  message SortPicked {
-    NotesLibrarySort sort = 1;
-  }
-
-  message PinnedOnlyToggled {}
-
-  message TagToggled {
-    string concept_id = 1;
-  }
-
   message WindowWidened {}
 
-  message ChipPicked {
-    string key = 1;
-  }
-
-  message SheetOpened {
-    NotesSheet sheet = 1;
-  }
+  message NotebookScopeCleared {}
 
   message SheetClosed {}
 

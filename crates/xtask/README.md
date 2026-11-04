@@ -13,7 +13,6 @@ cargo xtask rules                    # the structural rules alone
 cargo xtask doc-links                # every relative markdown link and in-repo anchor resolves
 cargo xtask test-plan                # which crates `local`'s `test` step would run, and why (--reads: the table it trusts)
 cargo xtask repo-root                # which tree the path-based rules will scan
-cargo xtask measure --write          # the edit-run loop, into the compile-time ledger
 cargo xtask artifact-key --triple <t>  # the prebuilt core's cache key
 ```
 
@@ -23,23 +22,19 @@ Every path-based rule — `sql-confinement`, `no-listening-socket`, `abi-five-sy
 
 A root baked in at compile time (`env!("CARGO_MANIFEST_DIR")`) would be wrong under a shared `CARGO_TARGET_DIR`: the cached binary belongs to whichever worktree built it last, the gate scans **that** worktree, and the failure direction is _reports clean_ ([#1020](https://github.com/srikanth235/centraid/issues/1020)). `cargo xtask repo-root` prints the answer in one line, and `crates/xtask/tests/repo_root.rs` runs the compiled binary from a second checkout and asserts it reports that checkout.
 
-## The target directory is `CARGO_TARGET_DIR`'s, for the same reason
-
-Everything that asks _what has been built_ — the warm/cold verdict, `measure`'s two cold keys, `vps-smoke`'s release binary — resolves the target directory as cargo does: `CARGO_TARGET_DIR` when it is set, otherwise `<root>/target`. Reading `<root>/target` under a shared target directory is wrong in both directions: a fully linked workspace would print `tree cold`, and a _stale_ `<root>/target` would read `tree warm` for a tree whose real target directory had never been built — and `measure` would time a warm build as a first build, into a down-only ledger ([#1020](https://github.com/srikanth235/centraid/issues/1020)). Each run's `tree` line prints the absolute `debug/deps` it scanned, so the answer is never implied.
-
 ## The profiles
 
 Each of `local`, `pr`, `nightly` and `release` is a **superset** of the one before, stated in code as concatenation rather than as a copied list, so a step can never be in `pr` and missing from `release` (there is a test for exactly that).
 
-| Profile | Steps it adds | Budget | Where it runs |
-| --- | --- | --- | --- |
-| `local` | `fmt`, `clippy`, `test` (**only the crates the change touches, and their dependents** — see below), `restore-drill`, `rules`, `doc-links`, `ledgers` | < 120 s **warm**, < 3200 s **cold** | by hand, before a push |
-| `pr` | `buf`, `deny`, `ci-policy`, `release-build`, `ts-static`, `emitters`, `lockfile`, `call-budget`, `search-budget`, `fault-door` — and its `test` step runs the **whole** workspace | < 1500 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
-| `nightly` | `device-lanes` | unbounded | `.github/workflows/nightly.yml`, 05:30 UTC |
-| `release` | `artifact-identity`, `prebuilt-core-required` (and `restore-drill`, inherited from `local`) | unbounded | the release workflows |
-| `mobile-jvm` | `mobile-jvm` — one step, not a superset of anything | < 420 s | `.github/workflows/nightly.yml`; on demand from `mobile/` |
+| Profile | Steps it adds | Where it runs |
+| --- | --- | --- |
+| `local` | `fmt`, `clippy`, `test` (**only the crates the change touches, and their dependents** — see below), `restore-drill`, `rules`, `doc-links`, `ledgers` | by hand, before a push |
+| `pr` | `buf`, `deny`, `ci-policy`, `release-build`, `ts-static`, `emitters`, `lockfile`, `fault-door` — and its `test` step runs the **whole** workspace | `.github/workflows/gate.yml`, every PR and every push to `main` |
+| `nightly` | `device-lanes` | `.github/workflows/nightly.yml`, 05:30 UTC |
+| `release` | `artifact-identity`, `prebuilt-core-required` (and `restore-drill`, inherited from `local`) | the release workflows |
+| `mobile-jvm` | `mobile-jvm` — one step, not a superset of anything | `.github/workflows/nightly.yml`; on demand from `mobile/` |
 
-**`local`'s `test` step runs the crates the change touches, and the crates that depend on them; every other profile runs the whole workspace** (hand-off 6.5, the owner's ruling of 2026-10-15). The loop took 290 to 500 s against its 120 s budget and `cargo nextest run --workspace` was nearly all of it, so the step now asks [`src/select.rs`](src/select.rs) which crates a change can affect:
+**`local`'s `test` step runs the crates the change touches, and the crates that depend on them; every other profile runs the whole workspace** (hand-off 6.5, the owner's ruling of 2026-10-15). The loop took 290 to 500 s and `cargo nextest run --workspace` was nearly all of it, so the step now asks [`src/select.rs`](src/select.rs) which crates a change can affect:
 
 - **The changed files** are those that differ from the merge base with `origin/main` (then `main`): committed, staged, unstaged and untracked. `CENTRAID_GATE_BASE=<commit or tree>` names a different base (a commit is compared at its merge base with `HEAD`; a tree is taken exactly, and an untracked file identical to the tree's copy is not a change).
 - **A path inside a crate** selects that crate. **A path some crate reads from outside its own directory** selects the crates whose sources name it — `contracts/`, `copy/`, `design/`, `experiments/`, the one Swift file the assistant embeds. That table is _derived_ by scanning every crate's string literals (comments skipped, since doc comments name paths freely), never listed, and `cargo xtask test-plan --reads` prints it. It over-approximates on purpose: a missed read skips a test, an extra one costs seconds.
@@ -49,29 +44,23 @@ Each of `local`, `pr`, `nightly` and `release` is a **superset** of the one befo
 
 The step says so in three places: a banner before its line naming every crate and why it is in, a `NARROWED to N of M crates (…)` prefix on the line itself (which is the `evidence.json` row), and `target/xtask/local/test/selection.txt`. `CENTRAID_GATE_TESTS=all` widens a local run to the whole workspace.
 
-**The narrowing is a nextest filter over `--workspace`, not `-p`.** `cargo nextest run --workspace -E 'package(=a) | package(=b)'` builds the same units `clippy` and `restore-drill` build; `-p a -p b` resolves features for those packages alone, which is a different feature set, and alternating the two is the 162 to 186 s each way measured in [Where the numbers came from](#where-the-numbers-came-from). So the saving is in what runs, not in what compiles, and without `cargo-nextest` the step runs the whole workspace and says why.
+**The narrowing is a nextest filter over `--workspace`, not `-p`.** `cargo nextest run --workspace -E 'package(=a) | package(=b)'` builds the same units `clippy` and `restore-drill` build; `-p a -p b` resolves features for those packages alone, which is a different feature set, and alternating the two is the 162 to 186 s each way measured in [Why `--workspace --test` and not `-p`](#why---workspace---test-and-not--p). So the saving is in what runs, not in what compiles, and without `cargo-nextest` the step runs the whole workspace and says why.
 
 **The drills run once per loop.** `restore_drill` is an ordinary integration test of `centraid-vault` and `centraid`, so a narrowed selection that reaches either would run both drills in `test` and again in the `restore-drill` step that follows (about a minute and a half of CPU each time). A narrowed `test` therefore filters the `restore_drill` binaries out and says so in its line, and `restore-drill` still runs both by name in the same gate run, so the promise is proved on every loop as before. `--lane test` keeps them, and `pr` and the whole-workspace fallback are unchanged.
 
-**What narrowing does not prove.** A change to a crate runs that crate's tests and its dependents', not the other crates'. A read the derivation did not see — a path assembled at run time from pieces no literal names — is caught only by `pr`, which CI runs over every crate on every pull request. The budget in `gate-budgets.json` did not move, and it is not raised by this.
+**What narrowing does not prove.** A change to a crate runs that crate's tests and its dependents', not the other crates'. A read the derivation did not see — a path assembled at run time from pieces no literal names — is caught only by `pr`, which CI runs over every crate on every pull request.
 
-The budgets live in [`contracts/ledgers/gate-budgets.json`](../../contracts/ledgers/gate-budgets.json) and are **enforced**: a profile whose steps together overran its `budgetSeconds` fails, prints the timing table, and says `FAIL — over budget` on its last line. They are down-only, like every other gate knob in this repo; the one time they rose was the 2026-09-12 re-base for the Rust workspace, under an owner ruling recorded as.
+**No profile fails for taking long** (owner ruling 2026-11-04). The wall-clock budgets that used to be enforced here — a per-profile ceiling in `gate-budgets.json`, the warm/cold `local` scoring against `coldLocalProfileSeconds`, the compile-time ceilings (`releaseBuildSeconds` and the rest of `compile-time.json`), the `call-budget` and `search-budget` p95 steps and `cargo xtask measure` — are removed: they flaked on a shared or loaded machine (a `search-budget` p95, a `write_costs` call ceiling and the `pr` profile's 1500 s all failed in one afternoon while several gates ran at once) and blocked unrelated changes. `cargo xtask gate` still prints each step's seconds and a total, as information. What stays is a hang backstop, not a budget: each CI job's `timeout-minutes`. Work that must stay bounded is bounded by construction (keyset pages, `LIMIT`s) and by tests that **count** work — statements, calls, rows — never seconds.
 
-**`local` is scored warm or cold, and they are different numbers.** The 120 s promise is the developer's feedback time after an edit, not the cost of the first build after a clone — 41.6 s against 1562.4 s on this container at ten crates. The runner asks whether **every** workspace member has a _linked_ artifact in the target directory's `debug/deps` (a `.rlib` or an extensionless executable): an `.rmeta` from a previous `cargo check` does not count, so a tree that has only been checked cannot buy a warm budget while its `test` step still has to compile and link everything. A _stale_ incremental tree does read as warm, on purpose — that is the tree the loop runs on, and rebuilding the delta is what the budget promises. Each run prints `tree warm` or `tree cold` with the reason; `--cold` forces the cold branch without deleting `target/`. A cold `local` run is charged against `coldLocalProfileSeconds` in `compile-time.json` and **fails** if that key states no ceiling, because cold must never be the answer that makes a slow gate green. No other profile has a cold ceiling: they run in CI on a runner that has never seen the workspace, so their budgets hold cold or they are not budgets.
-
-`mobile-jvm` is the Kotlin half, and it is **not** a superset of anything. Its one step builds `centraid-core-ffi` (without the `llama` feature: no Kotlin spec loads a model, and llama.cpp's cold build has no room in the 420 s), runs `./gradlew -p mobile mobileJvm` (`:core:jvmTest` — a real ABI round trip against the real cdylib), then regenerates the committed native design tables and fails on drift. It is kept out of `pr` because Kotlin/Gradle is a different toolchain with a different cold cost, and one ceiling answering for two build systems answers for neither (D-1020-B2-3). `budgetSeconds` is 420 s, measured when the step became real; `kotlinNativeLinkSeconds` in `compile-time.json` stays **null** on purpose — no machine here links Kotlin/Native, and filling it with a JVM number is the one thing that key exists to prevent.
+`mobile-jvm` is the Kotlin half, and it is **not** a superset of anything. Its one step builds `centraid-core-ffi` (without the `llama` feature: no Kotlin spec loads a model, and llama.cpp's cold build is too slow for this profile), runs `./gradlew -p mobile mobileJvm` (`:core:jvmTest` — a real ABI round trip against the real cdylib), then regenerates the committed native design tables and fails on drift. It is kept out of `pr` because Kotlin/Gradle is a different toolchain with a different cold cost (D-1020-B2-3).
 
 **A missing mobile tree FAILS, it does not skip.** What the step does not do, it says rather than passing over: it does not compile Compose, does not link Kotlin/Native, does not run a simulator and does not touch a device. Those are `nightly`'s `device-lanes` — four lanes (`backup-measurement`, `android-macrobenchmark`, `ios-xctest-metrics`, `battery-per-background-pass`) that run only on a machine with one iPhone and one Android attached and `CENTRAID_DEVICE_RUNNER=1` set (`cargo xtask gate --profile nightly --lane <name>`), and are a loud `Skipped` otherwise — and the hand-off table in [`mobile/README.md`](../../mobile/README.md).
 
-`restore-drill` runs `cargo test --workspace --test restore_drill` — `centraid-vault`'s drill of the snapshot plane against the in-memory store, and `centraid`'s drill of the phone's core against the real gateway harness: back up a real library, lose the phone, restore from the 24 words at writer epoch 2, compare every row, and see the old phone refused `VAULT_MOVED` ([#1080](https://github.com/srikanth235/centraid/issues/1080)) — and records its wall clock as evidence under the step's artifact directory (no budget slot, by ruling). It is a `local` step, so every profile carries it.
-
-### The `search-budget` step
-
-`cargo test --release --workspace --test search_budget -- --nocapture --include-ignored`. The core's own search answers over the year-3 vault ([`centraid_apps_kit::search_corpus`](../apps/kit/src/search_corpus.rs): about 46,000 entities, four million words of Zipf text over 188,000 distinct words, the index built by the vault's own `rebuild`), eleven queries on each of Home, Notes, Docs, Money and Locker, a hundred samples each after ten warm-up calls, the p95 of each pair against `contracts/ledgers/search-budget.json`. **`--release`**, because the promise is the shipped core's and a debug build runs the correction pass three to five times slower; it reuses what `release-build` built. **`--include-ignored`**, because the measurement is `#[ignore]`d from the `test` step, which would otherwise run a minutes-long suite a second time in a profile that does not measure it. It is `--workspace --test` rather than `-p` for the reason `call-budget` is.
+`restore-drill` runs `cargo test --workspace --test restore_drill` — `centraid-vault`'s drill of the snapshot plane against the in-memory store, and `centraid`'s drill of the phone's core against the real gateway harness: back up a real library, lose the phone, restore from the 24 words at writer epoch 2, compare every row, and see the old phone refused `VAULT_MOVED` ([#1080](https://github.com/srikanth235/centraid/issues/1080)). It is a `local` step, so every profile carries it.
 
 ### The `fault-door` step
 
-The one step that compiles the tree with a feature on: `cargo test --workspace --features centraid-core-ffi/debug-fault --test contract a_real_panic_inside_call_poisons_the_handle_through_the_abi`. It is `--workspace` rather than `-p centraid-core-ffi` for the reason in the last paragraph of this file: under the workspace's feature resolution the feature rebuilds four units (`centraid-core`, `centraid-core-ffi`, their build scripts, the `contract` binary), where `-p` re-resolved the graph and rebuilt 164. `call-budget` and `restore-drill` name their targets across `--workspace` for the same reason. `debug-fault` makes an `act` on `debug`/`panic` panic inside `Handle::call`, which is how clause 9 of the C ABI gets proved against the real library rather than against a shell's fake. It exports no symbol (`abi-five-symbols` still counts five) and is off in every other step and every release profile; a default build answers that act as one on an unknown app, and `the_fault_door_is_absent_from_a_default_build` asserts that. Its first run found `centraid_next_event` answering `TIMEOUT` on a poisoned handle instead of `PANICKED`.
+The one step that compiles the tree with a feature on: `cargo test --workspace --features centraid-core-ffi/debug-fault --test contract a_real_panic_inside_call_poisons_the_handle_through_the_abi`. It is `--workspace` rather than `-p centraid-core-ffi` for the reason in the last paragraph of this file: under the workspace's feature resolution the feature rebuilds four units (`centraid-core`, `centraid-core-ffi`, their build scripts, the `contract` binary), where `-p` re-resolved the graph and rebuilt 164. `restore-drill` names its target across `--workspace` for the same reason. `debug-fault` makes an `act` on `debug`/`panic` panic inside `Handle::call`, which is how clause 9 of the C ABI gets proved against the real library rather than against a shell's fake. It exports no symbol (`abi-five-symbols` still counts five) and is off in every other step and every release profile; a default build answers that act as one on an unknown app, and `the_fault_door_is_absent_from_a_default_build` asserts that. Its first run found `centraid_next_event` answering `TIMEOUT` on a poisoned handle instead of `PANICKED`.
 
 ## What every step prints
 
@@ -106,7 +95,7 @@ Standing checks over `.github/**` and the lockfiles, run on every pull request.
 
 **Inherited red is named, never hidden** (D-1020-B1): a step whose target is red today stays on the gate and red, rather than leaving it.
 
-`engine` is its own job in `gate.yml` for the opposite reason: it is a command over the tree, but a cold llama.cpp build (about five minutes) does not fit inside the `pr` profile's budget, so `centraid-core-ffi`'s `llama` feature is off in every step above and the job checks the engine with it on: `cargo clippy -p centraid-assist-llama -p centraid-core-ffi --all-targets --features centraid-core-ffi/llama -- -D warnings` and `cargo test` over the same. The `mobile-jvm` step builds the cdylib without the feature too.
+`engine` is its own job in `gate.yml` for the opposite reason: it is a command over the tree, but a cold llama.cpp build (about five minutes) is too slow for the `pr` profile, so `centraid-core-ffi`'s `llama` feature is off in every step above and the job checks the engine with it on: `cargo clippy -p centraid-assist-llama -p centraid-core-ffi --all-targets --features centraid-core-ffi/llama -- -D warnings` and `cargo test` over the same. The `mobile-jvm` step builds the cdylib without the feature too.
 
 `dependency-review` is its own job in `gate.yml`: it is a GitHub Action reading the PR's dependency diff through the API rather than a command over the tree, so it cannot be a step of `cargo xtask gate`.
 
@@ -159,7 +148,7 @@ Four of them, one per invariant in the issue's _Execution plan → Invariants_, 
 | `screens-per-app-layout` | under `crates/screens/src`, an app's screens name no other app's module and the kit names no app |
 | `healthkit-read-only` | every HealthKit authorization shares nothing, nothing saves or deletes a HealthKit object, the entitlement's access list is empty, no write reason is declared, and the reader's kinds are `health/kinds.rs`'s |
 | `health-connect-read-only` | the manifest asks only `READ_*`, the reader asks only what it declares, nothing writes, the permission sheet is built in the reader and launched only from `ScreenEffects.kt`, and every exercise type the kind table maps is named |
-| `walker-platform-law` | the camera-roll performer never copies a library original, forces iCloud on, reads a deletion as news, reads `OffsetTime` or sizes from `available()`; once a shell performs `RollPage`, it makes the platform calls the walk needs |
+| `walker-platform-law` | the camera-roll performer never copies a library original (only a hand-off the member asked for — Share, Download, Edit — does, through `exportOriginal` / `copyLibraryOriginal`), forces iCloud on, reads a deletion as news, reads `OffsetTime` or sizes from `available()`; once a shell performs `RollPage`, it makes the platform calls the walk needs |
 | `first-launch-asks-nothing` | the first-launch view types no app-id list and asks the phone for no permission |
 | `native-shell-parity` ([`src/native_parity.rs`](src/native_parity.rs), [#1152](https://github.com/srikanth235/centraid/issues/1152)) | every field of the `*_screens.proto` and `screens.proto` messages (oneof arms in, enum values out) is read by both the Compose and the SwiftUI shell, or is a row of the register ([`src/native_parity_register.rs`](src/native_parity_register.rs)) as `Platform` (the other platform has no such thing, with why), `Gap` (a lane owes the read; lane `F` is read by neither and waits for the owner to expose or delete it), `RustOnly` (Rust writes it and reads it back, or hands it from one screen or service to another) or `Runtime` (the runtime originates or consumes it); an unregistered one-sided or unread field, a row whose gap has closed, a `RustOnly` or `Runtime` row whose field a shell now spells, a row whose observed side disagrees and a row naming no field all fail. The match is by field name, not by message, comments cut |
 
@@ -169,35 +158,21 @@ A rule whose subject directory is absent prints `PENDING` with the reason rather
 
 ## The ledgers
 
-Three files under [`contracts/ledgers/`](../../contracts/ledgers), all down-only, all checked by the `ledgers` step in every profile:
+Two files under [`contracts/ledgers/`](../../contracts/ledgers), both down-only, both checked by the `ledgers` step in every profile:
 
 | Ledger | Holds |
 | --- | --- |
-| `gate-budgets.json` | the per-profile feedback-time ceiling |
-| `compile-time.json` | clean check, incremental check, single-crate test, release build, the cold `local` profile, and a null `kotlinNativeLinkSeconds` |
 | `library-size.json` | the prebuilt core's stripped size per ABI. A `null` gates nothing and says so; `x86_64-unknown-linux-gnu` carries the first measured artifact |
+| `query-plans.json` | the query-plan allowlist `crates/core/tests/query_plans.rs` reads: the statements allowed to scan a big table or sort a paged read, each with its home and reason, and the scan floor |
+
+No ledger holds a wall-clock number. `gate-budgets.json`, `compile-time.json`, `call-budget.json` and `search-budget.json` were removed by the owner's ruling of 2026-11-04 (see [The profiles](#the-profiles)).
 
 The base copy is read with `git show <merge-base>:<path>`, and "the base has no such file" means the entry is new and passes — without that fallback the very commit that introduces a ledger could not pass its own gate. A number that rose is a finding, and so is a number that was **removed**, because deleting a ceiling is the widest possible widen.
 
-What each ledger stores is a ceiling with **stated headroom**, not the last measurement. A ceiling pinned to today's number would fail the first time a crate landed, and the author would learn to widen ledgers instead of fixing loops. Each entry's `headroom` quotes its measurement, the state of the tree it was taken on, and the multiplier that produced the ceiling.
+**There is no waiver, deviation or override path here, and adding one is not how a number moves**: a waiver added before the first widen is asked for is an invitation. `ledger.rs`'s `a_risen_number_is_a_finding` fails a raise against an existing base copy.
 
-**There is no waiver, deviation or override path here, and adding one is not how a number moves**: a waiver added before the first widen is asked for is an invitation. The numbers rose once, on 2026-09-12, under an owner ruling quoted per key — not through a mechanism — and the ratchet code is exactly as strict as it was: `ledger.rs`'s `a_risen_number_is_a_finding` still fails a raise against an existing base copy. That re-base passed the `ledgers` step only because `origin/main` carries no `contracts/ledgers/` yet, so the base copy is `None` and every entry reads as new. Once #1020 merges, these numbers are the baseline and they only fall.
+**A gate run never writes a ledger.** A ratchet that records whatever the last run cost is a log.
 
-**A gate run never writes a ledger.** `cargo xtask measure --write` is the only writer, and it only ever _lowers_ `budgetSeconds`, printing one note per key saying what it did. A ratchet that records whatever the last run cost is a log.
+## Why `--workspace --test` and not `-p`
 
-## Where the numbers came from
-
-On this container (4 vCPU, 15 GB — the `ci-linux-x64-4c` hardware class in `tests/journeys.json`), with `CENTRAID_GATE_HARDWARE` overridable so a self-hosted device runner can score itself. The first column is a workspace of **one** crate over clap and serde_json; the 2026-09-12 column is **nine** crates over iroh, quinn, tokio, prost and rusqlite-bundled, which is why the ceilings were re-based:
-
-| Measurement | One crate | 2026-09-12 | Ceiling |
-| --- | --- | --- | --- |
-| `gate --profile local`, **warm** | — | 24.0-41.6 s | 120 s |
-| `gate --profile local`, **cold** | 4.9 s | 1394.6-1562.4 s | 3200 s |
-| `gate --profile pr`, cold | 16.8 s | 1420.1 s | 1500 s |
-| `gate --profile pr`, warm | — | 575.8 s | 1500 s |
-| `cargo check --workspace`, clean | 17.4 s | 541.7 s | 1200 s |
-| `cargo check --workspace`, one line in an app crate | 0.1 s | 0.6 s | 10 s |
-| `cargo test -p <the heaviest crate>`, repeated (`centraid-gateway-server` when measured; `centraid-gateway` since [#1080](https://github.com/srikanth235/centraid/issues/1080)) | 10.4 s | 2.4 s | 60 s |
-| `cargo build --workspace --release`, clean | 28.9 s | 240.3-666.6 s | 1400 s |
-
-Two numbers that are not ceilings and are worth knowing. A cold `local` run spends 587.6-626.1 s in `clippy` and 806.5-935.6 s in `cargo test --workspace` — the same dependency graph compiled twice, once for check units and once for artifacts to link against. And alternating `cargo test -p <one crate>` with `cargo test --workspace` costs 185.8 s / 161.7 s each way against 2.4 s for either command repeated, because one package's feature resolution is not the workspace's union, so the two commands invalidate each other's artifacts.
+Alternating `cargo test -p <one crate>` with `cargo test --workspace` costs minutes each way (185.8 s and 161.7 s were measured against 2.4 s for either command repeated), because one package's feature resolution is not the workspace's union, so the two commands invalidate each other's artifacts. That is why `restore-drill` and `fault-door` name their targets across `--workspace`, and why `local`'s narrowing is a nextest filter and not `-p`.

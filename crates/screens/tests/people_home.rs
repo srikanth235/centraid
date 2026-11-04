@@ -1,5 +1,5 @@
-//! People's home through the door a shell uses: the roster with its chips, order
-//! and star; search; Touch; More. Ports the Home cases of `PeopleSpec` over a real
+//! People's home through the door a shell uses: the roster with its filter menu
+//! (filters, counts and order) and star; search; Touch; More. Ports the Home cases of `PeopleSpec` over a real
 //! vault. Every sentence is Rust's, so the views are asserted as finished words.
 
 mod people_support;
@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::catalog::{act, load};
-use centraid_screens::kit::civil;
+use centraid_screens::kit::{civil, menu};
 use centraid_screens::people::routes;
 use people_support::*;
 use wire::app_query_response::Answer;
@@ -27,8 +27,31 @@ fn month_day_in(days: i64) -> String {
     civil::plus_days(&today(), days).expect("a day")[5..].to_owned()
 }
 
+fn pick(section: &str, option: &str) -> H {
+    H::FilterMenuPicked(wire::FilterMenuPicked {
+        section_key: section.to_owned(),
+        option_key: option.to_owned(),
+    })
+}
+
+fn menu_of(d: &centraid_screens::testing::Driver, i: u64) -> wire::FilterMenu {
+    home_state(d.view(i))
+        .filter_menu
+        .clone()
+        .expect("the filter menu")
+}
+
+/// The labels and counts of a section's options.
+fn shown(section: &wire::MenuSection) -> Vec<(&str, u32)> {
+    section
+        .options
+        .iter()
+        .map(|option| (option.label.as_str(), option.count))
+        .collect()
+}
+
 #[test]
-fn the_root_is_the_roster_under_a_band_with_one_chip_row() {
+fn the_root_is_the_roster_under_a_band_with_one_filter_menu() {
     let mut d = clean();
     person(&d, "Dana Reyes");
     person(&d, "Sam");
@@ -51,16 +74,35 @@ fn the_root_is_the_roster_under_a_band_with_one_chip_row() {
             .unwrap()
             .current
     );
-    let chips: Vec<(&str, u32)> = state
-        .chips
-        .iter()
-        .map(|chip| (chip.label.as_str(), chip.count))
-        .collect();
-    assert_eq!(chips, [("All", 2), ("Starred", 0), ("Overdue", 0)]);
-    assert!(state.chips[0].selected);
-    let sort = state.sort_chip.as_ref().expect("the sort chip");
-    assert_eq!(sort.label, "Recently added");
-    assert_eq!(sort.spoken, "Sort, Recently added");
+    // THE FILTER with the counts of the whole window, All picked; then the SORT.
+    let built = state.filter_menu.clone().expect("the filter menu");
+    assert_eq!(
+        built
+            .sections
+            .iter()
+            .map(|s| s.key.as_str())
+            .collect::<Vec<_>>(),
+        ["show", "sort"]
+    );
+    let show = menu::find(&built, "show").unwrap();
+    assert_eq!(show.title, "Show");
+    assert_eq!(show.kind, wire::menu_section::Kind::Single as i32);
+    assert_eq!(shown(show), [("All", 2), ("Starred", 0), ("Overdue", 0)]);
+    assert_eq!(
+        show.options
+            .iter()
+            .map(|o| o.key.as_str())
+            .collect::<Vec<_>>(),
+        ["all", "starred", "due"]
+    );
+    assert_eq!(menu::checked(show), ["all"]);
+    let sort = menu::find(&built, menu::SORT).unwrap();
+    assert_eq!(sort.kind, wire::menu_section::Kind::Single as i32);
+    assert_eq!(shown(sort), [("Recently added", 0), ("Name", 0)]);
+    assert_eq!(menu::checked(sort), ["recent"]);
+    assert!(!built.filtering);
+    assert_eq!(built.spoken, "Filter and sort");
+    assert_eq!(built.clear_label, "Clear filters");
     let data = roster_data(d.view(i));
     assert_eq!(data.status_line, "2 people · 0 to reconnect · 0 starred");
     // A person who was never touched says so; the row opens their page.
@@ -77,52 +119,44 @@ fn the_root_is_the_roster_under_a_band_with_one_chip_row() {
 }
 
 #[test]
-fn an_order_is_the_reads_and_a_pick_closes_the_sheet_and_renames_the_chip() {
+fn an_order_is_the_reads_and_a_pick_moves_the_check_and_never_lights_the_button() {
     let mut d = clean();
     person(&d, "Zed");
     person(&d, "Ana");
     person(&d, "Mia");
     let i = begin(&mut d);
-    send_home(
-        &mut d,
-        i,
-        H::SheetOpened(ev::SheetOpened {
-            sheet: wire::people_home_state::Sheet::Order as i32,
-        }),
-    );
-    let sheet = home_state(d.view(i));
-    assert_eq!(sheet.sheet, wire::people_home_state::Sheet::Order as i32);
-    assert_eq!(
-        sheet
-            .order_choices
-            .iter()
-            .map(|c| c.label.as_str())
-            .collect::<Vec<_>>(),
-        ["Recently added", "Name"]
-    );
-    send_home(
-        &mut d,
-        i,
-        H::Order(ev::OrderPicked {
-            order: wire::PeopleOrder::Name as i32,
-        }),
-    );
+    send_home(&mut d, i, pick("sort", "name"));
     let state = home_state(d.view(i));
+    // There is no order sheet any more: the menu is the whole of it.
     assert_eq!(
         state.sheet,
         wire::people_home_state::Sheet::Unspecified as i32
     );
-    assert_eq!(state.sort_chip.as_ref().unwrap().label, "Name");
+    let built = menu_of(&d, i);
+    assert_eq!(menu::checked(menu::find(&built, "sort").unwrap()), ["name"]);
+    assert!(!built.filtering, "a sort is not a filter");
     assert_eq!(names(roster_data(d.view(i))), ["Ana", "Mia", "Zed"]);
     // The same order again is nothing.
-    send_home(
-        &mut d,
-        i,
-        H::Order(ev::OrderPicked {
-            order: wire::PeopleOrder::Name as i32,
-        }),
-    );
+    send_home(&mut d, i, pick("sort", "name"));
     assert_eq!(names(roster_data(d.view(i))), ["Ana", "Mia", "Zed"]);
+    // ... and back.
+    send_home(&mut d, i, pick("sort", "recent"));
+    assert_eq!(
+        menu::checked(menu::find(&menu_of(&d, i), "sort").unwrap()),
+        ["recent"]
+    );
+    // A key the menu did not make is nothing.
+    let before = d.view(i).clone();
+    send_home(&mut d, i, pick("sort", "nope"));
+    send_home(&mut d, i, pick("show", "nope"));
+    send_home(&mut d, i, pick("nope", "name"));
+    assert_eq!(
+        *d.view(i),
+        wire::ViewState {
+            revision: d.view(i).revision,
+            ..before
+        }
+    );
 }
 
 #[test]
@@ -150,17 +184,16 @@ fn the_star_is_a_write_from_the_row_and_the_starred_chip_filters() {
     assert!(row.starred);
     assert_eq!(row.star_label, "Remove star from Dana");
     assert_eq!(row.accessibility_label, "Dana, starred");
-    assert_eq!(state.chips[1].count, 1);
+    let show =
+        |d: &centraid_screens::testing::Driver| menu::find(&menu_of(d, i), "show").unwrap().clone();
+    assert_eq!(show(&d).options[1].count, 1);
 
-    send_home(
-        &mut d,
-        i,
-        H::Chip(ev::ChipPicked {
-            chip: wire::PeopleChipKey::Starred as i32,
-        }),
-    );
+    send_home(&mut d, i, pick("show", "starred"));
     assert_eq!(names(roster_data(d.view(i))), ["Dana"]);
-    assert!(home_state(d.view(i)).chips[1].selected);
+    assert_eq!(menu::checked(&show(&d)), ["starred"]);
+    // Starred narrows the roster, so the button is lit; Clear is back to All.
+    assert!(menu_of(&d, i).filtering);
+    assert_eq!(menu_of(&d, i).spoken, "Filter and sort, on");
 
     send_home(&mut d, i, H::Star(ev::StarToggled { party_id: dana }));
     let state = home_state(d.view(i));
@@ -168,7 +201,7 @@ fn the_star_is_a_write_from_the_row_and_the_starred_chip_filters() {
         state.status.as_ref().unwrap().sentence,
         "Star removed · Dana"
     );
-    // Nobody is starred now, and that is the chip's own sentence, not day one's.
+    // Nobody is starred now, and that is the filter's own sentence, not day one's.
     let empty = roster_data(d.view(i))
         .empty
         .clone()
@@ -176,10 +209,33 @@ fn the_star_is_a_write_from_the_row_and_the_starred_chip_filters() {
     assert_eq!(empty.headline, "Nobody is starred.");
     assert_eq!(empty.action_label, "");
     assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
+    // CLEAR FILTERS goes back to All: the button goes out and everyone is back.
+    assert!(menu_of(&d, i).filtering);
+    send_home(&mut d, i, H::FilterMenuCleared(wire::FilterMenuCleared {}));
+    assert!(!menu_of(&d, i).filtering);
+    assert_eq!(menu::checked(&show(&d)), ["all"]);
+    assert_eq!(roster_data(d.view(i)).rows.len(), 2);
 }
 
 #[test]
-fn a_chip_with_nobody_says_so_and_day_one_offers_the_phones_contacts() {
+fn clear_filters_keeps_the_order() {
+    let mut d = clean();
+    person(&d, "Zed");
+    person(&d, "Ana");
+    let i = begin(&mut d);
+    send_home(&mut d, i, pick("sort", "name"));
+    send_home(&mut d, i, pick("show", "due"));
+    assert!(menu_of(&d, i).filtering);
+    send_home(&mut d, i, H::FilterMenuCleared(wire::FilterMenuCleared {}));
+    let built = menu_of(&d, i);
+    assert!(!built.filtering);
+    assert_eq!(menu::checked(menu::find(&built, "show").unwrap()), ["all"]);
+    assert_eq!(menu::checked(menu::find(&built, "sort").unwrap()), ["name"]);
+    assert_eq!(names(roster_data(d.view(i))), ["Ana", "Zed"]);
+}
+
+#[test]
+fn a_filter_with_nobody_says_so_and_day_one_offers_the_phones_contacts() {
     let mut d = clean();
     let i = begin(&mut d);
     // Day one: nobody at all.
@@ -190,14 +246,11 @@ fn a_chip_with_nobody_says_so_and_day_one_offers_the_phones_contacts() {
 
     person(&d, "Dana");
     refresh(&mut d, i);
-    send_home(
-        &mut d,
-        i,
-        H::Chip(ev::ChipPicked {
-            chip: wire::PeopleChipKey::Due as i32,
-        }),
-    );
-    let empty = roster_data(d.view(i)).empty.clone().expect("a chip's own");
+    send_home(&mut d, i, pick("show", "due"));
+    let empty = roster_data(d.view(i))
+        .empty
+        .clone()
+        .expect("a filter's own");
     assert_eq!(empty.headline, "Nobody is overdue.");
 }
 
@@ -246,11 +299,14 @@ fn search_is_a_field_over_the_roster_names_only_and_closing_clears_it() {
     person(&d, "Sam");
     let i = begin(&mut d);
     send_home(&mut d, i, H::SearchOpened(ev::SearchOpened {}));
-    // Open, with no term: the roster stands and no chip narrows a name.
+    // Open, with no term: the roster stands and no filter narrows a name, so there
+    // is no menu, and a pick that arrives anyway is nothing.
     let state = home_state(d.view(i));
     assert!(state.search.as_ref().unwrap().open);
-    assert!(state.chips.is_empty());
-    assert!(state.sort_chip.is_none());
+    assert!(state.filter_menu.is_none());
+    send_home(&mut d, i, pick("show", "starred"));
+    send_home(&mut d, i, H::FilterMenuCleared(wire::FilterMenuCleared {}));
+    assert!(home_state(d.view(i)).filter_menu.is_none());
 
     send_home(
         &mut d,
@@ -302,7 +358,9 @@ fn search_is_a_field_over_the_roster_names_only_and_closing_clears_it() {
     assert!(!search.open);
     assert_eq!(search.term, "");
     assert!(search.results.is_none());
-    assert_eq!(state.chips.len(), 3);
+    // The menu comes back with the roster, and the stale pick changed nothing.
+    let built = state.filter_menu.clone().expect("the menu is back");
+    assert_eq!(menu::checked(menu::find(&built, "show").unwrap()), ["all"]);
 }
 
 #[test]
@@ -356,8 +414,14 @@ fn touch_is_tiles_rails_and_the_band_swaps_it_without_a_stack_entry() {
     assert_eq!(depth(&d), before);
     let state = home_state(d.view(i));
     assert_eq!(state.destination, wire::PeopleDestination::Touch as i32);
-    // Touch filters nothing: no chip row.
-    assert!(state.chips.is_empty() && state.sort_chip.is_none());
+    // Touch filters nothing: no menu, and a stale pick is nothing.
+    assert!(state.filter_menu.is_none());
+    send_home(&mut d, i, pick("show", "starred"));
+    send_home(&mut d, i, pick("sort", "name"));
+    send_home(&mut d, i, H::FilterMenuCleared(wire::FilterMenuCleared {}));
+    let state = home_state(d.view(i));
+    assert_eq!(state.destination, wire::PeopleDestination::Touch as i32);
+    assert!(state.filter_menu.is_none());
     let touch = touch_data(d.view(i));
     let tiles: Vec<(&str, u32, bool)> = touch
         .tiles
@@ -426,14 +490,10 @@ fn touch_is_tiles_rails_and_the_band_swaps_it_without_a_stack_entry() {
     );
     let state = home_state(d.view(i));
     assert_eq!(state.destination, wire::PeopleDestination::People as i32);
-    assert!(
-        state
-            .chips
-            .iter()
-            .find(|c| c.label == "Overdue")
-            .unwrap()
-            .selected
-    );
+    // THE TILE SETS THE SAME FILTER A PICK DOES: Overdue is checked and lit.
+    let built = state.filter_menu.clone().expect("the menu");
+    assert_eq!(menu::checked(menu::find(&built, "show").unwrap()), ["due"]);
+    assert!(built.filtering);
 }
 
 #[test]

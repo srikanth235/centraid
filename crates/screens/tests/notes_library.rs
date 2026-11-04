@@ -1,13 +1,32 @@
-//! The Notes place of `notes.home`: the shelf, the chip row, search, the row menu
-//! and its writes. Ports of the `NotesAppSpec` library cases, through `Driver`.
+//! The Notes place of `notes.home`: the shelf, the header's filter menu and
+//! notebook subtitle, search, the row menu and its writes. Ports of the `NotesAppSpec` library cases, through `Driver`.
 
 mod notes_support;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::catalog::act;
+use centraid_screens::kit::menu;
 use centraid_screens::notes::{self, routes};
 use notes_support::*;
 use wire::notes_home_event::{self as ev, Kind as H};
+
+fn pick(section: &str, option: &str) -> H {
+    H::FilterMenuPicked(wire::FilterMenuPicked {
+        section_key: section.to_owned(),
+        option_key: option.to_owned(),
+    })
+}
+
+fn menu_of(d: &Driver, i: u64) -> wire::FilterMenu {
+    home_state(d.view(i))
+        .filter_menu
+        .clone()
+        .expect("the filter menu")
+}
+
+fn option_keys(section: &wire::MenuSection) -> Vec<&str> {
+    section.options.iter().map(|o| o.key.as_str()).collect()
+}
 
 fn pinned(d: &Driver, id: &str) {
     arrange(
@@ -111,70 +130,127 @@ fn day_one_is_one_sentence_and_one_action_and_a_filter_that_empties_it_is_not_da
     assert_eq!(empty.headline, "No notes yet");
     assert_eq!(empty.body, "Write the first one.");
     assert_eq!(empty.action_label, "New note");
-    send_home(&mut d, i, H::PinnedOnly(ev::PinnedOnlyToggled {}));
+    send_home(&mut d, i, pick("show", "pinned"));
     let empty = library_data(d.view(i)).empty.clone().expect("filtered");
     assert_eq!(empty.body, "No notes match this view.");
     assert_eq!(empty.action_label, "");
 }
 
 #[test]
-fn sort_pinned_only_tags_and_a_wider_window_are_the_reads_parameters_and_chips() {
+fn the_menu_holds_a_filter_to_show_and_a_sort_and_the_chip_row_is_gone() {
+    let mut d = clean();
+    note(&d, "Banana", "b");
+    let i = home(&mut d, wire::NotesPlace::Notes);
+    let built = menu_of(&d, i);
+    // THE FILTER first (Pinned, and the tags when there are some), then the SORT.
+    assert_eq!(
+        built
+            .sections
+            .iter()
+            .map(|s| s.key.as_str())
+            .collect::<Vec<_>>(),
+        ["show", "sort"]
+    );
+    let show = menu::find(&built, "show").unwrap();
+    assert_eq!(show.title, "Show");
+    assert_eq!(show.kind, wire::menu_section::Kind::Multi as i32);
+    assert_eq!(option_keys(show), ["pinned"]);
+    assert_eq!(show.options[0].label, "Pinned");
+    let sort = menu::find(&built, menu::SORT).unwrap();
+    assert_eq!(sort.kind, wire::menu_section::Kind::Single as i32);
+    assert_eq!(option_keys(sort), ["updated", "created", "title"]);
+    assert_eq!(
+        sort.options
+            .iter()
+            .map(|o| o.label.as_str())
+            .collect::<Vec<_>>(),
+        ["Last edited", "Date created", "Title"]
+    );
+    // Last edited is the order a fresh library reads in.
+    assert_eq!(menu::checked(sort), ["updated"]);
+    assert!(menu::checked(show).is_empty());
+    assert!(!built.filtering);
+    assert_eq!(built.clear_label, "Clear filters");
+    assert_eq!(built.spoken, "Filter and sort");
+    // Nothing else stands under the header: no sheet, no scope.
+    let state = home_state(d.view(i));
+    assert_eq!(state.title, "Notes");
+    assert!(state.subtitle.is_none());
+    assert_eq!(state.sheet, wire::NotesSheet::Unspecified as i32);
+}
+
+#[test]
+fn a_sort_is_the_reads_order_and_never_lights_the_filter() {
     let mut d = clean();
     note(&d, "Banana", "b");
     note(&d, "Apple", "a");
     let first = note(&d, "Cherry", "c");
     pinned(&d, &first);
     let i = home(&mut d, wire::NotesPlace::Notes);
-    // THE ONE CHIP ROW: Pinned, the sort last wearing the current order.
-    let chips = &home_state(d.view(i)).chips;
+    send_home(&mut d, i, pick("sort", "title"));
+    let built = menu_of(&d, i);
     assert_eq!(
-        chips.iter().map(|c| c.key.as_str()).collect::<Vec<_>>(),
-        ["pinned", "sort"]
+        menu::checked(menu::find(&built, "sort").unwrap()),
+        ["title"]
     );
-    assert_eq!(chips[1].label, "Last edited");
-    assert!(chips[1].chevron && !chips[0].chevron);
-    assert_eq!(chips[1].spoken, "Sort, Last edited");
-    // The sort chip opens the sheet; a choice re-reads and renames the chip.
-    send_home(&mut d, i, H::Chip(ev::ChipPicked { key: "sort".into() }));
-    let state = home_state(d.view(i));
-    assert_eq!(state.sheet, wire::NotesSheet::Sort as i32);
-    let selected: Vec<_> = state.choices.iter().filter(|c| c.selected).collect();
-    assert_eq!(selected.len(), 1);
-    assert_eq!(selected[0].sort, wire::NotesLibrarySort::Updated as i32);
-    send_home(
-        &mut d,
-        i,
-        H::Sort(ev::SortPicked {
-            sort: wire::NotesLibrarySort::Title as i32,
-        }),
-    );
-    let state = home_state(d.view(i));
-    assert_eq!(state.sheet, wire::NotesSheet::Unspecified as i32);
-    assert_eq!(state.chips.last().unwrap().label, "Title");
+    // A sort is not a filter: the button stays unlit and Clear is not offered.
+    assert!(!built.filtering);
+    assert_eq!(built.spoken, "Filter and sort");
     // Pinned leads under every order, then A first.
     assert_eq!(titles(d.view(i)), ["Cherry", "Apple", "Banana"]);
-    // A selected chip clears itself.
-    send_home(
-        &mut d,
-        i,
-        H::Chip(ev::ChipPicked {
-            key: "pinned".into(),
-        }),
+    send_home(&mut d, i, pick("sort", "created"));
+    assert_eq!(
+        menu::checked(menu::find(&menu_of(&d, i), "sort").unwrap()),
+        ["created"]
     );
-    assert!(home_state(d.view(i)).chips[0].selected);
-    assert_eq!(titles(d.view(i)), ["Cherry"]);
-    send_home(
-        &mut d,
-        i,
-        H::Chip(ev::ChipPicked {
-            key: "pinned".into(),
-        }),
+    send_home(&mut d, i, pick("sort", "updated"));
+    assert_eq!(
+        menu::checked(menu::find(&menu_of(&d, i), "sort").unwrap()),
+        ["updated"]
     );
-    assert!(home_state(d.view(i)).chips.iter().all(|c| !c.selected));
     assert_eq!(titles(d.view(i)).len(), 3);
-    // An unknown key is nothing.
+}
+
+#[test]
+fn pinned_toggles_lights_the_button_and_clear_filters_puts_it_out() {
+    let mut d = clean();
+    note(&d, "Banana", "b");
+    note(&d, "Apple", "a");
+    let first = note(&d, "Cherry", "c");
+    pinned(&d, &first);
+    let i = home(&mut d, wire::NotesPlace::Notes);
+    send_home(&mut d, i, pick("show", "pinned"));
+    let built = menu_of(&d, i);
+    assert_eq!(
+        menu::checked(menu::find(&built, "show").unwrap()),
+        ["pinned"]
+    );
+    assert!(built.filtering);
+    assert_eq!(built.spoken, "Filter and sort, on");
+    assert_eq!(titles(d.view(i)), ["Cherry"]);
+    // The same pick again toggles it off.
+    send_home(&mut d, i, pick("show", "pinned"));
+    assert!(!menu_of(&d, i).filtering);
+    assert_eq!(titles(d.view(i)).len(), 3);
+    // CLEAR FILTERS clears Pinned and leaves the order alone.
+    send_home(&mut d, i, pick("sort", "title"));
+    send_home(&mut d, i, pick("show", "pinned"));
+    assert!(menu_of(&d, i).filtering);
+    send_home(&mut d, i, H::FilterMenuCleared(wire::FilterMenuCleared {}));
+    let built = menu_of(&d, i);
+    assert!(!built.filtering);
+    assert!(menu::checked(menu::find(&built, "show").unwrap()).is_empty());
+    assert_eq!(
+        menu::checked(menu::find(&built, "sort").unwrap()),
+        ["title"]
+    );
+    // Cherry is pinned, so it leads; then A first under the Title order.
+    assert_eq!(titles(d.view(i)), ["Cherry", "Apple", "Banana"]);
+    // A key the menu did not make is nothing.
     let before = d.view(i).clone();
-    send_home(&mut d, i, H::Chip(ev::ChipPicked { key: "nope".into() }));
+    send_home(&mut d, i, pick("show", "nope"));
+    send_home(&mut d, i, pick("sort", "nope"));
+    send_home(&mut d, i, pick("nope", "pinned"));
     assert_eq!(
         *d.view(i),
         wire::ViewState {
@@ -185,7 +261,7 @@ fn sort_pinned_only_tags_and_a_wider_window_are_the_reads_parameters_and_chips()
 }
 
 #[test]
-fn a_tag_is_a_chip_that_narrows_the_shelf() {
+fn a_tag_is_an_option_of_the_filter_that_narrows_the_shelf() {
     let mut d = clean();
     let tagged = note(&d, "Tagged", "x");
     note(&d, "Plain", "y");
@@ -204,25 +280,38 @@ fn a_tag_is_a_chip_that_narrows_the_shelf() {
         },
     );
     let i = home(&mut d, wire::NotesPlace::Notes);
-    let chips = &home_state(d.view(i)).chips;
-    let tag = chips
+    let built = menu_of(&d, i);
+    let show = menu::find(&built, "show").unwrap();
+    // Pinned first, then each tag the window saw.
+    assert_eq!(show.options[0].key, "pinned");
+    let tag = show
+        .options
         .iter()
-        .find(|c| c.key.starts_with("tag-"))
-        .expect("a tag chip");
+        .find(|o| o.key.starts_with("tag-"))
+        .expect("a tag option");
     assert_eq!(tag.label, "work");
     let key = tag.key.clone();
-    send_home(&mut d, i, H::Chip(ev::ChipPicked { key: key.clone() }));
+    send_home(&mut d, i, pick("show", &key));
     assert_eq!(titles(d.view(i)), ["Tagged"]);
-    let chips = &home_state(d.view(i)).chips;
+    let built = menu_of(&d, i);
+    assert!(built.filtering);
     assert_eq!(
-        chips
-            .iter()
-            .filter(|c| c.selected)
-            .map(|c| c.key.clone())
-            .collect::<Vec<_>>(),
-        std::slice::from_ref(&key)
+        menu::checked(menu::find(&built, "show").unwrap()),
+        [key.as_str()]
     );
-    send_home(&mut d, i, H::Chip(ev::ChipPicked { key }));
+    // Pinned and the tag add up; Clear takes both.
+    send_home(&mut d, i, pick("show", "pinned"));
+    assert_eq!(
+        menu::checked(menu::find(&menu_of(&d, i), "show").unwrap()).len(),
+        2
+    );
+    send_home(&mut d, i, H::FilterMenuCleared(wire::FilterMenuCleared {}));
+    assert!(!menu_of(&d, i).filtering);
+    assert_eq!(titles(d.view(i)).len(), 2);
+    // A tag toggles off with the same pick.
+    send_home(&mut d, i, pick("show", &key));
+    assert_eq!(titles(d.view(i)), ["Tagged"]);
+    send_home(&mut d, i, pick("show", &key));
     assert_eq!(titles(d.view(i)).len(), 2);
 }
 
@@ -233,7 +322,7 @@ fn text(value: &str) -> wire::Value {
 }
 
 #[test]
-fn opened_on_a_notebook_its_chip_leads_and_a_tap_widens_to_every_note() {
+fn opened_on_a_notebook_it_is_the_subtitle_and_its_close_key_shows_every_note() {
     let mut d = clean();
     let book = notebook(&d, "Recipes");
     let inside = note(&d, "Soup", "s");
@@ -250,28 +339,30 @@ fn opened_on_a_notebook_its_chip_leads_and_a_tap_widens_to_every_note() {
         routes::home(wire::NotesPlace::Notes, &book, "Recipes", false),
     );
     let state = home_state(d.view(i));
-    assert_eq!(state.title, "Recipes");
-    assert_eq!(state.chips[0].key, "notebook");
-    assert_eq!(state.chips[0].label, "Recipes");
-    assert!(state.chips[0].selected);
+    // THE TITLE STAYS "Notes"; the notebook is the second line, with a close key.
+    assert_eq!(state.title, "Notes");
+    let subtitle = state.subtitle.clone().expect("the notebook subtitle");
+    assert_eq!(subtitle.label, "Recipes");
+    assert_eq!(subtitle.spoken, "Notebook Recipes");
+    assert!(subtitle.clearable && !subtitle.tappable);
+    assert_eq!(subtitle.clear_spoken, "Show every note");
+    // A notebook is not a filter: the button is not lit by it.
+    assert!(!menu_of(&d, i).filtering);
+    assert_eq!(titles(d.view(i)), ["Soup"]);
+    // Clear filters leaves the notebook scope alone.
+    send_home(&mut d, i, pick("show", "pinned"));
+    send_home(&mut d, i, H::FilterMenuCleared(wire::FilterMenuCleared {}));
+    assert!(home_state(d.view(i)).subtitle.is_some());
     assert_eq!(titles(d.view(i)), ["Soup"]);
     send_home(
         &mut d,
         i,
-        H::Chip(ev::ChipPicked {
-            key: "notebook".into(),
-        }),
+        H::NotebookScopeCleared(ev::NotebookScopeCleared {}),
     );
     let state = home_state(d.view(i));
     assert_eq!(state.title, "Notes");
-    assert_eq!(
-        state
-            .chips
-            .iter()
-            .map(|c| c.key.as_str())
-            .collect::<Vec<_>>(),
-        ["pinned", "sort"]
-    );
+    assert!(state.subtitle.is_none());
+    assert!(state.filter_menu.is_some());
     assert_eq!(titles(d.view(i)).len(), 2);
 }
 
@@ -306,9 +397,18 @@ fn unfiled_is_the_unfiled_filter_and_not_a_notebook() {
         notes::TAB,
         routes::home(wire::NotesPlace::Notes, "", "", true),
     );
-    assert_eq!(home_state(d.view(i)).title, "Unfiled");
+    assert_eq!(home_state(d.view(i)).title, "Notes");
     assert_eq!(titles(d.view(i)), ["Out"]);
-    assert_eq!(home_state(d.view(i)).chips[0].label, "Unfiled");
+    let subtitle = home_state(d.view(i)).subtitle.clone().unwrap();
+    assert_eq!(subtitle.label, "Unfiled");
+    assert_eq!(subtitle.spoken, "Notebook Unfiled");
+    send_home(
+        &mut d,
+        i,
+        H::NotebookScopeCleared(ev::NotebookScopeCleared {}),
+    );
+    assert!(home_state(d.view(i)).subtitle.is_none());
+    assert_eq!(titles(d.view(i)).len(), 2);
 }
 
 #[test]
@@ -479,8 +579,10 @@ fn search_is_a_field_marks_matches_and_close_restores_the_library() {
             .body,
         "Type to search titles and bodies."
     );
-    // No chip row over search: no filter narrows its results.
-    assert!(home_state(d.view(i)).chips.is_empty());
+    // No menu over search: no filter narrows its results. A stale pick is nothing.
+    assert!(home_state(d.view(i)).filter_menu.is_none());
+    send_home(&mut d, i, pick("show", "pinned"));
+    send_home(&mut d, i, H::FilterMenuCleared(wire::FilterMenuCleared {}));
     send_home(
         &mut d,
         i,
@@ -544,6 +646,8 @@ fn search_is_a_field_marks_matches_and_close_restores_the_library() {
     let search = home_state(d.view(i)).search.clone().unwrap();
     assert!(!search.open && search.term.is_empty() && search.results.is_none());
     assert_eq!(titles(d.view(i)).len(), 2);
+    // ... and with it the menu.
+    assert!(home_state(d.view(i)).filter_menu.is_some());
 }
 
 #[test]
