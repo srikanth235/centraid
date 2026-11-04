@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Mutex, OnceLock};
 
+use centraid_assist::native::prompt::ToolsMode;
 use centraid_assist_eval::run::{Runner, StepOut, Stepper};
 use centraid_assist_eval::source::EvalSource;
 use centraid_datagen::Catalog;
@@ -190,7 +191,12 @@ impl Replay {
 }
 
 impl Stepper for Replay {
-    fn step(&self, prompt: &str, _dates: Option<&str>) -> Result<StepOut, String> {
+    fn step(
+        &self,
+        prompt: &str,
+        _dates: Option<&str>,
+        _tools: ToolsMode,
+    ) -> Result<StepOut, String> {
         // the last placeholder in the prompt is the turn being answered
         let start = prompt.rfind("⟨m3:").ok_or("no placeholder in the prompt")?;
         let end = start + prompt[start..].find('⟩').ok_or("unclosed placeholder")? + '⟩'.len_utf8();
