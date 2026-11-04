@@ -280,7 +280,6 @@ fn choice(key: &str, label: String, selected: bool) -> wire::LockerChoice {
         key: key.to_owned(),
         label,
         selected,
-        detail: String::new(),
     }
 }
 

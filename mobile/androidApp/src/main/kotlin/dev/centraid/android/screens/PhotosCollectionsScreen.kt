@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -49,10 +50,13 @@ import centraid.core.v1.PhotosHomeEvent
 import centraid.core.v1.PhotosHomeState
 import centraid.core.v1.PhotosNewAlbumSubmitted
 import centraid.core.v1.Route
+import dev.centraid.android.kit.BandPolicy
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.ContentImage
 import dev.centraid.android.kit.KitLink
+import dev.centraid.android.kit.LocalBandClearance
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.theme.centraidColor
@@ -88,7 +92,8 @@ internal fun PhotosCollectionsScreen(
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = MARGIN)
-            .padding(bottom = 24.dp),
+            // THE LIST RUNS UNDER THE BAND'S GLASS; its last card scrolls clear of it.
+            .padding(bottom = LocalBandClearance.current + BandPolicy.FOOT_MARGIN.dp),
     ) {
         // SHOW ALL / COLLAPSE ALL is one link here — v0's Collections menu without
         // the menu: a bulk fold is a command over this list, not a header verb.
@@ -151,7 +156,7 @@ private fun SectionBody(
 ) {
     val empty = section.empty
     when (section.key) {
-        "pinned" -> Strip { section.cards.forEach { PinnedCard(it, onOpen) } }
+        "pinned" -> Strip { section.cards.forEach { AlbumCard(it, onOpen, onDelete = null) } }
         "albums" ->
             if (empty != null) {
                 EmptySectionCard(
@@ -182,9 +187,7 @@ private val MARGIN = 18.dp
 /** Home's tile radius: one card corner in the product, not one per screen. */
 private val CARD_RADIUS = 12.dp
 private val CARD_GAP = 12.dp
-private val PINNED_SIDE = 110.dp
 private val ALBUM_SIDE = 150.dp
-private val WIDE_CARD_HEIGHT = 150.dp
 private val FOLD_CONTROL = 30.dp
 
 // --- the section, the strip and the controls ---
@@ -262,41 +265,14 @@ private fun CoverGround(path: String?, iconKey: String, side: Dp) {
     }
 }
 
-/** ONE PINNED CARD: a square, the name printed on the picture over a dark wash. */
-@Composable
-private fun PinnedCard(card: PhotosCollectionCard, onOpen: (Route) -> Unit) {
-    Box(
-        Modifier
-            .size(PINNED_SIDE)
-            .clip(RoundedCornerShape(CARD_RADIUS))
-            .clickable { card.route?.let(onOpen) }
-            .semantics { contentDescription = card.accessibility_label; role = Role.Button },
-        contentAlignment = Alignment.BottomStart,
-    ) {
-        CoverGround(card.cover?.thumbnail_path, card.icon_key, PINNED_SIDE)
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Brush.verticalGradient(0.5f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.45f))),
-        )
-        Text(
-            card.title,
-            style = centraidType("smallStrong"),
-            color = Color.White,
-            maxLines = 2,
-            modifier = Modifier.padding(10.dp),
-        )
-    }
-}
-
 /**
- * ONE ALBUM: the cover, then the name and the count beneath it. A long-press is
- * the system's way to the album's own verbs — here, Delete, which Rust confirms
- * before it writes.
+ * ONE CARD FOR EVERY STRIP, pinned shelves and albums alike: the cover, then the name and the
+ * count beneath it. A long-press on an album is the system's way to its own verbs — here, Delete,
+ * which Rust confirms before it writes. A standing shelf has no delete.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AlbumCard(card: PhotosCollectionCard, onOpen: (Route) -> Unit, onDelete: () -> Unit) {
+private fun AlbumCard(card: PhotosCollectionCard, onOpen: (Route) -> Unit, onDelete: (() -> Unit)?) {
     Column(
         Modifier
             .width(ALBUM_SIDE)
@@ -304,11 +280,13 @@ private fun AlbumCard(card: PhotosCollectionCard, onOpen: (Route) -> Unit, onDel
             .semantics(mergeDescendants = true) {
                 contentDescription = card.accessibility_label
                 role = Role.Button
-                customActions = listOf(CustomAccessibilityAction(card.delete_label) { onDelete(); true })
+                if (onDelete != null) {
+                    customActions = listOf(CustomAccessibilityAction(card.delete_label) { onDelete(); true })
+                }
             },
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        CoverGround(card.cover?.thumbnail_path, "album", ALBUM_SIDE)
+        CoverGround(card.cover?.thumbnail_path, card.icon_key.ifEmpty { "album" }, ALBUM_SIDE)
         Column {
             Text(card.title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(card.count_label, style = centraidType("small"), color = centraidColor("textFaint"))
@@ -316,25 +294,22 @@ private fun AlbumCard(card: PhotosCollectionCard, onOpen: (Route) -> Unit, onDel
     }
 }
 
-/** An empty section's card: icon and verb across the top, the sentence at the foot. */
+/** An empty section's card, laid out as any empty state: the mark, the sentence, the line, then the verb. */
 @Composable
 private fun EmptySectionCard(iconKey: String, title: String, caption: String, verb: String, onVerb: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = WIDE_CARD_HEIGHT)
             .clip(RoundedCornerShape(CARD_RADIUS))
             .background(centraidColor("bgElev"))
             .padding(18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(verticalAlignment = Alignment.Top) {
-            CentraidIcon(iconKey = iconKey, tint = centraidColor("textFaint"), size = 28.dp)
-            Spacer(Modifier.weight(1f))
-            KitLink(label = verb, onClick = onVerb)
-        }
-        Spacer(Modifier.weight(1f).heightIn(min = 12.dp))
-        Text(title, style = centraidType("smallStrong"), color = centraidColor("textSoft"))
-        Text(caption, style = centraidType("small"), color = centraidColor("textFaint"))
+        CentraidIcon(iconKey = iconKey, tint = centraidColor("textFaint"), size = 28.dp)
+        Text(title, style = centraidType("smallStrong"), color = centraidColor("textSoft"), textAlign = TextAlign.Center)
+        Text(caption, style = centraidType("small"), color = centraidColor("textFaint"), textAlign = TextAlign.Center)
+        OutlineButton(label = verb, onPress = onVerb)
     }
 }
 

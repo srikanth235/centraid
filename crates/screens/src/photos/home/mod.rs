@@ -48,7 +48,7 @@ use super::cells::{self, Link};
 use super::keep_originals::FreeUpRow;
 use super::selection::{Drain, Offer, Outcome, Selection, Verb, Wording};
 use super::{fetch, free_up, routes};
-use crate::kit::civil;
+use crate::kit::{civil, menu};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, photos as words, photos_home as sentences};
 
@@ -227,6 +227,17 @@ impl Home {
 
     // --------------------------------------------------------------- events --
 
+    /// THE FILTER NARROWS THE READ, NOT THE DRAWING: filtering the pages already
+    /// loaded would show "No favorites yet" over a library whose favourites simply
+    /// had not been paged in.
+    fn set_filter(&mut self, filter: Filter, ctx: &Ctx) {
+        if filter != Filter::Unspecified && filter != self.filter {
+            self.filter = filter;
+            self.place_day.clear();
+            self.library.first(ctx, filter);
+        }
+    }
+
     fn on_event(&mut self, event: H, ctx: &Ctx) -> Vec<wire::Effect> {
         let locale = ctx.locale();
         match event {
@@ -251,8 +262,14 @@ impl Home {
                 let picked = self.selection.picked().to_vec();
                 match self.choice.update(&event, &picked, ctx) {
                     ChoiceOutcome::Moved => {}
-                    ChoiceOutcome::Added { written, .. } => {
+                    ChoiceOutcome::Added { album_id, written } => {
                         self.selection.settle(&written, Verb::AddToAlbum);
+                        self.selection.acknowledge(
+                            ctx.locale(),
+                            Verb::AddToAlbum,
+                            &written,
+                            self.choice.title_of(&album_id),
+                        );
                         self.read_library(ctx);
                     }
                     ChoiceOutcome::Created { refusal } => self.selection.refuse(refusal),
@@ -274,17 +291,12 @@ impl Home {
                     self.library.more(ctx, self.filter);
                 }
             }
-            H::Filter(filter) => {
-                let filter = Filter::try_from(filter).unwrap_or(Filter::Unspecified);
-                if filter != Filter::Unspecified && filter != self.filter {
-                    // THE FILTER NARROWS THE READ, NOT THE DRAWING: filtering the
-                    // pages already loaded would show "No favorites yet" over a
-                    // library whose favourites simply had not been paged in.
-                    self.filter = filter;
-                    self.place_day.clear();
-                    self.library.first(ctx, filter);
+            H::FilterMenuPicked(picked) => {
+                if let Some(filter) = chrome::filter_of(menu::Pick::of(&picked)) {
+                    self.set_filter(filter, ctx);
                 }
             }
+            H::FilterMenuCleared(_) => self.set_filter(Filter::All, ctx),
             H::Grain(changed) => {
                 let grain = Grain::try_from(changed.grain).unwrap_or(Grain::Unspecified);
                 if grain != Grain::Unspecified {
@@ -754,7 +766,18 @@ impl Home {
     /// under the Favorites filter, where every photograph on screen already is one.
     fn selection_view(&self, locale: Locale) -> wire::PhotosSelection {
         let mut bar = self.selection.view(locale);
-        let favorites = self.filter == Filter::Favorites;
+        // "Unfavorite" when every photograph picked already is one, else "Favorite".
+        let picked = self.selection.picked();
+        let favorites = self.filter == Filter::Favorites
+            || (!picked.is_empty()
+                && picked.iter().all(|id| {
+                    self.library
+                        .cells
+                        .iter()
+                        .chain(self.search.cells())
+                        .find(|cell| cell.photo_id == *id)
+                        .is_some_and(|cell| cell.favorite)
+                }));
         bar.actions
             .retain(|action| match Verb::try_from(action.kind) {
                 Ok(Verb::Favorite) => !favorites,
@@ -769,13 +792,7 @@ impl Home {
     }
 
     fn more_sheet(&self, locale: Locale) -> wire::PhotosMoreSheet {
-        let mut rows = vec![wire::PhotosMoreRow {
-            key: chrome::MORE_CAMERA_ROLL.to_owned(),
-            label: words::photos_camera_roll(locale),
-            meta: String::new(),
-            icon_key: "Archive".to_owned(),
-            route: None,
-        }];
+        let mut rows = Vec::new();
         if chrome::tile_size_offered(self.destination, self.grain) {
             rows.push(wire::PhotosMoreRow {
                 key: chrome::MORE_TILE_SIZE.to_owned(),
@@ -880,19 +897,23 @@ impl Screen for Home {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
         let library = chrome::is_library(self.destination);
-        let more_up = matches!(
-            self.sheet,
-            Sheet::More | Sheet::TileSize | Sheet::BackupDetail
-        );
+        let more_up = matches!(self.sheet, Sheet::More | Sheet::TileSize);
         let status = self.status.clone().or_else(|| self.selection.status());
         let mut state = wire::PhotosHomeState {
             destination: self.destination as i32,
             band: chrome::band(locale, self.destination, more_up),
-            chips: chrome::chips(
+            filter_menu: chrome::filter_menu(
                 locale,
                 self.destination,
                 self.selection.selecting(),
                 self.filter,
+            ),
+            grain_segments: chrome::grain_segments(
+                locale,
+                self.destination,
+                self.selection.selecting(),
+                self.library.loaded() && !self.library.cells.is_empty(),
+                self.grain,
             ),
             chrome: Some(chrome::words_of(locale)),
             sheet: self.sheet as i32,
@@ -916,7 +937,6 @@ impl Screen for Home {
         match self.sheet {
             Sheet::More => state.more = Some(self.more_sheet(locale)),
             Sheet::TileSize => state.tile_size = Some(chrome::tile_sizes(locale, self.rung)),
-            Sheet::BackupDetail => state.backup_detail = Some(self.roll.detail(locale)),
             Sheet::CopyPlace => {
                 state.copy_place = Some(wire::PhotosCopyPlaceSheet {
                     title: sentences::library_copy_place_title(locale),

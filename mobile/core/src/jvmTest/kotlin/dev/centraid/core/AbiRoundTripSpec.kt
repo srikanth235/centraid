@@ -30,14 +30,15 @@ import kotlin.time.TimeSource
  * FAILS and names the command, because a binding test that skipped would read
  * green on a machine where the ABI does not work at all.
  *
- * It also measures. The numbers are `ci-linux-x64-4c` numbers and a **floor**,
- * not a device answer — `contracts/ledgers/gate-budgets.json#mobile-jvm` is
- * seeded from them at three times the measured p95, and the device half is an
- * owner hand-off (`mobile/README.md`).
+ * It also measures, and only reports: the latencies are printed and written to
+ * `mobile-jvm-abi.json` as information, and nothing here asserts on a wall
+ * clock (owner ruling 2026-11-04: timing checks flake on a loaded machine). The
+ * numbers are a **floor**, not a device answer; the device half is an owner
+ * hand-off (`mobile/README.md`).
  *
  * The reads are the ones a screen makes, and the write is the one way a
- * screen writes (`act`), so the budget is over the product's calls and not
- * over synthetic ones.
+ * screen writes (`act`), so the measurement is over the product's calls and
+ * not over synthetic ones.
  */
 class AbiRoundTripSpec : StringSpec({
 
@@ -291,7 +292,7 @@ class AbiRoundTripSpec : StringSpec({
         }
     }
 
-    "the five calls' latencies, and the call budget for the two screens' reads" {
+    "the five calls' latencies, reported for the two screens' reads" {
         val core = openRealCore()
         try {
             val report = StringBuilder("{\"marker\":\"mobile-jvm-abi\",\"reads\":{")
@@ -311,13 +312,8 @@ class AbiRoundTripSpec : StringSpec({
                 val p95 = samples[(SAMPLES * 95) / 100]
                 if (index > 0) report.append(',')
                 report.append("\"$screen\":{\"p50Us\":$p50,\"p95Us\":$p95}")
-                // THE BUDGET IS A CEILING AND NOT A MEASUREMENT. It exists so a
-                // request that got an order of magnitude slower reds the gate;
-                // the number that goes in the ledger is three times the
-                // measured p95, which lane G writes with `measure --write`.
-                p95 shouldBeLessThan CALL_CEILING_US
             }
-            report.append("},\"samplesPerRead\":$SAMPLES,\"ceilingUs\":$CALL_CEILING_US}")
+            report.append("},\"samplesPerRead\":$SAMPLES}")
             println(report)
             File(System.getProperty("centraid.core.fixtureDir"), "mobile-jvm-abi.json")
                 .writeText(report.toString())
@@ -363,14 +359,6 @@ class AbiRoundTripSpec : StringSpec({
 
         private const val SAMPLES = 200
         private const val WARMUP = 50
-
-        /**
-         * 50 ms, the same ceiling `crates/xtask`'s `call-budget` step holds the
-         * Rust side to. A JVM binding that needed a looser one would be a
-         * binding the product could not ship, so the ceiling is shared rather
-         * than relaxed per language.
-         */
-        private const val CALL_CEILING_US = 50_000L
 
         /**
          * How long one `next_event` waits. Short, because the drain below runs

@@ -18,7 +18,7 @@
 
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use centraid_assist::host::ModelLoader;
 use centraid_assist::model::{Cancel, Control, Finish, GenerateRequest, Model};
@@ -168,7 +168,6 @@ fn cancel_and_stop_end_a_generation_as_ok_and_stop_strings_are_not_in_the_text()
     // Set before the call: nothing is read, nothing is said.
     let already = Cancel::new();
     already.cancel();
-    let started = Instant::now();
     let generation = model
         .generate(
             &request(prompt, None, 64, &[END_OF_TURN], &already),
@@ -177,7 +176,6 @@ fn cancel_and_stop_end_a_generation_as_ok_and_stop_strings_are_not_in_the_text()
         .expect("a cancelled generation is Ok");
     assert_eq!(generation.finish, Finish::Cancelled);
     assert!(generation.text.is_empty());
-    assert!(started.elapsed() < Duration::from_secs(1));
 
     // From another thread, mid-stream.
     let cancel = Cancel::new();

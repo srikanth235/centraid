@@ -12,7 +12,10 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import centraid.core.v1.PhotosDestination
-import centraid.core.v1.PhotosFilter
+import centraid.core.v1.FilterMenuCleared
+import centraid.core.v1.FilterMenuPicked
+import centraid.core.v1.PhotosGrain
+import centraid.core.v1.PhotosGrainChanged
 import centraid.core.v1.PhotosHomeChrome
 import centraid.core.v1.PhotosHomeEvent
 import centraid.core.v1.PhotosHomeState
@@ -24,13 +27,15 @@ import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.RoomAction
-import dev.centraid.android.kit.RoomChip
+import dev.centraid.android.kit.BandSegment
+import dev.centraid.android.kit.RoomFilter
 import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.screens.PhotosCollectionsScreen
 import dev.centraid.android.screens.PhotosLibraryBody
 import dev.centraid.android.screens.PhotosSearchScreen
 import dev.centraid.android.screens.PhotosSelectionBar
 import dev.centraid.android.screens.PhotosSheets
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 
 /**
@@ -38,12 +43,14 @@ import androidx.compose.runtime.remember
  * state Rust sends for `photos.home`.
  *
  * THE ROOT'S CHROME IS RUST'S (R-CHROME-1…5): the band's places then More, the
- * filter chips, and every word around them ride [PhotosHomeState], so this only
+ * filter menu, and every word around them ride [PhotosHomeState], so this only
  * draws them. "Photos" has ONE trailing action — Select on the library (the app
- * with nothing to create), New album on Collections — the search bar, the
- * library's filter chips, the body, and the band at the foot. A selection takes
- * the band's place (Apple Photos; v0's room), so a tap aimed at Trash cannot land
- * on a destination.
+ * with nothing to create), New album on Collections — beside the filter button's menu,
+ * the body, and the band at the foot, the one floating bar, which carries the library's zoom
+ * (Years · Months · All) as a segmented control, which the photographs run under and
+ * whose trailing key is search. A
+ * selection takes the band's place (Apple Photos; v0's room), so a tap aimed at
+ * Trash cannot land on a destination.
  *
  * Every tap is a [PhotosHomeEvent]; a row that opens a page carries the [Route]
  * Rust built, handed to [onOpen].
@@ -61,6 +68,9 @@ internal fun PhotosHomeScreen(
     val collections = state.destination == PhotosDestination.PHOTOS_DESTINATION_COLLECTIONS
     val selecting = !collections && !searching && selection.selecting
     val hasTiles = state.library?.data_?.tiles.orEmpty().isNotEmpty()
+    // WHERE THE MEMBER IS STANDING, reported by whichever grain the library draws, so a switch of
+    // zoom — a chip in the room's row, out here — can land on the same stretch of time.
+    val visibleDay = remember { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
     // A SCROLL THROUGH THE HITS PUTS THE KEYBOARD AWAY, as the system's search
     // does: the member has stopped typing and started looking.
@@ -73,6 +83,28 @@ internal fun PhotosHomeScreen(
         }
     }
     val search = state.search
+    // THE ZOOM, IN THE BAND: Years · Months · All as a segmented control. Whether it is there, its
+    // words and which segment is lit are Rust's; a pick carries the day the member is standing on.
+    val grainName = { grain: PhotosGrain ->
+        when (grain) {
+            PhotosGrain.PHOTOS_GRAIN_YEARS -> "years"
+            PhotosGrain.PHOTOS_GRAIN_MONTHS -> "months"
+            else -> "all"
+        }
+    }
+    val grainSegments = state.grain_segments.map { segment ->
+        BandSegment(id = "photos-grain-" + grainName(segment.grain), label = segment.label, selected = segment.selected)
+    }
+    // THE HEADER'S FILTER BUTTON (R-CHROME-3): All photos · Favorites, Rust's menu.
+    val filter = state.filter_menu?.let { menu ->
+        RoomFilter(
+            menu = menu,
+            onPick = { section, option ->
+                onEvent(PhotosHomeEvent(filter_menu_picked = FilterMenuPicked(section_key = section, option_key = option)))
+            },
+            onClear = { onEvent(PhotosHomeEvent(filter_menu_cleared = FilterMenuCleared())) },
+        )
+    }
     Box(Modifier.fillMaxSize().testTag("photos-home")) {
         AppPlace(
             app = "photos",
@@ -90,10 +122,10 @@ internal fun PhotosHomeScreen(
                 }
                 else -> null
             },
-            // SEARCH IS THE FIELD UNDER THE TITLE (R-CHROME-2): the bar's press moves
-            // Photos to Search, whose body is the hits, and the field opens where the
-            // bar stood; closing clears the query and returns to the library. Not while
-            // selecting — the header is the selection's then.
+            // SEARCH IS THE BAND'S TRAILING KEY (R-CHROME-2): its press moves Photos to
+            // Search, whose body is the hits, and the field opens at the foot where the
+            // band stood; closing clears the query and returns to the library. While
+            // selecting, the selection bar stands in the band's place and carries no key.
             search = if (selecting) {
                 null
             } else {
@@ -102,6 +134,7 @@ internal fun PhotosHomeScreen(
                         open_ = searching,
                         term = search?.query.orEmpty(),
                         corrected = search?.corrected.orEmpty(),
+                        corrected_label = search?.corrected.orEmpty(),
                     ),
                     placeholder = chrome.search_placeholder,
                     onTerm = { query -> onEvent(PhotosHomeEvent(search_term = query)) },
@@ -111,15 +144,8 @@ internal fun PhotosHomeScreen(
                     onOpen = { onEvent(PhotosHomeEvent(search_opened = centraid.core.v1.PhotosSearchOpened())) },
                 )
             },
-            chips = state.chips.map { chip ->
-                RoomChip(
-                    testTag = "photos-filter-" +
-                        if (chip.filter == PhotosFilter.PHOTOS_FILTER_FAVORITES) "favorites" else "all",
-                    label = chip.label,
-                    selected = chip.selected,
-                    onPress = { onEvent(PhotosHomeEvent(filter = chip.filter)) },
-                )
-            },
+            filter = filter,
+            contentUnderBand = true,
             status = state.status?.sentence.orEmpty(),
             band = {
                 if (selecting) {
@@ -136,6 +162,14 @@ internal fun PhotosHomeScreen(
                         },
                         onSelect = { key -> onEvent(PhotosHomeEvent(band = key)) },
                         onHome = onHome,
+                        segments = grainSegments,
+                        onSegment = { id ->
+                            state.grain_segments.firstOrNull { "photos-grain-" + grainName(it.grain) == id }?.let { segment ->
+                                onEvent(
+                                    PhotosHomeEvent(grain = PhotosGrainChanged(grain = segment.grain, at_day = visibleDay.value)),
+                                )
+                            }
+                        },
                     )
                 }
             },
@@ -148,7 +182,7 @@ internal fun PhotosHomeScreen(
                     PhotosSearchScreen(searchState, onEvent, onOpen)
                 }
                 collectionsState != null -> PhotosCollectionsScreen(state, collectionsState, onEvent, onOpen)
-                library != null -> PhotosLibraryBody(state, library, onEvent, onOpen)
+                library != null -> PhotosLibraryBody(state, library, onEvent, onOpen, visibleDay)
                 else -> Box(Modifier.fillMaxWidth())
             }
         }

@@ -1,5 +1,6 @@
 package dev.centraid.android.screens.photos
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
@@ -15,6 +16,7 @@ import dev.centraid.core.CentraidCore
 import dev.centraid.android.session.Stage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import dev.centraid.android.screens.copyLibraryOriginal
 import java.io.File
 import java.util.UUID
 import kotlin.math.floor
@@ -47,9 +49,13 @@ internal object PhotosEditRender {
     }
 
     /** Render [effect] and stage the result; a failure is `EffectFailed`, never silence. */
-    suspend fun perform(cacheDir: File, core: CentraidCore, effect: RenderEdit): EffectResult =
+    suspend fun perform(context: Context, core: CentraidCore, effect: RenderEdit): EffectResult =
         withContext(Dispatchers.Default) {
-            val made = render(cacheDir, effect) ?: return@withContext failed("the edit could not be drawn")
+            val cacheDir = context.cacheDir
+            // An original the photo library holds is copied out for the render.
+            val copied = if (effect.source_path.isEmpty() && effect.os_ref.isNotEmpty()) copyLibraryOriginal(context, effect.os_ref) else null
+            val source = if (copied != null) effect.copy(source_path = copied) else effect
+            val made = render(cacheDir, source) ?: return@withContext failed("the edit could not be drawn")
             try {
                 val size = made.file.length()
                 val staged = made.file.inputStream().use { source ->
@@ -69,6 +75,7 @@ internal object PhotosEditRender {
                 }
             } finally {
                 made.file.delete()
+                copied?.let { File(it).delete() }
             }
         }
 

@@ -22,9 +22,8 @@
 //!    boundary in wave 2.
 //! 3. **One mutex, every call serialised.** Adopted for wave 2.
 //!
-//! What option 3 costs is measurable and bounded: `call` is p95-budgeted on a
-//! *single* bounded read (`tests/call_budget.rs`), which serialisation does not
-//! change, and a phone's shell makes one call per screen. What it does not cost
+//! What option 3 costs is bounded: a bounded read is one page, which
+//! serialisation does not change, and a phone's shell makes one call per screen. What it does not cost
 //! is correctness — a serialised read is a correct read. The FFI's "two
 //! concurrent calls never block on the FFI itself" clause is still honestly
 //! met, because the FFI takes no lock of its own; the lock is the vault's, and
@@ -465,7 +464,7 @@ const TIDY_PAUSE: Duration = Duration::from_millis(5);
 
 /// How long the vault must have gone unused before the launch tidy takes it for
 /// a batch: a first screen's reads are back to back, and a tidy that ran between
-/// them cost the search budget its p95 (#1146).
+/// them cost a search its latency (#1146).
 const TIDY_IDLE: Duration = Duration::from_millis(300);
 
 /// Which launch pass a batch belongs to.

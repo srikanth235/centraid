@@ -198,6 +198,82 @@ message ListRow {
   StatusChip.Tone trailing_tone = 10;
 }
 
+// THE ONE FILTER AND SORT MENU (DESIGN.md, "AppPlace"): the header's filter
+// button opens this, in every app that filters or sorts, in place of the chip
+// row that stood under the header. Rust makes the whole menu: every section,
+// option, count and checkmark, the words, and whether anything is narrowing the
+// list now. The shell draws it with its platform's menu (SwiftUI `Menu`,
+// Material 3 `DropdownMenu`) and sends the pick back as `FilterMenuPicked`, or
+// `FilterMenuCleared` for the clear row; it keeps no state of its own.
+message FilterMenu {
+  repeated MenuSection sections = 1;
+  // A filter is narrowing the list now: the button is drawn lit (the selected
+  // ground, never an accent) and the menu opens with `clear_label` on top. A
+  // sort is not a filter, so a changed order never sets this.
+  bool filtering = 2;
+  // "Clear filters": drawn first while `filtering`, and only then.
+  string clear_label = 3;
+  // What a screen reader says for the button: "Filter and sort", and what is on.
+  string spoken = 4;
+}
+
+// A titled group of options. `key` is the section's id in the selectors
+// (`<app>-filter-<key>-<option>`) and in `FilterMenuPicked`.
+message MenuSection {
+  string key = 1;
+  string title = 2;
+  Kind kind = 3;
+  repeated MenuOption options = 4;
+  // Drawn as a menu of its own, labelled `title` with `summary` beside it and
+  // a chevron, that the member opens from the menu (two levels deep, never
+  // more); otherwise the options stand in the menu under `title` as a header.
+  bool nested = 5;
+  // The nested menu's current value in a word ("Any type", "PDF"). Unused by a
+  // section that is not nested.
+  string summary = 6;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    // Exactly one option is selected; a pick moves the check.
+    KIND_SINGLE = 1;
+    // Any number are selected; a pick toggles the option and the menu stays open.
+    KIND_MULTI = 2;
+  }
+}
+
+message MenuOption {
+  string key = 1;
+  string label = 2;
+  // How many rows the option holds, drawn beside the label; 0 draws none.
+  uint32 count = 3;
+  bool selected = 4;
+}
+
+// A pick: the section's `key` and the option's `key`, as Rust made them.
+message FilterMenuPicked {
+  string section_key = 1;
+  string option_key = 2;
+}
+
+// The menu's "Clear filters" row.
+message FilterMenuCleared {}
+
+// A TITLE'S SECOND LINE in the header, under the app's name: the scope the page
+// is in ("Work" for a notebook, "March 2026" for Money's month). `clearable`
+// draws a close key after the words that sends the app's own clear event; a
+// tap on the words themselves is the app's own event too (Money opens its
+// month sheet), and an app with none draws them as plain text.
+message HeaderSubtitle {
+  string label = 1;
+  // What a screen reader says for the words ("Notebook Work").
+  string spoken = 2;
+  bool clearable = 3;
+  // What a screen reader says for the close key ("Show every note").
+  string clear_spoken = 4;
+  // The words open something (Money's month sheet).
+  bool tappable = 5;
+}
+
 // THE ONE STATUS LINE (DESIGN.md: no toast). One clause, at most one verb.
 // A screen carries it where it says what a write did — "Task done" with
 // Undo — and `action_label` empty is a line with no verb. What the verb does

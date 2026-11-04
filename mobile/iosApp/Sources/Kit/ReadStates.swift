@@ -243,6 +243,9 @@ struct SearchAskRow: View {
     /// A view whose state carries the Ask's finished route (Home's search) pushes it itself and
     /// needs no door; every other search hands the row to the shell's.
     var handoff: (() -> Void)? = nil
+    /// False inside a column that already stands on the page margin, so the row's words
+    /// start where the column's do.
+    var inset: Bool = true
 
     @Environment(\.askChat) private var askChat
     @Environment(\.colorScheme) private var scheme
@@ -256,7 +259,7 @@ struct SearchAskRow: View {
                 Text(ask.label)
                     .centraidType("smallStrong")
                     .foregroundStyle(Theme.color("link", scheme))
-                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.horizontal, inset ? CentraidGeometry.pageMargin : 0)
                     .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
                     .contentShape(Rectangle())
             }

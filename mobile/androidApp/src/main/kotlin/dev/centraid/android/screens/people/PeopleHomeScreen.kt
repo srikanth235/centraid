@@ -28,6 +28,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.unit.dp
+import centraid.core.v1.FilterMenuCleared
+import centraid.core.v1.FilterMenuPicked
 import centraid.core.v1.PeopleAvatar
 import centraid.core.v1.PeopleHomeEvent
 import centraid.core.v1.PeopleHomeState
@@ -46,15 +48,13 @@ import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
-import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
-import dev.centraid.android.kit.RoomChip
+import dev.centraid.android.kit.RoomFilter
 import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
-import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.hueColor
@@ -64,10 +64,10 @@ import dev.centraid.android.theme.centraidType
 
 /**
  * `people.home` (#1135): People (the roster) and Touch (the rails) under one band
- * — Add person top right, the search bar, ONE chip row (the roster's chips, the
- * sort last), More (Trash) an ordinary band tab.
+ * — Add person top right beside the filter button (the roster's filters with their
+ * counts, then the order), More (Trash) an ordinary band tab.
  *
- * THE VIEW DECIDES NOTHING. Every word, chip, count and empty sentence is on
+ * THE VIEW DECIDES NOTHING. Every word, filter, count and empty sentence is on
  * [PeopleHomeState], which Rust makes, and every tap is a [PeopleHomeEvent]; a
  * row that opens a page carries its [Route] and a tap hands it to [onOpen].
  */
@@ -96,7 +96,7 @@ public fun PeopleHomeScreen(
         },
         search = if (search != null && !denied) {
             RoomSearch(
-                field = SearchField(open_ = search.open_, term = search.term, corrected = search.corrected),
+                field = SearchField(open_ = search.open_, term = search.term, corrected = search.corrected, corrected_label = search.corrected),
                 placeholder = chrome?.search_placeholder.orEmpty(),
                 label = chrome?.search_label.orEmpty(),
                 closeLabel = chrome?.search_close.orEmpty(),
@@ -107,22 +107,17 @@ public fun PeopleHomeScreen(
         } else {
             null
         },
-        // ONE CHIP ROW: the filters, then the sort chip, last.
-        chips = state.chips.map { chip ->
-            RoomChip(
-                testTag = "people-chip-${chip.key.name}",
-                label = chip.label,
-                count = if (chip.count > 0) chip.count.toString() else "",
-                selected = chip.selected,
-                spoken = chip.accessibility_label,
-            ) { onEvent(PeopleHomeEvent(chip = PeopleHomeEvent.ChipPicked(chip.key))) }
-        } + listOfNotNull(
-            state.sort_chip?.let { sort ->
-                RoomChip(testTag = "people-chip-sort", label = sort.label, chevron = true, spoken = sort.spoken) {
-                    onEvent(PeopleHomeEvent(sheet_opened = PeopleHomeEvent.SheetOpened(PeopleHomeState.Sheet.SHEET_ORDER)))
-                }
-            },
-        ),
+        // THE HEADER'S FILTER BUTTON (R-CHROME-3): Rust's menu, the roster's filters with their
+        // counts and then its order.
+        filter = state.filter_menu?.let { menu ->
+            RoomFilter(
+                menu = menu,
+                onPick = { section, option ->
+                    onEvent(PeopleHomeEvent(filter_menu_picked = FilterMenuPicked(section_key = section, option_key = option)))
+                },
+                onClear = { onEvent(PeopleHomeEvent(filter_menu_cleared = FilterMenuCleared())) },
+            )
+        },
         status = status,
         // More is an ordinary tab, last, as Rust lists it (R-CHROME-4).
         band = if (state.band.isEmpty()) {
@@ -183,19 +178,6 @@ public fun PeopleHomeScreen(
                 )
             }
         }
-    }
-    // THE SORT CHIP'S SHEET: the orders, the current one marked.
-    if (state.sheet == PeopleHomeState.Sheet.SHEET_ORDER && chrome != null) {
-        OptionSheet(
-            title = chrome.sort_heading,
-            options = state.order_choices.map { SheetOption(key = it.order.name, label = it.label, selected = it.selected) },
-            onPick = { key ->
-                state.order_choices.firstOrNull { it.order.name == key }?.let {
-                    onEvent(PeopleHomeEvent(order = PeopleHomeEvent.OrderPicked(it.order)))
-                }
-            },
-            onDismiss = dismiss,
-        )
     }
 }
 

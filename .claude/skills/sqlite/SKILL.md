@@ -22,7 +22,7 @@ Start with the repository checks that match the change:
 
 - Schema or model change: run `cargo test -p centraid-vault`; regenerate the artifacts with the commands in [`vault-change`](../vault-change/SKILL.md).
 - Gateway schema or SQL change: run `cargo test -p centraid-gateway`.
-- Read path or index change: inspect the query plan and run the relevant app/core query-plan or budget check; use the `pr` gate when the schema, index, or query behavior changes.
+- Read path or index change: inspect the query plan and run the relevant app/core query-plan check; use the `pr` gate when the schema, index, or query behavior changes.
 - For any change, run the matching `cargo xtask gate --profile <local|pr|nightly|release|mobile-jvm>` and `bun run check` as applicable. The `mobile-jvm` profile runs in Linux CI with Cargo, Bun, and JDK 21; no Android SDK is required.
 
 Profile queries only when the change targets performance or measurements show a regression. Seed data at realistic volume, inspect `EXPLAIN QUERY PLAN`, and compare before and after. See [`diagnostics.md`](references/diagnostics.md) for the performance loop, repo tools, and error table; see [`query-performance.md`](references/query-performance.md) for deeper plan interpretation and index design.

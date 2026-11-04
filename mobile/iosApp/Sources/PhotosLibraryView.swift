@@ -2,7 +2,9 @@ import SwiftUI
 import UIKit
 
 // THE LIBRARY'S DRAWING, IN SWIFTUI (#1029, photos port — v0's `PhotoTimeline.tsx`,
-// `PhotoGrainView.tsx`, `ScrubRail.tsx`, `TimelineGrainControl.tsx`; #1135).
+// `PhotoGrainView.tsx`, `ScrubRail.tsx`; #1135). The zoom, Years · Months · All, is no control of its
+// own: Rust sends it as chips (`PhotosHomeState.grain_chips`) and `PhotosHomeView` draws them in the
+// room's one chip row.
 //
 // What is drawn here is arithmetic over a position only the shell knows: where
 // a header sits, which tile is under a finger. WHICH ROWS THE PHOTOGRAPHS PACK
@@ -74,6 +76,12 @@ struct PhotosLibraryBody: View {
 
     private var selection: Centraid_Core_V1_PhotosSelection { state.selection }
 
+    /// Whether the scrub rail stands on the trailing edge.
+    private var railShown: Bool {
+        guard library.grain == .all, !selection.selecting, let data else { return false }
+        return data.rows.count >= LibraryMetrics.railMinimumRows
+    }
+
     private var data: Centraid_Core_V1_PhotosLibraryData? {
         if case let .data(data)? = library.content { return data }
         return nil
@@ -92,6 +100,12 @@ struct PhotosLibraryBody: View {
             .scrollTargetLayout()
         }
         .scrollPosition(id: $scrolledID, anchor: .top)
+        // ONE INDICATOR: the rail is the list's scroll bar where it stands, and the system's
+        // would draw a second beside it. THE FOOT CLEARS THE ONE BAND: the photographs run under
+        // its glass, `AppPlace`'s inset holds the last row above it, and this is the breathing
+        // room beyond that — the same 24 Collections, Search and a shelf leave.
+        .scrollIndicators(railShown ? .hidden : .automatic)
+        .contentMargins(.bottom, 24, for: .scrollContent)
         // RUST PACKS THE ROWS: it is told the width this grid is drawn at, and the
         // height of what can be seen.
         .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
@@ -100,7 +114,7 @@ struct PhotosLibraryBody: View {
             send(PhotosHomeEvents.make { $0.viewport = .with { $0.width = Double(size.width); $0.height = Double(size.height) } })
         }
         .overlay(alignment: .topTrailing) {
-            if library.grain == .all, !selection.selecting, let data, data.rows.count >= LibraryMetrics.railMinimumRows {
+            if railShown, let data {
                 LibraryScrubRail(rows: data.rows, data: data, position: $scrolledID)
             }
         }
@@ -240,7 +254,9 @@ struct LibraryTimelineRows: View {
     }
 
     var body: some View {
-        ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
+        // A MONTH WITH NOTHING UNDER IT DRAWS NO HEADER: a pinned header over an empty section
+        // is a title with no photographs, stuck above the next month's.
+        ForEach(Array(sections.filter { $0.month == nil || !$0.rows.isEmpty }.enumerated()), id: \.offset) { _, section in
             Section {
                 ForEach(section.rows, id: \.id) { row in
                     rowView(row)
@@ -248,7 +264,7 @@ struct LibraryTimelineRows: View {
             } header: {
                 if let month = section.month {
                     Text(month.title)
-                        .centraidType("eyebrow")
+                        .centraidType("title")
                         .foregroundStyle(Theme.color("text", scheme))
                         .lineLimit(1)
                         .padding(.top, 12)
@@ -426,7 +442,7 @@ struct LibraryGrainCards: View {
             ForEach(items, id: \.key) { item in
                 if !item.header.isEmpty {
                     Text(item.header)
-                        .centraidType("eyebrow")
+                        .centraidType("title")
                         .foregroundStyle(Theme.color("text", scheme))
                         .padding(.horizontal, CentraidGeometry.pageMargin)
                         .padding(.bottom, 6)
@@ -440,11 +456,12 @@ struct LibraryGrainCards: View {
                 } else {
                     HStack(alignment: .top, spacing: LibraryMetrics.cardGutter) {
                         ForEach(item.periods, id: \.key) { period in
-                            card(period, coverHeight: cardWidth, overlaid: false).frame(width: cardWidth)
+                            // A LONE MONTH TAKES THE ROW: it is no taller than its neighbours
+                            // would be, so it reads as a month on its own line and not as a
+                            // half page with a hole beside it.
+                            card(period, coverHeight: cardWidth, overlaid: false)
+                                .frame(maxWidth: item.periods.count == 1 ? .infinity : cardWidth)
                         }
-                        // AN ODD MONTH LEAVES ITS COLUMN EMPTY — a wider card would
-                        // read as a bigger month.
-                        if item.periods.count == 1 { Spacer().frame(width: cardWidth) }
                     }
                     .padding(.horizontal, CentraidGeometry.pageMargin)
                     .id(item.key)
@@ -632,7 +649,8 @@ struct LibraryScrubRail: View {
 
     private var thumb: some View {
         // THE THUMB: a hairline-bordered pill on the elevated ground, the band's
-        // grammar at a rail's size. Never glass over a photograph.
+        // plate at a rail's size — and solid, not the band's glass: it carries no label to keep
+        // legible, and a 6pt sliver of blur over a photograph is only a smudge.
         Capsule()
             .fill(Theme.color("bgElev", scheme))
             .overlay(Capsule().strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline))
@@ -657,33 +675,10 @@ struct LibraryScrubRail: View {
     }
 }
 
-/// THE GRAIN CONTROL (v0's `TimelineGrainControl.tsx`): Years · Months · All,
-/// PERMANENT while the library is the destination — never armed by a scroll,
-/// never on a timer. The band's grammar, which is the kit's `KitSegmented`.
-struct LibraryGrainControl: View {
-    let grain: Centraid_Core_V1_PhotosGrain
-    let chrome: Centraid_Core_V1_PhotosHomeChrome
-    let onGrain: (Centraid_Core_V1_PhotosGrain) -> Void
-
-    var body: some View {
-        KitSegmented(
-            options: [
-                (key: Centraid_Core_V1_PhotosGrain.years, label: chrome.grainYearsLabel),
-                (key: Centraid_Core_V1_PhotosGrain.months, label: chrome.grainMonthsLabel),
-                (key: Centraid_Core_V1_PhotosGrain.all, label: chrome.grainAllLabel),
-            ],
-            selected: grain == .unspecified ? .all : grain,
-            onSelect: onGrain
-        )
-        .frame(maxWidth: .infinity)
-        .padding(.top, BandMetrics.topGap)
-    }
-}
-
 /// THE SELECTION BAR, IN THE BAND'S PLACE (Apple Photos; v0's room took the band
 /// away under a selection so a tap aimed at Trash could not land on a
-/// destination). The band's grammar: one elevated plate on the pill rung with a
-/// hairline, a mark over a word per verb. With nothing picked every verb is drawn
+/// destination). The band's grammar: one plate on the pill rung — the band's
+/// glass (`BandGround`) — a mark over a word per verb. With nothing picked every verb is drawn
 /// DISABLED rather than hidden, so the bar does not move under the member's thumb
 /// as they pick. Which verbs, their words and whether each is enabled are Rust's
 /// (`PhotosSelection.actions`); "Send a copy" is the library's own and asks which
@@ -698,7 +693,7 @@ struct PhotosSelectionBar: View {
         let armed = !selection.selectedIds.isEmpty
         HStack(spacing: BandMetrics.groupGutter) {
             ForEach(Array(selection.actions.enumerated()), id: \.offset) { _, action in
-                verb(icon(action.kind), action.label, action.enabled) {
+                verb(action.iconKey, action.label, action.enabled) {
                     send(PhotosHomeEvents.selection { $0.action = .with { $0.kind = action.kind } })
                 }
                 // "SEND A COPY" SITS BESIDE THE HEART, as the bar always had it.
@@ -711,24 +706,12 @@ struct PhotosSelectionBar: View {
         }
         .padding(BandMetrics.platePad)
         .frame(maxWidth: .infinity)
-        .background(Theme.color("bgElev", scheme), in: Capsule())
-        .overlay(Capsule().strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline))
+        .bandGround(Capsule(), solid: "bgElev")
         .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, BandMetrics.inset)
         .padding(.top, BandMetrics.topGap)
         .padding(.bottom, BandMetrics.floorPadding)
         .accessibilityIdentifier("photos-selection-bar")
-    }
-
-    private func icon(_ kind: Centraid_Core_V1_PhotosBatchAction.Kind) -> String {
-        switch kind {
-        case .addToAlbum: return "FolderPlus"
-        case .favorite, .unfavorite: return "Heart"
-        case .trash, .deleteForever: return "Trash"
-        case .restore: return "Undo"
-        case .archive, .unarchive: return "Archive"
-        default: return "Check"
-        }
     }
 
     private func verb(_ icon: String, _ label: String, _ armed: Bool, run: @escaping () -> Void) -> some View {

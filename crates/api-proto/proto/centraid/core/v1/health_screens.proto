@@ -53,8 +53,8 @@ message HealthFact {
   string detail = 2;
 }
 
-// A filter chip (a workout kind) or a segment (a range): `active` is the one in
-// force.
+// A segment of a range (Trends' days, a metric's week · month · year): `active`
+// is the one in force.
 message HealthChip {
   string key = 1;
   string label = 2;
@@ -150,10 +150,10 @@ message HealthHomeState {
   // 9 was `trend_range`: nothing read it (#1152).
   reserved 9;
   reserved "trend_range";
-  // Workouts' kind filter: EMPTY is every kind.
-  string kind_concept_id = 10;
-  // The chip row (Workouts: All, then each kind with a workout); EMPTY elsewhere.
-  repeated HealthChip chips = 11;
+  // 10 was `kind_concept_id` (Workouts' kind filter) and 11 was `chips` (its chip
+  // row): the filter is `filter_menu`, and the menu carries which kind is checked.
+  reserved 10, 11;
+  reserved "kind_concept_id", "chips";
   // The segmented control (Trends: 30 days, 90 days, Year); EMPTY elsewhere.
   repeated HealthChip segments = 12;
   // More's rows, as the store and the connection make them.
@@ -165,6 +165,10 @@ message HealthHomeState {
   optional Confirm stop = 15;
   // A refusal's sentence, over the tab; the tab stays.
   optional StatusLine status = 16;
+  // The header's filter button: Workouts' kind, one single-choice section (All,
+  // then each kind with a workout). Unset on every other tab, while nothing is
+  // connected and while the read is denied.
+  optional FilterMenu filter_menu = 17;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -265,14 +269,19 @@ message HealthHomeEvent {
     Refreshed refreshed = 1;
     BandPicked band = 2;
     RangePicked range = 3;
-    KindPicked kind_picked = 4;
+    // 4 was `kind_picked`: a kind is now a pick in the filter menu.
     ShowMore show_more = 5;
     SheetClosed sheet_closed = 6;
     // `reads` and `stop` open their sheet; `choose` is a row's route.
     MorePicked more = 7;
     // The member confirmed the stop.
     StopConfirmed stop = 8;
+    // The header's filter menu: a pick, or its Clear row (every kind).
+    FilterMenuPicked filter_menu_picked = 9;
+    FilterMenuCleared filter_menu_cleared = 10;
   }
+  reserved 4;
+  reserved "kind_picked";
 
   message Refreshed {}
 
@@ -283,11 +292,6 @@ message HealthHomeEvent {
   // `days_30`, `days_90`, `year`.
   message RangePicked {
     string key = 1;
-  }
-
-  // EMPTY is every kind.
-  message KindPicked {
-    string kind_concept_id = 1;
   }
 
   message ShowMore {}

@@ -30,7 +30,7 @@ use wire::photos_selection_event::Kind as E;
 use crate::catalog::act;
 use crate::kit::act as kit_act;
 use crate::screen::Ctx;
-use crate::strings::{Locale, photos as words};
+use crate::strings::{Locale, fill, photos as words};
 
 /// A bar verb.
 pub use wire::photos_batch_action::Kind as Verb;
@@ -183,6 +183,8 @@ pub struct Selection {
     picked: Vec<String>,
     confirming: Option<Verb>,
     refusal: Option<String>,
+    /// What the last batch did, in a sentence, until the next attempt.
+    receipt: Option<String>,
 }
 
 impl Selection {
@@ -196,6 +198,7 @@ impl Selection {
             picked: Vec::new(),
             confirming: None,
             refusal: None,
+            receipt: None,
         }
     }
 
@@ -295,14 +298,34 @@ impl Selection {
         self.refusal.as_deref()
     }
 
-    /// The refusal as the kit's status line.
+    /// The refusal as the kit's status line, or else what the last batch did.
     #[must_use]
     pub fn status(&self) -> Option<wire::StatusLine> {
-        self.refusal.as_ref().map(|sentence| wire::StatusLine {
-            sentence: sentence.clone(),
-            action_label: String::new(),
-            refused: true,
-        })
+        self.refusal
+            .as_ref()
+            .map(|sentence| wire::StatusLine {
+                sentence: sentence.clone(),
+                action_label: String::new(),
+                refused: true,
+            })
+            .or_else(|| {
+                self.receipt.as_ref().map(|sentence| wire::StatusLine {
+                    sentence: sentence.clone(),
+                    action_label: String::new(),
+                    refused: false,
+                })
+            })
+    }
+
+    /// Say what a batch did. Only a batch that landed something has a receipt.
+    pub fn acknowledge(
+        &mut self,
+        locale: Locale,
+        verb: Verb,
+        written: &Written,
+        album: Option<&str>,
+    ) {
+        self.receipt = receipt(locale, verb, written.committed.len(), album);
     }
 
     /// Record a refusal from a write this selection did not run (the album
@@ -342,6 +365,9 @@ impl Selection {
         ordered: &[String],
         ctx: &Ctx,
     ) -> Outcome {
+        if !matches!(event.kind, Some(E::Action(_) | E::Confirmed(_))) {
+            self.receipt = None;
+        }
         match &event.kind {
             Some(E::Mode(mode)) => self.set_mode(mode.selecting),
             Some(E::Toggled(toggled)) => self.toggle(&toggled.photo_id),
@@ -378,6 +404,7 @@ impl Selection {
             return Outcome::Moved;
         }
         self.refusal = None;
+        self.receipt = None;
         match verb {
             // Destroying and trashing ask first, in full sentences.
             Verb::Trash | Verb::DeleteForever => {
@@ -451,6 +478,7 @@ impl Selection {
             Verb::RemoveFromAlbum | Verb::AddToAlbum | Verb::Unspecified => return Outcome::Moved,
         };
         self.settle(&written, verb);
+        self.acknowledge(ctx.locale(), verb, &written, None);
         Outcome::Wrote(written)
     }
 
@@ -468,6 +496,7 @@ impl Selection {
                 label: label(locale, kind),
                 enabled,
                 destructive: matches!(kind, Verb::Trash | Verb::DeleteForever),
+                icon_key: icon(kind).to_owned(),
             })
             .collect();
         let title = match (enabled, self.wording) {
@@ -485,6 +514,40 @@ impl Selection {
             confirm: self.confirming.map(|verb| confirm(locale, verb, count)),
         }
     }
+}
+
+/// A verb's mark. Favorite is a star on every screen of Photos.
+fn icon(verb: Verb) -> &'static str {
+    match verb {
+        Verb::Favorite | Verb::Unfavorite => "Star",
+        Verb::Archive | Verb::Unarchive => "Archive",
+        Verb::Trash | Verb::DeleteForever => "trash",
+        Verb::Restore => "restore",
+        Verb::AddToAlbum => "FolderPlus",
+        Verb::RemoveFromAlbum => "removeFrom",
+        Verb::Unspecified => "Check",
+    }
+}
+
+/// The sentence a batch is owed when it landed `count` photographs: a favourite,
+/// an archive or an album write is silent on the screen otherwise.
+#[must_use]
+pub fn receipt(locale: Locale, verb: Verb, count: usize, album: Option<&str>) -> Option<String> {
+    if count == 0 {
+        return None;
+    }
+    let n = count as u64;
+    Some(match verb {
+        Verb::Favorite => words::receipt_favorited_n(locale, n),
+        Verb::Unfavorite => words::receipt_unfavorited_n(locale, n),
+        Verb::Archive => words::receipt_archived_n(locale, n),
+        Verb::Unarchive => words::receipt_unarchived_n(locale, n),
+        Verb::AddToAlbum => fill(
+            &words::receipt_album_n(locale, n),
+            &[("album", album.unwrap_or_default())],
+        ),
+        _ => return None,
+    })
 }
 
 fn unarchive(id: &str) -> wire::ActRequest {

@@ -278,17 +278,23 @@ private fun Slip(
 /**
  * EVERY APP'S MARK AS ONE HOUSE: rooms in one place, not separate products. The
  * marks are Home's own roster ([apps], #1129), so an app that gets a tile is in
- * the house too; five to a row at 40dp is the same width the grid always took,
- * and fits the narrowest phone's slip.
+ * the house too; four to a row, each in an equal cell across the slip, so the
+ * roster fills the card evenly (eight marks make two full rows).
  */
 @Composable
 private fun HouseScene(apps: List<String>) {
-    Box(Modifier.fillMaxWidth().height(SCENE_HEIGHT.dp).padding(top = 18.dp), contentAlignment = Alignment.TopCenter) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            apps.chunked(5).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    row.forEach { appId -> AppMark(appId = appId, size = 40.dp) }
+    Column(
+        Modifier.fillMaxWidth().height(SCENE_HEIGHT.dp).padding(top = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        apps.chunked(4).forEach { row ->
+            Row(Modifier.fillMaxWidth()) {
+                row.forEach { appId ->
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        AppMark(appId = appId, size = 40.dp)
+                    }
                 }
+                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }

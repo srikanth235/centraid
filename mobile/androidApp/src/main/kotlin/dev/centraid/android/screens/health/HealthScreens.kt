@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import centraid.core.v1.FilterMenuCleared
+import centraid.core.v1.FilterMenuPicked
 import centraid.core.v1.HealthDestination
 import centraid.core.v1.HealthHomeEvent
 import centraid.core.v1.HealthHomeState
@@ -23,7 +25,7 @@ import dev.centraid.android.kit.KitSegmented
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.ReadStateView
-import dev.centraid.android.kit.RoomChip
+import dev.centraid.android.kit.RoomFilter
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.ShowMoreFooter
@@ -34,8 +36,8 @@ import dev.centraid.android.kit.screenContentOf
 // ---------------------------------------------------------------------------
 
 /**
- * HEALTH'S PLACE. The band's tab is the state's parameter; Workouts' kind chips sit in the room's
- * chip row and Trends' ranges in a segmented control at the top of its list. Before a store is
+ * HEALTH'S PLACE. The band's tab is the state's parameter; Workouts' kind is the header's filter
+ * menu and Trends' ranges in a segmented control at the top of its list. Before a store is
  * connected every tab draws Rust's one empty sentence, whose action is Connect (its [Route]).
  * A row that opens a page carries its route and a tap hands it to [onOpen].
  */
@@ -51,12 +53,14 @@ internal fun HealthHomeScreen(
         app = "health",
         title = chrome?.title.orEmpty(),
         meta = state.data_?.day_label.orEmpty(),
-        chips = state.chips.map { chip ->
-            RoomChip(
-                testTag = "health-chip-${chip.key.ifEmpty { "all" }}",
-                label = chip.label,
-                selected = chip.active,
-                onPress = { onEvent(HealthHomeEvent(kind_picked = HealthHomeEvent.KindPicked(kind_concept_id = chip.key))) },
+        // THE HEADER'S FILTER BUTTON: Workouts' kind, Rust's menu.
+        filter = state.filter_menu?.let { menu ->
+            RoomFilter(
+                menu = menu,
+                onPick = { section, option ->
+                    onEvent(HealthHomeEvent(filter_menu_picked = FilterMenuPicked(section_key = section, option_key = option)))
+                },
+                onClear = { onEvent(HealthHomeEvent(filter_menu_cleared = FilterMenuCleared())) },
             )
         },
         status = state.status?.sentence.orEmpty(),

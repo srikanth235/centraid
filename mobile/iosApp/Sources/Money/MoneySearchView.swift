@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// `money.search` — the search bar's page (R-CHROME-2; #1099).
+/// `money.search` — the search key's page (R-CHROME-2; #1099).
 ///
-/// Home's bar is a door and never a field: it pushes this page, whose field is
-/// open at once. The words, the count line and the resting sentence are Rust's;
+/// Home's key is a door and never a field: it pushes this page, whose field is
+/// open at once, at the foot. The words, the count line and the resting sentence are Rust's;
 /// a row carries the `Route` of its transaction, and the term is Rust's too.
 struct MoneySearchView: View {
     let state: Centraid_Core_V1_MoneySearchState
@@ -31,17 +31,6 @@ struct MoneySearchView: View {
             EmptyView()
         } content: {
             VStack(alignment: .leading, spacing: 0) {
-                CentraidSearchField(
-                    field: field(state),
-                    placeholder: state.placeholder,
-                    closeLabel: state.clearLabel_p.isEmpty ? KitWords.CLOSE_SEARCH : state.clearLabel_p,
-                    identifier: "money-search",
-                    onTerm: { term in send(event { $0.term = .with { $0.term = term } }) },
-                    onClose: { send(event { $0.cleared = .init() }) }
-                )
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .padding(.top, 4)
-                .padding(.bottom, 8)
                 if state.content == nil, state.hasResting {
                     let resting = state.resting
                     EmptyStateView(resting)
@@ -53,6 +42,20 @@ struct MoneySearchView: View {
                         results(search, state: state)
                     }
                 }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // THE FIELD IS AT THE FOOT, over the keyboard, like every app's search (R-CHROME-2).
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                BandSearchField(
+                    field: field(state),
+                    placeholder: state.placeholder,
+                    closeLabel: state.clearLabel_p.isEmpty ? KitWords.CLOSE_SEARCH : state.clearLabel_p,
+                    identifier: "money-search",
+                    keepsFocusOnClose: true,
+                    onTerm: { term in send(event { $0.term = .with { $0.term = term } }) },
+                    onClose: { send(event { $0.cleared = .init() }) }
+                )
+                .bandStrip()
             }
         }
     }

@@ -184,6 +184,7 @@ final class ShellModel: ObservableObject {
             if self?.preferredScheme != held { self?.preferredScheme = held }
         }
         store.onHomeAppeared = { [weak self] in self?.tellPhoneScheme() }
+        store.onClosed = { [weak self] instances in self?.rustClosed(instances) }
         store.onContactsLimited = { [weak self] in self?.contactAccessPickerShown = true }
         store.linkReading = { [weak self] in self?.links.reading ?? Centraid_Core_V1_LinkReading() }
         store.onAnnounce = { [weak self] topic in
@@ -231,6 +232,25 @@ final class ShellModel: ObservableObject {
         guard !path.isEmpty else { return }
         path.removeAll()
         screens?.popToRoot(tab: RustScreens.homeTab)
+    }
+
+    /// RUST CLOSED INSTANCES: the pages drawing them leave `path`. A closed instance has no view
+    /// state left to draw, so the entry would stay as bare paper over Home (the vault just made
+    /// closes its own page this way). Rust already dropped them, so it is not told `NavPopped`.
+    private func rustClosed(_ instances: [UInt64]) {
+        let gone = Set(instances)
+        let entries = path.compactMap { route -> RustEntry? in
+            if case let .rust(entry) = route, let instance = rustInstances[entry.token], gone.contains(instance) {
+                return entry
+            }
+            return nil
+        }
+        guard !entries.isEmpty else { return }
+        for entry in entries { rustInstances[entry.token] = nil }
+        path.removeAll { route in
+            if case let .rust(entry) = route { return entries.contains(entry) }
+            return false
+        }
     }
 
     /// A Rust entry left `path` (a back control, a swipe, Home): Rust drops its

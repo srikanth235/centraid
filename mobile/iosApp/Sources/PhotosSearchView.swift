@@ -7,7 +7,7 @@ import SwiftUI
 /// matched nothing must not read the same words.** The oneof is which one is
 /// showing, and every word in it is Rust's.
 ///
-/// **THE FIELD IS NOT HERE.** It is the room's search field, under the title where
+/// **THE FIELD IS NOT HERE.** It is the room's search field, at the foot where
 /// every app's search stands (R-CHROME-2). This view is only what the query found:
 /// the doors (places and albums the words name), the photographs, and the reason
 /// line.
@@ -62,7 +62,7 @@ struct PhotosSearchBody: View {
                     EmptyView()
                 }
                 // THE ASK ROW closes the answer, matched or not (#1135).
-                if search.hasAsk { SearchAskRow(ask: search.ask) }
+                if search.hasAsk { SearchAskRow(ask: search.ask, inset: false) }
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.vertical, 8)
@@ -71,6 +71,7 @@ struct PhotosSearchBody: View {
         // A SCROLL THROUGH THE HITS PUTS THE KEYBOARD AWAY, as the system's search
         // does: the member has stopped typing and started looking.
         .scrollDismissesKeyboard(.immediately)
+        .contentMargins(.bottom, 24, for: .scrollContent)
     }
 }
 

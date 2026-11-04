@@ -189,8 +189,6 @@ pub const REGISTER: &[Entry] = &[
         "AgendaHomeState.hidden_calendar_ids",
         gap("F", Missing::Both),
     ),
-    // The pinned-only filter
-    ("NotesHomeEvent.pinned_only", gap("F", Missing::Both)),
     // Range select
     (
         "PhotosSelectionEvent.SelectRange.from_photo_id",

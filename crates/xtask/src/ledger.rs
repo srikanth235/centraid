@@ -1,11 +1,15 @@
 //! The down-only ledgers under `contracts/ledgers/`.
 //!
-//! Three files, one rule: **every number may only fall.** `gate-budgets.json`
-//! holds the per-profile feedback-time budget the issue sets, `compile-time.json`
-//! the edit-run loop ("compile time is the new Hermes"), and
-//! `library-size.json` the per-ABI core size the prebuilt-core lane fills in
-//! wave 3. v0's ledgers live under `tests/` and retire with v0; these are v1's,
-//! seeded from wave 1 measurements.
+//! Two files, one rule: **every number may only fall.** `library-size.json` is
+//! the per-ABI core size the prebuilt-core lane fills in, and
+//! `query-plans.json` the query-plan ledger. v0's ledgers live under `tests/`
+//! and retire with v0; these are v1's.
+//!
+//! No ledger holds a wall-clock number. The per-profile feedback-time budgets
+//! (`gate-budgets.json`), the compile-time ceilings (`compile-time.json`) and
+//! the `call` and `search` p95 ledgers were removed by the owner's ruling of
+//! 2026-11-04: a timing ceiling flakes on a shared or loaded machine and
+//! blocks unrelated changes.
 //!
 //! The comparison reads the base copy with `git show <merge-base>:<path>`, and treat "the base has no such file" as a
 //! new entry that passes, because otherwise the very commit that introduces a
@@ -14,9 +18,7 @@
 //! nothing to launder, and a waiver added before the first widen is asked for
 //! is an invitation.
 //!
-//! A gate run never writes a ledger. `cargo xtask measure --write` does. If the
-//! runner wrote its own measurements back, the ratchet would be a recording of
-//! whatever the last run happened to cost.
+//! A gate run never writes a ledger.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -26,8 +28,6 @@ use std::process::Command;
 use anyhow::{Context, Result, anyhow};
 
 pub const LEDGER_DIR: &str = "contracts/ledgers";
-pub const BUDGETS: &str = "contracts/ledgers/gate-budgets.json";
-pub const COMPILE_TIME: &str = "contracts/ledgers/compile-time.json";
 
 /// The refs the merge-base is taken against, in order.
 const BASE_CANDIDATES: [&str; 4] = ["origin/main", "main", "origin/master", "master"];
@@ -117,9 +117,9 @@ pub fn down_only_findings(path: &str, base: Option<&str>, head: &str) -> Result<
 
 /// Every number in a JSON document, keyed by its dotted path.
 ///
-/// `null` is not a number and is skipped on purpose: it is how `nightly` and
-/// `release` say "unbounded", which the issue rules, and a null that later
-/// becomes a number is a new entry rather than a rise.
+/// `null` is not a number and is skipped on purpose: it is how a ledger says
+/// "not measured yet" (`library-size.json`'s unbuilt ABIs), and a null that
+/// later becomes a number is a new entry rather than a rise.
 pub fn numbers(value: &serde_json::Value) -> BTreeMap<String, f64> {
     let mut out = BTreeMap::new();
     collect(value, String::new(), &mut out);
@@ -193,46 +193,6 @@ fn show(root: &Path, base: &str, path: &str) -> Option<String> {
     }
 }
 
-/// The budget for one profile on one hardware class, in seconds. `None` is
-/// "unbounded", which the issue rules for `nightly` and `release`.
-pub fn budget_seconds(root: &Path, profile: &str, hardware: &str) -> Result<Option<f64>> {
-    let path = root.join(BUDGETS);
-    let text = fs::read_to_string(&path).with_context(|| {
-        format!(
-            "{BUDGETS} is missing — a profile with no budget is not a budget (#1020). Seed it with `cargo xtask measure`"
-        )
-    })?;
-    let document: serde_json::Value =
-        serde_json::from_str(&text).with_context(|| format!("{BUDGETS} is not valid JSON"))?;
-    let entry = document
-        .get("profiles")
-        .and_then(|profiles| profiles.get(profile))
-        .and_then(|entry| entry.get(hardware))
-        .ok_or_else(|| {
-            anyhow!(
-                "{BUDGETS} has no `profiles.{profile}.{hardware}` entry — an unbudgeted profile on an unbudgeted hardware class cannot be scored"
-            )
-        })?;
-    let seconds = entry.get("budgetSeconds").ok_or_else(|| {
-        anyhow!("{BUDGETS}: `profiles.{profile}.{hardware}` has no `budgetSeconds`")
-    })?;
-    Ok(seconds.as_f64())
-}
-
-/// A ceiling from `compile-time.json`, in seconds, for one hardware class.
-/// `None` when the key is absent — a ledger that has not stated a ceiling
-/// cannot enforce one, and the caller says so rather than inventing a number.
-pub fn compile_time_ceiling(root: &Path, hardware: &str, key: &str) -> Option<f64> {
-    let text = fs::read_to_string(root.join(COMPILE_TIME)).ok()?;
-    let document: serde_json::Value = serde_json::from_str(&text).ok()?;
-    document
-        .get("measurements")?
-        .get(hardware)?
-        .get(key)?
-        .get("budgetSeconds")?
-        .as_f64()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -240,18 +200,18 @@ mod tests {
     #[test]
     fn numbers_are_flattened_by_dotted_path() {
         let document: serde_json::Value = serde_json::from_str(
-            r#"{"profiles":{"local":{"h":{"budgetSeconds":120,"headroom":"x"}}},"n":null}"#,
+            r#"{"profiles":{"local":{"h":{"ceiling":120,"headroom":"x"}}},"n":null}"#,
         )
         .expect("valid json");
         let flat = numbers(&document);
-        assert_eq!(flat.get("profiles.local.h.budgetSeconds"), Some(&120.0));
+        assert_eq!(flat.get("profiles.local.h.ceiling"), Some(&120.0));
         assert_eq!(flat.len(), 1, "null and strings are not numbers: {flat:?}");
     }
 
     #[test]
     fn a_risen_number_is_a_finding() {
-        let base = r#"{"a":{"budgetSeconds":100}}"#;
-        let head = r#"{"a":{"budgetSeconds":101}}"#;
+        let base = r#"{"a":{"ceiling":100}}"#;
+        let head = r#"{"a":{"ceiling":101}}"#;
         let findings = down_only_findings("l.json", Some(base), head).expect("compare");
         assert_eq!(findings.len(), 1);
         assert!(findings[0].contains("rose 100 → 101"));
@@ -259,8 +219,8 @@ mod tests {
 
     #[test]
     fn a_fallen_number_is_clean() {
-        let base = r#"{"a":{"budgetSeconds":100}}"#;
-        let head = r#"{"a":{"budgetSeconds":90}}"#;
+        let base = r#"{"a":{"ceiling":100}}"#;
+        let head = r#"{"a":{"ceiling":90}}"#;
         assert!(
             down_only_findings("l.json", Some(base), head)
                 .expect("compare")
@@ -270,7 +230,7 @@ mod tests {
 
     #[test]
     fn a_removed_ceiling_is_a_finding() {
-        let base = r#"{"a":{"budgetSeconds":100}}"#;
+        let base = r#"{"a":{"ceiling":100}}"#;
         let head = r#"{"a":{}}"#;
         let findings = down_only_findings("l.json", Some(base), head).expect("compare");
         assert_eq!(findings.len(), 1);
@@ -279,7 +239,7 @@ mod tests {
 
     #[test]
     fn a_new_ledger_with_no_base_copy_passes() {
-        let head = r#"{"a":{"budgetSeconds":100}}"#;
+        let head = r#"{"a":{"ceiling":100}}"#;
         assert!(
             down_only_findings("l.json", None, head)
                 .expect("compare")
@@ -289,8 +249,8 @@ mod tests {
 
     #[test]
     fn a_new_entry_in_an_existing_ledger_passes() {
-        let base = r#"{"a":{"budgetSeconds":100}}"#;
-        let head = r#"{"a":{"budgetSeconds":100},"b":{"budgetSeconds":9999}}"#;
+        let base = r#"{"a":{"ceiling":100}}"#;
+        let head = r#"{"a":{"ceiling":100},"b":{"ceiling":9999}}"#;
         assert!(
             down_only_findings("l.json", Some(base), head)
                 .expect("compare")

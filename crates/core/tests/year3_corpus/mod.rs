@@ -1,8 +1,7 @@
 //! THE YEAR-3 SEARCH VAULT, founded once per test binary (#1135).
 //!
-//! `search_budget` times the core's search answers over it and `query_plans`
-//! plans every read the apps hold over it; both need the same vault, and the same
-//! vault is what makes the one's p95 and the other's plan about one thing.
+//! `query_plans` plans every read the apps hold over it and `year3_writes` runs
+//! the write paths on it; both need the same vault.
 //!
 //! **How it is founded.** The vault is created by this build (`Core::open`, then
 //! `Vault::found`), the generator in `centraid_apps_kit::search_corpus` writes
@@ -16,7 +15,6 @@
 #![allow(dead_code)]
 
 use std::path::PathBuf;
-use std::time::Instant;
 
 use centraid_apps_kit::search_corpus::{
     SearchCorpusCounts, SearchCorpusShape, Vocabulary, YEAR3_ROWS, YEAR3_SEARCH,
@@ -39,9 +37,6 @@ pub struct Year3 {
     pub counts: SearchCorpusCounts,
     pub shape: SearchCorpusShape,
     pub vocabulary: Vocabulary,
-    /// Seconds spent writing the rows, and building the index.
-    pub wrote_seconds: f64,
-    pub indexed_seconds: f64,
 }
 
 impl Year3 {
@@ -92,7 +87,6 @@ pub fn found_shape(shape: SearchCorpusShape) -> Year3 {
         .with_vault(|vault| Ok(vault.found("Year 3", "Owner")?))
         .expect("it founds");
 
-    let started = Instant::now();
     let counts =
         handle
             .with_vault(|vault| {
@@ -104,9 +98,7 @@ pub fn found_shape(shape: SearchCorpusShape) -> Year3 {
                     .value)
             })
             .expect("the corpus commits");
-    let wrote_seconds = started.elapsed().as_secs_f64();
 
-    let started = Instant::now();
     handle
         .with_vault(|vault| {
             vault.commit(|tx| {
@@ -116,7 +108,6 @@ pub fn found_shape(shape: SearchCorpusShape) -> Year3 {
             Ok(())
         })
         .expect("the index builds");
-    let indexed_seconds = started.elapsed().as_secs_f64();
 
     Year3 {
         dir,
@@ -124,7 +115,5 @@ pub fn found_shape(shape: SearchCorpusShape) -> Year3 {
         counts,
         shape,
         vocabulary: Vocabulary::new(shape.vocabulary),
-        wrote_seconds,
-        indexed_seconds,
     }
 }

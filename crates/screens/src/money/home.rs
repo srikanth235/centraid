@@ -3,8 +3,9 @@
 //!
 //! Roots are places only. Search is the bar under the title and pushes
 //! `money.search`; the header's one trailing action is the Plus glyph, spoken
-//! "Import statement"; Activity's chip row is month, account and category with
-//! no sort chip; More's rows are routes.
+//! "Import statement"; Activity's header holds the filter menu (account and
+//! category, no sort) and the month under the title, which opens the month sheet;
+//! More's rows are routes.
 //!
 //! EACH TAB READS ITS OWN QUERY, and a change of tab, month or filter reads
 //! again (a read is local and synchronous, so nothing is held over from the
@@ -20,7 +21,7 @@ use wire::status_chip::Tone;
 use super::fold::{self, Phase, figure};
 use super::{routes, rows};
 use crate::catalog::load;
-use crate::kit::read;
+use crate::kit::{menu, read};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words};
 
@@ -35,6 +36,12 @@ const BP_PERCENT: i64 = 100;
 
 /// The key a category filter takes for "lines with no category".
 pub const FILTER_UNCATEGORISED: &str = "uncategorised";
+
+/// The filter menu's section keys, and the option that is the section off. They
+/// read well in a selector (`money-filter-account-all`).
+pub const SECTION_ACCOUNT: &str = "account";
+pub const SECTION_CATEGORY: &str = "category";
+pub const FILTER_ALL: &str = "all";
 
 #[must_use]
 pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
@@ -238,18 +245,29 @@ impl Home {
             },
             Some(H::MonthStepped(step)) => self.step_month(step.months, ctx),
             Some(H::MonthPicked(picked)) => self.set_month(&picked.month, ctx),
-            Some(H::Chip(chip)) => {
-                self.sheet = match chip.key.as_str() {
-                    "month" => Sheet::Month,
-                    "account" => Sheet::Account,
-                    "category" => Sheet::Category,
-                    _ => self.sheet,
+            Some(H::MonthTapped(_)) => self.sheet = Sheet::Month,
+            Some(H::FilterMenuPicked(picked)) => {
+                let pick = menu::Pick::of(&picked);
+                // "All" is the filter off; a key the menu does not hold is nothing.
+                let value = if pick.option == FILTER_ALL {
+                    ""
+                } else {
+                    pick.option
                 };
-            }
-            Some(H::AccountPicked(picked)) => {
-                self.account_id = picked.account_id;
+                match pick.section {
+                    SECTION_ACCOUNT => self.account_id = value.to_owned(),
+                    SECTION_CATEGORY => self.category_filter = value.to_owned(),
+                    _ => return,
+                }
                 self.refilter(ctx);
             }
+            // CLEAR is the account and the category; the month is not a filter.
+            Some(H::FilterMenuCleared(_)) => {
+                self.account_id.clear();
+                self.category_filter.clear();
+                self.refilter(ctx);
+            }
+            // The Needs row: the filter that lists the rows it counts.
             Some(H::CategoryPicked(picked)) => {
                 self.category_filter = picked.key;
                 self.refilter(ctx);
@@ -292,12 +310,8 @@ impl Home {
                 spending: Some(spending(locale, answer)),
                 ..base
             },
-            Loaded::Activity {
-                activity,
-                accounts,
-                categories,
-            } => wire::MoneyHomeData {
-                activity: Some(self.activity(locale, activity, accounts, categories)),
+            Loaded::Activity { activity, .. } => wire::MoneyHomeData {
+                activity: Some(self.activity(locale, activity)),
                 ..base
             },
             Loaded::Cashflow(answer) => wire::MoneyHomeData {
@@ -307,13 +321,7 @@ impl Home {
         }
     }
 
-    fn activity(
-        &self,
-        locale: Locale,
-        answer: &wire::MoneyActivity,
-        accounts: &wire::MoneyAccounts,
-        categories: &wire::MoneyCategories,
-    ) -> wire::MoneyActivityData {
+    fn activity(&self, locale: Locale, answer: &wire::MoneyActivity) -> wire::MoneyActivityData {
         let filtered = !self.account_id.is_empty() || !self.category_filter.is_empty();
         let needs_count: u32 = answer.needs_category.iter().map(|c| c.count).sum();
         let shown = u32::try_from(answer.rows.len()).unwrap_or(u32::MAX);
@@ -333,8 +341,6 @@ impl Home {
             }
         });
         wire::MoneyActivityData {
-            account_options: account_options(locale, accounts, &self.account_id),
-            category_options: category_options(locale, categories, &self.category_filter),
             needs_label: if needs_count > 0 {
                 fill(
                     &words::needs_category(locale),
@@ -379,52 +385,63 @@ impl Home {
         }
     }
 
-    fn chips(&self, locale: Locale) -> Vec<wire::MoneyChip> {
+    /// THE HEADER'S FILTER BUTTON (R-CHROME-3): Account and Category, each a nested
+    /// single choice, no sort. Lit while either narrows Activity. Only on Activity
+    /// once it has read, where the chip row stood.
+    fn filter_menu(&self, locale: Locale) -> Option<wire::FilterMenu> {
         let Phase::Ready(Loaded::Activity {
             accounts,
             categories,
             ..
         }) = &self.phase
         else {
-            return Vec::new();
+            return None;
         };
-        let account_name = accounts
-            .on_budget
-            .iter()
-            .chain(&accounts.off_budget)
-            .find(|line| line.account_id == self.account_id)
-            .map(|line| line.name.clone());
-        let category_name = match self.category_filter.as_str() {
-            "" => None,
-            FILTER_UNCATEGORISED => Some(words::needs_category_option(locale)),
-            id => categories
-                .groups
-                .iter()
-                .flat_map(|group| &group.categories)
-                .find(|category| category.category_id == id)
-                .map(|category| category.label.clone()),
+        let (account_options, account_name) = account_options(locale, accounts, &self.account_id);
+        let (category_options, category_name) =
+            category_options(locale, categories, &self.category_filter);
+        Some(menu::menu(
+            locale,
+            vec![
+                menu::nested(
+                    menu::single(
+                        SECTION_ACCOUNT,
+                        words::filter_account(locale),
+                        account_options,
+                    ),
+                    account_name.unwrap_or_else(|| words::all_accounts(locale)),
+                ),
+                menu::nested(
+                    menu::single(
+                        SECTION_CATEGORY,
+                        words::filter_category(locale),
+                        category_options,
+                    ),
+                    category_name.unwrap_or_else(|| words::all_categories(locale)),
+                ),
+            ],
+            !self.account_id.is_empty() || !self.category_filter.is_empty(),
+        ))
+    }
+
+    /// THE MONTH IN VIEW, under the app's name: a tap opens the month sheet. Where
+    /// the month chip stood (Activity, once read); the band's stepper still steps.
+    fn subtitle(&self, locale: Locale) -> Option<wire::HeaderSubtitle> {
+        let Phase::Ready(Loaded::Activity { .. }) = &self.phase else {
+            return None;
         };
-        vec![
-            wire::MoneyChip {
-                key: "month".to_owned(),
-                label: if self.month.is_empty() {
-                    words::this_month(locale)
-                } else {
-                    fold::month_label(locale, &self.month)
-                },
-                active: false,
-            },
-            wire::MoneyChip {
-                key: "account".to_owned(),
-                label: account_name.unwrap_or_else(|| words::all_accounts(locale)),
-                active: !self.account_id.is_empty(),
-            },
-            wire::MoneyChip {
-                key: "category".to_owned(),
-                label: category_name.unwrap_or_else(|| words::all_categories(locale)),
-                active: !self.category_filter.is_empty(),
-            },
-        ]
+        let label = if self.month.is_empty() {
+            words::this_month(locale)
+        } else {
+            fold::month_label(locale, &self.month)
+        };
+        Some(wire::HeaderSubtitle {
+            spoken: fill(&words::month_spoken(locale), &[("month", &label)]),
+            label,
+            clearable: false,
+            clear_spoken: String::new(),
+            tappable: true,
+        })
     }
 
     fn band(&self, locale: Locale) -> Vec<wire::MoneyBandTab> {
@@ -501,8 +518,6 @@ impl Home {
             previous_month_label: words::previous_month(locale),
             next_month_label: words::next_month(locale),
             month_sheet_title: words::month_sheet_title(locale),
-            account_sheet_title: words::account_sheet_title(locale),
-            category_sheet_title: words::category_sheet_title(locale),
             close_label: words::close(locale),
             import_route: Some(routes::import(&title)),
             search_route: Some(routes::search(&title)),
@@ -740,61 +755,72 @@ fn spending(locale: Locale, answer: &wire::MoneySpending) -> wire::MoneySpending
     }
 }
 
+/// The Account section's options, and the name of the one checked (None for all).
 fn account_options(
     locale: Locale,
     accounts: &wire::MoneyAccounts,
     selected: &str,
-) -> Vec<wire::MoneyChoice> {
-    let mut options = vec![fold::choice(
-        "",
-        &words::all_accounts(locale),
+) -> (Vec<wire::MenuOption>, Option<String>) {
+    let mut options = vec![menu::option(
+        FILTER_ALL,
+        words::all_accounts(locale),
         selected.is_empty(),
-        "",
     )];
+    let mut name = None;
     for line in accounts.on_budget.iter().chain(&accounts.off_budget) {
-        options.push(fold::choice(
-            &line.account_id,
-            &line.name,
+        // The last four digits tell two accounts of one name apart.
+        let label = match &line.mask {
+            Some(mask) => format!("{} ····{mask}", line.name),
+            None => line.name.clone(),
+        };
+        if line.account_id == selected {
+            name = Some(label.clone());
+        }
+        options.push(menu::option(
+            line.account_id.clone(),
+            label,
             line.account_id == selected,
-            &line
-                .mask
-                .as_ref()
-                .map(|mask| format!("····{mask}"))
-                .unwrap_or_default(),
         ));
     }
-    options
+    (options, name)
 }
 
+/// The Category section's options, and the name of the one checked (None for any).
 fn category_options(
     locale: Locale,
     categories: &wire::MoneyCategories,
     selected: &str,
-) -> Vec<wire::MoneyChoice> {
+) -> (Vec<wire::MenuOption>, Option<String>) {
     let mut options = vec![
-        fold::choice("", &words::all_categories(locale), selected.is_empty(), ""),
-        fold::choice(
+        menu::option(
+            FILTER_ALL,
+            words::all_categories(locale),
+            selected.is_empty(),
+        ),
+        menu::option(
             FILTER_UNCATEGORISED,
-            &words::needs_category_option(locale),
+            words::needs_category_option(locale),
             selected == FILTER_UNCATEGORISED,
-            "",
         ),
     ];
+    let mut name = (selected == FILTER_UNCATEGORISED).then(|| words::needs_category_option(locale));
     for group in &categories.groups {
         for category in group
             .categories
             .iter()
             .filter(|c| !c.archived || c.category_id == selected)
         {
-            options.push(fold::choice(
-                &category.category_id,
-                &category.label,
+            if category.category_id == selected {
+                name = Some(category.label.clone());
+            }
+            options.push(menu::option(
+                category.category_id.clone(),
+                category.label.clone(),
                 category.category_id == selected,
-                &group.label,
             ));
         }
     }
-    options
+    (options, name)
 }
 
 fn cashflow(locale: Locale, answer: &wire::MoneyCashflow) -> wire::MoneyCashflowData {
@@ -925,12 +951,12 @@ impl Screen for Home {
                 },
                 chrome: Some(Self::chrome(locale)),
                 month: self.month.clone(),
-                account_id: self.account_id.clone(),
-                chips: if drawing && self.destination == Destination::Activity {
-                    self.chips(locale)
+                filter_menu: if drawing {
+                    self.filter_menu(locale)
                 } else {
-                    Vec::new()
+                    None
                 },
+                subtitle: if drawing { self.subtitle(locale) } else { None },
             })),
             ..wire::ViewState::default()
         }

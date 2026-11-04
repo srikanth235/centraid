@@ -1,19 +1,60 @@
 //! THE DRIVE'S REQUEST: the shelf, the three filters and the order are the
 //! core's REQUEST (`docs.drive`), so changing any of them reads again. This
-//! holds the filters the member chose, the keys their sheets send, and the
+//! holds the filters the member chose, the keys the filter menu sends, and the
 //! words each is drawn in.
-
-use centraid_api_proto::core_v1 as wire;
-use wire::docs_query::{Modified, Sort, TypeFilter};
 
 use crate::strings::{Locale, docs as words};
 
-/// A filter sheet's "any" row.
+/// A filter section's "any" option.
 pub const ANY: &str = "any";
+
+/// The filter menu's section keys. The sort's is the kit's (`menu::SORT`). They
+/// read well in a selector (`docs-filter-type-pdf`).
+pub const SECTION_TYPE: &str = "type";
+pub const SECTION_MODIFIED: &str = "modified";
+pub const SECTION_LABEL: &str = "label";
+pub const SECTION_VIEW: &str = "view";
+
+/// The View section's options.
+pub const VIEW_LIST: &str = "list";
+pub const VIEW_GRID: &str = "grid";
 
 type Words = fn(Locale) -> String;
 
-/// The Type sheet: its key, the filter, the core's name for it and the words.
+/// The Type filter. `Unspecified` is any.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TypeFilter {
+    Unspecified,
+    Pdf,
+    Image,
+    Word,
+    Spreadsheet,
+    Markdown,
+    Text,
+    Audio,
+    Video,
+}
+
+/// The Modified filter. `Unspecified` is any time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Modified {
+    Unspecified,
+    Today,
+    Last7Days,
+    Last30Days,
+    ThisYear,
+}
+
+/// What the order is by; `Query::ascending` says which way.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sort {
+    Changed,
+    Name,
+    Kind,
+    Size,
+}
+
+/// The Type section: its key, the filter, the core's name for it and the words.
 pub const TYPES: [(&str, TypeFilter, Words); 8] = [
     ("pdf", TypeFilter::Pdf, words::type_pdf),
     ("image", TypeFilter::Image, words::type_image),
@@ -29,7 +70,7 @@ pub const TYPES: [(&str, TypeFilter, Words); 8] = [
     ("video", TypeFilter::Video, words::type_video),
 ];
 
-/// The Modified sheet: its key, the filter, the core's name for it and the words.
+/// The Modified section: its key, the filter, the core's name for it and the words.
 pub const MODIFIED: [(&str, Modified, &str, Words); 4] = [
     ("today", Modified::Today, "today", words::modified_today),
     (
@@ -52,8 +93,8 @@ pub const MODIFIED: [(&str, Modified, &str, Words); 4] = [
     ),
 ];
 
-/// The sort sheet: its key, the sort and its direction, and the two words
-/// ("Name", "A to Z") the chip and the row say.
+/// The Sort section: its key, the sort and its direction, and the two words
+/// ("Name", "A to Z") an option is read in.
 pub const SORTS: [(&str, Sort, bool, Words, Words); 6] = [
     (
         "changed_desc",
@@ -139,7 +180,7 @@ impl Query {
         self.label.clear();
     }
 
-    /// The Type sheet's pick.
+    /// The Type section's pick.
     pub fn pick_type(&mut self, key: &str) {
         self.type_filter = TYPES
             .iter()
@@ -147,7 +188,7 @@ impl Query {
             .map_or(TypeFilter::Unspecified, |(_, filter, _)| *filter);
     }
 
-    /// The Modified sheet's pick.
+    /// The Modified section's pick.
     pub fn pick_modified(&mut self, key: &str) {
         self.modified = MODIFIED
             .iter()
@@ -155,7 +196,7 @@ impl Query {
             .map_or(Modified::Unspecified, |(_, filter, _, _)| *filter);
     }
 
-    /// The sort sheet's pick; false for a key that is not one.
+    /// The Sort section's pick; false for a key that is not one.
     pub fn pick_sort(&mut self, key: &str) -> bool {
         let Some((_, sort, ascending, _, _)) = SORTS.iter().find(|(k, ..)| *k == key) else {
             return false;
@@ -165,7 +206,7 @@ impl Query {
         true
     }
 
-    /// The sort sheet's key for the order in force.
+    /// The Sort section's key for the order in force.
     #[must_use]
     pub fn sort_key(&self) -> &'static str {
         match (self.sort, self.ascending) {
@@ -204,17 +245,6 @@ impl Query {
             Sort::Kind => "kind",
             Sort::Size => "size",
             _ => "changed",
-        }
-    }
-
-    /// The wire message a view reads.
-    #[must_use]
-    pub fn wire(&self) -> wire::DocsQuery {
-        wire::DocsQuery {
-            r#type: self.type_filter as i32,
-            modified: self.modified as i32,
-            label: self.label.clone(),
-            sort: self.sort as i32,
         }
     }
 }

@@ -4,7 +4,6 @@
 use centraid_api_proto::core_v1 as wire;
 use wire::docs_sheet::{Body, Kind};
 
-use super::query::{ANY, MODIFIED, SORTS, TYPES};
 use super::{
     Drive, KEY_FOLLOW_FOLDER, KEY_FOLLOWED, KEY_NEW_FOLDER, KEY_RECENT, KEY_SCAN, KEY_STOP_PREFIX,
     KEY_TEXT, KEY_TRASH_SHELF, KEY_UPLOAD,
@@ -18,10 +17,6 @@ pub(super) enum Sheet {
     None,
     More,
     Add,
-    Type,
-    Modified,
-    Label,
-    Sort,
     RowMenu(String),
     Move(String),
     Labels { document_id: String, draft: String },
@@ -52,15 +47,6 @@ pub(super) fn none() -> wire::DocsSheet {
     }
 }
 
-fn choice(key: &str, label: String, selected: bool) -> wire::DocsChoice {
-    wire::DocsChoice {
-        key: key.to_owned(),
-        label,
-        detail: String::new(),
-        selected,
-    }
-}
-
 fn actions(actions: Vec<wire::DocsAction>) -> Body {
     Body::Actions(wire::DocsActionList {
         actions,
@@ -74,7 +60,6 @@ fn choices(choices: Vec<wire::DocsChoice>) -> Body {
 
 /// The open sheet as the view draws it.
 pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
-    let query = &drive.query;
     let empty_rail = super::Rail::default();
     let rail = drive.rail.as_ref().unwrap_or(&empty_rail);
     match &drive.sheet {
@@ -143,71 +128,6 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
             locale,
             actions(add_rows(drive, locale)),
         ),
-        Sheet::Type => {
-            let mut rows = vec![choice(
-                ANY,
-                words::type_any(locale),
-                query.type_filter == wire::docs_query::TypeFilter::Unspecified,
-            )];
-            rows.extend(TYPES.iter().map(|(key, filter, label)| {
-                choice(key, label(locale), query.type_filter == *filter)
-            }));
-            sheet(
-                Kind::Type,
-                words::filter_type(locale),
-                "",
-                locale,
-                choices(rows),
-            )
-        }
-        Sheet::Modified => {
-            let mut rows = vec![choice(
-                ANY,
-                words::modified_any(locale),
-                query.modified == wire::docs_query::Modified::Unspecified,
-            )];
-            rows.extend(MODIFIED.iter().map(|(key, filter, _, label)| {
-                choice(key, label(locale), query.modified == *filter)
-            }));
-            sheet(
-                Kind::Modified,
-                words::filter_modified(locale),
-                "",
-                locale,
-                choices(rows),
-            )
-        }
-        Sheet::Label => {
-            let mut rows = vec![choice(
-                ANY,
-                words::label_any(locale),
-                query.label.is_empty(),
-            )];
-            rows.extend(
-                rail.labels
-                    .iter()
-                    .map(|label| choice(label, label.clone(), query.label == *label)),
-            );
-            sheet(
-                Kind::Label,
-                words::filter_label(locale),
-                "",
-                locale,
-                choices(rows),
-            )
-        }
-        Sheet::Sort => {
-            let rows = SORTS
-                .iter()
-                .map(|(key, _, _, label, detail)| wire::DocsChoice {
-                    key: (*key).to_owned(),
-                    label: label(locale),
-                    detail: detail(locale),
-                    selected: query.sort_key() == *key,
-                })
-                .collect();
-            sheet(Kind::Sort, words::sort(locale), "", locale, choices(rows))
-        }
         Sheet::RowMenu(document_id) => {
             let Some(row) = drive.row(document_id) else {
                 return none();

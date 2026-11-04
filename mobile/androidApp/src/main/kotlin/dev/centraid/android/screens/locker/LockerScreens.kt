@@ -57,6 +57,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import centraid.core.v1.FilterMenuCleared
+import centraid.core.v1.FilterMenuPicked
 import centraid.core.v1.LockerChoice
 import centraid.core.v1.LockerCountdown
 import centraid.core.v1.LockerDestination
@@ -96,7 +98,7 @@ import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
-import dev.centraid.android.kit.RoomChip
+import dev.centraid.android.kit.RoomFilter
 import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
@@ -254,13 +256,15 @@ internal fun LockerHomeScreen(
             } else {
                 null
             },
-            chips = data?.filters.orEmpty().map { choice ->
-                RoomChip(
-                    testTag = "locker-filter-${choice.key}",
-                    label = choice.label,
-                    count = choice.detail,
-                    selected = choice.selected,
-                ) { onEvent(LockerHomeEvent(filter = LockerHomeEvent.FilterPicked(key = choice.key))) }
+            // THE ITEMS FILTER IS THE HEADER'S MENU (R-CHROME-3): only Items' data carries it.
+            filter = data?.filter_menu?.let { menu ->
+                RoomFilter(
+                    menu = menu,
+                    onPick = { section, option ->
+                        onEvent(LockerHomeEvent(filter_menu_picked = FilterMenuPicked(section_key = section, option_key = option)))
+                    },
+                    onClear = { onEvent(LockerHomeEvent(filter_menu_cleared = FilterMenuCleared())) },
+                )
             },
             status = if (generating) "" else data?.status_line.orEmpty(),
             statusLine = state.status?.let { line ->
@@ -437,7 +441,6 @@ internal fun LockerChoices(choices: List<LockerChoice>, testTag: String, onPick:
         choices.forEach { choice ->
             KitChip(
                 label = choice.label,
-                count = choice.detail,
                 selected = choice.selected,
                 modifier = Modifier.testTag("$testTag-${choice.key}"),
                 onClick = { onPick(choice.key) },

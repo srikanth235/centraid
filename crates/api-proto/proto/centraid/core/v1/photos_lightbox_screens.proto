@@ -135,6 +135,8 @@ message PhotosLightboxPhoto {
 message PhotosLightboxFact {
   string label = 1;
   string text = 2;
+  // The catalogue key of the heading's mark.
+  string icon_key = 3;
 }
 
 message PhotosLightboxLabel {
@@ -373,6 +375,9 @@ message RenderEdit {
   string source_path = 1;
   PhotosEditPlan plan = 2;
   uint32 jpeg_quality_percent = 3;
+  // Set when the operating system's library holds the original and `source_path`
+  // is empty: the shell reads the original from the library by this reference.
+  string os_ref = 4;
 }
 
 message EditRendered {

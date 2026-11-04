@@ -11,6 +11,7 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_screens::catalog::act;
 use centraid_screens::field::{Field, Keyed};
 use centraid_screens::kit::act as kit_act;
+use centraid_screens::kit::menu;
 use centraid_screens::photos;
 use centraid_screens::photos::home::chrome::Roll;
 use centraid_screens::photos::home::layout::{self, Boxed};
@@ -265,41 +266,155 @@ fn the_lit_tab_follows_the_destination_and_more_is_lit_while_its_sheet_is_up() {
     assert_eq!(lit(&r), ["collections"]);
 }
 
-#[test]
-fn the_filter_is_a_chip_row_on_the_library_and_its_selection_follows_the_filter() {
-    let mut r = rig();
-    let chips = &r.state().chips;
-    assert_eq!(
-        chips.iter().map(|c| c.label.as_str()).collect::<Vec<_>>(),
-        ["All photos", "Favorites"]
-    );
-    assert_eq!(chips.iter().filter(|c| c.selected).count(), 1);
-    assert_eq!(
-        chips.iter().find(|c| c.selected).unwrap().filter,
-        Filter::All as i32
-    );
-    r.send(H::Filter(Filter::Favorites as i32));
-    assert_eq!(
-        r.state().chips.iter().find(|c| c.selected).unwrap().filter,
-        Filter::Favorites as i32
-    );
+/// The header's filter menu, the pick of a Photos filter.
+fn pick_filter(filter: Filter) -> H {
+    let option = if filter == Filter::Favorites {
+        "favorites"
+    } else {
+        "all"
+    };
+    H::FilterMenuPicked(wire::FilterMenuPicked {
+        section_key: "show".to_owned(),
+        option_key: option.to_owned(),
+    })
 }
 
-#[test]
-fn no_chips_off_the_library_on_searchs_page_or_while_selecting() {
-    let mut r = rig();
-    r.send(H::Band("collections".to_owned()));
-    assert!(r.state().chips.is_empty());
-    r.send(H::SearchOpened(wire::PhotosSearchOpened {}));
-    assert!(r.state().chips.is_empty());
-    r.send(H::SearchClosed(wire::PhotosSearchClosed {}));
-    assert!(!r.state().chips.is_empty());
-    r.send(H::Selection(wire::PhotosSelectionEvent {
+fn selecting_on() -> H {
+    H::Selection(wire::PhotosSelectionEvent {
         kind: Some(wire::photos_selection_event::Kind::Mode(
             wire::photos_selection_event::ModeSet { selecting: true },
         )),
+    })
+}
+
+#[test]
+fn the_filter_is_a_menu_on_the_library_and_its_check_follows_the_filter() {
+    let mut r = rig();
+    let built = r
+        .state()
+        .filter_menu
+        .clone()
+        .expect("a menu on the library");
+    assert_eq!(built.sections.len(), 1);
+    let section = &built.sections[0];
+    assert_eq!(section.key, "show");
+    assert_eq!(section.kind, wire::menu_section::Kind::Single as i32);
+    assert!(!section.nested);
+    assert_eq!(
+        section
+            .options
+            .iter()
+            .map(|o| (o.key.as_str(), o.label.as_str()))
+            .collect::<Vec<_>>(),
+        [("all", "All photos"), ("favorites", "Favorites")]
+    );
+    assert_eq!(menu::checked(section), ["all"]);
+    assert!(!built.filtering);
+    assert_eq!(built.spoken, "Filter");
+    r.send(pick_filter(Filter::Favorites));
+    let built = r.state().filter_menu.clone().unwrap();
+    assert_eq!(menu::checked(&built.sections[0]), ["favorites"]);
+    // Favorites narrows the library, so the button is lit and offers the clear.
+    assert!(built.filtering);
+    assert_eq!(built.clear_label, "Clear filters");
+    assert_eq!(built.spoken, "Filter, on");
+}
+
+#[test]
+fn clearing_the_filter_returns_to_all_photos_and_unlights_the_button() {
+    let mut r = rig();
+    r.send(pick_filter(Filter::Favorites));
+    assert!(r.state().filter_menu.clone().unwrap().filtering);
+    r.send(H::FilterMenuCleared(wire::FilterMenuCleared {}));
+    let built = r.state().filter_menu.clone().unwrap();
+    assert!(!built.filtering);
+    assert_eq!(menu::checked(&built.sections[0]), ["all"]);
+}
+
+#[test]
+fn a_pick_of_another_section_changes_nothing() {
+    let mut r = rig();
+    r.send(H::FilterMenuPicked(wire::FilterMenuPicked {
+        section_key: "sort".to_owned(),
+        option_key: "favorites".to_owned(),
     }));
-    assert!(r.state().chips.is_empty());
+    assert!(!r.state().filter_menu.clone().unwrap().filtering);
+}
+
+#[test]
+fn no_menu_off_the_library_on_searchs_page_or_while_selecting() {
+    let mut r = rig();
+    r.send(H::Band("collections".to_owned()));
+    assert!(r.state().filter_menu.is_none());
+    r.send(H::SearchOpened(wire::PhotosSearchOpened {}));
+    assert!(r.state().filter_menu.is_none());
+    r.send(H::SearchClosed(wire::PhotosSearchClosed {}));
+    assert!(r.state().filter_menu.is_some());
+    r.send(selecting_on());
+    assert!(r.state().filter_menu.is_none());
+}
+
+#[test]
+fn the_zoom_is_the_bands_segments_and_follows_the_grain() {
+    let mut r = rig();
+    r.clear_library();
+    // NOTHING TO ZOOM, NO ZOOM: an empty library draws the menu and no grains.
+    assert!(r.state().grain_segments.is_empty());
+    r.photo("grain segment", Some("2026-05-01T10:00:00Z"), None);
+    r.send(H::Refreshed(wire::PhotosRefreshed {}));
+    let segments = &r.state().grain_segments;
+    assert_eq!(
+        segments
+            .iter()
+            .map(|c| c.label.as_str())
+            .collect::<Vec<_>>(),
+        ["Years", "Months", "All"]
+    );
+    assert_eq!(
+        segments.iter().map(|c| c.grain).collect::<Vec<_>>(),
+        [Grain::Years as i32, Grain::Months as i32, Grain::All as i32]
+    );
+    // The library opens at All, and the lit segment is the one the library is drawn at.
+    let lit = |r: &Rig| -> Vec<i32> {
+        r.state()
+            .grain_segments
+            .iter()
+            .filter(|c| c.selected)
+            .map(|c| c.grain)
+            .collect()
+    };
+    assert_eq!(lit(&r), [Grain::All as i32]);
+    r.send(H::Grain(wire::PhotosGrainChanged {
+        grain: Grain::Years as i32,
+        at_day: String::new(),
+    }));
+    assert_eq!(lit(&r), [Grain::Years as i32]);
+    // Any move of the grain, a segment's or a pinch's, lights its segment.
+    r.send(H::Grain(wire::PhotosGrainChanged {
+        grain: Grain::Months as i32,
+        at_day: String::new(),
+    }));
+    assert_eq!(lit(&r), [Grain::Months as i32]);
+}
+
+#[test]
+fn the_zoom_goes_where_the_library_goes() {
+    let mut r = rig();
+    r.photo("grain away", Some("2026-05-01T10:00:00Z"), None);
+    r.send(H::Refreshed(wire::PhotosRefreshed {}));
+    assert!(!r.state().grain_segments.is_empty());
+    // Away on Collections and on Search's page, as the filter is...
+    r.send(H::Band("collections".to_owned()));
+    assert!(r.state().grain_segments.is_empty());
+    r.send(H::Band("library".to_owned()));
+    r.send(H::SearchOpened(wire::PhotosSearchOpened {}));
+    assert!(r.state().grain_segments.is_empty());
+    r.send(H::SearchClosed(wire::PhotosSearchClosed {}));
+    assert!(!r.state().grain_segments.is_empty());
+    // ...and while selecting, when the selection bar takes the band's place.
+    r.send(selecting_on());
+    assert!(r.state().grain_segments.is_empty());
+    assert!(r.state().filter_menu.is_none());
 }
 
 #[test]
@@ -555,9 +670,9 @@ fn import_now_over_an_emptied_library_asks_the_camera_roll_for_a_pass_and_the_sh
     let banner = r.state().import_banner.as_ref().expect("a banner");
     assert!(banner.import_now);
     // A library emptied by the Favorites filter is not an empty library.
-    r.send(H::Filter(Filter::Favorites as i32));
+    r.send(pick_filter(Filter::Favorites));
     assert!(r.state().import_banner.is_none());
-    r.send(H::Filter(Filter::All as i32));
+    r.send(pick_filter(Filter::All));
     // THE ROLL IS ASKED BY NAME (`imports_by_name.rs` follows it there).
     let update = r.send(H::ImportNow(wire::PhotosImportNow {}));
     assert!(update.effects.is_empty(), "{:?}", update.effects);
@@ -599,26 +714,35 @@ fn boxed(width: u32, height: u32) -> Boxed {
 
 #[test]
 fn a_full_row_fills_the_width_to_the_point_folding_its_remainder_into_the_last_tile() {
-    let rows = layout::justify(&[boxed(3, 2); 4], 400.0, 120.0);
+    let rows = layout::justify(&[boxed(3, 2); 8], 400.0, 120.0);
     let first = &rows[0];
-    assert_eq!(first.iter().map(|t| t.index).collect::<Vec<_>>(), [0, 1, 2]);
-    assert!((first.iter().map(|t| t.width).sum::<f64>() + layout::GAP * 2.0 - 400.0).abs() < 1e-9);
+    assert_eq!(
+        first.iter().map(|t| t.index).collect::<Vec<_>>(),
+        [0, 1, 2, 3]
+    );
+    assert!((first.iter().map(|t| t.width).sum::<f64>() + layout::GAP * 3.0 - 400.0).abs() < 1e-9);
     let heights: Vec<f64> = first.iter().map(|t| t.height).collect();
     assert!(heights.windows(2).all(|w| w[0] == w[1]));
 }
 
 #[test]
-fn the_trailing_row_keeps_its_natural_height_capped_at_one_and_a_quarter_times_the_target() {
-    let rows = layout::justify(&[boxed(1000, 1000)], 400.0, 100.0);
-    assert_eq!(rows.len(), 1);
-    assert_eq!((rows[0][0].width, rows[0][0].height), (125.0, 125.0));
+fn a_lone_photograph_in_the_last_row_is_one_cell_the_size_of_every_other() {
+    let rows = layout::justify(&[boxed(1000, 1000); 6], 400.0, 100.0);
+    let cell = rows[0][0].height;
+    for tile in rows.iter().flatten().take(5) {
+        assert_eq!(tile.height, cell);
+        assert!((tile.width - cell).abs() < 5.0);
+    }
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[1].len(), 1);
+    assert_eq!((rows[1][0].width, rows[1][0].height), (cell, cell));
 }
 
 #[test]
-fn an_unknown_box_packs_square_and_a_zero_width_packs_nothing() {
-    let rows = layout::justify(&[boxed(0, 0), boxed(1, 1)], 200.0, 100.0);
+fn every_photograph_packs_square_whatever_its_box_and_a_zero_width_packs_nothing() {
+    let rows = layout::justify(&[boxed(0, 0), boxed(3, 1)], 200.0, 100.0);
     for tile in rows.iter().flatten() {
-        assert!((tile.width / tile.height - 1.0).abs() < 1e-9);
+        assert!((tile.width / tile.height - 1.0).abs() < 0.05);
     }
     assert!(layout::justify(&[boxed(1, 1)], 0.0, 100.0).is_empty());
     assert!(layout::justify(&[boxed(1, 1)], 100.0, 0.0).is_empty());
@@ -704,8 +828,30 @@ fn another_years_day_carries_its_year_and_a_rung_past_the_table_is_clamped() {
         99,
         2026,
     );
-    // The largest rung is 168, and a lone trailing photograph stops at 1.25 times it.
-    assert_eq!(rows.last().unwrap().tiles[0].height, 210.0);
+    // The largest rung is 168: seven columns of 141 fit a thousand points, and a
+    // lone photograph is one of them and not a stretched row.
+    assert_eq!(rows.last().unwrap().tiles[0].height, 141.0);
+    assert_eq!(rows.last().unwrap().tiles[0].width, 141.0);
+}
+
+#[test]
+fn a_month_header_is_never_left_with_nothing_under_it() {
+    let cells = [
+        cell("a", "2026-08-14", false),
+        cell("b", "2026-07-30", false),
+        cell("c", "2011-03-13", false),
+        cell("d", "2009-10-09", false),
+        cell("e", "", false),
+    ];
+    for width in [0.0, 120.0, 390.0] {
+        let rows = layout::rows(Locale::En, &cells, width, layout::DEFAULT_RUNG, 2026);
+        for (at, row) in rows.iter().enumerate() {
+            if row.kind == layout::RowKind::Month {
+                let next = rows.get(at + 1).expect("a month with nothing after it");
+                assert_ne!(next.kind, layout::RowKind::Month, "{}", row.id);
+            }
+        }
+    }
 }
 
 #[test]
@@ -913,7 +1059,7 @@ fn the_favorites_filter_narrows_the_read_not_the_drawing() {
     });
     r.send(H::Refreshed(wire::PhotosRefreshed {}));
     assert!(r.tile_ids().contains(&plain));
-    r.send(H::Filter(Filter::Favorites as i32));
+    r.send(pick_filter(Filter::Favorites));
     assert!(r.tile_ids().contains(&loved));
     assert!(!r.tile_ids().contains(&plain));
     assert_eq!(
@@ -1023,6 +1169,10 @@ fn a_favourite_keeps_the_selection_and_the_value_is_one_for_the_whole_pick() {
     assert_eq!(r.state().selection.as_ref().unwrap().count, 2);
     r.send(verb(V::Favorite));
     assert!(r.tile(&a).favorite && r.tile(&b).favorite);
+    assert_eq!(
+        r.state().status.as_ref().expect("a receipt").sentence,
+        "2 photos added to Favorites."
+    );
     // The pick stays: favouriting is not the end of a member's job with it.
     assert_eq!(r.state().selection.as_ref().unwrap().count, 2);
     r.send(verb(V::Unfavorite));
@@ -1030,7 +1180,7 @@ fn a_favourite_keeps_the_selection_and_the_value_is_one_for_the_whole_pick() {
 }
 
 #[test]
-fn the_bar_offers_favorite_in_all_and_unfavorite_only_under_the_favorites_filter() {
+fn the_bar_turns_favorite_round_when_every_photograph_picked_already_is_one() {
     use wire::photos_batch_action::Kind as V;
     let mut r = rig();
     let a = r.photo("bar a", Some("2026-06-01T10:00:00Z"), None);
@@ -1049,13 +1199,22 @@ fn the_bar_offers_favorite_in_all_and_unfavorite_only_under_the_favorites_filter
             .collect()
     };
     r.send(toggle(&a));
-    assert!(kinds(&r).contains(&(V::Favorite as i32)));
-    assert!(!kinds(&r).contains(&(V::Unfavorite as i32)));
-    // Under Favorites every photograph on screen already is one: the verb turns round.
-    r.send(H::Filter(Filter::Favorites as i32));
+    // The only photograph picked is one already: the verb turns round, in All as under Favorites.
+    assert!(kinds(&r).contains(&(V::Unfavorite as i32)));
+    assert!(!kinds(&r).contains(&(V::Favorite as i32)));
+    // Under Favorites every photograph on screen already is one.
+    r.send(pick_filter(Filter::Favorites));
     r.send(toggle(&a));
     assert!(kinds(&r).contains(&(V::Unfavorite as i32)));
     assert!(!kinds(&r).contains(&(V::Favorite as i32)));
+    // A photograph that is not one offers Favorite.
+    r.send(pick_filter(Filter::All));
+    let b = r.photo("bar b", Some("2026-06-02T10:00:00Z"), None);
+    r.send(H::Refreshed(wire::PhotosRefreshed {}));
+    r.send(toggle(&a));
+    r.send(toggle(&b));
+    assert!(kinds(&r).contains(&(V::Favorite as i32)));
+    assert!(!kinds(&r).contains(&(V::Unfavorite as i32)));
 }
 
 #[test]
@@ -1398,33 +1557,41 @@ fn what_the_last_free_up_came_to_is_one_sentence_on_the_row() {
 }
 
 #[test]
-fn the_cameras_roll_sheet_says_the_rest_of_what_the_banner_says_in_one_line() {
+fn more_has_no_camera_roll_row_and_the_retired_sheet_opens_nothing() {
     let mut r = rig();
-    r.send(H::Backup(wire::PhotosBackupChanged {
-        phase: Phase::WaitingForPower as i32,
-        assets_transferred_this_session: 0,
-        assets_remaining: 0,
-        paused_reason: "Plug in to continue.".to_owned(),
-    }));
-    r.send(H::Sheet(wire::photos_home_event::SheetEvent {
-        sheet: Sheet::BackupDetail as i32,
-    }));
-    let detail = r.state().backup_detail.as_ref().expect("the detail");
-    assert!(detail.import_enabled);
-    assert_eq!(
-        detail
-            .rows
-            .iter()
-            .find(|row| row.key == "Paused")
-            .unwrap()
-            .value,
-        "Plug in to continue."
+    r.send(H::Band("more".to_owned()));
+    let more = r.state().more.clone().expect("the sheet is up");
+    assert!(
+        more.rows.iter().all(|row| row.key == "tile_size"),
+        "More offers the tile size and nothing about the roll: {:?}",
+        more.rows.iter().map(|row| &row.key).collect::<Vec<_>>()
     );
+    // 6 was `SHEET_BACKUP_DETAIL`, reserved: an old shell asking for it reads as no sheet.
+    r.send(H::Sheet(wire::photos_home_event::SheetEvent { sheet: 6 }));
+    assert_eq!(r.state().sheet, Sheet::More as i32);
+}
+
+#[test]
+fn a_wait_the_member_should_know_about_is_the_banners_and_has_no_sheet_behind_it() {
+    let mut r = rig();
+    r.send(H::Permission(wire::PhotosPermissionChanged {
+        permission: Perm::Granted as i32,
+    }));
     r.send(H::Backup(wire::PhotosBackupChanged {
-        phase: Phase::Transferring as i32,
+        phase: Phase::WaitingForUnmetered as i32,
+        paused_reason: "Waiting for Wi-Fi, as you asked.".to_owned(),
         ..Default::default()
     }));
-    assert!(!r.state().backup_detail.as_ref().unwrap().import_enabled);
+    let banner = r.state().import_banner.clone().expect("the banner says it");
+    assert_eq!(banner.reason, "Waiting for Wi-Fi, as you asked.");
+    // Nothing the member taps opens a second page about it.
+    assert_eq!(r.state().sheet, Sheet::None as i32);
+    assert!(
+        !r.state()
+            .band
+            .iter()
+            .any(|tab| tab.current && tab.key == "more")
+    );
 }
 
 // ---------------------------------------------------------------------------

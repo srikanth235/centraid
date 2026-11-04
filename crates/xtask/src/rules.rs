@@ -8,7 +8,7 @@
 //! **These are file walks and hand-rolled scanners, not parse trees.** The
 //! issue rules that tree-sitter owns structural rules; it is not here yet,
 //! because the four rules below are answerable from string literals, attribute
-//! lines and import lines, and a parser would cost the `local` budget more than
+//! lines and import lines, and a parser would cost the `local` loop more than
 //! the precision is worth today. When a rule needs to know what an expression
 //! *means*, that is the commit that adds tree-sitter. Until then the scanners
 //! are unit-tested against fixtures that must be caught (see the tests below) —

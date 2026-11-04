@@ -16,9 +16,13 @@ catalog! {
     plain kit_band_home = ("Home", "Home");
     plain kit_band_more = ("More", "More");
     plain kit_cancel = ("Cancel", "Cancel");
+    plain kit_clear_filters = ("Clear filters", "Clear filters");
     plain kit_close_search = ("Close search", "Close search");
     plain kit_dismiss = ("Dismiss", "Dismiss");
     plain kit_done = ("Done", "Done");
+    plain kit_filter = ("Filter", "Filter");
+    plain kit_filter_on = ("{label}, on", "{label}, on");
+    plain kit_filter_sort = ("Filter and sort", "Filter and sort");
     plain kit_loading_more = ("Loading more", "Loading more");
     plain kit_open = ("Open", "Open");
     plain kit_opening = ("Opening", "Opening");

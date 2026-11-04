@@ -1,6 +1,6 @@
 //! DOCS' DRIVE (`docs.drive`, #1046): All · Folders · Starred, with Recently
 //! added from More, search as the room's bar (R-CHROME-2), the filters and the
-//! sort as the room's chip row (R-CHROME-3), a folder's own page, and every
+//! sort as the header's filter menu (R-CHROME-3), a folder's own page, and every
 //! write a row offers. One screen, the shelf a parameter (law 2): the tab's
 //! root and each folder page pushed over it are this machine on two routes.
 //!
@@ -15,7 +15,8 @@
 //! The shelf, the folder, the three filters and the order are the core's
 //! REQUEST (`docs.drive`), so changing any of them reads again. A term reads
 //! `docs.search` instead; the folder rail and counts are kept from the last
-//! drive answer. Grid or list is local and reads nothing. Reads are
+//! drive answer. Grid or list (the menu's View section) is local and reads
+//! nothing. Reads are
 //! synchronous, so there is no read in flight to queue behind.
 //!
 //! ## Writes
@@ -29,7 +30,7 @@
 //!
 //! ## Views decide nothing
 //!
-//! The band, the pills, the sheets, the empty choice, the head's subtitle and
+//! The band, the filter menu, the sheets, the empty choice, the head's subtitle and
 //! every label are made again on every view.
 
 use centraid_api_proto::core_v1 as wire;
@@ -43,6 +44,7 @@ use super::rename::Rename;
 use super::{Phase, refusal};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::menu;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::docs as words;
@@ -323,13 +325,12 @@ impl Drive {
                     self.reload(ctx);
                 }
             }
-            Some(D::LayoutToggled(_)) => self.grid = !self.grid,
             Some(D::SheetOpened(opened)) => self.open_sheet(opened.kind()),
             Some(D::SheetClosed(_)) => self.sheet = Sheet::None,
             Some(D::Choice(picked)) => self.choice(ctx, &picked.key),
-            Some(D::FiltersCleared(_)) => {
+            Some(D::FilterMenuPicked(picked)) => self.menu_pick(ctx, menu::Pick::of(&picked)),
+            Some(D::FilterMenuCleared(_)) => {
                 self.query.clear_filters();
-                self.sheet = Sheet::None;
                 self.reload(ctx);
             }
             Some(D::RowMenu(opened)) => {
@@ -425,10 +426,6 @@ impl Drive {
         self.sheet = match kind {
             K::More => Sheet::More,
             K::Add => Sheet::Add,
-            K::Type => Sheet::Type,
-            K::Modified => Sheet::Modified,
-            K::Label => Sheet::Label,
-            K::Sort => Sheet::Sort,
             K::NewFolder => Sheet::NewFolder(String::new()),
             K::Followed => Sheet::Followed,
             // A row's menu, its move and its labels need the row: `RowMenu`.
@@ -436,34 +433,37 @@ impl Drive {
         };
     }
 
+    /// A PICK IN THE HEADER'S FILTER MENU. A filter or the order reads again; the
+    /// layout is local. A pick of a section or an option the menu does not hold is
+    /// nothing, and a filter is no filter on the shelves that carry none.
+    fn menu_pick(&mut self, ctx: &Ctx, pick: menu::Pick<'_>) {
+        // "Any" is the filter off.
+        let value = if pick.option == query::ANY {
+            ""
+        } else {
+            pick.option
+        };
+        match pick.section {
+            query::SECTION_TYPE => self.query.pick_type(value),
+            query::SECTION_MODIFIED => self.query.pick_modified(value),
+            query::SECTION_LABEL => self.query.label = value.to_owned(),
+            menu::SORT => {
+                if !self.query.pick_sort(pick.option) {
+                    return;
+                }
+            }
+            query::SECTION_VIEW => {
+                self.grid = pick.option == query::VIEW_GRID;
+                return;
+            }
+            _ => return,
+        }
+        self.reload(ctx);
+    }
+
     fn choice(&mut self, ctx: &Ctx, key: &str) {
         let sheet = std::mem::replace(&mut self.sheet, Sheet::None);
         match sheet {
-            Sheet::Type => {
-                self.query
-                    .pick_type(if key == query::ANY { "" } else { key });
-                self.reload(ctx);
-            }
-            Sheet::Modified => {
-                self.query
-                    .pick_modified(if key == query::ANY { "" } else { key });
-                self.reload(ctx);
-            }
-            Sheet::Label => {
-                self.query.label = if key == query::ANY {
-                    String::new()
-                } else {
-                    key.to_owned()
-                };
-                self.reload(ctx);
-            }
-            Sheet::Sort => {
-                if self.query.pick_sort(key) {
-                    self.reload(ctx);
-                } else {
-                    self.sheet = Sheet::Sort;
-                }
-            }
             Sheet::Move(document_id) => {
                 let Some(current) = self.row(&document_id).map(|row| row.folder_id.clone()) else {
                     return;

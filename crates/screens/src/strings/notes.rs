@@ -8,7 +8,6 @@ catalog! {
     plain band_notes = ("Notes", "Notes");
     plain body_placeholder = ("Write something", "Write something");
     plain cancel = ("Cancel", "Cancel");
-    plain chip_pinned = ("Pinned", "Pinned");
     plain close = ("Close", "Close");
     plain create = ("Create", "Create");
     plain current_version = ("Current version", "Current version");
@@ -49,6 +48,8 @@ catalog! {
     );
     plain file_title = ("File into notebook", "File into notebook");
     plain file_verb = ("File into notebook", "File into notebook");
+    plain filter_pinned = ("Pinned", "Pinned");
+    plain filter_title = ("Show", "Show");
     plain history_empty_body = (
         "Versions appear here as the note changes.",
         "Versions appear here as the note changes."
@@ -99,6 +100,7 @@ catalog! {
     plain note_missing = ("This note isn't on this phone.", "This note isn't on this phone.");
     plain note_trashed = ("This note is in the trash.", "This note is in the trash.");
     plain notebook_name = ("Notebook name", "Notebook name");
+    plain notebook_scope = ("Notebook {name}", "Notebook {name}");
     plain notebooks_empty_body = (
         "A notebook keeps related notes together.",
         "A notebook keeps related notes together."
@@ -129,7 +131,7 @@ catalog! {
     plain section_notes = ("Notes", "Notes");
     plain section_pinned = ("Pinned", "Pinned");
     plain send_to_agenda = ("Send to Agenda", "Send to Agenda");
-    plain sort_chip_spoken = ("Sort, {order}", "Sort, {order}");
+    plain show_every_note = ("Show every note", "Show every note");
     plain sort_created = ("Date created", "Date created");
     plain sort_title = ("Sort notes", "Sort notes");
     plain sort_title_az = ("Title", "Title");

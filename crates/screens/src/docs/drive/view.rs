@@ -1,14 +1,15 @@
-//! EVERYTHING THE DRIVE DRAWS that depends on its state: the band, the pills,
-//! the head, the rows, the empty choice, the sheet. Made again on every view.
+//! EVERYTHING THE DRIVE DRAWS that depends on its state: the band, the filter
+//! menu, the head, the rows, the empty choice, the sheet. Made again on every view.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::docs_drive_data::{EmptyAction, Mode};
-use wire::docs_sheet::Kind;
 
-use super::query::{MODIFIED, SORTS, TYPES};
+use super::query::{
+    self, ANY, MODIFIED, SECTION_LABEL, SECTION_MODIFIED, SECTION_TYPE, SORTS, TYPES,
+};
 use super::{BAND_ALL, BAND_FOLDERS, BAND_MORE, BAND_STARRED, Drive, Held, sheets};
 use crate::docs::{Phase, denied, fold, folders};
-use crate::kit::{read, search as kit_search};
+use crate::kit::{menu, read, search as kit_search};
 use crate::screen::Ctx;
 use crate::strings::{Locale, docs as words, shared};
 
@@ -33,7 +34,6 @@ pub(super) fn state(drive: &Drive, ctx: &Ctx) -> wire::ViewState {
     use wire::docs_drive_state::Content;
     let locale = ctx.locale();
     let is_denied = matches!(drive.phase, Phase::Denied(_));
-    let searching = drive.active_term().is_some();
     let content = match &drive.phase {
         Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
         Phase::Failed => Content::Failure(read::failure(locale)),
@@ -46,7 +46,6 @@ pub(super) fn state(drive: &Drive, ctx: &Ctx) -> wire::ViewState {
                 destination: drive.destination as i32,
                 folder_id: drive.folder_id.clone(),
                 folder_name: drive.folder_name.clone(),
-                query: Some(drive.query.wire()),
                 layout: if drive.grid {
                     wire::docs_drive_state::Layout::Grid
                 } else {
@@ -72,11 +71,7 @@ pub(super) fn state(drive: &Drive, ctx: &Ctx) -> wire::ViewState {
                 } else {
                     band(drive, locale)
                 },
-                pills: if is_denied || searching || !drive.filtering() {
-                    Vec::new()
-                } else {
-                    pills(drive, locale)
-                },
+                filter_menu: filter_menu(drive, locale),
                 chrome: Some(chrome(drive, locale)),
                 head_meta: head_meta(drive, locale),
                 ingest: Some(drive.ingest.view(locale)),
@@ -136,10 +131,41 @@ fn band(drive: &Drive, locale: Locale) -> Vec<wire::DocsBandTab> {
     ]
 }
 
-/// THE ROOM'S CHIP ROW (R-CHROME-3): the filters first, "Clear filters" while
-/// one is set, and the sort LAST, named for the order in force. Every chip but
-/// Clear opens a sheet of choices, so it carries a chevron.
-fn pills(drive: &Drive, locale: Locale) -> Vec<wire::DocsPill> {
+/// THE HEADER'S FILTER BUTTON (R-CHROME-3): Type, Modified and Label as nested
+/// sections, then the sort and the layout. "Clear filters" is the kit's row, lit
+/// while a filter is set; the sort and the layout never light the button.
+///
+/// In search and on Recently changed (a window, not a filter) the filters and the
+/// sort do not apply, so the menu holds the View section alone and is never lit:
+/// the layout is the one thing the member can still choose there. None while the
+/// vault denies Docs.
+fn filter_menu(drive: &Drive, locale: Locale) -> Option<wire::FilterMenu> {
+    if matches!(drive.phase, Phase::Denied(_)) {
+        return None;
+    }
+    let narrows = drive.active_term().is_none() && drive.filtering();
+    let mut sections = Vec::new();
+    if narrows {
+        sections.extend(filter_sections(drive, locale));
+    }
+    sections.push(menu::single(
+        query::SECTION_VIEW,
+        words::view_title(locale),
+        vec![
+            menu::option(query::VIEW_LIST, words::view_list(locale), !drive.grid),
+            menu::option(query::VIEW_GRID, words::view_grid(locale), drive.grid),
+        ],
+    ));
+    let filtering = narrows && drive.query.filtering();
+    let mut built = menu::menu(locale, sections, filtering);
+    if !narrows {
+        built.spoken = words::view_title(locale);
+    }
+    Some(built)
+}
+
+/// The nested filters and the sort, in the order the chip row held them.
+fn filter_sections(drive: &Drive, locale: Locale) -> Vec<wire::MenuSection> {
     let query = &drive.query;
     let type_label = TYPES
         .iter()
@@ -150,64 +176,62 @@ fn pills(drive: &Drive, locale: Locale) -> Vec<wire::DocsPill> {
         .find(|(_, filter, _, _)| *filter == query.modified)
         .map(|(_, _, _, label)| label(locale));
     let label = Some(query.label.clone()).filter(|label| !label.is_empty());
-    let sort = SORTS.iter().find(|(key, ..)| *key == query.sort_key());
-    let pill = |key: Kind, name: String, chosen: Option<String>| wire::DocsPill {
-        key: key as i32,
-        accessibility_label: match &chosen {
-            Some(chosen) => format!("{name}, {chosen}"),
-            None => name.clone(),
-        },
-        active: chosen.is_some(),
-        label: chosen.unwrap_or(name),
-        chevron: true,
-        clears: false,
-    };
-    let any_labels = drive
-        .rail
-        .as_ref()
-        .is_some_and(|rail| !rail.labels.is_empty());
-    let mut pills = vec![
-        pill(Kind::Type, words::filter_type(locale), type_label.clone()),
-        pill(
-            Kind::Modified,
-            words::filter_modified(locale),
-            modified_label.clone(),
+    let mut types = vec![menu::option(
+        ANY,
+        words::type_any(locale),
+        type_label.is_none(),
+    )];
+    types.extend(TYPES.iter().map(|(key, filter, label)| {
+        menu::option(*key, label(locale), query.type_filter == *filter)
+    }));
+    let mut modified = vec![menu::option(
+        ANY,
+        words::modified_any(locale),
+        modified_label.is_none(),
+    )];
+    modified.extend(MODIFIED.iter().map(|(key, filter, _, label)| {
+        menu::option(*key, label(locale), query.modified == *filter)
+    }));
+    let mut sections = vec![
+        menu::nested(
+            menu::single(SECTION_TYPE, words::filter_type(locale), types),
+            type_label.unwrap_or_else(|| words::type_any(locale)),
+        ),
+        menu::nested(
+            menu::single(SECTION_MODIFIED, words::filter_modified(locale), modified),
+            modified_label.unwrap_or_else(|| words::modified_any(locale)),
         ),
     ];
-    // No label in the drive: no Label chip to open an empty sheet.
-    if any_labels || label.is_some() {
-        pills.push(pill(
-            Kind::Label,
-            words::filter_label(locale),
-            label.clone(),
+    let rail_labels = drive.rail.as_ref().map(|rail| rail.labels.as_slice());
+    // No label in the drive: no Label section to open an empty menu.
+    if rail_labels.is_some_and(|labels| !labels.is_empty()) || label.is_some() {
+        let mut labels = vec![menu::option(ANY, words::label_any(locale), label.is_none())];
+        labels.extend(
+            rail_labels
+                .unwrap_or_default()
+                .iter()
+                .map(|name| menu::option(name.clone(), name.clone(), query.label == *name)),
+        );
+        sections.push(menu::nested(
+            menu::single(SECTION_LABEL, words::filter_label(locale), labels),
+            label.unwrap_or_else(|| words::label_any(locale)),
         ));
     }
-    if type_label.is_some() || modified_label.is_some() || label.is_some() {
-        pills.push(wire::DocsPill {
-            key: Kind::None as i32,
-            label: words::clear_filters(locale),
-            accessibility_label: words::clear_filters(locale),
-            clears: true,
-            ..wire::DocsPill::default()
-        });
-    }
-    let sort_name = words::sort(locale);
-    pills.push(wire::DocsPill {
-        key: Kind::Sort as i32,
-        label: sort.map_or_else(
-            || sort_name.clone(),
-            |(_, _, _, name, detail)| format!("{} · {}", name(locale), detail(locale)),
-        ),
-        // The order is always set; it is a control, not a filter.
-        active: false,
-        accessibility_label: sort.map_or_else(
-            || sort_name.clone(),
-            |(_, _, _, name, detail)| format!("{sort_name}, {}, {}", name(locale), detail(locale)),
-        ),
-        chevron: true,
-        clears: false,
-    });
-    pills
+    sections.push(menu::single(
+        menu::SORT,
+        words::sort(locale),
+        SORTS
+            .iter()
+            .map(|(key, _, _, name, detail)| {
+                menu::option(
+                    *key,
+                    format!("{} · {}", name(locale), detail(locale)),
+                    query.sort_key() == *key,
+                )
+            })
+            .collect(),
+    ));
+    sections
 }
 
 fn chrome(drive: &Drive, locale: Locale) -> wire::DocsDriveChrome {
@@ -220,12 +244,6 @@ fn chrome(drive: &Drive, locale: Locale) -> wire::DocsDriveChrome {
         retry: words::retry(locale),
         loading: words::loading(locale),
         add: words::add(locale),
-        layout_toggle: if drive.grid {
-            words::layout_to_list(locale)
-        } else {
-            words::layout_to_grid(locale)
-        },
-        layout_icon_key: if drive.grid { "List" } else { "Grid" }.to_owned(),
         row_menu: words::more(locale),
         starred: words::starred(locale),
         rename_placeholder: words::rename_placeholder(locale),

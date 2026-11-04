@@ -56,7 +56,7 @@ struct DocsSheetView: View {
                     VStack(spacing: 0) {
                         ForEach(list.choices, id: \.key) { choice in
                             SheetRow(
-                                label: choice.detail.isEmpty ? choice.label : "\(choice.label) · \(choice.detail)",
+                                label: choice.label,
                                 selected: choice.selected,
                                 identifier: "docs-choice-\(choice.key)",
                                 onTap: { actions.onChoice(choice.key) }

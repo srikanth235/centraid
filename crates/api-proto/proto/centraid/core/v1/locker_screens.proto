@@ -113,8 +113,10 @@ message LockerChoice {
   string key = 1;
   string label = 2;
   bool selected = 3;
-  // A count or a note beside the label ("12"); empty for none.
-  string detail = 4;
+  // 4 was `detail` (a count beside the label): the counts moved to the filter
+  // menu's options and no choice carries one.
+  reserved 4;
+  reserved "detail";
 }
 
 message LockerSection {
@@ -192,8 +194,10 @@ message LockerHomeState {
   repeated LockerBandTab band = 9;
   LockerHomeChrome chrome = 10;
   LockerSearchField search = 11;
-  // The Items filter in force: `all`, `starred`, `archived` or a type key.
-  string filter = 12;
+  // 12 was `filter` (the Items filter in force): the menu on `LockerHomeData`
+  // carries which option is checked.
+  reserved 12;
+  reserved "filter";
   // A refusal or a note over the page.
   optional StatusLine status = 13;
 
@@ -245,8 +249,10 @@ message LockerHomeData {
   // Locker was shut ("3 failed unlocks · last 12 Oct 14:05", #1146).
   string status_line = 1;
 
-  // ITEMS: the filter chips, the rows, the window's honest end.
-  repeated LockerChoice filters = 2;
+  // ITEMS: the rows, the window's honest end. 2 was `filters` (the chip row): the
+  // filter is `filter_menu`, in the header.
+  reserved 2;
+  reserved "filters";
   repeated LockerRow rows = 3;
   string window = 4;
   optional EmptyState items_empty = 5;
@@ -264,6 +270,10 @@ message LockerHomeData {
 
   // GENERATE: reads nothing, writes nothing.
   optional LockerGenerator generator = 13;
+
+  // The header's filter button: All · Starred · each type · Archived, with counts,
+  // one single-choice section. Set on Items' data only.
+  optional FilterMenu filter_menu = 14;
 }
 
 message LockerReviewSection {
@@ -306,7 +316,7 @@ message LockerGenerator {
 message LockerHomeEvent {
   oneof kind {
     BandPicked band = 1;
-    FilterPicked filter = 2;
+    // 2 was `filter`: a filter is now a pick in the header's menu.
     SheetOpened sheet_opened = 3;
     SheetClosed sheet_closed = 4;
     SearchOpened search_opened = 5;
@@ -325,13 +335,14 @@ message LockerHomeEvent {
     // "Put it on an item": hands the candidate to the editor and says so. The
     // shell then pushes `generator.use_route`.
     GeneratorUsed generator_used = 15;
+    // The header's filter menu: a pick, or its Clear row (All).
+    FilterMenuPicked filter_menu_picked = 16;
+    FilterMenuCleared filter_menu_cleared = 17;
   }
+  reserved 2;
+  reserved "filter";
 
   message BandPicked {
-    string key = 1;
-  }
-
-  message FilterPicked {
     string key = 1;
   }
 

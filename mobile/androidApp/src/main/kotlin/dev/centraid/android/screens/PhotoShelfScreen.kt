@@ -187,7 +187,18 @@ public fun PhotoShelfScreen(
 
         // A REFUSED WRITE, ABOVE THE CELLS AND NEVER INSTEAD OF THEM: it lands in
         // `status`, not in the read's `failure`, so the shelf and the pick stay.
-        state.status?.let { ScreenFailure(it.sentence, "") }
+        // A receipt (what the last batch did) is a quiet line; only a refusal is a failure.
+        state.status?.let { status ->
+            if (status.refused) {
+                ScreenFailure(status.sentence, "")
+            } else {
+                androidx.compose.material3.Text(
+                    text = status.sentence,
+                    color = centraidColor("textSoft"),
+                    style = centraidType("small"),
+                )
+            }
+        }
         if (state.notice.isNotEmpty()) {
             Text(text = state.notice, style = centraidType("small"), color = centraidColor("textSoft"))
         }
@@ -319,16 +330,6 @@ private fun AlbumActions(
     }
 }
 
-/** The icon key for a bar verb; one [dev.centraid.design.CentraidCatalog] has. */
-private fun iconOf(kind: PhotosBatchAction.Kind): String = when (kind) {
-    PhotosBatchAction.Kind.KIND_FAVORITE, PhotosBatchAction.Kind.KIND_UNFAVORITE -> "heart"
-    PhotosBatchAction.Kind.KIND_ADD_TO_ALBUM -> "album"
-    PhotosBatchAction.Kind.KIND_ARCHIVE -> "Archive"
-    PhotosBatchAction.Kind.KIND_UNARCHIVE, PhotosBatchAction.Kind.KIND_RESTORE -> "restore"
-    PhotosBatchAction.Kind.KIND_TRASH, PhotosBatchAction.Kind.KIND_DELETE_FOREVER -> "trash"
-    else -> "MoreHoriz"
-}
-
 /**
  * THE BAR: the verbs Rust offered for this shelf, in its order, disabled with
  * nothing picked rather than hidden (a bar whose keys come and go moves under a
@@ -376,7 +377,7 @@ private fun SelectionBar(
         }
         actions.filterNot(inMenu).forEach { action ->
             IconKey(
-                iconKey = iconOf(action.kind),
+                iconKey = action.icon_key,
                 label = action.label,
                 testTag = "shelf-verb",
                 bordered = false,

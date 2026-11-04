@@ -116,8 +116,14 @@ enum ShelfCopyExport {
             // is by position and a short answer pairs nothing wrongly.
             for (index, item) in slice.enumerated() where index < answer.urls.count {
                 let url = answer.urls[index]
-                if url.contentID == item.content, url.hasPath, !url.path.isEmpty {
+                guard url.contentID == item.content else { continue }
+                if url.hasPath, !url.path.isEmpty {
                     found.append(LocatedOriginal(path: url.path, mediaType: url.mediaType, isVideo: item.isVideo))
+                } else if url.source == .osLibrary, !url.osRef.isEmpty,
+                    // THE ORIGINAL LIVES IN THE PHOTO LIBRARY, not the store: write it out as a file.
+                    let file = await PhoneLibrary.exportOriginal(ref: url.osRef)
+                {
+                    found.append(LocatedOriginal(path: file.path, mediaType: url.mediaType, isVideo: item.isVideo))
                 }
             }
         }

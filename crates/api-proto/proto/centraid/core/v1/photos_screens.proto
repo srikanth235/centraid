@@ -147,6 +147,8 @@ message PhotosBatchAction {
   bool enabled = 3;
   // Drawn as the outlined `net` action.
   bool destructive = 4;
+  // The catalogue key of the verb's mark.
+  string icon_key = 5;
 
   enum Kind {
     KIND_UNSPECIFIED = 0;

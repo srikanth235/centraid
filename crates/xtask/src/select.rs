@@ -3,7 +3,7 @@
 //!
 //! `cargo xtask gate --profile local` ran `cargo nextest run --workspace` over
 //! every crate on every edit, and that one step was almost all of a loop that
-//! took 290 to 500 s against a 120 s budget. The ruling: the loop tests the
+//! took 290 to 500 s. The ruling: the loop tests the
 //! crates a change **touches, plus the crates that depend on them**, and `pr`
 //! (which CI runs on every pull request) keeps the whole workspace. This module
 //! decides which crates those are. It decides nothing else: `fmt`, `clippy`,

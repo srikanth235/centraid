@@ -399,24 +399,29 @@ public fun StageKey(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    /** A toggle that is on is drawn solid and announced as selected. */
+    on: Boolean = false,
+    /** The label is drawn under the mark (a trashed photograph's Restore and Delete forever). */
+    showLabel: Boolean = false,
+    destructive: Boolean = false,
 ) {
-    Box(
+    val ink = centraidColor(if (!enabled) "onStageSoft" else if (destructive) "net" else "onStage")
+    Column(
         modifier
-            .size(KitGeometry.ROW_MIN)
+            .defaultMinSize(minWidth = KitGeometry.ROW_MIN, minHeight = KitGeometry.ROW_MIN)
             .clip(controlRadius("pill"))
             .clickable(enabled = enabled, onClick = onClick)
             .clearAndSetSemantics {
                 contentDescription = label
                 role = Role.Button
+                selected = on
                 if (!enabled) disabled()
             },
-        contentAlignment = Alignment.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        CentraidIcon(
-            iconKey = iconKey,
-            tint = centraidColor(if (enabled) "onStage" else "onStageSoft"),
-            size = 24.dp,
-        )
+        CentraidIcon(iconKey = iconKey, tint = ink, size = 24.dp, solid = on)
+        if (showLabel) Text(text = label, color = ink, style = centraidType("small"), maxLines = 1)
     }
 }
 

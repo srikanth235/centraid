@@ -12,12 +12,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import centraid.core.v1.FilterMenuCleared
+import centraid.core.v1.FilterMenuPicked
 import centraid.core.v1.NotesBandTab
 import centraid.core.v1.NotesHomeEvent
 import centraid.core.v1.NotesHomeState
 import centraid.core.v1.NotesJournalData
 import centraid.core.v1.NotesLibraryData
-import centraid.core.v1.NotesLibrarySort
 import centraid.core.v1.NotesNoteRow
 import centraid.core.v1.NotesNotebooksData
 import centraid.core.v1.NotesPlace
@@ -39,7 +40,8 @@ import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
-import dev.centraid.android.kit.RoomChip
+import dev.centraid.android.kit.RoomFilter
+import dev.centraid.android.kit.RoomSubtitle
 import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SearchContainerRow
@@ -56,8 +58,8 @@ import dev.centraid.android.theme.centraidType
  * `notes.home` (#1135): Notes · Notebooks · Journal under one band, with Search
  * a field over the Notes place and More a sheet.
  *
- * THE VIEW DECIDES NOTHING. The place, the heading, the band, the chip row, the
- * sections, every count and sentence, the sheets and their rows, the confirms
+ * THE VIEW DECIDES NOTHING. The place, the heading, the band, the header's filter
+ * menu, the notebook under the title, the sections, every count and sentence, the sheets and their rows, the confirms
  * and the two forms are on [NotesHomeState], which Rust makes. A band tap is an
  * event and swaps the place; a row that opens a page carries its [Route] and a
  * tap hands it to [onOpen].
@@ -90,7 +92,7 @@ public fun NotesHomeScreen(
         },
         search = if (notesPlace && search != null && denied == null) {
             RoomSearch(
-                field = SearchField(open_ = search.open_, term = search.term, corrected = search.corrected),
+                field = SearchField(open_ = search.open_, term = search.term, corrected = search.corrected, corrected_label = search.corrected),
                 placeholder = chrome?.search_placeholder.orEmpty(),
                 label = chrome?.search_label.orEmpty(),
                 closeLabel = chrome?.search_close.orEmpty(),
@@ -101,18 +103,22 @@ public fun NotesHomeScreen(
         } else {
             null
         },
-        chips = if (notesPlace) {
-            state.chips.map { chip ->
-                RoomChip(
-                    testTag = "notes-chip-${chip.key}",
-                    label = chip.label,
-                    selected = chip.selected,
-                    chevron = chip.chevron,
-                    spoken = chip.spoken,
-                ) { onEvent(NotesHomeEvent(chip = NotesHomeEvent.ChipPicked(chip.key))) }
-            }
-        } else {
-            emptyList()
+        // THE HEADER'S FILTER BUTTON (R-CHROME-3): Pinned and the tags, then the sort, Rust's menu.
+        filter = state.filter_menu?.let { menu ->
+            RoomFilter(
+                menu = menu,
+                onPick = { section, option ->
+                    onEvent(NotesHomeEvent(filter_menu_picked = FilterMenuPicked(section_key = section, option_key = option)))
+                },
+                onClear = { onEvent(NotesHomeEvent(filter_menu_cleared = FilterMenuCleared())) },
+            )
+        },
+        // THE NOTEBOOK THE LIST IS SCOPED TO, under the title; its close key shows every note.
+        subtitle = state.subtitle?.let { subtitle ->
+            RoomSubtitle(
+                subtitle = subtitle,
+                onClear = { onEvent(NotesHomeEvent(notebook_scope_cleared = NotesHomeEvent.NotebookScopeCleared())) },
+            )
         },
         status = state.status?.sentence.orEmpty(),
         band = if (state.band.isEmpty()) null else ({ NotesBand(state.band, { key -> onEvent(NotesHomeEvent(band = NotesHomeEvent.BandPicked(key))) }, onHome) }),
@@ -332,7 +338,7 @@ private fun JournalList(
     }
 }
 
-/** Every sheet and form the page can hold: More, the row and notebook menus, file-into, sort, the confirm, the notebook form and the journal's new entry. */
+/** Every sheet and form the page can hold: More, the row and notebook menus, file-into, the confirm, the notebook form and the journal's new entry. */
 @Composable
 private fun HomeSheets(state: NotesHomeState, onEvent: (NotesHomeEvent) -> Unit, onOpen: (Route) -> Unit) {
     val chrome = state.chrome
@@ -348,18 +354,6 @@ private fun HomeSheets(state: NotesHomeState, onEvent: (NotesHomeEvent) -> Unit,
                     })
                 }
             }
-            NotesSheet.NOTES_SHEET_SORT -> OptionSheet(
-                title = chrome?.sort_title.orEmpty(),
-                options = state.choices.map { SheetOption(key = it.id, label = it.label, selected = it.selected) },
-                // The choice carries its sort (`NotesChoice.sort`): sent back as it came.
-                onPick = { id ->
-                    val sort = state.choices.firstOrNull { it.id == id }?.sort
-                    if (sort != null && sort != NotesLibrarySort.NOTES_LIBRARY_SORT_UNSPECIFIED) {
-                        onEvent(NotesHomeEvent(sort = NotesHomeEvent.SortPicked(sort)))
-                    }
-                },
-                onDismiss = close,
-            )
             NotesSheet.NOTES_SHEET_FILE_INTO -> OptionSheet(
                 title = chrome?.file_title.orEmpty(),
                 options = state.choices.map { SheetOption(key = it.id, label = it.label, selected = it.selected) },

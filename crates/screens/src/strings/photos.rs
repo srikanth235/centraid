@@ -33,8 +33,14 @@ catalog! {
     plain photos_band_more = ("More", "More");
     plain photos_bytes_many = ("{count} bytes", "{count} bytes");
     plain photos_byte_one = ("1 byte", "1 byte");
-    plain photos_camera_roll = ("Camera roll", "Camera roll");
     plain photos_cancel = ("Cancel", "Cancel");
+    plain photos_receipt_trashed = ("Moved to Trash. Restore brings it back.", "Moved to Trash. Restore brings it back.");
+    plain photos_receipt_restored = ("Restored.", "Restored.");
+    plain photos_receipt_favorited = ("Added to Favorites.", "Added to Favorites.");
+    plain photos_receipt_unfavorited = ("Removed from Favorites.", "Removed from Favorites.");
+    plain photos_receipt_archived = ("Moved to the archive.", "Moved to the archive.");
+    plain photos_receipt_unarchived = ("Moved out of the archive.", "Moved out of the archive.");
+    plain photos_receipt_album = ("Added to {album}.", "Added to {album}.");
     plain photos_captions = ("Captions", "Captions");
     plain photos_caption_placeholder = ("Say what this is", "Say what this is");
     plain photos_cell_downloading = ("Downloading", "Downloading");
@@ -125,6 +131,7 @@ catalog! {
     plain photos_filmstrip_show = ("Show photo {number} of {total}", "Show photo {number} of {total}");
     plain photos_filter_all = ("All photos", "All photos");
     plain photos_filter_favorites = ("Favorites", "Favorites");
+    plain photos_filter_title = ("Show", "Show");
     plain photos_free_up_retention_body = ("Deleted photos stay on your backup device for a while before they are cleared.", "Deleted photos stay on your backup device for a while before they are cleared.");
     plain photos_free_up_title = ("Free up space", "Free up space");
     plain photos_grain_all = ("All", "All");
@@ -139,15 +146,10 @@ catalog! {
     plain photos_grid_selected_many = ("{count} photos selected", "{count} photos selected");
     plain photos_grid_selected_one = ("1 photo selected", "1 photo selected");
     plain photos_grid_trash_confirm = ("Move to trash", "Move to trash");
-    plain photos_import_auto = ("Centraid also imports on Wi-Fi while charging.", "Centraid also imports on Wi-Fi while charging.");
-    plain photos_import_done = ("Your camera roll is in your vault", "Your camera roll is in your vault");
-    plain photos_import_done_count = ("Your camera roll is in your vault — {done} this time.", "Your camera roll is in your vault — {done} this time.");
     plain photos_import_looking = ("Looking through your camera roll", "Looking through your camera roll");
     plain photos_import_now = ("Import now", "Import now");
-    plain photos_import_off = ("Camera roll import is off", "Camera roll import is off");
     plain photos_import_paused_disk = ("Paused: this phone is out of space", "Paused: this phone is out of space");
     plain photos_import_progress = ("Importing: {done} done, {left} to go", "Importing: {done} done, {left} to go");
-    plain photos_import_running = ("Import is already running.", "Import is already running.");
     plain photos_import_wait_counts = ("{done} done, {left} waiting.", "{done} done, {left} waiting.");
     plain photos_import_wait_power = ("Waiting for a charger", "Waiting for a charger");
     plain photos_import_wait_wifi = ("Waiting for Wi-Fi", "Waiting for Wi-Fi");
@@ -315,6 +317,11 @@ catalog! {
     plain vault_online = ("On this phone", "On this phone");
 
     // Counted forms of the pairs above: `{n}` is the count.
+    counted receipt_favorited_n = ("1 photo added to Favorites.", "{n} photos added to Favorites.");
+    counted receipt_unfavorited_n = ("1 photo removed from Favorites.", "{n} photos removed from Favorites.");
+    counted receipt_archived_n = ("1 photo moved to the archive.", "{n} photos moved to the archive.");
+    counted receipt_unarchived_n = ("1 photo moved out of the archive.", "{n} photos moved out of the archive.");
+    counted receipt_album_n = ("1 photo added to {album}.", "{n} photos added to {album}.");
     counted selected_title = ("1 photo selected", "{n} photos selected");
     counted chosen_title = ("{n} chosen", "{n} chosen");
     counted trash_question = ("Move 1 photo to the trash?", "Move {n} photos to the trash?");

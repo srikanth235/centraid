@@ -4,10 +4,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
@@ -26,12 +25,16 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
@@ -44,6 +47,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.SecureFlagPolicy
 import centraid.core.v1.Autosave
@@ -75,11 +80,13 @@ public data class RoomAction(
 /**
  * Search on an [AppPlace]: the kit `SearchField` and its events.
  *
- * SEARCH IS ALWAYS IN THE SAME PLACE (R-CHROME-2): closed, the slot is a
- * field-shaped bar reading [placeholder], and a tap sends [onOpen]; open, it
- * is the field. Never a More row, a header glyph or a band tab. An app whose
- * search is a page of its own (Photos) pushes it from [onOpen] and
- * never sets `field.open_`.
+ * SEARCH IS ALWAYS IN THE SAME PLACE (R-CHROME-2): a round key at the trailing end of the app's
+ * band, the way the system Photos app has it. Closed, the band draws the key
+ * ([LocalBandSearchKey], handed to [AppBand] by [AppPlace]) and a tap sends [onOpen]; open, the
+ * field takes the band's place at the foot ([BandSearchField]) and its close key brings the band
+ * back. Never a More row, a header glyph or a band tab; an app with no search slot gets no key.
+ * An app whose search is a page of its own (Photos, Money) pushes it from [onOpen] and never sets
+ * `field.open_`.
  */
 public data class RoomSearch(
     val field: SearchField,
@@ -92,86 +99,66 @@ public data class RoomSearch(
 )
 
 /**
- * One chip in the room's filter row (R-CHROME-3): a filter ([selected] says
- * whether it narrows the list now) or the sort, which carries [chevron] and
- * opens an `OptionSheet` of its choices. The row sits under search, before
- * the content, in every app.
+ * HOW FAR THE BAND REACHES UP INTO THE CONTENT: the foot's height (the band and the status lines
+ * above it) while an [AppPlace] was asked to run its content under the band, and zero everywhere
+ * else. A scroller that runs under the band gives its last row this much bottom padding, so the
+ * row can still scroll clear of the band ([bandFootPadding]).
  */
-public data class RoomChip(
-    val testTag: String,
-    val label: String,
-    val count: String = "",
-    val selected: Boolean = false,
-    val chevron: Boolean = false,
-    val spoken: String = "",
-    val onPress: () -> Unit,
-)
+public val LocalBandClearance: ProvidableCompositionLocal<Dp> = compositionLocalOf { 0.dp }
 
-/** The search bar while search is closed: field-shaped, so it reads as the place to type. */
+/**
+ * THE BOTTOM PADDING OF A SCROLLER UNDER THE BAND: the band's clearance and, beyond it, the same
+ * breathing room the SwiftUI shell leaves (`BandPolicy.FOOT_MARGIN`).
+ */
 @Composable
-public fun RoomSearchOpener(placeholder: String, testTag: String = "search-opener", onOpen: () -> Unit) {
-    val shape = RoundedCornerShape(KitGeometry.RADIUS)
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 4.dp, bottom = 8.dp)
-            .heightIn(min = KitGeometry.ROW_MIN)
-            .clip(shape)
-            .background(centraidColor("bgSunken"))
-            .border(KitGeometry.HAIRLINE, centraidColor("line"), shape)
-            .clickable(onClick = onOpen)
-            .padding(horizontal = 12.dp)
-            .testTag(testTag)
-            .clearAndSetSemantics {
-                contentDescription = placeholder
-                role = Role.Button
-            },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        CentraidIcon(iconKey = "Search", tint = centraidColor("textFaint"), size = 16.dp)
-        Text(
-            placeholder,
-            style = centraidType("body"),
-            color = centraidColor("textFaint"),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 8.dp),
-        )
-    }
-}
+public fun bandFootPadding(): PaddingValues =
+    PaddingValues(bottom = LocalBandClearance.current + BandPolicy.FOOT_MARGIN.dp)
 
-/** The filter row: chips in one line, scrolling sideways when they overflow. */
+/**
+ * THE PLACE'S BODY AND ITS FOOT: [content] and, at the bottom, [foot] (the status lines and the
+ * band). With [contentUnderBand] the content is laid out the whole height and the foot floats over
+ * its end, so what scrolls shows around the band's floating pills; [LocalBandClearance] then says how much
+ * of it the foot covers. Without it the content ends where the foot begins, as it always did.
+ */
 @Composable
-public fun RoomChipRow(app: String, chips: List<RoomChip>) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)
-            .testTag("$app-chips"),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        chips.forEach { chip ->
-            val spoken = chip.spoken.ifEmpty { chip.label }
-            KitChip(
-                label = chip.label,
-                count = chip.count,
-                selected = chip.selected,
-                chevron = chip.chevron,
-                modifier = Modifier.testTag(chip.testTag).semantics { contentDescription = spoken },
-                onClick = chip.onPress,
-            )
+private fun BandStage(
+    modifier: Modifier,
+    contentUnderBand: Boolean,
+    foot: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    SubcomposeLayout(modifier) { constraints ->
+        val width = constraints.maxWidth
+        val height = constraints.maxHeight
+        val footPlaceables = subcompose("foot", foot)
+            .map { it.measure(Constraints(minWidth = width, maxWidth = width)) }
+        val footHeight = minOf(footPlaceables.maxOfOrNull { it.height } ?: 0, height)
+        val room = if (contentUnderBand) height else height - footHeight
+        val clearance = if (contentUnderBand) footHeight.toDp() else 0.dp
+        val contentPlaceables = subcompose("content") {
+            CompositionLocalProvider(LocalBandClearance provides clearance) {
+                Box(Modifier.fillMaxSize()) { content() }
+            }
+        }.map { it.measure(Constraints.fixed(width, room)) }
+        layout(width, height) {
+            contentPlaceables.forEach { it.place(0, 0) }
+            footPlaceables.forEach { it.place(0, height - footHeight) }
         }
     }
 }
 
 /**
- * `AppPlace`: an app's root. `AppHeader` (mark + name + ≤1 trailing action),
- * search under it (the bar, or the field while open), the filter row of
- * [chips], [content], the status line
- * and the app's band at the foot — a render prop, so the band stays the app's.
+ * `AppPlace`: an app's root. `AppHeader` (mark + name + the filter menu + ≤1 trailing action),
+ * [content], the status line
+ * and the app's band at the foot — a render prop, so the band stays the app's. Search is the
+ * band's trailing key, and the open field takes the band's place at the foot (see [RoomSearch]).
  * [statusLine] is the status host's second form, for a line that carries a
  * verb or a bar ([ProgressStatusLine]); it docks where [status] does.
+ *
+ * **THE BAND IS A SOLID TONAL FLOATING PILL** ([bandGround]), and with [contentUnderBand] the
+ * content runs under it, as the SwiftUI shell's always does. A screen that sets it owes its
+ * scrollers the bottom padding in [bandFootPadding]; one that does not keeps its content above the
+ * band, which is the old layout.
  */
 @Composable
 public fun AppPlace(
@@ -181,10 +168,17 @@ public fun AppPlace(
     meta: String = "",
     trailing: RoomAction? = null,
     search: RoomSearch? = null,
-    chips: List<RoomChip> = emptyList(),
+    /**
+     * THE HEADER'S FILTER BUTTON (R-CHROME-3): Rust's `FilterMenu`, drawn as a menu beside the
+     * app's one trailing action. Null where the app has nothing to filter or sort.
+     */
+    filter: RoomFilter? = null,
+    /** The scope the page is in, under the app's name (Notes' notebook, Money's month). */
+    subtitle: RoomSubtitle? = null,
     status: String = "",
     statusLine: (@Composable () -> Unit)? = null,
     band: (@Composable () -> Unit)? = null,
+    contentUnderBand: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     Column(modifier.fillMaxSize().testTag("$app-place")) {
@@ -198,30 +192,49 @@ public fun AppPlace(
                 if (meta.isNotEmpty()) {
                     Text(meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
                 }
+                if (subtitle != null) RoomSubtitleLine(subtitle)
             }
+            // THE HEADER'S TWO TRAILING ITEMS: the filter menu, then the app's one verb.
+            if (filter != null) FilterMenuButton(app, filter)
             if (trailing != null) IconKey(trailing.iconKey, trailing.label, trailing.testTag, onPress = trailing.onPress)
         }
-        if (search != null) {
-            if (search.field.open_) {
-                CentraidSearchField(
-                    field = search.field,
-                    placeholder = search.placeholder,
-                    onTerm = search.onTerm,
-                    onClose = search.onClose,
-                    label = search.label,
-                    closeLabel = search.closeLabel,
-                )
-            } else {
-                RoomSearchOpener(search.placeholder, testTag = "$app-search-open", onOpen = search.onOpen)
-            }
-        }
-        if (chips.isNotEmpty()) RoomChipRow(app, chips)
-        Box(Modifier.weight(1f).fillMaxWidth()) { content() }
-        StatusLine(status)
-        statusLine?.invoke()
-        // THE SHELL'S LINE SITS ON THE BAND, never under it.
-        LocalShellLine.current?.invoke()
-        band?.invoke()
+        BandStage(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentUnderBand = contentUnderBand,
+            foot = {
+                Column(Modifier.fillMaxWidth()) {
+                    // THE LINES STAND ON THE PAGE'S COLOUR: they are text, and text over a
+                    // photograph is not legible. The floating pill is the band's alone.
+                    Column(Modifier.fillMaxWidth().background(centraidColor("bg"))) {
+                        StatusLine(status)
+                        statusLine?.invoke()
+                        // THE SHELL'S LINE SITS ON THE BAND, never under it.
+                        LocalShellLine.current?.invoke()
+                    }
+                    Column(Modifier.fillMaxWidth().bandStrip()) {
+                        if (search != null && search.field.open_) {
+                            // OPEN SEARCH TAKES THE BAND'S PLACE, and stays there while the keyboard
+                            // goes (its search key) so the foot is never a blank.
+                            BandSearchField(
+                                field = search.field,
+                                placeholder = search.placeholder,
+                                onTerm = search.onTerm,
+                                onClose = search.onClose,
+                                label = search.label,
+                                closeLabel = search.closeLabel,
+                                testTag = "$app-search",
+                            )
+                        } else {
+                            // THE BAND'S TRAILING KEY is the app's search, when it has one.
+                            CompositionLocalProvider(
+                                LocalBandSearchKey provides search?.let { BandSearchKey(it.placeholder, it.onOpen) },
+                            ) { band?.invoke() }
+                        }
+                    }
+                }
+            },
+            content = content,
+        )
     }
 }
 
@@ -241,6 +254,10 @@ public fun PushedPage(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     trailing: RoomAction? = null,
+    /** The header's filter menu, beside the one trailing action, for a pushed list (Docs' folder). */
+    filter: RoomFilter? = null,
+    /** The app's id, which the filter menu's test tags are made from (`<app>-filter-menu`). */
+    app: String = "",
     status: String = "",
     statusLine: (@Composable () -> Unit)? = null,
     backSpoken: String? = null,
@@ -274,6 +291,7 @@ public fun PushedPage(
                 )
             }
             Spacer(Modifier.weight(1f))
+            if (filter != null) FilterMenuButton(app, filter)
             if (trailing != null) IconKey(trailing.iconKey, trailing.label, trailing.testTag, onPress = trailing.onPress)
         }
         RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp))

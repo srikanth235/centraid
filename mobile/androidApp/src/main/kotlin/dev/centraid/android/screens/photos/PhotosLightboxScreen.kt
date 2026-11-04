@@ -236,20 +236,25 @@ private fun Chrome(
 
         // A WRITE THAT WAS REFUSED, OR A RECEIPT, AS A LINE OVER THE CHROME.
         state.status?.takeIf { it.sentence.isNotEmpty() }?.let { status ->
-            Text(
-                text = status.sentence,
-                color = ink,
-                textAlign = TextAlign.Center,
-                style = centraidType("small"),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            )
+            // ON ITS OWN PLATE, clear of the photograph's pixels beneath it.
+            Box(Modifier.fillMaxWidth().padding(bottom = 8.dp), contentAlignment = Alignment.Center) {
+                Text(
+                    text = status.sentence,
+                    color = ink,
+                    textAlign = TextAlign.Center,
+                    style = centraidType("small"),
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(centraidColor("stageSunken"))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
         }
 
         if (!state.slideshow) {
             if (player != null) LightboxTransport(player, words)
             LightboxFilmstrip(state, onEvent)
-            Pager(state, words, onEvent)
-            Toolbar(state, onEvent, onOpen, soft)
+            Toolbar(state, words, photo.trashed, onEvent, onOpen, soft)
         }
     }
 }
@@ -274,45 +279,37 @@ private fun Chip(icon: String, label: String, onClick: () -> Unit) {
 }
 
 /**
- * THE POINTER EQUIVALENT FOR SWIPE: nothing here is reachable by gesture alone,
- * and a phone has no arrow keys. The ids are Rust's `previous_id` and `next_id`,
- * empty at either end of the shelf.
- */
-@Composable
-private fun Pager(state: PhotosLightboxState, words: PhotosLightboxWords, onEvent: (PhotosLightboxEvent) -> Unit) {
-    if (state.previous_id.isEmpty() && state.next_id.isEmpty()) return
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        StageKey(
-            iconKey = "ChevronLeft",
-            label = words.previous,
-            onClick = { onEvent(movedEvent(state.previous_id)) },
-            enabled = state.previous_id.isNotEmpty(),
-        )
-        StageKey(
-            iconKey = "ChevronRight",
-            label = words.next,
-            onClick = { onEvent(movedEvent(state.next_id)) },
-            enabled = state.next_id.isNotEmpty(),
-        )
-    }
-}
-
-/**
  * THE BOTTOM ROW, and its refusals in words. The enabled/reason table is Rust's
  * ([PhotosLightboxVerb]): no action is enabled without being able to run, and
  * none is disabled without a reason. A refused target is greyed with the
  * stage's own soft ink, never the page's disabled ink.
+ *
+ * THE POINTER EQUIVALENT FOR SWIPE is the ends of this one row, so the arrows line up with the
+ * verbs between them: nothing here is reachable by gesture alone. The ids are Rust's
+ * `previous_id` and `next_id`, empty at either end of the shelf. Over a trashed photograph the
+ * verbs carry their words, because a restore and a delete-forever are two marks to tell apart.
  */
 @Composable
 private fun Toolbar(
     state: PhotosLightboxState,
+    words: PhotosLightboxWords,
+    trashed: Boolean,
     onEvent: (PhotosLightboxEvent) -> Unit,
     onOpen: (Route) -> Unit,
     soft: Color,
 ) {
     val reasons = state.toolbar.filter { !it.enabled && it.why.isNotEmpty() }.map { it.why }.distinct()
+    val paged = state.previous_id.isNotEmpty() || state.next_id.isNotEmpty()
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            if (paged) {
+                StageKey(
+                    iconKey = "ChevronLeft",
+                    label = words.previous,
+                    onClick = { onEvent(movedEvent(state.previous_id)) },
+                    enabled = state.previous_id.isNotEmpty(),
+                )
+            }
             state.toolbar.forEach { verb ->
                 StageKey(
                     iconKey = verb.icon_key,
@@ -323,6 +320,17 @@ private fun Toolbar(
                         if (route != null) onOpen(route) else onEvent(verbEvent(verb))
                     },
                     enabled = verb.enabled,
+                    on = verb.on,
+                    showLabel = trashed,
+                    destructive = verb.destructive,
+                )
+            }
+            if (paged) {
+                StageKey(
+                    iconKey = "ChevronRight",
+                    label = words.next,
+                    onClick = { onEvent(movedEvent(state.next_id)) },
+                    enabled = state.next_id.isNotEmpty(),
                 )
             }
         }

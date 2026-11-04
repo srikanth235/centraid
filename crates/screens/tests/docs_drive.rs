@@ -1,5 +1,5 @@
 //! Docs' drive (`docs.drive`): ports of the `DocsSpec` drive cases — the shelves,
-//! the band, the chip row, search, the row menu, move, labels, rename, a folder
+//! the band, the filter menu, search, the row menu, move, labels, rename, a folder
 //! page and the Add sheet — through `Driver`, the door a shell uses.
 
 mod docs_support;
@@ -7,6 +7,7 @@ mod docs_support;
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::catalog::act;
 use centraid_screens::docs::{self, routes};
+use centraid_screens::kit::menu;
 use centraid_screens::testing::Driver;
 use docs_support::*;
 use wire::docs_drive_event as de;
@@ -92,39 +93,104 @@ fn a_row_says_kind_size_and_when_in_words() {
     assert_eq!(args.parent, "Docs");
 }
 
+/// The menu the drive draws.
+fn filter_menu(d: &Driver, i: u64) -> &wire::FilterMenu {
+    state(d, i)
+        .filter_menu
+        .as_ref()
+        .expect("the drive has a filter menu")
+}
+
+fn section<'a>(d: &'a Driver, i: u64, key: &str) -> &'a wire::MenuSection {
+    menu::find(filter_menu(d, i), key).unwrap_or_else(|| panic!("no {key} section"))
+}
+
 #[test]
-fn filters_are_the_requests_and_the_chip_row_follows_them() {
+fn the_filter_menu_holds_three_nested_filters_the_sort_and_the_view() {
+    let d = driver();
+    let i = root(&d);
+    let built = filter_menu(&d, i);
+    let keys: Vec<_> = built.sections.iter().map(|s| s.key.as_str()).collect();
+    assert_eq!(keys, ["type", "modified", "label", "sort", "view"]);
+    let nested: Vec<_> = built.sections.iter().map(|s| s.nested).collect();
+    assert_eq!(nested, [true, true, true, false, false]);
+    assert!(
+        built
+            .sections
+            .iter()
+            .all(|s| s.kind == wire::menu_section::Kind::Single as i32)
+    );
+    assert!(!built.filtering);
+    assert_eq!(built.spoken, "Filter and sort");
+    assert_eq!(built.clear_label, "Clear filters");
+    // "Any" is first and checked; a nested section says its value in a word.
+    let types = section(&d, i, "type");
+    assert_eq!(types.title, "Type");
+    assert_eq!(types.summary, "Any type");
+    assert_eq!(types.options[0].key, "any");
+    assert_eq!(menu::checked(types), ["any"]);
+    assert_eq!(types.options.len(), 9);
+    assert_eq!(section(&d, i, "modified").summary, "Any time");
+    assert_eq!(section(&d, i, "modified").options.len(), 5);
+    // The drive's labels are the Label section's options.
+    let labels = section(&d, i, "label");
+    assert_eq!(labels.summary, "Any label");
+    assert!(labels.options.iter().any(|o| o.key == "tahoe"));
+    // Six orders, each named for the order it is: "Name · A to Z".
+    let sort = section(&d, i, "sort");
+    assert_eq!(sort.options.len(), 6);
+    assert_eq!(menu::checked(sort), ["changed_desc"]);
+    assert_eq!(sort.options[0].label, "Date changed · Newest first");
+    assert_eq!(sort.options[2].label, "Name · A to Z");
+    // The layout is a choice of the menu: a list until a grid is picked.
+    let view = section(&d, i, "view");
+    assert_eq!(view.title, "View");
+    assert_eq!(menu::checked(view), ["list"]);
+}
+
+#[test]
+fn filters_are_the_requests_and_the_menu_follows_them() {
     let mut d = driver();
     let i = root(&d);
     let all = titles(d.view(i)).len();
     pdf(&d, "Lease.pdf", 'a');
     drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
-    let pills: Vec<&str> = state(&d, i)
-        .pills
-        .iter()
-        .map(|pill| pill.label.as_str())
-        .collect();
-    assert_eq!(pills.first(), Some(&"Type"));
-    assert_eq!(pills.last(), Some(&"Date changed · Newest first"));
-    open_sheet(&mut d, i, Sheet::Type);
-    assert_eq!(sheet_keys(state(&d, i))[0], "any");
-    choose(&mut d, i, "pdf");
+    menu_pick(&mut d, i, "type", "pdf");
     assert_eq!(titles(d.view(i)), ["Lease.pdf"]);
-    let drive = state(&d, i);
-    let pills: Vec<(&str, bool)> = drive
-        .pills
-        .iter()
-        .map(|pill| (pill.label.as_str(), pill.active))
-        .collect();
-    assert_eq!(pills[0], ("PDFs", true));
-    assert!(drive.pills.iter().any(|pill| pill.clears));
+    let built = filter_menu(&d, i);
+    assert!(built.filtering);
+    assert_eq!(built.spoken, "Filter and sort, on");
+    let types = section(&d, i, "type");
+    assert_eq!(menu::checked(types), ["pdf"]);
+    assert_eq!(types.summary, "PDFs");
+    // The other filters are untouched.
+    assert_eq!(menu::checked(section(&d, i, "modified")), ["any"]);
+    // Modified and Label are their own requests too.
+    menu_pick(&mut d, i, "modified", "today");
+    assert_eq!(section(&d, i, "modified").summary, "Today");
+    menu_pick(&mut d, i, "modified", "any");
+    menu_pick(&mut d, i, "type", "any");
+    menu_pick(&mut d, i, "label", "tahoe");
+    assert_eq!(titles(d.view(i)), ["Tahoe packing list"]);
+    assert_eq!(section(&d, i, "label").summary, "tahoe");
+    assert!(filter_menu(&d, i).filtering);
+    menu_pick(&mut d, i, "type", "pdf");
+    assert!(
+        titles(d.view(i)).is_empty(),
+        "a label and a type narrow together"
+    );
     // Clear filters reads the shelf back and keeps the order.
-    drive_send(&mut d, i, D::FiltersCleared(de::FiltersCleared {}));
+    menu_pick(&mut d, i, "sort", "name_asc");
+    menu_clear(&mut d, i);
     assert_eq!(titles(d.view(i)).len(), all + 1);
-    assert!(!state(&d, i).pills.iter().any(|pill| pill.clears));
+    let built = filter_menu(&d, i);
+    assert!(!built.filtering);
+    for key in ["type", "modified", "label"] {
+        assert_eq!(menu::checked(menu::find(built, key).unwrap()), ["any"]);
+    }
+    assert_eq!(menu::checked(section(&d, i, "sort")), ["name_asc"]);
     // A filter nothing matches is its own empty state with the one action.
-    open_sheet(&mut d, i, Sheet::Type);
-    choose(&mut d, i, "video");
+    menu_pick(&mut d, i, "type", "video");
     let data = drive_data(d.view(i));
     assert_eq!(
         data.empty.as_ref().unwrap().headline,
@@ -135,50 +201,97 @@ fn filters_are_the_requests_and_the_chip_row_follows_them() {
         data.empty_action,
         wire::docs_drive_data::EmptyAction::ClearFilters as i32
     );
+    // That action is the menu's Clear.
+    menu_clear(&mut d, i);
+    assert_eq!(titles(d.view(i)).len(), all + 1);
 }
 
 #[test]
-fn the_sort_chip_is_named_for_the_order_in_force_and_follows_it() {
+fn a_pick_the_menu_does_not_hold_is_nothing() {
     let mut d = driver();
     let i = root(&d);
-    open_sheet(&mut d, i, Sheet::Sort);
-    choose(&mut d, i, "name_asc");
+    let before = titles(d.view(i));
+    menu_pick(&mut d, i, "type", "pdf");
+    let filtered = titles(d.view(i));
+    menu_pick(&mut d, i, "sort", "sideways");
+    menu_pick(&mut d, i, "colour", "red");
+    assert_eq!(titles(d.view(i)), filtered);
+    assert_eq!(menu::checked(section(&d, i, "sort")), ["changed_desc"]);
+    menu_clear(&mut d, i);
+    assert_eq!(titles(d.view(i)), before);
+}
+
+#[test]
+fn the_sort_is_a_choice_of_the_menu_and_never_lights_it() {
+    let mut d = driver();
+    let i = root(&d);
+    menu_pick(&mut d, i, "sort", "name_asc");
     let titles_now = titles(d.view(i));
     let mut sorted = titles_now.clone();
     sorted.sort_by_key(|title| title.to_lowercase());
     assert_eq!(titles_now, sorted);
-    assert_eq!(state(&d, i).pills.last().unwrap().label, "Name · A to Z");
-    open_sheet(&mut d, i, Sheet::Sort);
-    let sheet = state(&d, i).sheet.as_ref().unwrap();
-    let Some(wire::docs_sheet::Body::Choices(list)) = &sheet.body else {
-        panic!("the sort sheet lists choices");
-    };
-    assert!(
-        list.choices
-            .iter()
-            .find(|c| c.key == "name_asc")
-            .unwrap()
-            .selected
+    assert_eq!(menu::checked(section(&d, i, "sort")), ["name_asc"]);
+    assert!(!filter_menu(&d, i).filtering, "an order is not a filter");
+    menu_pick(&mut d, i, "sort", "name_desc");
+    assert_eq!(menu::checked(section(&d, i, "sort")), ["name_desc"]);
+    let titles_now = titles(d.view(i));
+    let mut sorted = titles_now.clone();
+    sorted.sort_by_key(|title| std::cmp::Reverse(title.to_lowercase()));
+    assert_eq!(titles_now, sorted);
+}
+
+#[test]
+fn the_layout_is_the_views_section_and_changes_no_filter() {
+    let mut d = driver();
+    let i = root(&d);
+    assert_eq!(
+        state(&d, i).layout,
+        wire::docs_drive_state::Layout::List as i32
     );
+    menu_pick(&mut d, i, "view", "grid");
+    assert_eq!(
+        state(&d, i).layout,
+        wire::docs_drive_state::Layout::Grid as i32
+    );
+    assert_eq!(menu::checked(section(&d, i, "view")), ["grid"]);
+    assert!(!filter_menu(&d, i).filtering);
+    menu_pick(&mut d, i, "view", "list");
+    assert_eq!(
+        state(&d, i).layout,
+        wire::docs_drive_state::Layout::List as i32
+    );
+    // Clear filters keeps the layout.
+    menu_pick(&mut d, i, "view", "grid");
+    menu_pick(&mut d, i, "type", "pdf");
+    menu_clear(&mut d, i);
+    assert_eq!(menu::checked(section(&d, i, "view")), ["grid"]);
 }
 
 #[test]
 fn recently_added_is_a_window_with_no_filters_and_its_rule_said_once() {
     let mut d = driver();
     let i = root(&d);
-    open_sheet(&mut d, i, Sheet::Type);
-    choose(&mut d, i, "pdf");
+    menu_pick(&mut d, i, "type", "pdf");
     band(&mut d, i, "more");
     pick(&mut d, i, "recent");
     let drive = state(&d, i);
     assert_eq!(drive.destination, wire::DocsDestination::Recent as i32);
     assert_eq!(drive.chrome.as_ref().unwrap().title, "Recently added");
-    assert!(drive.pills.is_empty());
+    // The filters and the order do not apply: the menu is the layout alone, and
+    // the type chosen on All does not light it.
+    let built = filter_menu(&d, i);
+    let keys: Vec<_> = built.sections.iter().map(|s| s.key.as_str()).collect();
+    assert_eq!(keys, ["view"]);
+    assert!(!built.filtering);
+    assert_eq!(built.spoken, "View");
     assert_eq!(
         drive_data(d.view(i)).shelf_note,
         "Most recently added documents."
     );
     assert!(!titles(d.view(i)).is_empty(), "the filter did not apply");
+    // Back on All the filter is still in force.
+    band(&mut d, i, "all");
+    assert!(filter_menu(&d, i).filtering);
 }
 
 #[test]
@@ -208,10 +321,18 @@ fn search_is_a_field_a_term_reads_search_and_closing_reads_the_shelf_back() {
     assert_eq!(ask.label, "Ask about “tahoe”");
     assert_eq!(ask.question, "Find tahoe");
     assert_eq!(ask.scope, "docs");
-    // The band and the pills stay out of search's way.
-    assert!(state(&d, i).pills.is_empty());
+    // The band stays out of search's way, and the filters and the order do not
+    // apply to hits: the menu is the layout alone.
+    let keys: Vec<_> = filter_menu(&d, i)
+        .sections
+        .iter()
+        .map(|s| s.key.clone())
+        .collect();
+    assert_eq!(keys, ["view"]);
+    assert!(!filter_menu(&d, i).filtering);
     // A term cleared to nothing reads the shelf back under the field.
     search(&mut d, i, "  ");
+    assert_eq!(filter_menu(&d, i).sections.len(), 5);
     assert_eq!(
         drive_data(d.view(i)).mode,
         wire::docs_drive_data::Mode::Shelf as i32
@@ -518,6 +639,8 @@ fn a_folder_page_shows_its_children_its_crumbs_and_makes_a_folder_inside_it() {
     let page = d.push(docs::TAB, node.route.clone().unwrap());
     let drive = state(&d, page);
     assert_eq!(drive.chrome.as_ref().unwrap().title, "Taxes");
+    // A folder page carries the same filter menu (it holds no chip row of its own).
+    assert!(drive.filter_menu.is_some());
     assert_eq!(drive.chrome.as_ref().unwrap().back, "Docs");
     let data = drive_data(d.view(page));
     assert_eq!(data.folders.len(), 1);

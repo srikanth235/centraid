@@ -2,10 +2,12 @@
 //! sort and filters as the read's parameters, and a row menu that pins, files
 //! into a notebook and trashes.
 //!
-//! THE ROOM'S GRAMMAR (R-CHROME-1…4): New note is the header's one action,
-//! search the bar under it, the filters and the sort ONE chip row ([`chips`]: the
-//! notebook it was opened on, Pinned, the tags, the sort last), and More holds
-//! Trash alone — never search, sort or a filter.
+//! THE ROOM'S GRAMMAR (R-CHROME-1…4): New note is the header's one action next to
+//! the filter button, search the bar under it, and More holds Trash alone — never
+//! search, sort or a filter. The button opens ONE menu ([`Library::filter_menu`]:
+//! Pinned and the tags to show, the order to sort by), and the notebook the
+//! library was opened on is the title's second line ([`Library::subtitle`]), whose
+//! close key shows every note.
 //!
 //! - **Reads** are `notes.library` (its notebooks are the file-into sheet's
 //!   choices), or `notes.search` while a term is typed. Search lives beside the
@@ -17,6 +19,7 @@ use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
 
 use crate::catalog::load;
+use crate::kit::menu;
 use crate::kit::read;
 use crate::kit::search;
 use crate::notes::{Phase, fold, routes};
@@ -27,10 +30,16 @@ use crate::strings::{Locale, fill, notes as words};
 const DEFAULT_WINDOW: u32 = 200;
 const MAX_WINDOW: u32 = 2000;
 
-pub(super) const CHIP_NOTEBOOK: &str = "notebook";
-pub(super) const CHIP_PINNED: &str = "pinned";
-pub(super) const CHIP_TAG: &str = "tag-";
-pub(super) const CHIP_SORT: &str = "sort";
+/// The filter section's key (`notes-filter-show-pinned` on a screen), its Pinned
+/// option, and the prefix a tag's option key carries before the concept id.
+pub(super) const FILTER: &str = "show";
+pub(super) const FILTER_PINNED: &str = "pinned";
+pub(super) const FILTER_TAG: &str = "tag-";
+
+/// The sort section's options (`notes-filter-sort-updated`).
+const SORT_UPDATED: &str = "updated";
+const SORT_CREATED: &str = "created";
+const SORT_TITLE: &str = "title";
 
 /// The search field and its answer.
 #[derive(Default)]
@@ -80,11 +89,7 @@ impl Library {
             self.search.held = Some(self.read_search(ctx));
             return;
         }
-        let sort = match self.sort {
-            wire::NotesLibrarySort::Created => "created",
-            wire::NotesLibrarySort::Title => "title",
-            _ => "updated",
-        };
+        let sort = sort_key(self.sort);
         let request = load::notes::Library {
             limit: self.window,
             notebook_id: Some(self.notebook_id.clone()).filter(|id| !id.is_empty()),
@@ -170,7 +175,18 @@ impl Library {
         self.reload(ctx);
     }
 
-    /// The notebook chip widens to every note.
+    /// "Clear filters": Pinned and the tags go; the notebook it was opened on and
+    /// the order stay (the notebook has its own close key, a sort is no filter).
+    pub fn clear_filters(&mut self, ctx: &Ctx) {
+        if !self.pinned_only && self.tag_ids.is_empty() {
+            return;
+        }
+        self.pinned_only = false;
+        self.tag_ids.clear();
+        self.reload(ctx);
+    }
+
+    /// The subtitle's close key widens to every note.
     pub fn clear_notebook(&mut self, ctx: &Ctx) {
         self.notebook_id.clear();
         self.notebook_name.clear();
@@ -178,19 +194,42 @@ impl Library {
         self.reload(ctx);
     }
 
-    /// The heading: the notebook, "Unfiled", or "Notes".
-    pub fn heading(&self, locale: Locale) -> String {
+    /// The notebook the library is scoped to, in a word: its name, or "Unfiled".
+    fn scope_label(&self, locale: Locale) -> Option<String> {
         if !self.notebook_id.is_empty() {
-            if self.notebook_name.is_empty() {
-                words::title(locale)
+            Some(if self.notebook_name.is_empty() {
+                words::untitled_notebook(locale)
             } else {
                 self.notebook_name.clone()
-            }
+            })
         } else if self.unfiled_only {
-            words::unfiled_row(locale)
+            Some(words::unfiled_row(locale))
         } else {
-            words::title(locale)
+            None
         }
+    }
+
+    /// Does the library offer its menu and subtitle? Not while denied, and not
+    /// over search, whose results no filter narrows and no notebook scopes.
+    fn offers_chrome(&self) -> bool {
+        !matches!(self.phase, Phase::Denied(_)) && !self.search.open
+    }
+
+    /// THE TITLE'S SECOND LINE: the notebook (or "Unfiled") the library was
+    /// opened on, with a close key that shows every note. The page's title stays
+    /// "Notes" while scoped. None when the library is not scoped.
+    pub fn subtitle(&self, locale: Locale) -> Option<wire::HeaderSubtitle> {
+        if !self.offers_chrome() {
+            return None;
+        }
+        let label = self.scope_label(locale)?;
+        Some(wire::HeaderSubtitle {
+            spoken: fill(&words::notebook_scope(locale), &[("name", &label)]),
+            label,
+            clearable: true,
+            clear_spoken: words::show_every_note(locale),
+            tappable: false,
+        })
     }
 
     /// A note on screen — the library's or search's — by id: its pin and notebook.
@@ -226,64 +265,62 @@ impl Library {
             || !self.tag_ids.is_empty()
     }
 
-    /// The sort sheet's choices, the current order marked.
-    pub fn sort_choices(&self, locale: Locale) -> Vec<wire::NotesChoice> {
-        sorts(locale)
-            .into_iter()
-            .map(|(sort, label)| wire::NotesChoice {
-                id: format!("{sort:?}"),
-                label,
-                selected: sort == self.sort,
-                sort: sort as i32,
-            })
-            .collect()
-    }
-
-    /// THE CHIP ROW, in draw order: the notebook the library was opened on
-    /// (selected — a tap widens to every note), Pinned, the tags the window saw,
-    /// then the sort, last, wearing the current order's name. None while
-    /// denied, and none over search, whose results no filter narrows.
-    pub fn chips(&self, locale: Locale) -> Vec<wire::NotesChip> {
-        if matches!(self.phase, Phase::Denied(_)) || self.search.open {
-            return Vec::new();
+    /// THE HEADER'S FILTER BUTTON: Pinned and the tags the window saw (any number
+    /// on, the filter), then the sort (one of three). Lit while Pinned or a tag
+    /// narrows the shelf; the notebook scope is the subtitle's, and a sort is no
+    /// filter. None while denied and over search.
+    pub fn filter_menu(&self, locale: Locale) -> Option<wire::FilterMenu> {
+        if !self.offers_chrome() {
+            return None;
         }
-        let mut chips = Vec::new();
-        if !self.notebook_id.is_empty() || self.unfiled_only {
-            chips.push(wire::NotesChip {
-                key: CHIP_NOTEBOOK.to_owned(),
-                label: self.heading(locale),
-                selected: true,
-                ..wire::NotesChip::default()
-            });
-        }
-        chips.push(wire::NotesChip {
-            key: CHIP_PINNED.to_owned(),
-            label: words::chip_pinned(locale),
-            selected: self.pinned_only,
-            ..wire::NotesChip::default()
-        });
+        let mut shown = vec![menu::option(
+            FILTER_PINNED,
+            words::filter_pinned(locale),
+            self.pinned_only,
+        )];
         if let Some(library) = self.phase.data() {
-            for tag in &library.tags {
-                chips.push(wire::NotesChip {
-                    key: format!("{CHIP_TAG}{}", tag.concept_id),
-                    label: tag.label.clone(),
-                    selected: self.tag_ids.contains(&tag.concept_id),
-                    ..wire::NotesChip::default()
-                });
-            }
+            shown.extend(library.tags.iter().map(|tag| {
+                menu::option(
+                    format!("{FILTER_TAG}{}", tag.concept_id),
+                    tag.label.clone(),
+                    self.tag_ids.contains(&tag.concept_id),
+                )
+            }));
         }
         let order = sorts(locale)
             .into_iter()
-            .find(|(sort, _)| *sort == self.sort)
-            .map_or_else(|| words::sort_updated(locale), |(_, label)| label);
-        chips.push(wire::NotesChip {
-            key: CHIP_SORT.to_owned(),
-            spoken: fill(&words::sort_chip_spoken(locale), &[("order", &order)]),
-            label: order,
-            chevron: true,
-            ..wire::NotesChip::default()
-        });
-        chips
+            .map(|(sort, label)| menu::option(sort_key(sort), label, sort == self.sort))
+            .collect();
+        Some(menu::menu(
+            locale,
+            vec![
+                menu::multi(FILTER, words::filter_title(locale), shown),
+                menu::single(menu::SORT, words::sort_title(locale), order),
+            ],
+            self.pinned_only || !self.tag_ids.is_empty(),
+        ))
+    }
+
+    /// A pick in the menu: Pinned and a tag toggle themselves, a sort sets the
+    /// order. Nothing while the menu is not offered, or for a key it did not make.
+    pub fn pick(&mut self, ctx: &Ctx, pick: menu::Pick<'_>) {
+        if !self.offers_chrome() {
+            return;
+        }
+        match (pick.section, pick.option) {
+            (FILTER, FILTER_PINNED) => self.toggle_pinned(ctx),
+            (FILTER, tag) => {
+                if let Some(concept_id) = tag.strip_prefix(FILTER_TAG) {
+                    self.toggle_tag(ctx, concept_id);
+                }
+            }
+            (menu::SORT, order) => {
+                if let Some(sort) = sort_of(order) {
+                    self.set_sort(ctx, sort);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// What the place draws: the library, or search's failure or gate.
@@ -342,15 +379,6 @@ impl Library {
         };
         wire::NotesLibraryData {
             sections: fold::sections(locale, rows),
-            tags: library
-                .tags
-                .iter()
-                .map(|tag| wire::NotesTagChip {
-                    concept_id: tag.concept_id.clone(),
-                    label: tag.label.clone(),
-                    selected: self.tag_ids.contains(&tag.concept_id),
-                })
-                .collect(),
             count_label: fold::notes_count(locale, count, false),
             empty,
             truncated: library.truncated,
@@ -434,6 +462,25 @@ pub(super) enum Content {
     Data(wire::NotesLibraryData),
 }
 
+/// The sort a menu key names, or None for a key the menu did not make.
+fn sort_of(key: &str) -> Option<wire::NotesLibrarySort> {
+    match key {
+        SORT_UPDATED => Some(wire::NotesLibrarySort::Updated),
+        SORT_CREATED => Some(wire::NotesLibrarySort::Created),
+        SORT_TITLE => Some(wire::NotesLibrarySort::Title),
+        _ => None,
+    }
+}
+
+/// A sort's key in the menu, which is also the core's name for the order.
+fn sort_key(sort: wire::NotesLibrarySort) -> &'static str {
+    match sort {
+        wire::NotesLibrarySort::Created => SORT_CREATED,
+        wire::NotesLibrarySort::Title => SORT_TITLE,
+        _ => SORT_UPDATED,
+    }
+}
+
 fn sorts(locale: Locale) -> [(wire::NotesLibrarySort, String); 3] {
     [
         (wire::NotesLibrarySort::Updated, words::sort_updated(locale)),
@@ -469,4 +516,67 @@ fn containers(locale: Locale, hits: &[wire::ContainerHit]) -> Vec<wire::SearchCo
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ready(notebook: &str, unfiled: bool) -> Library {
+        let mut library = Library::new(notebook, "Work", unfiled);
+        library.phase = Phase::Ready(wire::NotesLibrary::default());
+        library
+    }
+
+    #[test]
+    fn no_menu_and_no_subtitle_while_denied_or_over_search() {
+        let locale = Locale::En;
+        let library = ready("book-1", false);
+        assert!(library.filter_menu(locale).is_some());
+        assert!(library.subtitle(locale).is_some());
+
+        let mut denied = ready("book-1", false);
+        denied.phase = Phase::Denied(wire::AppQueryDenial::default());
+        assert!(denied.filter_menu(locale).is_none());
+        assert!(denied.subtitle(locale).is_none());
+
+        let mut searching = ready("book-1", false);
+        searching.search.open = true;
+        assert!(searching.filter_menu(locale).is_none());
+        assert!(searching.subtitle(locale).is_none());
+    }
+
+    #[test]
+    fn the_notebook_is_the_subtitle_and_never_a_filter() {
+        let locale = Locale::En;
+        let scoped = ready("book-1", false);
+        let subtitle = scoped.subtitle(locale).expect("a subtitle");
+        assert_eq!(subtitle.label, "Work");
+        assert_eq!(subtitle.spoken, "Notebook Work");
+        assert!(subtitle.clearable && !subtitle.tappable);
+        assert_eq!(subtitle.clear_spoken, "Show every note");
+        assert!(!scoped.filter_menu(locale).unwrap().filtering);
+
+        // A notebook with no name read yet still has a word.
+        let mut unnamed = ready("book-1", false);
+        unnamed.notebook_name.clear();
+        assert_eq!(unnamed.subtitle(locale).unwrap().label, "Untitled notebook");
+
+        assert_eq!(ready("", true).subtitle(locale).unwrap().label, "Unfiled");
+        assert!(ready("", false).subtitle(locale).is_none());
+    }
+
+    #[test]
+    fn the_filter_is_lit_by_pinned_or_a_tag_only() {
+        let locale = Locale::En;
+        let mut library = ready("", false);
+        assert!(!library.filter_menu(locale).unwrap().filtering);
+        library.sort = wire::NotesLibrarySort::Title;
+        assert!(!library.filter_menu(locale).unwrap().filtering);
+        library.tag_ids.push("t1".to_owned());
+        assert!(library.filter_menu(locale).unwrap().filtering);
+        library.tag_ids.clear();
+        library.pinned_only = true;
+        assert!(library.filter_menu(locale).unwrap().filtering);
+    }
 }

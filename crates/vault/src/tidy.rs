@@ -67,7 +67,7 @@ impl Vault {
     /// **Why the pass collects at its end and not in each batch.** Collecting is one walk of
     /// every blob in the library; a batch of five that did it held the vault for the whole
     /// library each time, and one big collect at the end held it for every byte released at
-    /// once. Two thousand overdue photographs measured both (`tests/write_costs.rs`).
+    /// once. Two thousand overdue photographs showed both when it was timed by hand; `crates/core/tests/year3_writes.rs` runs the pass at that size.
     ///
     /// # Errors
     /// The command's own refusal or failure.

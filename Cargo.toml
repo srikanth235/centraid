@@ -319,11 +319,10 @@ debug = false
 # TWO OPTIMISED PROFILES, and the split is measured rather than stylistic.
 #
 # `release` is what a PULL REQUEST builds. `cargo xtask gate --profile pr`'s
-# `release-build` step runs `cargo build --workspace --release` and scores it
-# against the `releaseBuildSeconds` ceiling in
-# `contracts/ledgers/compile-time.json` (1400 s as wave 2 lane B2 re-based it)
-# — the one compile-time number a pull request can go red on. It is also what a developer builds when checking that
-# something is fast enough to be worth shipping.
+# `release-build` step runs `cargo build --workspace --release` and fails only
+# if it does not compile; how long it takes is printed, not scored (owner ruling
+# 2026-11-04). It is also what a developer builds when checking that something
+# is fast enough to be worth shipping.
 #
 # `dist` is what a TAG publishes. It is `release` plus `lto = "thin"` and
 # `codegen-units = 1`: cross-crate inlining across `crates/*` is the
@@ -342,15 +341,13 @@ debug = false
 #   * `cargo build --workspace --release`, no LTO, with split debuginfo: 747 s
 #   * `cargo build --workspace --release`, this profile: **379 s**
 #
-# Against the 600 s `releaseBuildSeconds` ceiling those numbers were measured
-# under, LTO simply did not fit. B2 has since re-based that ceiling to 1400 s,
-# so 1039 s WOULD now fit — and the split stays anyway, on the argument that
-# survives the number: LTO in `release` spends 74 % of the ceiling and about
-# 70 % of the whole 1500 s `pr` budget on an optimisation only the PUBLISHED
-# artifact needs, and `pr` has to hold with the release build inside it. A
-# feedback loop is not the place to pay for inlining nobody on a pull request
-# consumes. If that argument ever stops holding, the fix is to merge `dist`
-# back into `release`, not to widen a ledger.
+# LTO in `release` roughly triples the wall clock of the build every pull
+# request runs, for an optimisation only the PUBLISHED artifact needs. (These
+# numbers were measured under a build-time ceiling that the owner's ruling of
+# 2026-11-04 removed with every other timing budget; the argument for the split
+# is the cost to a pull request, not the ceiling.) A feedback loop is not the
+# place to pay for inlining nobody on a pull request consumes. If that argument
+# ever stops holding, the fix is to merge `dist` back into `release`.
 #
 # WHAT THE SPLIT COSTS, stated because it is a real cost and not a free win:
 # the binary a pull request builds is no longer bit-identical to the binary a
@@ -375,9 +372,8 @@ debug = false
 # packing one is not free: `release` carrying
 # `debug = "line-tables-only"` + `split-debuginfo = "packed"` cost 747 s against
 # this profile's 379 s — nearly double, for symbols no pull request reads. So
-# the debuginfo settings live in `dist`, where the wall clock is bounded by a CI
-# runner rather than by a feedback-time budget, and `release` is cargo's
-# ordinary optimised build.
+# the debuginfo settings live in `dist`, which only a tag's publishing lane
+# builds, and `release` is cargo's ordinary optimised build.
 #
 # `debug = "line-tables-only"` + `split-debuginfo = "packed"` + NO `strip`. A
 # stripped binary with no symbol file anywhere is a crash report nobody can

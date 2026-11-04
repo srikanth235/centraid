@@ -152,7 +152,7 @@ struct VaultHeader: View {
                     KitIconKey(
                         iconKey: "Search",
                         label: bar.searchLabel,
-                        framed: true,
+                        glass: true,
                         identifier: "home-search-open"
                     ) {
                         shell.open(bar.searchRoute)
@@ -162,7 +162,7 @@ struct VaultHeader: View {
                     KitIconKey(
                         iconKey: bar.appearanceIcon,
                         label: bar.appearanceLabel,
-                        framed: true,
+                        glass: true,
                         identifier: "home-appearance"
                     ) {
                         store.sendHome(.appearance(.init()))

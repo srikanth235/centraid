@@ -15,11 +15,10 @@ catalog! {
     plain edit_flip = ("Flip", "Flip");
     plain edit_flip_horizontal = ("Flip ↔", "Flip ↔");
     plain edit_flip_vertical = ("Flip ↕", "Flip ↕");
-    plain edit_status = (
-        "Crop {ratio} · rotation {degrees}{flip}",
-        "Crop {ratio} · rotation {degrees}{flip}"
-    );
-    plain edit_status_flip = (" · {flip}", " · {flip}");
+    plain edit_status_crop = ("Cropped to {ratio}", "Cropped to {ratio}");
+    plain edit_status_rotate = ("Rotated {degrees}", "Rotated {degrees}");
+    plain edit_status_flip_horizontal = ("Flipped left to right", "Flipped left to right");
+    plain edit_status_flip_vertical = ("Flipped top to bottom", "Flipped top to bottom");
     plain edit_retry = ("Try again.", "Try again.");
     plain edit_no_vault = (
         "Centraid could not read the edited photo.",

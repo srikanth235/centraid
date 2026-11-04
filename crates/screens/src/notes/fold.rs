@@ -238,13 +238,11 @@ pub fn file_choices(
         id: String::new(),
         label: words::no_notebook(locale),
         selected: current.is_empty(),
-        sort: 0,
     })
     .chain(notebooks.iter().map(|notebook| wire::NotesChoice {
         id: notebook.notebook_id.clone(),
         label: notebook_name(locale, notebook),
         selected: notebook.notebook_id == current,
-        sort: 0,
     }))
     .collect()
 }

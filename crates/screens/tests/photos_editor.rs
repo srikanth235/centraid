@@ -91,20 +91,17 @@ fn the_new_photographs_title_is_the_caption_or_an_edited_file_name() {
 }
 
 #[test]
-fn the_status_line_names_the_crop_the_rotation_and_the_flip() {
+fn the_status_line_says_what_changed_and_nothing_when_nothing_did() {
     let en = Locale::En;
     let mut plan = editor::fresh_plan();
-    assert_eq!(
-        editor::editor_status(en, &plan),
-        "Crop Original · rotation 0°"
-    );
+    assert_eq!(editor::editor_status(en, &plan), "");
     plan.ratio = Ratio::ThreeTwo as i32;
     plan.quarters = 1;
     plan.straighten = -3;
     plan.flip = Flip::Horizontal as i32;
     assert_eq!(
         editor::editor_status(en, &plan),
-        "Crop 3 : 2 · rotation +87° · flip ↔"
+        "Cropped to 3 : 2, rotated +87°, flipped left to right"
     );
     assert!(editor::is_edited(&plan));
     assert!(!editor::is_edited(&editor::fresh_plan()));
@@ -226,7 +223,7 @@ fn it_opens_fresh_on_the_original_with_the_date_the_shutter_fired() {
     assert_eq!(state.phase, Phase::Editing as i32);
     assert_eq!(state.plan, Some(editor::fresh_plan()));
     assert!(!state.edited);
-    assert_eq!(state.status_line, "Crop Original · rotation 0°");
+    assert_eq!(state.status_line, "");
     assert_eq!(state.straighten_label, "Straighten 0°");
     assert_eq!(state.flip_label, "Flip");
     assert_eq!(data(&state).meta, "from a photo taken 30 July 2026");
@@ -309,7 +306,7 @@ fn a_quarter_turn_resets_the_crop_and_the_ratio_and_every_tool_updates_the_words
     let state = state_of(&d, at);
     assert_eq!(state.straighten_label, "Straighten −1°");
     assert_eq!(state.flip_label, "Flip ↔");
-    assert_eq!(state.status_line, "Crop Original · rotation +89° · flip ↔");
+    assert_eq!(state.status_line, "Rotated +89°, flipped left to right");
     send(&mut d, at, ev::Kind::Flip(ev::Flipped {}));
     assert_eq!(state_of(&d, at).flip_label, "Flip ↕");
     send(&mut d, at, ev::Kind::Flip(ev::Flipped {}));

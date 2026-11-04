@@ -240,7 +240,7 @@ internal class ShellEffects(
                 val camera = withContext(Dispatchers.IO) { PhotoHandOff.cameraOf(effect.read_camera!!.path) }
                 EffectResult(camera_read = CameraRead(camera = camera.orEmpty()))
             }
-            effect.render_edit != null -> PhotosEditRender.perform(context.cacheDir, core, effect.render_edit!!)
+            effect.render_edit != null -> PhotosEditRender.perform(context, core, effect.render_edit!!)
             // ---- generic platform work -----------------------------------------------------------
             effect.clipboard_set != null -> {
                 val set = effect.clipboard_set!!

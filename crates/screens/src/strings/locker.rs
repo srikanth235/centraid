@@ -131,6 +131,7 @@ catalog! {
     plain filter_archived = ("Archived", "Archived");
     plain filter_empty = ("Nothing here.", "Nothing here.");
     plain filter_starred = ("Starred", "Starred");
+    plain filter_title = ("Show", "Show");
     plain generate = ("Generate", "Generate");
     plain generated_copied = ("Copied. Clears in 30 seconds.", "Copied. Clears in 30 seconds.");
     plain generator_a11y = ("Generated password", "Generated password");

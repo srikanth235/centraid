@@ -73,6 +73,7 @@ catalog! {
     plain kind_run = ("Run", "Run");
     plain kind_strength = ("Strength", "Strength");
     plain kind_swim = ("Swim", "Swim");
+    plain kind_title = ("Type", "Type");
     plain kind_walk = ("Walk", "Walk");
     plain kind_yoga = ("Yoga", "Yoga");
     plain metric_empty = ("Nothing in this period.", "Nothing in this period.");

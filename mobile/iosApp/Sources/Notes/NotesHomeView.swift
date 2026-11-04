@@ -3,9 +3,10 @@ import SwiftUI
 /// `notes.home` — Notes · Notebooks · Journal under one band, with Search as a
 /// field over the Notes place and More as a sheet (#1135).
 ///
-/// **THE VIEW DECIDES NOTHING.** The place, the heading, the band, the chip row,
-/// the sections, every count and sentence, the sheets and their rows, the
-/// confirms and the two forms are on `NotesHomeState`, which Rust makes
+/// **THE VIEW DECIDES NOTHING.** The place, the heading, the band, the header's
+/// filter menu, the notebook under the title, the sections, every count and
+/// sentence, the sheets and their rows, the confirms and the two forms are on
+/// `NotesHomeState`, which Rust makes
 /// (`crates/screens`, module `notes`). A tap on the band is an event and swaps
 /// the place; a row that opens a page carries its `Route` and a tap hands it to
 /// `open`.
@@ -31,16 +32,8 @@ struct NotesHomeView: View {
             title: state.title,
             trailing: addAction,
             search: isNotesPlace && !denied ? searchSlot : nil,
-            chips: isNotesPlace ? state.chips.map { chip in
-                RoomChip(
-                    identifier: "notes-chip-\(chip.key)",
-                    label: chip.label,
-                    selected: chip.selected,
-                    chevron: chip.chevron,
-                    spoken: chip.spoken,
-                    action: { send(NotesEvents.home { $0.chip = .with { $0.key = chip.key } }) }
-                )
-            } : [],
+            filter: filter,
+            subtitle: subtitle,
             showsBand: !denied && !state.band.isEmpty
         ) {
             AppBand(
@@ -130,11 +123,41 @@ struct NotesHomeView: View {
         }
     }
 
+    /// THE HEADER'S FILTER BUTTON (R-CHROME-3): Pinned and the tags, then the sort, Rust's menu.
+    /// A pick or the clear row is an event; which is checked, and whether the funnel is lit, is
+    /// on the state.
+    private var filter: FilterSlot? {
+        guard state.hasFilterMenu else { return nil }
+        return FilterSlot(
+            menu: state.filterMenu,
+            onPick: { section, option in
+                send(NotesEvents.home {
+                    $0.filterMenuPicked = .with {
+                        $0.sectionKey = section
+                        $0.optionKey = option
+                    }
+                })
+            },
+            onClear: { send(NotesEvents.home { $0.filterMenuCleared = .init() }) }
+        )
+    }
+
+    /// THE NOTEBOOK THE LIST IS SCOPED TO, under the title; its close key shows every note.
+    private var subtitle: SubtitleSlot? {
+        guard state.hasSubtitle else { return nil }
+        return SubtitleSlot(
+            subtitle: state.subtitle,
+            onClear: { send(NotesEvents.home { $0.notebookScopeCleared = .init() }) }
+        )
+    }
+
     private var searchSlot: SearchSlot {
         var field = KitSearchField()
         field.open = state.search.open
         field.term = state.search.term
         field.corrected = state.search.corrected
+        // Rust's `corrected` here is the finished sentence, so the field says it as it is.
+        field.correctedLabel = state.search.corrected
         return SearchSlot(
             field: field,
             placeholder: state.chrome.searchPlaceholder,
@@ -149,7 +172,7 @@ struct NotesHomeView: View {
         Binding(
             get: {
                 switch state.sheet {
-                case .more, .sort, .rowMenu, .fileInto, .notebookMenu: return !state.hasConfirm
+                case .more, .rowMenu, .fileInto, .notebookMenu: return !state.hasConfirm
                 case .unspecified, .UNRECOGNIZED: return false
                 }
             },
@@ -480,14 +503,6 @@ private struct NotesHomeSheet: View {
                 ForEach(state.choices, id: \.id) { choice in
                     SheetRow(label: choice.label, selected: choice.selected, identifier: "notes-file-\(choice.id)") {
                         send(NotesEvents.home { $0.notebookChosen = .with { $0.notebookID = choice.id } })
-                    }
-                }
-            }
-        case .sort:
-            OptionSheet(title: chrome.sortTitle) {
-                ForEach(state.choices, id: \.id) { choice in
-                    SheetRow(label: choice.label, selected: choice.selected, identifier: "notes-sort-\(choice.id.lowercased())") {
-                        send(NotesEvents.home { $0.sort = .with { $0.sort = choice.sort } })
                     }
                 }
             }

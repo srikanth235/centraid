@@ -92,8 +92,6 @@ catalog! {
     plain label_any = ("Any label", "Any label");
     plain label_placeholder = ("New label", "New label");
     plain label_remove = ("Remove", "Remove");
-    plain layout_to_grid = ("Show as grid", "Show as grid");
-    plain layout_to_list = ("Show as list", "Show as list");
     plain loading = ("Loading documents", "Loading documents");
     plain modified_any = ("Any time", "Any time");
     plain modified_last_30_days = ("Last 30 days", "Last 30 days");
@@ -150,6 +148,9 @@ catalog! {
     plain untitled = ("Untitled", "Untitled");
     plain version = ("Version", "Version");
     plain versions_heading = ("Versions", "Versions");
+    plain view_grid = ("Grid", "Grid");
+    plain view_list = ("List", "List");
+    plain view_title = ("View", "View");
     plain where_in = ("In", "In");
     plain where_top = ("At the top level", "At the top level");
     counted document_count = ("{n} document", "{n} documents");

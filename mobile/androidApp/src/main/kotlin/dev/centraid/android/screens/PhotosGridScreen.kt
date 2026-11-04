@@ -43,8 +43,6 @@ import centraid.core.v1.PhotosCopyPlaceChosen
 import centraid.core.v1.PhotosFreeUpRow
 import centraid.core.v1.PhotosFreeUpTapped
 import centraid.core.v1.PhotosGrain
-import centraid.core.v1.PhotosGrainChanged
-import centraid.core.v1.PhotosHomeChrome
 import centraid.core.v1.PhotosHomeEvent
 import centraid.core.v1.PhotosHomeImportBanner
 import centraid.core.v1.PhotosHomeState
@@ -67,10 +65,10 @@ import dev.centraid.android.kit.PhotosAlbumChoiceSheet
 import dev.centraid.android.kit.ScreenEmpty
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.SheetOption
-import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.bandFloor
+import dev.centraid.android.kit.bandGround
 import dev.centraid.android.kit.bandPress
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -89,8 +87,8 @@ import dev.centraid.android.kit.BandPolicy
  *
  * v0's `PhotosHome.tsx` and its siblings: a justified timeline grouped by day
  * under sticky months, paged through the whole library as the member scrolls;
- * Years · Months · All above the band; a scrub rail on the trailing edge; the
- * filter as chips under the search bar and the tile size in More (the room's
+ * a scrub rail on the trailing edge; the zoom (Years · Months · All) and the
+ * filter as chips under the header and the tile size in More (the room's
  * chrome, drawn by [PhotosHomeScreen]); skeleton tiles while the first page is
  * read; and a selection whose bar takes the band's place. Every choice is Rust's
  * (`photos.home`) and every write is Rust's, so this file draws and forwards and
@@ -103,14 +101,14 @@ internal fun PhotosLibraryBody(
     library: PhotosLibrary,
     onEvent: (PhotosHomeEvent) -> Unit,
     onOpen: (Route) -> Unit,
+    // WHERE THE MEMBER IS STANDING, reported by whichever grain is drawn, so a
+    // grain switch (a chip in the room's row) can land on the same stretch of time.
+    visibleDay: MutableState<String>,
 ) {
     val selection = state.selection ?: PhotosSelection()
     val selected = remember(selection.selected_ids) { selection.selected_ids.toSet() }
     val data = library.data_
     val tiles = data?.tiles.orEmpty()
-    // WHERE THE MEMBER IS STANDING, reported by whichever grain is drawn, so a
-    // grain switch can land on the same stretch of time.
-    val visibleDay = remember { mutableStateOf("") }
     // ONE SCROLL POSITION PER GRAIN: All and Months are different lists, and
     // an index carried from one into the other lands nowhere in particular.
     val listState = remember(library.grain) { LazyListState() }
@@ -228,22 +226,6 @@ internal fun PhotosLibraryBody(
                 }
             }
         }
-        // THE GRAIN CONTROL IS PERMANENT WHILE THE LIBRARY HAS PHOTOGRAPHS
-        // (v0): absent only while selecting — the bar is then the foot — or
-        // when there is nothing to zoom.
-        if (!selection.selecting && tiles.isNotEmpty()) {
-            val chrome = state.chrome ?: PhotosHomeChrome()
-            GrainControl(
-                grain = grain,
-                labels = listOf(
-                    PhotosGrain.PHOTOS_GRAIN_YEARS to chrome.grain_years_label,
-                    PhotosGrain.PHOTOS_GRAIN_MONTHS to chrome.grain_months_label,
-                    PhotosGrain.PHOTOS_GRAIN_ALL to chrome.grain_all_label,
-                ),
-            ) { next ->
-                onEvent(PhotosHomeEvent(grain = PhotosGrainChanged(grain = next, at_day = visibleDay.value)))
-            }
-        }
     }
 }
 
@@ -306,8 +288,8 @@ private fun LandOnDay(listState: LazyListState, data: PhotosLibraryData, day: St
  * destination). Drawn in place of `AppBand` while the library is selecting —
  * the band components themselves are not touched.
  *
- * The band's grammar: one elevated plate on the pill rung with a hairline, a
- * mark over a word per verb. With nothing picked every verb is drawn DISABLED
+ * The band's grammar: one plate on the pill rung — the band's tonal floating pill — a mark over a
+ * word per verb. With nothing picked every verb is drawn DISABLED
  * rather than hidden, so the bar does not move under the member's thumb as
  * they pick. Which verbs the bar offers, their words and whether each is
  * enabled are Rust's (`PhotosSelection.actions`); "Send a copy" is the
@@ -334,17 +316,12 @@ internal fun PhotosSelectionBar(
             Modifier
                 .weight(1f)
                 .height(BandPolicy.BAND_HEIGHT.dp)
-                .clip(RoundedCornerShape(BandPolicy.BAND_RADIUS.dp))
-                .border(
-                    CentraidGeometry.HAIRLINE.dp,
-                    centraidColor("lineStrong"),
-                    RoundedCornerShape(BandPolicy.BAND_RADIUS.dp),
-                )
+                .bandGround(RoundedCornerShape(BandPolicy.BAND_RADIUS.dp))
                 .padding(BandPolicy.BAND_PLATE_PAD.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             selection.actions.forEach { action ->
-                SelectionVerb(verbIcon(action.kind), action.label, action.enabled, Modifier.weight(1f)) {
+                SelectionVerb(action.icon_key, action.label, action.enabled, Modifier.weight(1f)) {
                     onEvent(
                         PhotosHomeEvent(
                             selection = PhotosSelectionEvent(action = PhotosSelectionEvent.ActionTapped(kind = action.kind)),
@@ -362,15 +339,6 @@ internal fun PhotosSelectionBar(
             }
         }
     }
-}
-
-private fun verbIcon(kind: PhotosBatchAction.Kind): String = when (kind) {
-    PhotosBatchAction.Kind.KIND_ADD_TO_ALBUM -> "FolderPlus"
-    PhotosBatchAction.Kind.KIND_FAVORITE, PhotosBatchAction.Kind.KIND_UNFAVORITE -> "Heart"
-    PhotosBatchAction.Kind.KIND_TRASH, PhotosBatchAction.Kind.KIND_DELETE_FOREVER -> "Trash"
-    PhotosBatchAction.Kind.KIND_RESTORE -> "Undo"
-    PhotosBatchAction.Kind.KIND_ARCHIVE, PhotosBatchAction.Kind.KIND_UNARCHIVE -> "Archive"
-    else -> "Check"
 }
 
 @Composable
@@ -456,8 +424,8 @@ private fun BackupBanner(banner: PhotosHomeImportBanner, onEvent: (PhotosHomeEve
 }
 
 /**
- * THE SHEETS PHOTOS' HOME OPENS: More, the tile sizes, the camera roll's detail,
- * the location a copy carries, and "Add to album". WHICH ONE IS OPEN IS STATE —
+ * THE SHEETS PHOTOS' HOME OPENS: More, the tile sizes, the location a copy
+ * carries, and "Add to album". WHICH ONE IS OPEN IS STATE —
  * read here, beside the band that opens it, so More works from every band and
  * not only from the library body.
  *
@@ -474,7 +442,6 @@ internal fun PhotosSheets(state: PhotosHomeState, onEvent: (PhotosHomeEvent) -> 
     val close = { sheet(PhotosHomeState.Sheet.SHEET_NONE) }
     val more = state.more
     val tileSize = state.tile_size
-    val detail = state.backup_detail
     val copyPlace = state.copy_place
     when (state.sheet) {
         PhotosHomeState.Sheet.SHEET_MORE -> if (more != null) {
@@ -482,18 +449,11 @@ internal fun PhotosSheets(state: PhotosHomeState, onEvent: (PhotosHomeEvent) -> 
                 more.rows.forEach { row ->
                     SheetRow(
                         label = row.label,
-                        iconKey = if (row.key == "tile_size") "Grid" else null,
+                        iconKey = "Grid",
                         detail = row.meta,
                         testTag = "sheet-option-" + row.key.replace('_', '-'),
-                        onTap = {
-                            sheet(
-                                if (row.key == "tile_size") {
-                                    PhotosHomeState.Sheet.SHEET_TILE_SIZE
-                                } else {
-                                    PhotosHomeState.Sheet.SHEET_BACKUP_DETAIL
-                                },
-                            )
-                        },
+                        // `tile_size` is the one row, and it opens its choice.
+                        onTap = { sheet(PhotosHomeState.Sheet.SHEET_TILE_SIZE) },
                     )
                 }
                 // ONE CLAUSE ONLY: every other surface is reached from Collections.
@@ -515,34 +475,6 @@ internal fun PhotosSheets(state: PhotosHomeState, onEvent: (PhotosHomeEvent) -> 
                 onPick = { key -> onEvent(PhotosHomeEvent(rung = key.toInt())) },
                 onDismiss = close,
             )
-        }
-
-        PhotosHomeState.Sheet.SHEET_BACKUP_DETAIL -> if (detail != null) {
-            SheetRoom(
-                title = detail.title,
-                onDismiss = close,
-                // AN IMPORT, AND ONLY THAT (#1080). No transport row and no
-                // gateway: where the backup stands is the Backup screen's.
-                primary = SheetPrimary(
-                    label = detail.import_label,
-                    enabled = detail.import_enabled,
-                    onPress = { onEvent(PhotosHomeEvent(import_now = PhotosImportNow())) },
-                ),
-                status = detail.status,
-            ) {
-                Column(
-                    Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    detail.rows.forEach { row ->
-                        Text(
-                            text = row.value_,
-                            style = centraidType(if (row.key == "Status") "body" else "small"),
-                            color = centraidColor(if (row.key == "Status") "text" else "textSoft"),
-                        )
-                    }
-                }
-            }
         }
 
         // HOW MUCH OF THE PLACE TRAVELS, asked every time (#816): a place NAME is

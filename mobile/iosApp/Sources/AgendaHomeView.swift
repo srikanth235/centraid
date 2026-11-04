@@ -36,9 +36,8 @@ struct AgendaHomeView: View {
             app: "agenda",
             title: state.chrome.title,
             trailing: addAction(state, denied: content.isDenied),
-            // SEARCH IS THE BAR UNDER THE TITLE (R-CHROME-2), above the day
-            // bar; a tap opens the field through Rust. None on the
-            // gate, which has nothing to search.
+            // SEARCH IS THE BAND'S TRAILING KEY (R-CHROME-2); a tap opens the field
+            // through Rust, at the foot. None on the gate, which has nothing to search.
             search: content.isDenied ? nil : SearchSlot(
                 field: searchField(state),
                 placeholder: state.chrome.searchPlaceholder,
@@ -192,6 +191,8 @@ struct AgendaHomeView: View {
         field.open = state.searchOpen
         field.term = state.searchTerm
         field.corrected = state.searchCorrected
+        // Rust's `search_corrected` is the finished sentence, so the field says it as it is.
+        field.correctedLabel = state.searchCorrected
         return field
     }
 

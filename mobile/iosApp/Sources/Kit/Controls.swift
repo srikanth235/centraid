@@ -23,6 +23,11 @@ struct KitIconKey: View {
     let iconKey: String
     let label: String
     var framed: Bool = false
+    /// The plate is a circle, as the rooms' icon plates are, and not a rounded square.
+    var round: Bool = false
+    /// A floating key over content (Home's header): a round plate on the band's ground — Liquid
+    /// Glass on iOS 26 — in place of the hairline frame.
+    var glass: Bool = false
     var tint: String = "text"
     var identifier: String = ""
     let action: () -> Void
@@ -33,7 +38,15 @@ struct KitIconKey: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                if framed {
+                if glass {
+                    Color.clear
+                        .frame(width: 40, height: 40)
+                        .bandGround(Circle(), solid: "bg", interactive: true)
+                } else if framed && round {
+                    Circle()
+                        .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
+                        .frame(width: 36, height: 36)
+                } else if framed {
                     RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
                         .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
                         .frame(width: 36, height: 36)
@@ -102,9 +115,17 @@ struct KitChipFace: View {
         let ink = enabled ? Theme.color(selected ? "text" : "textSoft", scheme) : Theme.color("textDisabled", scheme)
         let faint = enabled ? Theme.color("textFaint", scheme) : Theme.color("textDisabled", scheme)
         HStack(spacing: 4) {
+            // THE BOLD LABEL SETS THE WIDTH, selected or not: a chip must not change size under
+            // a tap because its weight did.
             Text(label)
-                .centraidType(selected ? "smallStrong" : "small")
-                .foregroundStyle(ink)
+                .centraidType("smallStrong")
+                .hidden()
+                .overlay {
+                    Text(label)
+                        .centraidType(selected ? "smallStrong" : "small")
+                        .foregroundStyle(ink)
+                        .fixedSize()
+                }
             if !count.isEmpty {
                 Text(count)
                     .centraidType("annotLabel")

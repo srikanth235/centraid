@@ -2,12 +2,12 @@ import SwiftUI
 
 import UIKit
 
-// THE SEARCH FIELD, ONCE (K5). Lifted from `PhotosSearchBar`, which still draws
-// the Photos band-slot variant from these two pieces; `CentraidSearchField` below
-// is the field every other app place opens under its header.
+// THE SEARCH FIELD, ONCE (K5). Lifted from `PhotosSearchBar`. `BandSearchField` is the field
+// every app place opens at the foot, in the band's place; `CentraidSearchField` is the one
+// Home's search page and Chat's drawer open under their headers.
 
-/// One of the search row's round controls: 48, on the elevated ground, with a
-/// hairline — the band's own materials at the system's size.
+/// One of the search row's round controls: 48, on the band's glass (`bandGround`) — the band's
+/// own materials at the system's size.
 struct SearchCircle: View {
     let iconKey: String
     let spoken: String
@@ -19,10 +19,7 @@ struct SearchCircle: View {
         Button(action: action) {
             CentraidIconView(iconKey: iconKey, tint: Theme.color("text", scheme), size: 20)
                 .frame(width: BandMetrics.searchHeight, height: BandMetrics.searchHeight)
-                .background(Circle().fill(Theme.color("bgElev", scheme)))
-                .overlay(
-                    Circle().strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
-                )
+                .bandGround(Circle(), solid: "bg", interactive: true)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -184,7 +181,9 @@ struct CentraidSearchField: View {
                             .fixedSize()
                             .padding(.trailing, 8)
                     }
-                    if !typed.isEmpty {
+                    // ONE WAY TO CLEAR OR LEAVE: a field with its own close key closes (the
+                    // term goes with it); the inline clear is for a field that has none.
+                    if !typed.isEmpty, !closes {
                         Button {
                             typed = ""
                         } label: {
@@ -238,5 +237,121 @@ struct CentraidSearchField: View {
             guard term != field.term else { return }
             onTerm(term)
         }
+    }
+}
+
+
+/// THE SEARCH FIELD AT THE FOOT: an app place's open search, drawn in the band's place.
+///
+/// A 48 glass field (`bandGround`, the band's own glass) and, at its trailing end, a 48 glass
+/// ✕ — the same circle the band's search key was, so the key turns into the way out. While the
+/// keyboard is up the row rides it, 8 from the screen's sides and 8 above the keys, as the
+/// system Photos app draws it; with the keyboard away (the Search key) it moves into the band's
+/// slot, `floor` from the glass, so the foot is never a blank and the results stay in view.
+///
+/// Its state is the machine's `SearchField`, as `CentraidSearchField`'s is: the text a member
+/// types lives here first and each DIFFERENCE from the state's term goes to `onTerm`. Close is
+/// its own event, and Rust clears the term and its answer with it; this puts the keyboard away
+/// first. The correction line ("Including results for ...", #1097) stands directly over the
+/// field, because the field is at the foot and the line is read with it.
+struct BandSearchField: View {
+    let field: KitSearchField
+    let placeholder: String
+    var closeLabel: String = KitWords.CLOSE_SEARCH
+    var identifier: String = "kit-search"
+    /// A page whose close only CLEARS the query (Money's search page, which the member leaves
+    /// by its back key) keeps the keyboard; everywhere else the close puts it away.
+    var keepsFocusOnClose = false
+    let onTerm: (String) -> Void
+    let onClose: () -> Void
+
+    @State private var typed = ""
+    @State private var focused = false
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !field.corrected.isEmpty {
+                Text(field.correctedLabel.isEmpty ? KitWords.searchCorrected(corrected: field.corrected) : field.correctedLabel)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .lineLimit(2)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .bandGround(Capsule(), solid: "bgElev")
+                    .padding(.leading, BandMetrics.searchGlyphLead)
+                    .accessibilityIdentifier("search-corrected")
+            }
+            BandGlassGroup(spacing: BandMetrics.groupSpacing) {
+                HStack(spacing: focused ? BandMetrics.searchInset : BandMetrics.searchRestGap) {
+                    fieldCapsule
+                    SearchCircle(iconKey: "X", spoken: closeLabel, identifier: "\(identifier)-close") {
+                        if !keepsFocusOnClose { focused = false }
+                        onClose()
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, focused ? BandMetrics.searchInset : BandMetrics.inset + BandMetrics.searchRestPad)
+        .padding(.vertical, focused ? 0 : BandMetrics.searchRestPad)
+        .padding(.top, BandMetrics.topGap)
+        // Over the keyboard while typing; in the band's slot, `floor` from the glass, when not.
+        .padding(.bottom, focused ? BandMetrics.searchInset : BandMetrics.floorPadding)
+        .animation(
+            reduceMotion
+                ? nil
+                : .timingCurve(0.3, 0, 0.4, 1, duration: CentraidGeometry.durationOne / 1000),
+            value: focused
+        )
+        .onAppear {
+            // THE FIELD OPENS READY: a member who pressed the key wants to type.
+            typed = field.term
+            focused = true
+        }
+        // A TERM THE MACHINE SET reaches the field only while the field still shows the term it
+        // replaced, so a reducer a keystroke behind never takes typed letters back.
+        .onChange(of: field.term) { old, new in
+            if typed == old, typed != new { typed = new }
+        }
+        .onChange(of: typed) { _, term in
+            guard term != field.term else { return }
+            onTerm(term)
+        }
+    }
+
+    private var fieldCapsule: some View {
+        HStack(spacing: BandMetrics.searchTextLead - BandMetrics.searchGlyphLead - BandMetrics.searchGlyph) {
+            CentraidIconView(iconKey: "Search", tint: Theme.color("textSoft", scheme), size: BandMetrics.searchGlyph)
+                .frame(width: BandMetrics.searchGlyph, height: BandMetrics.searchGlyph)
+            BareSearchField(
+                text: $typed,
+                focused: $focused,
+                placeholder: placeholder,
+                font: Theme.uiFont("body", scheme, dynamicTypeSize),
+                color: UIColor(Theme.color("text", scheme)),
+                placeholderColor: UIColor(Theme.color("textFaint", scheme))
+            )
+            .accessibilityIdentifier("\(identifier)-field")
+            if !typed.isEmpty {
+                Button {
+                    typed = ""
+                } label: {
+                    CentraidIconView(iconKey: "XCircle", tint: Theme.color("textFaint", scheme), size: 18)
+                        .frame(minWidth: CentraidGeometry.targetMinFine, minHeight: CentraidGeometry.targetMinFine)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.leading, BandMetrics.searchGlyphLead)
+        .padding(.trailing, 4)
+        .frame(height: BandMetrics.searchHeight)
+        .bandGround(Capsule(), solid: "bgElev")
+        .contentShape(Capsule())
+        // A tap anywhere on the capsule, not only on the text run, starts typing again.
+        .onTapGesture { focused = true }
     }
 }

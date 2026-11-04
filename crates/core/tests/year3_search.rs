@@ -1,55 +1,35 @@
-//! The search budget: p95 of the core's own search answers over a year-3 vault,
-//! against a ceiling (#1135, after `call_budget`'s pattern, D-1020-D2-6).
+//! Search answers over a year-3 vault, checked for correctness (#1135).
 //!
-//! `SEARCH_BUDGET_MS` is **80** on `ci-linux-x64-4c`, and the number is in
-//! `contracts/ledgers/search-budget.json` where it can only fall. The ceiling is
-//! the product's promise about a call (a frame is not late because a member
-//! typed), stated once for every search call, and never the observation.
+//! This was `search_budget`, which also held each call to a p95 ceiling. That wall-clock
+//! assertion is removed (owner ruling 2026-11-04: timing checks flake on a loaded machine and
+//! block unrelated changes); what is kept is what the answers *are*:
 //!
-//! ## What is timed
+//! - the corpus is the year-3 one it claims to be;
+//! - the same question has the same answer every time;
+//! - a word typed right finds something, and a word nothing holds finds nothing.
 //!
-//! `Handle::call` with an `AppQuery` request: the door a shell uses, so the
-//! number includes the request's decode, the read connection, the FTS door, the
-//! correction pass, the app's fold and the answer's conversion. The surfaces are
-//! the ones a member types into: Home's vault search, and Notes', Docs', Money's
-//! and Locker's own (Locker after its session is unlocked, as the shell gates it).
+//! ## Surfaces and queries
 //!
-//! ## Over what
+//! `Handle::call` with an `AppQuery` request: the door a shell uses. The surfaces are the ones a
+//! member types into: Home's vault search, and Notes', Docs', Money's and Locker's own (Locker
+//! after its session is unlocked, as the shell gates it). Each query is a way the same box is
+//! typed into: a prefix of two letters and of three, a word held by most documents, by a few
+//! hundred, and by two; two words; a one-letter word beside a word; a typo (corrected over the
+//! whole word list); a rare word typed right (the filled pass); a fragment from the middle of a
+//! word; and a word nothing holds. The words are chosen from the corpus's own tallies.
 //!
-//! The vault of [`year3_corpus`]: about 45,000 entities and two million words of
-//! text drawn Zipf-distributed from 200,000 distinct words, so a two-letter prefix
-//! matches thousands of terms and a common word is held by nearly every
-//! document. `call_budget` is the floor measurement over a few hundred rows;
-//! this is the year-3 one.
-//!
-//! ## Which queries
-//!
-//! Each is a way the same box is typed into, and each costs a different path:
-//! a prefix of two letters and of three (the term count the index expands), a
-//! word held by most documents, by a few hundred, and by two; two words; a
-//! one-letter word beside a word; a typo (the empty answer is corrected over the
-//! whole word list); a rare word typed right (the filled pass corrects a thin
-//! exact answer); a fragment from the middle of a word; and a word nothing
-//! holds. The words are chosen from the corpus's own tallies, not typed here.
+//! The vault is [`year3_corpus`]'s, about 45,000 entities; founding it is the cost of this
+//! target (about 30 s in a debug build), the same order as `query_plans`, which founds it too.
 
 mod year3_corpus;
-
-use std::time::{Duration, Instant};
 
 use centraid_apps_kit::search_corpus::{a_then_word, adjacent_pair};
 use centraid_core::api_proto as wire;
 use wire::app_query_request::Query as Q;
 use wire::app_query_response::Answer;
 
-/// The ceiling, in milliseconds, on `ci-linux-x64-4c`: 80, by the owner's ruling of
-/// 2026-10-22 (#1135), after a machine a fifth slower than the first measured Docs'
-/// two-letter prefix at 75 to 78 ms and the owner accepted those p95s.
-const SEARCH_BUDGET_MS: f64 = 80.0;
-/// How many calls each percentile is taken over.
-const SAMPLES: usize = 100;
-/// Unmeasured calls first: the statement compiles, the pages fault in, the
-/// vault's word cache loads.
-const WARMUP: usize = 10;
+/// Calls per query: the second proves the answer is the same.
+const ASKS: usize = 2;
 const TZ: &str = "America/Los_Angeles";
 const LIMIT: u32 = 50;
 
@@ -154,20 +134,6 @@ fn ask(handle: &centraid_core::Handle, query: Q) -> Answer {
     }
 }
 
-/// The nearest-rank percentile of a sorted sample.
-fn percentile(sorted: &[Duration], fraction: f64) -> Duration {
-    if sorted.is_empty() {
-        return Duration::ZERO;
-    }
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let rank = ((sorted.len() as f64 * fraction).ceil() as usize).clamp(1, sorted.len()) - 1;
-    sorted[rank]
-}
-
-fn ms(duration: Duration) -> f64 {
-    duration.as_secs_f64() * 1_000.0
-}
-
 /// A word with two neighbouring letters swapped that nothing in the corpus holds.
 fn typo_of(corpus: &year3_corpus::Year3, word: &str) -> String {
     let letters: Vec<char> = word.chars().collect();
@@ -231,32 +197,20 @@ fn queries(corpus: &year3_corpus::Year3, surface: Surface) -> Vec<(&'static str,
     ]
 }
 
-struct Timing {
+struct Found {
     surface: &'static str,
     query: &'static str,
     term: String,
     rows: usize,
-    corrected: bool,
-    p50: Duration,
-    p95: Duration,
-    p99: Duration,
 }
 
-/// **`#[ignore]`d from the `test` step on purpose**, and run by `search-budget`
-/// with `--include-ignored` in a RELEASE build: the promise is the shipped
-/// core's, and a debug build runs the correction pass three to five times slower
-/// than the phone does. Founding the vault and 6,000 calls is minutes in debug;
-/// the `test` step running it again would charge the `pr` profile twice for one
-/// measurement. By hand:
-/// `cargo test --release -p centraid-core --test search_budget -- --include-ignored --nocapture`.
 #[test]
-#[ignore = "run by the pr gate's `search-budget` step, in release (cargo xtask gate --profile pr --lane search-budget)"]
-fn the_p95_of_every_search_is_inside_the_budget() {
+fn every_search_answers_the_same_and_finds_what_is_typed_right() {
     let corpus = year3_corpus::found();
     println!(
         "search corpus — {} entities ({} notes, {} documents, {} photos, {} people, {} events, \
          {} tasks, {} transactions, {} locker items, {} workouts, {} chat threads), {} words \
-         of text, {} distinct words; rows written in {:.1}s, index built in {:.1}s",
+         of text, {} distinct words",
         corpus.counts.entities,
         corpus.counts.notes,
         corpus.counts.documents,
@@ -270,8 +224,6 @@ fn the_p95_of_every_search_is_inside_the_budget() {
         corpus.counts.threads,
         corpus.counts.words_written,
         corpus.counts.distinct_words,
-        corpus.wrote_seconds,
-        corpus.indexed_seconds,
     );
     assert!(
         corpus.counts.entities >= 40_000 && corpus.counts.distinct_words >= 100_000,
@@ -297,24 +249,14 @@ fn the_p95_of_every_search_is_inside_the_budget() {
         "the Locker unlocks"
     );
 
-    let mut timings = Vec::new();
+    let mut found = Vec::new();
     for surface in Surface::ALL {
         for (query, term) in queries(&corpus, surface) {
-            let ask_once = || {
-                let started = Instant::now();
-                let answer = ask(&corpus.handle, surface.query(&term));
-                (started.elapsed(), surface.read(answer))
-            };
-            for _ in 0..WARMUP {
-                ask_once();
-            }
-            let mut samples = Vec::with_capacity(SAMPLES);
             let mut shape = (0, String::new());
-            for sample in 0..SAMPLES {
-                let (elapsed, answered) = ask_once();
-                samples.push(elapsed);
+            for ask_number in 0..ASKS {
+                let answered = surface.read(ask(&corpus.handle, surface.query(&term)));
                 // The same question has the same answer every time.
-                if sample > 0 {
+                if ask_number > 0 {
                     assert_eq!(
                         answered,
                         shape,
@@ -324,97 +266,26 @@ fn the_p95_of_every_search_is_inside_the_budget() {
                 }
                 shape = answered;
             }
-            samples.sort_unstable();
-            timings.push(Timing {
+            found.push(Found {
                 surface: surface.name(),
                 query,
                 term,
                 rows: shape.0,
-                corrected: !shape.1.is_empty(),
-                p50: percentile(&samples, 0.50),
-                p95: percentile(&samples, 0.95),
-                p99: percentile(&samples, 0.99),
             });
         }
     }
 
-    println!(
-        "search budget — {SAMPLES} samples after {WARMUP} warm-up on ci-linux-x64-4c, \
-         ceiling {SEARCH_BUDGET_MS:.0}ms (p95)"
-    );
-    println!(
-        "{:<7} {:<17} {:<16} {:>5} {:>5} {:>8} {:>8} {:>8}",
-        "surface", "query", "term", "rows", "fixed", "p50 ms", "p95 ms", "p99 ms"
-    );
-    for timing in &timings {
-        println!(
-            "{:<7} {:<17} {:<16} {:>5} {:>5} {:>8.2} {:>8.2} {:>8.2}",
-            timing.surface,
-            timing.query,
-            timing.term.chars().take(16).collect::<String>(),
-            timing.rows,
-            if timing.corrected { "yes" } else { "" },
-            ms(timing.p50),
-            ms(timing.p95),
-            ms(timing.p99),
-        );
-    }
-
-    // A budget met by returning nothing is not a budget met: what is typed right
-    // finds something, and what nothing holds finds nothing.
-    for timing in &timings {
-        match timing.query {
-            "no match" => assert_eq!(timing.rows, 0, "{} `{}`", timing.surface, timing.term),
+    // What is typed right finds something, and what nothing holds finds nothing.
+    for hit in &found {
+        match hit.query {
+            "no match" => assert_eq!(hit.rows, 0, "{} `{}`", hit.surface, hit.term),
             "in-word fragment" => {}
             query => assert!(
-                timing.rows > 0,
+                hit.rows > 0,
                 "{} {query} `{}` found nothing",
-                timing.surface,
-                timing.term
+                hit.surface,
+                hit.term
             ),
         }
     }
-    let over: Vec<String> = timings
-        .iter()
-        .filter(|timing| ms(timing.p95) > SEARCH_BUDGET_MS)
-        .map(|timing| {
-            format!(
-                "{} {} `{}`: p95 {:.2}ms",
-                timing.surface,
-                timing.query,
-                timing.term,
-                ms(timing.p95)
-            )
-        })
-        .collect();
-    assert!(
-        over.is_empty(),
-        "p95 over the {SEARCH_BUDGET_MS:.0}ms ceiling: {}. The budget is the product's \
-         responsiveness promise, not a target — either the search path got slower or the \
-         ledger needs an owner ruling (contracts/ledgers/search-budget.json, #1135)",
-        over.join("; ")
-    );
-}
-
-/// The ledger's number and this test's constant are the same number.
-///
-/// Two copies of a budget is two budgets, and the one that is not read is the
-/// one that drifts. The ledger is what `cargo xtask gate` ratchets; this test is
-/// what measures.
-#[test]
-fn the_ledger_and_this_test_state_the_same_ceiling() {
-    let path = centraid_ontology::scratch::repo_root().join("contracts/ledgers/search-budget.json");
-    let text = std::fs::read_to_string(&path)
-        .unwrap_or_else(|error| panic!("{} is committed: {error}", path.display()));
-    let ledger: serde_json::Value = serde_json::from_str(&text).expect("the ledger is valid JSON");
-    let recorded = ledger["profiles"]["pr"]["ci-linux-x64-4c"]["p95Ms"]
-        .as_f64()
-        .expect("the ledger records a p95 ceiling for this hardware");
-    assert!(
-        (recorded - SEARCH_BUDGET_MS).abs() < f64::EPSILON,
-        "the ledger says {recorded} and this test says {SEARCH_BUDGET_MS}"
-    );
-    let provenance = &ledger["_provenance"];
-    assert_eq!(provenance["samples"].as_u64(), Some(SAMPLES as u64));
-    assert_eq!(provenance["warmup"].as_u64(), Some(WARMUP as u64));
 }

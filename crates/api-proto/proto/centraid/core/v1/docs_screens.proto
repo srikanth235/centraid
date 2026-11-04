@@ -8,7 +8,7 @@
 //
 // THE CORE'S ANSWERS ARE FOLDED IN RUST before they cross: the shelf, the filters
 // and the sort are part of the core's REQUEST, so changing one reads again; what
-// depends on the SCREEN's state (the band, the pills, the sheets, the empty
+// depends on the SCREEN's state (the band, the filter menu, the sheets, the empty
 // choice) is made by the screen on every view.
 //
 // THE BAND IS ALL · FOLDERS · STARRED · MORE. Shared left with the sharing plane
@@ -42,9 +42,10 @@ message DocsDriveState {
   // rides along so the head has words before the read lands.
   string folder_id = 2;
   string folder_name = 3;
-  // The filters and the order, as the member chose them. Carried across
-  // shelves; "Clear filters" resets the three filters and keeps the order.
-  DocsQuery query = 4;
+  // 4 was `query`, the filters and the order as the member chose them: they are
+  // the checks of `filter_menu`.
+  reserved 4;
+  reserved "query";
   Layout layout = 5;
   DocsSearchField search = 6;
   oneof content {
@@ -71,10 +72,10 @@ message DocsDriveState {
   optional DocsRename rename = 16;
   // THE BAND, computed. EMPTY while denied.
   repeated DocsBandTab band = 17;
-  // The room's chip row (R-CHROME-3), computed: filters, "Clear filters"
-  // while one is set, the sort last. EMPTY in search, on Recently changed (a
-  // window, not a filter) and while denied.
-  repeated DocsPill pills = 18;
+  // 18 was `pills`, the room's chip row: the filters, the sort and the layout
+  // are `filter_menu` in the header.
+  reserved 18;
+  reserved "pills";
   // 19 was `filters_active`: nothing read it (#1152).
   reserved 19;
   reserved "filters_active";
@@ -83,50 +84,15 @@ message DocsDriveState {
   string head_meta = 21;
   // ADDING A DOCUMENT: the status line's words and bar, from the phase.
   DocsIngestView ingest = 22;
+  // THE HEADER'S FILTER BUTTON (R-CHROME-3): Type, Modified and Label as nested
+  // sections, the sort, and the layout (View). In search and on Recently changed
+  // (a window, not a filter) it holds the View section alone; unset while denied.
+  // "Clear filters" is `FilterMenuCleared`.
+  optional FilterMenu filter_menu = 23;
   enum Layout {
     LAYOUT_UNSPECIFIED = 0;
     LAYOUT_LIST = 1;
     LAYOUT_GRID = 2;
-  }
-}
-
-// The core's filter and sort values, mirrored (this file cannot import them).
-message DocsQuery {
-  TypeFilter type = 1;
-  Modified modified = 2;
-  // One label, matched exactly; EMPTY is none.
-  string label = 3;
-  Sort sort = 4;
-  // 5 was `ascending`: nothing read it (#1152).
-  reserved 5;
-  reserved "ascending";
-
-  enum TypeFilter {
-    TYPE_FILTER_UNSPECIFIED = 0;
-    TYPE_FILTER_PDF = 1;
-    TYPE_FILTER_IMAGE = 2;
-    TYPE_FILTER_WORD = 3;
-    TYPE_FILTER_SPREADSHEET = 4;
-    TYPE_FILTER_MARKDOWN = 5;
-    TYPE_FILTER_TEXT = 6;
-    TYPE_FILTER_AUDIO = 7;
-    TYPE_FILTER_VIDEO = 8;
-  }
-
-  enum Modified {
-    MODIFIED_UNSPECIFIED = 0;
-    MODIFIED_TODAY = 1;
-    MODIFIED_LAST_7_DAYS = 2;
-    MODIFIED_LAST_30_DAYS = 3;
-    MODIFIED_THIS_YEAR = 4;
-  }
-
-  enum Sort {
-    SORT_UNSPECIFIED = 0;
-    SORT_CHANGED = 1;
-    SORT_NAME = 2;
-    SORT_KIND = 3;
-    SORT_SIZE = 4;
   }
 }
 
@@ -155,9 +121,10 @@ message DocsDriveChrome {
   string loading = 7;
   // The Add button (sends `SheetOpened{KIND_ADD}`).
   string add = 8;
-  // The grid/list toggle: its label names what a tap switches TO.
-  string layout_toggle = 9;
-  string layout_icon_key = 10;
+  // 9 and 10 were the grid/list toggle's label and icon: the layout is the
+  // menu's View section.
+  reserved 9, 10;
+  reserved "layout_toggle", "layout_icon_key";
   // 11 was `filters_clear_label`: nothing read it (#1152).
   reserved 11;
   reserved "filters_clear_label";
@@ -180,23 +147,6 @@ message DocsBandTab {
   // A `design/native-catalog.json` icon key.
   string icon_key = 3;
   bool current = 4;
-}
-
-// A CHIP IN THE ROOM'S FILTER ROW (R-CHROME-3): Type, Modified, Label, then
-// "Clear filters" while a filter is set, then the sort LAST. `key` is what
-// `SheetOpened` asks for; `label` is the choice when one is set ("PDF") and
-// the filter's name when none is ("Type"); the sort's is the current order
-// ("Name · A to Z").
-message DocsPill {
-  DocsSheet.Kind key = 1;
-  string label = 2;
-  bool active = 3;
-  string accessibility_label = 4;
-  // Opens a sheet of choices (every filter and the sort): drawn with a chevron.
-  bool chevron = 5;
-  // The "Clear filters" chip: a tap sends `FiltersCleared`, not `SheetOpened`
-  // (its `key` is KIND_NONE).
-  bool clears = 6;
 }
 
 // OS grants the Add sheet's rows depend on, reported by the shell.
@@ -266,7 +216,7 @@ message DocsDriveData {
     EMPTY_ACTION_NONE = 1;
     // Opens the Add sheet.
     EMPTY_ACTION_ADD = 2;
-    // Sends `FiltersCleared`.
+    // Sends `FilterMenuCleared`.
     EMPTY_ACTION_CLEAR_FILTERS = 3;
     // Opens the new-folder sheet.
     EMPTY_ACTION_NEW_FOLDER = 4;
@@ -345,11 +295,14 @@ message DocsFollowed {
   int32 documents = 3;
 }
 
-// A choice on a choices sheet (#1015 D4: choices sheet, content pushes).
+// A choice on a choices sheet (#1015 D4: choices sheet, content pushes): where
+// to move a document.
 message DocsChoice {
   string key = 1;
   string label = 2;
-  string detail = 3;
+  // 3 was `detail`: only the sort sheet used it, and the sort is the menu's.
+  reserved 3;
+  reserved "detail";
   bool selected = 4;
 }
 
@@ -360,7 +313,7 @@ message DocsSheet {
   oneof body {
     // More, Add and a row's menu: a list of actions.
     DocsActionList actions = 3;
-    // A filter, the sort, or where to move a document.
+    // Where to move a document.
     DocsChoiceList choices = 4;
     DocsLabelsSheet labels = 5;
     DocsNewFolderSheet new_folder = 6;
@@ -374,10 +327,10 @@ message DocsSheet {
     KIND_NONE = 1;
     KIND_MORE = 2;
     KIND_ADD = 3;
-    KIND_TYPE = 4;
-    KIND_MODIFIED = 5;
-    KIND_LABEL = 6;
-    KIND_SORT = 7;
+    // 4 to 7 were Type, Modified, Label and Sort, the chip row's sheets: they are
+    // `filter_menu` now.
+    reserved 4, 5, 6, 7;
+    reserved "KIND_TYPE", "KIND_MODIFIED", "KIND_LABEL", "KIND_SORT";
     KIND_ROW_MENU = 8;
     KIND_MOVE = 9;
     KIND_LABELS = 10;
@@ -469,11 +422,9 @@ message DocsDriveEvent {
     SearchOpened search_opened = 3;
     SearchTermChanged search_term = 4;
     SearchClosed search_closed = 5;
-    LayoutToggled layout_toggled = 6;
     SheetOpened sheet_opened = 7;
     SheetClosed sheet_closed = 8;
     ChoicePicked choice = 9;
-    FiltersCleared filters_cleared = 10;
     RowMenuOpened row_menu = 11;
     ActionPicked action = 12;
     RenameEdited rename_edited = 13;
@@ -490,9 +441,16 @@ message DocsDriveEvent {
     // The status line's controls.
     IngestRetried ingest_retried = 24;
     IngestDismissed ingest_dismissed = 25;
+    // ---- The header's filter menu ----
+    FilterMenuPicked filter_menu_picked = 26;
+    FilterMenuCleared filter_menu_cleared = 27;
   }
   // `FollowedChanged`: the drive reads what the vault follows itself.
   reserved 23;
+  // 6 was `layout_toggled` (the layout is the menu's View section) and 10 was
+  // `filters_cleared` (`filter_menu_cleared`).
+  reserved 6, 10;
+  reserved "layout_toggled", "filters_cleared";
 
   message Refreshed {}
 
@@ -509,20 +467,16 @@ message DocsDriveEvent {
 
   message SearchClosed {}
 
-  message LayoutToggled {}
-
   message SheetOpened {
     DocsSheet.Kind kind = 1;
   }
 
   message SheetClosed {}
 
-  // A `DocsChoice.key` on the open choices sheet.
+  // A `DocsChoice.key` on the open choices sheet (Move).
   message ChoicePicked {
     string key = 1;
   }
-
-  message FiltersCleared {}
 
   message RowMenuOpened {
     string document_id = 1;

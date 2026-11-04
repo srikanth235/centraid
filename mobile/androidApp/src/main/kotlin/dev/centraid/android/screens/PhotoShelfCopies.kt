@@ -1,5 +1,6 @@
 package dev.centraid.android.screens
 
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -18,6 +19,7 @@ import centraid.core.v1.LoadRequest
 import centraid.core.v1.OriginalsExported
 import centraid.core.v1.Request
 import centraid.core.v1.Value
+import dev.centraid.android.backup.LibraryRefs
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
 import kotlinx.coroutines.Dispatchers
@@ -57,7 +59,7 @@ internal suspend fun performExportOriginals(
     core: CentraidCore,
     export: ExportOriginals,
 ): EffectResult {
-    val located = locateOriginals(core, export.photo_ids)
+    val located = withContext(Dispatchers.IO) { locateOriginals(context, core, export.photo_ids) }
     val missing = located.missing
     fun exported(status: OriginalsExported.Status, handed: Int = 0) = EffectResult(
         originals_exported = OriginalsExported(status = status, handed = handed, missing = missing),
@@ -108,7 +110,7 @@ internal data class Located(val originals: List<LocatedOriginal>, val missing: I
 private const val URL_BATCH: Int = 100
 
 /** WHERE EACH PICKED ORIGINAL IS ON THIS DEVICE, in the pick's order, and how many are not here. */
-private suspend fun locateOriginals(core: CentraidCore, photoIds: List<String>): Located {
+private suspend fun locateOriginals(context: Context, core: CentraidCore, photoIds: List<String>): Located {
     val ids = photoIds.filter { it.isNotEmpty() }.distinct()
     // The content item and the form of each photograph, from the one read.
     val known = LinkedHashMap<String, Pair<String, Boolean>>()
@@ -134,7 +136,9 @@ private suspend fun locateOriginals(core: CentraidCore, photoIds: List<String>):
         // position and a short answer pairs nothing wrongly.
         slice.forEachIndexed { index, id ->
             val url = urls.getOrNull(index)
-            val path = url?.path
+            // THE ORIGINAL LIVES IN THE PHOTO LIBRARY, not the store: write it out as a file.
+            val path = url?.path?.takeIf { it.isNotEmpty() }
+                ?: url?.os_ref?.takeIf { it.isNotEmpty() }?.let { copyLibraryOriginal(context, it) }
             if (url != null && url.content_id == refs[index].content_id && !path.isNullOrEmpty()) {
                 found += LocatedOriginal(
                     assetId = id,
@@ -146,6 +150,23 @@ private suspend fun locateOriginals(core: CentraidCore, photoIds: List<String>):
         }
     }
     return Located(found, ids.size - found.size)
+}
+
+/**
+ * AN ORIGINAL THE PHOTO LIBRARY HOLDS, AS A FILE: a `MediaStore` row has no path in the
+ * store, so a hand-off copies its bytes into the cache. Null when the row is gone.
+ * The SwiftUI twin is `PhoneLibrary.exportOriginal`.
+ */
+internal fun copyLibraryOriginal(context: Context, osRef: String): String? {
+    val row = LibraryRefs.row(osRef) ?: return null
+    val collection = if (row.video) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+    val uri = ContentUris.withAppendedId(collection, row.id)
+    val target = File.createTempFile("library-", ".bin", context.cacheDir)
+    val copied = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use { input.copyTo(it) } } != null
+    }.getOrDefault(false)
+    if (!copied) target.delete()
+    return if (copied) target.path else null
 }
 
 /** `<applicationId>.photocopies` — the manifest's one `FileProvider`, `PhotoHandOff`'s. */

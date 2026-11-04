@@ -52,18 +52,11 @@ struct HomeBand: View {
             }
         }
         .padding(BandMetrics.platePad)
-        // THE BAND FLOATS (§G), never a flush bar. Its ground is the page's
-        // elevated surface — not `bg`, because a page colour does not float,
-        // and not `bgChrome`, which sinks on dark — and its edge is
-        // `lineStrong`, never the lighter `line`.
-        .background(Theme.color("bgElev", scheme))
-        // A PILL (`BandMetrics.radius`), drawn as `Capsule` so the ends are
-        // exact semicircles at whatever height the plate takes.
-        .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
-        )
+        // THE BAND FLOATS (§G), never a flush bar, on the same ground as every
+        // app's band: Liquid Glass on iOS 26, the fallback before it, and solid
+        // `bgElev` with its `lineStrong` edge under Reduce Transparency or
+        // Increase Contrast. A pill, so the ends are exact semicircles.
+        .bandGround(Capsule())
         .padding(.horizontal, BandMetrics.inset)
         .padding(.top, BandMetrics.topGap)
         .padding(.bottom, BandMetrics.floorPadding)
@@ -126,11 +119,12 @@ private struct BandTab: View {
 /// copied from v0's (`apps/mobile/src/apps/photos/PhotosBand.tsx`,
 /// `kit/band/BandCapsule.tsx`, `kit/band-surface.ts`).
 ///
-/// **TWO PLATES, NOT ONE.** On the leading edge, the HOME CAPSULE: the frame's
-/// own plate, on the page colour and never the app's, because home is the one
+/// **TWO PLATES, NOT ONE, AND A KEY AT EACH END.** On the leading edge, the HOME CAPSULE: the
+/// frame's own plate, on the page colour and never the app's, because home is the one
 /// thing an app may not take away (#883). Beside it, one plate of the app's own
-/// destinations. A member always knows which half is Centraid and which half is
-/// the app, and a back button that has scrolled or been swiped out of reach is
+/// destinations, and — where the app has search — a round SEARCH KEY at the trailing edge, the
+/// Home circle's twin (`BandKey`), so search is always the same circle in the same place. A member always knows which half is
+/// Centraid and which half is the app, and a back button that has scrolled or been swiped out of reach is
 /// never the only way home.
 ///
 /// **WHICH TAB IS LIT IS SAID THREE WAYS AT ONCE, all of them the system's:**
@@ -157,53 +151,66 @@ private struct BandTab: View {
 /// and absent when it has none: a More that opened nothing would be a control
 /// that lies.
 ///
-/// Opaque, never glass: contrast must not depend on what was photographed.
+/// **THE GROUND IS THE PLATFORM'S OWN, AND CONTENT RUNS UNDER IT** (`BandGround`): real Liquid
+/// Glass on iOS 26 and later, the system material before it. The Home circle, the plate and the
+/// search key are one glass family (`BandGlassGroup`). Under Reduce Transparency or Increase
+/// Contrast it is the solid paper it used to be, so contrast then depends on nothing that was
+/// photographed.
 struct AppBand: View {
     /// The app's id, for the identifiers a flow taps (`photos-band-library`).
     let app: String
     let tabs: [BandView]
     let onSelect: (Data) -> Void
     var onMore: (() -> Void)? = nil
+    /// A segmented control the page asks the band to carry (Photos' Years · Months · All). Empty
+    /// is none, and the plate of places is what the band draws. With some, the places FOLD
+    /// into one leading key, as the system's tab bar folds when an accessory takes the middle,
+    /// and the control stands between that key and the search key; the key brings the plate
+    /// back, and a pick of a place puts the control back.
+    var segments: [BandSegment] = []
+    var onSegment: (String) -> Void = { _ in }
     let onHome: () -> Void
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The app's search, when it has one (`AppPlace` hands it down; see `SearchSlot`).
+    @Environment(\.bandSearchKey) private var searchKey
     @Namespace private var rule
+    /// The plate of places is out in place of the segments (the member asked for it).
+    @State private var placesOpen = false
+
+    private var folded: Bool { !segments.isEmpty && !placesOpen }
 
     /// The lit tab, as the thing the slide and the tick both key on.
     private var lit: String { tabs.first(where: \.selected)?.label ?? "" }
 
     var body: some View {
+        BandGlassGroup(spacing: BandMetrics.groupSpacing) {
         HStack(spacing: BandMetrics.plateGap) {
-            Button(action: onHome) {
-                CentraidIconView(
-                    iconKey: "Home",
-                    tint: Theme.color("textSoft", scheme),
-                    size: BandMetrics.iconSize,
-                    strokeWidth: CentraidGeometry.appMarkStroke
-                )
-                // AS WIDE AS THE PLATE IS TALL — so the pill rung makes a
-                // circle and not an oval. Both read one number.
-                .frame(width: BandMetrics.height, height: BandMetrics.height)
-                .contentShape(Circle())
-            }
-            // The frame's page colour, never the app's plate — and `bgPress`
-            // while held, like every other press on the band.
-            // A CIRCLE: the pill rung on a square is round, which is what
-            // makes Home read as a button beside the app's plate and not as a
-            // fifth tab that lost its label.
-            .buttonStyle(BandPress(ground: "bg", inset: 0))
-            .overlay(
-                Capsule()
-                    .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
+            // The frame's page colour, never the app's plate — a CIRCLE, which is what makes
+            // Home read as a button beside the app's plate and not as a fifth tab that lost its
+            // label.
+            BandKey(
+                iconKey: "Home",
+                spoken: KitWords.BAND_HOME,
+                identifier: "\(app)-band-home",
+                action: onHome
             )
-            .accessibilityLabel(KitWords.BAND_HOME)
-            .accessibilityIdentifier("\(app)-band-home")
 
+            if folded {
+                // THE PLACES, FOLDED: one key for where the member is, the same circle as Home
+                // and search, and the segments in the middle.
+                BandKey(
+                    iconKey: tabs.first(where: \.selected)?.iconKey ?? tabs.first?.iconKey ?? "Image",
+                    spoken: lit.isEmpty ? (tabs.first?.label ?? "") : lit,
+                    identifier: "\(app)-band-places",
+                    action: { placesOpen = true }
+                )
+                BandSegmented(segments: segments, onPick: onSegment)
+            } else if !tabs.isEmpty || onMore != nil {
             // ONE plate; the gutter between the tabs is the seam. NO PLATE
             // AT ALL with no tabs (a locked Locker, #1047): an empty capsule
             // is a control that does nothing.
-            if !tabs.isEmpty || onMore != nil {
             HStack(spacing: BandMetrics.groupGutter) {
                 ForEach(tabs, id: \.self) { tab in
                     AppBandTab(
@@ -212,7 +219,10 @@ struct AppBand: View {
                         selected: tab.selected,
                         rule: rule,
                         identifier: "\(app)-band-\(tab.key.isEmpty ? tab.label.lowercased() : tab.key)",
-                        onPress: { onSelect(tab.event) }
+                        onPress: {
+                            placesOpen = false
+                            onSelect(tab.event)
+                        }
                     )
                 }
                 if let onMore {
@@ -228,12 +238,7 @@ struct AppBand: View {
             }
             .padding(BandMetrics.platePad)
             .frame(maxWidth: .infinity)
-            .background(Theme.color("bgElev", scheme))
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
-            )
+            .bandGround(Capsule(), solid: "bgElev")
             .animation(
                 reduceMotion
                     ? nil
@@ -243,18 +248,110 @@ struct AppBand: View {
             } else {
                 Spacer(minLength: 0)
             }
+
+            // THE APP'S SEARCH, at the trailing end — the same circle, the same glass and the
+            // same size as Home's at the leading end, with the magnifier Home's own search key
+            // wears. An app with no search slot hands none, and draws none. The id is the same
+            // on both shells and in every app, because the key is the kit's and not the app's.
+            if let searchKey {
+                BandKey(
+                    iconKey: "Search",
+                    spoken: searchKey.label,
+                    identifier: "band-search",
+                    action: searchKey.onOpen
+                )
+            }
         }
         // The capsule takes the plate's height, whatever the plate's is.
         .fixedSize(horizontal: false, vertical: true)
+        }
         .padding(.horizontal, BandMetrics.inset)
         .padding(.top, BandMetrics.topGap)
         .padding(.bottom, BandMetrics.floorPadding)
         .sensoryFeedback(.selection, trigger: lit)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: folded)
         // `.contain`, as on Home's band: without it the container's identifier
         // REPLACES each tab's own, and every tab reads `<app>-band` (#1128's
         // flows found it).
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("\(app)-band")
+    }
+}
+
+/// ONE SEGMENT of a band's segmented control: the machine's key, its word, whether it is lit.
+struct BandSegment: Hashable {
+    let id: String
+    let label: String
+    var selected: Bool = false
+}
+
+/// THE BAND'S SEGMENTED CONTROL: a plate of words between the folded place key and the search
+/// key, the plate's own height and ground, each segment a 44pt-wide target at least. The lit one
+/// takes the held pair (`band` 400 to `control` 600, one rung, so a tap reflows nothing) and the
+/// selected ground, `bgSunken`, never an accent.
+struct BandSegmented: View {
+    let segments: [BandSegment]
+    let onPick: (String) -> Void
+
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        HStack(spacing: BandMetrics.groupGutter) {
+            ForEach(segments, id: \.id) { segment in
+                Button { onPick(segment.id) } label: {
+                    Text(segment.label)
+                        .centraidType(segment.selected ? "control" : "band", scales: false)
+                        .foregroundStyle(Theme.color(segment.selected ? "text" : "textSoft", scheme))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity, minHeight: BandMetrics.tabMinHeight)
+                        .background(
+                            Capsule().fill(segment.selected ? Theme.color("bgSunken", scheme) : .clear)
+                        )
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(segment.id)
+                .accessibilityLabel(segment.label)
+                .accessibilityAddTraits(segment.selected ? [.isButton, .isSelected] : [.isButton])
+            }
+        }
+        .padding(BandMetrics.platePad)
+        .frame(maxWidth: .infinity)
+        .bandGround(Capsule(), solid: "bgElev")
+    }
+}
+
+/// A ROUND KEY ON THE BAND: Home at the leading end and the app's search at the trailing end are
+/// this one view — as wide as the plate is tall, so the pill rung makes a circle and not an oval,
+/// on the same glass (`bandGround`, `bg` when solid). On iOS 26 the glass itself answers the
+/// finger; wherever it is not glass, `bgPress` is the held ground, like every other press on the band.
+struct BandKey: View {
+    let iconKey: String
+    let spoken: String
+    let identifier: String
+    let action: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    var body: some View {
+        let liquid = BandMetrics.usesLiquidGlass(reduceTransparency: reduceTransparency, contrast: contrast)
+        Button(action: action) {
+            CentraidIconView(
+                iconKey: iconKey,
+                tint: Theme.color("textSoft", scheme),
+                size: BandMetrics.iconSize,
+                strokeWidth: CentraidGeometry.appMarkStroke
+            )
+            .frame(width: BandMetrics.height, height: BandMetrics.height)
+            .contentShape(Circle())
+        }
+        .buttonStyle(BandPress(inset: 0, paints: !liquid))
+        .bandGround(Circle(), solid: "bg", interactive: true)
+        .accessibilityLabel(spoken)
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -312,7 +409,7 @@ private struct AppBandTab: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(BandPress(ground: nil, inset: 0))
+        .buttonStyle(BandPress(inset: 0))
         .accessibilityIdentifier(identifier)
         .accessibilityLabel(label + (selected ? ", " + KitWords.BAND_CURRENT : ""))
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : [.isButton])
@@ -324,19 +421,18 @@ private struct AppBandTab: View {
 /// scale, a dim or an opacity — DESIGN.md refuses all three — so the tab stays
 /// exactly where it was and only its floor answers.
 private struct BandPress: ButtonStyle {
-    /// The resting ground, or none for a tab that sits on its plate.
-    let ground: String?
     /// How far the pressed ground stands in from the tab's top and bottom, so
     /// it sits inside the plate rather than touching its edges.
     let inset: CGFloat
+    /// False for a key on Liquid Glass, whose own glass answers the finger.
+    var paints: Bool = true
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
-        let fill: Color = configuration.isPressed
-            ? Theme.color("bgPress", scheme)
-            : ground.map { Theme.color($0, scheme) } ?? .clear
+        // THE RESTING GROUND IS THE PLATE'S (`BandGround`), so the style paints only the press.
+        let fill: Color = configuration.isPressed && paints ? Theme.color("bgPress", scheme) : .clear
         return configuration.label
             .background(
                 Capsule()
@@ -352,9 +448,118 @@ private struct BandPress: ButtonStyle {
     }
 }
 
+/// THE BAND'S GROUND, ONCE FOR EVERY BAND (DESIGN.md, "Elevation & Depth"): the platform's own
+/// glass over whatever the page scrolls under it, or the paper it falls back to. This is the ONE
+/// place the shell asks which OS it is on; no band, key or bar decides that for itself.
+///
+/// **iOS 26 AND LATER: REAL LIQUID GLASS** (`.glassEffect`), on floating controls only: the app
+/// band's plate, its round keys, the search field and its ✕, and the Photos selection bars.
+/// Content (lists, cards, sheets) stays paper. A control that is a key says `interactive` so the
+/// glass answers the finger itself; a plate holding several tabs does not, because the press is
+/// each tab's. The glass draws its own edge and its own depth, so nothing is added to it: no
+/// tint, no hairline, no shadow.
+///
+/// **THE FALLBACK IS ONE SIMPLE RULE, NOT A SECOND DESIGN.** iOS 17.5 to 25 has no glass, so the
+/// plate is the system's own material (`.thinMaterial`) with no tint laid over it. Reduce
+/// Transparency and Increase Contrast, on any OS, both mean "do not make me read through a blur",
+/// so either one puts the plate on `solid` (the token it was always drawn on, which the caller
+/// names) and `BandStrip` puts the page colour back under the strip. Either fallback keeps the
+/// plate's hairline; glass has no need of one.
+struct BandGround<S: InsettableShape>: ViewModifier {
+    let shape: S
+    /// The token the plate is drawn on when it is not glass.
+    let solid: String
+    /// A key the glass should answer to the finger (a round key, not a plate of tabs).
+    let interactive: Bool
+
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *), BandMetrics.isGlass(reduceTransparency: reduceTransparency, contrast: contrast) {
+            content.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
+        } else {
+            content
+                .background {
+                    if BandMetrics.isGlass(reduceTransparency: reduceTransparency, contrast: contrast) {
+                        shape.fill(.thinMaterial)
+                    } else {
+                        shape.fill(Theme.color(solid, scheme))
+                    }
+                }
+                .overlay(
+                    shape.strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
+                )
+        }
+    }
+}
+
+/// THE BAND'S SHAPES THAT SIT TOGETHER, so on iOS 26 their glass is one family: it is sampled
+/// together, and shapes that come within `spacing` of each other morph into one another as they
+/// arrive and leave. Before iOS 26 (and wherever glass is off) there is no container and the
+/// content is drawn as it is.
+struct BandGlassGroup<Content: View>: View {
+    let spacing: CGFloat
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        if #available(iOS 26, *) {
+            GlassEffectContainer(spacing: spacing) { content() }
+        } else {
+            content()
+        }
+    }
+}
+
+/// WHAT THE BAND STANDS ON: nothing under glass, so the content that scrolls
+/// beneath the plates shows around and through them; the page colour under the
+/// solid fallback, so the strip is the slab it was.
+struct BandStrip: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        content.background {
+            if !BandMetrics.isGlass(reduceTransparency: reduceTransparency, contrast: contrast) {
+                Theme.color("bg", scheme).ignoresSafeArea(edges: .bottom)
+            }
+        }
+    }
+}
+
+extension View {
+    /// A band plate's ground, in `shape`: the platform's glass, or `solid` where glass is off.
+    /// `interactive` is for a round key, whose glass answers the finger.
+    func bandGround<S: InsettableShape>(_ shape: S, solid: String = "bgElev", interactive: Bool = false) -> some View {
+        modifier(BandGround(shape: shape, solid: solid, interactive: interactive))
+    }
+
+    /// The strip a band stands on (see `BandStrip`).
+    func bandStrip() -> some View {
+        modifier(BandStrip())
+    }
+}
+
 /// The plate's geometry, the same measures Compose draws (`BandPolicy` in `BandGeometry.kt`), so
 /// the two shells draw one band.
 enum BandMetrics {
+    /// Glass unless the member asked not to read through a blur, by either of
+    /// the two settings that say so: Reduce Transparency, or Increase Contrast.
+    static func isGlass(reduceTransparency: Bool, contrast: ColorSchemeContrast) -> Bool {
+        !reduceTransparency && contrast != .increased
+    }
+
+    /// Whether the plate is REAL Liquid Glass: glass, on an OS that has it. Only a round key asks,
+    /// to know whether the glass answers the finger or the pressed ground (`BandPress`) must.
+    static func usesLiquidGlass(reduceTransparency: Bool, contrast: ColorSchemeContrast) -> Bool {
+        if #available(iOS 26, *) {
+            return isGlass(reduceTransparency: reduceTransparency, contrast: contrast)
+        }
+        return false
+    }
+
     // THE SYSTEM PHOTOS APP'S STRUCTURE AT HOME'S SIZE: a pill whose tabs stand 4
     // in from its edge, 21 from the screen's bottom edge; the mark is the tiles'
     // own 22, the tab what a 22 mark and one label line need, and the sides the
@@ -385,6 +590,10 @@ enum BandMetrics {
     // plate, nor the search bar's measures.
     /// Between the home circle and the app's plate.
     static let plateGap: CGFloat = 8
+    /// How near two glass shapes must come before they melt into one another (`BandGlassGroup`).
+    /// Under `plateGap`, so the band's resting shapes stay three and only a shape arriving or
+    /// leaving morphs.
+    static let groupSpacing: CGFloat = 4
     /// Between tabs inside the plate.
     static let groupGutter: CGFloat = 2
     /// The selection rule's thickness; it is as wide as the mark it marks.

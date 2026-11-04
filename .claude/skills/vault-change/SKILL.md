@@ -66,7 +66,7 @@ An app is a first-party screen, not a principal. It holds no credential and decl
 - **Touching a row without `ctx.touch`.** The row changes but search and `updated_at` do not; the index-equals-rebuild commitment fails, or worse, silently does not for a path no test covers.
 - **A command that works on the wrong kind.** Notes and Photos both hold containers; every command states its kind and refuses the other's id with a sentence, and every reader filters on kind.
 - **Adding a CHECK value without its writers.** Sweep mechanically (below); a CHECK value nothing writes is dormant schema.
-- **Never weaken a test, budget, ledger or allowlist to go green.** Fix the code.
+- **Never weaken a test, budget, ledger or allowlist to go green.** (Wall-clock budgets were removed, owner ruling 2026-11-04; what remains are counts and sizes.) Fix the code.
 
 ### The mechanical sweeps (part of the review, not extras)
 

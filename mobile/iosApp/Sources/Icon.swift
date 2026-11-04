@@ -19,6 +19,8 @@ struct CentraidIconView: View {
     let tint: Color
     var size: CGFloat = 16
     var strokeWidth: CGFloat = CentraidGeometry.appMarkStroke
+    /// A toggle that is on: the outline is filled in the same ink.
+    var solid: Bool = false
 
     var body: some View {
         Canvas { context, canvasSize in
@@ -32,6 +34,7 @@ struct CentraidIconView: View {
                 if entry.filled {
                     context.fill(path, with: .color(tint), style: FillStyle(eoFill: entry.evenOdd))
                 } else {
+                    if solid { context.fill(path, with: .color(tint)) }
                     context.stroke(
                         path,
                         with: .color(tint),

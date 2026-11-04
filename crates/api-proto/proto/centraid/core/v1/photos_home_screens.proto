@@ -24,10 +24,22 @@ import "centraid/core/v1/route.proto";
 message PhotosHomeState {
   PhotosDestination destination = 1;
   // THE ROOT'S CHROME (R-CHROME-1…5): the band is places then More, with no
-  // Search tab (the bar under the title opens it); the chips are the library's
-  // filter; the words are Rust's.
+  // Search tab (the band's trailing key opens it); the header's filter button
+  // opens `filter_menu`; the words are Rust's.
   repeated PhotosHomeBandTab band = 2;
-  repeated PhotosHomeFilterChip chips = 3;
+  // 3 was `chips` (All photos · Favorites as a chip row) and 19 was
+  // `grain_chips` (the zoom in that row): the filter is `filter_menu` and the
+  // zoom is `grain_segments` in the band.
+  reserved 3, 19;
+  reserved "chips", "grain_chips";
+  // The header's filter button: All photos · Favorites, one section. Unset off
+  // the library and while selecting, when there is nothing to filter.
+  optional FilterMenu filter_menu = 20;
+  // Years · Months · All, a segmented control IN THE BAND (like the system
+  // Photos'): the zoom the library is drawn at, a view of the same photographs
+  // and not a filter of them. Empty off the library, while selecting, and when
+  // there is nothing to zoom.
+  repeated PhotosHomeGrainSegment grain_segments = 21;
   PhotosHomeChrome chrome = 4;
   Sheet sheet = 5;
   // The camera-roll banner over the library; unset when there is nothing to say
@@ -52,7 +64,10 @@ message PhotosHomeState {
   optional PhotosTileSizeSheet tile_size = 16;
   // "Include which location?" over a pick (set while `sheet` is COPY_PLACE).
   optional PhotosCopyPlaceSheet copy_place = 17;
-  optional PhotosBackupDetailSheet backup_detail = 18;
+  // 18 was `backup_detail`, the camera roll's page behind More's first row: the
+  // import runs on its own, and the banner says when it matters.
+  reserved 18;
+  reserved "backup_detail";
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -62,7 +77,8 @@ message PhotosHomeState {
     // Naming a new album, from Collections' Plus.
     SHEET_NEW_ALBUM = 4;
     SHEET_COPY_PLACE = 5;
-    SHEET_BACKUP_DETAIL = 6;
+    reserved 6;
+    reserved "SHEET_BACKUP_DETAIL";
   }
 }
 
@@ -74,8 +90,9 @@ message PhotosHomeBandTab {
   bool current = 4;
 }
 
-message PhotosHomeFilterChip {
-  PhotosFilter filter = 1;
+// One of the zoom's three choices, a segment of the band's control.
+message PhotosHomeGrainSegment {
+  PhotosGrain grain = 1;
   string label = 2;
   bool selected = 3;
 }
@@ -112,10 +129,9 @@ message PhotosHomeChrome {
   string selecting_title = 9;
   string send_copy_label = 10;
   string search_label = 11;
-  // The zoom control's three segments.
-  string grain_years_label = 12;
-  string grain_months_label = 13;
-  string grain_all_label = 14;
+  // The zoom's three words moved onto `PhotosHomeState.grain_segments`.
+  reserved 12, 13, 14;
+  reserved "grain_years_label", "grain_months_label", "grain_all_label";
 }
 
 // ---------------------------------------------------------------------------
@@ -375,23 +391,8 @@ message PhotosMoreSheet {
   string close_label = 5;
 }
 
-// WHAT THIS DEVICE'S CAMERA-ROLL IMPORT IS DOING, IN FULL: the banner says the
-// phase in one sentence; this says the rest.
-message PhotosBackupDetailSheet {
-  string title = 1;
-  string status = 2;
-  string import_label = 3;
-  bool import_enabled = 4;
-  repeated PhotosBackupDetailRow rows = 5;
-}
-
-message PhotosBackupDetailRow {
-  string key = 1;
-  string value = 2;
-}
-
 message PhotosMoreRow {
-  // `tile_size`, `places`, `duplicates`.
+  // `tile_size`.
   string key = 1;
   string label = 2;
   string meta = 3;
@@ -471,7 +472,6 @@ message PhotosHomeEvent {
     PhotosRefreshed refreshed = 6;
     // The end of what is loaded came into view.
     PhotosNextPage next_page = 7;
-    PhotosFilter filter = 8;
     PhotosGrainChanged grain = 9;
     // A Years/Months card opened: one grain in, at the period's first day.
     string period_opened = 10;
@@ -506,11 +506,18 @@ message PhotosHomeEvent {
     PhotosCopyAsked copy_asked = 31;
     PhotosCopyPlaceChosen copy_place_chosen = 32;
     PhotosImportNow import_now = 33;
+    // ---- The header's filter menu ----
+    FilterMenuPicked filter_menu_picked = 34;
+    FilterMenuCleared filter_menu_cleared = 35;
   }
 
   message SheetEvent {
     PhotosHomeState.Sheet sheet = 1;
   }
+
+  // 8 was `filter` (a chip's pick): the pick is `filter_menu_picked`.
+  reserved 8;
+  reserved "filter";
 }
 
 message PhotosViewport {

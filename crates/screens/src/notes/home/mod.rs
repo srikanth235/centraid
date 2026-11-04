@@ -10,8 +10,9 @@
 //!   and whenever a table it read changes.
 //! - **Writes** are one at a time and synchronous (`kit::act`); the load after
 //!   each shows what committed, and a refusal's sentence is the status line.
-//! - **Views decide nothing**: the band, the chrome, the heading, the chips,
-//!   More's rows and every empty sentence are made here on every view.
+//! - **Views decide nothing**: the band, the chrome, the heading, the filter menu,
+//!   the notebook under the title, More's rows and every empty sentence are made
+//!   here on every view.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::notes_home_event::Kind as H;
@@ -20,6 +21,7 @@ use wire::screen_event::Kind as E;
 use super::{Phase, denied, routes};
 use crate::catalog::act;
 use crate::kit::act as kit_act;
+use crate::kit::menu;
 use crate::kit::read;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, notes as words};
@@ -388,31 +390,22 @@ impl Home {
             H::SearchOpened(_) => self.library.search_opened(),
             H::SearchTerm(typed) => self.library.search_term(ctx, typed.term),
             H::SearchClosed(_) => self.library.search_closed(ctx),
-            H::Sort(picked) => {
-                self.close_sheet();
-                self.library.set_sort(
-                    ctx,
-                    wire::NotesLibrarySort::try_from(picked.sort)
-                        .unwrap_or(wire::NotesLibrarySort::Updated),
-                );
-            }
-            H::PinnedOnly(_) => {
-                self.close_sheet();
-                self.library.toggle_pinned(ctx);
-            }
-            H::Tag(toggled) => self.library.toggle_tag(ctx, &toggled.concept_id),
             H::WindowWidened(_) => match self.place {
                 wire::NotesPlace::Journal => self.journal.widen(ctx),
                 _ => self.library.widen(ctx),
             },
-            H::Chip(picked) => self.chip(ctx, &picked.key),
-            H::SheetOpened(opened) => match wire::NotesSheet::try_from(opened.sheet) {
-                Ok(wire::NotesSheet::Sort) => {
-                    self.sheet = wire::NotesSheet::Sort;
-                }
-                Ok(wire::NotesSheet::More) => self.sheet = wire::NotesSheet::More,
-                _ => {}
-            },
+            // THE HEADER'S MENU and the notebook's close key belong to the Notes
+            // place: a stale event from another place is nothing.
+            H::FilterMenuPicked(picked) if self.place == wire::NotesPlace::Notes => {
+                self.library.pick(ctx, menu::Pick::of(&picked));
+            }
+            H::FilterMenuCleared(_) if self.place == wire::NotesPlace::Notes => {
+                self.library.clear_filters(ctx);
+            }
+            H::NotebookScopeCleared(_) if self.place == wire::NotesPlace::Notes => {
+                self.library.clear_notebook(ctx);
+            }
+            H::FilterMenuPicked(_) | H::FilterMenuCleared(_) | H::NotebookScopeCleared(_) => {}
             H::SheetClosed(_) => self.close_sheet(),
             H::RowMenu(opened) => self.open_row_menu(ctx, &opened.note_id),
             H::Pin(toggled) => self.pin(ctx, &toggled.note_id),
@@ -453,20 +446,6 @@ impl Home {
             }
             H::ComposeClosed(_) => self.compose = None,
             H::ComposeSaved(_) => self.save_entry(ctx),
-        }
-    }
-
-    /// A CHIP, by its key: the notebook chip widens to every note, Pinned and a
-    /// tag toggle themselves, and the sort opens its sheet.
-    fn chip(&mut self, ctx: &Ctx, key: &str) {
-        if key == library::CHIP_NOTEBOOK {
-            self.library.clear_notebook(ctx);
-        } else if key == library::CHIP_PINNED {
-            self.library.toggle_pinned(ctx);
-        } else if key == library::CHIP_SORT {
-            self.sheet = wire::NotesSheet::Sort;
-        } else if let Some(concept_id) = key.strip_prefix(library::CHIP_TAG) {
-            self.library.toggle_tag(ctx, concept_id);
         }
     }
 
@@ -518,7 +497,6 @@ impl Home {
             },
             more_title: words::more_title(locale),
             file_title: words::file_title(locale),
-            sort_title: words::sort_title(locale),
             home: words::home(locale),
             row_menu_label: words::row_menu(locale),
             new_entry: words::new_entry(locale),
@@ -535,7 +513,7 @@ impl Home {
         match self.place {
             wire::NotesPlace::Notebooks => words::notebooks_title(locale),
             wire::NotesPlace::Journal => words::journal_title(locale),
-            _ => self.library.heading(locale),
+            _ => words::title(locale),
         }
     }
 
@@ -575,7 +553,6 @@ impl Home {
                 };
                 (Some(menu), choices)
             }
-            wire::NotesSheet::Sort => (None, self.library.sort_choices(locale)),
             wire::NotesSheet::NotebookMenu => {
                 let title = self
                     .notebooks
@@ -646,11 +623,6 @@ impl Screen for Home {
             band: self.band(locale),
             chrome: Some(Self::chrome(locale, self.place)),
             content: Some(content),
-            chips: if notes_place {
-                self.library.chips(locale)
-            } else {
-                Vec::new()
-            },
             search: notes_place.then(|| self.library.search_state(locale)),
             more_rows: if denied_now {
                 Vec::new()
@@ -671,6 +643,10 @@ impl Screen for Home {
             compose: self.compose.as_ref().map(|compose| compose.view(locale)),
             new_note: Some(routes::new_note()),
             window: self.library.window,
+            filter_menu: notes_place
+                .then(|| self.library.filter_menu(locale))
+                .flatten(),
+            subtitle: notes_place.then(|| self.library.subtitle(locale)).flatten(),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::NotesHome(Box::new(state))),

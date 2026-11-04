@@ -2,8 +2,8 @@ import SwiftUI
 
 /// `money.home` — Spending · Activity · Cash flow, More a sheet (#1099), on the kit.
 ///
-/// **THE VIEW DECIDES NOTHING.** `MoneyHomeState` carries the band, the chips,
-/// every word, every figure and every row; this file lays them out and forwards
+/// **THE VIEW DECIDES NOTHING.** `MoneyHomeState` carries the band, the header's
+/// filter menu and the month under the title, every word, every figure and every row; this file lays them out and forwards
 /// events. `AppPlace` owns the header, the search door and the band;
 /// `ReadStateView` owns loading, failure and the denied gate (no band while
 /// denied). The header's Plus is the app's create verb: rows enter by import.
@@ -25,19 +25,37 @@ struct MoneyHomeView: View {
 
     private func addStatement() { open(state.chrome.importRoute) }
 
+    /// Rust's menu: Account and Category, nested. A pick or the clear row is an event; which is
+    /// checked, and whether the funnel is lit, is on the state.
+    private var filter: FilterSlot? {
+        guard state.hasFilterMenu else { return nil }
+        return FilterSlot(
+            menu: state.filterMenu,
+            onPick: { section, option in
+                send(event {
+                    $0.filterMenuPicked = .with {
+                        $0.sectionKey = section
+                        $0.optionKey = option
+                    }
+                })
+            },
+            onClear: { send(event { $0.filterMenuCleared = .init() }) }
+        )
+    }
+
+    /// The month in view, under the title: a tap opens the month sheet.
+    private var subtitle: SubtitleSlot? {
+        guard state.hasSubtitle else { return nil }
+        return SubtitleSlot(
+            subtitle: state.subtitle,
+            onTap: { send(event { $0.monthTapped = .init() }) }
+        )
+    }
+
     var body: some View {
         let content = state.readContent
         let chrome = state.chrome
         let sheetBinding = moneySheetBinding(sheetIsOpen(state)) { send(event { $0.sheetClosed = .init() }) }
-        let chips: [RoomChip] = content.isDenied ? [] : state.chips.map { chip in
-            RoomChip(
-                identifier: "money-chip-\(chip.key)",
-                label: chip.label,
-                selected: chip.active,
-                chevron: true,
-                action: { send(event { $0.chip = .with { $0.key = chip.key } }) }
-            )
-        }
         AppPlace(
             app: "money",
             title: chrome.title,
@@ -45,7 +63,8 @@ struct MoneyHomeView: View {
             trailing: chrome.addLabel.isEmpty
                 ? nil
                 : RoomAction(iconKey: "Plus", label: chrome.addLabel, identifier: "money-add", action: addStatement),
-            // A DOOR, NOT A FIELD (R-CHROME-2): the field is never open here.
+            // A DOOR, NOT A FIELD (R-CHROME-2): the band's key pushes the search page; the field is
+            // never open here.
             search: content.isDenied || chrome.searchPlaceholder.isEmpty ? nil : SearchSlot(
                 field: KitSearchField(),
                 placeholder: chrome.searchPlaceholder,
@@ -53,8 +72,10 @@ struct MoneyHomeView: View {
                 onTerm: { _ in },
                 onClose: {}
             ),
-            // THE FILTER ROW is month, account and category; no sort chip (R-CHROME-3).
-            chips: chips,
+            // THE HEADER'S FILTER BUTTON is account and category, no sort (R-CHROME-3); the month
+            // stays under the title and opens its sheet.
+            filter: filter,
+            subtitle: subtitle,
             showsBand: !content.isDenied && !state.band.isEmpty
         ) {
             AppBand(
@@ -239,7 +260,7 @@ struct MoneyHomeView: View {
 
     private func sheetIsOpen(_ state: Centraid_Core_V1_MoneyHomeState) -> Bool {
         switch state.sheet {
-        case .more, .month, .account, .category: return true
+        case .more, .month: return true
         default: return false
         }
     }
@@ -269,18 +290,6 @@ struct MoneyHomeView: View {
                 choices: home?.monthOptions ?? [],
                 identifierPrefix: "money-month-option"
             ) { key in send(event { $0.monthPicked = .with { $0.month = key } }) }
-        case .account:
-            MoneyChoiceSheet(
-                title: chrome.accountSheetTitle,
-                choices: home?.activity.accountOptions ?? [],
-                identifierPrefix: "money-account-option"
-            ) { key in send(event { $0.accountPicked = .with { $0.accountID = key } }) }
-        case .category:
-            MoneyChoiceSheet(
-                title: chrome.categorySheetTitle,
-                choices: home?.activity.categoryOptions ?? [],
-                identifierPrefix: "money-category-option"
-            ) { key in send(event { $0.categoryPicked = .with { $0.key = key } }) }
         default:
             EmptyView()
         }

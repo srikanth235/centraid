@@ -1,16 +1,17 @@
 //! PEOPLE'S HOME (`people.home`): People and Touch under ONE band, with Search a
 //! field on the current destination and More a sheet.
 //!
-//! - **People** is the roster: chips (All, Starred, Overdue) and the order
-//!   (Recently added, Name) are PARAMETERS of the core's read, so a chip or an
-//!   order reads again and the counts stay the whole window's.
+//! - **People** is the roster: the filter (All, Starred, Overdue) and the order
+//!   (Recently added, Name) are PARAMETERS of the core's read, so a pick reads
+//!   again and the counts stay the whole window's. Both are the header's one
+//!   filter menu.
 //! - **Touch** is the keep-in-touch dashboard: tiles, Reconnect (most overdue
 //!   first, each card with "Log a touch"), Upcoming (nearest first), Recent.
 //! - **Search** asks the core's name search; the destination under it is kept, so
 //!   closing search reads nothing and clears the term.
 //! - **The room's grammar** (R-CHROME-1…4): Add person is the header's one
-//!   action, search the bar under it, the chips and the sort ONE row, and More
-//!   holds Trash alone.
+//!   action beside the filter button, search the bar under it, and More holds
+//!   Trash alone.
 //! - **The star** is a write from the row: it commits at once, the load after it
 //!   shows the vault's star, and a refusal's sentence is the status line.
 //! - **Contacts** import and follow here ([`ContactsFollow`]): the day-one empty
@@ -26,6 +27,7 @@ use super::contacts::ContactsFollow;
 use super::{Phase, denied, routes};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::menu;
 use crate::kit::read;
 use crate::kit::search;
 use crate::screen::{Ctx, Screen};
@@ -45,18 +47,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         Ok(wire::PeopleDestination::Unspecified) | Err(_) => wire::PeopleDestination::People,
         Ok(destination) => destination,
     };
-    Some(Box::new(Home {
-        destination,
-        chip: wire::PeopleChipKey::All,
-        order: wire::PeopleOrder::Recent,
-        roster: Phase::Loading,
-        touch: Phase::Loading,
-        search: Search::default(),
-        sheet: wire::people_home_state::Sheet::Unspecified,
-        status: None,
-        contacts: ContactsFollow::new(),
-        attached: false,
-    }))
+    Some(Box::new(Home::new(destination)))
 }
 
 /// The search field and its answer.
@@ -91,6 +82,21 @@ struct Home {
 }
 
 impl Home {
+    fn new(destination: wire::PeopleDestination) -> Self {
+        Self {
+            destination,
+            chip: wire::PeopleChipKey::All,
+            order: wire::PeopleOrder::Recent,
+            roster: Phase::Loading,
+            touch: Phase::Loading,
+            search: Search::default(),
+            sheet: wire::people_home_state::Sheet::Unspecified,
+            status: None,
+            contacts: ContactsFollow::new(),
+            attached: false,
+        }
+    }
+
     fn reload(&mut self, ctx: &Ctx) {
         if self.search.active() {
             self.search.held = Some(self.read_search(ctx));
@@ -178,7 +184,6 @@ impl Home {
     }
 
     fn set_order(&mut self, ctx: &Ctx, order: wire::PeopleOrder) {
-        self.sheet = wire::people_home_state::Sheet::Unspecified;
         if order == self.order || order == wire::PeopleOrder::Unspecified {
             return;
         }
@@ -273,15 +278,20 @@ impl Home {
                 }
                 _ => {}
             },
-            H::Chip(picked) => self.chip(
-                ctx,
-                wire::PeopleChipKey::try_from(picked.chip).unwrap_or_default(),
-                false,
-            ),
-            H::Order(picked) => self.set_order(
-                ctx,
-                wire::PeopleOrder::try_from(picked.order).unwrap_or_default(),
-            ),
+            // THE HEADER'S MENU belongs to the roster, and is not offered over
+            // search or while denied: a pick that arrives anyway is nothing.
+            H::FilterMenuPicked(picked) if self.menu_offered() => {
+                let pick = menu::Pick::of(&picked);
+                if let Some(chip) = rows::chip_of(pick) {
+                    self.chip(ctx, chip, false);
+                } else if let Some(order) = rows::order_of(pick) {
+                    self.set_order(ctx, order);
+                }
+            }
+            H::FilterMenuCleared(_) if self.menu_offered() => {
+                self.chip(ctx, wire::PeopleChipKey::All, false);
+            }
+            H::FilterMenuPicked(_) | H::FilterMenuCleared(_) => {}
             H::Tile(picked) => match picked.key.as_str() {
                 "all" => self.chip(ctx, wire::PeopleChipKey::All, true),
                 "reconnect" => self.chip(ctx, wire::PeopleChipKey::Due, true),
@@ -291,12 +301,6 @@ impl Home {
             H::SearchOpened(_) => self.search.open = true,
             H::SearchTerm(typed) => self.search_term(ctx, typed.term),
             H::SearchClosed(_) => self.search_closed(ctx),
-            H::SheetOpened(opened) => {
-                self.sheet = match wire::people_home_state::Sheet::try_from(opened.sheet) {
-                    Ok(sheet) => sheet,
-                    Err(_) => wire::people_home_state::Sheet::Unspecified,
-                };
-            }
             H::SheetClosed(_) => self.sheet = wire::people_home_state::Sheet::Unspecified,
             H::Star(toggled) => self.star(ctx, &toggled.party_id),
             H::ImportContacts(_) => {
@@ -345,37 +349,30 @@ impl Home {
             retry: words::retry(locale),
             loading: words::loading(locale),
             more_title: words::more_title(locale),
-            sort_heading: words::sort_heading(locale),
             home: words::band_home(locale),
             cancel: words::cancel(locale),
             import_contacts: words::import_contacts(locale),
         }
     }
 
-    fn order_choices(&self, locale: Locale) -> Vec<wire::PeopleOrderChoice> {
-        [
-            (wire::PeopleOrder::Recent, words::sort_recent(locale)),
-            (wire::PeopleOrder::Name, words::sort_name(locale)),
-        ]
-        .into_iter()
-        .map(|(order, label)| wire::PeopleOrderChoice {
-            order: order as i32,
-            label,
-            selected: order == self.order,
-        })
-        .collect()
+    /// Is the header's menu offered? On the roster, not over search and not while
+    /// the roster is not there (loading, failed or denied).
+    fn menu_offered(&self) -> bool {
+        self.destination == wire::PeopleDestination::People
+            && !self.search.open
+            && matches!(self.roster, Phase::Ready(_))
     }
 
-    /// THE CHIP ROW: the roster's chips, the current one selected. None on
-    /// Touch (no filter there), over search, whose names no chip narrows, or
-    /// while the roster is not there.
-    fn chips(&self, locale: Locale) -> Vec<wire::PeopleChip> {
-        if self.destination != wire::PeopleDestination::People || self.search.open {
-            return Vec::new();
+    /// THE HEADER'S FILTER MENU: the roster's filters with their counts and its
+    /// order. None on Touch (no filter there), over search, whose names no filter
+    /// narrows, or while the roster is not there.
+    fn filter_menu(&self, locale: Locale) -> Option<wire::FilterMenu> {
+        if !self.menu_offered() {
+            return None;
         }
         match &self.roster {
-            Phase::Ready(roster) => rows::chips(locale, roster, self.chip),
-            _ => Vec::new(),
+            Phase::Ready(roster) => Some(rows::filter_menu(locale, roster, self.chip, self.order)),
+            _ => None,
         }
     }
 
@@ -475,17 +472,6 @@ impl Screen for Home {
                 }
             },
         });
-        let chips = self.chips(locale);
-        let order = self
-            .order_choices(locale)
-            .into_iter()
-            .find(|choice| choice.selected)
-            .map(|choice| choice.label)
-            .unwrap_or_default();
-        let sort_chip = (!chips.is_empty()).then(|| wire::PeopleSortChip {
-            spoken: fill(&words::sort_chip_spoken(locale), &[("order", &order)]),
-            label: order,
-        });
         let denied_now = self.denied();
         let state = wire::PeopleHomeState {
             destination: self.destination as i32,
@@ -493,8 +479,6 @@ impl Screen for Home {
             band: self.band(locale),
             chrome: Some(Self::chrome(locale)),
             content: Some(content),
-            chips,
-            sort_chip,
             search: Some(self.search_state(locale)),
             more_rows: if denied_now {
                 Vec::new()
@@ -507,13 +491,51 @@ impl Screen for Home {
                 }]
             },
             sheet: self.sheet as i32,
-            order_choices: self.order_choices(locale),
             status: self.status(),
             add_person: Some(routes::new_person()),
+            filter_menu: self.filter_menu(locale),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::PeopleHome(Box::new(state))),
             ..wire::ViewState::default()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ready(search_open: bool, destination: wire::PeopleDestination) -> Home {
+        let mut home = Home::new(destination);
+        home.roster = Phase::Ready(wire::PeopleRoster::default());
+        home.search.open = search_open;
+        home
+    }
+
+    #[test]
+    fn the_menu_is_the_rosters_alone_and_only_once_the_roster_is_there() {
+        let locale = Locale::En;
+        let people = wire::PeopleDestination::People;
+        assert!(ready(false, people).filter_menu(locale).is_some());
+        // Over search, no filter narrows a name.
+        assert!(ready(true, people).filter_menu(locale).is_none());
+        // Touch has nothing to filter.
+        assert!(
+            ready(false, wire::PeopleDestination::Touch)
+                .filter_menu(locale)
+                .is_none()
+        );
+        // Not while loading, failed or denied: no counts to show, nothing to pick.
+        for phase in [
+            Phase::Loading,
+            Phase::Failed,
+            Phase::Denied(wire::AppQueryDenial::default()),
+        ] {
+            let mut home = Home::new(people);
+            home.roster = phase;
+            assert!(home.filter_menu(locale).is_none());
+            assert!(!home.menu_offered());
         }
     }
 }
