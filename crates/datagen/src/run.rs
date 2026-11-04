@@ -9,7 +9,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -105,7 +105,8 @@ pub fn generate_with(
     for (number, spec) in specs.iter().enumerate() {
         let world = make(*spec);
         let dir = scratch.join(world.id());
-        let mut run = WorldRun::seed(&world, catalog, &dir)?;
+        let mut run = WorldRun::seed(&world, catalog, &dir)
+            .with_context(|| format!("world {}", world.id()))?;
         let facts = run.facts.clone();
         let sampler =
             Sampler::new(&world, &facts, catalog, &grid).with_empty_reads(run.empty_reads);
@@ -132,7 +133,9 @@ pub fn generate_with(
                     }
                     continue;
                 };
-                let solution = run.solve(&scenario)?;
+                let solution = run
+                    .solve(&scenario)
+                    .with_context(|| format!("scenario {}", scenario.id))?;
                 for (kept_cell, _) in &solution.turns {
                     if let Some(stat) = out.cells.get_mut(kept_cell) {
                         stat.attempts += 1;
