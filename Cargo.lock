@@ -664,6 +664,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "centraid-datagen"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "anyhow",
+ "blake3",
+ "centraid-apps-kit",
+ "centraid-assist",
+ "centraid-nativetools",
+ "clap",
+ "hex",
+ "jiff",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "centraid-design"
 version = "1.0.0-alpha.0"
 dependencies = [

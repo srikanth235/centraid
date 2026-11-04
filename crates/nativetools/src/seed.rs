@@ -31,6 +31,7 @@
 //!   "transfers": [{"a":"out","b":"in"}],
 //!   "categories": [{"key":"pets","name":"Pets fund"}],
 //!   "rules":     [{"key":"coffee_rule","match":"contains","text":"BLUE BOTTLE","category":"food.dining"}],
+//!   "budgets":   [{"month":"2026-09","category":"food.dining","amount":300,"carry":true}],
 //!   "links":     [{"from":"cabin","to":"neha"}]
 //! }
 //! ```
@@ -196,6 +197,7 @@ const SECTIONS: &[&str] = &[
     "transfers",
     "categories",
     "rules",
+    "budgets",
     "links",
 ];
 
@@ -657,6 +659,26 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             }),
         )?;
         seeder.key(row, Kind::Rule, id)?;
+    }
+    // A budget is a month's plan for a category in currency units (the vault's default currency).
+    for row in rows(world, "budgets") {
+        seeder.clock_for(row, "created")?;
+        let month = str_of(row, "month").ok_or("a budget needs a month")?;
+        let category = str_of(row, "category").ok_or("a budget needs a category")?;
+        let amount = row
+            .get("amount")
+            .and_then(Value::as_f64)
+            .ok_or("a budget needs an amount")?;
+        let mut input = json!({
+            "month": month,
+            "category_id": format!("category:{category}"),
+            "amount_minor": crate::world::minor_of(amount, &currency),
+            "currency": currency,
+        });
+        if let Some(carry) = row.get("carry").and_then(Value::as_bool) {
+            input["carry"] = json!(carry);
+        }
+        seeder.run("budget.set", input)?;
     }
     for link in rows(world, "links") {
         let (Some(from), Some(to)) = (str_of(link, "from"), str_of(link, "to")) else {
