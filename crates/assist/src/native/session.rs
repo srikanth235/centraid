@@ -19,7 +19,7 @@ use crate::native::world::{Key, Row, Val, World};
 pub struct Flags {
     /// The vault directory of the system prompt.
     pub directory: bool,
-    /// The block of every user turn: the `vault:`, `focus:` and `dates:` lines.
+    /// The block of every user turn: the `vault:`, `focus:`, `dates:` and `nums:` lines.
     pub preground: bool,
     pub tools: crate::native::prompt::ToolsMode,
     /// Which conventions of `crate::native::ground` run.
@@ -1933,7 +1933,7 @@ impl Session {
             self.observations[index].compacted = Some(kept);
             compacted.push(json!({"obs": index, "text": self.observations[index].render()}));
         }
-        let (preground, focus, answer, dates, picks) = if self.flags.preground {
+        let (preground, focus, answer, dates, nums, picks) = if self.flags.preground {
             // The containers of the focus rows are numbered first, so the
             // `vault:` and `focus:` lines can name them (`#8 album "Wedding"`).
             crate::native::block::number_containers(self);
@@ -1942,13 +1942,15 @@ impl Session {
                 crate::native::prompt::focus_line(self),
                 crate::native::block::answer_line(self),
                 self.dates_line(message),
+                self.nums_line(message),
                 crate::native::block::picks_line(self, message),
             )
         } else {
-            (None, None, None, None, None)
+            (None, None, None, None, None, None)
         };
-        let block =
-            crate::native::prompt::user_block(&[&preground, &focus, &answer, &dates, &picks]);
+        let block = crate::native::prompt::user_block(&[
+            &preground, &focus, &answer, &dates, &nums, &picks,
+        ]);
         // A RETRACTION ENDS THE TURN BEFORE ANY CALL: the runtime makes the
         // `decline never_mind` itself, so the model never has to learn it. The
         // reply carries it as `ended`, and a call after it is refused as a call
@@ -1961,6 +1963,7 @@ impl Session {
             "focus": focus,
             "answer": answer,
             "dates": dates,
+            "nums": nums,
             "picks": picks,
             "block": block,
             "compacted": compacted,
@@ -2023,6 +2026,9 @@ impl Session {
             Some((tool, args)) => (*tool, args),
             None => (tool, args),
         };
+        // the regrouped tools carry a create's and an edit's fields as parameters of their own: folded into `args` here
+        let folded = self.folded(tool, args, self.renamed);
+        let args = folded.as_ref().unwrap_or(args);
         if self.turn == 0 {
             self.user("");
         }
@@ -2601,6 +2607,8 @@ impl Session {
             Some((tool, args)) => (*tool, args),
             None => (tool, args),
         };
+        let folded = self.folded(tool, args, renamed.is_some());
+        let args = folded.as_ref().unwrap_or(args);
         let canonical = format!("{tool} {}", canonical_json(args));
         (!self.turn_over && self.last_call.as_deref() == Some(canonical.as_str()))
             .then_some(self.repeats)
@@ -2628,6 +2636,15 @@ impl Session {
     /// own shapes: `answer` takes rows or a value, `edit` and `do` take rows.
     pub(crate) fn lenient(&self) -> bool {
         self.flags.tools == crate::native::prompt::ToolsMode::S2 || self.renamed
+    }
+
+    /// The call with its flat fields folded into `args` (`legacy::fold_fields`), for a model on the regrouped tools: S2's
+    /// shapes, and a call renamed from them, are read as they were.
+    fn folded(&self, tool: &str, args: &Value, renamed: bool) -> Option<Value> {
+        if self.flags.tools == crate::native::prompt::ToolsMode::S2 || renamed {
+            return None;
+        }
+        crate::native::legacy::fold_fields(tool, args)
     }
 
     fn dispatch(&mut self, tool: &str, args: &Value) -> Outcome {

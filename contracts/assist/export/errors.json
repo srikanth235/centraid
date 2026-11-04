@@ -1435,12 +1435,12 @@
       "why_no_example": ""
     },
     {
-      "argument": "name",
+      "argument": "kind",
       "example": [
         {
           "args": {
             "args": "effort: 5",
-            "name": "Book the cabin"
+            "kind": "task"
           },
           "strict": true,
           "think": null,

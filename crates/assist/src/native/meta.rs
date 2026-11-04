@@ -405,6 +405,23 @@ pub fn create_arg_canonical(kind: Kind, spelling: &str) -> Option<&'static str> 
     lookup(Verb::Create, kind, None).and_then(|row| row.canonical_name(spelling))
 }
 
+/// Every field name a `create` or an `edit` carries as a parameter of its own (#1166): `name` and the fields of every
+/// kind, under the names the model writes them (`create_args`, `edit_actions`), sorted and without repeats.
+#[must_use]
+pub fn flat_field_names() -> Vec<&'static str> {
+    let mut names: Vec<&'static str> = vec!["name"];
+    for spec in KINDS {
+        names.extend(spec.fields.iter().map(|field| field.name));
+        names.extend(create_args(spec.kind));
+        for action in edit_actions(spec.kind) {
+            names.extend(action.chat_names());
+        }
+    }
+    names.sort_unstable();
+    names.dedup();
+    names
+}
+
 /// One kind's row.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct KindSpec {

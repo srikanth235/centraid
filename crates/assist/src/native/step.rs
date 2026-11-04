@@ -1,6 +1,10 @@
-//! THE FREE DECODE STEP (SPEC §6.6, §9; #1088, D-1044-18): one assistant message, written by any [`Model`].
+//! THE DECODE STEP (SPEC §6.6, §9; #1088, D-1044-18, #1166): one assistant message, written by any [`Model`].
 //!
-//! The model writes text and the runtime reads it; nothing is masked (no grammar). Three things generation does not do
+//! The model writes text and the runtime reads it. The think is free by default (`StepOptions::grammar` is `Off`: S2 and the
+//! phone); a model trained on the regrouped tools decodes it under a grammar built fresh from the catalog and the prompt
+//! (`native/grammar.rs`), sent as the think generation's `grammar` and to no other. The call and the rest of the message
+//! are never masked. The spans the think copies are checked against the user's message after decoding
+//! ([`StepInfo::unspanned`]). Three things generation does not do
 //! by itself are done here, as steps over TEXT, which is the only thing an engine behind the [`Model`] trait takes:
 //!
 //! 1. **the think guard**: the think is generated with `</think>` as the stop string and `think_limit` tokens at most; a think
@@ -29,9 +33,12 @@
 //! slot); the message returned starts with `<think>\n` and includes them.
 
 use crate::model::{Cancel, Control, Finish, GenerateRequest, Generation, Model, ModelError};
+use crate::native::grammar::{
+    GrammarMode, Visible, block_line, grammar_for_step, unspanned, user_message,
+};
 use crate::native::identity::MODEL;
 use crate::native::prompt::ToolsMode;
-use crate::native::think::{TraceMode, compile_think_for};
+use crate::native::think::{TraceMode, compile_think_with};
 use crate::native::transcript::{assistant_header, assistant_open, call_text_of, py_strip};
 
 /// Think tokens before `</think>` is forced.
@@ -52,6 +59,10 @@ pub struct StepOptions {
     /// (`compile_think_for`). The default is S2, the model the phone ships; a model trained on the
     /// regrouped tools sets `Sig` (#1166).
     pub tools: ToolsMode,
+    /// How much of the think the decoder holds to (`native/grammar.rs`). `Off` is the phone's and S2's: the think is free.
+    /// `Full` is the grammar of the regrouped tools; under `ToolsMode::S2` it is `Handles`, because S2 writes `search`
+    /// and `open` and puts a create's kind in `set`.
+    pub grammar: GrammarMode,
 }
 
 impl Default for StepOptions {
@@ -61,6 +72,7 @@ impl Default for StepOptions {
             max_new: MAX_NEW,
             temperature: 0.0,
             tools: ToolsMode::S2,
+            grammar: GrammarMode::Off,
         }
     }
 }
@@ -80,6 +92,12 @@ pub struct StepInfo {
     pub think_tokens: Option<u32>,
     /// Tokens the engine reports for the message, plus the `</think>` a cut think was closed with.
     pub new_tokens: Option<u32>,
+    /// The grammar the think was decoded under, `off` when none (the mode in effect, which `Full` is not for S2).
+    pub grammar: Option<GrammarMode>,
+    /// Spans the think quotes or copies that are not in the user's message (`name: …`, a `set` text, a `contains "…"`,
+    /// an `intent` phrase): `slot: value`. A grammar cannot say "a span of that message", so this is the check
+    /// after decoding; it refuses nothing and the runtime still grounds the value.
+    pub unspanned: Vec<String>,
 }
 
 /// One assistant message.
@@ -93,6 +111,7 @@ pub struct StepOutput {
 fn generate(
     model: &dyn Model,
     prompt: &str,
+    grammar: Option<&str>,
     stop: &str,
     max_tokens: u32,
     temperature: f32,
@@ -102,7 +121,7 @@ fn generate(
     model.generate(
         &GenerateRequest {
             prompt,
-            grammar: None,
+            grammar,
             max_tokens,
             stop: &stops,
             temperature,
@@ -155,7 +174,15 @@ pub fn decode_step(
         return Ok(cancelled(text, info));
     }
 
-    // 1. the think, under the guard (and under the message's own token budget)
+    // 1. the think, under the guard (and under the message's own token budget), under the grammar when there is one
+    let grammar = grammar_for_step(
+        opts.grammar,
+        opts.tools,
+        &Visible::of(&prompt, dates, block_line(&prompt, "nums:")),
+        prefix,
+    );
+    info.grammar = grammar.as_ref().map(|(mode, _)| *mode);
+    let grammar = grammar.map(|(_, text)| text);
     let mut think = String::new();
     let mut used = 0u32;
     let budget_ends_think = opts.max_new <= opts.think_limit;
@@ -171,6 +198,7 @@ pub fn decode_step(
         let generation = generate(
             model,
             &prompt,
+            grammar.as_deref(),
             MODEL.think_close,
             think_cap,
             opts.temperature,
@@ -201,13 +229,17 @@ pub fn decode_step(
     text.push_str(&think);
     text.push_str(MODEL.think_close);
     info.new_tokens = Some(used);
+    if let Some(message) = user_message(&prompt) {
+        info.unspanned = unspanned(&format!("{prefix}{think}"), message);
+    }
     if used >= opts.max_new {
         return Ok(StepOutput { text, info }); // the `</think>` was the message's last token
     }
 
     // 2. the call the think states, written by the compiler
     let stated = format!("{prefix}{think}");
-    if let Ok(call) = compile_think_for(py_strip(&stated), dates, mode, opts.tools) {
+    let nums = block_line(&prompt, "nums:");
+    if let Ok(call) = compile_think_with(py_strip(&stated), dates, nums, mode, opts.tools) {
         text.push_str("\n\n");
         text.push_str(&call_text_of(&call));
         info.rendered_call = true;
@@ -224,6 +256,7 @@ pub fn decode_step(
     let generation = generate(
         model,
         &continued,
+        None,
         MODEL.tool_call_close,
         left,
         opts.temperature,
@@ -611,6 +644,145 @@ mod tests {
         };
         decode_step(&model, &prompt(), None, TraceMode::V4, opts, &Cancel::new()).unwrap();
         assert!((model.requests()[0].temperature - 0.6).abs() < f32::EPSILON);
+    }
+
+    fn grammar_options(grammar: GrammarMode, tools: ToolsMode) -> StepOptions {
+        StepOptions {
+            grammar,
+            tools,
+            ..StepOptions::default()
+        }
+    }
+
+    #[test]
+    fn a_grammar_goes_to_the_think_and_not_to_the_call() {
+        let engine = Engine::new(&[("no tool fits", Finish::Stop, 3), ("", Finish::Stop, 1)]);
+        let seen = std::sync::Arc::new(Mutex::new(Vec::new()));
+        struct Spy<'a>(&'a Engine, std::sync::Arc<Mutex<Vec<Option<String>>>>);
+        impl Model for Spy<'_> {
+            fn generate(
+                &self,
+                request: &GenerateRequest<'_>,
+                on_token: &mut dyn FnMut(&str) -> Control,
+            ) -> Result<Generation, ModelError> {
+                self.1
+                    .lock()
+                    .unwrap()
+                    .push(request.grammar.map(str::to_owned));
+                self.0.generate(request, on_token)
+            }
+        }
+        let spy = Spy(&engine, seen.clone());
+        let prompt = format!(
+            "<|im_start|>user\nstar it\n<|im_end|>\nvault directory:\nlists: Home (#6)\n{OPEN}"
+        );
+        let out = decode_step(
+            &spy,
+            &prompt,
+            None,
+            TraceMode::V4,
+            grammar_options(GrammarMode::Full, ToolsMode::Sig),
+            &Cancel::new(),
+        )
+        .unwrap();
+        let seen = seen.lock().unwrap();
+        assert_eq!(
+            seen.len(),
+            2,
+            "the think, then the call the think did not state"
+        );
+        let think = seen[0].as_deref().expect("the think is under a grammar");
+        assert!(think.starts_with("root ::= think\n"), "{think}");
+        assert!(
+            think.contains("\"#6\""),
+            "the handle the prompt shows is in it: {think}"
+        );
+        assert!(!think.contains("\"#7\""));
+        assert!(
+            think.contains("</think>"),
+            "the think ends with its closing tag"
+        );
+        assert_eq!(seen[1], None, "the call is free");
+        assert_eq!(out.info.grammar, Some(GrammarMode::Full));
+    }
+
+    #[test]
+    fn s2_is_held_to_the_handles_only_and_off_sends_nothing() {
+        let model = ScriptedModel::new([THINK, THINK, THINK]);
+        let run = |grammar, tools| {
+            decode_step(
+                &model,
+                &prompt(),
+                None,
+                TraceMode::V4,
+                grammar_options(grammar, tools),
+                &Cancel::new(),
+            )
+            .unwrap()
+        };
+        let off = run(GrammarMode::Off, ToolsMode::S2);
+        let s2 = run(GrammarMode::Full, ToolsMode::S2);
+        let sig = run(GrammarMode::Handles, ToolsMode::Sig);
+        let requests = model.requests();
+        assert_eq!(requests[0].grammar, None);
+        assert_eq!(off.info.grammar, None);
+        // `full` over S2's tools is `handles`: S2 writes `search` and `open`, and a create's kind in `set`
+        assert_eq!(s2.info.grammar, Some(GrammarMode::Handles));
+        assert!(
+            requests[1]
+                .grammar
+                .as_deref()
+                .unwrap()
+                .starts_with("root ::= any-s0\n")
+        );
+        assert_eq!(sig.info.grammar, Some(GrammarMode::Handles));
+    }
+
+    #[test]
+    fn a_given_prefix_of_slots_leaves_the_structure_to_the_handles() {
+        // `retry: where` is a line of the grammar's own; a prefix with more than that is not placed
+        let model = ScriptedModel::new([THINK, "kind: event\n", ""]);
+        for (given, root) in [
+            ("retry: where\n", "root ::= think\n"),
+            ("intent: read\n", "root ::= any-s0\n"),
+        ] {
+            decode_step(
+                &model,
+                &format!("{}{given}", prompt()),
+                None,
+                TraceMode::V4,
+                grammar_options(GrammarMode::Full, ToolsMode::Sig),
+                &Cancel::new(),
+            )
+            .unwrap();
+            let requests = model.requests();
+            let grammar = requests
+                .last()
+                .unwrap()
+                .grammar
+                .as_deref()
+                .unwrap()
+                .to_owned();
+            assert!(grammar.starts_with(root), "{given}: {grammar}");
+        }
+    }
+
+    #[test]
+    fn the_spans_a_think_copies_are_checked_against_the_message() {
+        let think = "intent: write \"add\"\nverb: create\nkind: task\nname: Pay rent\nset: description = Zorblax";
+        let model = ScriptedModel::new([think]);
+        let prompt = format!(
+            "<|im_start|>user\nvault: Home (#6)\n\nadd a task pay RENT, thanks\n<|im_end|>\n{OPEN}"
+        );
+        let out = step(&model, &prompt, None);
+        assert_eq!(out.info.unspanned, ["set description: Zorblax"]);
+        // an observation is not the message
+        let model = ScriptedModel::new([think]);
+        let prompt = format!(
+            "<|im_start|>user\nadd a task pay rent\n<|im_end|>\n<|im_start|>user\n<tool_response>\nZorblax\n</tool_response><|im_end|>\n{OPEN}"
+        );
+        let out = step(&model, &prompt, None);
+        assert_eq!(out.info.unspanned, ["set description: Zorblax"]);
     }
 
     #[test]

@@ -1894,12 +1894,12 @@
   },
   "session.tool_has_no_parameter_param_tool": {
     "tool": "edit",
-    "argument": "name",
+    "argument": "kind",
     "calls": [
       {
         "tool": "edit",
         "args": {
-          "name": "Book the cabin",
+          "kind": "task",
           "args": "effort: 5"
         },
         "strict": true

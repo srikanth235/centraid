@@ -153,17 +153,16 @@ fn tools_with(full: bool) -> Vec<Value> {
         "kind".into(),
         json!({"type": "string", "description": "the kind of the new row"}),
     );
-    create.insert(
-        "args".into(),
-        json!({"type": "string", "description": "field: value lines, name first, dates as date expressions"}),
-    );
+    // a create's and an edit's fields are parameters of their own (#1166): the name of every kind's fields
+    for field in meta::flat_field_names() {
+        create.insert(field.into(), json!({"type": "string"}));
+    }
     create.insert("more".into(), more.clone());
     let mut edit = serde_json::Map::new();
     edit.insert("rows".into(), rows.clone());
-    edit.insert(
-        "args".into(),
-        json!({"type": "string", "description": "only the fields that change, as field: value lines, dates as date expressions; body+: or description+: adds text"}),
-    );
+    for field in meta::flat_field_names() {
+        edit.insert(field.into(), json!({"type": "string"}));
+    }
     edit.insert("more".into(), more.clone());
     let mut verb_do = serde_json::Map::new();
     verb_do.insert(
@@ -210,15 +209,15 @@ fn tools_with(full: bool) -> Vec<Value> {
         ),
         tool(
             "create",
-            "Add a new row. Ends the turn unless more.",
+            "Add a new row: one parameter per field of the kind, name first, dates as date expressions. Ends the turn unless more.",
             create,
             &["kind"],
         ),
         tool(
             "edit",
-            "Change fields on rows. Ends the turn unless more.",
+            "Change fields on rows: one parameter per field that changes, dates as date expressions; body+: or description+: adds text. Ends the turn unless more.",
             edit,
-            &["rows", "args"],
+            &["rows"],
         ),
         tool(
             "do",
@@ -327,13 +326,13 @@ const SIGNATURES: [(&str, &[&str], &str); 8] = [
     ),
     (
         "create",
-        &["kind", "args", "more"],
-        "add a row; args: name first, then its fields; ends the turn unless more",
+        &["kind", "fields", "more"],
+        "add a row; one parameter per field of the kind (the kinds card), name first, dates as date expressions; ends the turn unless more",
     ),
     (
         "edit",
-        &["rows", "args", "more"],
-        "change fields on rows; args: only the fields that change, body+: or description+: adds text; ends the turn unless more",
+        &["rows", "fields", "more"],
+        "change fields on rows; one parameter per field, only the fields that change, body+: or description+: adds text; ends the turn unless more",
     ),
     (
         "do",
@@ -394,6 +393,7 @@ pub fn signature(tool: &Value) -> String {
                     .map(|field| sig_param(field, properties, &required)),
             ),
             "rows|selector" => parts.push("rows? | selector".to_owned()),
+            "fields" => parts.push("field…".to_owned()),
             other => parts.push(sig_param(other, properties, &required)),
         }
     }
@@ -682,7 +682,7 @@ pub fn focus_line(session: &Session) -> Option<String> {
 }
 
 /// The block that leads a user turn: the lines that exist (`vault:`,
-/// `focus:`, `answer:`, `dates:`), one per line, in that order. The Python renderer puts
+/// `focus:`, `answer:`, `dates:`, `nums:` (regrouped tools only), `picks:`), one per line, in that order. The Python renderer puts
 /// a blank line between it and the message (`render.user_content`).
 #[must_use]
 pub fn user_block(lines: &[&Option<String>]) -> Option<String> {

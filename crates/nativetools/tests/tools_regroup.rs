@@ -568,3 +568,230 @@ fn a_by_name_write_is_a_find_step_in_the_trace() {
         ]
     );
 }
+
+// ---- the fields of a create and an edit are parameters of their own (#1166) ----
+
+#[test]
+fn create_and_edit_carry_their_fields_as_parameters() {
+    let world = seeded();
+    let mut session = world.strict_session();
+    session.user("");
+    let created = call(
+        &mut session,
+        "create",
+        json!({"kind": "task", "name": "Call plumber", "effort": "20"}),
+    );
+    assert_eq!(created["effect"]["verb"], "create", "{created}");
+    session.user("");
+    let row = number(&mut session, "task", "Call plumber");
+    let edited = call(
+        &mut session,
+        "edit",
+        json!({"rows": row, "name": "Call the plumber", "effort": 30}),
+    );
+    assert_eq!(edited["effect"]["verb"], "edit", "{edited}");
+    // the selector parameters an edit does not take are still refused by name
+    session.user("");
+    let row = number(&mut session, "task", "Call the plumber");
+    let refused = text(
+        &mut session,
+        "edit",
+        json!({"rows": row, "kind": "task", "effort": 5}),
+    );
+    assert!(
+        refused.contains("edit has no parameter \"kind\""),
+        "{refused}"
+    );
+    // the args lines still work (S2's, and a model that writes them)
+    session.user("");
+    let row = number(&mut session, "task", "Call the plumber");
+    let old = call(
+        &mut session,
+        "edit",
+        json!({"rows": row, "args": "effort: 10"}),
+    );
+    assert_eq!(old["effect"]["verb"], "edit", "{old}");
+}
+
+#[test]
+fn no_field_is_named_like_a_parameter_the_tool_takes_itself() {
+    for field in meta::flat_field_names() {
+        assert!(
+            !["kind", "rows", "more", "args", "verb"].contains(&field),
+            "{field} would collide with a parameter of create or edit"
+        );
+        if field != "name" {
+            assert!(
+                !meta::SELECTOR_PARAMS.contains(&field),
+                "{field} is a selector parameter an edit refuses"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_think_states_a_create_with_its_fields_flat_and_s2_with_args() {
+    let think =
+        "intent: write \"add\"\nverb: create\nkind: task\nset: name = Pay rent · effort = 30";
+    let new = compile_think_for(think, None, TraceMode::V4, ToolsMode::Sig).unwrap();
+    assert_eq!(new.tool, "create");
+    let pairs: Vec<(&str, &str)> = new
+        .args
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect();
+    assert_eq!(
+        pairs,
+        [("kind", "task"), ("name", "Pay rent"), ("effort", "30")]
+    );
+    let s2 = compile_think(think, None, TraceMode::V4).unwrap();
+    assert_eq!(
+        s2.args[1],
+        ("args".to_owned(), "name: Pay rent\neffort: 30".to_owned())
+    );
+    // a field that is also a slot of the call is refused, not written twice
+    let twice = compile_think_for(
+        "intent: write\nverb: create\nkind: task\nset: kind = event",
+        None,
+        TraceMode::V4,
+        ToolsMode::Sig,
+    );
+    assert!(twice.is_err());
+}
+
+#[test]
+fn the_session_states_the_same_flat_fields_the_stateless_compiler_writes() {
+    let world = seeded();
+    let mut session = world.strict_session();
+    let row = number(&mut session, "task", "cabin");
+    session.user("add a task call plumber, thirty minutes");
+    let compiled = session.compile(&json!({
+        "trace": "v4", "intent": "write", "verb": "create", "kind": "task",
+        "set": [{"key": "name", "value": "Call plumber"}, {"key": "effort", "value": 30}]
+    }));
+    assert!(compiled.get("refused").is_none(), "{compiled}");
+    let want = compile_think_for(
+        "intent: write\nverb: create\nkind: task\nset: name = Call plumber · effort = 30",
+        None,
+        TraceMode::V4,
+        ToolsMode::Sig,
+    )
+    .unwrap();
+    let args = compiled["stated"]["args"].as_object().unwrap();
+    let got: Vec<(String, String)> = args
+        .iter()
+        .map(|(key, value)| {
+            let value = value
+                .as_str()
+                .map_or_else(|| value.to_string(), str::to_owned);
+            (key.clone(), value)
+        })
+        .collect();
+    // a JSON object has no order the reply could keep, so the same arguments, compared as a set
+    let mut want_args = want.args.clone();
+    want_args.sort();
+    assert_eq!(got, want_args, "{compiled}");
+    // `call` (grounded) keeps the lines the runtime reads; `stated` is the training target
+    assert!(compiled["call"]["args"].get("args").is_some(), "{compiled}");
+    // an edit, and a set key that is also a slot
+    session.user("make the cabin one hour");
+    let edit = session.compile(&json!({
+        "trace": "v4", "intent": "write", "verb": "edit", "pick": [{"row": row, "verdict": "ok", "reason": "name"}],
+        "set": [{"key": "effort", "value": 60}]
+    }));
+    assert_eq!(edit["stated"]["args"]["effort"], "60", "{edit}");
+    assert!(edit["stated"]["args"].get("args").is_none(), "{edit}");
+    let twice = session.compile(&json!({
+        "trace": "v4", "intent": "write", "verb": "create", "kind": "task",
+        "set": [{"key": "kind", "value": "event"}]
+    }));
+    assert!(twice.get("refused").is_some(), "{twice}");
+}
+
+// ---- `nums[i]`: the numbers of the message, named like its dates (#1166) ----
+
+#[test]
+fn the_block_carries_a_nums_line_for_the_regrouped_tools_and_never_for_s2() {
+    let world = seeded();
+    let mut strict = world.strict_session();
+    let block = strict.user("paid fifty and 23.50 for lunch")["block"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert!(block.contains("nums: fifty = 50 · 23.50 = 23.5"), "{block}");
+    let mut s2 = world.session();
+    let block = s2.user("paid fifty and 23.50 for lunch")["block"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert!(!block.contains("nums:"), "{block}");
+    let none = strict.user("what is on tomorrow")["block"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert!(!none.contains("nums:"), "{none}");
+}
+
+#[test]
+fn a_think_names_a_number_and_the_call_carries_its_value() {
+    use centraid_nativetools::think::compile_think_with;
+    let nums = Some("nums: fifty = 50 · thirty = 30");
+    let call = compile_think_with(
+        "intent: write \"add\"\nverb: create\nkind: task\nset: name = Pay rent · effort = nums[1]",
+        None,
+        nums,
+        TraceMode::V4,
+        ToolsMode::Sig,
+    )
+    .unwrap();
+    assert!(
+        call.args.contains(&("effort".to_owned(), "30".to_owned())),
+        "{call:?}"
+    );
+    let read = compile_think_with(
+        "intent: read \"big\"\nkind: transaction\nwhere: amount > nums[0] USD",
+        None,
+        nums,
+        TraceMode::V4,
+        ToolsMode::Sig,
+    )
+    .unwrap();
+    assert!(
+        read.args
+            .iter()
+            .any(|(key, value)| key == "where" && value.contains("50")),
+        "{read:?}"
+    );
+    let missing = compile_think_with(
+        "intent: read \"big\"\nkind: transaction\nwhere: amount > nums[2]",
+        None,
+        nums,
+        TraceMode::V4,
+        ToolsMode::Sig,
+    );
+    assert!(missing.unwrap_err().message.contains("nums[2]"));
+    let without = compile_think_for(
+        "intent: read \"big\"\nkind: transaction\nwhere: amount > nums[0]",
+        None,
+        TraceMode::V4,
+        ToolsMode::Sig,
+    );
+    assert!(without.is_err());
+}
+
+#[test]
+fn the_session_compile_fills_a_nums_entry_from_the_message() {
+    let world = seeded();
+    let mut session = world.strict_session();
+    session.user("add a task call plumber, thirty minutes");
+    let compiled = session.compile(&json!({
+        "trace": "v4", "intent": "write", "verb": "create", "kind": "task",
+        "set": [{"key": "name", "value": "Call plumber"}, {"key": "effort", "value": "nums[0]"}]
+    }));
+    assert_eq!(compiled["stated"]["args"]["effort"], "30", "{compiled}");
+    let missing = session.compile(&json!({
+        "trace": "v4", "intent": "write", "verb": "create", "kind": "task",
+        "set": [{"key": "effort", "value": "nums[3]"}]
+    }));
+    assert_eq!(missing["refused"]["slot"], "set[0]", "{missing}");
+}

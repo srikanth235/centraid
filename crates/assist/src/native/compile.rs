@@ -173,10 +173,45 @@ fn shape_of(slots: &Map<String, Value>) -> Shape {
 impl Session {
     /// Compile the slots of a trace into the call the runtime will execute.
     pub fn compile(&mut self, slots: &Value) -> Value {
-        match self.compile_slots(slots) {
+        let filled = match self.fill_nums(slots) {
+            Ok(filled) => filled,
+            Err(refusal) => {
+                return json!({"refused": {"slot": refusal.slot, "why": refusal.why}});
+            }
+        };
+        match self.compile_slots(&filled) {
             Ok(done) => done,
             Err(refusal) => json!({"refused": {"slot": refusal.slot, "why": refusal.why}}),
         }
+    }
+
+    /// The slots with each `nums[i]` of a `where` condition's or a `set` entry's value replaced by the number entry `i` of the
+    /// message's `nums:` line (`native/nums.rs`).
+    fn fill_nums(&self, slots: &Value) -> Compiled<Value> {
+        let mut filled = slots.clone();
+        let Some(object) = filled.as_object_mut() else {
+            return Ok(filled);
+        };
+        let line = self.nums_line(&self.message);
+        for slot in ["where", "set"] {
+            let Some(Value::Array(entries)) = object.get_mut(slot) else {
+                continue;
+            };
+            for (index, entry) in entries.iter_mut().enumerate() {
+                let Some(Value::String(text)) = entry.get_mut("value") else {
+                    continue;
+                };
+                if text.contains("nums[") {
+                    *text = crate::native::nums::fill(text, line.as_deref()).map_err(|why| {
+                        Refusal {
+                            slot: format!("{slot}[{index}]"),
+                            why,
+                        }
+                    })?;
+                }
+            }
+        }
+        Ok(filled)
     }
 
     fn compile_slots(&mut self, slots: &Value) -> Compiled<Value> {
@@ -370,16 +405,32 @@ impl Session {
             let text = self.compile_where(slots, &args, value)?;
             args.insert("where".to_owned(), json!(text));
         }
+        // a create's and an edit's fields: `args` lines in the call, parameters of their own in `stated` (#1166)
+        let mut fields: Vec<(String, String)> = Vec::new();
         if let Some(value) = slots.get("set").filter(|value| !value.is_null()) {
-            let text = self.compile_set(value, &picked.into_set, &mut resolved)?;
-            args.insert("args".to_owned(), json!(text));
+            fields = self.compile_set(value, &picked.into_set, &mut resolved)?;
         } else if !picked.into_set.is_empty() {
-            let lines: Vec<String> = picked
-                .into_set
+            fields = picked.into_set.clone();
+        }
+        let flat = !lenient && matches!(tool, "create" | "edit");
+        if !fields.is_empty() {
+            let lines: Vec<String> = fields
                 .iter()
-                .map(|(key, expr)| format!("{key}: {expr}"))
+                .map(|(key, value)| format!("{key}: {value}"))
                 .collect();
             args.insert("args".to_owned(), json!(lines.join("\n")));
+        }
+        if flat
+            && let Some((key, _)) = fields.iter().enumerate().find_map(|(at, (key, value))| {
+                (args.contains_key(key) && key != "args"
+                    || fields[..at].iter().any(|(have, _)| have == key))
+                .then_some((key, value))
+            })
+        {
+            return refuse(
+                key,
+                format!("{key} is a field and also a slot of this {tool}"),
+            );
         }
 
         // the tools of the regroup name rows: a selector on `answer`, `edit` or `do` is a step missing
@@ -403,7 +454,14 @@ impl Session {
         if v4 {
             self.infer_scope_and_refer(tool, slots, &ordered, &picked.reasons, &mut inferred);
         }
-        let stated = json!({"tool": tool, "args": Value::Object(ordered.clone())});
+        let mut stated_args = ordered.clone();
+        if flat && !fields.is_empty() {
+            stated_args.remove("args");
+            for (key, value) in &fields {
+                stated_args.insert(key.clone(), json!(value));
+            }
+        }
+        let stated = json!({"tool": tool, "args": Value::Object(stated_args)});
         // the call a malformed trace states is repaired here, before its first send; the
         // trace's `target` is the name of a write whose every pick was rejected (rule 4)
         let target = match slots.get("target") {
@@ -774,11 +832,11 @@ impl Session {
         value: &Value,
         picked: &[(String, String)],
         resolved: &mut Resolved,
-    ) -> Compiled<String> {
+    ) -> Compiled<Vec<(String, String)>> {
         let Some(entries) = value.as_array() else {
             return refuse("set", "set is a list of {key, value} entries");
         };
-        let mut lines: Vec<String> = Vec::new();
+        let mut lines: Vec<(String, String)> = Vec::new();
         for (index, entry) in entries.iter().enumerate() {
             let place = format!("set[{index}]");
             let Some(object) = entry.as_object() else {
@@ -789,7 +847,7 @@ impl Session {
             };
             if let Some(date) = object.get("date") {
                 let expr = self.compile_date(&place, date, resolved)?;
-                lines.push(format!("{key}: {}", date_text(&expr)));
+                lines.push((key.to_owned(), date_text(&expr)));
             } else if let Some(value) = object.get("value") {
                 let text = match value {
                     Value::String(text) => text.clone(),
@@ -800,15 +858,15 @@ impl Session {
                     Value::Bool(flag) => flag.to_string(),
                     _ => return refuse(place, "a set value is text, a number or a pick"),
                 };
-                lines.push(format!("{key}: {text}"));
+                lines.push((key.to_owned(), text));
             } else {
                 return refuse(place, "a set entry has a value or a date");
             }
         }
         for (key, expr) in picked {
-            lines.push(format!("{key}: {expr}"));
+            lines.push((key.clone(), expr.clone()));
         }
-        Ok(lines.join("\n"))
+        Ok(lines)
     }
 }
 

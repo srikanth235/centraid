@@ -61,13 +61,17 @@ fn serve(model: &dyn Model, request: &Request) -> String {
         inner: model,
         prompt_tokens: Mutex::new(None),
     };
+    let options = match request.options() {
+        Ok(options) => options,
+        Err(error) => return wire::error_line(&error),
+    };
     let start = Instant::now();
     let stepped = decode_step(
         &counting,
         &request.prompt,
         request.dates.as_deref(),
         TraceMode::V4,
-        request.options(),
+        options,
         &Cancel::new(),
     );
     let ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);

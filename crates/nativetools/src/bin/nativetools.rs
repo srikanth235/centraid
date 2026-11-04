@@ -316,7 +316,8 @@ fn think_answer(request: &Value) -> String {
                     }
                 },
             };
-            match think::compile_think_for(text, dates, mode, tools) {
+            let nums = request.get("nums").and_then(Value::as_str);
+            match think::compile_think_with(text, dates, nums, mode, tools) {
                 Ok(call) => format!("{{\"call\":{}}}", call_json(&call)),
                 Err(refusal) => {
                     json!({"refused": {"class": refusal.class, "message": refusal.message}})

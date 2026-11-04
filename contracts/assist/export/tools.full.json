@@ -219,21 +219,161 @@
   },
   {
     "function": {
-      "description": "Add a new row. Ends the turn unless more.",
+      "description": "Add a new row: one parameter per field of the kind, name first, dates as date expressions. Ends the turn unless more.",
       "name": "create",
       "parameters": {
         "properties": {
-          "args": {
-            "description": "field: value lines, name first, dates as date expressions",
+          "account": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "area": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "cadence": {
+            "type": "string"
+          },
+          "card_number": {
+            "type": "string"
+          },
+          "carry": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "climb": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "completed": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "cvv": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "distance": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "string"
+          },
+          "effort": {
+            "type": "string"
+          },
+          "energy": {
+            "type": "string"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "heart_rate": {
+            "type": "string"
+          },
+          "key": {
             "type": "string"
           },
           "kind": {
             "description": "the kind of the new row",
             "type": "string"
           },
+          "list": {
+            "type": "string"
+          },
+          "met": {
+            "type": "string"
+          },
+          "metric": {
+            "type": "string"
+          },
           "more": {
             "description": "another call follows",
             "type": "boolean"
+          },
+          "moving": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nickname": {
+            "type": "string"
+          },
+          "notebook": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "on_budget": {
+            "type": "string"
+          },
+          "opening": {
+            "type": "string"
+          },
+          "opening_on": {
+            "type": "string"
+          },
+          "parent": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "pinned": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "starred": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "transfer": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
           }
         },
         "required": [
@@ -246,26 +386,165 @@
   },
   {
     "function": {
-      "description": "Change fields on rows. Ends the turn unless more.",
+      "description": "Change fields on rows: one parameter per field that changes, dates as date expressions; body+: or description+: adds text. Ends the turn unless more.",
       "name": "edit",
       "parameters": {
         "properties": {
-          "args": {
-            "description": "only the fields that change, as field: value lines, dates as date expressions; body+: or description+: adds text",
+          "account": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "area": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "cadence": {
+            "type": "string"
+          },
+          "card_number": {
+            "type": "string"
+          },
+          "carry": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "climb": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "completed": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "cvv": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "distance": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "string"
+          },
+          "effort": {
+            "type": "string"
+          },
+          "energy": {
+            "type": "string"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "heart_rate": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "list": {
+            "type": "string"
+          },
+          "met": {
+            "type": "string"
+          },
+          "metric": {
             "type": "string"
           },
           "more": {
             "description": "another call follows",
             "type": "boolean"
           },
+          "moving": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nickname": {
+            "type": "string"
+          },
+          "notebook": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "on_budget": {
+            "type": "string"
+          },
+          "opening": {
+            "type": "string"
+          },
+          "opening_on": {
+            "type": "string"
+          },
+          "parent": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "pinned": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
           "rows": {
             "description": "#n, @n list",
+            "type": "string"
+          },
+          "starred": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "transfer": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "value": {
             "type": "string"
           }
         },
         "required": [
-          "rows",
-          "args"
+          "rows"
         ],
         "type": "object"
       }
