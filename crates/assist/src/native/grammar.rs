@@ -429,13 +429,13 @@ impl<'a> Builder<'a> {
         trie(self, '#', &rows);
         trie(self, '@', &results);
 
-        for k in 0..CHAIN.len() {
+        for (k, chain_char) in CHAIN.iter().enumerate() {
             let mut options = vec![stop()];
             if k == 0 {
                 options.push(seq(vec![any_but(&plain_extra), rf(&state(0))]));
             } else {
                 options.push(seq(vec![
-                    any_but(&format!("{plain_extra}{}", CHAIN[k])),
+                    any_but(&format!("{plain_extra}{chain_char}")),
                     rf(&state(0)),
                 ]));
                 options.push(seq(vec![lit("d"), rf(&state(1))]));
@@ -443,7 +443,7 @@ impl<'a> Builder<'a> {
             options.push(seq(vec![lit("#"), rf(&format!("{family}-h"))]));
             options.push(seq(vec![lit("@"), rf(&format!("{family}-a"))]));
             if k + 1 < CHAIN.len() {
-                options.push(seq(vec![lit(&CHAIN[k].to_string()), rf(&state(k + 1))]));
+                options.push(seq(vec![lit(&chain_char.to_string()), rf(&state(k + 1))]));
             } else if self.seen.dates > 0 {
                 // `dates[` was written: only an index that is an entry, and the bracket
                 let indices = (0..self.seen.dates)
