@@ -69,8 +69,15 @@ impl Stepper for Script {
     }
 }
 
+/// Runs under S2's tools block, the prompt the frozen sets were written for.
 fn run(source: &MemorySource, stepper: &dyn Stepper) -> Vec<SessionResult> {
-    let mut runner = Runner::new(source, stepper).expect("runner");
+    run_with(source, stepper, ToolsMode::S2)
+}
+
+fn run_with(source: &MemorySource, stepper: &dyn Stepper, tools: ToolsMode) -> Vec<SessionResult> {
+    let mut runner = Runner::new(source, stepper)
+        .expect("runner")
+        .with_tools(tools);
     source
         .sessions
         .iter()
@@ -237,7 +244,7 @@ fn a_look_then_answer_that_passes_gets_its_arguments_right() {
         call("find", &[("kind", "person"), ("name", "Neha")]),
         call("answer", &[("rows", "@1")]),
     ]));
-    let turn = &run(&source, &script)[0].turns[0];
+    let turn = &run_with(&source, &script, ToolsMode::Sig)[0].turns[0];
     assert!(turn.pass, "{:?} ended {}", turn.problems, turn.ending);
     assert_eq!(turn.calls.len(), 2);
     assert_eq!(
@@ -257,7 +264,7 @@ fn the_new_contract_finds_then_does_by_handle_and_names_the_right_tool() {
         call("find", &[("kind", "task"), ("name", "Book the cabin")]),
         call("do", &[("verb", "complete"), ("rows", "@1")]),
     ]));
-    let turn = &run(&source, &script)[0].turns[0];
+    let turn = &run_with(&source, &script, ToolsMode::Sig)[0].turns[0];
     assert!(turn.pass, "{:?} ended {}", turn.problems, turn.ending);
     assert!(turn.tool_name_ok && turn.tool_ok);
     assert_eq!(turn.args["rows"], "right");

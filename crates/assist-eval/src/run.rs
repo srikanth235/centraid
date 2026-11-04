@@ -63,6 +63,16 @@ impl<'a> ModelStepper<'a> {
     }
 }
 
+impl ModelStepper<'_> {
+    /// The tools the model was trained on, which fix the shape of the call its think states
+    /// (`StepOptions::tools`). Keep it equal to the tools block the run shows ([`Runner::with_tools`]).
+    #[must_use]
+    pub fn with_tools(mut self, tools: ToolsMode) -> Self {
+        self.options.tools = tools;
+        self
+    }
+}
+
 impl Stepper for ModelStepper<'_> {
     fn step(&self, prompt: &str, dates: Option<&str>) -> Result<StepOut, String> {
         decode_step(
