@@ -692,6 +692,105 @@ fn date_from_compact(text: &str, times: &mut Vec<String>) -> Result<String, Refu
     Ok(format!("{{{}}}", parts.join(",")))
 }
 
+/// The compact date of a date expression, the inverse of [`date_from_compact`]: `week-8`, `2026-03-27 t`,
+/// `from 2026-07-16 to 2026-07-20`, and the clock values the `t` markers stand for (the think's `time` slot, in order). `None`
+/// for a value that is not a date expression, or one the compact form cannot spell. Reading it back with
+/// `date_from_compact` gives the same expression (the keys of a call's date are in the runtime's order; a compact date's are
+/// in its tokens' order, and the two compare equal as JSON).
+#[must_use]
+pub fn date_to_compact(expr: &Value) -> Option<(String, Vec<String>)> {
+    fn point(object: &serde_json::Map<String, Value>, times: &mut Vec<String>) -> Option<String> {
+        let mut words: Vec<String> = Vec::new();
+        for key in object.keys() {
+            if !["date", "unit", "rel", "name", "weekday", "time", "anchor"].contains(&key.as_str())
+            {
+                return None;
+            }
+        }
+        if let Some(unit) = object.get("unit") {
+            let unit = unit.as_str().filter(|unit| UNITS.contains(unit))?;
+            match object.get("rel") {
+                Some(rel) => {
+                    let rel = rel.as_i64()?;
+                    words.push(if rel >= 0 {
+                        format!("{unit}+{rel}")
+                    } else {
+                        format!("{unit}{rel}")
+                    });
+                }
+                None => words.push(unit.to_owned()),
+            }
+        } else if let Some(rel) = object.get("rel") {
+            let rel = rel.as_i64()?;
+            words.push(if rel >= 0 {
+                format!("+{rel}")
+            } else {
+                rel.to_string()
+            });
+        }
+        if let Some(name) = object.get("name") {
+            words.push(format!("m{}", name.as_i64().filter(|n| *n >= 0)?));
+        }
+        if let Some(day) = object.get("weekday") {
+            words.push(format!("wd{}", day.as_i64().filter(|n| *n >= 0)?));
+        }
+        if let Some(time) = object.get("time") {
+            times.push(time.as_str()?.to_owned());
+            words.push("t".to_owned());
+        }
+        if let Some(anchor) = object.get("anchor") {
+            let anchor = anchor.as_str().filter(|a| matches!(*a, "row" | "today"))?;
+            words.push(anchor.to_owned());
+        }
+        if let Some(date) = object.get("date") {
+            let date = date.as_str().filter(|d| is_date_word(d))?;
+            words.push(date.to_owned());
+        }
+        (!words.is_empty()).then(|| words.join(" "))
+    }
+    let object = expr.as_object()?;
+    let mut times = Vec::new();
+    if object.contains_key("from") || object.contains_key("to") {
+        let mut parts = Vec::new();
+        for edge in ["from", "to"] {
+            if let Some(value) = object.get(edge) {
+                parts.push(format!("{edge} {}", point(value.as_object()?, &mut times)?));
+            }
+        }
+        if object.len() != parts.len() {
+            return None;
+        }
+        return Some((parts.join(" "), times));
+    }
+    Some((point(object, &mut times)?, times))
+}
+
+/// The spelling of a call's `where` in a think (`status = open · priority >= 1`): the typed segments the model writes, a
+/// closed word bare and any other text quoted, joined with ` · `. `None` when the text is not a list of typed conditions;
+/// then the call's own text is what the slot carries. [`compile_think`] respells it as the call.
+#[must_use]
+pub fn where_slot(call: &str) -> Option<String> {
+    let parts = split_segments(call, &[" and "]);
+    if parts.is_empty() {
+        return None;
+    }
+    let conds: Result<Vec<Cond>, String> = parts.iter().map(|part| parse_cond(part)).collect();
+    Some(
+        conds
+            .ok()?
+            .iter()
+            .map(cond_text)
+            .collect::<Vec<_>>()
+            .join(" · "),
+    )
+}
+
+/// Why row `number` is the one a call takes (one of `PICK_REASONS`), read from `context`: the `pick:` line's parenthesis.
+#[must_use]
+pub fn pick_reason_of(context: &Context, number: &str) -> &'static str {
+    pick_reason(context, number)
+}
+
 // ---------------------------------------------------------------------------------------------
 // the dates line
 // ---------------------------------------------------------------------------------------------
@@ -1930,5 +2029,43 @@ mod tests {
                 .unwrap()
                 .ends_with("pick: #31 (date)")
         );
+    }
+
+    #[test]
+    fn a_date_expression_is_spelled_compact_and_reads_back_the_same() {
+        for json in [
+            r#"{"unit":"week","rel":-8}"#,
+            r#"{"unit":"month","rel":1}"#,
+            r#"{"from":{"date":"2026-07-16"},"to":{"date":"2026-07-20"}}"#,
+            r#"{"unit":"week","rel":1,"weekday":5}"#,
+            r#"{"date":"2026-03-27","time":"14:30"}"#,
+            r#"{"anchor":"row","rel":-1}"#,
+            r#"{"unit":"day","name":3}"#,
+        ] {
+            let expr: Value = serde_json::from_str(json).unwrap();
+            let (compact, mut times) = date_to_compact(&expr).unwrap_or_else(|| panic!("{json}"));
+            let back = date_from_compact(&compact, &mut times).unwrap();
+            assert_eq!(
+                serde_json::from_str::<Value>(&back).unwrap(),
+                expr,
+                "{json} -> {compact}"
+            );
+            assert!(times.is_empty());
+        }
+        assert!(date_to_compact(&serde_json::json!({"unit": "fortnight"})).is_none());
+        assert!(date_to_compact(&serde_json::json!({"colour": "red"})).is_none());
+        assert!(date_to_compact(&serde_json::json!("tomorrow")).is_none());
+    }
+
+    #[test]
+    fn a_where_is_spelled_as_typed_segments_and_respells_as_the_call() {
+        let call = "status = \"open\" and priority >= 1 and title contains \"rent\"";
+        let slot = where_slot(call).unwrap();
+        assert_eq!(
+            slot,
+            "status = open · priority >= 1 · title contains \"rent\""
+        );
+        assert_eq!(where_respell(&slot).unwrap().as_deref(), Some(call));
+        assert_eq!(where_slot("not a condition"), None);
     }
 }

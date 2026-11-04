@@ -4,7 +4,7 @@ The chat model's training-data pipeline, in Rust ([#1166](https://github.com/sri
 
 ## State
 
-Milestones M1, M2 and M3 are built: stages 0 to 5, plus the ambiguity measure.
+Milestones M1 to M4 are built: stages 0 to 7 (the intents, the messages, the render and the mix), plus the ambiguity measure. `datagen build --version vN` makes a data version end to end.
 
 | Module | Stage | What it is |
 | --- | --- | --- |
@@ -22,9 +22,13 @@ Milestones M1, M2 and M3 are built: stages 0 to 5, plus the ambiguity measure.
 | `llm` | 4 + 5 | The `Llm` trait, Claude Haiku through headless Claude Code (`ClaudeCli`), and the prompt-hash cache. |
 | `typos` | 4 | The seeded typo pass: light by default, heavy for the noise split. |
 | `verify` | 5 | Runtime grounding (the session solved afresh against the real messages) and the read-back pass. |
-| `source` | out | `DatagenSource`: the sessions as an `assist-eval` `EvalSource`. |
+| `source` | out | `DatagenSource`: the sessions as an `assist-eval` `EvalSource`, from a run (`open`) or from a data version (`open_version`). |
+| `trace` | 6 | The v4 think of a reference call, and the round trip through the runtime's compiler. |
+| `render` | 6 | A session rendered as the phone renders it, the HF tokenizer, the loss weights of every token. |
+| `mix` | 7 | Duplicates out, minimal pairs together, the grid's shares, the multi-turn floor, the per-cell report. |
+| `version` | 6 + 7 | Render all, mix, write `train|val|test|noise.jsonl.zst` and the manifest of a data version. |
 
-Everything after this (render, mix) is not built. New stages add modules beside these and read `Catalog`; none reads a schema from anywhere else.
+New stages add modules beside these and read `Catalog`; none reads a schema from anywhere else.
 
 ### Where the catalog comes from
 
@@ -109,6 +113,62 @@ A turn that fails a step is dropped with a reason, and the turns after it are cu
 
 **Output** (`<out>/`): `train|val|test|noise/sessions.jsonl` in the shape above with `user` filled and `reference calls` rewritten against the real message, plus `"verify": {"keep": true, "passed": [...], "reason": "ok"}` on each turn and `scenario` cut to the kept turns; `dropped.jsonl` (one row per session that lost a turn: split, session, turn, grid cell, reference, reason, detail, the message, how many turns were cut); `worlds/` (copied, so `DatagenSource::open(<out>)` and `open_named(<out>, &["noise"])` read the result unchanged); `manifest.json` and `report.txt` (drop rate per grid cell, per reference axis and per split with the reasons, the recovery rate and its disagreements by slot, the noise split, examples). Files hold no call counts; the command prints them to stderr.
 
+## Render and mix (stages 6 and 7)
+
+`datagen render --in <messages out> --out <dir> --tokenizer <tokenizer.json>` renders every session of a messages run and mixes the result into a data version. `datagen build --version vN --out <dir> --tokenizer <tokenizer.json>` runs intents, messages (from the cache; `--offline` makes no call), render and mix, the stages under `<dir>/stages/` and the version in `<dir>/`. `datagen show --in <dir> --tokenizer <tokenizer.json> [--split train] [--session ID]` prints one record decoded with its mask drawn on it.
+
+### The record contract (what M6 reads)
+
+`<dir>/{train,val,test,noise}.jsonl.zst` are single zstd frames, one record a line. A record is the session of `assist_eval::gold::Session` (`id`, `world`, `today`, `me`, `tags`, `turns[{user, gold, ref, tags}]`, so `assist-eval` loads it unchanged: `DatagenSource::open_version(<dir>, &["train", ...])`), plus `meta` (`app`, `apps`, `cells`, `span`, for the per-app and per-cell slices) and
+
+```json
+"render": {"input_ids": [u32, ...], "weights": [f32, ...], "text": "<the rendered transcript>"}
+```
+
+`input_ids` and `weights` have one entry per token. **The trainer reads only `render.input_ids` and `render.weights`.** The typed `scenario` stays behind. `<dir>/worlds/` holds the worlds the sessions name, so a version loads in the eval on its own; `manifest.json` is the data version, `report.txt` the render and mix reports, `render_dropped.jsonl` the turns the renderer lost.
+
+The turns' `ref` are the reference calls the think states. One thing differs from the messages run: a period the planner wrote relative to today (`{"unit":"week","rel":-8}`) is written as the days it covers (`{"from":{"date":"2026-08-17"},"to":{"date":"2026-08-23"}}`) when the member's own message says the days ("aug 17 to aug 23", so the `dates:` line holds them). The days are the same, so the gold is, and the call is one a model can write from what it reads instead of a count of weeks it would have to work out.
+
+### Render
+
+A session is run on a private copy of its world's vault the way the phone runs one (`WorldRun::open`: default flags, the eight tools of the regroup). For each turn the runtime reads the member's message (`Session::user`: the block of `vault:`, `focus:`, `dates:`, `nums:` lines, and the compaction of earlier observations), then for each reference call:
+
+1. **The think** is derived from the call (`trace`, below) and **round-tripped**: `compile_think_with` (what `decode_step` runs on the phone, with the turn's `dates:` and `nums:` lines) must give back exactly the reference call. A step that does not is never a record; the turn is lost and counted.
+2. **The call text** is what the compiler gave back, not something written here. A `create` or `edit` carries its fields as parameters of its own, as the regrouped tools do.
+3. **The observation** is what the runtime answers when it runs that text (`Session::call_text`), so it is byte-exact what the phone shows the model. A call the plan expects the runtime to refuse must be refused, and every other call must not be.
+4. The step goes into `centraid_assist::native_turn::log::Log`, the conversation the phone feeds its model (the system turn and catalog from `Session::prompt`, history with earlier calls, results, `@k` handles and compaction), and `Log::transcript` renders it with `transcript.rs`. Nothing here writes a byte of the prompt format.
+
+A session whose turn fails a step is kept as the shorter session before it (tag `truncated`); a failure at the first turn drops it. The report counts both, with the reason and the call.
+
+**The think (v4, with the tools of CONTRACT_V3 section 9).** `trace::trace` writes the slots in the v4 order from the call: `retry: rejected` on the step after a refused call, `intent` (the turn's act, from the typed scenario, and the opening words of the message), `via: find|compute`, `verb`, `pick: #n (reason)` for one row (the reason is the runtime's own `pick_reason`, read from the block and the rows shown so far), `rows`/`value`/`options`/`linked_to`/`within`/`exclude` as handles, the arguments of the selector, `where` as typed segments (`status = open · priority >= 1`, with `nums[i]` where the message says the number and the `nums:` line has it), `when` as `"<phrase>" = dates[i]` when the `dates:` line reads the period and else as the compact date (`"aug 17 to aug 23" = from 2026-08-17 to 2026-08-23`, `earlier = ...` when the days are in what the model has already read, `now = ...` otherwise), and `set` for the fields of a create, an edit or a `do` (a field under the name chat writes it: `date`, not `due`). A value a slot cannot spell (a line break or ` · ` in a field) is refused, not guessed. `Failure::Unspellable` and `Failure::Roundtrip` are the two reasons.
+
+**The mask**, as per-token float weights from the trained span of each assistant message (just after `<think>\n` through `<|im_end|>`, `Log::transcript`'s spans in bytes):
+
+| weight | tokens |
+| --- | --- |
+| `0.0` | the system turn and catalog, every user turn and its block, every tool result, the assistant header, and every token of a call the runtime was expected to refuse (the first half of an error-then-repair turn: the model is taught the recovery, not the mistake) |
+| `1.0` | every other token of an assistant message, intermediate steps included: the think, `</think>`, the call, `<|im_end|>` |
+| `2.0` (`--decision-weight`, `render::DECISION_WEIGHT`) | the deciding tokens inside those: in the think the intent word, `via`, `verb`, `kind`, `op`, `field`, `group`, `trashed`, `where`, `when` (the date after `=`), `linked_to`, `within`, `exclude`, `order`, `limit`, `more`, `rows`, the row number of `pick`, `value`, `options`, `reason`, `time`, and the values of `set`; in the call the same parameters and the values of `args` lines and of the fields of a create or edit. Not the free text the member said (`name`, `text`), the phrases, the pick's reason, `retry`, labels, tool names and scaffolding |
+
+A token is trained when it lies wholly inside a span and a decision token when it also overlaps a decision range (`render::decisions`; the precedent is `train/fmt.py`'s decision spans, with the labels the issue lists instead of every label). Offsets are bytes (a character the byte-level tokenizer splits into several tokens gives each the character's range), and a special string of the format (`<|im_start|>`, `<think>`) is one token.
+
+**The tokenizer** is the Hugging Face `tokenizers` crate reading the model's `tokenizer.json` (`--tokenizer`; its BLAKE3 goes in the manifest). `render::byte_level_tokenizer` is a byte-level one with no merges that the tests use, so no test needs the network or the model file (`DATAGEN_TOKENIZER=<path>` also runs the one test that reads the real file).
+
+### Mix
+
+`mix::mix` chooses the sessions of each split from the larger rendered input. Splits are by world seed (drawn before any session; asserted: no world is in two splits). Then, per split:
+
+1. **Duplicates out**: a session's key is the BLAKE3 of its normalised user texts and its gold. Test is read first, then val, then train, so a repeat is dropped from train.
+2. **Minimal pairs together**: the two sessions tagged `pair:<id>` are one unit, both or neither; a pair whose twin is gone is not kept alone.
+3. **Targets**, by a greedy over units, exact lazily because a deficit only shrinks: the grid's live cells share the split's turns equally (water-filled: a cell the input cannot fill gives its share away); each app, by the first app a session names, an equal share of the sessions (~2,250 of 18k over eight apps); one, two and three or more turns 40 / 30 / 30 (`--turn-shares`); across-app sessions 30% (`--across`). **A floor**, not a share: at least half the sessions have two turns or more, as many as the input holds.
+4. **Noise** is the heavy-typo copy of val: the noise sessions whose val session was chosen.
+
+Mixing downsamples, and says what it could not do: per split the report lists each live cell's target, realised count and supply (`hit`, `supply` when the input holds no more, `short` when the mix left it under), each app and each share the same way, and "could not hit" lines for what fell short. Defaults: `--targets 18000,1000,1000`.
+
+### The manifest
+
+`manifest.json` is the data version: `catalog_hash`, `runtime_commit` (`git rev-parse HEAD`, `-dirty` when the tree is), `seeds` (master, typos, mix), `tokenizer.blake3`, `llm_cache.blake3` (every cache file's name and bytes, in name order) and its entry count, the weights, the targets, the render counts (steps and how many round-tripped), per split the sessions, turns, tokens, pairs, the shares realised and what was missed, and each file's size and BLAKE3. A rebuild from the same input, seeds and tokenizer is byte-identical (tested).
+
 ## Output
 
 `datagen intents` writes `<out>/<split>/sessions.jsonl` (one session a line), `<out>/worlds/<id>.json` (the world, presence-only), `report.txt` and `manifest.json` (catalog hash, master seed, counts, the grid and the per-cell numbers).
@@ -139,9 +199,12 @@ cargo run -p centraid-datagen -- worlds --seed 1 --out out/ [--counts 48,6,6] [-
 cargo run -p centraid-datagen -- ambiguity --seed 1 [--counts 48,6,6] [--json]
 cargo run --release -p centraid-datagen -- intents --seed 1 --out out/ [--counts 48,6,6] [--sessions 18000,1000,1000 | --per-world N[,N,N]]
 cargo run --release -p centraid-datagen -- messages --in out/ --out msgs/ [--concurrency 6] [--batch 12] [--limit N] [--offline] [--seed 1] [--model haiku]
+cargo run --release -p centraid-datagen -- render --in msgs/ --out v1/ --tokenizer tokenizer.json [--version v1] [--targets 18000,1000,1000] [--decision-weight 2] [--turn-shares .4,.3,.3] [--across .3] [--render-concurrency 6]
+cargo run --release -p centraid-datagen -- build --version v1 --out v1/ --tokenizer tokenizer.json [--seed 1] [--counts 48,6,6] [--sessions 27000,1500,1500] [--offline] [--reuse] [render's flags]
+cargo run --release -p centraid-datagen -- show --in v1/ --tokenizer tokenizer.json [--split train] [--session ID]
 ```
 
-`worlds` writes `<out>/<split>/<id>.json` (and `.vault` with `--vaults`) and `manifest.json`. `intents` runs stages 2 and 3 over the worlds of the run and prints the coverage report (also `report.txt`): the grid's size and its not-live cells, solvable intents per live cell (kept / drawn, with drop reasons), the shares along each axis, and the multi-turn share. Each world visits every live cell once as the first turn of a session, then keeps drawing until it has `--per-world` sessions (default: one per live cell); `--sessions train,val,test` derives it from the targets. Use `--release` for a long run: the first run's 20,010 sessions over 60 worlds take about an hour and a half in release. `DATAGEN_DEBUG=1` prints every drop with the intents that led to it. The package is `centraid-datagen`; the binary is `datagen`.
+`build` draws half as many sessions again as the targets by default (`--sessions` sets it), so the mix has something to choose from; `--reuse` skips a stage whose manifest exists under `<out>/stages/`. `worlds` writes `<out>/<split>/<id>.json` (and `.vault` with `--vaults`) and `manifest.json`. `intents` runs stages 2 and 3 over the worlds of the run and prints the coverage report (also `report.txt`): the grid's size and its not-live cells, solvable intents per live cell (kept / drawn, with drop reasons), the shares along each axis, and the multi-turn share. Each world visits every live cell once as the first turn of a session, then keeps drawing until it has `--per-world` sessions (default: one per live cell); `--sessions train,val,test` derives it from the targets. Use `--release` for a long run: the first run's 20,010 sessions over 60 worlds take about an hour and a half in release. `DATAGEN_DEBUG=1` prints every drop with the intents that led to it. The package is `centraid-datagen`; the binary is `datagen`.
 
 ## What the runtime and the worlds showed (open questions)
 
@@ -165,3 +228,5 @@ Found while making the intents solvable; each is either a product call or a runt
 `cargo test -p centraid-datagen`. The intents tests run three worlds with more rows in the trash than a preset puts there (a `restore` needs one) and hold: a run is a pure function of its seed; every live cell has a solvable intent; the shares (multi-turn, three or more turns, across-app, three or more constraints among the turns that select by constraints); each follow-up leans on an earlier turn; each minimal pair differs in its answer; **replaying every session's reference calls through `assist_eval::run::Runner` passes every turn**, so gold is the runtime's effect reproduced and the eval loads what datagen writes; and a written run opens as an `EvalSource` with its worlds. `-- --ignored` also seeds all 60 worlds (about two minutes).
 
 `tests/messages.rs` runs stages 4 and 5 over a small intents run with a **deterministic fake model** (no network): a rebuild from a warm cache makes zero calls and every output file is byte-identical, `--offline` on a cold cache fails, no sealed placeholder or datagen placeholder reaches a prompt (checked against every placeholder the worlds seed), the output opens as an `EvalSource` with real messages and a verdict on each turn, and `World::from_doc` reads a world back from its document. Unit tests cover the checks (span, pronoun repeating a name, hygiene), the parsing of an answer, the cache and the typo pass (spans, numbers and date words survive even heavy noise).
+
+`tests/render.rs` renders and mixes a small intents run with the byte-level tokenizer and proves: every step's think compiled back to its reference call (the count is in the manifest), the ids decode to the text, the mask is exactly the assistant messages by an independent reading of the text (every `<|im_start|>assistant\n<think>\n` opens one region that runs to its `<|im_end|>`; a region is all trained, or all zero when it is a call the runtime was expected to refuse, and those are counted against the `bad` calls), the records carry the contract and load in `assist-eval` unchanged, **replaying their reference calls through `assist_eval::run::Runner` passes every turn** (so the rewritten periods keep their gold), no world is in two splits, noise follows val, the manifest names the version, and a rebuild is byte-identical. Unit tests cover the think (typed filters, `dates[i]`, the compact date, `nums[i]`, picks and their reasons, fields under chat's names, a value a slot cannot spell), the decision spans, the weights, byte offsets, and the mix (targets hit, pairs whole, duplicates out, the multi-turn floor, supply-limited reports, a world in two splits refused, water-filling).

@@ -204,6 +204,22 @@ pub struct WorldRun<'a> {
     pub empty_reads: bool,
 }
 
+/// A session on a private copy of a world's vault ([`WorldRun::open`]).
+pub struct Live {
+    pub session: centraid_assist::native::session::Session,
+    vault: PathBuf,
+}
+
+impl std::ops::Drop for Live {
+    fn drop(&mut self) {
+        for suffix in ["", "-wal", "-shm"] {
+            let mut file = self.vault.as_os_str().to_os_string();
+            file.push(suffix);
+            let _ = std::fs::remove_file(file);
+        }
+    }
+}
+
 /// The one time of day every session runs at.
 pub const CLOCK: &str = "09:00";
 
@@ -353,6 +369,24 @@ impl<'a> WorldRun<'a> {
             turns: cells,
             heard,
         })
+    }
+
+    /// A session on a private copy of the world's vault, as the eval and the phone open one: the clock at the world's
+    /// `today`, no turn taken yet. The copy is removed when the [`Live`] is dropped.
+    ///
+    /// # Errors
+    ///
+    /// If the vault cannot be copied or opened.
+    pub fn open(&mut self) -> Result<Live> {
+        self.copies += 1;
+        let vault = self
+            .scratch
+            .join(format!("{}-live{}.vault", self.world.id(), self.copies));
+        vaultio::copy_vault(&self.base, &vault).map_err(anyhow::Error::msg)?;
+        let now = dates::parse_now(&self.today_at).map_err(anyhow::Error::msg)?;
+        let session = vaultio::open_session(&vault, now, &self.me, Flags::default())
+            .map_err(anyhow::Error::msg)?;
+        Ok(Live { session, vault })
     }
 
     // ---------------------------------------------------------------- planning
@@ -1145,7 +1179,7 @@ fn resolve_markers(text: &str, handles: &[Option<String>], left: &[Left]) -> Str
 }
 
 /// A call as the model writes it.
-fn call_xml(tool: &str, args: &Map<String, Value>) -> String {
+pub fn call_xml(tool: &str, args: &Map<String, Value>) -> String {
     let mut text = format!("<tool_call>\n<function={tool}>\n");
     for (name, value) in args {
         let value = value

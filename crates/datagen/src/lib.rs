@@ -13,6 +13,11 @@
 //! M3 adds [`brief`] (a typed turn in plain English), [`llm`] (Haiku behind a trait, with a
 //! prompt-hash cache), [`typos`] (the seeded typo pass), [`verify`] (runtime grounding and the
 //! read-back pass) and [`messages`] (stages 4 and 5 end to end).
+//!
+//! M4 adds [`trace`] (the v4 think of a reference call, round-tripped through the runtime's compiler),
+//! [`render`] (a session as the phone renders it, tokenized, with the loss weight of every token), [`mix`]
+//! (the sessions of a data version, chosen to the grid's shares) and [`version`] (the files and the manifest of
+//! a data version, and the record contract M6 reads).
 
 #![forbid(unsafe_code)]
 
@@ -25,17 +30,21 @@ pub mod grid;
 pub mod intent;
 pub mod llm;
 pub mod messages;
+pub mod mix;
 pub mod persona;
 pub mod plan;
 mod pools;
+pub mod render;
 pub mod rng;
 pub mod run;
 pub mod sample;
 pub mod settings;
 pub mod source;
 pub mod text;
+pub mod trace;
 pub mod typos;
 pub mod verify;
+pub mod version;
 pub mod world;
 
 pub use catalog::Catalog;

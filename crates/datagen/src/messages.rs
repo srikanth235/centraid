@@ -677,7 +677,7 @@ pub fn run(
     }
 
     stats_of(&mut stats, &items);
-    write_out(input, out, &items, &stats)?;
+    write_out(input, out, &items, &stats, cfg.seed)?;
     let (calls, hits) = cache.counts();
     let text = report_text(&stats, &items);
     std::fs::write(out.join("report.txt"), &text)?;
@@ -733,7 +733,13 @@ fn reason_key(reason: &str) -> String {
     reason.to_owned()
 }
 
-fn write_out(input: &Path, out: &Path, items: &[Item], stats: &Stats) -> Result<()> {
+fn write_out(
+    input: &Path,
+    out: &Path,
+    items: &[Item],
+    stats: &Stats,
+    typo_seed: u64,
+) -> Result<()> {
     let mut by_split: BTreeMap<&str, String> = BTreeMap::new();
     let mut dropped = String::new();
     for item in items {
@@ -808,9 +814,16 @@ fn write_out(input: &Path, out: &Path, items: &[Item], stats: &Stats) -> Result<
             wdir.join(format!("{id}.json")),
         )?;
     }
+    // what the intents run says of itself travels on, so the data version can name its seeds and catalog
+    let intents: Value = std::fs::read_to_string(input.join("manifest.json"))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or(Value::Null);
     let manifest = json!({
         "stage": "messages+verify",
         "input": input.file_name().map(|n| n.to_string_lossy().into_owned()),
+        "catalog_hash": intents["catalog_hash"],
+        "seeds": {"master": intents["master_seed"], "typos": typo_seed},
         "stats": stats,
     });
     std::fs::write(
