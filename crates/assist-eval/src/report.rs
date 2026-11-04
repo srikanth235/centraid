@@ -92,6 +92,8 @@ pub struct Slice {
     pub turn_pass: Rate,
     pub clean_turn_pass: Rate,
     pub tool_accuracy: Rate,
+    /// The model's last call names the act a reference call names (reads collapse; a write is its tool and verb).
+    pub tool_name_accuracy: Rate,
     pub arguments: BTreeMap<String, ArgRate>,
     /// `0`, `1`, `2`, `3`, `4+`, and `0-1` (the census's "k<=1").
     pub by_constraints: BTreeMap<&'static str, Bucket>,
@@ -167,6 +169,10 @@ fn slice(rows: &[Row<'_>]) -> Slice {
     let clean: Vec<&Row<'_>> = rows.iter().filter(|r| r.clean).collect();
     out.clean_turn_pass = Rate::of(clean.iter().filter(|r| r.turn.pass).count(), clean.len());
     out.tool_accuracy = Rate::of(rows.iter().filter(|r| r.turn.tool_ok).count(), rows.len());
+    out.tool_name_accuracy = Rate::of(
+        rows.iter().filter(|r| r.turn.tool_name_ok).count(),
+        rows.len(),
+    );
     for class in ArgClass::ALL {
         let word = class.word();
         let count = |label: &str| {
@@ -363,6 +369,10 @@ pub fn text(report: &Report) -> String {
     out += &format!(
         "Tool accuracy:    {}  (the turn ended in the act gold wants)\n",
         a.tool_accuracy.pct()
+    );
+    out += &format!(
+        "Tool name:        {}  (last call names a reference act)\n",
+        a.tool_name_accuracy.pct()
     );
     out += &format!("Arguments:        {}\n", args_line(a));
     out += &format!("Wrong writes:     {}\n", o.wrong_write.pct());

@@ -77,6 +77,60 @@ fn where_clauses(call_args: &Map<String, Value>) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// A write: `create`, `edit`, `do`, or the retired `act` they replaced.
+fn is_write_tool(tool: &str) -> bool {
+    tool == "act" || centraid_assist::native::meta::is_write(tool)
+}
+
+/// A call as the eight tools state it: S2's `search`, `open` and `act` renamed by the runtime's own table
+/// (`native::legacy::modernize`), any other call as it is. Reference calls of the frozen set and the calls S2 decodes
+/// meet here, so they compare in one vocabulary.
+#[must_use]
+pub fn modern(tool: &str, args: &Map<String, Value>) -> (String, Map<String, Value>) {
+    match centraid_assist::native::legacy::modernize(tool, &Value::Object(args.clone())) {
+        Some((tool, Value::Object(args))) => (tool.to_owned(), args),
+        _ => (tool.to_owned(), args.clone()),
+    }
+}
+
+/// The verb a modern write names: `create` and `edit` are their own, `do` carries `verb`.
+fn verb_of(tool: &str, args: &Map<String, Value>) -> String {
+    match tool {
+        "create" | "edit" => tool.to_owned(),
+        _ => args
+            .get("verb")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_lowercase(),
+    }
+}
+
+/// Reads look alike: `find`, `answer` and `compute` all state a selector, and the contract has the model look
+/// with one and end with another.
+fn is_read(tool: &str) -> bool {
+    matches!(tool, "find" | "answer" | "compute")
+}
+
+/// Does the model's last call name the act a reference call names? Reads count as one act; a write is its tool and
+/// verb. The effect-level counterpart is [`crate::judge::ending_fits`].
+#[must_use]
+pub fn tool_name_ok(turn: &Turn, model_calls: &[Value]) -> bool {
+    let Some(last) = model_calls.last() else {
+        return false;
+    };
+    let (Some(tool), Some(args)) = (last["tool"].as_str(), last["args"].as_object()) else {
+        return false;
+    };
+    let (tool, args) = modern(tool, args);
+    turn.reference.iter().filter(|call| !call.bad).any(|call| {
+        let (rt, ra) = modern(&call.tool, &call.args);
+        if is_read(&tool) && is_read(&rt) {
+            return true;
+        }
+        rt == tool && verb_of(&rt, &ra) == verb_of(&tool, &args)
+    })
+}
+
 /// The number of constraints a reference call carries (`authored/hardness.py` `constraints`).
 #[must_use]
 pub fn constraints(call: &RefCall) -> usize {
@@ -86,7 +140,7 @@ pub fn constraints(call: &RefCall) -> usize {
         return 0;
     }
     let mut k = 0;
-    if call.tool == "act" {
+    if is_write_tool(&call.tool) {
         k += usize::from(has("rows") || has("name"));
     } else {
         k += usize::from(has("name"));
@@ -233,6 +287,9 @@ pub fn classify(args: &Map<String, Value>) -> BTreeMap<ArgClass, Slots> {
     out
 }
 
+/// A call in the eight tools' names, with its arguments split by class.
+type Classed<T> = (String, T, BTreeMap<ArgClass, Slots>);
+
 /// What judging one class of one turn found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ArgVerdict {
@@ -278,52 +335,62 @@ fn resolved(slots: &Slots, handle: &dyn Fn(&str) -> Option<String>) -> Option<Sl
 ///
 /// `model_calls` are the calls the runtime read out of the model's messages (`{tool, args}`); `handle` turns a
 /// world key into the `#n` the runtime showed for it. A class is right when some model call and some accepted
-/// reference call agree on the tool (and the verb of an `act`) and carry the same arguments of that class.
+/// reference call agree on the act (reads are one act; a write is its tool and verb) and carry the same
+/// arguments of that class, or when the model took a write's selector from a read before it. Both sides are put in
+/// the eight tools' names first ([`modern`]).
 #[must_use]
 pub fn judge_args(
     turn: &Turn,
     model_calls: &[Value],
     handle: &dyn Fn(&str) -> Option<String>,
 ) -> BTreeMap<ArgClass, ArgVerdict> {
-    let theirs: Vec<(&RefCall, BTreeMap<ArgClass, Slots>)> = turn
+    let theirs: Vec<Classed<Map<String, Value>>> = turn
         .reference
         .iter()
         .filter(|call| !call.bad)
-        .map(|call| (call, classify(&call.args)))
+        .map(|call| {
+            let (tool, args) = modern(&call.tool, &call.args);
+            let classes = classify(&args);
+            (tool, args, classes)
+        })
         .collect();
-    let ours: Vec<(&str, Option<&str>, BTreeMap<ArgClass, Slots>)> = model_calls
+    let ours: Vec<Classed<String>> = model_calls
         .iter()
         .filter_map(|call| {
-            let args = call["args"].as_object()?;
-            Some((
-                call["tool"].as_str()?,
-                args.get("verb").and_then(Value::as_str),
-                classify(args),
-            ))
+            let (tool, args) = modern(call["tool"].as_str()?, call["args"].as_object()?);
+            let verb = verb_of(&tool, &args);
+            Some((tool, verb, classify(&args)))
         })
         .collect();
     let mut out = BTreeMap::new();
     for class in ArgClass::ALL {
         let stated: Vec<_> = theirs
             .iter()
-            .filter(|(_, c)| c.contains_key(&class))
+            .filter(|(_, _, c)| c.contains_key(&class))
             .collect();
         let verdict = if stated.is_empty() {
             ArgVerdict::Absent
         } else {
             let scorable: Vec<_> = stated
                 .iter()
-                .filter_map(|(call, c)| resolved(&c[&class], handle).map(|slots| (*call, slots)))
+                .filter_map(|(tool, args, c)| {
+                    resolved(&c[&class], handle).map(|slots| (tool, verb_of(tool, args), slots))
+                })
                 .collect();
             if scorable.is_empty() {
                 ArgVerdict::Unscorable
-            } else if scorable.iter().any(|(call, slots)| {
-                let verb = call.args.get("verb").and_then(Value::as_str);
-                ours.iter().any(|(tool, our_verb, c)| {
-                    *tool == call.tool
-                        && our_verb.map(str::to_lowercase) == verb.map(str::to_lowercase)
-                        && c.get(&class).is_some_and(|mine| mine == slots)
-                })
+            } else if scorable.iter().any(|(rt, rverb, slots)| {
+                let states =
+                    |(_, _, c): &Classed<String>| c.get(&class).is_some_and(|mine| mine == slots);
+                // a read states its selector in `find` or `answer` alike; a write is its tool and verb, and a
+                // write by `@k` took its selector from a read that came before it
+                let same_act = |(t, v, _): &Classed<String>| {
+                    (is_read(t) && is_read(rt)) || (t == *rt && v == rverb)
+                };
+                ours.iter().any(|m| same_act(m) && states(m))
+                    || (!is_read(rt)
+                        && ours.iter().any(same_act)
+                        && ours.iter().any(|m| is_read(&m.0) && states(m)))
             }) {
                 ArgVerdict::Right
             } else {
@@ -485,5 +552,106 @@ mod tests {
             judge_args(&t, &[], &|_| None)[&ArgClass::Filters],
             ArgVerdict::Wrong
         );
+    }
+
+    #[test]
+    fn s2_names_and_the_new_names_compare_alike() {
+        let (tool, args) = modern(
+            "act",
+            json!({"verb": "complete", "name": "tiles"})
+                .as_object()
+                .expect("object"),
+        );
+        assert_eq!(
+            (tool.as_str(), args["verb"].as_str()),
+            ("do", Some("complete"))
+        );
+        let (tool, args) = modern(
+            "act",
+            json!({"verb": "edit", "rows": "#2", "args": "name: x"})
+                .as_object()
+                .expect("object"),
+        );
+        assert_eq!(tool, "edit");
+        assert!(!args.contains_key("verb"));
+        assert_eq!(
+            modern(
+                "search",
+                json!({"text": "boiler"}).as_object().expect("object")
+            )
+            .0,
+            "find"
+        );
+        assert_eq!(
+            modern(
+                "answer",
+                json!({"kind": "task"}).as_object().expect("object")
+            )
+            .0,
+            "answer"
+        );
+    }
+
+    #[test]
+    fn a_find_then_do_by_handle_is_right_against_a_by_name_reference() {
+        let t = turn(
+            json!([{"tool": "act", "args": {"verb": "complete", "kind": "task", "name": "tiles"}}]),
+        );
+        let calls = vec![
+            json!({"tool": "find", "args": {"kind": "task", "name": "tiles"}}),
+            json!({"tool": "do", "args": {"verb": "complete", "rows": "@1"}}),
+        ];
+        assert_eq!(
+            judge_args(&t, &calls, &|_| None)[&ArgClass::Rows],
+            ArgVerdict::Right
+        );
+        let wrong = vec![
+            json!({"tool": "find", "args": {"kind": "task", "name": "adhesive"}}),
+            json!({"tool": "do", "args": {"verb": "complete", "rows": "@1"}}),
+        ];
+        assert_eq!(
+            judge_args(&t, &wrong, &|_| None)[&ArgClass::Rows],
+            ArgVerdict::Wrong
+        );
+        let other_verb = vec![
+            json!({"tool": "find", "args": {"kind": "task", "name": "tiles"}}),
+            json!({"tool": "do", "args": {"verb": "cancel", "rows": "@1"}}),
+        ];
+        assert_eq!(
+            judge_args(&t, &other_verb, &|_| None)[&ArgClass::Rows],
+            ArgVerdict::Wrong
+        );
+    }
+
+    #[test]
+    fn tool_name_accuracy_collapses_reads_and_keeps_a_write_s_verb() {
+        let read = turn(json!([{"tool": "answer", "args": {"kind": "event"}}]));
+        let find_then_answer = vec![
+            json!({"tool": "find", "args": {}}),
+            json!({"tool": "answer", "args": {"rows": "@1"}}),
+        ];
+        assert!(tool_name_ok(&read, &find_then_answer));
+        assert!(
+            tool_name_ok(&read, &[json!({"tool": "search", "args": {"text": "x"}})]),
+            "S2's search is a read"
+        );
+        assert!(!tool_name_ok(
+            &read,
+            &[json!({"tool": "decline", "args": {"reason": "not_found"}})]
+        ));
+        let write = turn(json!([{"tool": "act", "args": {"verb": "complete", "name": "x"}}]));
+        assert!(tool_name_ok(
+            &write,
+            &[json!({"tool": "act", "args": {"verb": "complete", "name": "x"}})]
+        ));
+        assert!(tool_name_ok(
+            &write,
+            &[json!({"tool": "do", "args": {"verb": "complete", "rows": "@1"}})]
+        ));
+        assert!(!tool_name_ok(
+            &write,
+            &[json!({"tool": "do", "args": {"verb": "cancel", "rows": "@1"}})]
+        ));
+        assert!(!tool_name_ok(&write, &[]));
     }
 }

@@ -17,6 +17,7 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
+use centraid_assist::native::prompt::ToolsMode;
 use centraid_assist_eval::report;
 use centraid_assist_eval::run::{DeclineStepper, Runner, SessionResult, Stepper};
 use centraid_assist_eval::source::{EvalSource, JsonlSource};
@@ -32,10 +33,11 @@ struct Args {
     only: Vec<String>,
     shard: Option<(usize, usize)>,
     rescore: Vec<PathBuf>,
+    tools: ToolsMode,
 }
 
 const USAGE: &str = "usage: assist-eval (--model GGUF | --stub) --set SET.jsonl [--worlds DIR]… [--out PREFIX] \
-[--threads N] [--limit N] [--only ID,ID] [--shard K/N]\n       assist-eval --rescore RUN.sessions.jsonl… --set SET.jsonl [--out PREFIX]";
+[--tools s2|sig|compact|full] [--threads N] [--limit N] [--only ID,ID] [--shard K/N]\n       assist-eval --rescore RUN.sessions.jsonl… --set SET.jsonl [--out PREFIX]";
 
 fn args() -> Result<Args> {
     let native = PathBuf::from("experiments/toolchat/native");
@@ -52,6 +54,8 @@ fn args() -> Result<Args> {
         only: Vec::new(),
         shard: None,
         rescore: Vec::new(),
+        // the model shipping today is S2; a model trained on the eight tools is scored with `--tools sig`
+        tools: ToolsMode::S2,
     };
     let mut argv = std::env::args().skip(1);
     while let Some(flag) = argv.next() {
@@ -79,6 +83,16 @@ fn args() -> Result<Args> {
                     bail!("--shard K/N counts from 0: K < N");
                 }
                 out.shard = Some((k, n));
+            }
+            "--tools" => {
+                let word = value("--tools")?;
+                out.tools = match word.as_str() {
+                    "s2" => ToolsMode::S2,
+                    "sig" => ToolsMode::Sig,
+                    "compact" => ToolsMode::Compact,
+                    "full" => ToolsMode::Full,
+                    other => bail!("--tools takes s2, sig, compact or full, not {other}"),
+                };
             }
             "--rescore" => out.rescore.push(value("--rescore")?.into()),
             other => bail!("unknown argument {other}\n{USAGE}"),
@@ -132,7 +146,10 @@ fn run() -> Result<()> {
         #[cfg(feature = "engine")]
         let loaded;
         let (label, stepper): (String, Box<dyn Stepper>) = if args.stub {
-            ("stub:decline".to_owned(), Box::new(DeclineStepper))
+            (
+                format!("stub:decline[tools={:?}]", args.tools).to_lowercase(),
+                Box::new(DeclineStepper),
+            )
         } else {
             let path = args
                 .model
@@ -155,7 +172,7 @@ fn run() -> Result<()> {
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_default();
                 (
-                    format!("gguf:{name}@{sha}"),
+                    format!("gguf:{name}@{sha}[tools={:?}]", args.tools).to_lowercase(),
                     Box::new(centraid_assist_eval::run::ModelStepper::new(
                         loaded.as_ref(),
                     )),
@@ -167,7 +184,7 @@ fn run() -> Result<()> {
                 bail!("built without llama.cpp: rebuild with --features engine, or pass --stub");
             }
         };
-        let mut runner = Runner::new(&source, stepper.as_ref())?;
+        let mut runner = Runner::new(&source, stepper.as_ref())?.with_tools(args.tools);
         let started = Instant::now();
         let mut results: Vec<SessionResult> = Vec::new();
         let total = sessions.len();

@@ -18,6 +18,7 @@ It prints the summary and writes `runs/val-s2-q4.json` (the report) and `runs/va
 | flag | meaning |
 | --- | --- |
 | `--model GGUF` / `ASSIST_EVAL_MODEL` | the model; greedy, trace v4, think limit 200, 512 tokens, context 8192: the phone's `StepOptions` |
+| `--tools s2\|sig\|compact\|full` | the tools block the system prompt shows. **Default `s2`**, the prompt the shipping model was trained on (`contracts/assist/export/prompt.s2.txt`); a model trained on the eight tools is scored with `--tools sig`. The report's `model` names it |
 | `--stub` | no weights: a model that declines everything. The floor, and a way to check the rig |
 | `--set FILE` | the JSONL set (default `experiments/toolchat/native/eval/sets/val.jsonl`) |
 | `--worlds DIR` | where the sessions' world JSON lives; repeatable, searched in order (default `eval/worlds`, then `authored/worlds`, as `lib.py`) |
@@ -37,7 +38,7 @@ Sessions and worlds come through `source::EvalSource` (`sessions()`, `world(name
 `report.json` has, over all turns and again for each app (`by_app`, with `single_app_session_pass`):
 
 - `overall`: `session_pass` (every turn passes), `wrong_write`, loop/cap/think-cut counts, engine errors.
-- `turn_pass`, `clean_turn_pass`, `tool_accuracy`.
+- `turn_pass`, `clean_turn_pass`, `tool_accuracy`, `tool_name_accuracy`.
 - `arguments`: `rows`, `date`, `filters`, `amount`, each `{right, scored, unscorable, rate}`.
 - `by_constraints`: `0`, `1`, `2`, `3`, `4+` and `0-1` (the census's "k≤1"), each with `fail_rate` over all turns and `clean_fail_rate` over clean turns.
 - `by_gold_type`, `by_tag`, and `failed` (every failed turn: the problems, the calls).
@@ -45,8 +46,10 @@ Sessions and worlds come through `source::EvalSource` (`sessions()`, `world(name
 ### What the new measures mean
 
 - **Constraints** are counted on the turn's reference calls, exactly as `authored/hardness.py` counts them (the census behind the issue's 13% / 22% / 37% / 67%): the row selector, `when`, `linked_to`, `within`, `exclude`, `status`, `text`, each `where` clause, `order`+`limit`, `op`+`field`+`group`; the widest accepted, non-`bad` reference call. `ask`, `decline` and `open` carry 0.
+- **S2 and the eight tools.** The runtime renames S2's `search`, `open` and `act` itself (`native::legacy::modernize`, at `Session::step`), so S2's calls run as `find`, `create`, `edit` and `do`. The scorer puts the reference calls and the model's calls through the same table before comparing, so both sides speak the eight tools. A read is `find`, `answer` or `compute` alike; a write is its tool and verb, and a write by `@k` takes its selector from the read before it.
+- **Tool name accuracy** (`tool_name_accuracy`) sits beside the effect-based one: the model's last call names an act some reference call names (reads collapse to one act; a write is its tool and verb, so `do complete` is not `do cancel`).
 - **Tool accuracy** is read off the effect: the turn ended in the act some accepted gold wants (rows, value, write, ask or decline; a write that also answers its row counts as a write; a turn that passes counts whatever it ended in). A wrong set of rows or a wrong amount is not a wrong tool.
-- **Arguments** are the one measure the effect cannot isolate, so they are read off the calls. For each class, a turn counts when a reference call states it; a turn that passes by effect is right on every class it carries (it may have looked first); on a failed turn the model is right when one of its calls has the same tool (and verb) and states the same arguments of that class, which says which argument to blame. Classes: *rows* = `rows`, `name`, `within`, `linked_to`; *date* = `when`, and a date written in `args`; *filters* = `where` clauses that are not amounts, `status`, `exclude`, `text`, `order`, `limit`, `op`, `field`, `group`; *amount* = a `where` clause or `args` line on a money field of the call's kind. Values compare as the runtime reads them (case-folded, whitespace-collapsed; date expressions as JSON). A reference's `$key` is compared as the `#n` the runtime showed; when the runtime never showed that row the argument is `unscorable` and left out of the rate, not counted as a miss.
+- **Arguments** are the one measure the effect cannot isolate, so they are read off the calls. For each class, a turn counts when a reference call states it; a turn that passes by effect is right on every class it carries (it may have looked first); on a failed turn the model is right when one of its calls has the same tool (and verb) and states the same arguments of that class, which says which argument to blame. Classes: _rows_ = `rows`, `name`, `within`, `linked_to`; _date_ = `when`, and a date written in `args`; _filters_ = `where` clauses that are not amounts, `status`, `exclude`, `text`, `order`, `limit`, `op`, `field`, `group`; _amount_ = a `where` clause or `args` line on a money field of the call's kind. Values compare as the runtime reads them (case-folded, whitespace-collapsed; date expressions as JSON). A reference's `$key` is compared as the `#n` the runtime showed; when the runtime never showed that row the argument is `unscorable` and left out of the rate, not counted as a miss.
 - **App** of a turn: the apps of the kinds its reference calls name and of the rows its gold names. A cross-app turn is in each of its apps.
 
 ## Differences from `score.py` / `metrics.py` / `slices.py`
@@ -78,7 +81,7 @@ python3 experiments/toolchat/native/artefacts.py fetch
 python3 experiments/toolchat/native/train/to_gguf.py CKPT --out OUT --name native-s2 \
     --source-repo OWNER/NAME --source-tag S2 --source-revision SHA        # CKPT = the S2 soup
 RUSTFLAGS='-C target-cpu=native' cargo build --release -p centraid-assist-eval --features engine --bin assist-eval
-target/release/assist-eval --model OUT/native-s2-Q4_0.gguf \
+target/release/assist-eval --model OUT/native-s2-Q4_0.gguf --tools s2 \
     --set experiments/toolchat/native/eval/sets/val.jsonl --out runs/val-s2-q4 --threads 4
 ```
 

@@ -5,6 +5,7 @@
 
 use std::sync::Mutex;
 
+use centraid_assist::native::prompt::ToolsMode;
 use centraid_assist_eval::report;
 use centraid_assist_eval::run::{DeclineStepper, Runner, SessionResult, StepOut, Stepper};
 use centraid_assist_eval::source::MemorySource;
@@ -244,4 +245,59 @@ fn a_look_then_answer_that_passes_gets_its_arguments_right() {
         "the effect passed, so the argument was right"
     );
     assert!(turn.tool_ok);
+}
+
+#[test]
+fn the_new_contract_finds_then_does_by_handle_and_names_the_right_tool() {
+    let complete = json!({"user": "tick off the cabin", "gold": [{"type": "diff", "diff": {"rows": [
+        {"key": "cabin", "change": "updated", "fields": {"status": "completed", "completed": {"any": true}}}], "links": []}}],
+        "ref": [{"tool": "act", "args": {"verb": "complete", "kind": "task", "name": "Book the cabin"}}]});
+    let source = source(vec![session("S", vec![complete])]);
+    let script = Script(Mutex::new(vec![
+        call("find", &[("kind", "task"), ("name", "Book the cabin")]),
+        call("do", &[("verb", "complete"), ("rows", "@1")]),
+    ]));
+    let turn = &run(&source, &script)[0].turns[0];
+    assert!(turn.pass, "{:?} ended {}", turn.problems, turn.ending);
+    assert!(turn.tool_name_ok && turn.tool_ok);
+    assert_eq!(turn.args["rows"], "right");
+    // the wrong verb is a failed turn, a wrong tool name, and the right tool by effect-class (it still wrote)
+    let script = Script(Mutex::new(vec![
+        call("find", &[("kind", "task"), ("name", "Book the cabin")]),
+        call("do", &[("verb", "cancel"), ("rows", "@1")]),
+    ]));
+    let turn = &run(&source, &script)[0].turns[0];
+    assert!(!turn.pass && !turn.tool_name_ok && turn.tool_ok);
+    assert_eq!(turn.args["rows"], "wrong", "another verb is another act");
+}
+
+/// Remembers the first prompt it was shown.
+struct Seen(Mutex<Option<String>>);
+
+impl Stepper for Seen {
+    fn step(&self, prompt: &str, _dates: Option<&str>) -> Result<StepOut, String> {
+        self.0
+            .lock()
+            .expect("lock")
+            .get_or_insert_with(|| prompt.to_owned());
+        DeclineStepper.step(prompt, None)
+    }
+}
+
+#[test]
+fn the_tools_block_the_model_reads_is_the_one_the_run_names() {
+    let source = source(vec![session("S", vec![declines()])]);
+    let shown = |tools: ToolsMode| {
+        let seen = Seen(Mutex::new(None));
+        let mut runner = Runner::new(&source, &seen)
+            .expect("runner")
+            .with_tools(tools);
+        runner.run_session(&source.sessions[0]).expect("session");
+        let prompt = seen.0.lock().expect("lock").clone().expect("a prompt");
+        prompt
+    };
+    let (s2, new) = (shown(ToolsMode::S2), shown(ToolsMode::Sig));
+    assert_ne!(s2, new);
+    assert!(s2.contains("act("), "S2 learned act");
+    assert!(!new.contains("act("), "the eight tools have no act");
 }

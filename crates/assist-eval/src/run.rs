@@ -14,6 +14,7 @@ use std::time::Instant;
 use centraid_assist::model::{Cancel, Model};
 use centraid_assist::native::Flags;
 use centraid_assist::native::meta::{Kind, STEP_CAP};
+use centraid_assist::native::prompt::ToolsMode;
 use centraid_assist::native::step::{StepOptions, decode_step};
 use centraid_assist::native::think::TraceMode;
 use centraid_assist::native_turn::cards::app_of;
@@ -23,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::EvalError;
-use crate::args::{ArgClass, ArgVerdict, bucket, judge_args, turn_constraints};
+use crate::args::{ArgClass, ArgVerdict, bucket, judge_args, tool_name_ok, turn_constraints};
 use crate::effect::{effect_rows, turn_effect};
 use crate::gold::{Accept, Session, Turn};
 use crate::judge::{Ids, judge_turn};
@@ -103,6 +104,9 @@ pub struct TurnResult {
     /// How the turn ended (`rows`, `value`, `act`, `ask`, `decline`, `cap`, `loop`, `error`, `none`).
     pub ending: String,
     pub tool_ok: bool,
+    /// Did the model's last call name the act a reference call names ([`crate::args::tool_name_ok`])?
+    #[serde(default)]
+    pub tool_name_ok: bool,
     /// Constraints on the reference call ([`crate::args::turn_constraints`]).
     pub constraints: usize,
     /// The apps the turn is in (by the kinds of its reference calls and gold rows).
@@ -150,6 +154,7 @@ pub struct Runner<'a> {
     scratch: tempfile::TempDir,
     worlds: HashMap<String, SeededWorld>,
     copies: usize,
+    tools: ToolsMode,
 }
 
 fn first_call(text: &str) -> &str {
@@ -208,7 +213,16 @@ impl<'a> Runner<'a> {
             scratch: tempfile::tempdir().map_err(runtime)?,
             worlds: HashMap::new(),
             copies: 0,
+            tools: ToolsMode::default(),
         })
+    }
+
+    /// Which tools block the system prompt shows: `S2` for the model shipping today, `Sig` (the default) for one
+    /// trained on the eight tools.
+    #[must_use]
+    pub fn with_tools(mut self, tools: ToolsMode) -> Self {
+        self.tools = tools;
+        self
     }
 
     /// Seed a world once; every session copies the result.
@@ -254,8 +268,16 @@ impl<'a> Runner<'a> {
             .join(format!("session-{}.vault", self.copies));
         vaultio::copy_vault(&base, &vault).map_err(runtime)?;
         let now = dates::parse_now(&session.today).map_err(runtime)?;
-        let mut live =
-            vaultio::open_session(&vault, now, &session.me, Flags::default()).map_err(runtime)?;
+        let mut live = vaultio::open_session(
+            &vault,
+            now,
+            &session.me,
+            Flags {
+                tools: self.tools,
+                ..Flags::default()
+            },
+        )
+        .map_err(runtime)?;
         let prompt = live.prompt();
         let system = prompt["rendered"]
             .as_str()
@@ -337,6 +359,7 @@ impl<'a> Runner<'a> {
             };
             // A turn that passes by effect got every argument it carries right, however it looked first; only a
             // failed turn needs the call comparison, which says which argument to blame.
+            let name_ok = tool_name_ok(turn, &calls);
             let args = judge_args(turn, &calls, &handle)
                 .into_iter()
                 .map(|(class, v)| {
@@ -357,6 +380,7 @@ impl<'a> Runner<'a> {
                 ending: verdict.effect.ending.word().to_owned(),
                 // a write that landed and then looped still chose the right act
                 tool_ok: verdict.pass || verdict.tool_ok,
+                tool_name_ok: name_ok,
                 constraints,
                 apps,
                 args,
@@ -407,6 +431,7 @@ fn not_run(turn: &Turn, constraints: usize, apps: Vec<String>) -> TurnResult {
             .to_owned(),
         ending: "none".to_owned(),
         tool_ok: false,
+        tool_name_ok: false,
         constraints,
         apps,
         args: ArgClass::ALL

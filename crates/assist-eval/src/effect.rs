@@ -208,6 +208,11 @@ pub fn merge_diffs(diffs: &[&Value]) -> NetDiff {
     out
 }
 
+/// Whether an effect's tool changes the vault: `create`, `edit`, `do`, and `act`, the one tool all three replaced.
+fn is_write(tool: &str) -> bool {
+    tool == "act" || centraid_assist::native::meta::is_write(tool)
+}
+
 /// Python truthiness of a JSON value.
 fn truthy(value: &Value) -> bool {
     match value {
@@ -229,7 +234,7 @@ pub fn turn_effect(steps: &[Value]) -> Effect {
     let mut final_response: Option<&Value> = None;
     for step in steps {
         let eff = &step["effect"];
-        if eff["tool"] == "act" {
+        if is_write(eff["tool"].as_str().unwrap_or_default()) {
             if truthy(&eff["diff"]) {
                 diffs.push(&eff["diff"]);
             }
@@ -264,7 +269,7 @@ pub fn turn_effect(steps: &[Value]) -> Effect {
         out.ending = Ending::Loop;
     } else if truthy(&eff["cap"]) {
         out.ending = Ending::Cap;
-    } else if matches!(tool, "answer" | "act") && eff.get("answer").is_some() {
+    } else if (tool == "answer" || is_write(tool)) && eff.get("answer").is_some() {
         // an `act log` that ends the turn also answers the row it logged (rows + diff)
         out.ending = Ending::Rows;
         out.rows = ids_of(&eff["answer"]["rows"]);
@@ -277,7 +282,7 @@ pub fn turn_effect(steps: &[Value]) -> Effect {
     } else if tool == "decline" {
         out.ending = Ending::Decline;
         out.reason = eff["decline"]["reason"].as_str().map(str::to_owned);
-    } else if tool == "act" && eff.get("error").is_none() {
+    } else if is_write(tool) && eff.get("error").is_none() {
         out.ending = Ending::Act;
     } else if truthy(&eff["error"]) {
         out.ending = Ending::Error;
@@ -362,6 +367,17 @@ mod tests {
         assert_eq!(effect.ending, Ending::Rows);
         assert_eq!(effect.rows, vec!["a".to_owned()]);
         assert_eq!(effect.diff.rows.len(), 1);
+    }
+
+    #[test]
+    fn the_three_write_tools_and_the_retired_act_all_read_as_writes() {
+        for tool in ["create", "edit", "do", "act"] {
+            let diff = json!({"rows": [{"id": "a", "kind": "task", "change": "updated", "fields": {"status": ["open", "completed"]}}]});
+            let step = json!({"ends_turn": true, "effect": {"tool": tool, "diff": diff}});
+            let effect = turn_effect(&[step]);
+            assert_eq!(effect.ending, Ending::Act, "{tool}");
+            assert_eq!(effect.diff.rows.len(), 1, "{tool}");
+        }
     }
 
     #[test]
