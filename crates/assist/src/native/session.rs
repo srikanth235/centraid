@@ -2023,6 +2023,9 @@ impl Session {
             Some((tool, args)) => (*tool, args),
             None => (tool, args),
         };
+        // the regrouped tools carry a create's and an edit's fields as parameters of their own: folded into `args` here
+        let folded = self.folded(tool, args, self.renamed);
+        let args = folded.as_ref().unwrap_or(args);
         if self.turn == 0 {
             self.user("");
         }
@@ -2601,6 +2604,8 @@ impl Session {
             Some((tool, args)) => (*tool, args),
             None => (tool, args),
         };
+        let folded = self.folded(tool, args, renamed.is_some());
+        let args = folded.as_ref().unwrap_or(args);
         let canonical = format!("{tool} {}", canonical_json(args));
         (!self.turn_over && self.last_call.as_deref() == Some(canonical.as_str()))
             .then_some(self.repeats)
@@ -2628,6 +2633,15 @@ impl Session {
     /// own shapes: `answer` takes rows or a value, `edit` and `do` take rows.
     pub(crate) fn lenient(&self) -> bool {
         self.flags.tools == crate::native::prompt::ToolsMode::S2 || self.renamed
+    }
+
+    /// The call with its flat fields folded into `args` (`legacy::fold_fields`), for a model on the regrouped tools: S2's
+    /// shapes, and a call renamed from them, are read as they were.
+    fn folded(&self, tool: &str, args: &Value, renamed: bool) -> Option<Value> {
+        if self.flags.tools == crate::native::prompt::ToolsMode::S2 || renamed {
+            return None;
+        }
+        crate::native::legacy::fold_fields(tool, args)
     }
 
     fn dispatch(&mut self, tool: &str, args: &Value) -> Outcome {

@@ -568,3 +568,79 @@ fn a_by_name_write_is_a_find_step_in_the_trace() {
         ]
     );
 }
+
+// ---- the fields of a create and an edit are parameters of their own (#1166) ----
+
+#[test]
+fn create_and_edit_carry_their_fields_as_parameters() {
+    let world = seeded();
+    let mut session = world.strict_session();
+    session.user("");
+    let created = call(
+        &mut session,
+        "create",
+        json!({"kind": "task", "name": "Call plumber", "effort": "20"}),
+    );
+    assert_eq!(created["effect"]["verb"], "create", "{created}");
+    session.user("");
+    let row = number(&mut session, "task", "Call plumber");
+    let edited = call(
+        &mut session,
+        "edit",
+        json!({"rows": row, "name": "Call the plumber", "effort": 30}),
+    );
+    assert_eq!(edited["effect"]["verb"], "edit", "{edited}");
+    // the selector parameters an edit does not take are still refused by name
+    session.user("");
+    let row = number(&mut session, "task", "Call the plumber");
+    let refused = text(
+        &mut session,
+        "edit",
+        json!({"rows": row, "kind": "task", "effort": 5}),
+    );
+    assert!(refused.contains("edit has no parameter \"kind\""), "{refused}");
+    // the args lines still work (S2's, and a model that writes them)
+    session.user("");
+    let row = number(&mut session, "task", "Call the plumber");
+    let old = call(&mut session, "edit", json!({"rows": row, "args": "effort: 10"}));
+    assert_eq!(old["effect"]["verb"], "edit", "{old}");
+}
+
+#[test]
+fn no_field_is_named_like_a_parameter_the_tool_takes_itself() {
+    for field in meta::flat_field_names() {
+        assert!(
+            !["kind", "rows", "more", "args", "verb"].contains(&field),
+            "{field} would collide with a parameter of create or edit"
+        );
+        if field != "name" {
+            assert!(
+                !meta::SELECTOR_PARAMS.contains(&field),
+                "{field} is a selector parameter an edit refuses"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_think_states_a_create_with_its_fields_flat_and_s2_with_args() {
+    let think = "intent: write \"add\"\nverb: create\nkind: task\nset: name = Pay rent · effort = 30";
+    let new = compile_think_for(think, None, TraceMode::V4, ToolsMode::Sig).unwrap();
+    assert_eq!(new.tool, "create");
+    let pairs: Vec<(&str, &str)> = new
+        .args
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect();
+    assert_eq!(pairs, [("kind", "task"), ("name", "Pay rent"), ("effort", "30")]);
+    let s2 = compile_think(think, None, TraceMode::V4).unwrap();
+    assert_eq!(s2.args[1], ("args".to_owned(), "name: Pay rent\neffort: 30".to_owned()));
+    // a field that is also a slot of the call is refused, not written twice
+    let twice = compile_think_for(
+        "intent: write\nverb: create\nkind: task\nset: kind = event",
+        None,
+        TraceMode::V4,
+        ToolsMode::Sig,
+    );
+    assert!(twice.is_err());
+}

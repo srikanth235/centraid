@@ -1,6 +1,10 @@
-//! THE FREE DECODE STEP (SPEC §6.6, §9; #1088, D-1044-18): one assistant message, written by any [`Model`].
+//! THE DECODE STEP (SPEC §6.6, §9; #1088, D-1044-18, #1166): one assistant message, written by any [`Model`].
 //!
-//! The model writes text and the runtime reads it; nothing is masked (no grammar). Three things generation does not do
+//! The model writes text and the runtime reads it. The think is free by default (`StepOptions::grammar` is `Off`: S2 and the
+//! phone); a model trained on the regrouped tools decodes it under a grammar built fresh from the catalog and the prompt
+//! (`native/grammar.rs`), sent as the think generation's `grammar` and to no other. The call and the rest of the message
+//! are never masked. The spans the think copies are checked against the user's message after decoding
+//! ([`StepInfo::unspanned`]). Three things generation does not do
 //! by itself are done here, as steps over TEXT, which is the only thing an engine behind the [`Model`] trait takes:
 //!
 //! 1. **the think guard**: the think is generated with `</think>` as the stop string and `think_limit` tokens at most; a think

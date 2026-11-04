@@ -2,8 +2,8 @@
 //!
 //! An engine (llama.cpp over a GGUF file) implements [`Model`] and nothing else
 //! in this crate knows an engine exists. The plane hands it a finished prompt,
-//! a token ceiling and stop strings (and an optional GBNF grammar, which no turn
-//! sends today: the native plane's model writes text the runtime reads), and takes
+//! a token ceiling and stop strings (and an optional GBNF grammar, which only the native
+//! step's think can send, `native::step::StepOptions::grammar`, off by default), and takes
 //! text back — streaming each piece to a callback as it is produced.
 //!
 //! # WHAT AN ENGINE MUST DO

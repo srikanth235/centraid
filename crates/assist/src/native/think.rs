@@ -1198,6 +1198,10 @@ fn compile_slots(slots: &Slots, dates: Option<&str>, lenient: bool) -> Result<Ca
         let value = date(expr, &mut times)?;
         set_arg(&mut args, "when", value);
     }
+    // the regrouped tools (#1166) carry a create's and an edit's fields as parameters of their own, after the ones the tool
+    // takes; S2 and every other verb carry them as the `args` lines
+    let flat = !lenient && matches!(tool.as_str(), "create" | "edit");
+    let mut fields: Vec<(String, String)> = Vec::new();
     if let Some(set) = slots.set.as_ref().filter(|set| !set.is_empty()) {
         let mut lines = Vec::new();
         for (key, value, is_date) in set {
@@ -1206,9 +1210,18 @@ fn compile_slots(slots: &Slots, dates: Option<&str>, lenient: bool) -> Result<Ca
             } else {
                 value.clone()
             };
-            lines.push(format!("{key}: {spelled}"));
+            if flat {
+                if has_arg(&args, key) || fields.iter().any(|(have, _)| have == key) {
+                    return refuse(format!("{key} is a field and also a slot of this {tool}"));
+                }
+                fields.push((key.clone(), spelled));
+            } else {
+                lines.push(format!("{key}: {spelled}"));
+            }
         }
-        set_arg(&mut args, "args", lines.join("\n"));
+        if !lines.is_empty() {
+            set_arg(&mut args, "args", lines.join("\n"));
+        }
     }
     if !times.is_empty() {
         return refuse(format!("{} time values with no `t` marker", times.len()));
@@ -1239,6 +1252,7 @@ fn compile_slots(slots: &Slots, dates: Option<&str>, lenient: bool) -> Result<Ca
             outside.join(", ")
         ));
     }
+    ordered.extend(fields);
     Ok(Call {
         tool,
         args: ordered,
