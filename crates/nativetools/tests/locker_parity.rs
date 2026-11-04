@@ -16,7 +16,7 @@ mod common;
 use std::sync::{Arc, Mutex};
 
 use centraid_nativetools::vaultio::{Call, Door, Handle, Ran, SetClock};
-use centraid_nativetools::{Flags, Session, dates, vaultio};
+use centraid_nativetools::{Session, dates, vaultio};
 use common::{TODAY, World, call, seeded};
 use serde_json::{Value, json};
 
@@ -113,7 +113,8 @@ fn recorded(world: &World) -> (Session, Arc<Mutex<Log>>) {
         inner,
         log: Arc::clone(&log),
     };
-    let session = Session::with_door(Box::new(door), now, "", Flags::default()).expect("it opens");
+    let session =
+        Session::with_door(Box::new(door), now, "", common::s2_flags()).expect("it opens");
     (session, log)
 }
 

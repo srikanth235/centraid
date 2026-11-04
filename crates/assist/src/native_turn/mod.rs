@@ -122,8 +122,11 @@ impl NativeChat {
     /// The door's words, when the vault would not load into a world.
     pub fn open(door: Box<dyn Door>, tz: &str) -> Result<Self, String> {
         let now = civil_at(door.now_ms(), tz);
+        // the phone ships S2, which learned the tools before the regroup (#1166): its prompt, and
+        // its way of calling. The retrained model sets this (and `StepOptions::tools`) to `Sig`.
         let flags = Flags {
             writes: Writes::Park,
+            tools: crate::native::prompt::ToolsMode::S2,
             ..Flags::default()
         };
         let mut session = Session::with_door_in(door, now, tz, "", flags)?;

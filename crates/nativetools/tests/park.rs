@@ -27,7 +27,7 @@ use serde_json::{Value, json};
 fn flags(writes: Writes) -> Flags {
     Flags {
         writes,
-        ..Flags::default()
+        ..common::s2_flags()
     }
 }
 

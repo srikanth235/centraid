@@ -67,8 +67,18 @@ pub fn seeded_with(world: &Value) -> World {
 }
 
 impl World {
+    /// A session that takes S2's calls (`--tools s2`): `act`, `search`, `open`, and `answer`,
+    /// `edit` and `do` with a selector. The older suites drive the runtime the way the model
+    /// shipping today does; the eight tools of the regroup are `strict_session`'s.
     #[must_use]
     pub fn session(&self) -> Session {
+        self.session_with(TODAY, s2_flags())
+    }
+
+    /// A session with the eight tools as the issue states them (#1166): rows, never a selector,
+    /// on `answer`, `edit` and `do`.
+    #[must_use]
+    pub fn strict_session(&self) -> Session {
         self.session_with(TODAY, Flags::default())
     }
 
@@ -81,7 +91,7 @@ impl World {
             TODAY,
             Flags {
                 compose: false,
-                ..Flags::default()
+                ..s2_flags()
             },
         )
     }
@@ -106,6 +116,15 @@ impl World {
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
+    }
+}
+
+/// The flags of a session that takes S2's calls.
+#[must_use]
+pub fn s2_flags() -> Flags {
+    Flags {
+        tools: centraid_nativetools::prompt::ToolsMode::S2,
+        ..Flags::default()
     }
 }
 

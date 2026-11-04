@@ -138,7 +138,8 @@
               "sum",
               "avg",
               "min",
-              "max"
+              "max",
+              "compare"
             ],
             "type": "string"
           },

@@ -852,7 +852,7 @@ fn nt12_without_normalize_a_fixable_call_is_the_error_it_was() {
     let world = seeded();
     let flags = centraid_nativetools::Flags {
         normalize: false,
-        ..centraid_nativetools::Flags::default()
+        ..common::s2_flags()
     };
     let mut session = world.session_with(common::TODAY, flags);
     session.user("tasks that mention the cabin");
