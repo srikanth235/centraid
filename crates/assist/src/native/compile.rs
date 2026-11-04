@@ -160,6 +160,16 @@ struct Resolved {
     dates: Vec<Value>,
 }
 
+/// What the slots of a trace say about the rows and the value of its call.
+fn shape_of(slots: &Map<String, Value>) -> Shape {
+    let has = |key: &str| slots.get(key).is_some_and(|value| !value.is_null());
+    Shape {
+        rows: has("rows") || has("row") || has("pick"),
+        value: has("value"),
+        op: has("op"),
+    }
+}
+
 impl Session {
     /// Compile the slots of a trace into the call the runtime will execute.
     pub fn compile(&mut self, slots: &Value) -> Value {
@@ -196,6 +206,7 @@ impl Session {
             None => return refuse("intent", "every trace has an intent"),
         };
         let verb = slots.get("verb").and_then(Value::as_str);
+        let lenient = self.flags.tools == crate::native::prompt::ToolsMode::S2;
         // `search` and `open` are the `find` of text and of one row (S2 wrote them as `via`)
         let tool = match slots.get("via").and_then(Value::as_str) {
             Some("find" | "search" | "open") => "find",
@@ -203,7 +214,7 @@ impl Session {
             Some(other) => {
                 return refuse("via", format!("via is find or compute, not \"{other}\""));
             }
-            None => default_tool(intent, verb),
+            None => default_tool(intent, verb, shape_of(slots), lenient),
         };
         let mut resolved = Resolved::default();
         let mut args: Map<String, Value> = Map::new();
@@ -371,6 +382,18 @@ impl Session {
             args.insert("args".to_owned(), json!(lines.join("\n")));
         }
 
+        // the tools of the regroup name rows: a selector on `answer`, `edit` or `do` is a step missing
+        if !lenient && let Some(key) = outside_the_tool(tool, args.keys().map(String::as_str)) {
+            return refuse(
+                key,
+                match tool {
+                    "answer" => format!(
+                        "answer takes rows or value=@n, not {key}; find or compute first, then answer"
+                    ),
+                    _ => format!("{tool} takes rows, not {key}; find them first, then {tool} rows"),
+                },
+            );
+        }
         let mut ordered = Map::new();
         for key in CALL_ORDER {
             if let Some(value) = args.remove(key) {
@@ -789,15 +812,50 @@ impl Session {
     }
 }
 
-/// The tool a trace's intent calls when no `via` says otherwise (`read` and `count` an `answer`, a
-/// write the tool of its verb: `create`, `edit`, else `do`).
-pub(crate) fn default_tool(intent: &str, verb: Option<&str>) -> &'static str {
+/// What a trace says about the rows and the value its call ends in.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Shape {
+    /// A `rows`, a `row` or a `pick`.
+    pub rows: bool,
+    pub value: bool,
+    pub op: bool,
+}
+
+/// The tool a trace's intent calls when no `via` says otherwise. A write is the tool of its
+/// verb: `create`, `edit`, else `do`. A read that names rows or a value is an `answer`, one that
+/// names neither is the `find` a later `answer` ends on; a count with an `op` is a `compute`, one
+/// that names a value is the `answer` that ends on it. S2 (`lenient`) answered both in one call.
+pub(crate) fn default_tool(
+    intent: &str,
+    verb: Option<&str>,
+    shape: Shape,
+    lenient: bool,
+) -> &'static str {
     match intent {
-        "read" | "count" => "answer",
+        "read" | "count" if lenient => "answer",
+        "read" if shape.op => "compute",
+        "read" if shape.rows || shape.value => "answer",
+        "read" => "find",
+        "count" if shape.value && !shape.op => "answer",
+        "count" => "compute",
         "write" => verb.map_or("do", crate::native::meta::tool_of_verb),
         "ask" => "ask",
         _ => "decline",
     }
+}
+
+/// The argument of a call that its tool takes in S2's shape only: `answer` takes rows or a
+/// value, `edit` and `do` take rows. `None` when every argument belongs (or the call is S2's).
+pub(crate) fn outside_the_tool<'a>(
+    tool: &str,
+    keys: impl Iterator<Item = &'a str>,
+) -> Option<&'a str> {
+    let own: &[&str] = match tool {
+        "answer" => &["rows", "value"],
+        "edit" | "do" => &["verb", "rows", "args", "more"],
+        _ => return None,
+    };
+    keys.into_iter().find(|key| !own.contains(key))
 }
 
 /// Does a pick state the rows of the call? A v4 pick always does; a v3.1 pick only when no other handle slot is explicit.

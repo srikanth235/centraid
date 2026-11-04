@@ -352,6 +352,12 @@ pub struct Session {
     /// What each result handle's selector called its rows (`Selector::what`), for the ask a write
     /// over the handle ends in (nt11 R5).
     pub(crate) result_whats: BTreeMap<usize, String>,
+    /// The results a `find` by `name` made: a write on one of them that holds several rows is the
+    /// by-name write, with the same safety check (`act::settle_rows`).
+    pub(crate) result_named: BTreeSet<usize>,
+    /// The results of a `find` that matched nothing, with how it says so: `answer rows=@n` on one
+    /// ends the turn on "nothing" (the eight tools' `answer` has no selector to say it with).
+    pub(crate) result_empty: BTreeMap<usize, String>,
     pub(crate) observations: Vec<Obs>,
     pub(crate) references: Vec<(usize, BTreeSet<usize>)>,
     pub(crate) directory: Vec<usize>,
@@ -424,6 +430,8 @@ pub struct Session {
     /// What the compile step repaired in the call it last returned: reported by the step
     /// that runs that call (`normalize.rs`).
     pub(crate) compiled: Option<crate::native::normalize::Carry>,
+    /// The call being run came in a name only S2 writes (`legacy.rs`).
+    pub(crate) renamed: bool,
     /// The write over `ROW_CAP` rows the last turn ended asking about: the
     /// same write, sent after the person's yes, goes through
     /// (`Session::confirmed`).
@@ -547,7 +555,10 @@ pub(crate) fn is_row_handle(part: &str) -> bool {
         .is_some_and(|digits| !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()))
 }
 
-pub(crate) fn tool_params(tool: &str) -> Vec<&'static str> {
+/// The parameters of a tool. `lenient` is S2's way of calling (`--tools s2`, or a retired tool
+/// name): `answer`, `edit` and `do` also take a selector and `answer` an `op`, as S2 sends them.
+/// The tools the issue describes take rows (`find` a selector, `compute` rows or a selector).
+pub(crate) fn tool_params(tool: &str, lenient: bool) -> Vec<&'static str> {
     let mut out: Vec<&'static str> = match tool {
         "find" => Vec::new(),
         "compute" => vec!["op", "field", "group", "rows"],
@@ -556,22 +567,55 @@ pub(crate) fn tool_params(tool: &str) -> Vec<&'static str> {
         "create" => vec!["rows", "args", "more"],
         "edit" => vec!["rows", "args", "more"],
         "do" => vec!["verb", "rows", "args", "more"],
-        "answer" => vec!["rows", "op", "field", "value"],
+        "answer" if lenient => vec!["rows", "op", "field", "value"],
+        "answer" => vec!["rows", "value"],
         "ask" => vec!["question", "options"],
         "decline" => vec!["reason"],
         _ => return Vec::new(),
     };
-    // `create` names its kind (a selector parameter) and nothing else of it
-    if matches!(
-        tool,
-        "find" | "compute" | "create" | "edit" | "do" | "answer"
-    ) {
+    let selects = match tool {
+        "find" | "compute" | "create" => true,
+        "edit" | "do" | "answer" => lenient,
+        _ => false,
+    };
+    if selects {
         out.extend(meta::SELECTOR_PARAMS);
     }
     if tool == "find" {
         out.extend(["text", "rows"]);
     }
     out
+}
+
+/// The sentence a call earns for a parameter the tool does not take, when the parameter is one
+/// the tool took before the regroup: the way to say it now is a step earlier.
+fn strict_refusal(tool: &str, args: &Map<String, Value>) -> Option<String> {
+    if !matches!(tool, "answer" | "edit" | "do") {
+        return None;
+    }
+    let selector = meta::SELECTOR_PARAMS
+        .iter()
+        .find(|param| args.get(**param).is_some_and(|value| !value.is_null()));
+    if tool == "answer" {
+        if let Some(param) = ["op", "field"]
+            .iter()
+            .find(|param| args.contains_key(**param))
+        {
+            return Some(format!(
+                "error: answer has no parameter \"{param}\". Compute first (compute op=…), then answer value=@n."
+            ));
+        }
+        return selector.map(|param| {
+            format!(
+                "error: answer has no parameter \"{param}\". answer takes rows or value=@n; find first, then answer rows=@n."
+            )
+        });
+    }
+    selector.map(|param| {
+        format!(
+            "error: {tool} has no parameter \"{param}\". {tool} takes rows; find them first, then {tool} rows=@n."
+        )
+    })
 }
 
 impl Session {
@@ -629,6 +673,8 @@ impl Session {
             results: Vec::new(),
             result_notes: BTreeMap::new(),
             result_whats: BTreeMap::new(),
+            result_named: BTreeSet::new(),
+            result_empty: BTreeMap::new(),
             observations: Vec::new(),
             references: Vec::new(),
             directory: Vec::new(),
@@ -660,6 +706,7 @@ impl Session {
             last_invalid: false,
             last_rejected: None,
             compiled: None,
+            renamed: false,
             pending_bulk: None,
             plan_offer: None,
             reveal_refused: Vec::new(),
@@ -1971,6 +2018,7 @@ impl Session {
     ) -> Value {
         // a call in a name S2 wrote is renamed once, here (`legacy.rs`)
         let renamed = crate::native::legacy::modernize(tool, args);
+        self.renamed = renamed.is_some();
         let (tool, args) = match &renamed {
             Some((tool, args)) => (*tool, args),
             None => (tool, args),
@@ -2575,6 +2623,13 @@ impl Session {
         }
     }
 
+    /// Whether this call may be made the way S2 makes them: `--tools s2`, or a call in one of
+    /// the names only S2 writes (`legacy.rs`). Every other call is made in the eight tools'
+    /// own shapes: `answer` takes rows or a value, `edit` and `do` take rows.
+    pub(crate) fn lenient(&self) -> bool {
+        self.flags.tools == crate::native::prompt::ToolsMode::S2 || self.renamed
+    }
+
     fn dispatch(&mut self, tool: &str, args: &Value) -> Outcome {
         let Some(args) = args.as_object() else {
             return Outcome::error(format!(
@@ -2588,7 +2643,12 @@ impl Session {
                 meta::TOOLS.join(", ")
             ));
         }
-        let allowed = tool_params(tool);
+        if !self.lenient()
+            && let Some(error) = strict_refusal(tool, args)
+        {
+            return Outcome::error(error);
+        }
+        let allowed = tool_params(tool, self.lenient());
         for key in args.keys() {
             if !allowed.contains(&key.as_str()) {
                 return Outcome::error(format!(
@@ -2680,7 +2740,30 @@ impl Session {
                 .as_ref()
                 .map(|(_, numbers)| vec![(numbers.clone(), String::new())])
                 .unwrap_or_default();
-            self.push_obs(true, None, text.clone(), text, lines, &mut outcome);
+            if self.lenient() {
+                self.push_obs(true, None, text.clone(), text, lines, &mut outcome);
+            } else {
+                // an empty result is a result: `answer rows=@n` is how the turn says "nothing"
+                self.results.push(ResultSet {
+                    kinds: selector.kinds.clone(),
+                    keys: Vec::new(),
+                    value: None,
+                });
+                let handle = self.results.len();
+                self.result_empty.insert(handle, text.clone());
+                let header = format!("@{handle} · {text}");
+                self.push_obs(
+                    true,
+                    Some(handle),
+                    header.clone(),
+                    header,
+                    lines,
+                    &mut outcome,
+                );
+                outcome
+                    .effect
+                    .insert("result".to_owned(), json!(format!("@{handle}")));
+            }
             if let Some((line, _)) = hint {
                 self.pending_notes.push(line);
                 self.read_misses += 1;
@@ -2696,6 +2779,9 @@ impl Session {
                 &mut outcome,
             );
             self.result_whats.insert(handle, selector.what());
+            if selector.name.is_some() {
+                self.result_named.insert(handle);
+            }
             if !selector.conds.is_empty()
                 || selector.when.is_some()
                 || !selector.linked_to.is_empty()
@@ -2943,6 +3029,16 @@ impl Session {
             outcome.ends_turn = !(outcome.effect.contains_key("recovery") || opened);
             return Ok(outcome);
         }
+        if let Some(text) = self.empty_result(args) {
+            let text = format!("answered: {text}");
+            let mut outcome = Outcome::text("");
+            self.push_obs(false, None, text.clone(), text, Vec::new(), &mut outcome);
+            outcome.ends_turn = true;
+            outcome
+                .effect
+                .insert("answer".to_owned(), json!({"rows": []}));
+            return Ok(outcome);
+        }
         let mut outcome = Outcome::text("");
         let mut what: Option<String> = None;
         let (kinds, keys, when, ordered) = if let Some(keys) = self.rows_arg(
@@ -3032,6 +3128,166 @@ impl Session {
         Ok(outcome)
     }
 
+    /// `compute op=compare rows=@a,@b` (#1166): two values already computed, side by side, and
+    /// what separates them in each unit both hold ("this month against last", "spent against the
+    /// budget"). It takes no field, group or selector: the values say what they are over.
+    fn compare(&mut self, args: &Map<String, Value>, answering: bool) -> Result<Outcome, String> {
+        if let Some(extra) = args
+            .keys()
+            .find(|key| !matches!(key.as_str(), "op" | "rows"))
+        {
+            return Err(format!(
+                "error: compare takes rows=@a,@b and nothing else, not {extra}; the two values say what they are over."
+            ));
+        }
+        let handles = args.get("rows").map(handle_list).unwrap_or_default();
+        let [first, second] = handles.as_slice() else {
+            return Err("error: compare takes exactly two values, rows=@a,@b.".to_owned());
+        };
+        let mut sides: Vec<(usize, Value)> = Vec::new();
+        for handle in [first, second] {
+            let number = self.resolve_result(handle)?;
+            let value = self.results[number - 1].value.clone().ok_or_else(|| {
+                format!("error: @{number} holds rows, not a value; compare takes two values.")
+            })?;
+            if value.get("values").is_none() {
+                return Err(format!(
+                    "error: @{number} is a value per group; compare takes plain values."
+                ));
+            }
+            sides.push((number, value));
+        }
+        // each side's amounts by unit, as the figures were written
+        let amounts = |value: &Value| -> Vec<(Option<String>, f64)> {
+            value["values"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|entry| {
+                    Some((
+                        entry["unit"].as_str().map(str::to_owned),
+                        entry["amount"].as_f64()?,
+                    ))
+                })
+                .collect()
+        };
+        let (one, two) = (amounts(&sides[0].1), amounts(&sides[1].1));
+        let show = |amount: f64, unit: &Option<String>, signed: bool| {
+            let mut text = if (amount.fract()).abs() < f64::EPSILON {
+                format!("{amount:.0}")
+            } else {
+                format!("{amount:.2}").trim_end_matches('0').to_owned()
+            };
+            if signed && amount > 0.0 {
+                text.insert(0, '+');
+            }
+            match unit {
+                Some(unit) => format!("{text} {unit}"),
+                None => text,
+            }
+        };
+        let side_text = |side: &[(Option<String>, f64)]| {
+            side.iter()
+                .map(|(unit, amount)| show(*amount, unit, false))
+                .collect::<Vec<_>>()
+                .join(" · ")
+        };
+        let mut difference: Vec<Value> = Vec::new();
+        let mut said: Vec<String> = Vec::new();
+        for (unit, left) in &one {
+            if let Some((_, right)) = two.iter().find(|(other, _)| other == unit) {
+                let amount = ((left - right) * 100.0).round() / 100.0;
+                // a count or a whole number stays an integer, as every other value is
+                let shown = if amount.fract() == 0.0 && amount.abs() < 1e15 {
+                    json!(amount as i64)
+                } else {
+                    json!(amount)
+                };
+                difference.push(json!({"amount": shown, "unit": unit}));
+                said.push(show(amount, unit, true));
+            }
+        }
+        if difference.is_empty() {
+            return Err(format!(
+                "error: @{} and @{} share no unit; compare takes two values of one kind of figure.",
+                sides[0].0, sides[1].0
+            ));
+        }
+        let machine = json!({
+            "op": "compare",
+            "compared": [format!("@{}", sides[0].0), format!("@{}", sides[1].0)],
+            "values": difference,
+        });
+        // the new value keeps the rows of both, so `within: @n` and the focus line reach them
+        let mut kinds: Vec<Kind> = Vec::new();
+        let mut keys: Vec<Key> = Vec::new();
+        for (number, _) in &sides {
+            let set = &self.results[number - 1];
+            for kind in &set.kinds {
+                if !kinds.contains(kind) {
+                    kinds.push(*kind);
+                }
+            }
+            for key in &set.keys {
+                if !keys.contains(key) {
+                    keys.push(key.clone());
+                }
+            }
+        }
+        self.results.push(ResultSet {
+            kinds,
+            keys,
+            value: Some(machine.clone()),
+        });
+        let handle = self.results.len();
+        let (a, b) = (sides[0].0, sides[1].0);
+        let text = said.join(" · ");
+        self.result_notes.insert(
+            handle,
+            crate::native::block::SetNote {
+                text: format!(
+                    "compared @{a} {} with @{b} {}: {text}",
+                    side_text(&one),
+                    side_text(&two)
+                ),
+                container: Vec::new(),
+            },
+        );
+        let mut header = format!(
+            "@{handle} = {text} (compare @{a} {} with @{b} {})",
+            side_text(&one),
+            side_text(&two)
+        );
+        if answering {
+            header = format!("answered: {header}");
+        }
+        let mut outcome = Outcome::text("");
+        self.push_obs(
+            false,
+            Some(handle),
+            header.clone(),
+            header,
+            Vec::new(),
+            &mut outcome,
+        );
+        outcome.effect.insert("value".to_owned(), machine);
+        outcome
+            .effect
+            .insert("result".to_owned(), json!(format!("@{handle}")));
+        Ok(outcome)
+    }
+
+    /// How a `find` that matched nothing says so, when `args` is `rows=@n` of that result alone.
+    fn empty_result(&self, args: &Map<String, Value>) -> Option<String> {
+        match crate::native::session::handle_list(args.get("rows")?).as_slice() {
+            [only] => self
+                .result_empty
+                .get(&only.strip_prefix('@')?.parse::<usize>().ok()?)
+                .cloned(),
+            _ => None,
+        }
+    }
+
     /// `compute` and `answer op=…` (SPEC §4.3).
     fn compute(&mut self, args: &Map<String, Value>, answering: bool) -> Result<Outcome, String> {
         let op = arg_str(args, "op")
@@ -3041,6 +3297,9 @@ impl Session {
                 "error: no op \"{op}\". ops: {}.",
                 meta::OPS.join(", ")
             ));
+        }
+        if op == "compare" {
+            return self.compare(args, answering);
         }
         let (kinds, keys, selector) = if let Some(keys) = self.rows_arg(
             args,

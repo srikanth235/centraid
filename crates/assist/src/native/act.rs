@@ -682,6 +682,23 @@ impl Session {
                     .unwrap_or_else(|| "the selector".to_owned());
                 return self.settle_rows(verb, keys, args, extra, &what);
             }
+            // A WRITE ON THE RESULT OF A FIND BY NAME that holds several rows is the by-name write
+            // the one safety check (SPEC §3.3) is for: the eight tools' writes carry no selector, so
+            // the check is made where the rows come from
+            if !self.lenient()
+                && keys.len() > 1
+                && let Some(handle) = args
+                    .get("rows")
+                    .map(crate::native::session::handle_list)
+                    .and_then(|parts| match parts.as_slice() {
+                        [only] => only.strip_prefix('@')?.parse::<usize>().ok(),
+                        _ => None,
+                    })
+                    .filter(|handle| self.result_named.contains(handle))
+            {
+                let what = self.result_whats.get(&handle).cloned().unwrap_or_default();
+                return self.settle_rows(verb, keys, args, extra, &what);
+            }
             return Ok(Ok(Targets::of(keys)));
         }
         if !Self::has_selector(args) {

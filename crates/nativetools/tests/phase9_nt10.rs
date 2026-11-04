@@ -200,7 +200,7 @@ fn a_when_the_message_never_said_is_named() {
         common::TODAY,
         centraid_nativetools::Flags {
             normalize: false,
-            ..centraid_nativetools::Flags::default()
+            ..common::s2_flags()
         },
     );
     replay.user("what about the cabin task");

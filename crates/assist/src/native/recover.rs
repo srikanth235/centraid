@@ -300,7 +300,7 @@ use crate::native::session::{arg_str, tool_params};
 /// in the tool's order; a name is quoted, a date expression is its compact JSON, the lines of
 /// `args` are joined by `; `.
 pub(crate) fn render_call(tool: &str, args: &Map<String, Value>) -> String {
-    let mut keys: Vec<String> = tool_params(tool)
+    let mut keys: Vec<String> = tool_params(tool, true)
         .iter()
         .map(|key| (*key).to_owned())
         .collect();

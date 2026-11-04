@@ -151,7 +151,7 @@ fn assert_find_missed(reply: &Value) {
 fn uncomposed() -> Flags {
     Flags {
         compose: false,
-        ..Flags::default()
+        ..common::s2_flags()
     }
 }
 
@@ -978,7 +978,7 @@ fn a_pick_the_words_leave_ambiguous_ends_a_repeated_refusal_in_the_composed_ask(
     let world = pedros();
     let flags = Flags {
         normalize: false,
-        ..Flags::default()
+        ..common::s2_flags()
     };
     let mut session = world.session_with(common::TODAY, flags);
     session.user("star pedro");
@@ -1260,7 +1260,7 @@ fn a_find_with_rows_a_name_that_resolves_or_a_valid_empty_is_not_a_miss() {
         common::TODAY,
         centraid_nativetools::Flags {
             normalize: false,
-            ..centraid_nativetools::Flags::default()
+            ..common::s2_flags()
         },
     );
     replayed.user("is the cabin due the friday after next");
@@ -2044,7 +2044,7 @@ fn a_series_of_events_that_has_gone_by_keeps_the_ask_too() {
     let world = movie_nights();
     let keys = movie_keys();
     let keys: Vec<&str> = keys.iter().map(String::as_str).collect();
-    let mut session = world.session_with("2027-06-01", Flags::default());
+    let mut session = world.session_with("2027-06-01", common::s2_flags());
     session.user("cancel movie night");
     let reply = call(&mut session, "act", cancel_movie_night());
     assert_asked(&world, &reply, "Which one?", &keys);

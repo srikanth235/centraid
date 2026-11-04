@@ -1056,7 +1056,7 @@ fn the_flags_still_switch_the_block_off() {
         common::TODAY,
         Flags {
             preground: false,
-            ..Flags::default()
+            ..common::s2_flags()
         },
     );
     let user = session.user("star neha");
