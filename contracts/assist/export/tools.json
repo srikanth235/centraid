@@ -228,6 +228,9 @@
           "effort": {
             "type": "string"
           },
+          "end": {
+            "type": "string"
+          },
           "energy": {
             "type": "string"
           },
@@ -393,6 +396,9 @@
             "type": "string"
           },
           "effort": {
+            "type": "string"
+          },
+          "end": {
             "type": "string"
           },
           "energy": {
