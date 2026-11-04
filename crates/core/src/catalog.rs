@@ -125,7 +125,7 @@ mod tests {
                 actions += 1;
             }
         }
-        assert_eq!(actions, 154, "the eight manifests declare 154 actions");
+        assert_eq!(actions, 158, "the eight manifests declare 158 actions");
     }
 
     #[test]
