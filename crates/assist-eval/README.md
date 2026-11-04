@@ -70,6 +70,8 @@ Kept: the matching rules (`match_value`, `diff_match`, `value_match`; the same p
 
 ## Baseline
 
+**The baseline run is deferred (owner, 2026-11-04): no model is scored, here or on Kaggle, until the owner says so.** The kit below is ready and untested.
+
 **Not scored yet.** Two things are settled, one is not.
 
 _What the val set can be asked._ The held-out val (data-v7, 655 sessions) predates the vault rebuild (#1135) and Tally's removal (#1099): its worlds carry Tally sections and a task status the vault no longer has, and the seeder refuses both, so neither this runner nor the Python rig can seed them as they are. The frozen files are not edited. `tally::WithoutTally` and `WithoutInProgress` read both out as a world is loaded and leave out the sessions that need them: **510 of 655 are scored, 145 left out** (118 that name or create a Tally row, 27 that ask about `in_progress`), each listed with its reason in the report's `excluded`. The gold of the 510 was last regenerated before the vault rebuild and before the tool regroup and has not been checked against today's runtime, so its turn pass is a measure for a floor near 0%, not for a model near S2's 82%. A refreeze of val on today's runtime is the real fix (data-version work). The check "the reference calls still reach 100%" cannot be made by `build_sets.py ref` as it stands (see "Precondition" above). `nativetools::vaultio::open_session` also failed on any world over 500 entities (its probe ordered by a nullable column); fixed.
