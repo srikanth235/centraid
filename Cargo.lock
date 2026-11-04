@@ -685,6 +685,7 @@ dependencies = [
  "blake3",
  "centraid-apps-kit",
  "centraid-assist",
+ "centraid-assist-eval",
  "centraid-nativetools",
  "clap",
  "hex",

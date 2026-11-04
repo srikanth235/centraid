@@ -1,0 +1,466 @@
+//! STAGES 2 AND 3 TOGETHER: draw intents world by world, solve them against the real runtime, keep
+//! the sessions that solve, and count everything that does not.
+//!
+//! A run is a pure function of its master seed, the world counts and the sessions per world.
+//! Each world visits every live grid cell once as the first turn of a session (so a cell that the
+//! world can serve is served), then keeps drawing cells in turn until it has the sessions asked
+//! for. Sessions are weighted toward several turns, and a follow-up always leans on a turn before it.
+
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use anyhow::Result;
+use serde::Serialize;
+use serde_json::Value;
+
+use crate::catalog::Catalog;
+use crate::grid::{Cell, Grid};
+use crate::intent::{Intent, Outcome, Reference, Span};
+use crate::plan::{Drop, WorldRun};
+use crate::rng::Rng;
+use crate::sample::Sampler;
+use crate::settings::Split;
+use crate::world::{World, plan_sized};
+
+/// Extra turns after the first, weighted so that most sessions have two or more turns and a
+/// good share three or more.
+const EXTRA_TURNS: &[(usize, u32)] = &[(0, 36), (1, 30), (2, 20), (3, 14)];
+
+#[derive(Debug, Clone)]
+pub struct Config {
+    pub seed: u64,
+    /// Worlds in each split: train, val, test.
+    pub counts: [usize; 3],
+    /// Sessions to keep per world; never fewer than one per live cell.
+    pub per_world: usize,
+    /// Visit only this many cells per world (tests that need a quick run); `None` for all.
+    pub cell_limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct CellStat {
+    /// Intents drawn and run from this cell.
+    pub attempts: usize,
+    pub kept: usize,
+    /// Draws the sampler could not make (the world held nothing to draw it from).
+    pub undrawn: usize,
+    pub drops: BTreeMap<String, usize>,
+}
+
+/// One kept session and where it belongs.
+#[derive(Debug, Clone)]
+pub struct Kept {
+    pub split: Split,
+    pub world: String,
+    pub record: Value,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WorldInfo {
+    pub id: String,
+    pub split: Split,
+    pub seed: u64,
+    pub sessions: usize,
+}
+
+#[derive(Debug, Default)]
+pub struct Generated {
+    /// Presence-only world documents by id.
+    pub docs: BTreeMap<String, Value>,
+    pub worlds: Vec<WorldInfo>,
+    pub kept: Vec<Kept>,
+    pub cells: BTreeMap<Cell, CellStat>,
+}
+
+/// Run stages 2 and 3 over the worlds of `config`.
+///
+/// # Errors
+///
+/// If a world cannot be seeded or a vault cannot be copied.
+pub fn generate(config: &Config, catalog: &Catalog, scratch: &Path) -> Result<Generated> {
+    generate_with(config, catalog, scratch, &World::generate)
+}
+
+/// [`generate`] over worlds made by `make` (a test that needs worlds with particular settings).
+///
+/// # Errors
+///
+/// If a world cannot be seeded or a vault cannot be copied.
+pub fn generate_with(
+    config: &Config,
+    catalog: &Catalog,
+    scratch: &Path,
+    make: &dyn Fn(crate::world::WorldSpec) -> World,
+) -> Result<Generated> {
+    let grid = Grid::build(catalog);
+    let live: Vec<Cell> = grid.live().into_iter().cloned().collect();
+    let specs = plan_sized(config.seed, |split| match split {
+        Split::Train => config.counts[0],
+        Split::Val => config.counts[1],
+        Split::Test => config.counts[2],
+    });
+    let mut out = Generated::default();
+    for cell in &live {
+        out.cells.insert(cell.clone(), CellStat::default());
+    }
+    for (number, spec) in specs.iter().enumerate() {
+        let world = make(*spec);
+        let dir = scratch.join(world.id());
+        let mut run = WorldRun::seed(&world, catalog, &dir)?;
+        let facts = run.facts.clone();
+        let sampler = Sampler::new(&world, &facts, catalog, &grid);
+        let root = Rng::new(config.seed).fork(&format!("intents:{}", world.id()));
+        let target = config
+            .cell_limit
+            .unwrap_or_else(|| config.per_world.max(live.len()));
+        let mut kept = 0;
+        let mut drawn = 0;
+        let offset = number * 31;
+        while kept < target && drawn < target * 3 {
+            let cell = &live[(offset + drawn) % live.len()];
+            drawn += 1;
+            let mut shape = root.fork(&format!("shape:{drawn}"));
+            let extra = *shape.weighted(EXTRA_TURNS);
+            for attempt in 0..4 {
+                let id = format!("{}-{:04}", world.id(), kept + 1);
+                let mut rng = root.fork(&format!("draw:{drawn}:{attempt}"));
+                // later attempts fall back toward fewer turns, so a cell a follow-up cannot lean on is still served
+                let extra = extra.saturating_sub(attempt / 2);
+                let Some(scenario) = sampler.session(&id, cell, extra, &mut rng) else {
+                    if let Some(stat) = out.cells.get_mut(cell) {
+                        stat.undrawn += 1;
+                    }
+                    continue;
+                };
+                let solution = run.solve(&scenario)?;
+                for (kept_cell, _) in &solution.turns {
+                    if let Some(stat) = out.cells.get_mut(kept_cell) {
+                        stat.attempts += 1;
+                        stat.kept += 1;
+                    }
+                }
+                for dropped in &solution.dropped {
+                    if std::env::var_os("DATAGEN_DEBUG").is_some() {
+                        eprintln!(
+                            "drop {} {} {}: {}\n   {}",
+                            dropped.cell,
+                            dropped.why.word(),
+                            scenario.id,
+                            dropped.detail,
+                            serde_json::to_string(
+                                &scenario.turns[..=dropped.turn]
+                                    .iter()
+                                    .map(|t| &t.intent)
+                                    .collect::<Vec<_>>()
+                            )
+                            .unwrap_or_default()
+                        );
+                    }
+                    let stat = out.cells.entry(dropped.cell.clone()).or_default();
+                    stat.attempts += 1;
+                    *stat.drops.entry(dropped.why.word().to_owned()).or_default() += 1;
+                }
+                if let Some(record) = solution.record {
+                    out.kept.push(Kept {
+                        split: spec.split,
+                        world: world.id(),
+                        record,
+                    });
+                    kept += 1;
+                    break;
+                }
+            }
+        }
+        out.docs.insert(world.id(), world.doc.clone());
+        out.worlds.push(WorldInfo {
+            id: world.id(),
+            split: spec.split,
+            seed: spec.seed,
+            sessions: kept,
+        });
+        // a seeded vault is the heaviest thing a run holds; free it as soon as the world is done
+        drop(run);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+    Ok(out)
+}
+
+// ------------------------------------------------------------------------ the report
+
+#[derive(Debug, Default, Serialize)]
+pub struct Summary {
+    pub sessions: usize,
+    pub turns: usize,
+    pub truncated: usize,
+    /// Sessions with 1, 2 and 3 or more turns.
+    pub by_turns: BTreeMap<String, usize>,
+    pub multi_turn_share: f64,
+    pub three_plus_share: f64,
+    pub constraints: BTreeMap<String, usize>,
+    pub reference: BTreeMap<String, usize>,
+    pub outcome: BTreeMap<String, usize>,
+    pub span: BTreeMap<String, usize>,
+    pub across_share: f64,
+    pub outcome_by_tool: BTreeMap<String, usize>,
+    pub reference_by_tool: BTreeMap<String, usize>,
+    pub constraints_by_app: BTreeMap<String, usize>,
+    pub span_by_turns: BTreeMap<String, usize>,
+    pub drops: BTreeMap<String, usize>,
+}
+
+fn bump(map: &mut BTreeMap<String, usize>, key: impl Into<String>) {
+    *map.entry(key.into()).or_default() += 1;
+}
+
+fn share(part: usize, whole: usize) -> f64 {
+    if whole == 0 {
+        0.0
+    } else {
+        part as f64 / whole as f64
+    }
+}
+
+impl Summary {
+    /// Count the kept sessions and the drops.
+    #[must_use]
+    pub fn of(generated: &Generated) -> Self {
+        let mut s = Self::default();
+        for stat in generated.cells.values() {
+            for (why, n) in &stat.drops {
+                *s.drops.entry(why.clone()).or_default() += n;
+            }
+        }
+        for kept in &generated.kept {
+            let record = &kept.record;
+            let Ok(scenario) =
+                serde_json::from_value::<crate::intent::Scenario>(record["scenario"].clone())
+            else {
+                continue;
+            };
+            s.sessions += 1;
+            s.turns += scenario.turns.len();
+            if record["tags"].as_array().is_some_and(|t| !t.is_empty()) {
+                s.truncated += 1;
+            }
+            let n = scenario.turns.len();
+            bump(
+                &mut s.by_turns,
+                if n >= 3 {
+                    "3+".to_owned()
+                } else {
+                    n.to_string()
+                },
+            );
+            bump(&mut s.span, scenario.span.word());
+            bump(
+                &mut s.span_by_turns,
+                format!(
+                    "{} x {}",
+                    scenario.span.word(),
+                    if n >= 3 {
+                        "3+".to_owned()
+                    } else {
+                        n.to_string()
+                    }
+                ),
+            );
+            for (t, jt) in scenario
+                .turns
+                .iter()
+                .zip(record["turns"].as_array().into_iter().flatten())
+            {
+                let c = jt["constraints"].as_u64().unwrap_or(0) as usize;
+                let bucket = centraid_assist_eval::args::bucket(c);
+                let cell0 = crate::grid::cell_of(t);
+                // constraints are a property of turns that select rows or fold them
+                if matches!(cell0.tool.as_str(), "find" | "compute" | "do" | "edit")
+                    && cell0.verb != "undo"
+                {
+                    bump(&mut s.constraints, bucket);
+                }
+                bump(&mut s.reference, t.reference.word());
+                bump(&mut s.outcome, t.outcome.word());
+                let cell = crate::grid::cell_of(t);
+                bump(
+                    &mut s.outcome_by_tool,
+                    format!("{} x {}", t.outcome.word(), cell.tool),
+                );
+                bump(
+                    &mut s.reference_by_tool,
+                    format!("{} x {}", t.reference.word(), cell.tool),
+                );
+                for app in &t.apps {
+                    if app == "money" || app == "health" {
+                        bump(&mut s.constraints_by_app, format!("{app} x {bucket}"));
+                    }
+                }
+            }
+        }
+        let multi = s
+            .by_turns
+            .iter()
+            .filter(|(k, _)| *k != "1")
+            .map(|(_, v)| v)
+            .sum::<usize>();
+        s.multi_turn_share = share(multi, s.sessions);
+        s.three_plus_share = share(s.by_turns.get("3+").copied().unwrap_or(0), s.sessions);
+        s.across_share = share(s.span.get("across").copied().unwrap_or(0), s.sessions);
+        s
+    }
+}
+
+/// The report as text: the grid's size and not-live cells, solvable intents per cell, the shares,
+/// the drop reasons.
+#[must_use]
+pub fn report(catalog: &Catalog, grid: &Grid, generated: &Generated) -> String {
+    use std::fmt::Write;
+    let summary = Summary::of(generated);
+    let (live, not_live, invalid) = grid.counts();
+    let mut out = String::new();
+    let _ = writeln!(out, "catalog {}", catalog.hash());
+    let _ = writeln!(
+        out,
+        "grid: {} primary cells = {live} live + {not_live} not live + {invalid} invalid (invalid cells are left out of every denominator)",
+        live + not_live + invalid
+    );
+    let _ = writeln!(out, "\nnot live:");
+    for (cell, why) in grid.not_live() {
+        let _ = writeln!(out, "  {cell}: {why}");
+    }
+    let _ = writeln!(
+        out,
+        "\nsessions {} ({} truncated at an unsolvable turn), turns {}, worlds {}",
+        summary.sessions,
+        summary.truncated,
+        summary.turns,
+        generated.worlds.len()
+    );
+    let _ = writeln!(
+        out,
+        "multi-turn share {:.1}%, 3+ turns {:.1}%, across-app {:.1}%",
+        summary.multi_turn_share * 100.0,
+        summary.three_plus_share * 100.0,
+        summary.across_share * 100.0
+    );
+    let line = |out: &mut String, name: &str, map: &BTreeMap<String, usize>| {
+        let total: usize = map.values().sum();
+        let parts: Vec<String> = map
+            .iter()
+            .map(|(k, v)| format!("{k} {v} ({:.0}%)", share(*v, total) * 100.0))
+            .collect();
+        let _ = writeln!(out, "{name}: {}", parts.join(", "));
+    };
+    line(&mut out, "constraints", &summary.constraints);
+    line(&mut out, "reference", &summary.reference);
+    line(&mut out, "outcome", &summary.outcome);
+    line(&mut out, "span", &summary.span);
+    line(&mut out, "turns", &summary.by_turns);
+    line(&mut out, "drop reasons", &summary.drops);
+    let _ = writeln!(
+        out,
+        "\nsolvable intents per live cell (kept / drawn; undrawn = the world held nothing to draw it from):"
+    );
+    for (cell, stat) in &generated.cells {
+        let drops: Vec<String> = stat.drops.iter().map(|(k, v)| format!("{k} {v}")).collect();
+        let _ = writeln!(
+            out,
+            "  {cell}: {} / {} ({:.0}%){}{}",
+            stat.kept,
+            stat.attempts,
+            share(stat.kept, stat.attempts) * 100.0,
+            if stat.undrawn > 0 {
+                format!(", undrawn {}", stat.undrawn)
+            } else {
+                String::new()
+            },
+            if drops.is_empty() {
+                String::new()
+            } else {
+                format!("  drops: {}", drops.join(", "))
+            },
+        );
+    }
+    let empty: Vec<&Cell> = generated
+        .cells
+        .iter()
+        .filter(|(_, s)| s.kept == 0)
+        .map(|(c, _)| c)
+        .collect();
+    let _ = writeln!(
+        out,
+        "\nlive cells with no solvable intent: {}",
+        if empty.is_empty() {
+            "none".to_owned()
+        } else {
+            empty
+                .iter()
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
+    );
+    let _ = (
+        Reference::ALL,
+        Outcome::ALL,
+        Span::Single,
+        Intent::Decline {
+            reason: String::new(),
+        },
+        Drop::Error,
+    );
+    out
+}
+
+/// Write a run: `<out>/<split>/sessions.jsonl`, the worlds as presence-only documents under
+/// `<out>/worlds/`, `report.txt` and `manifest.json` (the catalog hash, the seeds and counts a
+/// reader needs to regenerate the worlds, the grid and the per-cell numbers).
+///
+/// # Errors
+///
+/// If a file cannot be written.
+pub fn write(
+    out: &Path,
+    config: &Config,
+    catalog: &Catalog,
+    generated: &Generated,
+) -> Result<String> {
+    use crate::source::SESSIONS;
+    std::fs::create_dir_all(out)?;
+    for split in Split::ALL {
+        let dir = out.join(split.name());
+        std::fs::create_dir_all(&dir)?;
+        let mut text = String::new();
+        for kept in generated.kept.iter().filter(|k| k.split == split) {
+            text += &serde_json::to_string(&kept.record)?;
+            text.push('\n');
+        }
+        std::fs::write(dir.join(SESSIONS), text)?;
+    }
+    let worlds_dir = out.join(crate::source::WORLDS);
+    std::fs::create_dir_all(&worlds_dir)?;
+    for (id, doc) in &generated.docs {
+        std::fs::write(
+            worlds_dir.join(format!("{id}.json")),
+            serde_json::to_string_pretty(doc)?,
+        )?;
+    }
+    let grid = Grid::build(catalog);
+    let report = report(catalog, &grid, generated);
+    std::fs::write(out.join("report.txt"), &report)?;
+    let summary = Summary::of(generated);
+    let manifest = serde_json::json!({
+        "catalog_hash": catalog.hash(),
+        "master_seed": config.seed,
+        "counts": config.counts,
+        "per_world": config.per_world,
+        "worlds": generated.worlds,
+        "grid": grid.cells.iter().map(|(c, s)| (c.to_string(), s)).collect::<BTreeMap<_, _>>(),
+        "cells": generated.cells.iter().map(|(c, s)| (c.to_string(), s)).collect::<BTreeMap<_, _>>(),
+        "summary": summary,
+    });
+    std::fs::write(
+        out.join("manifest.json"),
+        serde_json::to_string_pretty(&manifest)?,
+    )?;
+    Ok(report)
+}
