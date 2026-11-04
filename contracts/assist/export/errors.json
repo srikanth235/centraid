@@ -837,14 +837,14 @@
       "why_no_example": "only a door that cannot answer a read reaches it, which the harness's door never is; the phone's door is held to the same read by tests/assist_door.rs"
     },
     {
-      "argument": "",
+      "argument": "rows",
       "example": null,
       "family": "schema",
       "id": "act.could_not_read_the_figure_first",
       "source": "act.rs",
       "template": "error: could not read the figure first: it is not there.",
-      "tool": "",
-      "why_no_example": "no example written for this family"
+      "tool": "edit",
+      "why_no_example": "the figure was read a moment before the write that named it, so only a vault that lost it in between reaches this"
     },
     {
       "argument": "args",
@@ -1272,14 +1272,14 @@
       "why_no_example": ""
     },
     {
-      "argument": "",
+      "argument": "args",
       "example": null,
       "family": "value",
       "id": "act.there_is_already_a_metric_figure",
       "source": "act.rs",
       "template": "error: there is already a {metric} figure for {day}; change it with edit.",
-      "tool": "",
-      "why_no_example": "no example written for this family"
+      "tool": "create",
+      "why_no_example": "the fixture world holds no daily figure to log over; tests/health_kind.rs says it on a world that holds one"
     },
     {
       "argument": "args",
