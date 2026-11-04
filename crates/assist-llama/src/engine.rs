@@ -22,6 +22,7 @@
 
 use std::num::NonZeroU32;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Once, OnceLock, PoisonError, Weak};
 
 use centraid_assist::host::ModelLoader;
@@ -45,6 +46,7 @@ use llama_cpp_2::{LogOptions, send_logs_to_tracing};
 
 use crate::Config;
 use crate::generate::{Backend, run};
+use crate::sampling::{Rng, pick};
 
 /// llama.cpp's backend is initialised once per process and never freed: the
 /// weights of every model that is ever loaded borrow it.
@@ -137,6 +139,7 @@ impl ModelLoader for LlamaLoader {
             vision: Mutex::new(None),
             weights: Mutex::new(Some(weights)),
             config: self.config.clone(),
+            draws: AtomicU64::new(0),
         });
         {
             let mut live = LIVE.lock().unwrap_or_else(PoisonError::into_inner);
@@ -160,6 +163,8 @@ pub struct LlamaModel {
     /// are sequential anyway. `None` once the exit hook has freed them.
     weights: Mutex<Option<Weights>>,
     config: Config,
+    /// Sampled generations so far: each takes the next stream of `Config::seed`.
+    draws: AtomicU64,
 }
 
 impl LlamaModel {
@@ -237,12 +242,27 @@ impl Model for LlamaModel {
         })?;
         let vision = self.vision.lock().unwrap_or_else(PoisonError::into_inner);
         let mut session = Session::open(self, weights, vision.as_ref(), request)?;
+        if request.temperature > 0.0 {
+            let stream = self.draws.fetch_add(1, Ordering::Relaxed);
+            session.sampling = Some(Sampling {
+                temperature: request.temperature,
+                top_p: self.config.top_p,
+                rng: Rng::new(self.config.seed ^ stream.wrapping_mul(0x9E37_79B9_7F4A_7C15)),
+            });
+        }
         run(&mut session, request, on_token)
     }
 }
 
 fn failed(what: &str, error: impl std::fmt::Display) -> ModelError {
     ModelError::Generate(format!("{what}: {error}"))
+}
+
+/// A sampled generation's draw: see [`crate::sampling`].
+struct Sampling {
+    temperature: f32,
+    top_p: f32,
+    rng: Rng,
 }
 
 /// One generation's engine state. Dropped when the generation ends.
@@ -257,6 +277,8 @@ struct Session<'m> {
     context: LlamaContext<'m>,
     batch: LlamaBatch<'m>,
     grammar: Option<LlamaSampler>,
+    /// `Some` for a rollout's generation (`temperature > 0`); the phone's greedy generation leaves it `None`.
+    sampling: Option<Sampling>,
     chunk: usize,
     context_size: u32,
     position: i32,
@@ -301,9 +323,45 @@ impl<'m> Session<'m> {
             context,
             batch: LlamaBatch::new(chunk.max(1), 1),
             grammar,
+            sampling: None,
             chunk,
             position: 0,
         })
+    }
+}
+
+impl Session<'_> {
+    /// A rollout's pick: the grammar (when there is one) over the whole vocabulary, then [`pick`] among what it allows.
+    /// Slower than the greedy path, which a rollout can afford and the phone never takes.
+    fn sample_drawn(&mut self) -> Result<LlamaToken, ModelError> {
+        let mut all = self.context.token_data_array();
+        if let Some(grammar) = self.grammar.as_mut() {
+            grammar.apply(&mut all);
+        }
+        let allowed: Vec<(usize, f32)> = all
+            .data
+            .iter()
+            .filter(|data| !(data.logit().is_infinite() && data.logit() < 0.0))
+            .map(|data| (usize::try_from(data.id().0).unwrap_or(0), data.logit()))
+            .collect();
+        let sampling = self
+            .sampling
+            .as_mut()
+            .ok_or_else(|| ModelError::Generate("no sampling state".to_owned()))?;
+        let id = pick(
+            &allowed,
+            sampling.temperature,
+            sampling.top_p,
+            &mut sampling.rng,
+        )
+        .ok_or_else(|| ModelError::Generate("no token is allowed here".to_owned()))?;
+        let token = LlamaToken::new(i32::try_from(id).unwrap_or(i32::MAX));
+        if let Some(grammar) = self.grammar.as_mut()
+            && !self.weights.vocab().is_eog(token)
+        {
+            grammar.accept(token);
+        }
+        Ok(token)
     }
 }
 
@@ -388,6 +446,9 @@ impl Backend for Session<'_> {
     /// overall is allowed — so this is an optimisation and not a different
     /// sampler.
     fn sample(&mut self) -> Result<LlamaToken, ModelError> {
+        if self.sampling.is_some() {
+            return self.sample_drawn();
+        }
         let logits = self.context.get_logits();
         let (best, score) = best_of(logits);
         let Some(grammar) = self.grammar.as_mut() else {

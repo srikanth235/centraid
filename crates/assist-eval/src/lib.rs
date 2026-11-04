@@ -17,6 +17,7 @@
 //! | [`args`] | constraint count and per-argument agreement (new in Rust) |
 //! | [`run`] | the replay loop |
 //! | [`report`] | the JSON report and the text summary |
+//! | [`rollout`] | k sampled decodes per session, rollout reports and their comparison, RFT records and DPO pairs (#1171, M7) |
 
 #![forbid(unsafe_code)]
 
@@ -25,6 +26,7 @@ pub mod effect;
 pub mod gold;
 pub mod judge;
 pub mod report;
+pub mod rollout;
 pub mod run;
 pub mod source;
 pub mod tally;

@@ -15,7 +15,7 @@ use crate::run::{SessionResult, TurnResult};
 use crate::source::Exclusion;
 
 /// `k` of `n`, with its 95% Wilson interval.
-#[derive(Debug, Clone, Copy, Default, Serialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, serde::Deserialize)]
 pub struct Rate {
     pub k: usize,
     pub n: usize,
@@ -63,7 +63,7 @@ impl Rate {
 }
 
 /// Accuracy of one argument class over the turns that state it.
-#[derive(Debug, Clone, Copy, Default, Serialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, serde::Deserialize)]
 pub struct ArgRate {
     pub right: usize,
     /// Turns whose reference states the class and can be compared.
