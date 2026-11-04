@@ -37,7 +37,7 @@
 //! `{"op":"user_content","text":…,"block":…}` answer `{"text":…}`.
 //!
 //! `think` is the stateless compiler of `think.rs`, with no vault behind it: one JSON request per line on stdin, one JSON
-//! answer on stdout. `{"op":"compile","think":…,"dates":<the prompt's dates line or null>,"mode":"v3.1"|"v4"}` answers
+//! answer on stdout. `{"op":"compile","think":…,"dates":<the prompt's dates line or null>,"mode":"v3.1"|"v4"[,"tools":"sig"|"compact"|"full"|"s2"]}` (no `tools`: S2's) answers
 //! `{"call":{"tool":…,"args":{…}}}` (the arguments in the order a call writes them) or
 //! `{"refused":{"class":…,"message":…}}`; `{"op":"v4","think":…,"dates":…[,"context":{"message":…,"focus":<the `focus:`
 //! line without its lead or null>,"rows":{"<n>":{"name":…,"line":…}}}]}` answers `{"think":<the v4 text>}` or
@@ -139,7 +139,7 @@ fn session(path: &str, rest: &[String]) -> ExitCode {
             },
             "--tools" => match iter.next().and_then(|mode| ToolsMode::parse(mode)) {
                 Some(mode) => flags.tools = mode,
-                None => return fail("--tools takes sig, compact or full"),
+                None => return fail("--tools takes sig, compact, full or s2"),
             },
             _ => return usage(),
         }
@@ -304,7 +304,20 @@ fn think_answer(request: &Value) -> String {
             else {
                 return json!({"error": "`mode` is \"v3.1\" or \"v4\""}).to_string();
             };
-            match think::compile_think(text, dates, mode) {
+            // `tools` names the model's tools mode (`sig`, `compact`, `full`, `s2`); without it a
+            // think is read as S2's, the model the pipeline was built on (#1166)
+            let tools = match request.get("tools").and_then(Value::as_str) {
+                None => ToolsMode::S2,
+                Some(name) => match ToolsMode::parse(name) {
+                    Some(tools) => tools,
+                    None => {
+                        return json!({"error": "`tools` is \"sig\", \"compact\", \"full\" or \"s2\""})
+                            .to_string();
+                    }
+                },
+            };
+            let nums = request.get("nums").and_then(Value::as_str);
+            match think::compile_think_with(text, dates, nums, mode, tools) {
                 Ok(call) => format!("{{\"call\":{}}}", call_json(&call)),
                 Err(refusal) => {
                     json!({"refused": {"class": refusal.class, "message": refusal.message}})

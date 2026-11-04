@@ -122,8 +122,11 @@ impl NativeChat {
     /// The door's words, when the vault would not load into a world.
     pub fn open(door: Box<dyn Door>, tz: &str) -> Result<Self, String> {
         let now = civil_at(door.now_ms(), tz);
+        // the phone ships S2, which learned the tools before the regroup (#1166): its prompt, and
+        // its way of calling. The retrained model sets this (and `StepOptions::tools`) to `Sig`.
         let flags = Flags {
             writes: Writes::Park,
+            tools: crate::native::prompt::ToolsMode::S2,
             ..Flags::default()
         };
         let mut session = Session::with_door_in(door, now, tz, "", flags)?;
@@ -461,19 +464,20 @@ fn first_call(text: &str) -> &str {
 /// reads or writes rows of a known app announces anything; `ask`, `decline` and an `answer` of a
 /// value do not, and neither does a `reveal`, which only offers the member a card. The app is the one the member opens the rows in: a task read is "Looking in Agenda" (#1128).
 fn activity_of(chat: &NativeChat, call: &Value) -> Option<(App, &'static str)> {
-    let name = call["tool"].as_str()?;
+    // a call S2 wrote in a retired name (`legacy.rs`) announces what it will run as
+    let renamed = crate::native::legacy::modernize(call["tool"].as_str()?, &call["args"]);
+    let name = renamed
+        .as_ref()
+        .map_or_else(|| call["tool"].as_str(), |(tool, _)| Some(*tool))?;
     let tool = TOOLS.iter().copied().find(|known| *known == name)?;
     if matches!(tool, "ask" | "decline") {
         return None;
     }
-    let args = call["args"].as_object()?;
-    if tool == "act"
-        && args
-            .get("verb")
-            .and_then(Value::as_str)
-            .and_then(Verb::parse)
-            == Some(Verb::Reveal)
-    {
+    let args = renamed
+        .as_ref()
+        .map_or(&call["args"], |(_, args)| args)
+        .as_object()?;
+    if crate::native::meta::write_verb(tool, args).and_then(Verb::parse) == Some(Verb::Reveal) {
         return None;
     }
     let by_kind = args

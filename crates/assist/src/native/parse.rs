@@ -62,7 +62,8 @@ pub fn parse_call(text: &str) -> Result<Value, String> {
     let (name, rest) = between(body, MODEL.function_open, ">")
         .ok_or_else(|| unreadable(&format!("no {}…>", MODEL.function_open)))?;
     let name = name.trim();
-    if !meta::TOOLS.contains(&name) {
+    // a name S2 wrote is read too; the runtime renames it (`legacy.rs`)
+    if !meta::TOOLS.contains(&name) && !crate::native::legacy::RETIRED.contains(&name) {
         return Err(unreadable(&format!("no tool \"{name}\"")));
     }
     let inner = rest
@@ -105,9 +106,10 @@ pub fn parse_call(text: &str) -> Result<Value, String> {
 /// A parameter the model invented for what a real one carries: `result` (the
 /// thing it means to select from) with `#n` is `rows`, with `@n` is `within`,
 /// and with a kind name is `kind`. Only when the value says which. A key the
-/// tool really takes is never renamed: `open`'s own parameter is `row`.
+/// tool really takes is never renamed.
 fn salvage(tool: &str, key: &str, raw: &str) -> Option<(String, Value)> {
-    if (key != "result" && key != "row") || crate::native::session::tool_params(tool).contains(&key)
+    if (key != "result" && key != "row")
+        || crate::native::session::tool_params(tool, true).contains(&key)
     {
         return None;
     }
@@ -178,7 +180,7 @@ mod tests {
 
     #[test]
     fn rows_become_a_list_and_args_stay_lines() {
-        let text = "<tool_call>\n<function=act>\n<parameter=verb>\nedit\n</parameter>\n<parameter=rows>\n#3, #4\n</parameter>\n<parameter=args>\nname: Dal\neffort: 30\n</parameter>\n<parameter=more>\ntrue\n</parameter>\n</function>\n</tool_call>";
+        let text = "<tool_call>\n<function=edit>\n<parameter=rows>\n#3, #4\n</parameter>\n<parameter=args>\nname: Dal\neffort: 30\n</parameter>\n<parameter=more>\ntrue\n</parameter>\n</function>\n</tool_call>";
         let call = parse_call(text).unwrap();
         assert_eq!(call["args"]["rows"], json!(["#3", "#4"]));
         assert_eq!(call["args"]["args"], "name: Dal\neffort: 30");
@@ -199,22 +201,27 @@ mod tests {
     }
 
     #[test]
-    fn open_keeps_its_own_row_parameter() {
-        // `row` is open's real parameter: salvaging it into `rows` made every
-        // `open` of a handle fail with `open has no parameter "rows"`.
-        let text = "<tool_call>\n<function=open>\n<parameter=row>\n#7\n</parameter>\n</function>\n</tool_call>";
-        let call = parse_call(text).unwrap();
-        assert_eq!(call["args"], json!({"row": "#7"}));
-        // a tool without a `row` parameter still gets the salvage
-        let text = "<tool_call>\n<function=act>\n<parameter=row>\n#7\n</parameter>\n</function>\n</tool_call>";
+    fn find_opens_a_row_by_rows_and_a_stray_row_is_rows() {
+        let text = "<tool_call>\n<function=find>\n<parameter=rows>\n#7\n</parameter>\n</function>\n</tool_call>";
         assert_eq!(parse_call(text).unwrap()["args"], json!({"rows": ["#7"]}));
+        // no tool takes `row`: it is the `rows` it stands for
+        let text = "<tool_call>\n<function=do>\n<parameter=row>\n#7\n</parameter>\n</function>\n</tool_call>";
+        assert_eq!(parse_call(text).unwrap()["args"], json!({"rows": ["#7"]}));
+    }
+
+    #[test]
+    fn the_names_s2_wrote_are_read() {
+        for name in crate::native::legacy::RETIRED {
+            let text = format!("<tool_call>\n<function={name}>\n</function>\n</tool_call>");
+            assert_eq!(parse_call(&text).unwrap()["tool"], name);
+        }
     }
 
     #[test]
     fn an_unreadable_call_names_the_tools() {
         let error = parse_call("I will look.").unwrap_err();
         assert!(error.starts_with("error: could not read the call"));
-        assert!(error.contains("search, find, open"));
+        assert!(error.contains("find, compute, create, edit, do"));
         assert!(parse_call("<tool_call><function=delete_all></function></tool_call>").is_err());
     }
 }

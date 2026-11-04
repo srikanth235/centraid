@@ -296,11 +296,11 @@ use serde_json::{Map, Value, json};
 use crate::native::meta::Kind;
 use crate::native::session::{arg_str, tool_params};
 
-/// A call in the model's own terms: `act verb: edit, rows: #3, args: description: x`. Parameters
+/// A call in the model's own terms: `edit rows: #3, args: description: x`. Parameters
 /// in the tool's order; a name is quoted, a date expression is its compact JSON, the lines of
 /// `args` are joined by `; `.
 pub(crate) fn render_call(tool: &str, args: &Map<String, Value>) -> String {
-    let mut keys: Vec<String> = tool_params(tool)
+    let mut keys: Vec<String> = tool_params(tool, true)
         .iter()
         .map(|key| (*key).to_owned())
         .collect();
@@ -436,7 +436,7 @@ impl Session {
         let meant = fix.1.strip_suffix('.')?;
         // a date is no field of a condition; an `order` reads it (`order: due` is `date`), and an
         // edit or a create of one is the reschedule or the date arg (`act.rs`)
-        if meant.contains(' ') || (meant == "date" && tool == "act") {
+        if meant.contains(' ') || (meant == "date" && crate::native::meta::is_write(tool)) {
             return None;
         }
         let wrong = quoted_after(error, "have no field ")
@@ -474,7 +474,7 @@ impl Session {
                     }
                 }
             }
-            "act" => {
+            "create" | "edit" | "do" => {
                 let lines: Vec<String> = match args.get("args")? {
                     Value::String(text) => text.lines().map(str::to_owned).collect(),
                     Value::Object(object) => object
@@ -522,7 +522,7 @@ impl Session {
         Some(sent(
             error,
             &format!("Send reveal field: {field}."),
-            &render_call("act", &call),
+            &render_call("do", &call),
         ))
         .map(|text| text.replacen(" Send Send ", " Send ", 1))
     }
@@ -534,7 +534,7 @@ impl Session {
         args: &Map<String, Value>,
         error: &str,
     ) -> Option<String> {
-        if tool != "act" {
+        if !crate::native::meta::is_write(tool) {
             return None;
         }
         let at = error.find(" Did you mean ")?;

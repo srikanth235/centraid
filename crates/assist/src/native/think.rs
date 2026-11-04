@@ -27,10 +27,11 @@ use std::collections::BTreeMap;
 use serde_json::Value;
 
 use crate::native::compile::{
-    CALL_ORDER, HANDLE_SLOTS, PICK_REASONS, date_text, default_tool, infers_kind,
-    kind_a_verb_fixes, pick_states_rows, reading_expr, rows_key,
+    CALL_ORDER, HANDLE_SLOTS, PICK_REASONS, Shape, date_text, default_tool, infers_kind,
+    kind_a_verb_fixes, outside_the_tool, pick_states_rows, reading_expr,
 };
-use crate::native::meta::Verb;
+use crate::native::meta::{Verb, is_write};
+use crate::native::prompt::ToolsMode;
 use text::{
     focus_sets, has_time_phrase, is_word, nickname, normal_int, own_text, py_repr, py_rstrip,
     py_split_ws, py_strip, same, shows_date, words,
@@ -46,7 +47,9 @@ const REFERS: [&str; 4] = ["it", "both", "that", "nth"];
 /// The reasons a v3.1 pick gives for leaving a candidate out.
 const REASONS: [&str; 6] = ["kind", "name", "position", "date", "status", "other"];
 const VIA3: [&str; 4] = ["find", "search", "open", "compute"];
-const VIA4: [&str; 3] = ["search", "open", "compute"];
+/// `search` and `open` are what S2 wrote for `find` of a text and of one row (#1166); a think
+/// compiles them to that `find`.
+const VIA4: [&str; 4] = ["find", "search", "open", "compute"];
 /// `label: <the argument as the call carries it>`.
 const RAW: [&str; 20] = [
     "kind",
@@ -503,12 +506,11 @@ fn is_one_row_pick(line: &str) -> bool {
     })
 }
 
-/// A line only a v3.1 trace has: `scope`, `refer`, `target`, `via: find` or a candidate pick.
+/// A line only a v3.1 trace has: `scope`, `refer`, `target` or a candidate pick.
 fn is_v31_line(line: &str) -> bool {
     ["scope: ", "refer: ", "target: ", "pick: "]
         .iter()
         .any(|start| line.starts_with(start))
-        || line == "via: find"
 }
 
 /// `trace.py` `parse_any`: a trace of either version. A think with a construct of only one version is read as that version
@@ -1115,23 +1117,57 @@ fn has_arg(args: &[(String, String)], key: &str) -> bool {
     args.iter().any(|(name, _)| name == key)
 }
 
+/// The tool a think calls: its `via` (`search` and `open` being the `find` of S2's names), else the
+/// tool its intent and verb call.
+fn tool_of(slots: &Slots, lenient: bool) -> String {
+    match slots.via.as_deref() {
+        Some("find" | "search" | "open") => "find".to_owned(),
+        Some(other) => other.to_owned(),
+        None => {
+            let shape = Shape {
+                rows: slots.has("rows") || slots.has("row") || derived_rows(slots).is_some(),
+                value: slots.has("value"),
+                op: slots.has("op"),
+            };
+            default_tool(&slots.intent.0, slots.verb.as_deref(), shape, lenient).to_owned()
+        }
+    }
+}
+
 /// `trace.py` `compile_call` over parsed slots.
-fn compile_slots(slots: &Slots, dates: Option<&str>) -> Result<Call, Refusal> {
-    let tool = slots
-        .via
-        .clone()
-        .unwrap_or_else(|| default_tool(&slots.intent.0).to_owned());
+fn compile_slots(
+    slots: &Slots,
+    dates: Option<&str>,
+    nums: Option<&str>,
+    lenient: bool,
+) -> Result<Call, Refusal> {
+    let tool = tool_of(slots, lenient);
     let mut args: Vec<(String, String)> = Vec::new();
     let mut times: Vec<String> = slots.time.clone().unwrap_or_default();
-    if tool == "act" {
+    if slots.intent.0 == "write" && is_write(&tool) {
         let Some(verb) = &slots.verb else {
-            return refuse("an act without a verb slot");
+            return refuse("a write without a verb slot");
         };
-        set_arg(&mut args, "verb", verb.clone());
+        // `create` and `edit` are tools; every other verb is named to `do`
+        if tool == "do" {
+            set_arg(&mut args, "verb", verb.clone());
+        }
     }
     for key in RAW {
         if let Some(value) = slots.raw.get(key) {
-            set_arg(&mut args, key, value.clone());
+            // the row a `find` opens is its `rows`
+            let name = if key == "row" && tool == "find" {
+                "rows"
+            } else {
+                key
+            };
+            // a `nums[i]` of a condition is the number the `nums:` line gives, before the condition is respelled
+            let value = if key == "where" {
+                crate::native::nums::fill(value, nums).or_else(refuse)?
+            } else {
+                value.clone()
+            };
+            set_arg(&mut args, name, value);
         }
     }
     if let Some((_, spelled)) = args.iter().find(|(key, _)| key == "where").cloned()
@@ -1142,7 +1178,7 @@ fn compile_slots(slots: &Slots, dates: Option<&str>) -> Result<Call, Refusal> {
     if pick_states_rows(slots.v4, slots.any_handle_slot())
         && let Some(rows) = derived_rows(slots)
     {
-        set_arg(&mut args, rows_key(&tool), rows);
+        set_arg(&mut args, "rows", rows);
     }
     // inferred in v4: the one kind the verb applies to, for a name and no other handle
     if slots.v4
@@ -1173,20 +1209,41 @@ fn compile_slots(slots: &Slots, dates: Option<&str>) -> Result<Call, Refusal> {
         let value = date(expr, &mut times)?;
         set_arg(&mut args, "when", value);
     }
+    // the regrouped tools (#1166) carry a create's and an edit's fields as parameters of their own, after the ones the tool
+    // takes; S2 and every other verb carry them as the `args` lines
+    let flat = !lenient && matches!(tool.as_str(), "create" | "edit");
+    let mut fields: Vec<(String, String)> = Vec::new();
     if let Some(set) = slots.set.as_ref().filter(|set| !set.is_empty()) {
         let mut lines = Vec::new();
         for (key, value, is_date) in set {
             let spelled = if *is_date {
                 date(value, &mut times)?
             } else {
-                value.clone()
+                crate::native::nums::fill(value, nums).or_else(refuse)?
             };
-            lines.push(format!("{key}: {spelled}"));
+            if flat {
+                if has_arg(&args, key) || fields.iter().any(|(have, _)| have == key) {
+                    return refuse(format!("{key} is a field and also a slot of this {tool}"));
+                }
+                fields.push((key.clone(), spelled));
+            } else {
+                lines.push(format!("{key}: {spelled}"));
+            }
         }
-        set_arg(&mut args, "args", lines.join("\n"));
+        if !lines.is_empty() {
+            set_arg(&mut args, "args", lines.join("\n"));
+        }
     }
     if !times.is_empty() {
         return refuse(format!("{} time values with no `t` marker", times.len()));
+    }
+    // the tools of the regroup name rows: a selector on `answer`, `edit` or `do` is a step missing
+    if !lenient
+        && let Some(key) = outside_the_tool(&tool, args.iter().map(|(name, _)| name.as_str()))
+    {
+        return refuse(format!(
+            "{tool} takes rows, not {key}; find or compute first, then {tool} rows"
+        ));
     }
     let mut ordered: Vec<(String, String)> = Vec::new();
     for key in CALL_ORDER {
@@ -1206,6 +1263,7 @@ fn compile_slots(slots: &Slots, dates: Option<&str>) -> Result<Call, Refusal> {
             outside.join(", ")
         ));
     }
+    ordered.extend(fields);
     Ok(Call {
         tool,
         args: ordered,
@@ -1226,8 +1284,42 @@ fn kind_of_exact_verb(verb: &str) -> Option<&'static str> {
 ///
 /// A [`Refusal`] when the text is no trace, or does not state a whole call.
 pub fn compile_think(think: &str, dates: Option<&str>, mode: TraceMode) -> Result<Call, Refusal> {
+    compile_think_for(think, dates, mode, ToolsMode::S2)
+}
+
+/// [`compile_think`] for the model that calls these `tools`. S2 answered a read or a count in one
+/// call (`answer` with a selector or an `op`) and wrote a by-name write as `do`/`edit` with a
+/// selector; every other tools mode is the eight tools of the regroup (#1166): a read is a `find`
+/// and then an `answer` on rows or a value, a count a `compute`, a write names its rows. A think
+/// that states a selector on `answer`, `edit` or `do` is refused naming the slot.
+///
+/// # Errors
+///
+/// A [`Refusal`] when the text is no trace, or does not state a whole call.
+pub fn compile_think_for(
+    think: &str,
+    dates: Option<&str>,
+    mode: TraceMode,
+    tools: ToolsMode,
+) -> Result<Call, Refusal> {
+    compile_think_with(think, dates, None, mode, tools)
+}
+
+/// [`compile_think_for`] with the turn's `nums:` line too: a `nums[i]` in a `where` condition or a `set` value is the number
+/// entry `i` of that line gives (`native/nums.rs`), and a think that names an entry the line lacks is refused naming it.
+///
+/// # Errors
+///
+/// A [`Refusal`] when the text is no trace, or does not state a whole call.
+pub fn compile_think_with(
+    think: &str,
+    dates: Option<&str>,
+    nums: Option<&str>,
+    mode: TraceMode,
+    tools: ToolsMode,
+) -> Result<Call, Refusal> {
     match parse_any(think, mode) {
-        Ok(slots) => compile_slots(&slots, dates),
+        Ok(slots) => compile_slots(&slots, dates, nums, tools == ToolsMode::S2),
         Err(message) => refuse(message),
     }
 }
@@ -1346,16 +1438,10 @@ fn pure_handles(text: &str) -> Option<Vec<&str>> {
 /// context, else `hint_of`), else a `rows` / `row` slot as written; `scope`, `refer` and `target` go; an act's `kind` goes when
 /// its verb fixes it and a `name` selects.
 fn v4_slots(slots: &Slots, context: Option<&Context>) -> Result<Slots, Skip> {
-    if slots.via.as_deref() == Some("find") {
-        return skip("find", "a v3.1 lookup step has no v4 form");
-    }
     if slots.has("rows") && slots.has("row") {
         return skip("rows+row", "");
     }
-    let tool = slots
-        .via
-        .clone()
-        .unwrap_or_else(|| default_tool(&slots.intent.0).to_owned());
+    let tool = tool_of(slots, true);
     let mut out = slots.clone();
     out.scope = None;
     out.refer = None;
@@ -1372,9 +1458,11 @@ fn v4_slots(slots: &Slots, context: Option<&Context>) -> Result<Slots, Skip> {
         None => derived_rows(slots),
     };
     if let Some(rows) = stated.as_ref().filter(|rows| !rows.is_empty()) {
-        let key = explicit.unwrap_or_else(|| rows_key(&tool));
+        let key = explicit.unwrap_or("rows");
+        // the one row a `find` opens was a `row` slot in S2's `open`
+        let is_rows = key == "rows" || (key == "row" && tool == "find");
         match pure_handles(rows).as_deref() {
-            Some([handle]) if handle.starts_with('#') && key == rows_key(&tool) => {
+            Some([handle]) if handle.starts_with('#') && is_rows => {
                 let number = normal_int(&handle[1..]);
                 let reason =
                     context.map_or_else(|| hint_of(slots), |context| pick_reason(context, &number));
@@ -1389,7 +1477,7 @@ fn v4_slots(slots: &Slots, context: Option<&Context>) -> Result<Slots, Skip> {
         }
     }
     let stated_rows = stated.as_ref().is_some_and(|rows| !rows.is_empty());
-    if tool == "act"
+    if is_write(&tool)
         && out.has("name")
         && !stated_rows
         && !out.any_handle_slot()
@@ -1553,7 +1641,7 @@ pub fn v4_think(
     }
     let new = v4_slots(&old, context)?;
     let rendered = render4(&new);
-    let compile = |slots: &Slots| compile_slots(slots, dates);
+    let compile = |slots: &Slots| compile_slots(slots, dates, None, true);
     let (want, got) = match (compile(&old), parse4(&rendered)) {
         (Ok(want), Ok(reread)) => match compile(&reread) {
             Ok(got) => (want, got),
@@ -1607,10 +1695,41 @@ mod tests {
             None,
             TraceMode::V31,
         );
-        assert_eq!(c.tool, "act");
+        assert_eq!(c.tool, "do");
         assert_eq!(
             args(&c),
             [("verb", "cancel"), ("rows", "#7"), ("kind", "event")]
+        );
+    }
+
+    #[test]
+    fn a_write_is_the_tool_of_its_verb_and_a_lookup_is_a_find() {
+        let c = call(
+            "intent: write\nverb: create\nkind: task\nset: name = Pay rent",
+            None,
+            TraceMode::V4,
+        );
+        assert_eq!(c.tool, "create");
+        assert_eq!(args(&c), [("kind", "task"), ("args", "name: Pay rent")]);
+        let c = call(
+            "intent: write\nverb: edit\npick: #4 (name)\nset: effort = 30",
+            None,
+            TraceMode::V4,
+        );
+        assert_eq!(c.tool, "edit");
+        assert_eq!(args(&c), [("rows", "#4"), ("args", "effort: 30")]);
+        // S2's `search` and `open` are the `find` of a text and of one row
+        let c = call("intent: read\nvia: search\ntext: rent", None, TraceMode::V4);
+        assert_eq!(
+            (c.tool.as_str(), args(&c)),
+            ("find", vec![("text", "rent")])
+        );
+        let c = call("intent: read\nvia: open\nrow: #4", None, TraceMode::V4);
+        assert_eq!((c.tool.as_str(), args(&c)), ("find", vec![("rows", "#4")]));
+        let c = call("intent: read\nvia: find\nkind: task", None, TraceMode::V4);
+        assert_eq!(
+            (c.tool.as_str(), args(&c)),
+            ("find", vec![("kind", "task")])
         );
     }
 
@@ -1713,7 +1832,7 @@ mod tests {
         };
         assert_eq!(
             refuse_with("intent: write \"move\"\nkind: event"),
-            "an act without a verb slot"
+            "a write without a verb slot"
         );
         assert_eq!(
             refuse_with("what is on friday"),
@@ -1754,13 +1873,17 @@ mod tests {
             many.unwrap(),
             "intent: write \"delete\"\nverb: delete\nrows: #31, #33"
         );
+        // a lookup step is a `find` in v4 too
         let lookup = v4_think(
             "intent: read\nvia: find\nkind: task\nname: Pay rent",
             None,
             None,
         )
-        .unwrap_err();
-        assert_eq!(lookup.reason, "find");
+        .unwrap();
+        assert_eq!(
+            lookup,
+            "intent: read\nvia: find\nkind: task\nname: Pay rent"
+        );
         let unparsable = v4_think("intent: nonsense", None, None).unwrap_err();
         assert_eq!(unparsable.reason, "unparsable");
     }

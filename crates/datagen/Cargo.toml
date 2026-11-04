@@ -1,0 +1,36 @@
+[package]
+name = "centraid-datagen"
+description = "The chat model's training-data pipeline (#1166): the catalog, the world generator and the ambiguity measure, over the centraid-assist runtime."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_datagen"
+path = "src/lib.rs"
+
+[[bin]]
+name = "datagen"
+path = "src/main.rs"
+
+[dependencies]
+centraid-assist = { path = "../assist" }
+centraid-assist-eval = { path = "../assist-eval" }
+centraid-apps-kit = { path = "../apps/kit" }
+centraid-nativetools = { path = "../nativetools" }
+anyhow.workspace = true
+blake3.workspace = true
+clap.workspace = true
+hex.workspace = true
+jiff.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+

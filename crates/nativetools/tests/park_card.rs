@@ -44,7 +44,7 @@ fn sweep() -> &'static [Parked] {
                 let world = seeded();
                 let flags = Flags {
                     writes: Writes::Park,
-                    ..Flags::default()
+                    ..common::s2_flags()
                 };
                 let mut session = world.session_with(common::TODAY, flags);
                 let drove = drive(&mut session, spec.name, *kind, &mut |session, args| {

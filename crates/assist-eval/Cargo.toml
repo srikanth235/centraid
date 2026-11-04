@@ -1,0 +1,36 @@
+[package]
+name = "centraid-assist-eval"
+description = "The eval runner of the on-device chat model: a held-out set replayed turn by turn through the phone's decode step, gold checked by runtime effect (#1166, stage 10)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_assist_eval"
+path = "src/lib.rs"
+
+[[bin]]
+name = "assist-eval"
+path = "src/bin/assist-eval.rs"
+
+[features]
+# `engine` is llama.cpp (a cmake build of ~5 minutes cold), so only a build that
+# asks for it compiles it. Without it the binary scores the `--stub` model only.
+default = []
+engine = ["dep:centraid-assist-llama", "centraid-assist-llama/engine"]
+# CUDA llama.cpp for a Linux GPU box (the Kaggle kit). Cargo unifies the feature into the engine's own llama-cpp-2.
+cuda = ["engine", "dep:llama-cpp-2"]
+
+[dependencies]
+centraid-assist = { path = "../assist" }
+centraid-assist-llama = { path = "../assist-llama", optional = true }
+centraid-nativetools = { path = "../nativetools" }
+llama-cpp-2 = { version = "=0.1.158", default-features = false, features = ["cuda"], optional = true }
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true

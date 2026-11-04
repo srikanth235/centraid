@@ -264,7 +264,7 @@ fn open_shows_every_fact_and_its_links_with_counts() {
     assert!(opened.contains("tasks (1): #"), "{opened}");
     let many = text(&mut session, "open", json!({"row": "#1, #2"}));
     assert!(
-        many.starts_with("error: open takes exactly one row, #n.\nrows you can still use: #"),
+        many.starts_with("error: find rows takes exactly one row, #n.\nrows you can still use: #"),
         "{many}"
     );
 }
@@ -434,7 +434,7 @@ fn a_call_that_fails_to_parse_is_a_step_that_lists_the_tools() {
         response["text"]
             .as_str()
             .unwrap()
-            .contains("tools: search, find, open, compute, act, answer, ask, decline")
+            .contains("tools: find, compute, create, edit, do, answer, ask, decline")
     );
     let unknown = text(&mut session, "fetch", json!({}));
     assert!(unknown.starts_with("error: could not read the call; no tool \"fetch\""));

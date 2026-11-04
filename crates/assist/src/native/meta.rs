@@ -27,7 +27,7 @@ use serde::Serialize;
 
 /// Rows shown per result; the rest are counted and reachable through `@n`.
 pub const ROW_CAP: usize = 12;
-/// Rows a lookup (`find`, `search`) shows when more than `ROW_CAP` match: a
+/// Rows a lookup (`find`) shows when more than `ROW_CAP` match: a
 /// long candidate list is counted and narrowed, not read. `answer` keeps
 /// `ROW_CAP`. Set it to `ROW_CAP` or more to switch the rule off.
 pub const LOOKUP_CAP: usize = 6;
@@ -44,7 +44,7 @@ pub const DIRECTORY_CAP: usize = 8;
 /// Rows in a pre-grounding block (SPEC §6.1). No kind takes more than half of
 /// them while another kind has a hit (`search::preground`).
 pub const PREGROUND_CAP: usize = 8;
-/// Linked rows `open` names per linked kind.
+/// Linked rows a `find` of one row names per linked kind.
 pub const OPEN_LINK_CAP: usize = 8;
 
 impl Kind {
@@ -405,6 +405,23 @@ pub fn create_arg_canonical(kind: Kind, spelling: &str) -> Option<&'static str> 
     lookup(Verb::Create, kind, None).and_then(|row| row.canonical_name(spelling))
 }
 
+/// Every field name a `create` or an `edit` carries as a parameter of its own (#1166): `name` and the fields of every
+/// kind, under the names the model writes them (`create_args`, `edit_actions`), sorted and without repeats.
+#[must_use]
+pub fn flat_field_names() -> Vec<&'static str> {
+    let mut names: Vec<&'static str> = vec!["name"];
+    for spec in KINDS {
+        names.extend(spec.fields.iter().map(|field| field.name));
+        names.extend(create_args(spec.kind));
+        for action in edit_actions(spec.kind) {
+            names.extend(action.chat_names());
+        }
+    }
+    names.sort_unstable();
+    names.dedup();
+    names
+}
+
 /// One kind's row.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct KindSpec {
@@ -732,7 +749,7 @@ pub fn reveal_synonym(word: &str) -> Option<&'static str> {
 pub const PRIORITY_SCALE: &str = "9 highest..1 lowest, 0 none";
 
 /// Value operations (SPEC §4.3).
-pub const OPS: &[&str] = &["count", "sum", "min", "max"];
+pub const OPS: &[&str] = &["count", "sum", "avg", "min", "max", "compare"];
 
 /// Decline reasons (SPEC §4).
 pub const DECLINE_REASONS: &[&str] = &[
@@ -743,10 +760,44 @@ pub const DECLINE_REASONS: &[&str] = &[
     "not_found",
 ];
 
-/// The eight tools, in the order the prompt lists them.
+/// The eight tools, in the order the prompt lists them (#1166).
 pub const TOOLS: &[&str] = &[
-    "search", "find", "open", "compute", "act", "answer", "ask", "decline",
+    "find", "compute", "create", "edit", "do", "answer", "ask", "decline",
 ];
+
+/// The tools that change the vault. `create` and `edit` are the verbs of the same name; `do`
+/// names its verb.
+pub const WRITE_TOOLS: &[&str] = &["create", "edit", "do"];
+
+/// Whether `tool` changes the vault.
+#[must_use]
+pub fn is_write(tool: &str) -> bool {
+    WRITE_TOOLS.contains(&tool)
+}
+
+/// The verb a write call runs: the tool's own for `create` and `edit`, the `verb` argument of
+/// `do`. `None` for a call that is no write, or a `do` with no verb.
+#[must_use]
+pub fn write_verb<'a>(
+    tool: &'a str,
+    args: &'a serde_json::Map<String, serde_json::Value>,
+) -> Option<&'a str> {
+    match tool {
+        "create" | "edit" => Some(tool),
+        "do" => args.get("verb").and_then(serde_json::Value::as_str),
+        _ => None,
+    }
+}
+
+/// The tool a verb is called through: `create` and `edit` are tools, every other verb is a `do`.
+#[must_use]
+pub fn tool_of_verb(verb: &str) -> &'static str {
+    match verb {
+        "create" => "create",
+        "edit" => "edit",
+        _ => "do",
+    }
+}
 
 /// Parameters of the selector (SPEC §4.1).
 pub const SELECTOR_PARAMS: &[&str] = &[

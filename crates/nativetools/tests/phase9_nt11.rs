@@ -455,7 +455,7 @@ fn nt11_r3_a_typo_with_one_candidate_acts_and_several_are_asked_over() {
         json!({"verb": "star", "kind": "person", "name": "Farukh Kasimov"}),
     );
     // nt12 R6: a typo with exactly one candidate of the stated kind acts, and says what it matched
-    assert_eq!(tool_of(&ask), "act", "{ask}");
+    assert_eq!(tool_of(&ask), "do", "{ask}");
     assert_eq!(
         common::diff_rows(&ask)[0]["id"],
         world.id("farrukh"),

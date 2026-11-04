@@ -142,7 +142,7 @@ fn seed_copy_and_a_json_lines_session_round_trip() {
         lines[6]["text"]
             .as_str()
             .unwrap()
-            .starts_with("error: could not read the call (no <tool_call>). tools: search, find")
+            .starts_with("error: could not read the call (no <tool_call>). tools: find, compute")
     );
     assert_eq!(lines[6]["step"], 1);
     assert!(lines[7]["error"].as_str().unwrap().contains("unknown op"));
@@ -193,12 +193,14 @@ fn the_tools_flag_picks_the_spelling_and_rejects_an_unknown_one() {
         sig["rendered"]
             .as_str()
             .unwrap()
-            .contains("\"description\": \"find(kind, name?, where?, when?,")
+            .contains("\"description\": \"find(kind?, name?, where?, when?,")
     );
     assert_eq!(sig["system"], compact["system"]);
     let bad = prompt(Some("tiny"));
     assert!(!bad.status.success());
-    assert!(String::from_utf8_lossy(&bad.stderr).contains("--tools takes sig, compact or full"));
+    assert!(
+        String::from_utf8_lossy(&bad.stderr).contains("--tools takes sig, compact, full or s2")
+    );
 }
 
 #[test]
@@ -292,7 +294,7 @@ fn think_answers_one_line_per_request_with_no_vault() {
     // the arguments come in the order a call writes them, which a JSON map would sort away
     assert_eq!(
         answers[0],
-        r##"{"call":{"tool":"act","args":{"verb":"cancel","rows":"#7"}}}"##
+        r##"{"call":{"tool":"do","args":{"verb":"cancel","rows":"#7"}}}"##
     );
     assert_eq!(
         answers[1],
@@ -300,7 +302,7 @@ fn think_answers_one_line_per_request_with_no_vault() {
     );
     let refused: Value = serde_json::from_str(&answers[2]).unwrap();
     assert_eq!(refused["refused"]["class"], "CompileError");
-    assert_eq!(refused["refused"]["message"], "an act without a verb slot");
+    assert_eq!(refused["refused"]["message"], "a write without a verb slot");
     let v4: Value = serde_json::from_str(&answers[3]).unwrap();
     assert_eq!(
         v4["think"],
@@ -311,8 +313,12 @@ fn think_answers_one_line_per_request_with_no_vault() {
         v4["think"],
         "intent: write\nverb: complete\npick: #31 (name)"
     );
-    let skipped: Value = serde_json::from_str(&answers[5]).unwrap();
-    assert_eq!(skipped["skip"]["reason"], "find");
+    // a lookup step is a `find` in v4 too (#1166)
+    let lookup: Value = serde_json::from_str(&answers[5]).unwrap();
+    assert!(
+        lookup["think"].as_str().unwrap().contains("via: find"),
+        "{lookup}"
+    );
     let error: Value = serde_json::from_str(&answers[6]).unwrap();
     assert!(error["error"].as_str().unwrap().contains("mode"), "{error}");
 }

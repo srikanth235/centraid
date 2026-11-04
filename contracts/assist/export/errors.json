@@ -7,7 +7,7 @@
       "id": "act.x_does_not_apply_to_x",
       "source": "act.rs",
       "template": "error: {} does not apply to {}.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": "defensive: add_to and remove_from apply only to kinds that have a container, and the verb table already refuses the other kinds with the family below"
     },
     {
@@ -17,11 +17,11 @@
           "args": {
             "args": 5,
             "kind": "task",
-            "name": "Book the cabin",
-            "verb": "edit"
+            "name": "Book the cabin"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "edit",
           "user": null
         }
       ],
@@ -29,7 +29,7 @@
       "id": "act.args_are_field_value_lines_not",
       "source": "act.rs",
       "template": "error: args are \"field: value\" lines, not {other}.",
-      "tool": "act",
+      "tool": "edit",
       "why_no_example": ""
     },
     {
@@ -39,11 +39,11 @@
           "args": {
             "args": "no colon here",
             "kind": "task",
-            "name": "Book the cabin",
-            "verb": "edit"
+            "name": "Book the cabin"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "edit",
           "user": null
         }
       ],
@@ -51,7 +51,7 @@
       "id": "act.could_not_read_the_args_line",
       "source": "act.rs",
       "template": "error: could not read the args line \"{line}\"; args are \"field: value\" lines.",
-      "tool": "act",
+      "tool": "edit",
       "why_no_example": ""
     },
     {
@@ -63,8 +63,9 @@
             "name": "Book the cabin",
             "verb": "frobnicate"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -72,7 +73,50 @@
       "id": "act.no_verb_verb_text_verbs_x",
       "source": "act.rs",
       "template": "error: no verb \"{verb_text}\". verbs: {}.",
-      "tool": "act",
+      "tool": "do",
+      "why_no_example": ""
+    },
+    {
+      "argument": "verb",
+      "example": [
+        {
+          "args": {
+            "rows": "#6",
+            "verb": "edit"
+          },
+          "strict": false,
+          "think": null,
+          "tool": "do",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.x_is_a_tool_of_its",
+      "source": "act.rs",
+      "template": "error: {} is a tool of its own; send {}(…), not do(verb={}).",
+      "tool": "do",
+      "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
+            "args": "to: {\"unit\":\"day\",\"rel\":1}\nname: x",
+            "rows": "#6",
+            "verb": "reschedule"
+          },
+          "strict": false,
+          "think": null,
+          "tool": "do",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.do_takes_at_most_one_argument",
+      "source": "act.rs",
+      "template": "error: do takes at most one argument; {} got {}: {}.",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -83,8 +127,9 @@
             "rows": "#6",
             "verb": "undo"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -92,7 +137,7 @@
       "id": "act.undo_takes_no_rows_selector_or",
       "source": "act.rs",
       "template": "error: undo takes no rows, selector or args; it reverts the previous turn's writes.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -102,11 +147,11 @@
           "args": {
             "args": "name: x",
             "kind": "note",
-            "rows": "#6",
-            "verb": "create"
+            "rows": "#6"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "create",
           "user": null
         }
       ],
@@ -114,7 +159,7 @@
       "id": "act.create_takes_no_rows_parameter_a",
       "source": "act.rs",
       "template": "error: create takes no rows parameter; a new row has none yet. Give kind=<kind> and args with its fields.",
-      "tool": "act",
+      "tool": "create",
       "why_no_example": ""
     },
     {
@@ -124,11 +169,11 @@
           "args": {
             "args": "body: y",
             "kind": "note",
-            "name": "x",
-            "verb": "create"
+            "name": "x"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "create",
           "user": null
         }
       ],
@@ -136,7 +181,7 @@
       "id": "act.create_takes_no_param_parameter_the",
       "source": "act.rs",
       "template": "error: create takes no {param} parameter; the new row's fields go in args (name: …, field: …).",
-      "tool": "act",
+      "tool": "create",
       "why_no_example": ""
     },
     {
@@ -144,11 +189,11 @@
       "example": [
         {
           "args": {
-            "args": "kind: note\nname: x",
-            "verb": "create"
+            "args": "kind: note\nname: x"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "create",
           "user": null
         }
       ],
@@ -156,7 +201,7 @@
       "id": "act.create_takes_kind_as_the_top",
       "source": "act.rs",
       "template": "error: create takes kind as the top-level kind parameter, not inside args; args carry the fields only (name: …).",
-      "tool": "act",
+      "tool": "create",
       "why_no_example": ""
     },
     {
@@ -166,7 +211,7 @@
       "id": "act.act_takes_rows_or_a_selector",
       "source": "act.rs",
       "template": "error: act takes rows or a selector, not both; narrow with within=@n.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": "normalised away before the call runs: rows beside a selector run on the rows and the reply notes the selector left out (normalize.rs, rule 6); answer and compute still say this"
     },
     {
@@ -176,8 +221,9 @@
           "args": {
             "verb": "complete"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -185,7 +231,7 @@
       "id": "act.act_needs_rows_n_or_a",
       "source": "act.rs",
       "template": "error: act needs rows=#n or a selector (kind, name, …).",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -197,8 +243,9 @@
             "name": "x",
             "verb": "complete"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -206,7 +253,7 @@
       "id": "act.act_needs_exactly_one_kind_fields",
       "source": "act.rs",
       "template": "error: act needs exactly one kind; fields and verbs are per kind.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -219,8 +266,9 @@
             "name": "Report",
             "verb": "reschedule"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -228,7 +276,7 @@
       "id": "act.what_fits_x",
       "source": "act.rs",
       "template": "ambiguous: {what} fits {}",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -238,7 +286,7 @@
       "id": "act.what_nothing_was_done",
       "source": "act.rs",
       "template": "ambiguous: {what}; nothing was done",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": "the summary line of the ambiguous: reply above, never a reply of its own"
     },
     {
@@ -248,7 +296,7 @@
       "id": "act.that_row_no_longer_exists",
       "source": "act.rs",
       "template": "error: that row no longer exists.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": "defensive: rows are re-read after every write, so a numbered row is always there"
     },
     {
@@ -260,8 +308,9 @@
             "name": "Ray",
             "verb": "complete"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -269,7 +318,7 @@
       "id": "act.x_does_not_apply_to_x_2",
       "source": "act.rs",
       "template": "error: {} does not apply to {}. {} applies to: {}.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -279,8 +328,18 @@
       "id": "act.name_is_one_occurrence_of_a",
       "source": "act.rs",
       "template": "error: {name} is one occurrence of a repeating event; changing a single occurrence is not possible here. Nothing was done.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": "needs an event the vault repeats (a series read as its occurrences, World::read_event_window); the fixture world has none and no call makes one, so tests/events_local.rs drives it"
+    },
+    {
+      "argument": "rows",
+      "example": null,
+      "family": "value",
+      "id": "act.sentence_nothing_was_done",
+      "source": "act.rs",
+      "template": "error: {sentence} Nothing was done.",
+      "tool": "edit",
+      "why_no_example": "the fixture world holds no Health rows to refuse; tests/health_kind.rs drives it on a world that follows a store"
     },
     {
       "argument": "name",
@@ -292,8 +351,9 @@
             "trashed": true,
             "verb": "complete"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -301,7 +361,7 @@
       "id": "act.name_is_in_the_trash_restore",
       "source": "act.rs",
       "template": "error: {name} is in the trash; restore it first. Nothing was done.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -311,7 +371,7 @@
       "id": "act.x_name_was_refused_reason",
       "source": "act.rs",
       "template": "error: {} {name} was refused: {reason}",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": "a vault refusal with no named predicate; the fixture vault always names one (see the refused: families)"
     },
     {
@@ -323,8 +383,9 @@
             "name": "Write report",
             "verb": "complete"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -332,7 +393,7 @@
       "id": "act.name_state",
       "source": "act.rs",
       "template": "already: {name} {state}",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -345,8 +406,9 @@
             "name": "Ray",
             "verb": "log"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -354,7 +416,7 @@
       "id": "act.x_takes_x_not_key",
       "source": "act.rs",
       "template": "error: {} takes {}; not \"{key}\".",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -367,8 +429,9 @@
             "name": "Ray",
             "verb": "log"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -376,7 +439,7 @@
       "id": "act.log_takes_kind_x",
       "source": "act.rs",
       "template": "error: log takes kind: {}.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -388,8 +451,9 @@
             "name": "Book the cabin",
             "verb": "tag"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -397,7 +461,7 @@
       "id": "act.x_needs_name_text",
       "source": "act.rs",
       "template": "error: {} needs {name}: <text>.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -410,8 +474,9 @@
             "name": "Book the cabin",
             "verb": "add_to"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -419,7 +484,7 @@
       "id": "act.x_takes_slot_n_not_key",
       "source": "act.rs",
       "template": "error: {} takes {slot}: #n, not \"{key}\".",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -431,8 +496,9 @@
             "name": "Book the cabin",
             "verb": "add_to"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -440,7 +506,7 @@
       "id": "act.x_needs_slot_n",
       "source": "act.rs",
       "template": "error: {} needs {slot}: #n.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -453,8 +519,9 @@
             "name": "Book the cabin",
             "verb": "add_to"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -462,7 +529,7 @@
       "id": "act.slot_is_exactly_one_n",
       "source": "act.rs",
       "template": "error: {slot} is exactly one #n.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -475,8 +542,9 @@
             "name": "Book the cabin",
             "verb": "add_to"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -484,7 +552,7 @@
       "id": "act.a_x_goes_into_a_x",
       "source": "act.rs",
       "template": "error: a {} goes into a {}, and {} is a {}.{fits}",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -497,8 +565,9 @@
             "name": "Home wifi",
             "verb": "reveal"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": "what is the cvv of the home wifi"
         },
         {
@@ -508,8 +577,9 @@
             "name": "Home wifi",
             "verb": "reveal"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -517,7 +587,7 @@
       "id": "act.first_was_asked_for_first_and",
       "source": "act.rs",
       "template": "error: {first} was asked for first, and {name} does not keep it; {asked} is another secret, so it is not revealed. {name} holds: {}.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -530,8 +600,9 @@
             "name": "Home wifi",
             "verb": "reveal"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -539,7 +610,7 @@
       "id": "act.reveal_takes_field_not_key",
       "source": "act.rs",
       "template": "error: reveal takes field: …, not \"{key}\".",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -552,8 +623,9 @@
             "name": "Home wifi",
             "verb": "reveal"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -561,7 +633,7 @@
       "id": "act.reveal_takes_field_one_of_this",
       "source": "act.rs",
       "template": "error: reveal takes field: one of this {item}'s secrets, not \"{shown}\". this {item} {}.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -574,8 +646,9 @@
             "name": "Home wifi",
             "verb": "reveal"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -583,7 +656,7 @@
       "id": "act.name_has_no_field_it_holds",
       "source": "act.rs",
       "template": "error: {name} has no {field}. It holds: {}.{}",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -596,8 +669,9 @@
             "name": "Dentist",
             "verb": "reschedule"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -605,7 +679,7 @@
       "id": "act.reschedule_takes_to_date_expression_not",
       "source": "act.rs",
       "template": "error: reschedule takes to: <date expression>, not \"{key}\".",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -618,8 +692,9 @@
             "name": "Pay rent",
             "verb": "reschedule"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -627,7 +702,7 @@
       "id": "act.reschedule_needs_a_day_an_instant",
       "source": "act.rs",
       "template": "error: reschedule needs a day, an instant or a closed span; {} is open-ended.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -637,7 +712,7 @@
       "id": "act.a_task_is_due_at_one",
       "source": "act.rs",
       "template": "error: a task is due at one day or instant; {} is a range.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": "normalised away before the call runs: a task due on a closed range (a month, a week) is due on its first day and the reply notes it (act.rs, first_day_of; nt14 N5); only a session that does not normalise says this"
     },
     {
@@ -650,8 +725,9 @@
             "name": "Dentist",
             "verb": "reschedule"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -659,7 +735,7 @@
       "id": "act.an_event_moves_to_one_day",
       "source": "act.rs",
       "template": "error: an event moves to one day, one instant or a from/to span; {} is a range.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -671,8 +747,9 @@
             "name": "Ray",
             "verb": "reschedule"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -680,7 +757,7 @@
       "id": "act.reschedule_does_not_apply_to_x",
       "source": "act.rs",
       "template": "error: reschedule does not apply to {}. reschedule applies to: task, event.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -690,11 +767,11 @@
           "args": {
             "args": "effort+: 5",
             "kind": "task",
-            "name": "Pay rent",
-            "verb": "edit"
+            "name": "Pay rent"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "edit",
           "user": null
         }
       ],
@@ -702,7 +779,7 @@
       "id": "act.only_a_body_or_a_description",
       "source": "act.rs",
       "template": "error: only a body or a description takes +: (text added to the end); {} editable fields: {}.",
-      "tool": "act",
+      "tool": "edit",
       "why_no_example": ""
     },
     {
@@ -712,11 +789,11 @@
           "args": {
             "args": "body: lentils\nbody+: oat milk",
             "kind": "note",
-            "name": "Dal",
-            "verb": "edit"
+            "name": "Dal"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "edit",
           "user": null
         }
       ],
@@ -724,7 +801,7 @@
       "id": "act.base_and_base_in_one_edit",
       "source": "act.rs",
       "template": "error: {base} and {base}+ in one edit; {base}+: adds, {base}: replaces.",
-      "tool": "act",
+      "tool": "edit",
       "why_no_example": ""
     },
     {
@@ -734,11 +811,11 @@
           "args": {
             "args": "body+: ",
             "kind": "note",
-            "name": "Dal",
-            "verb": "edit"
+            "name": "Dal"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "edit",
           "user": null
         }
       ],
@@ -746,8 +823,28 @@
       "id": "act.base_needs_the_text_to_add",
       "source": "act.rs",
       "template": "error: {base}+ needs the text to add.",
-      "tool": "act",
+      "tool": "edit",
       "why_no_example": ""
+    },
+    {
+      "argument": "rows",
+      "example": null,
+      "family": "schema",
+      "id": "act.could_not_read_the_table_first",
+      "source": "act.rs",
+      "template": "error: could not read the {table} first: {why}",
+      "tool": "edit",
+      "why_no_example": "only a door that cannot answer a read reaches it, which the harness's door never is; the phone's door is held to the same read by tests/assist_door.rs"
+    },
+    {
+      "argument": "rows",
+      "example": null,
+      "family": "schema",
+      "id": "act.could_not_read_the_figure_first",
+      "source": "act.rs",
+      "template": "error: could not read the figure first: it is not there.",
+      "tool": "edit",
+      "why_no_example": "the figure was read a moment before the write that named it, so only a vault that lost it in between reaches this"
     },
     {
       "argument": "args",
@@ -755,11 +852,11 @@
         {
           "args": {
             "kind": "note",
-            "name": "Dal",
-            "verb": "edit"
+            "name": "Dal"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "edit",
           "user": null
         }
       ],
@@ -767,7 +864,7 @@
       "id": "act.edit_needs_field_value_lines_x",
       "source": "act.rs",
       "template": "error: edit needs field: value lines. {} editable fields: {}.",
-      "tool": "act",
+      "tool": "edit",
       "why_no_example": ""
     },
     {
@@ -777,11 +874,11 @@
           "args": {
             "args": "name: ",
             "kind": "note",
-            "name": "Dal",
-            "verb": "edit"
+            "name": "Dal"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "edit",
           "user": null
         }
       ],
@@ -789,7 +886,7 @@
       "id": "act.name_cannot_be_empty",
       "source": "act.rs",
       "template": "error: name cannot be empty.",
-      "tool": "act",
+      "tool": "edit",
       "why_no_example": ""
     },
     {
@@ -799,11 +896,11 @@
           "args": {
             "args": "date: 2026-10-10\ndescription: pay by transfer",
             "kind": "task",
-            "name": "Pay rent",
-            "verb": "edit"
+            "name": "Pay rent"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "edit",
           "user": null
         }
       ],
@@ -811,7 +908,7 @@
       "id": "act.a_date_changes_with_reschedule_to",
       "source": "act.rs",
       "template": "error: a date changes with reschedule (to: <date expression>), not edit.",
-      "tool": "act",
+      "tool": "edit",
       "why_no_example": ""
     },
     {
@@ -821,11 +918,11 @@
           "args": {
             "args": "code: 123456",
             "kind": "locker item",
-            "name": "Home wifi",
-            "verb": "edit"
+            "name": "Home wifi"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "edit",
           "user": null
         }
       ],
@@ -833,7 +930,7 @@
       "id": "act.a_item_type_item_has_no_place",
       "source": "act.rs",
       "template": "error: a {item_type} item has no place for {field}; nothing was stored.",
-      "tool": "act",
+      "tool": "edit",
       "why_no_example": ""
     },
     {
@@ -843,11 +940,11 @@
           "args": {
             "args": "colour: red",
             "kind": "task",
-            "name": "Pay rent",
-            "verb": "edit"
+            "name": "Pay rent"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "edit",
           "user": null
         }
       ],
@@ -855,7 +952,7 @@
       "id": "act.x_have_no_field_field_x",
       "source": "act.rs",
       "template": "error: {} have no field \"{field}\". {} editable fields: {}.{}",
-      "tool": "act",
+      "tool": "edit",
       "why_no_example": ""
     },
     {
@@ -865,11 +962,11 @@
           "args": {
             "args": "completed: 2026-09-01",
             "kind": "task",
-            "name": "Pay rent",
-            "verb": "edit"
+            "name": "Pay rent"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "edit",
           "user": null
         }
       ],
@@ -877,7 +974,7 @@
       "id": "act.field_cannot_be_edited_hint",
       "source": "act.rs",
       "template": "error: {field} cannot be edited; {hint}.",
-      "tool": "act",
+      "tool": "edit",
       "why_no_example": ""
     },
     {
@@ -887,7 +984,7 @@
       "id": "act.field_cannot_be_edited",
       "source": "act.rs",
       "template": "error: {field} cannot be edited.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": "a Money or Date field with an edit command; the metadata has none"
     },
     {
@@ -897,11 +994,11 @@
           "args": {
             "args": "duration: 99999999999999",
             "kind": "event",
-            "name": "Dentist",
-            "verb": "edit"
+            "name": "Dentist"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "edit",
           "user": null
         }
       ],
@@ -909,7 +1006,7 @@
       "id": "act.that_duration_is_out_of_range",
       "source": "act.rs",
       "template": "error: that duration is out of range.",
-      "tool": "act",
+      "tool": "edit",
       "why_no_example": ""
     },
     {
@@ -919,11 +1016,11 @@
           "args": {
             "args": "password: \nusername: sam2",
             "kind": "locker item",
-            "name": "Bank login",
-            "verb": "edit"
+            "name": "Bank login"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "edit",
           "user": null
         }
       ],
@@ -931,7 +1028,7 @@
       "id": "act.a_secret_the_member_types_in",
       "source": "act.rs",
       "template": "error: a secret the member types in Locker is its own call; send it alone.",
-      "tool": "act",
+      "tool": "edit",
       "why_no_example": ""
     },
     {
@@ -941,11 +1038,11 @@
           "args": {
             "args": "url: https://x.example",
             "kind": "locker item",
-            "name": "Home wifi",
-            "verb": "edit"
+            "name": "Home wifi"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "edit",
           "user": null
         }
       ],
@@ -953,7 +1050,7 @@
       "id": "act.a_item_type_item_keeps_no_field",
       "source": "act.rs",
       "template": "error: a {item_type} item keeps no {field}; {field} is kept on {} items.",
-      "tool": "act",
+      "tool": "edit",
       "why_no_example": ""
     },
     {
@@ -961,11 +1058,11 @@
       "example": [
         {
           "args": {
-            "args": "name: x",
-            "verb": "create"
+            "args": "name: x"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "create",
           "user": null
         }
       ],
@@ -973,7 +1070,7 @@
       "id": "act.create_needs_the_kind_parameter_set",
       "source": "act.rs",
       "template": "error: create needs the kind parameter set to one of {}.",
-      "tool": "act",
+      "tool": "create",
       "why_no_example": ""
     },
     {
@@ -983,7 +1080,7 @@
       "id": "act.create_x_args_take_x_not",
       "source": "act.rs",
       "template": "error: create {} args take {}; not \"{key}\".{}",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": "normalised away before the call runs: a create arg the kind does not take is dropped and the reply notes it (normalize.rs, rule 1)"
     },
     {
@@ -992,11 +1089,11 @@
         {
           "args": {
             "args": "body: x",
-            "kind": "note",
-            "verb": "create"
+            "kind": "note"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "create",
           "user": null
         }
       ],
@@ -1004,7 +1101,7 @@
       "id": "act.create_x_needs_name_in_args",
       "source": "act.rs",
       "template": "error: create {} needs name: … in args.",
-      "tool": "act",
+      "tool": "create",
       "why_no_example": ""
     },
     {
@@ -1014,7 +1111,7 @@
       "id": "act.key_is_a_number",
       "source": "act.rs",
       "template": "error: {key} is a number.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": "every numeric key of a create has a metadata field, so the field-specific number message answers first"
     },
     {
@@ -1023,11 +1120,11 @@
         {
           "args": {
             "args": "name: x\nlist: #6, #4",
-            "kind": "task",
-            "verb": "create"
+            "kind": "task"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "create",
           "user": null
         }
       ],
@@ -1035,7 +1132,7 @@
       "id": "act.key_is_one_x_n",
       "source": "act.rs",
       "template": "error: {key}: is one {} #n.",
-      "tool": "act",
+      "tool": "create",
       "why_no_example": ""
     },
     {
@@ -1044,11 +1141,11 @@
         {
           "args": {
             "args": "name: x\ndate: {\"from\":{\"unit\":\"day\",\"rel\":1}}",
-            "kind": "event",
-            "verb": "create"
+            "kind": "event"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "create",
           "user": null
         }
       ],
@@ -1056,7 +1153,7 @@
       "id": "act.a_new_row_s_date_is",
       "source": "act.rs",
       "template": "error: a new row's date is a day, an instant or a closed span; {} is open-ended.",
-      "tool": "act",
+      "tool": "create",
       "why_no_example": ""
     },
     {
@@ -1065,11 +1162,11 @@
         {
           "args": {
             "args": "name: x",
-            "kind": "event",
-            "verb": "create"
+            "kind": "event"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "create",
           "user": null
         }
       ],
@@ -1077,7 +1174,7 @@
       "id": "act.create_event_needs_date_date_expression",
       "source": "act.rs",
       "template": "error: create event needs date: <date expression>.",
-      "tool": "act",
+      "tool": "create",
       "why_no_example": ""
     },
     {
@@ -1086,11 +1183,11 @@
         {
           "args": {
             "args": "name: x\ntype: wifi\nurl: https://x.example",
-            "kind": "locker item",
-            "verb": "create"
+            "kind": "locker item"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "create",
           "user": null
         }
       ],
@@ -1098,7 +1195,7 @@
       "id": "act.a_kind_value_item_keeps_no_field",
       "source": "act.rs",
       "template": "error: a {kind_value} item keeps no {field}; {field} is kept on {} items.",
-      "tool": "act",
+      "tool": "create",
       "why_no_example": ""
     },
     {
@@ -1107,11 +1204,11 @@
         {
           "args": {
             "args": "name: x",
-            "kind": "account",
-            "verb": "create"
+            "kind": "account"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "create",
           "user": null
         }
       ],
@@ -1119,8 +1216,122 @@
       "id": "act.create_account_needs_type_checking_savings",
       "source": "act.rs",
       "template": "error: create account needs type: checking | savings | credit card | cash.",
-      "tool": "act",
+      "tool": "create",
       "why_no_example": ""
+    },
+    {
+      "argument": "kind",
+      "example": null,
+      "family": "value",
+      "id": "act.these_figures_come_from_store_change",
+      "source": "act.rs",
+      "template": "error: These figures come from {store}; change them there, not here. Nothing was done.",
+      "tool": "create",
+      "why_no_example": "the fixture world holds no Health origin; tests/health_kind.rs says it on a world that follows a store"
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
+            "args": "name: steps\nvalue: 8000",
+            "kind": "daily figure"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "create",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.create_daily_figure_needs_date_a",
+      "source": "act.rs",
+      "template": "error: create daily figure needs date: <a day>.",
+      "tool": "create",
+      "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
+            "args": "name: steps\ndate: {\"from\":{\"date\":\"2026-09-20\"},\"to\":{\"date\":\"2026-09-26\"}}\nvalue: 8000",
+            "kind": "daily figure"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "create",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.a_daily_figure_is_for_one",
+      "source": "act.rs",
+      "template": "error: a daily figure is for one day; {} is more.",
+      "tool": "create",
+      "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": null,
+      "family": "value",
+      "id": "act.there_is_already_a_metric_figure",
+      "source": "act.rs",
+      "template": "error: there is already a {metric} figure for {day}; change it with edit.",
+      "tool": "create",
+      "why_no_example": "the fixture world holds no daily figure to log over; tests/health_kind.rs says it on a world that holds one"
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
+            "args": "name: steps\ndate: 2026-09-26",
+            "kind": "daily figure"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "create",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.create_daily_figure_needs_value_a",
+      "source": "act.rs",
+      "template": "error: create daily figure needs value: <a number>.",
+      "tool": "create",
+      "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
+            "args": "name: Swim",
+            "kind": "workout"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "create",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.create_workout_needs_date_date_expression",
+      "source": "act.rs",
+      "template": "error: create workout needs date: <date expression>.",
+      "tool": "create",
+      "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": null,
+      "family": "value",
+      "id": "act.at_is_not_a_time_in",
+      "source": "act.rs",
+      "template": "error: {at} is not a time in {zone}.",
+      "tool": "create",
+      "why_no_example": "only a zone with no such clock reaches it (an hour a DST change skips); the fixture world's days are UTC, which skips none"
     },
     {
       "argument": "verb",
@@ -1129,7 +1340,7 @@
       "id": "act.create_x_was_refused_x",
       "source": "act.rs",
       "template": "error: create {} was refused: {}",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": "the vault's own reason, as the vault words it; the fixture has no create the vault refuses with a named predicate"
     },
     {
@@ -1139,8 +1350,9 @@
           "args": {
             "verb": "undo"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -1148,7 +1360,7 @@
       "id": "act.nothing_to_undo",
       "source": "act.rs",
       "template": "error: nothing to undo",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -1158,7 +1370,7 @@
       "id": "act.x_name_said",
       "source": "act.rs",
       "template": "refused: {} {name}: {said}.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": "composed only: the vault refuses a delete no more (a container's members go to the trash with it, #1135), so the ask this line leads is the one a cancelled event's reschedule ends in, and the asks the runtime composes are not said to the model uncomposed"
     },
     {
@@ -1168,6 +1380,7 @@
           "args": {
             "kind": "task"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1176,6 +1389,7 @@
           "args": {
             "kind": "task"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1184,6 +1398,7 @@
           "args": {
             "kind": "task"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1203,6 +1418,7 @@
           "args": {
             "kind": "task"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1211,6 +1427,7 @@
           "args": {
             "kind": "task"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1231,6 +1448,7 @@
             "kind": "task",
             "sort": "date"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1240,6 +1458,7 @@
             "kind": "task",
             "sort": "date"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1260,6 +1479,7 @@
             "kind": "task",
             "limit": 1.5
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1280,6 +1500,7 @@
             "kind": "task",
             "limit": "many"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1302,6 +1523,7 @@
               1
             ]
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1315,6 +1537,69 @@
       "why_no_example": ""
     },
     {
+      "argument": "op",
+      "example": [
+        {
+          "args": {
+            "kind": "task",
+            "op": "count"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "answer",
+          "user": null
+        }
+      ],
+      "family": "schema",
+      "id": "session.answer_has_no_parameter_param_compute",
+      "source": "session.rs",
+      "template": "error: answer has no parameter \"{param}\". Compute first (compute op=…), then answer value=@n.",
+      "tool": "answer",
+      "why_no_example": ""
+    },
+    {
+      "argument": "kind",
+      "example": [
+        {
+          "args": {
+            "kind": "task",
+            "where": "status = open"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "answer",
+          "user": null
+        }
+      ],
+      "family": "schema",
+      "id": "session.answer_has_no_parameter_param_answer",
+      "source": "session.rs",
+      "template": "error: answer has no parameter \"{param}\". answer takes rows or value=@n; find first, then answer rows=@n.",
+      "tool": "answer",
+      "why_no_example": ""
+    },
+    {
+      "argument": "kind",
+      "example": [
+        {
+          "args": {
+            "args": "effort: 5",
+            "kind": "task"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "edit",
+          "user": null
+        }
+      ],
+      "family": "schema",
+      "id": "session.tool_has_no_parameter_param_tool",
+      "source": "session.rs",
+      "template": "error: {tool} has no parameter \"{param}\". {tool} takes rows; find them first, then {tool} rows=@n.",
+      "tool": "edit",
+      "why_no_example": ""
+    },
+    {
       "argument": "rows",
       "example": [
         {
@@ -1322,8 +1607,9 @@
             "rows": "foo",
             "verb": "star"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -1331,7 +1617,7 @@
       "id": "session.handle_is_not_a_row_rows",
       "source": "session.rs",
       "template": "error: \"{handle}\" is not a row; rows are #n.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -1342,8 +1628,9 @@
             "rows": "#999",
             "verb": "star"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -1351,7 +1638,7 @@
       "id": "session.number_was_never_shown",
       "source": "session.rs",
       "template": "error: #{number} was never shown.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": ""
     },
     {
@@ -1361,7 +1648,7 @@
       "id": "session.number_no_longer_exists_in_the",
       "source": "session.rs",
       "template": "error: #{number} no longer exists in the vault.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": "defensive: a numbered row stays in the world, trashed rows included"
     },
     {
@@ -1372,6 +1659,7 @@
             "kind": "task",
             "within": "foo"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1392,6 +1680,7 @@
             "kind": "task",
             "within": "@9"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1412,6 +1701,7 @@
             "kind": "task",
             "linked_to": ""
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1432,6 +1722,7 @@
             "kind": "task",
             "op": "count"
           },
+          "strict": false,
           "think": null,
           "tool": "compute",
           "user": null
@@ -1441,8 +1732,9 @@
             "rows": "@1",
             "verb": "complete"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "do",
           "user": null
         }
       ],
@@ -1450,7 +1742,7 @@
       "id": "session.number_is_a_value_not_rows",
       "source": "session.rs",
       "template": "error: @{number} is a value, not rows.",
-      "tool": "act",
+      "tool": "compute",
       "why_no_example": ""
     },
     {
@@ -1461,6 +1753,7 @@
             "kind": "task",
             "rows": "#6"
           },
+          "strict": false,
           "think": null,
           "tool": "answer",
           "user": null
@@ -1480,6 +1773,7 @@
           "args": {
             "kind": "any"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1499,6 +1793,7 @@
           "args": {
             "kind": "spaceship"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1518,6 +1813,7 @@
           "args": {
             "kind": ","
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1537,6 +1833,7 @@
           "args": {
             "name": "x"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1567,6 +1864,7 @@
             "kind": "task,note",
             "where": "status = open"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1590,6 +1888,7 @@
               "unit": "day"
             }
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1610,6 +1909,7 @@
             "kind": "task",
             "order": "date sideways"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1630,6 +1930,7 @@
             "kind": "task",
             "order": "colour asc"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1650,6 +1951,7 @@
             "kind": "task",
             "limit": 0
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1670,6 +1972,7 @@
             "kind": "task",
             "name": "Pay rent"
           },
+          "strict": false,
           "think": null,
           "tool": "answer",
           "user": null
@@ -1678,6 +1981,7 @@
           "args": {
             "kind": "task"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1697,17 +2001,18 @@
           "args": {
             "args": "name: x",
             "kind": "note",
-            "more": true,
-            "verb": "create"
+            "more": true
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "create",
           "user": null
         },
         {
           "args": {
             "kind": "person"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1716,6 +2021,7 @@
           "args": {
             "kind": "task"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1724,6 +2030,7 @@
           "args": {
             "kind": "album"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1732,6 +2039,7 @@
           "args": {
             "kind": "event"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1740,6 +2048,7 @@
           "args": {
             "kind": "notebook"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1759,6 +2068,7 @@
           "args": {
             "kind": "spaceship"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1767,6 +2077,7 @@
           "args": {
             "kind": "spaceship"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1775,6 +2086,7 @@
           "args": {
             "kind": "spaceship"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1794,6 +2106,7 @@
           "args": {
             "kind": "task"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1802,6 +2115,7 @@
           "args": {
             "kind": "task"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1810,6 +2124,7 @@
           "args": {
             "kind": "task"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1818,6 +2133,7 @@
           "args": {
             "kind": "task"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1837,6 +2153,7 @@
           "args": [
             1
           ],
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1854,6 +2171,7 @@
       "example": [
         {
           "args": {},
+          "strict": false,
           "think": null,
           "tool": "frobnicate",
           "user": null
@@ -1874,6 +2192,7 @@
             "colour": "red",
             "kind": "task"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1887,39 +2206,65 @@
       "why_no_example": ""
     },
     {
-      "argument": "row",
-      "example": [
-        {
-          "args": {},
-          "think": null,
-          "tool": "open",
-          "user": null
-        }
-      ],
-      "family": "value",
-      "id": "session.open_needs_row_n",
-      "source": "session.rs",
-      "template": "error: open needs row=#n.",
-      "tool": "open",
-      "why_no_example": ""
-    },
-    {
-      "argument": "row",
+      "argument": "rows",
       "example": [
         {
           "args": {
-            "row": "#6, #5"
+            "rows": "#6",
+            "text": "cabin"
           },
+          "strict": false,
           "think": null,
-          "tool": "open",
+          "tool": "find",
           "user": null
         }
       ],
       "family": "cardinality",
-      "id": "session.open_takes_exactly_one_row_n",
+      "id": "session.find_takes_text_or_rows_not",
       "source": "session.rs",
-      "template": "error: open takes exactly one row, #n.",
-      "tool": "open",
+      "template": "error: find takes text or rows, not both.",
+      "tool": "find",
+      "why_no_example": ""
+    },
+    {
+      "argument": "text",
+      "example": [
+        {
+          "args": {
+            "name": "cabin",
+            "text": "cabin"
+          },
+          "strict": false,
+          "think": null,
+          "tool": "find",
+          "user": null
+        }
+      ],
+      "family": "cardinality",
+      "id": "session.find_x_takes_no_other_use",
+      "source": "session.rs",
+      "template": "error: find {} takes no {other}; use find with a selector, and no text or rows, to narrow.",
+      "tool": "find",
+      "why_no_example": ""
+    },
+    {
+      "argument": "rows",
+      "example": [
+        {
+          "args": {
+            "rows": "#6, #5"
+          },
+          "strict": false,
+          "think": null,
+          "tool": "find",
+          "user": null
+        }
+      ],
+      "family": "cardinality",
+      "id": "session.find_rows_takes_exactly_one_row",
+      "source": "session.rs",
+      "template": "error: find rows takes exactly one row, #n.",
+      "tool": "find",
       "why_no_example": ""
     },
     {
@@ -1927,6 +2272,7 @@
       "example": [
         {
           "args": {},
+          "strict": false,
           "think": null,
           "tool": "ask",
           "user": null
@@ -1946,6 +2292,7 @@
           "args": {
             "reason": "because"
           },
+          "strict": false,
           "think": null,
           "tool": "decline",
           "user": null
@@ -1966,6 +2313,7 @@
             "kind": "task",
             "value": "@1"
           },
+          "strict": false,
           "think": null,
           "tool": "answer",
           "user": null
@@ -1985,6 +2333,7 @@
           "args": {
             "kind": "task"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -1993,6 +2342,7 @@
           "args": {
             "value": "@1"
           },
+          "strict": false,
           "think": null,
           "tool": "answer",
           "user": null
@@ -2013,6 +2363,7 @@
             "name": "x",
             "rows": "#6"
           },
+          "strict": false,
           "think": null,
           "tool": "answer",
           "user": null
@@ -2026,12 +2377,210 @@
       "why_no_example": ""
     },
     {
+      "argument": "rows",
+      "example": [
+        {
+          "args": {
+            "kind": "task",
+            "op": "count"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "compute",
+          "user": null
+        },
+        {
+          "args": {
+            "kind": "task",
+            "op": "count"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "compute",
+          "user": null
+        },
+        {
+          "args": {
+            "kind": "task",
+            "op": "compare",
+            "rows": "@1, @2"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "compute",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "session.compare_takes_rows_a_b_and",
+      "source": "session.rs",
+      "template": "error: compare takes rows=@a,@b and nothing else, not {extra}; the two values say what they are over.",
+      "tool": "compute",
+      "why_no_example": ""
+    },
+    {
+      "argument": "rows",
+      "example": [
+        {
+          "args": {
+            "kind": "task",
+            "op": "count"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "compute",
+          "user": null
+        },
+        {
+          "args": {
+            "op": "compare",
+            "rows": "@1"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "compute",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "session.compare_takes_exactly_two_values_rows",
+      "source": "session.rs",
+      "template": "error: compare takes exactly two values, rows=@a,@b.",
+      "tool": "compute",
+      "why_no_example": ""
+    },
+    {
+      "argument": "rows",
+      "example": [
+        {
+          "args": {
+            "kind": "task"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "find",
+          "user": null
+        },
+        {
+          "args": {
+            "kind": "task",
+            "op": "count"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "compute",
+          "user": null
+        },
+        {
+          "args": {
+            "op": "compare",
+            "rows": "@1, @2"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "compute",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "session.number_holds_rows_not_a_value",
+      "source": "session.rs",
+      "template": "error: @{number} holds rows, not a value; compare takes two values.",
+      "tool": "compute",
+      "why_no_example": ""
+    },
+    {
+      "argument": "rows",
+      "example": [
+        {
+          "args": {
+            "group": "status",
+            "kind": "task",
+            "op": "count"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "compute",
+          "user": null
+        },
+        {
+          "args": {
+            "kind": "task",
+            "op": "count"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "compute",
+          "user": null
+        },
+        {
+          "args": {
+            "op": "compare",
+            "rows": "@1, @2"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "compute",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "session.number_is_a_value_per_group",
+      "source": "session.rs",
+      "template": "error: @{number} is a value per group; compare takes plain values.",
+      "tool": "compute",
+      "why_no_example": ""
+    },
+    {
+      "argument": "rows",
+      "example": [
+        {
+          "args": {
+            "kind": "task",
+            "op": "count"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "compute",
+          "user": null
+        },
+        {
+          "args": {
+            "field": "amount",
+            "kind": "transaction",
+            "op": "sum"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "compute",
+          "user": null
+        },
+        {
+          "args": {
+            "op": "compare",
+            "rows": "@1, @2"
+          },
+          "strict": true,
+          "think": null,
+          "tool": "compute",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "session.x_and_x_share_no_unit",
+      "source": "session.rs",
+      "template": "error: @{} and @{} share no unit; compare takes two values of one kind of figure.",
+      "tool": "compute",
+      "why_no_example": ""
+    },
+    {
       "argument": "op",
       "example": [
         {
           "args": {
             "kind": "task"
           },
+          "strict": false,
           "think": null,
           "tool": "compute",
           "user": null
@@ -2052,6 +2601,7 @@
             "kind": "task",
             "op": "median"
           },
+          "strict": false,
           "think": null,
           "tool": "compute",
           "user": null
@@ -2073,6 +2623,7 @@
             "op": "count",
             "rows": "#6"
           },
+          "strict": false,
           "think": null,
           "tool": "compute",
           "user": null
@@ -2094,6 +2645,7 @@
             "kind": "task,event",
             "op": "sum"
           },
+          "strict": false,
           "think": null,
           "tool": "compute",
           "user": null
@@ -2115,6 +2667,7 @@
             "kind": "task",
             "op": "count"
           },
+          "strict": false,
           "think": null,
           "tool": "compute",
           "user": null
@@ -2135,6 +2688,7 @@
             "kind": "task",
             "op": "sum"
           },
+          "strict": false,
           "think": null,
           "tool": "compute",
           "user": null
@@ -2156,6 +2710,7 @@
             "kind": "task",
             "op": "sum"
           },
+          "strict": false,
           "think": null,
           "tool": "compute",
           "user": null
@@ -2176,6 +2731,7 @@
             "kind": "task",
             "where": "colour = red"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2194,11 +2750,11 @@
         {
           "args": {
             "args": "name: x\neffort: lots",
-            "kind": "task",
-            "verb": "create"
+            "kind": "task"
           },
+          "strict": false,
           "think": null,
-          "tool": "act",
+          "tool": "create",
           "user": null
         }
       ],
@@ -2206,8 +2762,18 @@
       "id": "whr.x_is_shape_x_is_not",
       "source": "whr.rs",
       "template": "error: {} is {shape}; \"{}\" is not.",
-      "tool": "act",
+      "tool": "create",
       "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": null,
+      "family": "value",
+      "id": "whr.x_is_kept_as_a_whole",
+      "source": "whr.rs",
+      "template": "error: {} is kept as a whole number here; {value} would be saved as {}. Say it as {}.",
+      "tool": "edit",
+      "why_no_example": "the fixture world holds no Health rows to edit; tests/health_kind.rs says it on a world that holds a figure"
     },
     {
       "argument": "args",
@@ -2216,7 +2782,7 @@
       "id": "whr.amounts_are_in_currency_here_x",
       "source": "whr.rs",
       "template": "error: amounts are in {currency} here; \"{}\" names {}. Write the number in {currency}.",
-      "tool": "act",
+      "tool": "do",
       "why_no_example": "defensive: a currency symbol is checked only against an amount field, and no kind the assistant reads has one until Money is read again (symbol_conflict has no caller)"
     },
     {
@@ -2237,6 +2803,7 @@
             "kind": "note",
             "where": "pinned = maybe"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2257,6 +2824,7 @@
             "kind": "task",
             "where": "status = open or priority = 2"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2277,6 +2845,7 @@
             "kind": "task",
             "where": "foo count > 2"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2297,6 +2866,7 @@
             "kind": "event",
             "where": "album count > 1"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2317,6 +2887,7 @@
             "kind": "task",
             "where": "person count lots"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2337,6 +2908,7 @@
             "kind": "task",
             "where": "person count > 1.5"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2357,6 +2929,7 @@
             "kind": "task",
             "where": "= 3"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2387,6 +2960,7 @@
             "kind": "task",
             "where": "date = x"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2407,6 +2981,7 @@
             "kind": "task",
             "where": "completed = x"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2427,6 +3002,7 @@
             "kind": "task",
             "where": "effort contains \"3\""
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2447,6 +3023,7 @@
             "kind": "task",
             "where": "description contains foo"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2467,6 +3044,7 @@
             "kind": "task",
             "where": "status in foo"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2487,6 +3065,7 @@
             "kind": "task",
             "where": "effort ~ 3"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2507,6 +3086,7 @@
             "kind": "task",
             "where": "effort = lots"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2527,6 +3107,7 @@
             "kind": "task",
             "where": "priority = high"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2547,6 +3128,7 @@
             "kind": "task",
             "where": "description > 3"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2567,6 +3149,7 @@
             "kind": "task",
             "where": "status > open"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2587,6 +3170,7 @@
             "kind": "person",
             "where": "starred > yes"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2607,6 +3191,7 @@
             "kind": "task",
             "where": "status = bogus"
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null
@@ -2623,9 +3208,12 @@
       "argument": "text",
       "example": [
         {
-          "args": {},
+          "args": {
+            "text": ""
+          },
+          "strict": false,
           "think": null,
-          "tool": "search",
+          "tool": "find",
           "user": null
         }
       ],
@@ -2633,7 +3221,7 @@
       "id": "search.search_needs_text",
       "source": "search.rs",
       "template": "error: search needs text.",
-      "tool": "search",
+      "tool": "find",
       "why_no_example": ""
     },
     {
@@ -2644,8 +3232,9 @@
             "kind": "spaceship",
             "text": "x"
           },
+          "strict": false,
           "think": null,
-          "tool": "search",
+          "tool": "find",
           "user": null
         }
       ],
@@ -2653,7 +3242,7 @@
       "id": "search.no_kind_part_kinds_any_x",
       "source": "search.rs",
       "template": "error: no kind \"{part}\". kinds: any, {}.",
-      "tool": "search",
+      "tool": "find",
       "why_no_example": ""
     },
     {
@@ -2664,8 +3253,9 @@
             "kind": 5,
             "text": "x"
           },
+          "strict": false,
           "think": null,
-          "tool": "search",
+          "tool": "find",
           "user": null
         }
       ],
@@ -2673,7 +3263,7 @@
       "id": "search.kind_is_text_not_other",
       "source": "search.rs",
       "template": "error: kind is text, not {other}.",
-      "tool": "search",
+      "tool": "find",
       "why_no_example": ""
     },
     {
@@ -2683,6 +3273,7 @@
           "args": {
             "kind": "task"
           },
+          "strict": false,
           "think": "intent: write \"x\"\nverb: complete\nscope: one",
           "tool": "answer",
           "user": null
@@ -2702,6 +3293,7 @@
           "args": {
             "text": "I will look it up."
           },
+          "strict": false,
           "think": null,
           "tool": "call_text",
           "user": null
@@ -2724,6 +3316,7 @@
               "foo": 1
             }
           },
+          "strict": false,
           "think": null,
           "tool": "find",
           "user": null

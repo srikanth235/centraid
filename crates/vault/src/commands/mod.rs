@@ -297,7 +297,7 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 22] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 23] = [
             blob::definitions,
             contact_point::definitions,
             container::definitions,
@@ -320,6 +320,7 @@ impl Registry {
             task::definitions,
             thread::definitions,
             vault::definitions,
+            workout::definitions,
         ];
         for definitions in modules {
             for definition in definitions() {

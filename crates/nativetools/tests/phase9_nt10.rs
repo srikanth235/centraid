@@ -36,11 +36,11 @@ fn a_resend_after_an_error_with_a_fix_quotes_the_fix_and_the_turn_stays_open() {
     let bad = json!({"verb": "reveal", "rows": [wifi], "args": "field: cvv"});
     let first = call(&mut session, "act", bad.clone());
     assert!(text(&first).starts_with("error:"), "{first}");
-    assert!(text(&first).contains("Send act"), "{first}");
+    assert!(text(&first).contains("Send do"), "{first}");
     let hint = call(&mut session, "act", bad);
     assert_eq!(hint["ends_turn"], false, "{hint}");
     assert!(
-        text(&hint).starts_with("error: that is the same call again. Send act"),
+        text(&hint).starts_with("error: that is the same call again. Send do"),
         "{hint}"
     );
 }
@@ -200,7 +200,7 @@ fn a_when_the_message_never_said_is_named() {
         common::TODAY,
         centraid_nativetools::Flags {
             normalize: false,
-            ..centraid_nativetools::Flags::default()
+            ..common::s2_flags()
         },
     );
     replay.user("what about the cabin task");
@@ -535,7 +535,7 @@ fn a_field_the_kind_names_otherwise_runs_as_that_field() {
         "act",
         json!({"verb": "edit", "rows": cabin, "args": "due: tomorrow"}),
     );
-    assert!(!text(&wrong).contains("Send act"), "{wrong}");
+    assert!(!text(&wrong).contains("Send do"), "{wrong}");
 }
 
 #[test]
@@ -553,7 +553,7 @@ fn a_secret_the_item_lacks_ends_in_the_whole_reveal_call() {
     );
     ends_with_send(
         &reply,
-        &format!("act verb: reveal, rows: {wifi}, args: field: password"),
+        &format!("do verb: reveal, rows: {wifi}, args: field: password"),
     );
 }
 
@@ -584,7 +584,7 @@ fn a_wrong_kind_row_with_one_row_the_words_fit_ends_in_the_call_on_that_row() {
         text(&reply).contains(&format!("Did you mean {review} task \"Review lease\"?")),
         "{reply}"
     );
-    ends_with_send(&reply, &format!("act verb: complete, rows: {review}"));
+    ends_with_send(&reply, &format!("do verb: complete, rows: {review}"));
 }
 
 #[test]

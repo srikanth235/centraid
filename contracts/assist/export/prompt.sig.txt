@@ -4,12 +4,12 @@
 You have access to the following functions:
 
 <tools>
-{"function": {"description": "search(text, kind?) — fuzzy name search; kind: any, a kind or a comma list", "name": "search", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
-{"function": {"description": "find(kind, name?, where?, when?, linked_to?, within?, exclude?, order?, limit?, trashed?) — rows a selector matches, numbered #n, as @n; when: {unit: minute|hour|day|week|month|year, rel, name, weekday, time, date, from, to, anchor: today|row}", "name": "find", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
-{"function": {"description": "open(row) — every fact and link of one row", "name": "open", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
-{"function": {"description": "compute(op: count|sum|min|max, field?, group?, rows? | selector) — a value as @n, or one per group value", "name": "compute", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
-{"function": {"description": "act(verb: create|edit|reschedule|complete|reopen|cancel|delete|restore|star|unstar|add_to|remove_from|log|reveal|undo|tag|untag|unlink|archive|unarchive, rows? | selector, args?, more?) — change the vault; ends the turn unless more; edit body+: or description+: adds text", "name": "act", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
-{"function": {"description": "answer(rows? | selector, op?: count|sum|min|max, field?, value?) — rows, a value or value=@n; ends the turn", "name": "answer", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
+{"function": {"description": "find(kind?, name?, where?, when?, linked_to?, within?, exclude?, order?, limit?, trashed?, text?, rows?) — rows a selector matches, numbered #n, as @n; text: fuzzy name search; rows: every fact and link of one row; when: {unit: minute|hour|day|week|month|year, rel, name, weekday, time, date, from, to, anchor: today|row}", "name": "find", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
+{"function": {"description": "compute(op: count|sum|avg|min|max|compare, field?, group?, rows? | selector) — a value as @n, or one per group value; group: a field, or a period of the date: day, week, month, year; op compare takes rows=@a,@b, two values, and sets them side by side", "name": "compute", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
+{"function": {"description": "create(kind, field…, more?) — add a row; one parameter per field of the kind (the kinds card), name first, dates as date expressions; ends the turn unless more", "name": "create", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
+{"function": {"description": "edit(rows, field…, more?) — change fields on rows; one parameter per field, only the fields that change, body+: or description+: adds text; ends the turn unless more", "name": "edit", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
+{"function": {"description": "do(verb: reschedule|complete|reopen|cancel|delete|restore|star|unstar|add_to|remove_from|log|reveal|undo|tag|untag|unlink|archive|unarchive, rows, args?, more?) — run a verb on rows; args: at most one (reschedule to, add_to to, remove_from from, tag and untag label, log kind, reveal field); ends the turn unless more", "name": "do", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
+{"function": {"description": "answer(rows?, value?) — rows or value=@n already shown; ends the turn", "name": "answer", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
 {"function": {"description": "ask(question, options?) — ends the turn", "name": "ask", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
 {"function": {"description": "decline(reason: out_of_scope|unbounded_destruction|fabricated_secret|never_mind|not_found) — ends the turn", "name": "decline", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
 </tools>
@@ -53,8 +53,8 @@ notebook: name · links: notes · verbs: create edit delete
 folder: name · links: documents · verbs: create edit delete
 list: name, area · links: tasks · verbs: create edit
 transaction: name, date (posted), amount (USD), account, category, transfer, status (posted|void) · verbs: edit unlink
-daily figure: name, date (day), metric (steps|active_energy_kcal|exercise_min|sleep_min|resting_hr_bpm|weight_kg), value
-workout: name, date (start), moving (s), distance (m), energy (kcal), heart_rate (bpm), climb (m)
+daily figure: name, date (day), metric (steps|active_energy_kcal|exercise_min|sleep_min|resting_hr_bpm|weight_kg), value · verbs: create edit delete
+workout: name, date (start), moving (s), distance (m), energy (kcal), heart_rate (bpm), climb (m) · verbs: create edit delete restore
 account: name, type (checking|savings|credit_card|cash), currency, opening (USD), opening_on, on_budget (yes|no) · verbs: create edit archive unarchive
 category: name, key, group · verbs: create archive unarchive
 budget: name, date (month), amount (USD), currency, carry (yes|no)

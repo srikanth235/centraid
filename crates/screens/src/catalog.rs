@@ -1403,6 +1403,253 @@ pub mod act {
                 value.request()
             }
         }
+
+        /// Log a workout by hand through workout.log: an activity of a workout kind and what was measured, with no store behind it. A workout the health store follows is the store's to state.
+        #[derive(Clone, Debug, Default)]
+        pub struct LogWorkout {
+            pub starts: String,
+            pub climb_m: Option<f64>,
+            pub distance_m: Option<f64>,
+            pub ends: Option<String>,
+            pub energy_kcal: Option<f64>,
+            pub heart_bpm: Option<i64>,
+            pub id: Option<String>,
+            pub moving_s: Option<i64>,
+            pub title: Option<String>,
+            pub r#type: Option<String>,
+        }
+        impl LogWorkout {
+            pub const NAME: &str = "log-workout";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("starts".to_owned(), text(self.starts));
+                if let Some(it) = self.climb_m { map.insert("climb_m".to_owned(), real(it)); }
+                if let Some(it) = self.distance_m { map.insert("distance_m".to_owned(), real(it)); }
+                if let Some(it) = self.ends { map.insert("ends".to_owned(), text(it)); }
+                if let Some(it) = self.energy_kcal { map.insert("energy_kcal".to_owned(), real(it)); }
+                if let Some(it) = self.heart_bpm { map.insert("heart_bpm".to_owned(), whole(it)); }
+                if let Some(it) = self.id { map.insert("id".to_owned(), text(it)); }
+                if let Some(it) = self.moving_s { map.insert("moving_s".to_owned(), whole(it)); }
+                if let Some(it) = self.title { map.insert("title".to_owned(), text(it)); }
+                if let Some(it) = self.r#type { map.insert("type".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<LogWorkout> for wire::ActRequest {
+            fn from(value: LogWorkout) -> Self {
+                value.request()
+            }
+        }
+
+        /// Change a workout the member logged by hand through workout.edit: its title, kind, span or a figure. One the health store follows is refused, naming the store.
+        #[derive(Clone, Debug, Default)]
+        pub struct EditWorkout {
+            pub workout_id: String,
+            pub climb_m: Field<f64>,
+            pub distance_m: Field<f64>,
+            pub ends: Option<String>,
+            pub energy_kcal: Field<f64>,
+            pub heart_bpm: Field<i64>,
+            pub moving_s: Field<i64>,
+            pub starts: Option<String>,
+            pub title: Option<String>,
+            pub r#type: Option<String>,
+        }
+        impl EditWorkout {
+            pub const NAME: &str = "edit-workout";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.workout_id));
+                put_field(&mut map, "climb_m", self.climb_m, |it| real(it));
+                put_field(&mut map, "distance_m", self.distance_m, |it| real(it));
+                if let Some(it) = self.ends { map.insert("ends".to_owned(), text(it)); }
+                put_field(&mut map, "energy_kcal", self.energy_kcal, |it| real(it));
+                put_field(&mut map, "heart_bpm", self.heart_bpm, |it| whole(it));
+                put_field(&mut map, "moving_s", self.moving_s, |it| whole(it));
+                if let Some(it) = self.starts { map.insert("starts".to_owned(), text(it)); }
+                if let Some(it) = self.title { map.insert("title".to_owned(), text(it)); }
+                if let Some(it) = self.r#type { map.insert("type".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<EditWorkout> for wire::ActRequest {
+            fn from(value: EditWorkout) -> Self {
+                value.request()
+            }
+        }
+
+        /// Bring a workout back from the trash through entity.restore.
+        #[derive(Clone, Debug, Default)]
+        pub struct RestoreWorkout {
+            pub workout_id: String,
+        }
+        impl RestoreWorkout {
+            pub const NAME: &str = "restore-workout";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.workout_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<RestoreWorkout> for wire::ActRequest {
+            fn from(value: RestoreWorkout) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum EditFigureMetric {
+            #[default]
+            Steps,
+            ActiveEnergyKcal,
+            ExerciseMin,
+            SleepMin,
+            RestingHrBpm,
+            WeightKg,
+        }
+        impl EditFigureMetric {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Steps => "steps",
+                    Self::ActiveEnergyKcal => "active_energy_kcal",
+                    Self::ExerciseMin => "exercise_min",
+                    Self::SleepMin => "sleep_min",
+                    Self::RestingHrBpm => "resting_hr_bpm",
+                    Self::WeightKg => "weight_kg",
+                }
+            }
+        }
+
+        /// Set a daily figure the member states by hand through measurement.log: the day's value of one metric. Refused while a health store is followed, which states them each read.
+        #[derive(Clone, Debug, Default)]
+        pub struct EditFigure {
+            pub value: f64,
+            pub day: Option<String>,
+            pub daily_figure_id: Option<String>,
+            pub metric: Option<EditFigureMetric>,
+            pub person_id: Option<String>,
+        }
+        impl EditFigure {
+            pub const NAME: &str = "edit-figure";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("value".to_owned(), real(self.value));
+                if let Some(it) = self.day { map.insert("day".to_owned(), text(it)); }
+                if let Some(it) = self.daily_figure_id { map.insert("id".to_owned(), text(it)); }
+                if let Some(it) = self.metric { map.insert("metric".to_owned(), text(it.wire())); }
+                if let Some(it) = self.person_id { map.insert("person_id".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<EditFigure> for wire::ActRequest {
+            fn from(value: EditFigure) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum LogFigureMetric {
+            #[default]
+            Steps,
+            ActiveEnergyKcal,
+            ExerciseMin,
+            SleepMin,
+            RestingHrBpm,
+            WeightKg,
+        }
+        impl LogFigureMetric {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Steps => "steps",
+                    Self::ActiveEnergyKcal => "active_energy_kcal",
+                    Self::ExerciseMin => "exercise_min",
+                    Self::SleepMin => "sleep_min",
+                    Self::RestingHrBpm => "resting_hr_bpm",
+                    Self::WeightKg => "weight_kg",
+                }
+            }
+        }
+
+        /// Set a daily figure for a day the member states by hand through measurement.log. Refused while a health store is followed, which states them each read.
+        #[derive(Clone, Debug, Default)]
+        pub struct LogFigure {
+            pub value: f64,
+            pub day: Option<String>,
+            pub id: Option<String>,
+            pub metric: Option<LogFigureMetric>,
+            pub person_id: Option<String>,
+        }
+        impl LogFigure {
+            pub const NAME: &str = "log-figure";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("value".to_owned(), real(self.value));
+                if let Some(it) = self.day { map.insert("day".to_owned(), text(it)); }
+                if let Some(it) = self.id { map.insert("id".to_owned(), text(it)); }
+                if let Some(it) = self.metric { map.insert("metric".to_owned(), text(it.wire())); }
+                if let Some(it) = self.person_id { map.insert("person_id".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<LogFigure> for wire::ActRequest {
+            fn from(value: LogFigure) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum ClearFigureMetric {
+            #[default]
+            Steps,
+            ActiveEnergyKcal,
+            ExerciseMin,
+            SleepMin,
+            RestingHrBpm,
+            WeightKg,
+        }
+        impl ClearFigureMetric {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Steps => "steps",
+                    Self::ActiveEnergyKcal => "active_energy_kcal",
+                    Self::ExerciseMin => "exercise_min",
+                    Self::SleepMin => "sleep_min",
+                    Self::RestingHrBpm => "resting_hr_bpm",
+                    Self::WeightKg => "weight_kg",
+                }
+            }
+        }
+
+        /// Take back a daily figure the member logged by hand through measurement.clear. Refused while a health store is followed: a day a store states is never deleted.
+        #[derive(Clone, Debug, Default)]
+        pub struct ClearFigure {
+            pub day: Option<String>,
+            pub daily_figure_id: Option<String>,
+            pub metric: Option<ClearFigureMetric>,
+            pub person_id: Option<String>,
+        }
+        impl ClearFigure {
+            pub const NAME: &str = "clear-figure";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.day { map.insert("day".to_owned(), text(it)); }
+                if let Some(it) = self.daily_figure_id { map.insert("id".to_owned(), text(it)); }
+                if let Some(it) = self.metric { map.insert("metric".to_owned(), text(it.wire())); }
+                if let Some(it) = self.person_id { map.insert("person_id".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ClearFigure> for wire::ActRequest {
+            fn from(value: ClearFigure) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod locker {

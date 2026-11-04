@@ -65,7 +65,7 @@ fn session_with(world: &World, defaults: Defaults) -> centraid_nativetools::Sess
         TODAY,
         Flags {
             defaults,
-            ..Flags::default()
+            ..common::s2_flags()
         },
     )
 }

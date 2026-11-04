@@ -250,7 +250,7 @@ fn tables_read(world: &World, flags: Flags) -> Vec<String> {
 #[test]
 fn money_reads_only_the_window() {
     let world = seeded_with(&world_json());
-    let on = tables_read(&world, Flags::default());
+    let on = tables_read(&world, common::s2_flags());
     for table in ["txn", "entity"] {
         assert!(on.iter().any(|read| read == table), "{table} in {on:?}");
     }

@@ -42,7 +42,7 @@ fn replay(world: &World) -> Session {
         world,
         Flags {
             normalize: false,
-            ..Flags::default()
+            ..common::s2_flags()
         },
     )
 }
@@ -53,7 +53,7 @@ fn uncomposed(world: &World) -> Session {
         world,
         Flags {
             compose: false,
-            ..Flags::default()
+            ..common::s2_flags()
         },
     )
 }
@@ -626,10 +626,7 @@ fn nt15_r1s_the_hint_to_send_the_held_secret_is_for_a_message_that_names_it() {
     let mut session = world.session();
     session.user("what is the cvv or the password of the home wifi");
     let refused = reveal(&mut session, "Home wifi", "cvv");
-    assert!(
-        text(&refused).contains("Send act verb: reveal"),
-        "{refused}"
-    );
+    assert!(text(&refused).contains("Send do verb: reveal"), "{refused}");
     let mut session = world.session();
     session.user("what is the cvv of the home wifi");
     let refused = reveal(&mut session, "Home wifi", "cvv");
@@ -1023,7 +1020,7 @@ fn nt15_r2b_other_fields_and_empty_text_are_refused() {
 #[test]
 fn nt15_r2b_the_append_is_one_line_of_the_prompt() {
     let world = common::seeded();
-    let mut session = world.session();
+    let mut session = world.strict_session();
     let prompt = centraid_nativetools::prompt::prompt(&mut session);
     let rendered = prompt["rendered"].as_str().expect("a prompt");
     let lines: Vec<&str> = rendered
@@ -1031,7 +1028,7 @@ fn nt15_r2b_the_append_is_one_line_of_the_prompt() {
         .filter(|line| line.contains("body+"))
         .collect();
     assert_eq!(lines.len(), 1, "{lines:?}");
-    assert!(lines[0].contains("act(verb"), "{lines:?}");
+    assert!(lines[0].contains("edit(rows"), "{lines:?}");
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1635,7 +1632,7 @@ fn nt15_r1s_a_guess_the_message_never_named_is_repaired_to_what_the_item_holds()
     let guess = reveal(&mut session, "Alarm code", "password");
     // the error says what the item holds with the names reveal takes, and offers the call
     assert!(text(&guess).contains("It holds: content."), "{guess}");
-    assert!(text(&guess).contains("Send act verb: reveal"), "{guess}");
+    assert!(text(&guess).contains("Send do verb: reveal"), "{guess}");
     let repaired = reveal(&mut session, "Alarm code", "content");
     assert!(
         text(&repaired).contains("offered to the member: reveal notes of")
