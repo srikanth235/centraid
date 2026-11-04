@@ -467,6 +467,30 @@
       "verb": "edit"
     },
     {
+      "action": "log-figure",
+      "app": "health",
+      "command": "measurement.log",
+      "id_param": "id",
+      "kind": "daily figure",
+      "names": [
+        "date",
+        "name",
+        "value"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "clear-figure",
+      "app": "health",
+      "command": "measurement.clear",
+      "id_param": "id",
+      "kind": "daily figure",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
       "action": "add-item",
       "app": "locker",
       "command": "locker.add_item",
@@ -2027,6 +2051,42 @@
         "qualifier": null,
         "sealed": [],
         "verb": "edit"
+      },
+      {
+        "action": "log-figure",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "direct",
+        "command": "measurement.log",
+        "inverse": "clear-figure",
+        "kind": "daily_figure",
+        "phrasings": [
+          "log my weight as 70 kilos for today",
+          "note 8000 steps for yesterday",
+          "record seven hours of sleep for monday"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "clear-figure",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "direct",
+        "command": "measurement.clear",
+        "inverse": "log-figure",
+        "kind": "daily_figure",
+        "phrasings": [
+          "delete today's weight",
+          "clear yesterday's steps",
+          "remove the sleep I logged for monday"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "delete"
       },
       {
         "action": "add-item",
@@ -5497,7 +5557,7 @@
       ]
     },
     {
-      "card": "daily figure: name, date (day), metric (steps|active_energy_kcal|exercise_min|sleep_min|resting_hr_bpm|weight_kg), value · verbs: edit",
+      "card": "daily figure: name, date (day), metric (steps|active_energy_kcal|exercise_min|sleep_min|resting_hr_bpm|weight_kg), value · verbs: create edit delete",
       "container": false,
       "date": {
         "label": "day",
@@ -5566,7 +5626,9 @@
       "table": "measurement",
       "trash": false,
       "verbs": [
-        "edit"
+        "create",
+        "edit",
+        "delete"
       ],
       "where_fields": [
         "metric",
@@ -6018,6 +6080,7 @@
     "locker.add_item",
     "locker.edit_item",
     "locker.mark_used",
+    "measurement.clear",
     "measurement.log",
     "note.create",
     "note.edit",
@@ -6144,6 +6207,10 @@
         [
           "list",
           "container.create"
+        ],
+        [
+          "daily_figure",
+          "measurement.log"
         ],
         [
           "workout",
@@ -6338,6 +6405,10 @@
         [
           "folder",
           "entity.trash"
+        ],
+        [
+          "daily_figure",
+          "measurement.clear"
         ],
         [
           "workout",

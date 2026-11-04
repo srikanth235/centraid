@@ -17,7 +17,7 @@ pub const MANIFEST_JSON: &str = include_str!("../manifest.json");
 pub const APP_ID: &str = "health";
 
 /// The action each vault command is declared as.
-pub const ACTIONS: [ActionRow; 8] = [
+pub const ACTIONS: [ActionRow; 10] = [
     act("record-days", "measurement.record"),
     act("follow-workouts", "follow.health"),
     act("delete-workout", "entity.trash"),
@@ -26,6 +26,8 @@ pub const ACTIONS: [ActionRow; 8] = [
     act("edit-workout", "workout.edit"),
     act("restore-workout", "entity.restore"),
     act("edit-figure", "measurement.log"),
+    act("log-figure", "measurement.log"),
+    act("clear-figure", "measurement.clear"),
 ];
 
 /// The parsed manifest.

@@ -1225,3 +1225,39 @@ fn a_store_workout_found_again_after_it_was_forgotten_takes_the_stores_correctio
         "the store's correction lands on a workout the store stated"
     );
 }
+
+#[test]
+fn a_member_takes_back_a_figure_they_logged_and_only_while_no_store_is_followed() {
+    let world = World::new();
+    world.ok(
+        "measurement.log",
+        json!({"day": "2026-03-04", "metric": "weight_kg", "value": 70.5}),
+    );
+    let cleared = world.ok("measurement.clear", json!({"id": "2026-03-04:weight_kg"}));
+    assert_eq!(cleared["id"], "2026-03-04:weight_kg");
+    assert_eq!(world.count("SELECT COUNT(*) FROM measurement", &[]), 0);
+    assert_eq!(
+        world.refused(
+            "measurement.clear",
+            json!({"day": "2026-03-04", "metric": "weight_kg"})
+        ),
+        "There is no weight_kg figure for 2026-03-04."
+    );
+    // a figure a store stated is the store's: once one is followed nothing clears
+    world.ok(
+        "measurement.record",
+        json!({"days": [{"day": "2026-03-05", "metric": "steps", "value": 8000}]}),
+    );
+    follow_health(&world, "phone-a", &[], false);
+    assert_eq!(
+        world.refused("measurement.clear", json!({"id": "2026-03-05:steps"})),
+        "These figures come from Apple Health; change them there, not here."
+    );
+    assert_eq!(world.count("SELECT COUNT(*) FROM measurement", &[]), 1);
+    // disconnected, they are the member's to clear
+    world.ok(
+        "follow.stop",
+        json!({"system": "health", "ref": "store:apple-health"}),
+    );
+    world.ok("measurement.clear", json!({"id": "2026-03-05:steps"}));
+}

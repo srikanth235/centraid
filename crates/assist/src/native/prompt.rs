@@ -506,9 +506,25 @@ pub fn py_json(value: &Value) -> String {
 /// The kind card, one line per kind.
 #[must_use]
 pub fn kind_card(currency: &str) -> Vec<String> {
+    kind_card_for(ToolsMode::default(), currency)
+}
+
+/// The kind card as the model of `tools` learned it. S2's is frozen as it was trained (#1166):
+/// Health's two kinds were read-only then and list no verbs, whatever the runtime lets chat do to
+/// them now. The runtime still takes such a call from S2; its prompt does not advertise one.
+#[must_use]
+pub fn kind_card_for(tools: ToolsMode, currency: &str) -> Vec<String> {
     Kind::ALL
         .iter()
-        .map(|kind| render::card_line(*kind, currency))
+        .map(|kind| {
+            let line = render::card_line(*kind, currency);
+            match (tools, kind) {
+                (ToolsMode::S2, Kind::Workout | Kind::DailyFigure) => {
+                    line.split(" · verbs: ").next().unwrap_or(&line).to_owned()
+                }
+                _ => line,
+            }
+        })
         .collect()
 }
 
@@ -557,7 +573,7 @@ pub fn prompt(session: &mut Session) -> Value {
         "today: {} {today}\nme: {}\n\nkinds:\n{}",
         crate::native::dates::weekday_name(today),
         session.me_name,
-        kind_card(&session.world.currency).join("\n")
+        kind_card_for(session.flags.tools, &session.world.currency).join("\n")
     );
     if session.flags.directory {
         let mut lines = Vec::new();

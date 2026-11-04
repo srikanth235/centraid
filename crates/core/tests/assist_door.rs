@@ -493,6 +493,28 @@ fn health_reaches_the_world_through_the_core_door_inside_the_window() {
     assert_eq!(workouts.len(), 1, "{workouts:?}");
     assert_eq!(workouts[0].field("moving"), Some(&Val::Num(1800)));
     assert_eq!(workouts[0].field("distance"), Some(&Val::Num(5000)));
+    // the store the vault follows, and the workout it follows, reach the world through this door
+    // (#1166): the runtime refuses an edit of either with the store's name before a card parks
+    assert_eq!(world.health_store.as_deref(), Some("Health"));
+    assert_eq!(
+        workouts[0].extra.get("followed_by").map(String::as_str),
+        Some("Health")
+    );
+    // and a figure is read to the digit through it, for an undo that must not round
+    let exact = door
+        .table_where(
+            "measurement",
+            "day, metric, value",
+            "day",
+            "metric",
+            "day = ? AND metric = ?",
+            &[day(1), "weight_kg".to_owned()],
+        )
+        .expect("the figure reads");
+    assert_eq!(
+        exact.first().and_then(|row| row.get("value")),
+        Some(&centraid_apps_kit::row::Cell::Real(71.6))
+    );
     // A workout card is live while its activity is; a day's total has no row to be gone.
     let id = workouts[0].id.clone();
     let live = |entity: &str, id: &str| {

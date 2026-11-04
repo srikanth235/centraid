@@ -593,3 +593,24 @@ fn a_by_name_write_is_a_find_step_in_the_trace() {
         ]
     );
 }
+
+#[test]
+fn s2s_prompt_is_the_bytes_it_was_trained_on() {
+    // the system turn S2 saw before the regroup (`prompt.sig.txt` at 892ba2c42): its tools block
+    // and its kind card, frozen. New tools and new verbs are shown to the other modes only.
+    let trained = include_str!("fixtures/prompt.s2.pre-1166.txt");
+    let exported = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../contracts/assist/export/prompt.s2.txt"
+    ))
+    .expect("the exported S2 prompt");
+    assert_eq!(
+        exported, trained,
+        "prompt.s2.txt drifted from what S2 learned"
+    );
+    // and a live S2 session over the same world renders the same turn
+    let world = seeded();
+    let mut session = world.session();
+    let live = centraid_nativetools::prompt::prompt(&mut session);
+    assert_eq!(live["rendered"].as_str().unwrap(), trained);
+}

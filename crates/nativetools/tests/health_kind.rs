@@ -1,5 +1,6 @@
-//! Health in the assistant (#1135, the owner's ruling of 2026-10-24): the read kinds `daily figure`
-//! and `workout`, the 90 days the world holds, and that nothing here writes them.
+//! Health in the assistant (#1135, the owner's ruling of 2026-10-24; #1166): the kinds `daily figure`
+//! and `workout`, the 90 days the world holds, and what chat may write: what the member logged,
+//! never what a health store states.
 
 mod common;
 
@@ -382,4 +383,183 @@ fn a_workout_is_logged_at_the_instant_it_was_on_the_members_clock() {
         kept.contains("2026-09-26 11:00"),
         "kept as an instant: {kept}"
     );
+}
+
+#[test]
+fn a_figure_is_logged_cleared_and_put_back_once_the_store_is_disconnected() {
+    use centraid_nativetools::park::Writes;
+    let world = seeded_with(&world_json());
+    // followed, a store states the figures: nothing logs or clears them
+    let mut followed = world.strict_session();
+    followed.user("log my weight");
+    let refused = call(
+        &mut followed,
+        "create",
+        json!({"kind": "daily figure", "args": "name: weight_kg\ndate: 2026-09-27\nvalue: 70"}),
+    );
+    assert!(!wrote(&refused), "{refused}");
+    assert!(
+        refused["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("These figures come from Health"),
+        "{refused}"
+    );
+    world.elsewhere(
+        "follow.stop",
+        json!({"system": "health", "ref": "store:seed"}),
+    );
+    let mut session = world.session_with(
+        common::TODAY,
+        centraid_nativetools::Flags {
+            writes: Writes::Shadow,
+            ..centraid_nativetools::Flags::default()
+        },
+    );
+    session.user("log my weight as 70 for today");
+    let made = call(
+        &mut session,
+        "create",
+        json!({"kind": "daily figure", "args": "name: weight_kg\ndate: 2026-09-27\nvalue: 70"}),
+    );
+    assert!(wrote(&made), "{made}");
+    session.user("delete it");
+    let found = call(
+        &mut session,
+        "find",
+        json!({"kind": "daily figure", "where": "metric = weight_kg", "when": {"date": "2026-09-27"}}),
+    );
+    let handle = found["effect"]["result"]
+        .as_str()
+        .expect("the figure")
+        .to_owned();
+    let cleared = call(
+        &mut session,
+        "do",
+        json!({"verb": "delete", "rows": handle}),
+    );
+    assert!(wrote(&cleared), "{cleared}");
+    session.user("undo that");
+    let back = call(&mut session, "do", json!({"verb": "undo"}));
+    assert!(wrote(&back), "{back}");
+    let drift = session.take_drift();
+    assert!(
+        drift.is_empty(),
+        "the patch parted from the vault:\n{}",
+        drift.join("\n")
+    );
+}
+
+/// The value the vault holds for a day's metric, to the digit: the world shows figures whole.
+fn exact(world: &common::World, day: &str, metric: &str) -> Option<f64> {
+    use centraid_apps_kit::row::Cell;
+    use centraid_nativetools::vaultio::{Handle, SetClock};
+    let handle = Handle::open(world.path(), SetClock::at(1_900_000_000_000), "exact")
+        .expect("the vault opens");
+    handle
+        .table_where(
+            "measurement",
+            "day, metric, value",
+            "day",
+            "metric",
+            "day = ? AND metric = ?",
+            &[day.to_owned(), metric.to_owned()],
+        )
+        .expect("a read")
+        .first()
+        .and_then(|row| match row.get("value") {
+            Some(Cell::Real(value)) => Some(*value),
+            Some(Cell::Integer(value)) => Some(*value as f64),
+            _ => None,
+        })
+}
+
+#[test]
+fn an_undo_puts_back_the_value_the_vault_held_not_the_one_the_world_shows() {
+    let world = seeded_with(&world_json());
+    world.elsewhere(
+        "follow.stop",
+        json!({"system": "health", "ref": "store:seed"}),
+    );
+    assert_eq!(exact(&world, "2026-09-26", "weight_kg"), Some(71.6));
+    let mut session = world.strict_session();
+    session.user("my weight was 70");
+    let found = call(
+        &mut session,
+        "find",
+        json!({"kind": "daily figure", "where": "metric = weight_kg"}),
+    );
+    let handle = found["effect"]["result"].as_str().unwrap().to_owned();
+    let edited = call(
+        &mut session,
+        "edit",
+        json!({"rows": handle, "args": "value: 70"}),
+    );
+    assert!(wrote(&edited), "{edited}");
+    assert_eq!(exact(&world, "2026-09-26", "weight_kg"), Some(70.0));
+    session.user("undo that");
+    call(&mut session, "do", json!({"verb": "undo"}));
+    assert_eq!(
+        exact(&world, "2026-09-26", "weight_kg"),
+        Some(71.6),
+        "the undo rounded it"
+    );
+    // the same for a delete: it is put back to the digit
+    session.user("delete that figure");
+    let found = call(
+        &mut session,
+        "find",
+        json!({"kind": "daily figure", "where": "metric = weight_kg"}),
+    );
+    let handle = found["effect"]["result"].as_str().unwrap().to_owned();
+    call(
+        &mut session,
+        "do",
+        json!({"verb": "delete", "rows": handle}),
+    );
+    assert_eq!(exact(&world, "2026-09-26", "weight_kg"), None);
+    session.user("undo that");
+    call(&mut session, "do", json!({"verb": "undo"}));
+    assert_eq!(
+        exact(&world, "2026-09-26", "weight_kg"),
+        Some(71.6),
+        "the undo rounded it"
+    );
+}
+
+#[test]
+fn logging_a_figure_over_a_day_that_has_one_is_refused_and_leaves_it() {
+    let world = seeded_with(&world_json());
+    world.elsewhere(
+        "follow.stop",
+        json!({"system": "health", "ref": "store:seed"}),
+    );
+    let mut session = world.strict_session();
+    session.user("log my weight as 70 for yesterday");
+    let made = call(
+        &mut session,
+        "create",
+        json!({"kind": "daily figure", "args": "name: weight_kg\ndate: 2026-09-26\nvalue: 70"}),
+    );
+    assert!(
+        made["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("there is already a weight_kg figure for 2026-09-26; change it with edit"),
+        "{made}"
+    );
+    assert_eq!(exact(&world, "2026-09-26", "weight_kg"), Some(71.6));
+    // beyond the window the world holds, the vault still does
+    world.elsewhere(
+        "measurement.log",
+        json!({"day": "2026-01-02", "metric": "steps", "value": 4000}),
+    );
+    session.user("log steps for the second of january");
+    let old = call(
+        &mut session,
+        "create",
+        json!({"kind": "daily figure", "args": "name: steps\ndate: 2026-01-02\nvalue: 1"}),
+    );
+    assert!(!wrote(&old), "{old}");
+    assert_eq!(exact(&world, "2026-01-02", "steps"), Some(4000.0));
 }

@@ -83,6 +83,11 @@
         "schema": "entity",
         "table": "restore",
         "verbs": "act"
+      },
+      {
+        "schema": "measurement",
+        "table": "clear",
+        "verbs": "act"
       }
     ]
   },
@@ -598,6 +603,128 @@
             "aliases": ["value"]
           }
         }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "log-figure",
+      "verb": "create",
+      "kind": "daily_figure",
+      "inverse": "clear-figure",
+      "sealed": [],
+      "command": "measurement.log",
+      "phrasings": [
+        "log my weight as 70 kilos for today",
+        "note 8000 steps for yesterday",
+        "record seven hours of sleep for monday"
+      ],
+      "description": "Set a daily figure for a day the member states by hand through measurement.log. Refused while a health store is followed, which states them each read.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "person_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "day": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "aliases": ["date", "day"]
+          },
+          "metric": {
+            "enum": [
+              "steps",
+              "active_energy_kcal",
+              "exercise_min",
+              "sleep_min",
+              "resting_hr_bpm",
+              "weight_kg"
+            ],
+            "aliases": ["name", "metric"]
+          },
+          "value": {
+            "type": "number",
+            "minimum": 0,
+            "aliases": ["value"]
+          }
+        },
+        "required": ["value"],
+        "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "clear-figure",
+      "verb": "delete",
+      "kind": "daily_figure",
+      "inverse": "log-figure",
+      "sealed": [],
+      "command": "measurement.clear",
+      "phrasings": [
+        "delete today's weight",
+        "clear yesterday's steps",
+        "remove the sleep I logged for monday"
+      ],
+      "description": "Take back a daily figure the member logged by hand through measurement.clear. Refused while a health store is followed: a day a store states is never deleted.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "person_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "day": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "metric": {
+            "enum": [
+              "steps",
+              "active_energy_kcal",
+              "exercise_min",
+              "sleep_min",
+              "resting_hr_bpm",
+              "weight_kg"
+            ]
+          }
+        },
+        "type": "object"
       },
       "output": {
         "type": "object",

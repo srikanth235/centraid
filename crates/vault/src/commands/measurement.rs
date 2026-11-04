@@ -9,10 +9,14 @@
 //! - **A batch is one commit.** A value the vault already holds is not written
 //!   (so reading the same week twice changes nothing), a changed one is replaced,
 //!   a new one added.
-//! - **A day is never deleted** (R-1129-3). A sum the store now reports nothing
-//!   for is sent as `0` by the follower, and a last-value or average metric is
-//!   never cleared (RP-K-3); both rules are the follower's, because only it knows
-//!   what the store was asked.
+//! - **A day the store states is never deleted** (R-1129-3). A sum the store now
+//!   reports nothing for is sent as `0` by the follower, and a last-value or average
+//!   metric is never cleared (RP-K-3); both rules are the follower's, because only
+//!   it knows what the store was asked. **The one exception is the member's own**
+//!   ([#1166](https://github.com/srikanth235/centraid/issues/1166)): a figure they
+//!   logged by hand (`measurement.log`) can be taken back (`measurement.clear`), and
+//!   only while no health store is followed, so it can only ever remove a figure
+//!   nothing states.
 //! - **Days are store-agnostic**: a measurement is keyed by its person, day and
 //!   metric, so the vault keeps the latest statement of each, whichever store
 //!   made it.
@@ -177,11 +181,45 @@ fn log(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         rusqlite::params![person, day, metric, value],
     )?;
     ctx.touch(&person)?;
-    Ok(json!({ "day": day, "metric": metric, "value": value }))
+    Ok(json!({ "id": format!("{day}:{metric}"), "day": day, "metric": metric, "value": value }))
+}
+
+fn pre_clear(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let connection = ctx.connection();
+    let Some((day, metric)) = named(ctx) else {
+        return Ok(Some("Name the day and the metric.".to_owned()));
+    };
+    if let Some(store) = followed_by(connection)? {
+        return Ok(Some(format!(
+            "These figures come from {store}; change them there, not here."
+        )));
+    }
+    let held: bool = connection.query_row(
+        "SELECT EXISTS (SELECT 1 FROM measurement WHERE person_id = ?1 AND day = ?2 AND metric = ?3)",
+        rusqlite::params![subject(ctx)?, day, metric],
+        |row| row.get(0),
+    )?;
+    Ok((!held).then(|| format!("There is no {metric} figure for {day}.")))
+}
+
+/// Take back a figure the member logged: the row goes, and nothing else.
+fn clear(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let (day, metric) = named(ctx).unwrap_or_default();
+    let person = subject(ctx)?;
+    ctx.connection().execute(
+        "DELETE FROM measurement WHERE person_id = ?1 AND day = ?2 AND metric = ?3",
+        rusqlite::params![person, day, metric],
+    )?;
+    ctx.touch(&person)?;
+    Ok(json!({ "id": format!("{day}:{metric}"), "day": day, "metric": metric }))
 }
 
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
+    const CLEAR: &[CommandCondition] = &[CommandCondition {
+        predicate: "a_figure_the_member_logged_and_no_store_states",
+        check: pre_clear,
+    }];
     const LOG: &[CommandCondition] = &[CommandCondition {
         predicate: "a_figure_names_a_day_and_a_metric_and_no_store_states_it",
         check: pre_log,
@@ -191,6 +229,26 @@ pub fn definitions() -> Vec<CommandDefinition> {
         check: pre_record,
     }];
     vec![
+        CommandDefinition::plain(
+            "measurement.clear",
+            "measurement",
+            r#"{
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "person_id": { "type": "string", "minLength": 1 },
+            "id": { "type": "string", "minLength": 1 },
+            "day": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+            "metric": {
+              "enum": ["steps", "active_energy_kcal", "exercise_min", "sleep_min",
+                       "resting_hr_bpm", "weight_kg"]
+            }
+          }
+        }"#,
+            Idempotency::Idempotent,
+            CLEAR,
+            clear,
+        ),
         CommandDefinition::plain(
             "measurement.log",
             "measurement",

@@ -47,6 +47,18 @@ const UNDRIVEN: &[(&str, &str, &str)] = &[
         "the fixture world holds no Health rows; tests/health_kind.rs drives it on its own world",
     ),
     (
+        "create",
+        "daily figure",
+        "the fixture world holds no Health rows; tests/health_kind.rs drives it on its own world, \
+         once the store is disconnected",
+    ),
+    (
+        "delete",
+        "daily figure",
+        "the fixture world holds no Health rows; tests/health_kind.rs drives it on its own world, \
+         once the store is disconnected",
+    ),
+    (
         "edit",
         "daily figure",
         "the fixture world holds no Health rows; tests/health_kind.rs drives it on its own world, \

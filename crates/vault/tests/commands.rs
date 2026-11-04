@@ -108,6 +108,7 @@ fn the_registry_carries_the_shared_verbs_and_lockers_and_nothing_else() {
         "rule.apply",
         "measurement.record",
         "measurement.log",
+        "measurement.clear",
         "workout.log",
         "workout.edit",
         "thread.save_turn",

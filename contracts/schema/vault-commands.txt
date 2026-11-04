@@ -56,6 +56,7 @@ locker.set_field
 locker.set_memo
 locker.set_passkey
 locker.totp_code
+measurement.clear
 measurement.log
 measurement.record
 note.create

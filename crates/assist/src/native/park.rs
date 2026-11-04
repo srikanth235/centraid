@@ -478,6 +478,7 @@ pub(crate) fn apply(
         "workout.log" => workout_log(world, cx, input),
         "workout.edit" => workout_edit(world, cx, input),
         "measurement.log" => measurement_log(world, cx, input),
+        "measurement.clear" => measurement_clear(world, input),
         "account.add" => account_add(world, cx, input),
         "category.add" => category_add(world, cx, input),
         "account.edit" => account_edit(world, cx, input),
@@ -1917,7 +1918,28 @@ fn measurement_log(world: &mut World, _: &Cx, input: &Value) -> Result<Ran, Stri
             );
         }
     }
-    Ok(ok(json!({"day": day})))
+    Ok(ok(json!({"id": key.1, "day": day})))
+}
+
+/// A figure the member logged, taken back.
+fn measurement_clear(world: &mut World, input: &Value) -> Result<Ran, String> {
+    let id = match (text(input, "day"), text(input, "metric")) {
+        (Some(day), Some(metric)) => format!("{day}:{metric}"),
+        _ => text(input, "id").unwrap_or_default().to_owned(),
+    };
+    if let Some(store) = &world.health_store {
+        return Ok(refused(
+            "a_figure_the_member_logged_and_no_store_states",
+            &format!("These figures come from {store}; change them there, not here."),
+        ));
+    }
+    match world.rows.remove(&(Kind::DailyFigure, id.clone())) {
+        Some(_) => Ok(ok(json!({"id": id}))),
+        None => Ok(refused(
+            "a_figure_the_member_logged_and_no_store_states",
+            &format!("There is no figure {id}."),
+        )),
+    }
 }
 
 fn account_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {

@@ -1550,6 +1550,106 @@ pub mod act {
                 value.request()
             }
         }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum LogFigureMetric {
+            #[default]
+            Steps,
+            ActiveEnergyKcal,
+            ExerciseMin,
+            SleepMin,
+            RestingHrBpm,
+            WeightKg,
+        }
+        impl LogFigureMetric {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Steps => "steps",
+                    Self::ActiveEnergyKcal => "active_energy_kcal",
+                    Self::ExerciseMin => "exercise_min",
+                    Self::SleepMin => "sleep_min",
+                    Self::RestingHrBpm => "resting_hr_bpm",
+                    Self::WeightKg => "weight_kg",
+                }
+            }
+        }
+
+        /// Set a daily figure for a day the member states by hand through measurement.log. Refused while a health store is followed, which states them each read.
+        #[derive(Clone, Debug, Default)]
+        pub struct LogFigure {
+            pub value: f64,
+            pub day: Option<String>,
+            pub id: Option<String>,
+            pub metric: Option<LogFigureMetric>,
+            pub person_id: Option<String>,
+        }
+        impl LogFigure {
+            pub const NAME: &str = "log-figure";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("value".to_owned(), real(self.value));
+                if let Some(it) = self.day { map.insert("day".to_owned(), text(it)); }
+                if let Some(it) = self.id { map.insert("id".to_owned(), text(it)); }
+                if let Some(it) = self.metric { map.insert("metric".to_owned(), text(it.wire())); }
+                if let Some(it) = self.person_id { map.insert("person_id".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<LogFigure> for wire::ActRequest {
+            fn from(value: LogFigure) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum ClearFigureMetric {
+            #[default]
+            Steps,
+            ActiveEnergyKcal,
+            ExerciseMin,
+            SleepMin,
+            RestingHrBpm,
+            WeightKg,
+        }
+        impl ClearFigureMetric {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Steps => "steps",
+                    Self::ActiveEnergyKcal => "active_energy_kcal",
+                    Self::ExerciseMin => "exercise_min",
+                    Self::SleepMin => "sleep_min",
+                    Self::RestingHrBpm => "resting_hr_bpm",
+                    Self::WeightKg => "weight_kg",
+                }
+            }
+        }
+
+        /// Take back a daily figure the member logged by hand through measurement.clear. Refused while a health store is followed: a day a store states is never deleted.
+        #[derive(Clone, Debug, Default)]
+        pub struct ClearFigure {
+            pub day: Option<String>,
+            pub daily_figure_id: Option<String>,
+            pub metric: Option<ClearFigureMetric>,
+            pub person_id: Option<String>,
+        }
+        impl ClearFigure {
+            pub const NAME: &str = "clear-figure";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.day { map.insert("day".to_owned(), text(it)); }
+                if let Some(it) = self.daily_figure_id { map.insert("id".to_owned(), text(it)); }
+                if let Some(it) = self.metric { map.insert("metric".to_owned(), text(it.wire())); }
+                if let Some(it) = self.person_id { map.insert("person_id".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ClearFigure> for wire::ActRequest {
+            fn from(value: ClearFigure) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod locker {
