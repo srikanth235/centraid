@@ -157,6 +157,21 @@ impl Session {
         phrases::read_dates_in(message, self.now, &self.dates_context())
     }
 
+    /// The `nums:` line of `message` (`native/nums.rs`): the numbers outside its date phrases. Only a model on the regrouped
+    /// tools reads it; S2's prompt has none.
+    #[must_use]
+    pub fn nums_line(&self, message: &str) -> Option<String> {
+        if self.flags.tools == crate::native::prompt::ToolsMode::S2 {
+            return None;
+        }
+        let readings = self.date_readings(message);
+        let phrases: Vec<&str> = readings
+            .iter()
+            .map(|reading| reading.phrase.as_str())
+            .collect();
+        crate::native::nums::nums_line(message, &phrases)
+    }
+
     /// The `dates:` line of `message` with the conversation's help.
     #[must_use]
     pub fn dates_line(&self, message: &str) -> Option<String> {

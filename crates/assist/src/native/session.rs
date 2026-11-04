@@ -1933,7 +1933,7 @@ impl Session {
             self.observations[index].compacted = Some(kept);
             compacted.push(json!({"obs": index, "text": self.observations[index].render()}));
         }
-        let (preground, focus, answer, dates, picks) = if self.flags.preground {
+        let (preground, focus, answer, dates, nums, picks) = if self.flags.preground {
             // The containers of the focus rows are numbered first, so the
             // `vault:` and `focus:` lines can name them (`#8 album "Wedding"`).
             crate::native::block::number_containers(self);
@@ -1942,13 +1942,15 @@ impl Session {
                 crate::native::prompt::focus_line(self),
                 crate::native::block::answer_line(self),
                 self.dates_line(message),
+                self.nums_line(message),
                 crate::native::block::picks_line(self, message),
             )
         } else {
-            (None, None, None, None, None)
+            (None, None, None, None, None, None)
         };
-        let block =
-            crate::native::prompt::user_block(&[&preground, &focus, &answer, &dates, &picks]);
+        let block = crate::native::prompt::user_block(&[
+            &preground, &focus, &answer, &dates, &nums, &picks,
+        ]);
         // A RETRACTION ENDS THE TURN BEFORE ANY CALL: the runtime makes the
         // `decline never_mind` itself, so the model never has to learn it. The
         // reply carries it as `ended`, and a call after it is refused as a call
@@ -1961,6 +1963,7 @@ impl Session {
             "focus": focus,
             "answer": answer,
             "dates": dates,
+            "nums": nums,
             "picks": picks,
             "block": block,
             "compacted": compacted,

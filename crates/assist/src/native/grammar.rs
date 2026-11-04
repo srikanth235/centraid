@@ -76,12 +76,14 @@ pub struct Visible {
     pub rows: BTreeSet<u32>,
     pub results: BTreeSet<u32>,
     pub dates: usize,
+    /// How many entries its `nums:` line has.
+    pub nums: usize,
 }
 
 impl Visible {
-    /// The handles of `prompt`; `dates` is the `dates:` line of the turn's message when the prompt has one.
+    /// The handles of `prompt`; `dates` and `nums` are the `dates:` and `nums:` lines of the turn's message when it has them.
     #[must_use]
-    pub fn of(prompt: &str, dates: Option<&str>) -> Self {
+    pub fn of(prompt: &str, dates: Option<&str>, nums: Option<&str>) -> Self {
         let mut seen = Self::default();
         let chars: Vec<char> = prompt.chars().collect();
         let mut at = 0;
@@ -108,6 +110,7 @@ impl Visible {
                 seen.results.insert(number);
             }
         }
+        seen.nums = nums.map_or(0, |line| crate::native::nums::values(line).len());
         seen.dates = dates.map_or(0, |line| {
             line.strip_prefix("dates:")
                 .unwrap_or(line)
@@ -359,8 +362,30 @@ fn gbnf(rule: &Rule, top: bool) -> String {
 // the builder
 // ---------------------------------------------------------------------------------------------
 
-/// What `dates[` is: the characters of the chain a free text must not complete with a number that is no entry.
-const CHAIN: [char; 6] = ['d', 'a', 't', 'e', 's', '['];
+/// The references a free text may only write with an index that exists: `dates[i]` and `nums[i]`. Both end in `[`.
+const CHAINS: [&str; 2] = ["dates[", "nums["];
+
+/// The state of the free-text automaton after `text`: the longest suffix of it that starts a chain (`""` when none).
+fn chain_state(text: &str) -> String {
+    let mut best = String::new();
+    for chain in CHAINS {
+        for cut in 1..chain.len() {
+            let prefix = &chain[..cut];
+            if text.ends_with(prefix) && prefix.len() > best.len() {
+                best = prefix.to_owned();
+            }
+        }
+    }
+    best
+}
+
+fn state_name(family: &str, prefix: &str) -> String {
+    if prefix.is_empty() {
+        format!("{family}-s0")
+    } else {
+        format!("{family}-p{prefix}")
+    }
+}
 
 struct Builder<'a> {
     grammar: Grammar,
@@ -377,23 +402,30 @@ impl<'a> Builder<'a> {
 
     // --- free text -------------------------------------------------------------------------
 
-    /// The family `family` of rules for a text of any characters but `excluded`, in which a `#n`, `@k` and `dates[i]` can
-    /// only name what the prompt shows. Every state may stop: whatever follows (a newline, ` · `, a quote) is a character the
-    /// text excludes, or the end of the grammar. The states are a DFA over the text, so the grammar has no ambiguity.
+    /// The family `family` of rules for a text of any characters but `excluded`, in which a `#n`, `@k`, `dates[i]` and
+    /// `nums[i]` can only name what the prompt shows. Every state may stop: whatever follows (a newline, ` · `, a quote) is a
+    /// character the text excludes, or the end of the grammar. The states are a DFA over the text (the prefixes of the chains
+    /// are its states), so the grammar has no ambiguity.
     fn free(&mut self, family: &str, excluded: &str) {
-        let state = |k: usize| format!("{family}-s{k}");
         let stop = || lit("");
-        let plain_extra = format!("{excluded}#@d");
+        let mut alphabet: Vec<char> = CHAINS.iter().flat_map(|chain| chain.chars()).collect();
+        alphabet.sort_unstable();
+        alphabet.dedup();
+        let alphabet_text: String = alphabet.iter().collect();
+        let to = |after: &str| rf(&state_name(family, &chain_state(after)));
         // what may follow a sigil with no digit read, or a number that is complete: a character that is no digit, or a stop
         let rest = || {
-            alt(vec![
+            let mut options = vec![
                 stop(),
                 seq(vec![
-                    any_but(&format!("{excluded}0123456789#@d")),
-                    rf(&state(0)),
+                    any_but(&format!("{excluded}0123456789#@{alphabet_text}")),
+                    rf(&state_name(family, "")),
                 ]),
-                seq(vec![lit("d"), rf(&state(1))]),
-            ])
+            ];
+            for letter in &alphabet {
+                options.push(seq(vec![lit(&letter.to_string()), to(&letter.to_string())]));
+            }
+            alt(options)
         };
         // the numbers a sigil may name, as a trie of the digits read so far
         let trie = |this: &mut Self, sigil: char, numbers: &BTreeSet<u32>| {
@@ -429,33 +461,45 @@ impl<'a> Builder<'a> {
         trie(self, '#', &rows);
         trie(self, '@', &results);
 
-        for (k, chain_char) in CHAIN.iter().enumerate() {
+        let mut states: BTreeSet<String> = BTreeSet::from([String::new()]);
+        for chain in CHAINS {
+            for cut in 1..chain.len() {
+                states.insert(chain[..cut].to_owned());
+            }
+        }
+        for state in &states {
             let mut options = vec![stop()];
-            if k == 0 {
-                options.push(seq(vec![any_but(&plain_extra), rf(&state(0))]));
-            } else {
-                options.push(seq(vec![
-                    any_but(&format!("{plain_extra}{chain_char}")),
-                    rf(&state(0)),
-                ]));
-                options.push(seq(vec![lit("d"), rf(&state(1))]));
+            options.push(seq(vec![
+                any_but(&format!("{excluded}#@{alphabet_text}")),
+                rf(&state_name(family, "")),
+            ]));
+            for letter in &alphabet {
+                let after = format!("{state}{letter}");
+                let completes = CHAINS.iter().find(|chain| **chain == after);
+                match completes {
+                    // the chain is written: only an index that is an entry, and the bracket
+                    Some(chain) => {
+                        let count = if chain.starts_with("dates") {
+                            self.seen.dates
+                        } else {
+                            self.seen.nums
+                        };
+                        if count > 0 {
+                            let indices = (0..count).map(|index| lit(&index.to_string())).collect();
+                            options.push(seq(vec![
+                                lit(&letter.to_string()),
+                                alt(indices),
+                                lit("]"),
+                                rf(&state_name(family, "")),
+                            ]));
+                        }
+                    }
+                    None => options.push(seq(vec![lit(&letter.to_string()), to(&after)])),
+                }
             }
             options.push(seq(vec![lit("#"), rf(&format!("{family}-h"))]));
             options.push(seq(vec![lit("@"), rf(&format!("{family}-a"))]));
-            if k + 1 < CHAIN.len() {
-                options.push(seq(vec![lit(&chain_char.to_string()), rf(&state(k + 1))]));
-            } else if self.seen.dates > 0 {
-                // `dates[` was written: only an index that is an entry, and the bracket
-                let indices = (0..self.seen.dates)
-                    .map(|index| lit(&index.to_string()))
-                    .collect();
-                options.push(seq(vec![lit("["), alt(indices), lit("]"), rf(&state(0))]));
-            }
-            // at `d` itself the chain character is `d`, which the restart above already is
-            if k == 0 {
-                options.push(seq(vec![lit("d"), rf(&state(1))]));
-            }
-            self.grammar.add(&state(k), alt(options));
+            self.grammar.add(&state_name(family, state), alt(options));
         }
     }
 
@@ -898,25 +942,43 @@ pub fn grammar_for_step(
     Some((mode, grammar.to_gbnf()))
 }
 
-/// The user's message of the last user turn that is no observation: the text after the runtime's block.
-#[must_use]
-pub fn user_message(prompt: &str) -> Option<&str> {
-    let start = MODEL.im_start;
-    let header = format!("{start}user\n");
+/// The content of the last user turn that is no observation: the runtime's block (when it has one), a blank line, the message.
+fn user_turn(prompt: &str) -> Option<&str> {
+    let header = format!("{}user\n", MODEL.im_start);
     let mut at = prompt.len();
     while let Some(found) = prompt[..at].rfind(&header) {
         let body = &prompt[found + header.len()..];
         let body = body.split(MODEL.im_end).next().unwrap_or(body);
         if !body.starts_with("<tool_response>") {
-            let block = ["vault:", "focus:", "answer:", "dates:"];
-            if block.iter().any(|label| body.starts_with(label)) {
-                return body.split_once("\n\n").map(|(_, message)| message);
-            }
             return Some(body);
         }
         at = found;
     }
     None
+}
+
+/// The labels of the lines that lead a user turn (`prompt::user_block`).
+const BLOCK_LABELS: [&str; 6] = ["vault:", "focus:", "answer:", "dates:", "nums:", "picks:"];
+
+/// The user's message of the last user turn that is no observation: the text after the runtime's block.
+#[must_use]
+pub fn user_message(prompt: &str) -> Option<&str> {
+    let body = user_turn(prompt)?;
+    if BLOCK_LABELS.iter().any(|label| body.starts_with(label)) {
+        return body.split_once("\n\n").map(|(_, message)| message);
+    }
+    Some(body)
+}
+
+/// The line of the turn's block that starts with `label` (`nums:`), the whole line, or `None`.
+#[must_use]
+pub fn block_line<'a>(prompt: &'a str, label: &str) -> Option<&'a str> {
+    let body = user_turn(prompt)?;
+    if !BLOCK_LABELS.iter().any(|known| body.starts_with(known)) {
+        return None;
+    }
+    let block = body.split_once("\n\n").map_or(body, |(block, _)| block);
+    block.lines().find(|line| line.starts_with(label))
 }
 
 /// The words of `text`, lower case, joined by a space, with a space at each end: `" what s on "`.
@@ -1020,7 +1082,7 @@ mod tests {
 
     /// The handles a think names are shown: what a prompt that led to it would show.
     fn showing(think: &str) -> Visible {
-        let mut seen = Visible::of(think, None);
+        let mut seen = Visible::of(think, None, None);
         let mut index = 0;
         while let Some(at) = think[index..].find("dates[") {
             let digits: String = think[index + at + 6..]
@@ -1131,7 +1193,7 @@ mod tests {
 
     #[test]
     fn a_handle_the_prompt_does_not_show_is_refused() {
-        let seen = Visible::of("directory: Home (#6)\nobservation: @1 = 4", None);
+        let seen = Visible::of("directory: Home (#6)\nobservation: @1 = 4", None, None);
         let ok = think("intent: write \"star it\"\nverb: star\npick: #6 (name)");
         assert!(full(&seen).accepts(&ok));
         let unseen = think("intent: write \"star it\"\nverb: star\npick: #7 (name)");
@@ -1150,6 +1212,7 @@ mod tests {
         let seen = Visible::of(
             "x",
             Some("dates: friday = 2026-03-20 · next week = 2026-03-16..2026-03-22"),
+            None,
         );
         assert_eq!(seen.dates, 2);
         let base = "intent: read \"what is on\"\nkind: event\nwhen: \"friday\" = dates[";
@@ -1158,7 +1221,7 @@ mod tests {
         assert!(!handles(&seen).accepts(&think(&format!("{base}2]"))));
         assert!(handles(&seen).accepts(&think(&format!("{base}0]"))));
         // no dates line: no `dates[`
-        let none = Visible::of("x", None);
+        let none = Visible::of("x", None, None);
         assert!(!handles(&none).accepts(&think(&format!("{base}0]"))));
         // text that only looks like it
         assert!(handles(&none).accepts("dates are fine, so is dates and date[0] and ddates\n"));
@@ -1186,7 +1249,7 @@ mod tests {
 
     #[test]
     fn a_verb_is_followed_only_by_a_kind_it_applies_to() {
-        let seen = Visible::of("(#4)", None);
+        let seen = Visible::of("(#4)", None, None);
         let ok = think("intent: write \"complete it\"\nverb: complete\nkind: task\nname: pay rent");
         assert!(full(&seen).accepts(&ok));
         let wrong =
@@ -1203,7 +1266,7 @@ mod tests {
 
     #[test]
     fn free_text_cannot_name_a_handle_that_is_not_shown() {
-        let seen = Visible::of("(#5)", None);
+        let seen = Visible::of("(#5)", None, None);
         let name = |text: &str| {
             think(&format!(
                 "intent: write \"add\"\nverb: create\nkind: task\nname: {text}"
@@ -1216,8 +1279,28 @@ mod tests {
     }
 
     #[test]
+    fn a_nums_entry_the_nums_line_lacks_is_refused() {
+        let seen = Visible::of("x", None, Some("nums: fifty = 50 · 23.50 = 23.5"));
+        assert_eq!(seen.nums, 2);
+        let base = "intent: read \"big ones\"\nkind: transaction\nwhere: amount > nums[";
+        assert!(full(&seen).accepts(&think(&format!("{base}1] USD"))));
+        assert!(full(&seen).accepts(&think(&format!("{base}0]"))));
+        assert!(!full(&seen).accepts(&think(&format!("{base}2]"))));
+        assert!(!handles(&seen).accepts(&think(&format!("{base}2]"))));
+        // no nums line: no `nums[`
+        let none = Visible::of("x", None, None);
+        assert!(!handles(&none).accepts(&think(&format!("{base}0]"))));
+        // text that only looks like it, and the chains side by side
+        assert!(handles(&none).accepts("Numbers night, numsy, nums, datnums and dat\n"));
+        let both = Visible::of("x", Some("dates: a = b"), Some("nums: 3 = 3"));
+        assert!(handles(&both).accepts("dates[0] nums[0] datenums[0] dnums[0]\n"));
+        assert!(!handles(&both).accepts("datenums[1]\n"));
+        assert!(!handles(&both).accepts("dates[0] dnums[1]\n"));
+    }
+
+    #[test]
     fn the_gbnf_names_are_legal_and_the_root_is_first() {
-        let seen = Visible::of("(#1) (#12) @3", Some("dates: a = b"));
+        let seen = Visible::of("(#1) (#12) @3", Some("dates: a = b"), Some("nums: x = 1"));
         let grammar = full(&seen);
         let text = grammar.to_gbnf();
         assert!(text.starts_with("root ::= think\n"), "{}", &text[..40]);

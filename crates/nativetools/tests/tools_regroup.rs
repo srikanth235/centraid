@@ -707,3 +707,91 @@ fn the_session_states_the_same_flat_fields_the_stateless_compiler_writes() {
     }));
     assert!(twice.get("refused").is_some(), "{twice}");
 }
+
+// ---- `nums[i]`: the numbers of the message, named like its dates (#1166) ----
+
+#[test]
+fn the_block_carries_a_nums_line_for_the_regrouped_tools_and_never_for_s2() {
+    let world = seeded();
+    let mut strict = world.strict_session();
+    let block = strict.user("paid fifty and 23.50 for lunch")["block"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert!(block.contains("nums: fifty = 50 · 23.50 = 23.5"), "{block}");
+    let mut s2 = world.session();
+    let block = s2.user("paid fifty and 23.50 for lunch")["block"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert!(!block.contains("nums:"), "{block}");
+    let none = strict.user("what is on tomorrow")["block"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert!(!none.contains("nums:"), "{none}");
+}
+
+#[test]
+fn a_think_names_a_number_and_the_call_carries_its_value() {
+    use centraid_nativetools::think::compile_think_with;
+    let nums = Some("nums: fifty = 50 · thirty = 30");
+    let call = compile_think_with(
+        "intent: write \"add\"\nverb: create\nkind: task\nset: name = Pay rent · effort = nums[1]",
+        None,
+        nums,
+        TraceMode::V4,
+        ToolsMode::Sig,
+    )
+    .unwrap();
+    assert!(
+        call.args.contains(&("effort".to_owned(), "30".to_owned())),
+        "{call:?}"
+    );
+    let read = compile_think_with(
+        "intent: read \"big\"\nkind: transaction\nwhere: amount > nums[0] USD",
+        None,
+        nums,
+        TraceMode::V4,
+        ToolsMode::Sig,
+    )
+    .unwrap();
+    assert!(
+        read.args
+            .iter()
+            .any(|(key, value)| key == "where" && value.contains("50")),
+        "{read:?}"
+    );
+    let missing = compile_think_with(
+        "intent: read \"big\"\nkind: transaction\nwhere: amount > nums[2]",
+        None,
+        nums,
+        TraceMode::V4,
+        ToolsMode::Sig,
+    );
+    assert!(missing.unwrap_err().message.contains("nums[2]"));
+    let without = compile_think_for(
+        "intent: read \"big\"\nkind: transaction\nwhere: amount > nums[0]",
+        None,
+        TraceMode::V4,
+        ToolsMode::Sig,
+    );
+    assert!(without.is_err());
+}
+
+#[test]
+fn the_session_compile_fills_a_nums_entry_from_the_message() {
+    let world = seeded();
+    let mut session = world.strict_session();
+    session.user("add a task call plumber, thirty minutes");
+    let compiled = session.compile(&json!({
+        "trace": "v4", "intent": "write", "verb": "create", "kind": "task",
+        "set": [{"key": "name", "value": "Call plumber"}, {"key": "effort", "value": "nums[0]"}]
+    }));
+    assert_eq!(compiled["stated"]["args"]["effort"], "30", "{compiled}");
+    let missing = session.compile(&json!({
+        "trace": "v4", "intent": "write", "verb": "create", "kind": "task",
+        "set": [{"key": "effort", "value": "nums[3]"}]
+    }));
+    assert_eq!(missing["refused"]["slot"], "set[0]", "{missing}");
+}

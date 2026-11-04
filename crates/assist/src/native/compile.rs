@@ -173,10 +173,45 @@ fn shape_of(slots: &Map<String, Value>) -> Shape {
 impl Session {
     /// Compile the slots of a trace into the call the runtime will execute.
     pub fn compile(&mut self, slots: &Value) -> Value {
-        match self.compile_slots(slots) {
+        let filled = match self.fill_nums(slots) {
+            Ok(filled) => filled,
+            Err(refusal) => {
+                return json!({"refused": {"slot": refusal.slot, "why": refusal.why}});
+            }
+        };
+        match self.compile_slots(&filled) {
             Ok(done) => done,
             Err(refusal) => json!({"refused": {"slot": refusal.slot, "why": refusal.why}}),
         }
+    }
+
+    /// The slots with each `nums[i]` of a `where` condition's or a `set` entry's value replaced by the number entry `i` of the
+    /// message's `nums:` line (`native/nums.rs`).
+    fn fill_nums(&self, slots: &Value) -> Compiled<Value> {
+        let mut filled = slots.clone();
+        let Some(object) = filled.as_object_mut() else {
+            return Ok(filled);
+        };
+        let line = self.nums_line(&self.message);
+        for slot in ["where", "set"] {
+            let Some(Value::Array(entries)) = object.get_mut(slot) else {
+                continue;
+            };
+            for (index, entry) in entries.iter_mut().enumerate() {
+                let Some(Value::String(text)) = entry.get_mut("value") else {
+                    continue;
+                };
+                if text.contains("nums[") {
+                    *text = crate::native::nums::fill(text, line.as_deref()).map_err(|why| {
+                        Refusal {
+                            slot: format!("{slot}[{index}]"),
+                            why,
+                        }
+                    })?;
+                }
+            }
+        }
+        Ok(filled)
     }
 
     fn compile_slots(&mut self, slots: &Value) -> Compiled<Value> {

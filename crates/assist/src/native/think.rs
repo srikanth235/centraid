@@ -1135,7 +1135,12 @@ fn tool_of(slots: &Slots, lenient: bool) -> String {
 }
 
 /// `trace.py` `compile_call` over parsed slots.
-fn compile_slots(slots: &Slots, dates: Option<&str>, lenient: bool) -> Result<Call, Refusal> {
+fn compile_slots(
+    slots: &Slots,
+    dates: Option<&str>,
+    nums: Option<&str>,
+    lenient: bool,
+) -> Result<Call, Refusal> {
     let tool = tool_of(slots, lenient);
     let mut args: Vec<(String, String)> = Vec::new();
     let mut times: Vec<String> = slots.time.clone().unwrap_or_default();
@@ -1156,7 +1161,13 @@ fn compile_slots(slots: &Slots, dates: Option<&str>, lenient: bool) -> Result<Ca
             } else {
                 key
             };
-            set_arg(&mut args, name, value.clone());
+            // a `nums[i]` of a condition is the number the `nums:` line gives, before the condition is respelled
+            let value = if key == "where" {
+                crate::native::nums::fill(value, nums).or_else(refuse)?
+            } else {
+                value.clone()
+            };
+            set_arg(&mut args, name, value);
         }
     }
     if let Some((_, spelled)) = args.iter().find(|(key, _)| key == "where").cloned()
@@ -1208,7 +1219,7 @@ fn compile_slots(slots: &Slots, dates: Option<&str>, lenient: bool) -> Result<Ca
             let spelled = if *is_date {
                 date(value, &mut times)?
             } else {
-                value.clone()
+                crate::native::nums::fill(value, nums).or_else(refuse)?
             };
             if flat {
                 if has_arg(&args, key) || fields.iter().any(|(have, _)| have == key) {
@@ -1291,8 +1302,24 @@ pub fn compile_think_for(
     mode: TraceMode,
     tools: ToolsMode,
 ) -> Result<Call, Refusal> {
+    compile_think_with(think, dates, None, mode, tools)
+}
+
+/// [`compile_think_for`] with the turn's `nums:` line too: a `nums[i]` in a `where` condition or a `set` value is the number
+/// entry `i` of that line gives (`native/nums.rs`), and a think that names an entry the line lacks is refused naming it.
+///
+/// # Errors
+///
+/// A [`Refusal`] when the text is no trace, or does not state a whole call.
+pub fn compile_think_with(
+    think: &str,
+    dates: Option<&str>,
+    nums: Option<&str>,
+    mode: TraceMode,
+    tools: ToolsMode,
+) -> Result<Call, Refusal> {
     match parse_any(think, mode) {
-        Ok(slots) => compile_slots(&slots, dates, tools == ToolsMode::S2),
+        Ok(slots) => compile_slots(&slots, dates, nums, tools == ToolsMode::S2),
         Err(message) => refuse(message),
     }
 }
@@ -1614,7 +1641,7 @@ pub fn v4_think(
     }
     let new = v4_slots(&old, context)?;
     let rendered = render4(&new);
-    let compile = |slots: &Slots| compile_slots(slots, dates, true);
+    let compile = |slots: &Slots| compile_slots(slots, dates, None, true);
     let (want, got) = match (compile(&old), parse4(&rendered)) {
         (Ok(want), Ok(reread)) => match compile(&reread) {
             Ok(got) => (want, got),

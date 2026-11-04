@@ -33,10 +33,12 @@
 //! slot); the message returned starts with `<think>\n` and includes them.
 
 use crate::model::{Cancel, Control, Finish, GenerateRequest, Generation, Model, ModelError};
-use crate::native::grammar::{GrammarMode, Visible, grammar_for_step, unspanned, user_message};
+use crate::native::grammar::{
+    GrammarMode, Visible, block_line, grammar_for_step, unspanned, user_message,
+};
 use crate::native::identity::MODEL;
 use crate::native::prompt::ToolsMode;
-use crate::native::think::{TraceMode, compile_think_for};
+use crate::native::think::{TraceMode, compile_think_with};
 use crate::native::transcript::{assistant_header, assistant_open, call_text_of, py_strip};
 
 /// Think tokens before `</think>` is forced.
@@ -176,7 +178,7 @@ pub fn decode_step(
     let grammar = grammar_for_step(
         opts.grammar,
         opts.tools,
-        &Visible::of(&prompt, dates),
+        &Visible::of(&prompt, dates, block_line(&prompt, "nums:")),
         prefix,
     );
     info.grammar = grammar.as_ref().map(|(mode, _)| *mode);
@@ -236,7 +238,8 @@ pub fn decode_step(
 
     // 2. the call the think states, written by the compiler
     let stated = format!("{prefix}{think}");
-    if let Ok(call) = compile_think_for(py_strip(&stated), dates, mode, opts.tools) {
+    let nums = block_line(&prompt, "nums:");
+    if let Ok(call) = compile_think_with(py_strip(&stated), dates, nums, mode, opts.tools) {
         text.push_str("\n\n");
         text.push_str(&call_text_of(&call));
         info.rendered_call = true;
