@@ -90,6 +90,11 @@ impl Effect {
     }
 }
 
+/// The tools that change the vault: S2's `act`, and the regrouped `create`, `edit` and `do`.
+fn is_write(tool: &str) -> bool {
+    matches!(tool, "act" | "create" | "edit" | "do")
+}
+
 /// Numbers compare as numbers (Python's `1 == 1.0`), everything else as values.
 #[must_use]
 pub fn same(a: &Value, b: &Value) -> bool {
@@ -229,7 +234,7 @@ pub fn turn_effect(steps: &[Value]) -> Effect {
     let mut final_response: Option<&Value> = None;
     for step in steps {
         let eff = &step["effect"];
-        if eff["tool"] == "act" {
+        if is_write(eff["tool"].as_str().unwrap_or_default()) {
             if truthy(&eff["diff"]) {
                 diffs.push(&eff["diff"]);
             }
@@ -264,7 +269,7 @@ pub fn turn_effect(steps: &[Value]) -> Effect {
         out.ending = Ending::Loop;
     } else if truthy(&eff["cap"]) {
         out.ending = Ending::Cap;
-    } else if matches!(tool, "answer" | "act") && eff.get("answer").is_some() {
+    } else if (tool == "answer" || is_write(tool)) && eff.get("answer").is_some() {
         // an `act log` that ends the turn also answers the row it logged (rows + diff)
         out.ending = Ending::Rows;
         out.rows = ids_of(&eff["answer"]["rows"]);
@@ -277,7 +282,7 @@ pub fn turn_effect(steps: &[Value]) -> Effect {
     } else if tool == "decline" {
         out.ending = Ending::Decline;
         out.reason = eff["decline"]["reason"].as_str().map(str::to_owned);
-    } else if tool == "act" && eff.get("error").is_none() {
+    } else if is_write(tool) && eff.get("error").is_none() {
         out.ending = Ending::Act;
     } else if truthy(&eff["error"]) {
         out.ending = Ending::Error;

@@ -86,7 +86,7 @@ pub fn constraints(call: &RefCall) -> usize {
         return 0;
     }
     let mut k = 0;
-    if call.tool == "act" {
+    if matches!(call.tool.as_str(), "act" | "edit" | "do") {
         k += usize::from(has("rows") || has("name"));
     } else {
         k += usize::from(has("name"));
