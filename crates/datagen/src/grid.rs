@@ -75,7 +75,7 @@ pub fn cell_of(turn: &TurnIntent) -> Cell {
                 &measure.op
             },
         ),
-        Intent::Compare { a, .. } => Cell::new("compute", &a.sel.kind, "compare"),
+        Intent::Compare { b, .. } => Cell::new("compute", &b.sel.kind, "compare"),
         Intent::Write { target, verb, .. } => {
             let kind = match target {
                 Target::Name { kind, .. } => kind.as_str(),
@@ -247,7 +247,7 @@ impl Grid {
             cells.insert(
                 Cell::new("create", k, "create"),
                 if matches!(k, "workout" | "daily figure") {
-                    Live::NotLive("workouts and daily figures are read-only in chat".into())
+                    Live::NotLive("workouts and daily figures are read-only in chat today; live-pending the regroup's Health writes (owner-approved, not landed)".into())
                 } else if has("create") && live("create") {
                     Live::Live
                 } else {
@@ -260,7 +260,9 @@ impl Grid {
                     Live::NotLive("the runtime answers `edit does not apply to rule`".into())
                 } else if has("edit") && live("edit") {
                     Live::Live
-                } else if matches!(k, "workout" | "daily figure" | "budget") {
+                } else if matches!(k, "workout" | "daily figure") {
+                    Live::NotLive("read-only in chat today; live-pending the regroup's Health writes (owner-approved, not landed)".into())
+                } else if k == "budget" {
                     Live::NotLive("read-only in chat".into())
                 } else {
                     Live::NotLive("the runtime has no `edit` for this kind".into())

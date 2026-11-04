@@ -658,7 +658,14 @@ impl<'a> Sampler<'a> {
                         value: Lit::Text(cat),
                     });
                     spent.period = Some(Period::Month { rel });
-                    if self.facts.select(&spent, None).is_empty() {
+                    // a budget is in the vault's currency, so the spend compared with it must be
+                    // too (the runtime compares figures of one unit)
+                    let rows = self.facts.select(&spent, None);
+                    if rows.is_empty()
+                        || rows
+                            .iter()
+                            .any(|r| r.text("currency") != Some(self.facts.base.as_str()))
+                    {
                         continue;
                     }
                     let mut budget = Selector::of("budget");
