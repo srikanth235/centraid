@@ -297,7 +297,7 @@ impl<'a> Runner<'a> {
                 let sent = first_call(&out.text);
                 let response = live.call_text(sent);
                 for (id, n) in effect_rows(&response["effect"]) {
-                    shown.entry(id).or_insert(n);
+                    shown.insert(id, n);
                 }
                 if response["call"].is_object() {
                     calls.push(response["call"].clone());
@@ -335,9 +335,18 @@ impl<'a> Runner<'a> {
                 let id = keys.get(key)?;
                 shown.get(id).map(|n| format!("#{n}"))
             };
+            // A turn that passes by effect got every argument it carries right, however it looked first; only a
+            // failed turn needs the call comparison, which says which argument to blame.
             let args = judge_args(turn, &calls, &handle)
                 .into_iter()
-                .map(|(class, v)| (class.word().to_owned(), verdict_word(v).to_owned()))
+                .map(|(class, v)| {
+                    let v = if verdict.pass && v != ArgVerdict::Absent {
+                        ArgVerdict::Right
+                    } else {
+                        v
+                    };
+                    (class.word().to_owned(), verdict_word(v).to_owned())
+                })
                 .collect();
             turns.push(TurnResult {
                 user: turn.user.clone(),
@@ -346,7 +355,8 @@ impl<'a> Runner<'a> {
                 wrong_write: verdict.wrong_write,
                 gold_type: verdict.gold_type.word().to_owned(),
                 ending: verdict.effect.ending.word().to_owned(),
-                tool_ok: verdict.tool_ok,
+                // a write that landed and then looped still chose the right act
+                tool_ok: verdict.pass || verdict.tool_ok,
                 constraints,
                 apps,
                 args,

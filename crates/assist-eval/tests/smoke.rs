@@ -228,3 +228,20 @@ fn the_report_counts_sessions_turns_apps_and_constraints_and_survives_json() {
     assert!(text.contains("Session pass:     0/2 = 0.0%"), "{text}");
     assert!(text.contains("people"), "{text}");
 }
+
+#[test]
+fn a_look_then_answer_that_passes_gets_its_arguments_right() {
+    let source = source(vec![session("S", vec![who_is_neha()])]);
+    let script = Script(Mutex::new(vec![
+        call("find", &[("kind", "person"), ("name", "Neha")]),
+        call("answer", &[("rows", "@1")]),
+    ]));
+    let turn = &run(&source, &script)[0].turns[0];
+    assert!(turn.pass, "{:?} ended {}", turn.problems, turn.ending);
+    assert_eq!(turn.calls.len(), 2);
+    assert_eq!(
+        turn.args["rows"], "right",
+        "the effect passed, so the argument was right"
+    );
+    assert!(turn.tool_ok);
+}
