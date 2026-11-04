@@ -103,6 +103,8 @@ kaggle kernels status KAGGLE_OWNER/centraid-assist-eval
 kaggle kernels output KAGGLE_OWNER/centraid-assist-eval -p out         # report.json, summary.txt, shard-*.sessions.jsonl
 ```
 
+M6 (#1171) has its own kernel, `experiments/toolchat/native/train/kaggle/` (trains an arm, exports the GGUF, scores val with this runner; also never run); it builds `assist-eval` the same way, so run this kit first.
+
 Two T4s run two shards; the `shard-*.sessions.jsonl` files of a stopped run, added to the input dataset, are copied into the output directory first, so the same command resumes. Put the numbers in this section when the run is done.
 
 ## Tests

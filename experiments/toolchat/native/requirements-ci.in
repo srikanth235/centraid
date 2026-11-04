@@ -2,7 +2,7 @@
 # The `native-python` job of .github/workflows/gate.yml installs the compiled file, which pins every package by content
 # (`pip install --require-hashes`). Only what the suite imports: the trainer's tiny CPU model and its tokenizer (torch,
 # transformers), the checkpoint soup (safetensors) and the batcher (numpy). The VM's trainer needs more (flash-linear-attention,
-# peft for --lora, CUDA); none of it is exercised on a CPU.
+# CUDA); none of it is exercised on a CPU. peft and zstandard are below: the M6 tests (train/test_datagen.py) run a LoRA step and read .zst.
 #
 # Regenerate after changing this file, from experiments/toolchat/native (uv; every package and file it lists is then
 # re-hashed, so review the diff of the .txt):
@@ -31,3 +31,7 @@ transformers==5.17.0
 
 numpy
 safetensors
+
+# M6 (#1171): the arm-C LoRA test (peft) and the datagen reader (zstandard) of train/test_datagen.py.
+peft
+zstandard

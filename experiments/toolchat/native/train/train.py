@@ -1,5 +1,10 @@
 """SFT trainer for Qwen3.5-0.8B, one sequence per session (SPEC §11.3, §11.7, §11.8).
 
+M6 (#1171): `--data-format datagen --arm A|B|C` trains on the records `crates/datagen` writes (`.jsonl.zst`; datagen.py, arms.py): the
+`render.input_ids` and per-token `render.weights` are used as they are, the loss is sum(weight * CE) / sum(weight) over the step's records,
+and the three arms are base + method in arms.py (C = LoRA that skips layers 15 and 19 mlp.down_proj, checked bit-identical at export).
+Everything below describes the legacy formats unless it says otherwise. Not run on a GPU yet.
+
     python train.py --train train.jsonl.gz --val val.jsonl.gz --out ckpt/ [--hours 8]
     torchrun --nproc_per_node 2 train.py ...        # data parallel
 
@@ -104,7 +109,11 @@ from pathlib import Path
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import arms  # noqa: E402
+import datagen  # noqa: E402
 import fmt  # noqa: E402
+
+assert datagen.IGNORE == fmt.IGNORE
 
 
 def log(*a):
@@ -207,6 +216,33 @@ def load(tok, path, max_len, limit, default_tools, check_n, tag, cfg):
         raise SystemExit("%s: a hard tier is configured but no record has a hard token; check --hard-labels and "
                          "--hard-params against the format (fmt.py HardConfig)" % tag)
     return data
+
+
+def load_datagen(tok, path, max_len, limit, check_n, tag):
+    """Examples from a datagen file (`.jsonl.zst`, see datagen.py): `render.input_ids` with `render.weights` as they are. A record over
+    `max_len` tokens is dropped and counted; a record that breaks the contract stops the run."""
+    recs, st = datagen.load(path, max_len, limit)
+    data = [Example(r["input_ids"], r["labels"], r["weights"], r["pair"]) for r in recs]
+    n_dec = sum(1 for _, _, w in data for x in w[1:] if x > 1.0)
+    log("%s: %d examples (%d read, %d over max-len %d dropped), %d label tokens (%d weighted above 1, %.1f%%), weight mass %.1f, "
+        "%d tokens, %d with a pair id" % (tag, st["kept"], st["read"], st["dropped_too_long"], max_len, st["label_tokens"], n_dec,
+                                          100 * n_dec / max(st["label_tokens"], 1), st["weight_mass"], st["tokens"],
+                                          sum(1 for d in data if d.pair)))
+    if not data:
+        raise SystemExit("%s: no record of %s fits --max-len %d" % (tag, path, max_len))
+    if check_n and tok is not None:
+        bad = datagen.check_text(tok, path, check_n)
+        if bad:
+            log("WARNING %s: render.text of %d of the first %d records does not tokenise to render.input_ids; the ids are trained on as "
+                "they are. Is the tokenizer %s?" % (tag, bad, check_n, arms.TOKENIZER))
+    return data
+
+
+def load_records(a, tok, path, limit, default_tools, check_n, tag, cfg):
+    """`load` for the legacy formats, `load_datagen` for --data-format datagen."""
+    if a.data_format == "datagen":
+        return load_datagen(tok, path, a.max_len, limit, min(check_n, 8), tag)
+    return load(tok, path, a.max_len, limit, default_tools, check_n, tag, cfg)
 
 
 def assert_mask_sample(tok, path, default_tools, cfg, n=8, examples=None):
@@ -376,7 +412,11 @@ def label_logits(model, ids, labels, dev):
 
 def token_weights(dec, pos, weight, dev, copy_weight=1.0):
     """Weight of each label position: `weight` on decision tokens, `copy_weight` on copy tokens (fmt.PART_COPY: a verbatim copy of the
-    user's message, carried alone, never a decision or hard token), 1 elsewhere (dec aligned with labels). -> (weights, decision mask)."""
+    user's message, carried alone, never a decision or hard token), 1 elsewhere (dec aligned with labels). -> (weights, decision mask).
+    Datagen records (`dec` is a datagen.TokenWeights): the record's own weights, `weight` and `copy_weight` unused; "decision" = weight > 1."""
+    if isinstance(dec, datagen.TokenWeights):
+        w = torch.tensor(dec[1:], dtype=torch.float32, device=dev)[pos]
+        return w, w > 1.0
     v = torch.tensor(dec[1:], device=dev)[pos]
     d = (v & fmt.PART_MASK) > 0
     w = 1.0 + (weight - 1.0) * d.float()
@@ -396,6 +436,9 @@ def forward_loss(model, ids, labels, dev, dec=None, weight=1.0, copy_weight=1.0)
 
 def loss_from_logits(logits, tgt, pos, dec, weight, dev, copy_weight=1.0):
     correct = (logits.argmax(-1) == tgt).sum()
+    if isinstance(dec, datagen.TokenWeights):  # the sum of weight * CE; the caller divides by the weight mass (weight_mass)
+        ce = torch.nn.functional.cross_entropy(logits, tgt, reduction="none")
+        return (ce * token_weights(dec, pos, weight, dev, copy_weight)[0]).sum(), pos.numel(), correct, ce.detach().sum()
     if dec is None or (weight == 1.0 and copy_weight == 1.0):
         loss = torch.nn.functional.cross_entropy(logits, tgt, reduction="sum")
         return loss, pos.numel(), correct, loss.detach()
@@ -406,7 +449,10 @@ def loss_from_logits(logits, tgt, pos, dec, weight, dev, copy_weight=1.0):
 
 def weight_mass(labels, dec, weight, copy_weight=1.0):
     """(label tokens, decision tokens, weight mass) of one example, first token excluded as in the loss. The mass is what the token weights
-    sum to: decision tokens count `weight`, copy tokens `copy_weight`, every other label token 1."""
+    sum to: decision tokens count `weight`, copy tokens `copy_weight`, every other label token 1. Datagen records: the sum of their weights
+    (a weight of 0 is no label), and "decision" tokens are those above 1."""
+    if isinstance(dec, datagen.TokenWeights):
+        return sum(1 for y in labels[1:] if y != fmt.IGNORE), sum(1 for x in dec[1:] if x > 1.0), float(sum(dec[1:]))
     n = sum(1 for y in labels[1:] if y != fmt.IGNORE)
     nd = sum(1 for d in dec[1:] if d & fmt.PART_MASK)
     nc = sum(1 for d in dec[1:] if d & fmt.PART_COPY and not d & fmt.PART_MASK)
@@ -414,12 +460,16 @@ def weight_mass(labels, dec, weight, copy_weight=1.0):
 
 
 def hard_mask(dec, pos, dev):
-    """Bool mask over the label positions `pos`: the hard-tier tokens (fmt.PART_HARD bit of `dec`)."""
+    """Bool mask over the label positions `pos`: the hard-tier tokens (fmt.PART_HARD bit of `dec`). all False for datagen records."""
+    if isinstance(dec, datagen.TokenWeights):
+        return torch.zeros(pos.numel(), dtype=torch.bool, device=dev)
     return (torch.tensor(dec[1:], device=dev)[pos] & fmt.PART_HARD) > 0
 
 
 def copy_mask(dec, pos, dev):
-    """Bool mask over the label positions `pos`: the copy tokens (fmt.PART_COPY, never a decision token)."""
+    """Bool mask over the label positions `pos`: the copy tokens (fmt.PART_COPY, never a decision token). all False for datagen records."""
+    if isinstance(dec, datagen.TokenWeights):
+        return torch.zeros(pos.numel(), dtype=torch.bool, device=dev)
     v = torch.tensor(dec[1:], device=dev)[pos]
     return ((v & fmt.PART_COPY) > 0) & ((v & fmt.PART_MASK) == 0)
 
@@ -436,7 +486,8 @@ def evaluate(model, data, dev):
             logits, tgt, pos = label_logits(model, ids, labels, dev)
             ce = torch.nn.functional.cross_entropy(logits, tgt, reduction="none").double()
             hit = (logits.argmax(-1) == tgt).double()
-            d = (torch.tensor(dec[1:], device=dev)[pos] & fmt.PART_MASK) > 0
+            d = token_weights(dec, pos, 1.0, dev)[1] if isinstance(dec, datagen.TokenWeights) \
+                else (torch.tensor(dec[1:], device=dev)[pos] & fmt.PART_MASK) > 0
             h = hard_mask(dec, pos, dev)
             k = copy_mask(dec, pos, dev)
             tot += torch.stack([ce.sum(), torch.tensor(float(pos.numel()), dtype=torch.float64, device=dev), hit.sum(),
@@ -521,12 +572,34 @@ def dry_run(model, data, dev, weight, launch_flags="", copy_weight=1.0):
 
 
 
+def dry_run_weighted(model, data, dev):
+    """--dry-run on datagen records: one forward pass, and the weighted loss of each record checked against the weights it carries."""
+    model.eval()
+    n = mass = 0
+    ce_sum = wce = 0.0
+    with torch.no_grad():
+        for ids, labels, w in data:
+            logits, tgt, pos = label_logits(model, ids, labels, dev)
+            ce = torch.nn.functional.cross_entropy(logits, tgt, reduction="none").double()
+            loss = loss_from_logits(logits, tgt, pos, w, 1.0, dev)[0].item()
+            assert abs(loss - float((ce * token_weights(w, pos, 1.0, dev)[0].double()).sum())) <= 1e-4 * max(1.0, abs(loss))
+            n += pos.numel()
+            mass += weight_mass(labels, w, 1.0)[2]
+            ce_sum += ce.sum().item()
+            wce += loss
+    log("DRY-RUN datagen: %d records, %d label tokens, weight mass %.1f, plain CE %.4f, weighted loss (sum w*CE / sum w) %.4f"
+        % (len(data), n, mass, ce_sum / max(n, 1), wce / max(mass, 1e-9)))
+
+
 def launch_flags(a) -> str:
     """The decision / hard flags this run was given (others stay at their defaults), for the dry-run's launch line."""
     keys = ("decision_labels", "decision_ref_labels", "decision_params", "decision_skip_params",
             "hard_labels", "hard_ref_labels", "hard_params", "hard_ref_params", "hard_param_names",
             "hard_ref_sigil", "copy_labels")
     return "".join(" --%s %s" % (k.replace("_", "-"), getattr(a, k) or "''") for k in keys if getattr(a, k) is not None)
+
+
+PROTECT = {"snapshot": None}  # arm C: the edited tensors as loaded, checked at every export (arms.verify)
 
 
 def save(model, tok, out, tag, meta):
@@ -538,6 +611,8 @@ def save(model, tok, out, tag, meta):
     if peft_model is not None:  # merge in place, save plain weights, then unmerge and keep training
         peft_model.merge_adapter()
         model = peft_model.get_base_model()
+        if PROTECT["snapshot"] is not None:  # arm C: the edited tensors must still be the base's, bit for bit, after the merge
+            arms.verify(PROTECT["snapshot"], model)
         sd = {k.replace(".base_layer.", "."): v.detach().to(torch.bfloat16)
               for k, v in model.state_dict().items() if "lora_" not in k}
     else:
@@ -692,10 +767,10 @@ def dpo_pair_loss(model, pair, ref_row, beta, sft, dev, weight=1.0, copy_weight=
 RESUME_PREFIX = "resume-step-"
 RESUME_KEEP = 2
 FP_ARGS = ("bs", "lr", "warmup", "min_lr", "max_len", "seed", "embed", "lora", "decision_weight", "copy_weight", "pair_batches",
-           "n", "epochs", "tf32", "autocast", "ema", "dpo", "dpo_beta", "dpo_sft")  # the precision, the loss weights and the order change the numbers: a resume must not switch them mid-run
+           "n", "epochs", "tf32", "autocast", "ema", "dpo", "dpo_beta", "dpo_sft", "arm", "data_format")  # the precision, the loss weights and the order change the numbers: a resume must not switch them mid-run
 # what a checkpoint written before these flags existed ran with: pure fp32, TF32 off, copy tokens weighing 1, the plain shuffle
 FP_LEGACY = {"tf32": False, "autocast": "none", "copy_weight": 1.0, "pair_batches": False, "ema": 0.0,
-             "dpo": None, "dpo_beta": DPO_BETA, "dpo_sft": DPO_SFT}
+             "dpo": None, "dpo_beta": DPO_BETA, "dpo_sft": DPO_SFT, "arm": None, "data_format": "legacy"}
 
 
 def _fsync_path(p):
@@ -978,13 +1053,19 @@ def parser() -> argparse.ArgumentParser:
     """The command line (a function of its own so that the defaults can be read, and tested, without running a training)."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default=fmt.render.TOKENIZER)
+    ap.add_argument("--arm", choices=sorted(arms.ARMS), help="M6 arm (arms.py): A stock full SFT, B edited full SFT, C edited LoRA that skips "
+                    "the edited tensors; sets --model, --lora and the default --lr")
+    ap.add_argument("--tokenizer", help="tokenizer to load (default --model; with --arm, %s)" % arms.TOKENIZER)
+    ap.add_argument("--data-format", choices=("legacy", "datagen"), default="legacy",
+                    help="datagen: .jsonl.zst records with render.input_ids and render.weights, trained as they are (datagen.py); "
+                    "legacy: the (gzipped) JSONL of authored/build.py, rendered here")
     ap.add_argument("--train", help="train file (required unless --dpo; with --dpo it is never trained on: it is the sample the TRAIN "
                     "metrics score)")
     ap.add_argument("--val")
     ap.add_argument("--tools", help="tools.json when examples carry none (nativetools export)")
     ap.add_argument("--out", help="checkpoint folder (required unless --dry-run)")
     ap.add_argument("--bs", type=int, default=16, help="examples per optimizer step (global)")
-    ap.add_argument("--lr", type=float, default=2e-5)
+    ap.add_argument("--lr", type=float, default=None, help="default 2e-5 (the arm's with --arm)")
     ap.add_argument("--warmup", type=float, default=0.03, help="fraction of steps")
     ap.add_argument("--min-lr", type=float, default=0.1, help="final lr as a fraction of --lr")
     ap.add_argument("--max-len", type=int, default=8192, help="longest session kept, in tokens")
@@ -1080,6 +1161,11 @@ def main():
         ap.error("--save-every must be >= 0 and --epochs >= 1")
     if not a.train and not a.dpo:
         ap.error("--train is required (except with --dpo)")
+    if a.data_format == "datagen" and a.dpo:
+        ap.error("--data-format datagen is SFT only (no --dpo)")
+    arm = arms.apply_arm(a)  # --arm: the base, the method and the default lr (an explicit --lr wins)
+    if a.lr is None:
+        a.lr = 2e-5
     if a.dpo and not a.dpo_beta > 0:
         ap.error("--dpo-beta must be positive")
     if a.dpo and a.dpo_sft < 0:
@@ -1101,7 +1187,7 @@ def main():
     torch.manual_seed(a.seed)
 
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    tok = AutoTokenizer.from_pretrained(a.model)
+    tok = AutoTokenizer.from_pretrained(a.tokenizer)
     default_tools = json.loads(Path(a.tools).read_text()) if a.tools else None
     W, CW = a.decision_weight, a.copy_weight
     assert W > 0, "--decision-weight must be positive"
@@ -1112,9 +1198,11 @@ def main():
                                    a.decision_skip_params, hard=hard, copy=fmt.CopyConfig.parse(a.copy_labels))
     log("decision config: W %g copy weight %g pair batches %s %s copy %s" % (W, CW, a.pair_batches, cfg, cfg.copy))
     dpo = bool(a.dpo)
-    if a.train:
+    if a.data_format == "datagen":
+        log("datagen records: weights come from the records; --decision-weight, --copy-weight and the decision labels are not used")
+    elif a.train:
         assert_mask_sample(tok, a.train, default_tools, cfg)
-    data = load(tok, a.train, a.max_len, a.dry_run or a.n, default_tools, 64, "train", cfg) if a.train else []
+    data = load_records(a, tok, a.train, a.dry_run or a.n, default_tools, 64, "train", cfg) if a.train else []
     if dpo:  # `data` stays the SFT file (the TRAIN metrics' sample); `units` is what the epochs walk
         units = load_pairs(tok, a.dpo, a.max_len, a.dry_run or a.n, default_tools, 64, cfg)
         assert_mask_sample(tok, None, default_tools, cfg, examples=(ob["chosen"] for ob in fmt.read_examples(a.dpo)
@@ -1122,7 +1210,7 @@ def main():
         log("DPO: beta %g sft %g, reference = the frozen initial model (one no-grad pass before training)" % (a.dpo_beta, a.dpo_sft))
     else:
         units = data
-    vdata = [] if a.dry_run else load(tok, a.val, a.max_len, a.val_n, default_tools, 16, "val", cfg) if a.val else []
+    vdata = [] if a.dry_run else load_records(a, tok, a.val, a.val_n, default_tools, 16, "val", cfg) if a.val else []
 
     model = AutoModelForCausalLM.from_pretrained(a.model, dtype=torch.float32).to(dev)
     model.config.use_cache = False
@@ -1137,7 +1225,10 @@ def main():
         recs = dpo_records(units) if dpo else data
         n_pairs, n_pair_recs, n_orphans = pair_stats([d.pair for d in recs])
         log("PAIRS: %d pairs (%d of %d records), %d records whose partner is not among them" % (n_pairs, n_pair_recs, len(recs), n_orphans))
-        dry_run(model, recs, dev, W, launch_flags(a), CW)
+        if a.data_format == "datagen":
+            dry_run_weighted(model, recs, dev)
+        else:
+            dry_run(model, recs, dev, W, launch_flags(a), CW)
         log("DRY-RUN done: no training step was taken")
         if WORLD > 1:
             torch.distributed.destroy_process_group()
@@ -1152,8 +1243,13 @@ def main():
         # the base stays frozen in fp32; checkpoints merge the adapters back (save), so the
         # eval arms load a plain model exactly as they do after a full fine-tune
         from peft import LoraConfig, get_peft_model
-        model = get_peft_model(model, LoraConfig(r=a.lora, lora_alpha=2 * a.lora, lora_dropout=0.0,
-                                                 target_modules="all-linear", exclude_modules=r".*visual.*"))
+        if arm is not None and arm.skip_layers:  # arm C: no adapter on the edited tensors, which are checked at every export
+            PROTECT["snapshot"] = arms.snapshot(model, arm.skip_layers)
+            model = get_peft_model(model, arms.lora_config(model, a.lora, arm.skip_layers))
+            assert not set(arms.adapted_modules(model)) & {n.rsplit(".weight", 1)[0] for n in PROTECT["snapshot"]}
+        else:
+            model = get_peft_model(model, LoraConfig(r=a.lora, lora_alpha=2 * a.lora, lora_dropout=0.0,
+                                                     target_modules="all-linear", exclude_modules=r".*visual.*"))
     params = [p for p in model.parameters() if p.requires_grad]
     named = {n: p for n, p in model.named_parameters() if p.requires_grad}
     ema = Ema(named, a.ema) if a.ema else None  # before the memory probe, so the probe holds the shadow too
@@ -1241,7 +1337,7 @@ def main():
 
     def eval_test(step, tag):
         """The test file, read only here, after the last checkpoint is saved (so a bad file cannot cost it)."""
-        tdata = load(tok, a.test, a.max_len, 0, default_tools, 16, "test", cfg)
+        tdata = load_records(a, tok, a.test, 0, default_tools, 16, "test", cfg)
         if cap is not None:
             tdata = [d for d in tdata if len(d[0]) <= cap]
         r = evaluate(model, tdata, dev)
@@ -1333,7 +1429,7 @@ def main():
             torch.distributed.barrier()
 
     st = start
-    plain_loss = W == 1.0 and CW == 1.0  # every token weighs 1: the old plain mean CE, normalised by the label tokens
+    plain_loss = W == 1.0 and CW == 1.0 and a.data_format != "datagen"  # every token weighs 1: the old plain mean CE, normalised by the label tokens
     cur_epoch, order = -1, None
     dwin = torch.zeros(4, dtype=torch.float64, device=dev)  # DPO window sums: loss, margin, wins, pairs (zero and unused without --dpo)
     if ck and dpo and RANK == 0 and "dwin" in m:  # the log window a resume cuts into (rank 0's share: a logging aid, not training state)
