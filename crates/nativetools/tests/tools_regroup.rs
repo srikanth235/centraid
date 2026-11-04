@@ -658,3 +658,52 @@ fn a_think_states_a_create_with_its_fields_flat_and_s2_with_args() {
     );
     assert!(twice.is_err());
 }
+
+#[test]
+fn the_session_states_the_same_flat_fields_the_stateless_compiler_writes() {
+    let world = seeded();
+    let mut session = world.strict_session();
+    let row = number(&mut session, "task", "cabin");
+    session.user("add a task call plumber, thirty minutes");
+    let compiled = session.compile(&json!({
+        "trace": "v4", "intent": "write", "verb": "create", "kind": "task",
+        "set": [{"key": "name", "value": "Call plumber"}, {"key": "effort", "value": 30}]
+    }));
+    assert!(compiled.get("refused").is_none(), "{compiled}");
+    let want = compile_think_for(
+        "intent: write\nverb: create\nkind: task\nset: name = Call plumber · effort = 30",
+        None,
+        TraceMode::V4,
+        ToolsMode::Sig,
+    )
+    .unwrap();
+    let args = compiled["stated"]["args"].as_object().unwrap();
+    let got: Vec<(String, String)> = args
+        .iter()
+        .map(|(key, value)| {
+            let value = value
+                .as_str()
+                .map_or_else(|| value.to_string(), str::to_owned);
+            (key.clone(), value)
+        })
+        .collect();
+    // a JSON object has no order the reply could keep, so the same arguments, compared as a set
+    let mut want_args = want.args.clone();
+    want_args.sort();
+    assert_eq!(got, want_args, "{compiled}");
+    // `call` (grounded) keeps the lines the runtime reads; `stated` is the training target
+    assert!(compiled["call"]["args"].get("args").is_some(), "{compiled}");
+    // an edit, and a set key that is also a slot
+    session.user("make the cabin one hour");
+    let edit = session.compile(&json!({
+        "trace": "v4", "intent": "write", "verb": "edit", "pick": [{"row": row, "verdict": "ok", "reason": "name"}],
+        "set": [{"key": "effort", "value": 60}]
+    }));
+    assert_eq!(edit["stated"]["args"]["effort"], "60", "{edit}");
+    assert!(edit["stated"]["args"].get("args").is_none(), "{edit}");
+    let twice = session.compile(&json!({
+        "trace": "v4", "intent": "write", "verb": "create", "kind": "task",
+        "set": [{"key": "kind", "value": "event"}]
+    }));
+    assert!(twice.get("refused").is_some(), "{twice}");
+}
