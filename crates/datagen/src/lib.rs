@@ -9,15 +9,22 @@
 //! a world holds), [`sample`] (stage 2, the intent sampler), [`plan`] (stage 3, reference calls
 //! run through the runtime, gold as its effect), [`run`] (both stages over many worlds, with the
 //! coverage report) and [`source`] (the sessions as an `assist-eval` source).
+//!
+//! M3 adds [`brief`] (a typed turn in plain English), [`llm`] (Haiku behind a trait, with a
+//! prompt-hash cache), [`typos`] (the seeded typo pass), [`verify`] (runtime grounding and the
+//! read-back pass) and [`messages`] (stages 4 and 5 end to end).
 
 #![forbid(unsafe_code)]
 
 pub mod ambiguity;
+pub mod brief;
 pub mod catalog;
 pub mod facts;
 mod generate;
 pub mod grid;
 pub mod intent;
+pub mod llm;
+pub mod messages;
 pub mod persona;
 pub mod plan;
 mod pools;
@@ -27,6 +34,8 @@ pub mod sample;
 pub mod settings;
 pub mod source;
 pub mod text;
+pub mod typos;
+pub mod verify;
 pub mod world;
 
 pub use catalog::Catalog;

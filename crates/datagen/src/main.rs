@@ -1,13 +1,15 @@
 //! `datagen`: the training-data pipeline's command line. Stage subcommands are added beside
-//! `worlds`; `build --version vN` will run them in order once they exist.
+//! `worlds`, `intents` and `messages`; `build --version vN` will run them in order once render
+//! and mix exist.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use centraid_datagen::ambiguity::{self, Ambiguity};
+use centraid_datagen::llm::ClaudeCli;
 use centraid_datagen::world::{World, WorldSpec, plan, plan_sized};
-use centraid_datagen::{Catalog, Split, run};
+use centraid_datagen::{Catalog, Split, messages, run};
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 
@@ -60,6 +62,34 @@ enum Command {
         /// sets `--per-world` from the world counts.
         #[arg(long, value_delimiter = ',')]
         sessions: Option<Vec<usize>>,
+    },
+    /// Write phone-style messages for an intents run and verify them (stages 4 and 5): Claude
+    /// Haiku through headless Claude Code writes and reads back, every output cached by prompt
+    /// hash under `<out>/llm-cache`.
+    Messages {
+        /// The output directory of `datagen intents`.
+        #[arg(long = "in")]
+        input: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+        /// Calls in flight, and worlds replayed at once.
+        #[arg(long, default_value_t = 6)]
+        concurrency: usize,
+        /// Sessions per Haiku call.
+        #[arg(long, default_value_t = messages::BATCH)]
+        batch: usize,
+        /// Fail on a cache miss instead of calling the model: a rebuild from the cache.
+        #[arg(long)]
+        offline: bool,
+        /// At most this many sessions per split, spread evenly over its file.
+        #[arg(long)]
+        limit: Option<usize>,
+        /// The typo stream's seed.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+        /// The model passed to `claude --model`.
+        #[arg(long, default_value = "haiku")]
+        model: String,
     },
     /// Print how ambiguous each world is under its settings.
     Ambiguity {
@@ -178,6 +208,30 @@ fn main() -> Result<()> {
             let generated = run::generate(&config, &catalog, scratch.path())?;
             let report = run::write(&out, &config, &catalog, &generated)?;
             print!("{report}");
+        }
+        Command::Messages {
+            input,
+            out,
+            concurrency,
+            batch,
+            offline,
+            limit,
+            seed,
+            model,
+        } => {
+            let catalog = Catalog::build()?;
+            let mut llm = ClaudeCli::haiku();
+            llm.model = model;
+            let config = messages::Config {
+                batch,
+                concurrency,
+                offline,
+                limit,
+                seed,
+            };
+            let report = messages::run(&config, &catalog, &llm, &input, &out)?;
+            print!("{}", report.text);
+            eprintln!("model calls: {}, cache hits: {}", report.calls, report.hits);
         }
         Command::Ambiguity { seed, counts, json } => {
             let rows: Vec<(World, Ambiguity)> = specs(seed, counts.as_deref())?

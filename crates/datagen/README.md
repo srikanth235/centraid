@@ -4,7 +4,7 @@ The chat model's training-data pipeline, in Rust ([#1166](https://github.com/sri
 
 ## State
 
-Milestones M1 and M2 are built: stages 0 to 3, plus the ambiguity measure.
+Milestones M1, M2 and M3 are built: stages 0 to 5, plus the ambiguity measure.
 
 | Module | Stage | What it is |
 | --- | --- | --- |
@@ -18,9 +18,13 @@ Milestones M1 and M2 are built: stages 0 to 3, plus the ambiguity measure.
 | `sample` | 2 | The intent sampler: a pure function of a seed and a world. |
 | `plan` | 3 | The planner and execute: reference calls, run through the runtime, gold as its effect, and the drops. |
 | `run` | 2 + 3 | Both stages over many worlds, the coverage report and the writer. |
+| `brief`, `messages` | 4 | A typed turn put into English for the writer; the Haiku writer (batched JSON in, JSON out), the mechanical checks and the pipeline of stages 4 and 5. |
+| `llm` | 4 + 5 | The `Llm` trait, Claude Haiku through headless Claude Code (`ClaudeCli`), and the prompt-hash cache. |
+| `typos` | 4 | The seeded typo pass: light by default, heavy for the noise split. |
+| `verify` | 5 | Runtime grounding (the session solved afresh against the real messages) and the read-back pass. |
 | `source` | out | `DatagenSource`: the sessions as an `assist-eval` `EvalSource`. |
 
-Everything after this (messages, verify, render, mix) is not built. New stages add modules beside these and read `Catalog`; none reads a schema from anywhere else.
+Everything after this (render, mix) is not built. New stages add modules beside these and read `Catalog`; none reads a schema from anywhere else.
 
 ### Where the catalog comes from
 
@@ -89,6 +93,22 @@ Each call goes through `Session::call_text`, the path the eval uses, on a privat
 
 A turn that cannot be solved ends its session there: the turns before it are kept as a shorter session tagged `truncated`.
 
+## Messages and verify (stages 4 and 5)
+
+`datagen messages --in <intents out> --out <dir>` turns each typed turn into what a person types on a phone, then checks the text still means the intent. One command, five steps, each a pure function of its input, the seed and the cache:
+
+1. **Write** (Claude Haiku, `claude -p --model haiku`, no API key). Sessions are batched (`--batch`, default 12) and sent as JSON; the answer is JSON. The prompt for a turn is its **brief** (`brief.rs`): what it asks in the vault's words (the rows, the filters with their units, the period resolved from `today`, the new values), the strings it must say verbatim (`say_verbatim`: the names, titles and notes the reference calls copy), and how it points at rows (the reference axis: say the name as quoted, say the nickname, copy the misspelling, use a pronoun and do not name the row again, point back at an earlier answer; and, for a follow-up, which turn it leans on and that it must be short). It never sees a tool call, a handle (`@k`, `#n`) or a world value that is sealed: a world is presence-only, `messages::no_sealed` refuses any prompt holding a sealed placeholder, and a test asserts that none reaches one. A session the answer does not cover is asked again in a later batch (a different prompt, so a different cache entry), up to three times, then dropped with reason `writer`.
+2. **Check** (mechanical). No placeholder, ISO date, line break or text over 240 characters (`hygiene`); every `say_verbatim` string is in the message, compared without case (`span`); a pronoun or handle turn does not repeat a name an earlier turn said (`reference`).
+3. **Typos** (`typos.rs`, `rng.rs`, seeded by session and turn). Light by default: about a third of messages carry one slip (a dropped, doubled, swapped or neighbouring-key letter, first letter kept). It never touches a span, a word with a digit, or a date word (`last`, `week`, `march`, `yesterday`). The **noise split** is a heavy-typo copy of every val session (`noise/`, ids end in `~noise`), grounded like the rest and not read back.
+4. **Ground** (`verify::ground`). The session is solved again by the planner with the real message in place of the placeholder (`WorldRun::solve_with`). The runtime reads the message (names it finds, dates it reads, a retraction ends the turn), so this is what "the runtime finds the same rows and dates" means: gold must be unchanged, the reference calls are written afresh (what `#n` a row gets depends on what the message made the runtime show), the message must not read as a retraction (`grounding:retraction`), every row the turn points at by name must be listed in the runtime's `vault:` line (`grounding:name`; a trashed row is not looked for), and when the intent has a period the `dates:` line must read its first day (`grounding:dates`). Any change of gold or any other planner drop is `grounding:<drop>`.
+5. **Read back** (Haiku, again batched). A second pass sees only the messages, with no brief, and says per message: the act (read, count, sum, avg, min, max, compare, create, edit, recall, undo, decline, or one of the `do` verbs), the kind, the period as `from`/`to` dates, the numbers in base units, which earlier message it leans on, and a decline reason. These slots are compared with the typed intent (`verify::agree`): `act`, `kind` (not asked when a row is named or the turn refers back), `period` (exact days), `number` (every number the intent carries, by absolute value), `leans` (only for a pronoun or handle turn, which cannot be understood alone; a carried or narrowed select restates what it needs) and `decline`. The share of read turns that agree is the **recovery rate**.
+
+A turn that fails a step is dropped with a reason, and the turns after it are cut (they lean on it); the turns before it stay as a shorter session tagged `truncated`. The report counts a cut turn separately and never as a drop of its own cell.
+
+**Cache.** `<out>/llm-cache/<hh>/<hash>.json` holds each model output under the BLAKE3 hash of the model name and the exact prompt (one file per prompt, written whole then renamed). A rebuild with a warm cache makes zero calls and writes byte-identical files (tested with a fake model, and by hand with `--offline` on the real run); `--offline` makes a miss an error instead of a call. Copy the cache with the data version. `--model` changes the model name and so the keys.
+
+**Output** (`<out>/`): `train|val|test|noise/sessions.jsonl` in the shape above with `user` filled and `reference calls` rewritten against the real message, plus `"verify": {"keep": true, "passed": [...], "reason": "ok"}` on each turn and `scenario` cut to the kept turns; `dropped.jsonl` (one row per session that lost a turn: split, session, turn, grid cell, reference, reason, detail, the message, how many turns were cut); `worlds/` (copied, so `DatagenSource::open(<out>)` and `open_named(<out>, &["noise"])` read the result unchanged); `manifest.json` and `report.txt` (drop rate per grid cell, per reference axis and per split with the reasons, the recovery rate and its disagreements by slot, the noise split, examples). Files hold no call counts; the command prints them to stderr.
+
 ## Output
 
 `datagen intents` writes `<out>/<split>/sessions.jsonl` (one session a line), `<out>/worlds/<id>.json` (the world, presence-only), `report.txt` and `manifest.json` (catalog hash, master seed, counts, the grid and the per-cell numbers).
@@ -109,7 +129,7 @@ A line is a session in the shape `assist_eval::gold::Session` reads, with more b
 - `ref` lists every reference call in order; a call the runtime was expected to refuse (the first half of an error-then-repair turn) carries `"bad": true`.
 - A world is read back from `worlds/<id>.json` with its sealed placeholders put back in memory by `DatagenSource`, so the vault the eval seeds is the one gold was recorded against; the placeholder document is never written.
 
-`DatagenSource` implements `assist_eval::source::EvalSource`, so a run plugs straight into the eval. `DatagenSource::open(dir, split)` reads a written run; `DatagenSource::new` takes records and world documents in memory.
+`DatagenSource` (which also reads the output of `datagen messages`) implements `assist_eval::source::EvalSource`, so a run plugs straight into the eval. `DatagenSource::open(dir, split)` reads a written run; `DatagenSource::new` takes records and world documents in memory.
 
 ## Commands
 
@@ -118,6 +138,7 @@ cargo run -p centraid-datagen -- catalog [--out catalog.json]
 cargo run -p centraid-datagen -- worlds --seed 1 --out out/ [--counts 48,6,6] [--vaults]
 cargo run -p centraid-datagen -- ambiguity --seed 1 [--counts 48,6,6] [--json]
 cargo run --release -p centraid-datagen -- intents --seed 1 --out out/ [--counts 48,6,6] [--sessions 18000,1000,1000 | --per-world N[,N,N]]
+cargo run --release -p centraid-datagen -- messages --in out/ --out msgs/ [--concurrency 6] [--batch 12] [--limit N] [--offline] [--seed 1] [--model haiku]
 ```
 
 `worlds` writes `<out>/<split>/<id>.json` (and `.vault` with `--vaults`) and `manifest.json`. `intents` runs stages 2 and 3 over the worlds of the run and prints the coverage report (also `report.txt`): the grid's size and its not-live cells, solvable intents per live cell (kept / drawn, with drop reasons), the shares along each axis, and the multi-turn share. Each world visits every live cell once as the first turn of a session, then keeps drawing until it has `--per-world` sessions (default: one per live cell); `--sessions train,val,test` derives it from the targets. Use `--release` for a long run: the first run's 20,010 sessions over 60 worlds take about an hour and a half in release. `DATAGEN_DEBUG=1` prints every drop with the intents that led to it. The package is `centraid-datagen`; the binary is `datagen`.
@@ -142,3 +163,5 @@ Found while making the intents solvable; each is either a product call or a runt
 ## Tests
 
 `cargo test -p centraid-datagen`. The intents tests run three worlds with more rows in the trash than a preset puts there (a `restore` needs one) and hold: a run is a pure function of its seed; every live cell has a solvable intent; the shares (multi-turn, three or more turns, across-app, three or more constraints among the turns that select by constraints); each follow-up leans on an earlier turn; each minimal pair differs in its answer; **replaying every session's reference calls through `assist_eval::run::Runner` passes every turn**, so gold is the runtime's effect reproduced and the eval loads what datagen writes; and a written run opens as an `EvalSource` with its worlds. `-- --ignored` also seeds all 60 worlds (about two minutes).
+
+`tests/messages.rs` runs stages 4 and 5 over a small intents run with a **deterministic fake model** (no network): a rebuild from a warm cache makes zero calls and every output file is byte-identical, `--offline` on a cold cache fails, no sealed placeholder or datagen placeholder reaches a prompt (checked against every placeholder the worlds seed), the output opens as an `EvalSource` with real messages and a verdict on each turn, and `World::from_doc` reads a world back from its document. Unit tests cover the checks (span, pronoun repeating a name, hygiene), the parsing of an answer, the cache and the typo pass (spans, numbers and date words survive even heavy noise).

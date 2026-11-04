@@ -30,6 +30,9 @@ use crate::intent::{
 };
 use crate::world::World;
 
+/// The person a `decline not_found` turn asks about: nobody in any world has this name.
+pub const NOT_FOUND_NAME: &str = "Zzyzx Quillfeather";
+
 /// Rows an `answer` shows before the rest are counted.
 const ROW_CAP: usize = 12;
 
@@ -170,6 +173,17 @@ pub struct Solution {
     pub dropped: Vec<Dropped>,
     /// The cell and constraint count of each kept turn.
     pub turns: Vec<(Cell, usize)>,
+    /// What the runtime made of each kept turn's message before any call: the `block` that
+    /// precedes it in the user turn (`vault:`, `dates:` ...) and whether it read as a retraction.
+    pub heard: Vec<Heard>,
+}
+
+/// What the runtime's grounding made of a user message.
+#[derive(Debug, Clone, Default)]
+pub struct Heard {
+    pub block: String,
+    /// The message took the request back (`phrases::is_retraction`): the turn ends before any call.
+    pub ended: bool,
 }
 
 /// One world, seeded once; each scenario runs on a private copy of its vault.
@@ -250,6 +264,22 @@ impl<'a> WorldRun<'a> {
     ///
     /// If the vault cannot be copied or opened; an unsolvable intent is a drop, not an error.
     pub fn solve(&mut self, scenario: &Scenario) -> Result<Solution> {
+        self.solve_with(scenario, None)
+    }
+
+    /// [`Self::solve`] with the user's own words for each turn in place of the placeholders. The
+    /// runtime grounds each message (names it finds, dates it reads), so what `#n` numbers a row
+    /// gets can differ from the placeholder run: the reference calls are written afresh against
+    /// the real message, and gold is whatever the runtime's effect is.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::solve`].
+    pub fn solve_with(
+        &mut self,
+        scenario: &Scenario,
+        messages: Option<&[String]>,
+    ) -> Result<Solution> {
         self.copies += 1;
         let vault = self
             .scratch
@@ -261,18 +291,22 @@ impl<'a> WorldRun<'a> {
         let mut created: Vec<String> = Vec::new();
         let mut left: Vec<Left> = Vec::new();
         let mut out_turns: Vec<Value> = Vec::new();
+        let mut heard: Vec<Heard> = Vec::new();
         let mut cells = Vec::new();
         let mut dropped = Vec::new();
         for (index, turn) in scenario.turns.iter().enumerate() {
             let cell = cell_of(turn);
-            let placeholder = placeholder(&scenario.id, index);
+            let placeholder = messages
+                .and_then(|m| m.get(index).cloned())
+                .unwrap_or_else(|| placeholder(&scenario.id, index));
             let planned = self.plan(turn, &left);
             let outcome = planned.and_then(|plan| {
                 self.execute(&mut live, &plan, &placeholder, &mut created, &left, turn)
             });
             match outcome {
-                Ok((value, leftover, constraints)) => {
+                Ok((value, leftover, constraints, said)) => {
                     out_turns.push(value);
+                    heard.push(said);
                     left.push(leftover);
                     cells.push((cell, constraints));
                 }
@@ -317,6 +351,7 @@ impl<'a> WorldRun<'a> {
             asked: scenario.turns.len(),
             dropped,
             turns: cells,
+            heard,
         })
     }
 
@@ -595,7 +630,7 @@ impl<'a> WorldRun<'a> {
                         "find",
                         vec![
                             ("kind", "person".to_owned()),
-                            ("name", "Zzyzx Quillfeather".to_owned()),
+                            ("name", NOT_FOUND_NAME.to_owned()),
                         ],
                     ));
                 }
@@ -693,9 +728,13 @@ impl<'a> WorldRun<'a> {
         created: &mut Vec<String>,
         left: &[Left],
         turn: &TurnIntent,
-    ) -> Result<(Value, Left, usize), (Drop, String)> {
+    ) -> Result<(Value, Left, usize, Heard), (Drop, String)> {
         let err = |detail: String| (Drop::Error, detail);
-        live.user(placeholder);
+        let said = live.user(placeholder);
+        let heard = Heard {
+            block: said["block"].as_str().unwrap_or_default().to_owned(),
+            ended: said.get("ended").is_some_and(Value::is_object),
+        };
         let mut responses: Vec<Value> = Vec::new();
         let mut handles: Vec<Option<String>> = Vec::new();
         let mut calls: Vec<Value> = Vec::new();
@@ -961,7 +1000,7 @@ impl<'a> WorldRun<'a> {
         };
         let mut turn_json = turn_json;
         turn_json["constraints"] = json!(constraints);
-        Ok((turn_json, leftover, constraints))
+        Ok((turn_json, leftover, constraints, heard))
     }
 
     /// The world key of a vault id, or `+N` for a row the session created.

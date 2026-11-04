@@ -55,13 +55,25 @@ impl DatagenSource {
     ///
     /// If a sessions file or a world cannot be read.
     pub fn open(dir: &Path, split: Option<Split>) -> Result<Self> {
-        let mut records = Vec::new();
-        let mut worlds = BTreeMap::new();
-        for s in Split::ALL
+        let names: Vec<&str> = Split::ALL
             .into_iter()
             .filter(|s| split.is_none_or(|w| w == *s))
-        {
-            let path = dir.join(s.name()).join(SESSIONS);
+            .map(Split::name)
+            .collect();
+        Self::open_named(dir, &names)
+    }
+
+    /// As [`Self::open`], for the named subdirectories of `dir` (`train`, `val`, `test`, and
+    /// `noise`, the heavy-typo copy of val that `datagen messages` writes).
+    ///
+    /// # Errors
+    ///
+    /// If a sessions file or a world cannot be read.
+    pub fn open_named(dir: &Path, names: &[&str]) -> Result<Self> {
+        let mut records = Vec::new();
+        let mut worlds = BTreeMap::new();
+        for name in names {
+            let path = dir.join(name).join(SESSIONS);
             let Ok(text) = std::fs::read_to_string(&path) else {
                 continue;
             };
