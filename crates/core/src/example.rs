@@ -95,7 +95,7 @@ pub fn seed(
         report: Report::default(),
     };
     if wanted("people") {
-        seed_people(&mut seeder);
+        seed_people(&mut seeder, now_ms);
     }
     if wanted("notes") {
         seed_notes(&mut seeder);
@@ -443,7 +443,7 @@ fn seed_money(seeder: &mut Seeder, now: i64) {
 // ---------------------------------------------------------------------------
 
 /// The four people.
-fn seed_people(seeder: &mut Seeder) {
+fn seed_people(seeder: &mut Seeder, now: i64) {
     let mut ids = Vec::new();
     for (name, role, cadence) in [
         ("Maya Alvarez", "College friend", 30),
@@ -487,10 +487,13 @@ fn seed_people(seeder: &mut Seeder) {
         );
     }
 
-    for (party, label, month_day, reminder) in [
-        (&grandpa, "Birthday", "08-14", true),
-        (&maya, "Birthday", "11-02", false),
+    // Birthdays recur yearly, so they are a month-day: Maya's falls inside
+    // Agenda's 45-day window and Grandpa's outside it, whatever today is.
+    for (party, label, days, reminder) in [
+        (&grandpa, "Birthday", 120, true),
+        (&maya, "Birthday", 12, false),
     ] {
+        let month_day = day(now, days)[5..].to_owned();
         seeder.run(
             "person.add_date",
             json!({
