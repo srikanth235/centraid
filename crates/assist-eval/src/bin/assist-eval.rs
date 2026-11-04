@@ -137,8 +137,10 @@ fn run() -> Result<()> {
         args.worlds.clone(),
     )));
     let prefix = args.out.clone();
+    let mut set_total = None;
     let (label, results, skipped) = if args.rescore.is_empty() {
         let mut sessions = source.sessions()?;
+        set_total = Some(sessions.len() + source.excluded()?.len());
         if !args.only.is_empty() {
             sessions.retain(|s| args.only.contains(&s.id));
         }
@@ -273,7 +275,13 @@ fn run() -> Result<()> {
     };
     let mut excluded = source.excluded()?;
     excluded.extend(skipped);
-    let report = report::build(&label, &source.label(), &results, &excluded);
+    let report = report::build(
+        &label,
+        &source.label(),
+        &results,
+        &excluded,
+        set_total.unwrap_or(results.len() + excluded.len()),
+    );
     print!("{}", report::text(&report));
     if let Some(prefix) = prefix {
         let json = serde_json::to_string_pretty(&report)?;

@@ -188,7 +188,7 @@ fn the_report_counts_sessions_turns_apps_and_constraints_and_survives_json() {
         session("S2", vec![who_is_neha()]),
     ]);
     let results = run(&source, &DeclineStepper);
-    let report = report::build("stub", "smoke", &results, &[]);
+    let report = report::build("stub", "smoke", &results, &[], results.len());
     assert_eq!(report.overall.sessions, 2);
     assert_eq!(
         (report.overall.session_pass.k, report.overall.session_pass.n),
@@ -233,7 +233,8 @@ fn the_report_counts_sessions_turns_apps_and_constraints_and_survives_json() {
         .map(|r| serde_json::from_str(&serde_json::to_string(r).expect("ser")).expect("de"))
         .collect();
     assert_eq!(
-        serde_json::to_value(report::build("stub", "smoke", &again, &[])).expect("json"),
+        serde_json::to_value(report::build("stub", "smoke", &again, &[], again.len()))
+            .expect("json"),
         json
     );
 

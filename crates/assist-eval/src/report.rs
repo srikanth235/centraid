@@ -226,7 +226,13 @@ fn slice(rows: &[Row<'_>]) -> Slice {
 
 /// Aggregate a run.
 #[must_use]
-pub fn build(model: &str, set: &str, sessions: &[SessionResult], excluded: &[Exclusion]) -> Report {
+pub fn build(
+    model: &str,
+    set: &str,
+    sessions: &[SessionResult],
+    excluded: &[Exclusion],
+    set_total: usize,
+) -> Report {
     let mut rows: Vec<Row<'_>> = Vec::new();
     for session in sessions {
         let clean = clean_count(&session.turns);
@@ -314,7 +320,7 @@ pub fn build(model: &str, set: &str, sessions: &[SessionResult], excluded: &[Exc
         excluded: excluded.to_vec(),
         overall: Overall {
             sessions: sessions.len(),
-            set_sessions: sessions.len() + excluded.len(),
+            set_sessions: set_total,
             session_pass: Rate::of(passed, sessions.len()),
             session_pass_unblocked: Rate::of(
                 unblocked.iter().filter(|s| s.pass()).count(),
