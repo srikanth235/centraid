@@ -223,12 +223,12 @@ impl<'a> Runner<'a> {
             scratch: tempfile::tempdir().map_err(runtime)?,
             worlds: HashMap::new(),
             copies: 0,
-            tools: ToolsMode::S2,
+            tools: ToolsMode::Sig,
         })
     }
 
     /// Which tools block the system prompt shows, and the shape of call the step reads: `S2` for the model shipping
-    /// today, `Sig` for one trained on the eight tools. Defaults to `S2`, the model the frozen sets were written for.
+    /// today, `Sig` for one trained on the eight tools. Defaults to `Sig`; `S2` scores the model shipping today.
     #[must_use]
     pub fn with_tools(mut self, tools: ToolsMode) -> Self {
         self.tools = tools;

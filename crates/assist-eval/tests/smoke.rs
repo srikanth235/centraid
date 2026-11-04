@@ -188,7 +188,7 @@ fn the_report_counts_sessions_turns_apps_and_constraints_and_survives_json() {
         session("S2", vec![who_is_neha()]),
     ]);
     let results = run(&source, &DeclineStepper);
-    let report = report::build("stub", "smoke", &results);
+    let report = report::build("stub", "smoke", &results, &[]);
     assert_eq!(report.overall.sessions, 2);
     assert_eq!(
         (report.overall.session_pass.k, report.overall.session_pass.n),
@@ -233,7 +233,7 @@ fn the_report_counts_sessions_turns_apps_and_constraints_and_survives_json() {
         .map(|r| serde_json::from_str(&serde_json::to_string(r).expect("ser")).expect("de"))
         .collect();
     assert_eq!(
-        serde_json::to_value(report::build("stub", "smoke", &again)).expect("json"),
+        serde_json::to_value(report::build("stub", "smoke", &again, &[])).expect("json"),
         json
     );
 
@@ -359,21 +359,17 @@ impl Stepper for Tools {
 }
 
 #[test]
-fn a_default_runner_shows_s2_and_steps_under_s2_and_a_chosen_mode_reaches_both() {
+fn a_default_runner_shows_the_eight_tools_and_a_chosen_mode_reaches_the_step() {
     let source = source(vec![session("S", vec![declines()])]);
     let seen = Seen(Mutex::new(None));
     Runner::new(&source, &seen)
         .expect("runner")
         .run_session(&source.sessions[0])
         .expect("session");
+    let prompt = seen.0.lock().expect("lock").clone().expect("prompt");
     assert!(
-        seen.0
-            .lock()
-            .expect("lock")
-            .clone()
-            .expect("prompt")
-            .contains("act("),
-        "the default block is S2's"
+        !prompt.contains("act("),
+        "the default block is the eight tools'"
     );
     let tools = Tools(Mutex::new(Vec::new()));
     Runner::new(&source, &tools)
@@ -382,11 +378,11 @@ fn a_default_runner_shows_s2_and_steps_under_s2_and_a_chosen_mode_reaches_both()
         .expect("session");
     Runner::new(&source, &tools)
         .expect("runner")
-        .with_tools(ToolsMode::Sig)
+        .with_tools(ToolsMode::S2)
         .run_session(&source.sessions[0])
         .expect("session");
     assert_eq!(
         *tools.0.lock().expect("lock"),
-        vec![ToolsMode::S2, ToolsMode::Sig]
+        vec![ToolsMode::Sig, ToolsMode::S2]
     );
 }

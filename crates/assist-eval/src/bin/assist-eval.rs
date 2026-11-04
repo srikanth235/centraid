@@ -18,9 +18,11 @@ use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
 use centraid_assist::native::prompt::ToolsMode;
+use centraid_assist_eval::EvalError;
 use centraid_assist_eval::report;
 use centraid_assist_eval::run::{DeclineStepper, Runner, SessionResult, Stepper};
-use centraid_assist_eval::source::{EvalSource, JsonlSource};
+use centraid_assist_eval::source::{EvalSource, Exclusion, JsonlSource};
+use centraid_assist_eval::tally::{WithoutInProgress, WithoutTally};
 
 struct Args {
     model: Option<PathBuf>,
@@ -34,10 +36,11 @@ struct Args {
     shard: Option<(usize, usize)>,
     rescore: Vec<PathBuf>,
     tools: ToolsMode,
+    resume: bool,
 }
 
 const USAGE: &str = "usage: assist-eval (--model GGUF | --stub) --set SET.jsonl [--worlds DIR]… [--out PREFIX] \
-[--tools s2|sig|compact|full] [--threads N] [--limit N] [--only ID,ID] [--shard K/N]\n       assist-eval --rescore RUN.sessions.jsonl… --set SET.jsonl [--out PREFIX]";
+[--tools s2|sig|compact|full] [--threads N] [--limit N] [--only ID,ID] [--shard K/N] [--resume]\n       assist-eval --rescore RUN.sessions.jsonl… --set SET.jsonl [--out PREFIX]";
 
 fn args() -> Result<Args> {
     let native = PathBuf::from("experiments/toolchat/native");
@@ -54,8 +57,9 @@ fn args() -> Result<Args> {
         only: Vec::new(),
         shard: None,
         rescore: Vec::new(),
-        // the model shipping today is S2; a model trained on the eight tools is scored with `--tools sig`
-        tools: ToolsMode::S2,
+        // the eight tools; `--tools s2` scores the model shipping today
+        tools: ToolsMode::Sig,
+        resume: false,
     };
     let mut argv = std::env::args().skip(1);
     while let Some(flag) = argv.next() {
@@ -94,6 +98,7 @@ fn args() -> Result<Args> {
                     other => bail!("--tools takes s2, sig, compact or full, not {other}"),
                 };
             }
+            "--resume" => out.resume = true,
             "--rescore" => out.rescore.push(value("--rescore")?.into()),
             other => bail!("unknown argument {other}\n{USAGE}"),
         }
@@ -125,9 +130,14 @@ fn engine(
 
 fn run() -> Result<()> {
     let args = args()?;
-    let source = JsonlSource::new(&args.set, args.worlds.clone());
+    // the held-out worlds predate the vault rebuild: Tally and the `in_progress` status are gone from the runtime.
+    // The wrappers read them out and the report counts the sessions this leaves out
+    let source = WithoutInProgress::new(WithoutTally::new(JsonlSource::new(
+        &args.set,
+        args.worlds.clone(),
+    )));
     let prefix = args.out.clone();
-    let (label, results) = if args.rescore.is_empty() {
+    let (label, results, skipped) = if args.rescore.is_empty() {
         let mut sessions = source.sessions()?;
         if !args.only.is_empty() {
             sessions.retain(|s| args.only.contains(&s.id));
@@ -187,13 +197,47 @@ fn run() -> Result<()> {
         let mut runner = Runner::new(&source, stepper.as_ref())?.with_tools(args.tools);
         let started = Instant::now();
         let mut results: Vec<SessionResult> = Vec::new();
+        let file = prefix.as_ref().map(|p| with_ext(p, "sessions.jsonl"));
+        if let Some(file) = file.as_ref().filter(|f| args.resume && f.exists()) {
+            // a restart picks up where the run stopped; a line cut off by the kill is read as not done
+            for line in std::fs::read_to_string(file)?.lines() {
+                if let Ok(done) = serde_json::from_str::<SessionResult>(line) {
+                    results.push(done);
+                }
+            }
+            sessions.retain(|s| !results.iter().any(|r| r.id == s.id));
+            eprintln!("resuming: {} sessions already done", results.len());
+        }
         let total = sessions.len();
-        let mut sink = match &prefix {
-            Some(p) => Some(std::fs::File::create(with_ext(p, "sessions.jsonl"))?),
+        let mut skipped: Vec<Exclusion> = Vec::new();
+        let mut sink = match &file {
+            Some(f) if args.resume => {
+                // rewrite the lines that parsed, then append: a torn last line must not stay
+                let mut out = std::fs::File::create(f)?;
+                for done in &results {
+                    writeln!(out, "{}", serde_json::to_string(done)?)?;
+                }
+                Some(out)
+            }
+            Some(f) => Some(std::fs::File::create(f)?),
             None => None,
         };
         for (i, session) in sessions.iter().enumerate() {
-            let result = runner.run_session(session)?;
+            let result = match runner.run_session(session) {
+                Ok(result) => result,
+                // one session the data cannot seed or judge is left out and counted; it must not end the run
+                Err(
+                    error @ (EvalError::Data(_) | EvalError::Json { .. } | EvalError::Read { .. }),
+                ) => {
+                    eprintln!("[{}/{}] {} left out: {error}", i + 1, total, session.id);
+                    skipped.push(Exclusion {
+                        id: session.id.clone(),
+                        reason: error.to_string(),
+                    });
+                    continue;
+                }
+                Err(error) => return Err(error.into()),
+            };
             eprintln!(
                 "[{}/{}] {} {} ({} ms, {:.0}s elapsed)",
                 i + 1,
@@ -208,7 +252,7 @@ fn run() -> Result<()> {
             }
             results.push(result);
         }
-        (label, results)
+        (label, results, skipped)
     } else {
         let mut results = Vec::new();
         for path in &args.rescore {
@@ -221,9 +265,15 @@ fn run() -> Result<()> {
                 }
             }
         }
-        (format!("rescored:{}", args.rescore.len()), results)
+        (
+            format!("rescored:{}", args.rescore.len()),
+            results,
+            Vec::new(),
+        )
     };
-    let report = report::build(&label, &source.label(), &results);
+    let mut excluded = source.excluded()?;
+    excluded.extend(skipped);
+    let report = report::build(&label, &source.label(), &results, &excluded);
     print!("{}", report::text(&report));
     if let Some(prefix) = prefix {
         let json = serde_json::to_string_pretty(&report)?;

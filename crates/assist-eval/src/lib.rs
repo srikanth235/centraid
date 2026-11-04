@@ -10,6 +10,7 @@
 //! | module | is |
 //! | --- | --- |
 //! | [`source`] | [`source::EvalSource`]: where sessions and worlds come from (today the frozen JSONL set) |
+//! | [`tally`] | takes the removed Tally app out of the held-out worlds as they are read |
 //! | [`gold`] | the gold a session carries |
 //! | [`effect`] | a turn's effect, from the runtime's responses (`lib.py` `turn_effect`) |
 //! | [`judge`] | the scorer (`score.py` `judge_turn`) |
@@ -26,6 +27,7 @@ pub mod judge;
 pub mod report;
 pub mod run;
 pub mod source;
+pub mod tally;
 
 /// Why an eval could not run or score. A model that writes a bad call is not an error: that is a failed turn.
 #[derive(Debug, thiserror::Error)]

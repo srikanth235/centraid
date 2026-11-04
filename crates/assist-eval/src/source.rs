@@ -13,6 +13,13 @@ use serde_json::Value;
 use crate::EvalError;
 use crate::gold::Session;
 
+/// A session left out of a run, and why.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Exclusion {
+    pub id: String,
+    pub reason: String,
+}
+
 /// A set of sessions and the worlds they run in.
 pub trait EvalSource {
     /// A label for the report: the file or version the set came from.
@@ -23,6 +30,15 @@ pub trait EvalSource {
     /// # Errors
     /// [`EvalError`] when the set cannot be read.
     fn sessions(&self) -> Result<Vec<Session>, EvalError>;
+
+    /// Sessions the source holds but cannot be asked, and why. They are not in [`Self::sessions`]; the report
+    /// counts them so a subset never reads as the whole set.
+    ///
+    /// # Errors
+    /// [`EvalError`] when the set cannot be read.
+    fn excluded(&self) -> Result<Vec<Exclusion>, EvalError> {
+        Ok(Vec::new())
+    }
 
     /// A world description (`crates/nativetools/src/seed.rs` documents the format) by the name a session gives.
     ///
