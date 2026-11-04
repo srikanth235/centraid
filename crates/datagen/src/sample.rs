@@ -999,13 +999,37 @@ impl<'a> Sampler<'a> {
                 }),
                 _ => changes.push(rename(rng)),
             },
+            // the name of a figure is its metric: what an edit changes is the value
+            "daily figure" => changes.push(Change {
+                field: "value".into(),
+                value: Val::Num(rng.range(1, 200) as f64 * 10.0),
+            }),
+            "workout" => {
+                let (field, low, high, step) = *rng.pick(&[
+                    ("moving", 10, 150, 60),
+                    ("distance", 1, 40, 500),
+                    ("energy", 5, 120, 10),
+                    ("heart_rate", 9, 18, 10),
+                    ("climb", 1, 60, 10),
+                ]);
+                changes.push(Change {
+                    field: field.into(),
+                    value: Val::Num((rng.range(low, high) * step) as f64),
+                });
+            }
             _ => changes.push(rename(rng)),
         }
-        let repair = roll >= 92;
+        // What a health store states is not written here: every seeded world follows one, so the
+        // runtime refuses the edit, names the store, and the turn ends on that refusal (the
+        // owner's ruling: refuse edits to synced rows and name the source).
+        let synced = matches!(kind, "workout" | "daily figure");
+        let repair = !synced && roll >= 92;
         Some(self.turn(
             Intent::Edit { target, changes },
             reference,
-            if repair {
+            if synced {
+                Outcome::Decline
+            } else if repair {
                 Outcome::Repair
             } else {
                 Outcome::Done

@@ -129,6 +129,9 @@ enum Check {
     },
     Ask(BTreeSet<String>),
     Decline(String),
+    /// An edit the runtime refuses because a health store states the row: the turn ends on the
+    /// refusal, which names the store.
+    Refused,
     Write(BTreeSet<String>),
     Created(String),
     Undo,
@@ -515,9 +518,14 @@ impl<'a> WorldRun<'a> {
                     "edit",
                     vec![("rows", rows), ("args", change_lines(changes))],
                 ));
+                let check = if turn.outcome == Outcome::Decline {
+                    Check::Refused
+                } else {
+                    Check::Write(want.clone())
+                };
                 Ok(Plan {
                     steps,
-                    check: Check::Write(want.clone()),
+                    check,
                     keys: want,
                     kind,
                 })
@@ -826,6 +834,23 @@ impl<'a> WorldRun<'a> {
             Check::Decline(reason) => {
                 if effect.ending != Ending::Decline || effect.reason.as_deref() != Some(reason) {
                     return Err((Drop::Ending, format!("ended in {}", effect.ending.word())));
+                }
+            }
+            Check::Refused => {
+                // the runtime ends the turn on the refusal (reason `out_of_scope`) and records the
+                // vault's sentence, which names the store
+                let said = responses
+                    .last()
+                    .and_then(|r| r["effect"]["refusal"]["reason"].as_str())
+                    .unwrap_or_default();
+                if effect.ending != Ending::Decline
+                    || !said.contains(" from ")
+                    || !effect.diff.rows.is_empty()
+                {
+                    return Err((
+                        Drop::Ending,
+                        format!("ended in {} {said:?}", effect.ending.word()),
+                    ));
                 }
             }
             Check::Write(want) => {
