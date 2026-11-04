@@ -108,6 +108,9 @@ pub fn generate_with(
         let mut run = WorldRun::seed(&world, catalog, &dir)
             .with_context(|| format!("world {}", world.id()))?;
         let facts = run.facts.clone();
+        if std::env::var_os("DATAGEN_DEBUG").is_some() {
+            eprintln!("world {} empty reads {}", world.id(), run.empty_reads);
+        }
         let sampler =
             Sampler::new(&world, &facts, catalog, &grid).with_empty_reads(run.empty_reads);
         let root = Rng::new(config.seed).fork(&format!("intents:{}", world.id()));

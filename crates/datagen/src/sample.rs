@@ -444,7 +444,7 @@ impl<'a> Sampler<'a> {
         match (cell.tool.as_str(), cell.verb.as_str()) {
             ("find", _) => {
                 let (mut sel, _) = self.target_selector(kind, c, rng, ROW_CAP)?;
-                let mut empty = outcome_roll < 10 && self.empty_reads;
+                let mut empty = outcome_roll < 22 && self.empty_reads;
                 if empty {
                     match self.emptied(sel.clone(), rng) {
                         Some(none) => sel = none,
@@ -471,7 +471,7 @@ impl<'a> Sampler<'a> {
             }
             ("compute", "count") => {
                 let (mut sel, _) = self.target_selector(kind, c.saturating_sub(1), rng, 10_000)?;
-                let mut empty = outcome_roll < 8;
+                let mut empty = outcome_roll < 15;
                 if empty {
                     match self.emptied(sel.clone(), rng) {
                         Some(none) => sel = none,
@@ -554,7 +554,7 @@ impl<'a> Sampler<'a> {
 
     /// A selector that selects nothing: the same constraints under a period nothing falls in, or
     /// a threshold nothing clears.
-    fn emptied(&self, mut sel: Selector, rng: &mut Rng) -> Option<Selector> {
+    fn emptied(&self, sel: Selector, rng: &mut Rng) -> Option<Selector> {
         let dated =
             sel.kind != "budget" && self.live_rows(&sel.kind).iter().any(|r| r.date.is_some());
         if dated && sel.name.is_none() {
@@ -595,9 +595,9 @@ impl<'a> Sampler<'a> {
                 return Some(probe);
             }
         }
-        // a name nothing is called
-        sel.name = Some("Quillfeather".to_owned());
-        self.facts.select(&sel, None).is_empty().then_some(sel)
+        // a name nothing is called ends a read without a `@k` (the runtime's by-name miss), so
+        // there is no empty read to draw for a kind with no date and no number field
+        None
     }
 
     fn group_for(&self, sel: &Selector, rng: &mut Rng) -> Option<String> {
@@ -646,6 +646,7 @@ impl<'a> Sampler<'a> {
                     let F::T(cat) = b.fields.get("category")?.clone() else {
                         continue;
                     };
+                    let cat = self.facts.titles.get(&cat).cloned().unwrap_or(cat);
                     let month = b.date?;
                     let rel = months_between(today, month);
                     if !(-3..=0).contains(&rel) {
@@ -1493,7 +1494,10 @@ impl<'a> Sampler<'a> {
                 extra = 0;
             }
             _ => {
-                let across = matches!(cell.tool.as_str(), "find" | "compute") && rng.chance(0.7);
+                // an empty result is drawn by `opener`, so leave room for it before a window around an event
+                let across = matches!(cell.tool.as_str(), "find" | "compute")
+                    && !rng.chance(0.2)
+                    && rng.chance(0.7);
                 let first = across
                     .then(|| self.across(cell, rng))
                     .flatten()

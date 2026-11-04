@@ -48,8 +48,8 @@ Constraints are weighted toward three and more in the draw; what is realised dep
 | Cell | Why |
 | --- | --- |
 | `find/budget/read`, `find/daily figure/read` | The seed document keys no budget or daily figure, so an eval cannot name the rows an answer shows. (Their values, through `compute`, are all live.) |
-| `create/workout`, `create/daily figure` | Read-only in chat. |
-| `create/photo`, `create/transaction`, `create/budget`, `create/rule`; `edit/budget`, `edit/workout`, `edit/daily figure`, `edit/category` | The runtime has no such write. |
+| `create/workout`, `create/daily figure`, `edit/workout`, `edit/daily figure` | Read-only on the runtime this was built against. The owner approved Health writes; they are not on `claude/assist-tool-regroup-d53912` yet, so these cells are live-pending and no intent is drawn for them (there is nothing to verify one against). |
+| `create/photo`, `create/transaction`, `create/budget`, `create/rule`; `edit/budget`, `edit/category` | The runtime has no such write. |
 | `edit/rule` | The runtime answers `edit does not apply to rule`. |
 | `do/*/reveal` | Reveal opens a sealed value; a world carries only a placeholder, which must not reach a prompt. |
 | `do/*/tag`, `do/*/untag` | A tag is a label row; no world seeds one, and `tag` of an unknown label changes nothing. |
@@ -57,7 +57,7 @@ Constraints are weighted toward three and more in the draw; what is realised dep
 | `do/album/restore` | No world puts an album in the trash. |
 | `decline/-/never_mind` | The runtime ends that turn from the user's own words, and the placeholder has none. |
 | `compute/{account,rule}/{sum,avg,min,max}` | The world document does not carry those number fields. |
-| `compute/{transaction,workout,daily figure}/compare` | Live when `meta::OPS` has `compare` (the regroup branch adds it); not live on a runtime without it. |
+| `compute/{transaction,workout,daily figure}/compare` | Live now (the merged regroup has `compare`); the catalog reads this from `meta::OPS`, so a runtime without it marks them not live. |
 
 ## Intents (stage 2)
 
@@ -131,7 +131,9 @@ Found while making the intents solvable; each is either a product call or a runt
 - **`undo` after `log` or `cancel` changes nothing.** The undo pairs are drawn after the other writes.
 - **`tag` and `archive` produce no diff** (`no field changed`).
 - **Subtasks hide with a trashed parent**, but are not completed with a completed one; the seeder runs the second before the children exist.
-- **An empty `find` issues an `@k` only on the regrouped runtime** (the regroup branch, 991924658). On a runtime without it there is nothing for `answer rows=@k` to name, and `answer` takes no selector, so empty reads are not drawn (`WorldRun::empty_reads` probes this once per world). Empty counts (`compute count` is `@k = 0`) are drawn either way.
+- **An empty `find` by filters issues an `@k`** on the regrouped runtime (991924658, merged), so an empty read is `find` then `answer rows=@k`. A by-name miss (`name=` matching nothing) issues none, so an empty read is drawn from a period or a threshold, not a name. `WorldRun::empty_reads` probes this once per world; the sampler draws no empty read on a runtime without it. Empty counts are drawn either way.
+- **A `where` on a transaction's category reads the title** (`Clothes and household`), not the leaf notation (`shopping.general`), which selects nothing. The facts and the filters use the title.
+- **`create` and `edit` carry fields flat** in commit 5005b1afb, which is on `claude/vibrant-yalow-a14a45` (the per-step grammar), not on the regroup branch. Reference calls here send fields as `args` lines, the shape the merged runtime reads; if the flat shape reaches the base, the planner's `change_lines` changes with it.
 - **`judge_args` in `assist-eval` compares a write's verb as `act`**, so per-argument blame is off for regrouped calls (the effect-based pass/fail is not).
 - No world puts an album in the trash, so `do/album/restore` is not live.
 - `find` shows 6 of more than 12 matches; reads here are drawn with 12 rows or fewer.

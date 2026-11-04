@@ -309,7 +309,12 @@ impl Facts {
                     "account",
                     t(s(r, "account").and_then(&account_name).as_deref()),
                 ),
-                ("category", t(s(r, "category"))),
+                // the runtime reads a leaf notation like `shopping.general` as nothing; the title
+                // it shows (`Clothes and household`) is what a `where` filters on
+                (
+                    "category",
+                    t(s(r, "category").map(|c| titles.get(c).map_or(c, String::as_str))),
+                ),
                 ("status", Some(F::T(status.to_owned()))),
                 (
                     "currency",

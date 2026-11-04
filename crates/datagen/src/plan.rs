@@ -219,8 +219,8 @@ impl<'a> WorldRun<'a> {
             let found = live.call_text(&call_xml(
                 "find",
                 &Map::from_iter([
-                    ("kind".to_owned(), json!("person")),
-                    ("name".to_owned(), json!("Quillfeather")),
+                    ("kind".to_owned(), json!("task")),
+                    ("where".to_owned(), json!("priority >= 99")),
                 ]),
             ));
             found["effect"]["result"].is_string()
