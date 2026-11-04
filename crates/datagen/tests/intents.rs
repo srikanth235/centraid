@@ -21,7 +21,7 @@ use serde_json::Value;
 const CONFIG: Config = Config {
     seed: 1,
     counts: [3, 0, 0],
-    per_world: 0,
+    per_world: [0; 3],
     cell_limit: None,
 };
 
@@ -51,7 +51,7 @@ fn a_run_is_a_pure_function_of_its_seed() {
     let config = Config {
         seed: 7,
         counts: [1, 0, 0],
-        per_world: 0,
+        per_world: [0; 3],
         cell_limit: Some(30),
     };
     let go = || {

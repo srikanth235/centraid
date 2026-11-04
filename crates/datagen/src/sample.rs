@@ -1510,14 +1510,19 @@ impl<'a> Sampler<'a> {
             };
             turns.push(next);
         }
-        let mut apps: Vec<&String> = turns.iter().flat_map(|t| &t.apps).collect();
-        apps.sort();
-        apps.dedup();
-        let span = if apps.len() > 1 {
-            Span::Across
-        } else {
-            Span::Single
-        };
+        // across apps only where one turn joins two (a selector linked to a row of another app,
+        // a period read off a row of another app) or leans on a turn of another app; two
+        // unrelated questions in two apps are not an intent that joins them
+        let joins = turns.iter().enumerate().any(|(i, t)| {
+            t.apps.len() > 1
+                || t.dep.is_some_and(|(on, _)| {
+                    on < i
+                        && !t.apps.is_empty()
+                        && !turns[on].apps.is_empty()
+                        && t.apps != turns[on].apps
+                })
+        });
+        let span = if joins { Span::Across } else { Span::Single };
         Some(Scenario {
             id: id.to_owned(),
             world: self.world.id(),

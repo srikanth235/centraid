@@ -31,7 +31,7 @@ pub struct Config {
     /// Worlds in each split: train, val, test.
     pub counts: [usize; 3],
     /// Sessions to keep per world; never fewer than one per live cell.
-    pub per_world: usize,
+    pub per_world: [usize; 3],
     /// Visit only this many cells per world (tests that need a quick run); `None` for all.
     pub cell_limit: Option<usize>,
 }
@@ -113,7 +113,7 @@ pub fn generate_with(
         let root = Rng::new(config.seed).fork(&format!("intents:{}", world.id()));
         let target = config
             .cell_limit
-            .unwrap_or_else(|| config.per_world.max(live.len()));
+            .unwrap_or_else(|| config.per_world[split_index(spec.split)].max(live.len()));
         let mut kept = 0;
         let mut drawn = 0;
         let offset = number * 31;
@@ -246,6 +246,14 @@ pub struct Summary {
     pub constraints_by_app: BTreeMap<String, usize>,
     pub span_by_turns: BTreeMap<String, usize>,
     pub drops: BTreeMap<String, usize>,
+}
+
+fn split_index(split: Split) -> usize {
+    match split {
+        Split::Train => 0,
+        Split::Val => 1,
+        Split::Test => 2,
+    }
 }
 
 fn bump(map: &mut BTreeMap<String, usize>, key: impl Into<String>) {

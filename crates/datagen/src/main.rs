@@ -52,9 +52,14 @@ enum Command {
         /// Worlds per split as `train,val,test` (default 48,6,6).
         #[arg(long, value_delimiter = ',')]
         counts: Option<Vec<usize>>,
-        /// Sessions to keep per world; never fewer than one per live grid cell.
-        #[arg(long, default_value_t = 0)]
-        per_world: usize,
+        /// Sessions to keep per world, one number or `train,val,test`; never fewer than one per
+        /// live grid cell.
+        #[arg(long, value_delimiter = ',')]
+        per_world: Option<Vec<usize>>,
+        /// Sessions to keep per split as `train,val,test` (the first run: 18000,1000,1000);
+        /// sets `--per-world` from the world counts.
+        #[arg(long, value_delimiter = ',')]
+        sessions: Option<Vec<usize>>,
     },
     /// Print how ambiguous each world is under its settings.
     Ambiguity {
@@ -144,12 +149,24 @@ fn main() -> Result<()> {
             out,
             counts,
             per_world,
+            sessions,
         } => {
             let catalog = Catalog::build()?;
             let counts: [usize; 3] = match counts.as_deref() {
                 None => [48, 6, 6],
                 Some([a, b, c]) => [*a, *b, *c],
                 Some(_) => anyhow::bail!("--counts takes three numbers: train,val,test"),
+            };
+            let per_world: [usize; 3] = match (sessions.as_deref(), per_world.as_deref()) {
+                (Some([a, b, c]), _) => {
+                    let per = |total: usize, worlds: usize| total.div_ceil(worlds.max(1));
+                    [per(*a, counts[0]), per(*b, counts[1]), per(*c, counts[2])]
+                }
+                (Some(_), _) => anyhow::bail!("--sessions takes three numbers: train,val,test"),
+                (None, Some([n])) => [*n; 3],
+                (None, Some([a, b, c])) => [*a, *b, *c],
+                (None, Some(_)) => anyhow::bail!("--per-world takes one number or three"),
+                (None, None) => [0; 3],
             };
             let scratch = tempfile::tempdir()?;
             let config = run::Config {
