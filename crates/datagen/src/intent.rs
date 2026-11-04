@@ -413,4 +413,7 @@ pub struct Scenario {
     pub world: String,
     pub span: Span,
     pub turns: Vec<TurnIntent>,
+    /// `pair:<id>` on the two scenarios of a minimal pair.
+    #[serde(default)]
+    pub tags: Vec<String>,
 }

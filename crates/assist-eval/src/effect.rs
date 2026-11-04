@@ -370,6 +370,17 @@ mod tests {
     }
 
     #[test]
+    fn the_regrouped_writes_are_writes_as_act_was() {
+        for tool in ["do", "edit", "create"] {
+            let write = json!({"ends_turn": true, "effect": {"tool": tool,
+                "diff": {"rows": [{"id": "a", "kind": "task", "change": "updated", "fields": {"status": ["open", "completed"]}}]}}});
+            let effect = turn_effect(&[write]);
+            assert_eq!(effect.ending, Ending::Act, "{tool}");
+            assert_eq!(effect.diff.rows.len(), 1, "{tool}");
+        }
+    }
+
+    #[test]
     fn effect_rows_collects_every_numbered_row() {
         let effect = json!({"rows": [{"id": "a", "n": 1}], "answer": {"rows": [{"id": "b", "n": 2}]}, "ask": {"options": [{"id": "c", "n": 3}]}});
         let mut rows = effect_rows(&effect);

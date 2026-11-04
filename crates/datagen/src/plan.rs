@@ -26,8 +26,7 @@ use crate::catalog::Catalog;
 use crate::facts::Facts;
 use crate::grid::{Cell, cell_of};
 use crate::intent::{
-    Change, Intent, Lit, Measure, Outcome, Reference, Scenario, Selector, Target, TurnIntent, Val,
-    VerbArg,
+    Change, Intent, Measure, Outcome, Scenario, Selector, Target, TurnIntent, VerbArg,
 };
 use crate::world::World;
 
@@ -119,6 +118,10 @@ enum Check {
         at: usize,
     },
     Count(usize),
+    /// Two values set side by side: each side's figure by currency, and the step that computed it.
+    Compare {
+        sides: [(usize, BTreeMap<String, f64>); 2],
+    },
     Value {
         /// Figure per currency (`""` for a figure with no unit).
         want: BTreeMap<String, f64>,
@@ -179,6 +182,9 @@ pub struct WorldRun<'a> {
     copies: usize,
     pub me: String,
     pub today_at: String,
+    /// Whether the runtime gives an empty `find` a handle, so `answer rows=@k` can end a read that
+    /// found nothing. The regroup adds it; the runtime this was built against may not have it.
+    pub empty_reads: bool,
 }
 
 /// The one time of day every session runs at.
@@ -202,6 +208,23 @@ impl<'a> WorldRun<'a> {
                 keys.insert(id.to_owned(), key.clone());
             }
         }
+        let today_at = format!("{}T{CLOCK}", world.today);
+        let empty_reads = {
+            let probe = scratch.join(format!("{}-probe.vault", world.id()));
+            vaultio::copy_vault(&base, &probe).map_err(anyhow::Error::msg)?;
+            let now = dates::parse_now(&today_at).map_err(anyhow::Error::msg)?;
+            let mut live = vaultio::open_session(&probe, now, &world.persona.me, Flags::default())
+                .map_err(anyhow::Error::msg)?;
+            live.user("");
+            let found = live.call_text(&call_xml(
+                "find",
+                &Map::from_iter([
+                    ("kind".to_owned(), json!("person")),
+                    ("name".to_owned(), json!("Quillfeather")),
+                ]),
+            ));
+            found["effect"]["result"].is_string()
+        };
         Ok(Self {
             world,
             facts: Facts::of(world, catalog),
@@ -212,7 +235,8 @@ impl<'a> WorldRun<'a> {
             keys,
             copies: 0,
             me: world.persona.me.clone(),
-            today_at: format!("{}T{CLOCK}", world.today),
+            today_at,
+            empty_reads,
         })
     }
 
@@ -239,7 +263,7 @@ impl<'a> WorldRun<'a> {
         for (index, turn) in scenario.turns.iter().enumerate() {
             let cell = cell_of(turn);
             let placeholder = placeholder(&scenario.id, index);
-            let planned = self.plan(turn, index, &left);
+            let planned = self.plan(turn, &left);
             let outcome = planned.and_then(|plan| {
                 self.execute(&mut live, &plan, &placeholder, &mut created, &left, turn)
             });
@@ -268,11 +292,10 @@ impl<'a> WorldRun<'a> {
         }
         let kept = out_turns.len();
         let record = (kept > 0).then(|| {
-            let tags: Vec<String> = if kept < scenario.turns.len() {
-                vec!["truncated".to_owned()]
-            } else {
-                Vec::new()
-            };
+            let mut tags: Vec<String> = scenario.tags.clone();
+            if kept < scenario.turns.len() {
+                tags.push("truncated".to_owned());
+            }
             let mut scenario = scenario.clone();
             scenario.turns.truncate(kept);
             json!({
@@ -302,7 +325,6 @@ impl<'a> WorldRun<'a> {
         &self,
         sel: &Selector,
         steps: &mut Vec<Step>,
-        left: &[Left],
         tool: &'static str,
         extra: Vec<(&'static str, String)>,
     ) -> usize {
@@ -333,7 +355,6 @@ impl<'a> WorldRun<'a> {
             args.push(("linked_to", format!("§s{at}")));
         }
         if let Some(turn) = sel.within {
-            let _ = left;
             args.push(("within", format!("§t{turn}")));
         }
         if let Some((field, desc)) = &sel.order {
@@ -363,21 +384,15 @@ impl<'a> WorldRun<'a> {
             .collect()
     }
 
-    fn plan(&self, turn: &TurnIntent, index: usize, left: &[Left]) -> Result<Plan, (Drop, String)> {
-        let mut plan = self.plan_inner(turn, index, left)?;
+    fn plan(&self, turn: &TurnIntent, left: &[Left]) -> Result<Plan, (Drop, String)> {
+        let mut plan = self.plan_inner(turn, left)?;
         if turn.outcome == Outcome::Repair {
             apply_repair(&mut plan);
         }
         Ok(plan)
     }
 
-    fn plan_inner(
-        &self,
-        turn: &TurnIntent,
-        index: usize,
-        left: &[Left],
-    ) -> Result<Plan, (Drop, String)> {
-        let _ = index;
+    fn plan_inner(&self, turn: &TurnIntent, left: &[Left]) -> Result<Plan, (Drop, String)> {
         let no = |why: Drop, detail: &str| Err((why, detail.to_owned()));
         match &turn.intent {
             Intent::Read { sel } => {
@@ -386,17 +401,10 @@ impl<'a> WorldRun<'a> {
                     return no(Drop::TooMany, &format!("{} rows", want.len()));
                 }
                 let mut steps = Vec::new();
-                let at = self.select_steps(sel, &mut steps, left, "find", vec![]);
+                let at = self.select_steps(sel, &mut steps, "find", vec![]);
                 steps[at].primary = true;
                 let ordered = sel.order.is_some().then(|| want.clone());
-                if want.is_empty() {
-                    // an empty `find` issues no `@k`, so there is nothing for `answer rows=@k` to
-                    // name: the turn ends on S2's legacy `answer <selector>`, which answers no rows
-                    let selector = steps[at].args.clone();
-                    steps.push(step("answer", selector));
-                } else {
-                    steps.push(step("answer", vec![("rows", format!("§s{at}"))]));
-                }
+                steps.push(step("answer", vec![("rows", format!("§s{at}"))]));
                 let keys: BTreeSet<String> = want.iter().cloned().collect();
                 Ok(Plan {
                     steps,
@@ -412,13 +420,8 @@ impl<'a> WorldRun<'a> {
             Intent::Count { sel } => {
                 let want = self.expected(sel, left);
                 let mut steps = Vec::new();
-                let at = self.select_steps(
-                    sel,
-                    &mut steps,
-                    left,
-                    "compute",
-                    vec![("op", "count".to_owned())],
-                );
+                let at =
+                    self.select_steps(sel, &mut steps, "compute", vec![("op", "count".to_owned())]);
                 steps[at].primary = true;
                 steps.push(step("answer", vec![("value", format!("§s{at}"))]));
                 Ok(Plan {
@@ -464,12 +467,10 @@ impl<'a> WorldRun<'a> {
                 let at = steps.len() - 1;
                 steps[at].primary = true;
                 steps.push(step("answer", vec![("value", format!("§s{at}"))]));
-                let _ = (want_a, want_b);
                 Ok(Plan {
                     steps,
-                    check: Check::Value {
-                        want: BTreeMap::new(),
-                        grouped: false,
+                    check: Check::Compare {
+                        sides: [(at_a, want_a), (at_b, want_b)],
                     },
                     keys: keys_a,
                     kind: a.sel.kind.clone(),
@@ -619,7 +620,7 @@ impl<'a> WorldRun<'a> {
             extra.push(("group", group.clone()));
         }
         let mut steps = Vec::new();
-        let at = self.select_steps(&m.sel, &mut steps, left, "compute", extra);
+        let at = self.select_steps(&m.sel, &mut steps, "compute", extra);
         Ok((steps, at, want, keys))
     }
 
@@ -651,7 +652,7 @@ impl<'a> WorldRun<'a> {
                     return Err((Drop::NotUnique, format!("{} rows", want.len())));
                 }
                 let mut steps = Vec::new();
-                let at = self.select_steps(sel, &mut steps, left, "find", vec![]);
+                let at = self.select_steps(sel, &mut steps, "find", vec![]);
                 steps[at].primary = true;
                 Ok((
                     steps,
@@ -794,6 +795,25 @@ impl<'a> WorldRun<'a> {
                     }
                 }
             }
+            Check::Compare { sides } => {
+                if effect.ending != Ending::Value {
+                    return Err((Drop::Ending, format!("ended in {}", effect.ending.word())));
+                }
+                // each side is a figure the world's index also computes; the difference between
+                // them is the runtime's, and gold records it
+                for (at, want) in sides {
+                    let got = value_units(&responses[*at]["effect"]["value"]);
+                    let slack: f64 = if is_money(&plan.steps) { 0.02 } else { 0.51 };
+                    let same = got.len() == want.len()
+                        && want.iter().all(|(u, w)| {
+                            got.get(u)
+                                .is_some_and(|g| (g - w).abs() <= slack.max(w.abs() * 0.001))
+                        });
+                    if !same {
+                        return Err((Drop::Value, format!("side {got:?} want {want:?}")));
+                    }
+                }
+            }
             Check::Ask(want) => {
                 if effect.ending != Ending::Ask {
                     return Err((Drop::Ending, format!("ended in {}", effect.ending.word())));
@@ -901,7 +921,7 @@ impl<'a> WorldRun<'a> {
             kind: plan.kind.clone(),
             made,
         };
-        let gold = gold_of(&effect, &|id| self.key_of(id, created), turn, created)
+        let gold = gold_of(&effect, &|id| self.key_of(id, created), turn)
             .map_err(|d| (Drop::Ending, d))?;
         let turn_json = json!({
             "user": placeholder,
@@ -1098,7 +1118,11 @@ fn compare_sets(want: &BTreeSet<String>, got: &BTreeSet<String>) -> Result<(), (
 
 /// The figures a turn ended on, by currency.
 fn units(effect: &Effect) -> BTreeMap<String, f64> {
-    effect.value["values"]
+    value_units(&effect.value)
+}
+
+fn value_units(value: &Value) -> BTreeMap<String, f64> {
+    value["values"]
         .as_array()
         .into_iter()
         .flatten()
@@ -1132,9 +1156,7 @@ fn gold_of(
     effect: &Effect,
     key: &dyn Fn(&str) -> String,
     turn: &TurnIntent,
-    created: &[String],
 ) -> Result<Value, String> {
-    let _ = created;
     let mut accept = Map::new();
     match effect.ending {
         Ending::Rows => {
@@ -1239,14 +1261,3 @@ fn date_only_when_stamped(field: &str, value: &Value) -> Value {
     }
     value.clone()
 }
-
-/// `Lit` as a `where` value is rendered in [`crate::intent`]; kept here so the planner's callers
-/// build selectors without importing it twice.
-#[must_use]
-pub fn lit_text(value: &str) -> Lit {
-    Lit::Text(value.to_owned())
-}
-
-/// A `Reference` and a `Val` are imported for the sampler's benefit; the planner reads neither.
-#[allow(dead_code)]
-fn _unused(_: Reference, _: Val) {}

@@ -71,6 +71,9 @@ pub struct Sampler<'a> {
     pub catalog: &'a Catalog,
     pub grid: &'a Grid,
     world: &'a World,
+    /// Whether a read that finds nothing can be ended with `answer rows=@k` (see
+    /// `WorldRun::empty_reads`); when it cannot, no empty read is drawn.
+    pub empty_reads: bool,
 }
 
 fn nice_down(v: f64) -> f64 {
@@ -104,7 +107,14 @@ impl<'a> Sampler<'a> {
             catalog,
             grid,
             world,
+            empty_reads: true,
         }
+    }
+
+    #[must_use]
+    pub fn with_empty_reads(mut self, on: bool) -> Self {
+        self.empty_reads = on;
+        self
     }
 
     fn app_of(&self, kind: &str) -> String {
@@ -318,7 +328,9 @@ impl<'a> Sampler<'a> {
         *rng.weighted(CONSTRAINTS)
     }
 
-    /// A target row of `kind`, and a selector of `c` facets that selects it.
+    /// A target row of `kind`, and a selector of `c` facets that selects it. A row that cannot
+    /// carry `c` facets is not accepted while another attempt might: the grid is weighted toward
+    /// three constraints and more, and a world's richer rows are where those live.
     fn target_selector(
         &self,
         kind: &str,
@@ -327,31 +339,37 @@ impl<'a> Sampler<'a> {
         max_rows: usize,
     ) -> Option<(Selector, Vec<String>)> {
         let rows = self.live_rows(kind);
-        for _ in 0..12 {
-            if rows.is_empty() {
-                return None;
-            }
-            // of a few candidate rows, the one with the most to say about it
-            let candidates: Vec<&Row> = (0..5).map(|_| rows[rng.below(rows.len())]).collect();
-            let row = candidates
-                .into_iter()
-                .max_by_key(|r| self.facets(r, &mut Rng::new(0).fork(&r.key)).len())?;
-            let mut facets = self.facets(row, rng);
-            if c == 0 {
-                facets.clear();
-            }
+        if rows.is_empty() {
+            return None;
+        }
+        let mut best: Option<(Selector, Vec<String>, usize)> = None;
+        for attempt in 0..24 {
+            let row = rows[rng.below(rows.len())];
+            let facets = if c == 0 {
+                Vec::new()
+            } else {
+                self.facets(row, rng)
+            };
             let mut n = c;
             for _ in 0..4 {
                 let chosen = self.pick(facets.clone(), n, rng);
+                let got = chosen.len();
                 let sel = self.selector(kind, chosen);
                 let set = self.facts.select(&sel, None);
                 if !set.is_empty() && set.len() <= max_rows {
-                    return Some((sel, set.iter().map(|r| r.key.clone()).collect()));
+                    let keys: Vec<String> = set.iter().map(|r| r.key.clone()).collect();
+                    if got >= c || attempt >= 16 {
+                        return Some((sel, keys));
+                    }
+                    if best.as_ref().is_none_or(|(_, _, g)| got > *g) {
+                        best = Some((sel, keys, got));
+                    }
+                    break;
                 }
                 n += 1;
             }
         }
-        None
+        best.map(|(sel, keys, _)| (sel, keys))
     }
 
     /// A top-n ordering over a number field, only where the nth and (n+1)th rows differ.
@@ -426,7 +444,7 @@ impl<'a> Sampler<'a> {
         match (cell.tool.as_str(), cell.verb.as_str()) {
             ("find", _) => {
                 let (mut sel, _) = self.target_selector(kind, c, rng, ROW_CAP)?;
-                let mut empty = outcome_roll < 10;
+                let mut empty = outcome_roll < 10 && self.empty_reads;
                 if empty {
                     match self.emptied(sel.clone(), rng) {
                         Some(none) => sel = none,
@@ -1182,6 +1200,8 @@ impl<'a> Sampler<'a> {
             if set.is_empty() {
                 continue;
             }
+            sel = self.enriched(sel, self.constraints(rng).saturating_sub(2), rng);
+            let set = self.facts.select(&sel, None);
             let intent = match (cell.tool.as_str(), cell.verb.as_str()) {
                 ("find", _) if set.len() <= ROW_CAP => Intent::Read { sel },
                 ("compute", "count") => Intent::Count { sel },
@@ -1208,6 +1228,28 @@ impl<'a> Sampler<'a> {
             return Some(self.turn(intent, Reference::Select, Outcome::Done, None));
         }
         None
+    }
+
+    /// `sel` with up to `extra` more constraints, read off one of the rows it selects, so it still
+    /// selects that row.
+    fn enriched(&self, sel: Selector, extra: usize, rng: &mut Rng) -> Selector {
+        let set = self.facts.select(&sel, None);
+        if extra == 0 || set.is_empty() {
+            return sel;
+        }
+        let row = set[rng.below(set.len())];
+        let more: Vec<Facet> = self
+            .facets(row, rng)
+            .into_iter()
+            .filter(|f| matches!(f, Facet::Filter(_)))
+            .collect();
+        let mut richer = self.selector_into(sel.clone(), self.pick(more, extra, rng));
+        richer.filters.dedup_by(|a, b| a.field == b.field);
+        if self.facts.select(&richer, None).is_empty() {
+            sel
+        } else {
+            richer
+        }
     }
 
     /// Rows of another app over the days the rows of a turn fall in: "what did I spend that day".
@@ -1246,10 +1288,11 @@ impl<'a> Sampler<'a> {
                     value: Lit::Text("steps".into()),
                 });
             }
-            let found = self.facts.select(&sel, None);
-            if found.is_empty() {
+            if self.facts.select(&sel, None).is_empty() {
                 continue;
             }
+            let sel = self.enriched(sel, self.constraints(rng).saturating_sub(2), rng);
+            let found = self.facts.select(&sel, None);
             let fields = measurable(kind);
             if !fields.is_empty() && rng.chance(0.6) {
                 let field = fields[rng.below(fields.len())];
@@ -1273,6 +1316,102 @@ impl<'a> Sampler<'a> {
             });
         }
         None
+    }
+
+    // ------------------------------------------------------------------ minimal pairs
+
+    /// A single-turn twin of `base`'s first turn that differs from it in exactly one argument (a
+    /// threshold, a period, an op, a date), with an answer that differs too. Two messages that
+    /// differ in one argument are an axis of the grid, not a corpus of their own.
+    #[must_use]
+    pub fn pair(&self, base: &Scenario, rng: &mut Rng) -> Option<Scenario> {
+        let first = base.turns.first()?;
+        if first.dep.is_some() || first.outcome != Outcome::Done {
+            return None;
+        }
+        let shifted = |p: &Period| match p {
+            Period::Week { rel } => Some(Period::Week { rel: rel - 1 }),
+            Period::Month { rel } => Some(Period::Month { rel: rel - 1 }),
+            Period::Day { rel } => Some(Period::Day { rel: rel - 1 }),
+            Period::Between { .. } => None,
+        };
+        let mut twin = first.clone();
+        let changed = match &mut twin.intent {
+            Intent::Read { sel } | Intent::Count { sel } => {
+                let before = self
+                    .facts
+                    .select(sel, None)
+                    .iter()
+                    .map(|r| r.key.clone())
+                    .collect::<Vec<_>>();
+                let mut done = false;
+                if let Some(f) = sel
+                    .filters
+                    .iter_mut()
+                    .find(|f| matches!(f.value, Lit::Num(_)))
+                {
+                    if let Lit::Num(n) = &mut f.value {
+                        *n = if rng.chance(0.5) {
+                            nice_up(*n * 1.6 + 1.0)
+                        } else {
+                            nice_down(*n / 1.6).max(1.0)
+                        };
+                        done = true;
+                    }
+                } else if let Some(p) = sel.period.as_ref().and_then(shifted) {
+                    sel.period = Some(p);
+                    done = true;
+                }
+                let after = self
+                    .facts
+                    .select(sel, None)
+                    .iter()
+                    .map(|r| r.key.clone())
+                    .collect::<Vec<_>>();
+                done && before != after
+                    && !after.is_empty()
+                    && (matches!(first.intent, Intent::Count { .. }) || after.len() <= ROW_CAP)
+            }
+            Intent::Measure { measure } => {
+                let before = Facts::fold_units(
+                    &measure.op,
+                    &measure.field,
+                    &self.facts.select(&measure.sel, None),
+                );
+                if measure.group.is_none() && rng.chance(0.5) {
+                    measure.op = ["sum", "avg", "min", "max"]
+                        .into_iter()
+                        .filter(|o| *o != measure.op)
+                        .nth(rng.below(3))
+                        .unwrap_or("sum")
+                        .to_owned();
+                } else if let Some(p) = measure.sel.period.as_ref().and_then(shifted) {
+                    measure.sel.period = Some(p);
+                } else {
+                    return None;
+                }
+                let rows = self.facts.select(&measure.sel, None);
+                let after = Facts::fold_units(&measure.op, &measure.field, &rows);
+                !rows.is_empty() && !after.is_empty() && before != after
+            }
+            Intent::Write {
+                arg: VerbArg::When(when),
+                verb,
+                ..
+            } if verb == "reschedule" => {
+                let rel = rng.range(22, 40);
+                *when = Period::Day { rel }.when();
+                true
+            }
+            _ => false,
+        };
+        changed.then(|| Scenario {
+            id: format!("{}p", base.id),
+            world: base.world.clone(),
+            span: base.span,
+            turns: vec![twin],
+            tags: vec![format!("pair:{}", base.id)],
+        })
     }
 
     // ------------------------------------------------------------------ sessions
@@ -1347,7 +1486,7 @@ impl<'a> Sampler<'a> {
                 extra = 0;
             }
             _ => {
-                let across = matches!(cell.tool.as_str(), "find" | "compute") && rng.chance(0.45);
+                let across = matches!(cell.tool.as_str(), "find" | "compute") && rng.chance(0.7);
                 let first = across
                     .then(|| self.across(cell, rng))
                     .flatten()
@@ -1377,6 +1516,7 @@ impl<'a> Sampler<'a> {
             world: self.world.id(),
             span,
             turns,
+            tags: Vec::new(),
         })
     }
 
@@ -1412,7 +1552,7 @@ impl<'a> Sampler<'a> {
                 if matches!(verb_of(&prev.intent), "undo" | "log") {
                     vec![]
                 } else {
-                    vec![20, 21, 21]
+                    vec![20, 21, 22, 22]
                 }
             }
             Intent::Create { .. } if prev.outcome == Outcome::Done => vec![30],
@@ -1440,7 +1580,11 @@ impl<'a> Sampler<'a> {
                     (0..8).find_map(|_| {
                         let row = self.facts.row(keys[rng.below(keys.len())])?;
                         let chosen: Vec<Facet> = self
-                            .pick(self.facets(row, rng), rng.range(1, 2) as usize, rng)
+                            .pick(
+                                self.facets(row, rng),
+                                if rng.chance(0.7) { 2 } else { 1 },
+                                rng,
+                            )
                             .into_iter()
                             .filter(|f| !matches!(f, Facet::Link(_) | Facet::Name(_)))
                             .collect();
@@ -1653,6 +1797,14 @@ impl<'a> Sampler<'a> {
                         Some((last, Dep::Pronoun)),
                     ))
                 }
+                22 if !set.is_empty() => self.hop(set, &kind, rng).map(|intent| {
+                    self.turn(
+                        intent,
+                        Reference::Select,
+                        Outcome::Done,
+                        Some((last, Dep::Carry)),
+                    )
+                }),
                 // a row just made, changed
                 30 => {
                     let changes = match kind.as_str() {

@@ -15,8 +15,7 @@ use serde_json::Value;
 
 use crate::catalog::Catalog;
 use crate::grid::{Cell, Grid};
-use crate::intent::{Intent, Outcome, Reference, Span};
-use crate::plan::{Drop, WorldRun};
+use crate::plan::WorldRun;
 use crate::rng::Rng;
 use crate::sample::Sampler;
 use crate::settings::Split;
@@ -24,7 +23,7 @@ use crate::world::{World, plan_sized};
 
 /// Extra turns after the first, weighted so that most sessions have two or more turns and a
 /// good share three or more.
-const EXTRA_TURNS: &[(usize, u32)] = &[(0, 36), (1, 30), (2, 20), (3, 14)];
+const EXTRA_TURNS: &[(usize, u32)] = &[(0, 26), (1, 32), (2, 22), (3, 20)];
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -108,7 +107,8 @@ pub fn generate_with(
         let dir = scratch.join(world.id());
         let mut run = WorldRun::seed(&world, catalog, &dir)?;
         let facts = run.facts.clone();
-        let sampler = Sampler::new(&world, &facts, catalog, &grid);
+        let sampler =
+            Sampler::new(&world, &facts, catalog, &grid).with_empty_reads(run.empty_reads);
         let root = Rng::new(config.seed).fork(&format!("intents:{}", world.id()));
         let target = config
             .cell_limit
@@ -167,6 +167,37 @@ pub fn generate_with(
                         record,
                     });
                     kept += 1;
+                    // a minimal pair: the same question with one argument changed
+                    let mut twin_rng = root.fork(&format!("pair:{drawn}"));
+                    if scenario.turns.first().is_some_and(|t| t.dep.is_none())
+                        && twin_rng.chance(0.4)
+                        && let Some(twin) = sampler.pair(&scenario, &mut twin_rng)
+                    {
+                        let solved = run.solve(&twin)?;
+                        if let Some(record) = solved.record.filter(|r| {
+                            solved.kept == 1
+                                && Some(&r["turns"][0]["gold"])
+                                    != out.kept.last().map(|k| &k.record["turns"][0]["gold"])
+                        }) {
+                            for (kept_cell, _) in &solved.turns {
+                                if let Some(stat) = out.cells.get_mut(kept_cell) {
+                                    stat.attempts += 1;
+                                    stat.kept += 1;
+                                }
+                            }
+                            if let Some(base) = out.kept.last_mut()
+                                && let Some(tags) = base.record["tags"].as_array_mut()
+                            {
+                                tags.push(Value::String(format!("pair:{}", scenario.id)));
+                            }
+                            out.kept.push(Kept {
+                                split: spec.split,
+                                world: world.id(),
+                                record,
+                            });
+                            kept += 1;
+                        }
+                    }
                     break;
                 }
             }
@@ -192,11 +223,17 @@ pub struct Summary {
     pub sessions: usize,
     pub turns: usize,
     pub truncated: usize,
+    /// Pairs of sessions that differ in one argument and in their answers.
+    pub minimal_pairs: usize,
     /// Sessions with 1, 2 and 3 or more turns.
     pub by_turns: BTreeMap<String, usize>,
     pub multi_turn_share: f64,
     pub three_plus_share: f64,
     pub constraints: BTreeMap<String, usize>,
+    /// The same, for the turns that select rows by constraints (not by a name or by an earlier
+    /// turn): where the weighting toward three and more is meant to show.
+    pub constraints_selecting: BTreeMap<String, usize>,
+    pub three_plus_selecting_share: f64,
     pub reference: BTreeMap<String, usize>,
     pub outcome: BTreeMap<String, usize>,
     pub span: BTreeMap<String, usize>,
@@ -239,8 +276,17 @@ impl Summary {
             };
             s.sessions += 1;
             s.turns += scenario.turns.len();
-            if record["tags"].as_array().is_some_and(|t| !t.is_empty()) {
+            let tags: Vec<&str> = record["tags"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            if tags.contains(&"truncated") {
                 s.truncated += 1;
+            }
+            if tags.iter().any(|t| t.starts_with("pair:")) {
+                s.minimal_pairs += 1;
             }
             let n = scenario.turns.len();
             bump(
@@ -277,6 +323,9 @@ impl Summary {
                     && cell0.verb != "undo"
                 {
                     bump(&mut s.constraints, bucket);
+                    if t.reference == crate::intent::Reference::Select {
+                        bump(&mut s.constraints_selecting, bucket);
+                    }
                 }
                 bump(&mut s.reference, t.reference.word());
                 bump(&mut s.outcome, t.outcome.word());
@@ -302,6 +351,11 @@ impl Summary {
             .filter(|(k, _)| *k != "1")
             .map(|(_, v)| v)
             .sum::<usize>();
+        s.minimal_pairs /= 2;
+        let selecting: usize = s.constraints_selecting.values().sum();
+        let rich = s.constraints_selecting.get("3").copied().unwrap_or(0)
+            + s.constraints_selecting.get("4+").copied().unwrap_or(0);
+        s.three_plus_selecting_share = share(rich, selecting);
         s.multi_turn_share = share(multi, s.sessions);
         s.three_plus_share = share(s.by_turns.get("3+").copied().unwrap_or(0), s.sessions);
         s.across_share = share(s.span.get("across").copied().unwrap_or(0), s.sessions);
@@ -329,9 +383,10 @@ pub fn report(catalog: &Catalog, grid: &Grid, generated: &Generated) -> String {
     }
     let _ = writeln!(
         out,
-        "\nsessions {} ({} truncated at an unsolvable turn), turns {}, worlds {}",
+        "\nsessions {} ({} truncated at an unsolvable turn, {} minimal pairs), turns {}, worlds {}",
         summary.sessions,
         summary.truncated,
+        summary.minimal_pairs,
         summary.turns,
         generated.worlds.len()
     );
@@ -351,6 +406,11 @@ pub fn report(catalog: &Catalog, grid: &Grid, generated: &Generated) -> String {
         let _ = writeln!(out, "{name}: {}", parts.join(", "));
     };
     line(&mut out, "constraints", &summary.constraints);
+    line(
+        &mut out,
+        "constraints (selecting by constraints)",
+        &summary.constraints_selecting,
+    );
     line(&mut out, "reference", &summary.reference);
     line(&mut out, "outcome", &summary.outcome);
     line(&mut out, "span", &summary.span);
@@ -398,15 +458,6 @@ pub fn report(catalog: &Catalog, grid: &Grid, generated: &Generated) -> String {
                 .collect::<Vec<_>>()
                 .join(", ")
         }
-    );
-    let _ = (
-        Reference::ALL,
-        Outcome::ALL,
-        Span::Single,
-        Intent::Decline {
-            reason: String::new(),
-        },
-        Drop::Error,
     );
     out
 }

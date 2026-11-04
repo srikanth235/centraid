@@ -112,6 +112,43 @@ fn sessions_are_weighted_toward_several_turns_and_a_follow_up_leans_on_an_earlie
     }
 }
 
+#[test]
+fn a_minimal_pair_differs_in_one_argument_and_in_its_answer() {
+    let by_id: BTreeMap<String, &Value> = generated()
+        .kept
+        .iter()
+        .map(|k| (k.record["id"].as_str().expect("id").to_owned(), &k.record))
+        .collect();
+    let mut pairs = 0;
+    for (id, record) in &by_id {
+        let Some(base) = id.strip_suffix('p') else {
+            continue;
+        };
+        let twin = record;
+        let base = by_id.get(base).expect("a twin's base is kept");
+        pairs += 1;
+        assert_ne!(
+            base["turns"][0]["gold"], twin["turns"][0]["gold"],
+            "{id}: same answer"
+        );
+        let (a, b) = (
+            &base["scenario"]["turns"][0]["intent"],
+            &twin["scenario"]["turns"][0]["intent"],
+        );
+        assert_ne!(a, b);
+        assert_eq!(twin["turns"].as_array().expect("turns").len(), 1);
+        assert!(
+            twin["tags"]
+                .as_array()
+                .expect("tags")
+                .iter()
+                .any(|t| t == &Value::String(format!("pair:{}", id.trim_end_matches('p')))),
+            "{id}"
+        );
+    }
+    assert!(pairs >= 1, "no minimal pair in the run");
+}
+
 /// Says each turn's reference calls in turn, reading the turn from the placeholder in the prompt.
 struct Replay {
     calls: BTreeMap<String, Vec<String>>,
