@@ -2960,7 +2960,13 @@ impl Session {
     /// A workout's figure as the vault keeps it (`Null` when it holds none).
     fn workout_figure(&self, row: &Row, column: &str) -> Result<Value, String> {
         Ok(
-            match self.exact_number("workout", column, ("id", "id"), "id = ?", &[row.id.clone()])? {
+            match self.exact_number(
+                "workout",
+                column,
+                ("id", "id"),
+                "id = ?",
+                std::slice::from_ref(&row.id),
+            )? {
                 Some(value) if value.fract() == 0.0 => json!(value as i64),
                 Some(value) => json!(value),
                 None => Value::Null,
