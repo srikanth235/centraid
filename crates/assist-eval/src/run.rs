@@ -359,7 +359,12 @@ impl<'a> Runner<'a> {
             };
             // A turn that passes by effect got every argument it carries right, however it looked first; only a
             // failed turn needs the call comparison, which says which argument to blame.
-            let name_ok = tool_name_ok(turn, &calls);
+            // a retraction ends the turn in the runtime: no message was asked of the model, so its tool is the effect's
+            let name_ok = if ended.is_some() {
+                verdict.pass || verdict.tool_ok
+            } else {
+                tool_name_ok(turn, &calls)
+            };
             let args = judge_args(turn, &calls, &handle)
                 .into_iter()
                 .map(|(class, v)| {

@@ -300,3 +300,28 @@ fn the_tools_block_the_model_reads_is_the_one_the_run_names() {
     assert!(s2.contains("act("), "S2 learned act");
     assert!(!new.contains("act("), "the eight tools have no act");
 }
+
+#[test]
+fn a_count_is_compute_then_answer_value_and_ends_in_a_value() {
+    let count = json!({"user": "how many tasks", "gold": [{"type": "value", "values": [{"amount": 1, "unit": null}]}],
+        "ref": [{"tool": "answer", "args": {"kind": "task", "op": "count"}}]});
+    let source = source(vec![session("S", vec![count])]);
+    for tools in [ToolsMode::Sig, ToolsMode::S2] {
+        let script = Script(Mutex::new(vec![
+            call("compute", &[("op", "count"), ("kind", "task")]),
+            call("answer", &[("value", "@1")]),
+        ]));
+        let mut runner = Runner::new(&source, &script)
+            .expect("runner")
+            .with_tools(tools);
+        let result = runner.run_session(&source.sessions[0]).expect("session");
+        let turn = &result.turns[0];
+        assert!(
+            turn.pass,
+            "{tools:?}: {:?} ended {}",
+            turn.problems, turn.ending
+        );
+        assert_eq!(turn.ending, "value", "{tools:?}");
+        assert!(turn.tool_name_ok, "{tools:?}");
+    }
+}
