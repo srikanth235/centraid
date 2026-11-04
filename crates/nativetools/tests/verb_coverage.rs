@@ -27,6 +27,44 @@ use serde_json::Value;
 /// driven below.
 const UNDRIVEN: &[(&str, &str, &str)] = &[
     (
+        "create",
+        "workout",
+        "the fixture world holds no Health rows; tests/health_kind.rs drives it on its own world",
+    ),
+    (
+        "edit",
+        "workout",
+        "the fixture world holds no Health rows; tests/health_kind.rs drives it on its own world",
+    ),
+    (
+        "delete",
+        "workout",
+        "the fixture world holds no Health rows; tests/health_kind.rs drives it on its own world",
+    ),
+    (
+        "restore",
+        "workout",
+        "the fixture world holds no Health rows; tests/health_kind.rs drives it on its own world",
+    ),
+    (
+        "create",
+        "daily figure",
+        "the fixture world holds no Health rows; tests/health_kind.rs drives it on its own world, \
+         once the store is disconnected",
+    ),
+    (
+        "delete",
+        "daily figure",
+        "the fixture world holds no Health rows; tests/health_kind.rs drives it on its own world, \
+         once the store is disconnected",
+    ),
+    (
+        "edit",
+        "daily figure",
+        "the fixture world holds no Health rows; tests/health_kind.rs drives it on its own world, \
+         once the store is disconnected",
+    ),
+    (
         "reveal",
         "locker item",
         "a reveal runs no command: it ends the turn in a member action the member completes in \

@@ -69,6 +69,11 @@ const LOCKER: &[Row] = &[
     ("add-tag", "remove-tag", Input::Same),
     ("remove-tag", "add-tag", Input::Same),
 ];
+const HEALTH: &[Row] = &[
+    ("log-workout", "delete-workout", Input::Created),
+    ("delete-workout", "restore-workout", Input::Id),
+    ("restore-workout", "delete-workout", Input::Id),
+];
 const MONEY: &[Row] = &[
     ("close-account", "reopen-account", Input::Same),
     ("reopen-account", "close-account", Input::Same),
@@ -120,6 +125,7 @@ fn rows(app: &str) -> &'static [Row] {
     match app {
         "agenda" => AGENDA,
         "docs" => DOCS,
+        "health" => HEALTH,
         "locker" => LOCKER,
         "money" => MONEY,
         "notes" => NOTES,
@@ -264,6 +270,7 @@ mod tests {
         assert_eq!(Value::Object(input), Value::Object(flag));
 
         assert!(of("agenda", "purge-task", &minted, &Value::Null).is_none());
-        assert!(of("health", "delete-workout", &minted, &Value::Null).is_none());
+        let (action, _) = of("health", "delete-workout", &minted, &Value::Null).expect("undoable");
+        assert_eq!(action, "restore-workout");
     }
 }

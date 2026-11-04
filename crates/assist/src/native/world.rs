@@ -226,6 +226,13 @@ pub struct World {
     pub locker_key: Option<String>,
     /// The areas lists sit in, `(id, title)`: containers the model has no kind for.
     pub areas: Vec<(String, String)>,
+    /// The health store the vault follows, as its origin labels it ("Apple Health"): it states
+    /// the daily figures at each read, so the member does not write them. A followed workout
+    /// carries the same label in its row's `extra` as `followed_by`.
+    pub health_store: Option<String>,
+    /// The IANA zone the person's days are in: an instant the vault keeps in UTC (a workout's
+    /// start) is shown on their clock, and a time they say is kept as the instant it is.
+    pub zone: String,
 }
 
 /// Today in the person's zone, else the door's clock read in UTC.
@@ -246,6 +253,31 @@ fn rounded(row: &VaultRow, column: &str) -> i64 {
         Some(Cell::Real(value)) => value.round() as i64,
         _ => int(row, column).unwrap_or_default(),
     }
+}
+
+/// An instant the vault keeps (`2026-03-04T07:00:00.000Z`) on the clock of `zone`.
+pub(crate) fn local_stamp(zone: &str, instant: &str) -> Option<Stamp> {
+    let zoned = instant
+        .parse::<jiff::Timestamp>()
+        .ok()
+        .and_then(|at| jiff::tz::TimeZone::get(zone).ok().map(|tz| at.to_zoned(tz)));
+    match zoned {
+        Some(zoned) => {
+            let civil = zoned.datetime();
+            Some(Stamp {
+                date: civil.date(),
+                time: Some(civil.time()),
+            })
+        }
+        None => Stamp::parse(instant),
+    }
+}
+
+/// The instant a wall-clock time of `zone` is, as the vault keeps one (`2026-03-04T12:00:00Z`).
+pub(crate) fn utc_instant(zone: &str, civil: jiff::civil::DateTime) -> Option<String> {
+    let tz = jiff::tz::TimeZone::get(zone).ok()?;
+    let at = civil.to_zoned(tz).ok()?.timestamp();
+    Some(at.strftime("%Y-%m-%dT%H:%M:%SZ").to_string())
 }
 
 fn stamp(value: Option<String>) -> Option<Stamp> {
@@ -341,7 +373,10 @@ impl World {
     /// trash) beside its kind row, and the relations as edges or as the column that holds them.
     /// A container's kind is the container's own.
     pub fn load_in(door: &dyn Door, at: Option<&Standing>) -> Result<Self, String> {
-        let mut world = Self::default();
+        let mut world = Self {
+            zone: at.map_or_else(|| "Etc/UTC".to_owned(), |standing| standing.tz.clone()),
+            ..Self::default()
+        };
         let vault = door.table("vault", "id, self_id, currency", "id", "id")?;
         let vault = vault.first().ok_or("the vault has not been founded")?;
         world.me = text(vault, "self_id").unwrap_or_default();
@@ -1069,6 +1104,23 @@ impl World {
             "person_id = ? AND day >= ?",
             &[self.me.clone(), floor.clone()],
         )?;
+        // WHAT THE STORE STATES: the health origin the vault follows, and the workouts it follows
+        // (a `source` row of the health system names the entity). A member's edit of either would
+        // be stated over at the next read, so the runtime refuses it with the store's name, before
+        // anything parks (the vault's own precondition is the authority).
+        let origins = door.table_where(
+            "origin",
+            "id, label, created_at",
+            "created_at",
+            "id",
+            "system = ?",
+            &["health".to_owned()],
+        )?;
+        self.health_store = origins.iter().find_map(|origin| text(origin, "label"));
+        let labels: BTreeMap<String, String> = origins
+            .iter()
+            .filter_map(|origin| Some((text(origin, "id")?, text(origin, "label")?)))
+            .collect();
         let spec = Kind::DailyFigure.spec();
         for figure in &figures {
             let (Some(day), Some(metric)) = (text(figure, "day"), text(figure, "metric")) else {
@@ -1126,10 +1178,30 @@ impl World {
                 .into_iter()
                 .filter_map(|entity| Some((text(&entity, "id")?, entity)))
                 .collect();
+            let mut followed: BTreeMap<String, String> = BTreeMap::new();
+            if !labels.is_empty() {
+                let mut binds = vec!["health".to_owned()];
+                binds.extend(chunk.iter().cloned());
+                for source in door.table_where(
+                    "source",
+                    "id, entity_id, origin_id",
+                    "id",
+                    "id",
+                    &format!("system = ? AND entity_id IN ({marks})"),
+                    &binds,
+                )? {
+                    if let (Some(entity), Some(label)) = (
+                        text(&source, "entity_id"),
+                        text(&source, "origin_id").and_then(|origin| labels.get(&origin).cloned()),
+                    ) {
+                        followed.insert(entity, label);
+                    }
+                }
+            }
             for workout in &measured {
                 let id = text(workout, "id").unwrap_or_default();
-                let Some(entity) = named.get(&id).filter(|e| text(e, "deleted_at").is_none())
-                else {
+                // a trashed workout stays in the world, trashed: `restore` finds it there
+                let Some(entity) = named.get(&id) else {
                     continue;
                 };
                 let mut fields = BTreeMap::new();
@@ -1145,10 +1217,15 @@ impl World {
                     }
                 }
                 let mut row = Row::of(Kind::Workout, &id, entity, fields);
+                if let Some(label) = followed.get(&id) {
+                    row.extra.insert("followed_by", label.clone());
+                }
+                let zone = self.zone.clone();
                 row.date = started
                     .iter()
                     .find(|activity| text(activity, "id").as_deref() == Some(id.as_str()))
-                    .and_then(|activity| stamp(text(activity, "starts")));
+                    .and_then(|activity| text(activity, "starts"))
+                    .and_then(|starts| local_stamp(&zone, &starts));
                 self.insert(row);
             }
         }

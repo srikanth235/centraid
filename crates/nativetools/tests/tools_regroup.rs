@@ -40,6 +40,31 @@ fn the_prompt_carries_the_eight_tools_and_s2_its_own() {
         .map(|verb| verb.as_str().unwrap())
         .collect();
     assert!(!verbs.contains(&"create") && !verbs.contains(&"edit"));
+    // the issue's table, exactly (#1166): a catalog change cannot add or drop a verb unseen
+    let mut table = vec![
+        "complete",
+        "reopen",
+        "cancel",
+        "delete",
+        "restore",
+        "star",
+        "unstar",
+        "archive",
+        "unarchive",
+        "unlink",
+        "undo",
+        "reschedule",
+        "add_to",
+        "remove_from",
+        "tag",
+        "untag",
+        "log",
+        "reveal",
+    ];
+    let mut offered = verbs.clone();
+    table.sort_unstable();
+    offered.sort_unstable();
+    assert_eq!(offered, table);
     for verb in [
         "complete",
         "reschedule",
@@ -794,4 +819,25 @@ fn the_session_compile_fills_a_nums_entry_from_the_message() {
         "set": [{"key": "effort", "value": "nums[3]"}]
     }));
     assert_eq!(missing["refused"]["slot"], "set[0]", "{missing}");
+}
+
+#[test]
+fn s2s_prompt_is_the_bytes_it_was_trained_on() {
+    // the system turn S2 saw before the regroup (`prompt.sig.txt` at 892ba2c42): its tools block
+    // and its kind card, frozen. New tools and new verbs are shown to the other modes only.
+    let trained = include_str!("fixtures/prompt.s2.pre-1166.txt");
+    let exported = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../contracts/assist/export/prompt.s2.txt"
+    ))
+    .expect("the exported S2 prompt");
+    assert_eq!(
+        exported, trained,
+        "prompt.s2.txt drifted from what S2 learned"
+    );
+    // and a live S2 session over the same world renders the same turn
+    let world = seeded();
+    let mut session = world.session();
+    let live = centraid_nativetools::prompt::prompt(&mut session);
+    assert_eq!(live["rendered"].as_str().unwrap(), trained);
 }

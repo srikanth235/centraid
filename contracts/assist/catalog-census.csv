@@ -43,8 +43,14 @@ docs,rename-folder,edit,folder,direct,no,yes
 docs,delete-folder,delete,folder,direct,no,yes
 health,record-days,log,daily_figure,card,yes: crates/screens/src/health/follow.rs,no
 health,follow-workouts,import,workout,card,yes: crates/screens/src/health/follow.rs,no
-health,delete-workout,delete,workout,card,no,no
+health,delete-workout,delete,workout,direct,no,yes
 health,stop-following,detach,daily_figure,card,yes: crates/screens/src/health/home.rs,no
+health,log-workout,create,workout,direct,no,yes
+health,edit-workout,edit,workout,direct,no,yes
+health,restore-workout,restore,workout,direct,no,yes
+health,edit-figure,edit,daily_figure,direct,no,yes
+health,log-figure,create,daily_figure,direct,no,yes
+health,clear-figure,delete,daily_figure,direct,no,yes
 locker,add-item,create,locker_item,direct,yes: crates/screens/src/locker/editor.rs,yes
 locker,edit-item,edit,locker_item,direct,yes: crates/screens/src/locker/editor.rs,yes
 locker,trash-item,delete,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes

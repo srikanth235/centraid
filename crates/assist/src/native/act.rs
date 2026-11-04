@@ -233,7 +233,7 @@ enum Plan {
         command: &'static str,
         input: Value,
         predicate: &'static str,
-        reason: &'static str,
+        reason: String,
     },
 }
 
@@ -1547,6 +1547,23 @@ impl Session {
                 }
                 return Err(refusal);
             }
+            // WHAT THE HEALTH STORE STATES is the store's: the turn ends in its sentence (the
+            // vault says the same words, but only after a tap on a card that could not land)
+            if (verb == Verb::Edit || (verb == Verb::Delete && row.kind == Kind::DailyFigure))
+                && let Some(sentence) = self.store_states(&row)
+            {
+                let refusal = format!("error: {sentence} Nothing was done.");
+                if self.flags.compose {
+                    return Ok(self.compose_declined_write(
+                        verb,
+                        key,
+                        &refusal,
+                        "store_states",
+                        "out_of_scope",
+                    ));
+                }
+                return Err(refusal);
+            }
             if row.trashed && !matches!(verb, Verb::Restore | Verb::Delete) {
                 let name = self.named(key);
                 let refusal =
@@ -2109,11 +2126,17 @@ impl Session {
                 // (the vault's own `entity.restore`, a Locker item's by its own); the album,
                 // notebook or folder a delete takes out of the model included.
                 let back = action.inverse.ok_or_else(|| not_applicable(verb, kind))?;
+                // a figure taken back is put back with the value it had, to the digit the
+                // vault holds (the world shows it whole)
+                let mut input = json!({ back.id_param: id });
+                if kind == Kind::DailyFigure && verb == Verb::Delete {
+                    input["value"] = json!(self.figure_value(row)?);
+                }
                 run(
                     vec![Step::of(action, target())],
                     vec![Step {
                         act: back.call(),
-                        input: json!({ back.id_param: id }),
+                        input,
                     }],
                 )
             }
@@ -2731,7 +2754,7 @@ impl Session {
                         command: action.command,
                         input: json!({"id": row.id}),
                         predicate: "event_exists_not_cancelled",
-                        reason: "That event is not here to change.",
+                        reason: "That event is not here to change.".to_owned(),
                     });
                 }
                 let (old_start, old_end) = event_span(row);
@@ -2893,7 +2916,96 @@ impl Session {
         Ok(out)
     }
 
+    /// A number the vault keeps in `column` of the one row `predicate` names, to the digit: the
+    /// world shows a Health figure whole, and an undo that put the world's number back would write
+    /// one the member never stated. `None` for a null cell; an error when the door cannot say.
+    fn exact_number(
+        &self,
+        table: &str,
+        column: &str,
+        (sort, pk): (&str, &str),
+        predicate: &str,
+        binds: &[String],
+    ) -> Result<Option<f64>, String> {
+        // the paged read orders by its sort and key columns, so it projects them with the figure
+        let columns = if sort == pk {
+            format!("{pk}, {column}")
+        } else {
+            format!("{sort}, {pk}, {column}")
+        };
+        let rows = self
+            .door
+            .table_where(table, &columns, sort, pk, predicate, binds)
+            .map_err(|why| format!("error: could not read the {table} first: {why}"))?;
+        Ok(rows.first().and_then(|found| match found.get(column) {
+            Some(centraid_apps_kit::row::Cell::Real(value)) => Some(*value),
+            Some(centraid_apps_kit::row::Cell::Integer(value)) => Some(*value as f64),
+            _ => None,
+        }))
+    }
+
+    /// The value a daily figure holds, as the vault keeps it.
+    fn figure_value(&self, row: &Row) -> Result<f64, String> {
+        let (day, metric) = row.id.split_once(':').unwrap_or_default();
+        self.exact_number(
+            "measurement",
+            "value",
+            ("day", "metric"),
+            "person_id = ? AND day = ? AND metric = ?",
+            &[self.world.me.clone(), day.to_owned(), metric.to_owned()],
+        )?
+        .ok_or_else(|| "error: could not read the figure first: it is not there.".to_owned())
+    }
+
+    /// A workout's figure as the vault keeps it (`Null` when it holds none).
+    fn workout_figure(&self, row: &Row, column: &str) -> Result<Value, String> {
+        Ok(
+            match self.exact_number(
+                "workout",
+                column,
+                ("id", "id"),
+                "id = ?",
+                std::slice::from_ref(&row.id),
+            )? {
+                Some(value) if value.fract() == 0.0 => json!(value as i64),
+                Some(value) => json!(value),
+                None => Value::Null,
+            },
+        )
+    }
+
+    /// What the health store states, if `row` is one of it: a workout the store follows, or a
+    /// daily figure while a store is followed (figures carry no source of their own). The words
+    /// are the vault's.
+    fn store_states(&self, row: &Row) -> Option<String> {
+        match row.kind {
+            Kind::Workout => row.extra.get("followed_by").map(|store| {
+                format!("This workout comes from {store}; change it there, not here.")
+            }),
+            Kind::DailyFigure => self.world.health_store.as_ref().map(|store| {
+                format!("These figures come from {store}; change them there, not here.")
+            }),
+            _ => None,
+        }
+    }
+
     fn plan_edit(&mut self, row: &Row, args: &Map<String, Value>) -> Result<Plan, String> {
+        // WHAT THE HEALTH STORE STATES is not written here: a workout it follows, and the daily
+        // figures while a store is followed. The vault refuses both in these words; the runtime
+        // says them first, so no card parks for a write that cannot land.
+        if let Some(sentence) = self.store_states(row) {
+            let (command, predicate) = if row.kind == Kind::Workout {
+                ("workout.edit", "a_workout_the_member_logged")
+            } else {
+                ("measurement.log", "a_figure_no_store_states")
+            };
+            return Ok(Plan::Refused {
+                command,
+                input: json!({"id": row.id}),
+                predicate,
+                reason: sentence,
+            });
+        }
         let kind = row.kind;
         let spec = kind.spec();
         if args.is_empty() {
@@ -3137,6 +3249,11 @@ impl Session {
                     },
                     old.as_ref().map_or(Value::Null, Val::json),
                 ),
+                // a Health figure goes back as the vault held it, not as the world shows it
+                (Kind::DailyFigure, "value") => (new_json, json!(self.figure_value(row)?)),
+                (Kind::Workout, "moving" | "distance" | "energy" | "heart_rate" | "climb") => {
+                    (new_json, self.workout_figure(row, param)?)
+                }
                 _ => (new_json, old.as_ref().map_or(json!(""), Val::json)),
             };
             forward
@@ -3628,6 +3745,85 @@ impl Session {
                     json!({"id": mint(), "title": name, "type": kind_value}),
                     action.id_param,
                 )
+            }
+            // A DAILY FIGURE THE MEMBER STATES: the metric (its name), the day and the value, while
+            // no health store is followed (a store states them at each read)
+            Kind::DailyFigure => {
+                if let Some(store) = &self.world.health_store {
+                    return Err(format!(
+                        "error: These figures come from {store}; change them there, not here. Nothing was done."
+                    ));
+                }
+                let day = match date.ok_or("error: create daily figure needs date: <a day>.")? {
+                    dates::Resolved::At(at) => at.date(),
+                    dates::Resolved::Days { from, to } if from == to => from,
+                    other => {
+                        return Err(format!(
+                            "error: a daily figure is for one day; {} is more.",
+                            other.echo()
+                        ));
+                    }
+                };
+                let metric = whr::enum_value(Kind::DailyFigure, "metric", &name)?;
+                // a log is an upsert, and its undo clears the row: a day that already holds the
+                // figure is changed with `edit`, which puts the old value back
+                let held = self
+                    .exact_number(
+                        "measurement",
+                        "value",
+                        ("day", "metric"),
+                        "person_id = ? AND day = ? AND metric = ?",
+                        &[self.world.me.clone(), day.to_string(), metric.to_owned()],
+                    )?
+                    .is_some();
+                if held {
+                    return Err(format!(
+                        "error: there is already a {metric} figure for {day}; change it with edit."
+                    ));
+                }
+                let value = number("value")?
+                    .ok_or("error: create daily figure needs value: <a number>.")?;
+                (
+                    json!({"day": day.to_string(), "metric": metric, "value": value}),
+                    action.id_param,
+                )
+            }
+            // A WORKOUT THE MEMBER LOGS: a title, when it started (and when it ended, for a span)
+            // and the figures they state, in the units the kind shows (seconds, metres, kcal, bpm)
+            Kind::Workout => {
+                let resolved =
+                    date.ok_or("error: create workout needs date: <date expression>.")?;
+                // the time they say is on their clock; the vault keeps the instant it is
+                let zone = self.world.zone.clone();
+                let spell = |at: jiff::civil::DateTime| {
+                    crate::native::world::utc_instant(&zone, at)
+                        .ok_or_else(|| format!("error: {at} is not a time in {zone}."))
+                };
+                let (starts, ends) = match resolved {
+                    dates::Resolved::Between { from, to } => (spell(from)?, Some(spell(to)?)),
+                    dates::Resolved::At(at) => (spell(at)?, None),
+                    // a day alone is that day's midnight, which is what the vault keeps of it
+                    dates::Resolved::Days { from, .. } => (spell(from.at(0, 0, 0, 0))?, None),
+                };
+                let mut input = json!({"id": mint(), "title": name, "starts": starts});
+                if let Some(ends) = ends {
+                    input["ends"] = json!(ends);
+                }
+                if let Some(word) = text("type") {
+                    input["type"] = json!(word);
+                }
+                for (field, column) in [
+                    ("moving", "moving_s"),
+                    ("distance", "distance_m"),
+                    ("energy", "energy_kcal"),
+                    ("heart_rate", "heart_bpm"),
+                    ("climb", "climb_m"),
+                ] {
+                    if let Some(figure) = number(field)? {
+                        input[column] = json!(figure);
+                    }
+                }
+                (input, action.id_param)
             }
             // A CATEGORY'S ID IS ITS NAME: the core derives it, so there is none to mint.
             Kind::Category => (json!({"title": name}), "id"),

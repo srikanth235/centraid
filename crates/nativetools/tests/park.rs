@@ -17,7 +17,7 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use centraid_nativetools::meta::VERBS;
+use centraid_nativetools::meta::{Kind, VERBS};
 use centraid_nativetools::park::Writes;
 use centraid_nativetools::{Flags, Session};
 use common::drive::drive;
@@ -104,8 +104,18 @@ fn the_patched_world_is_the_vaults_after_every_mapped_write() {
         );
     });
     let pairs: usize = VERBS.iter().map(|spec| spec.commands.len()).sum();
-    // every pair but `restore album`, which no selector can reach (`verb_coverage.rs`, `UNDRIVEN`)
-    assert_eq!(driven + 1, pairs, "every pair of the table is driven");
+    // every pair but `restore album`, which no selector can reach, and Health's, whose world is
+    // `health_kind.rs`'s (`verb_coverage.rs`, `UNDRIVEN`)
+    let health: usize = VERBS
+        .iter()
+        .flat_map(|spec| spec.commands)
+        .filter(|(kind, _)| matches!(kind, Kind::Workout | Kind::DailyFigure))
+        .count();
+    assert_eq!(
+        driven + 1 + health,
+        pairs,
+        "every pair of the table is driven"
+    );
 }
 
 #[test]
