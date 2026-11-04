@@ -445,10 +445,10 @@ impl Session {
 
     /// RULE 14 (nt15 R1b): `within: #43, #44` is a list of rows, not a result: `rows: #43, #44`,
     /// with a note, when every `#n` is a row of the vault and nothing else selects (a `where`, a
-    /// `name`, ... beside it stays the error that names the repair). Not for a `find`, which has
-    /// no `rows`: its error says `answer rows: #43, #44`.
+    /// `name`, ... beside it stays the error that names the repair). Not for a `find`, whose
+    /// `rows` opens one row: its error says `answer rows: #43, #44`.
     fn within_rows(&self, tool: &str, object: &mut Map<String, Value>, out: &mut Normalized) {
-        // `find` has no `rows`: its reply names `answer`, which takes them
+        // a `find`'s `rows` opens one row: its reply names `answer`, which takes several
         let Some(within) = arg_str(object, "within").filter(|_| tool != "find") else {
             return;
         };
@@ -564,8 +564,7 @@ impl Session {
                 object.insert("where".to_owned(), json!(fixed));
             }
         }
-        let verb = arg_str(object, "verb").unwrap_or_default().to_lowercase();
-        if tool != "act" || !matches!(verb.as_str(), "create" | "edit") {
+        if !matches!(tool, "create" | "edit") {
             return;
         }
         let kind = kind.or_else(|| {
@@ -594,7 +593,7 @@ impl Session {
     /// secret (`meta::reveal_synonym`).
     fn reveal_synonym(object: &mut Map<String, Value>, out: &mut Normalized) {
         if !arg_str(object, "verb").is_some_and(|verb| verb.eq_ignore_ascii_case("reveal")) {
-            return;
+            return; // only a `do` names its verb in its arguments
         }
         let Ok(mut lines) = ArgLines::read(object.get("args")) else {
             return;
@@ -690,7 +689,11 @@ impl Session {
         let Some(object) = args.as_object() else {
             return out;
         };
-        if !matches!(tool, "find" | "answer" | "compute" | "act") {
+        if !matches!(tool, "find" | "answer" | "compute") && !meta::is_write(tool) {
+            return out;
+        }
+        // a `find` by text or by one row names no selector to repair
+        if tool == "find" && (object.contains_key("text") || object.contains_key("rows")) {
             return out;
         }
         let mut object = object.clone();
@@ -703,23 +706,26 @@ impl Session {
         if matches!(tool, "compute" | "answer") {
             Self::group_condition(&mut object, &mut out);
         }
-        let verb = arg_str(&object, "verb").unwrap_or_default().to_lowercase();
-        if tool == "act" {
+        let verb = meta::write_verb(tool, &object)
+            .unwrap_or_default()
+            .to_lowercase();
+        let write = meta::is_write(tool);
+        if write {
             Self::reveal_synonym(&mut object, &mut out);
         }
-        if tool == "act" && matches!(verb.as_str(), "create" | "edit") {
+        if matches!(tool, "create" | "edit") {
             Self::convert_units(&mut object, &mut out);
         }
-        if tool == "act" && verb == "edit" {
+        if tool == "edit" {
             self.append_alias(&mut object, &mut out);
         }
-        if tool == "act" && verb == "create" {
+        if tool == "create" {
             self.normalize_create(&mut object, &mut out);
-        } else if tool == "act" && verb != "undo" {
+        } else if write && verb != "undo" {
             self.drop_selector_beside_rows(&mut object, &mut out);
             Self::lift_where_name(&mut object, &mut out);
             self.name_from_target(&verb, &mut object, target, &mut out);
-        } else if tool != "act" {
+        } else if !write {
             Self::lift_where_name(&mut object, &mut out);
         }
         out.args = Value::Object(object);

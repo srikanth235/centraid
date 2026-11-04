@@ -543,7 +543,7 @@ fn a_write_on_a_trashed_row_declines_and_a_restore_finds_it() {
         "act",
         json!({"verb": "restore", "kind": "task", "name": "Library books", "trashed": true}),
     );
-    assert_eq!(tool_of(&restored), "act", "{restored}");
+    assert_eq!(tool_of(&restored), "do", "{restored}");
     assert_eq!(restored["effect"]["diff"]["rows"][0]["change"], "restored");
     // a restore that gives a word start (tier 3) goes to the one trashed row it fits, and the
     // vault restores it though its window ran out (#1146)
@@ -553,7 +553,7 @@ fn a_write_on_a_trashed_row_declines_and_a_restore_finds_it() {
         "act",
         json!({"verb": "restore", "kind": "person", "name": "Old Contac"}),
     );
-    assert_eq!(tool_of(&near), "act", "{near}");
+    assert_eq!(tool_of(&near), "do", "{near}");
     assert_eq!(
         near["effect"]["diff"]["rows"][0]["change"], "restored",
         "{near}"
@@ -866,7 +866,7 @@ fn an_event_that_clashes_in_time_asks_over_the_events_in_the_way() {
         json!({"verb": "create", "kind": "event",
                "args": "name: Call\ndate: {\"date\":\"2026-10-02\",\"time\":\"11:00\"}"}),
     );
-    assert_eq!(tool_of(&free), "act", "{free}");
+    assert_eq!(tool_of(&free), "create", "{free}");
     assert_eq!(free["effect"]["diff"]["rows"][0]["change"], "created");
 }
 
@@ -966,7 +966,7 @@ fn the_write_that_names_its_rows_is_not_composed() {
     session.user("star ray");
     let ray = find_in_turn(&mut session, "person", "Ray Ochoa");
     let starred = call(&mut session, "act", json!({"verb": "star", "rows": ray}));
-    assert_eq!(tool_of(&starred), "act", "{starred}");
+    assert_eq!(tool_of(&starred), "do", "{starred}");
     assert!(starred["effect"].get("composed").is_none(), "{starred}");
 }
 
@@ -1320,7 +1320,7 @@ fn unstar_cousins() -> Value {
 
 fn assert_both_cousins_unstarred(world: &World, reply: &Value) {
     assert_eq!(reply["ends_turn"], true, "{reply}");
-    assert_eq!(tool_of(reply), "act", "{reply}");
+    assert_eq!(tool_of(reply), "do", "{reply}");
     assert_eq!(
         sorted(ids(&reply["effect"]["diff"]["rows"])),
         sorted(vec![world.id("aziz"), world.id("zarina")]),
@@ -1423,7 +1423,7 @@ fn a_time_span_after_all_or_every_is_not_a_quantifier_of_rows() {
     let mut session = world.session();
     session.user("cancel all the workshops");
     let reply = call(&mut session, "act", cancel);
-    assert_eq!(tool_of(&reply), "act", "{reply}");
+    assert_eq!(tool_of(&reply), "do", "{reply}");
     assert_eq!(
         sorted(ids(&reply["effect"]["diff"]["rows"])),
         sorted(vec![world.id("pottery"), world.id("welding")]),
@@ -1484,7 +1484,7 @@ fn a_write_on_every_row_holds_the_cap() {
     // after a yes the same write goes through, all thirteen
     session.user("yes please");
     let done = call(&mut session, "act", complete);
-    assert_eq!(tool_of(&done), "act", "{done}");
+    assert_eq!(tool_of(&done), "do", "{done}");
     assert_eq!(diff_rows(&done).len(), 13, "{done}");
     assert_eq!(done["effect"]["bulk"]["confirmed"], true, "{done}");
 }
@@ -1530,7 +1530,7 @@ fn a_name_with_one_near_spelling_of_its_kind_is_acted_on_and_says_what_it_matche
     let mut session = world.session();
     session.user("star ray ochoo");
     let reply = call(&mut session, "act", STAR("Ray Ochoo"));
-    assert_eq!(tool_of(&reply), "act", "{reply}");
+    assert_eq!(tool_of(&reply), "do", "{reply}");
     assert_eq!(
         ids(&reply["effect"]["diff"]["rows"]),
         vec![world.id("ray")],
@@ -1559,7 +1559,7 @@ fn a_misspelled_log_lands_on_the_near_spelling_and_says_so() {
         "act",
         json!({"verb": "log", "kind": "person", "name": "Farukh", "args": "kind: call"}),
     );
-    assert_eq!(tool_of(&reply), "act", "{reply}");
+    assert_eq!(tool_of(&reply), "do", "{reply}");
     assert_eq!(
         ids(&reply["effect"]["diff"]["rows"]),
         vec![world.id("farrukh")],
@@ -1582,7 +1582,7 @@ fn a_restore_by_a_misspelled_name_goes_to_the_trashed_row() {
         "act",
         json!({"verb": "restore", "kind": "task", "name": "Libary books", "trashed": true}),
     );
-    assert_eq!(tool_of(&reply), "act", "{reply}");
+    assert_eq!(tool_of(&reply), "do", "{reply}");
     assert_eq!(
         ids(&reply["effect"]["diff"]["rows"]),
         vec![world.id("library")],
@@ -1700,7 +1700,7 @@ fn a_near_spelling_is_asked_over_whatever_the_words_single_out() {
     let mut session = world.session();
     session.user("star pedro almeidaa");
     let done = call(&mut session, "act", STAR("Pedro Almeidaa"));
-    assert_eq!(tool_of(&done), "act", "{done}");
+    assert_eq!(tool_of(&done), "do", "{done}");
     assert_eq!(
         ids(&done["effect"]["diff"]["rows"]),
         vec![world.id("pedro_a")],
@@ -2696,7 +2696,7 @@ fn a_name_the_other_kind_has_exactly_is_that_row() {
     session.user("move the oil change to friday");
     let reply = call(&mut session, "act", move_oil_change("oil change"));
     assert_eq!(reply["ends_turn"], true, "{reply}");
-    assert_eq!(tool_of(&reply), "act", "{reply}");
+    assert_eq!(tool_of(&reply), "do", "{reply}");
     let rows = diff_rows(&reply);
     assert_eq!(rows.len(), 1, "{reply}");
     assert_eq!(rows[0]["id"], world.id("oil"), "{reply}");
@@ -3075,9 +3075,10 @@ fn a_pick_of_the_row_the_model_found_by_a_condition_of_its_own_stands() {
         let pick = open_nepa(&mut session);
         let mut args = args;
         args["rows"] = json!(pick);
+        let tool = if args["verb"] == "edit" { "edit" } else { "do" };
         let reply = call(&mut session, "act", args);
         assert_eq!(reply["ends_turn"], true, "{message}: {reply}");
-        assert_eq!(tool_of(&reply), "act", "{message}: {reply}");
+        assert_eq!(tool_of(&reply), tool, "{message}: {reply}");
         assert_eq!(
             ids(&reply["effect"]["diff"]["rows"]),
             vec![world.id("nepa_open")],
@@ -3702,7 +3703,7 @@ fn the_near_spelling_of_a_joined_name_is_read_too() {
     );
     session.user("star hoseock");
     let done = call(&mut session, "act", STAR("hoseock"));
-    assert_eq!(tool_of(&done), "act", "{done}");
+    assert_eq!(tool_of(&done), "do", "{done}");
     assert_eq!(
         ids(&done["effect"]["diff"]["rows"]),
         vec![world.id("hoseok")],
@@ -3840,7 +3841,7 @@ fn a_lookup_of_trashed_rows_reads_a_word_start_and_a_near_spelling_as_a_live_one
         json!({"verb": "restore", "kind": "task", "name": "kitchen", "trashed": true}),
     );
     // nt12 R6: `Kitchn` is a typo of `kitchen` (tier 4), the one trashed candidate: restored
-    assert_eq!(tool_of(&near), "act", "{near}");
+    assert_eq!(tool_of(&near), "do", "{near}");
     assert_eq!(
         ids(&near["effect"]["diff"]["rows"]),
         vec![world.id("kitchn")],

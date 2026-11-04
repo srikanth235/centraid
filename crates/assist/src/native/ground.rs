@@ -57,7 +57,7 @@ use jiff::civil::{Date, DateTime, Time};
 use serde_json::{Map, Value, json};
 
 use crate::native::dates::{self, Resolved};
-use crate::native::meta::{FieldType, Kind};
+use crate::native::meta::{self, FieldType, Kind};
 use crate::native::session::Session;
 use crate::native::trace::Scope;
 use crate::native::whr::{Cond, Op};
@@ -1660,7 +1660,11 @@ impl Session {
         let Some(object) = args.as_object() else {
             return (args.clone(), Vec::new());
         };
-        if !matches!(tool, "find" | "answer" | "act" | "compute") {
+        if !matches!(tool, "find" | "answer" | "compute") && !meta::is_write(tool) {
+            return (args.clone(), Vec::new());
+        }
+        // a `find` by text or by one row names no selector to repair
+        if tool == "find" && (object.contains_key("text") || object.contains_key("rows")) {
             return (args.clone(), Vec::new());
         }
         let (grounded, mut notes) = self.ground_dates(tool, object);
@@ -1681,30 +1685,28 @@ impl Session {
         }
         let said = self.said();
         let context = self.date_context();
-        let verb = object
-            .get("verb")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
+        let verb = meta::write_verb(tool, object).unwrap_or_default();
+        let write = meta::is_write(tool);
         let mut grounder = Grounder {
             said: &said,
             now: self.now,
             notes: Vec::new(),
-            ahead: tool == "act" && matches!(verb, "cancel" | "reschedule" | "create" | "edit"),
-            call: match (tool, verb) {
-                ("act", "create") => Call::Create,
-                ("act", "reschedule" | "edit") => Call::Move,
+            ahead: write && matches!(verb, "cancel" | "reschedule" | "create" | "edit"),
+            call: match verb {
+                "create" if write => Call::Create,
+                "reschedule" | "edit" if write => Call::Move,
                 _ => Call::Read,
             },
             context,
             target: Target {
-                event: tool == "act"
+                event: write
                     && (verb == "reschedule"
                         || matches!(verb, "create" | "edit")
                             && object
                                 .get("kind")
                                 .and_then(Value::as_str)
                                 .is_some_and(|kind| kind.trim().eq_ignore_ascii_case("event"))),
-                reschedule: tool == "act" && verb == "reschedule",
+                reschedule: write && verb == "reschedule",
             },
         };
         let mut out = object.clone();
@@ -1723,7 +1725,7 @@ impl Session {
         {
             out.insert("when".to_owned(), closed);
         }
-        if tool == "act" && matches!(verb, "create" | "reschedule" | "edit") {
+        if write && matches!(verb, "create" | "reschedule" | "edit") {
             let key = if verb == "reschedule" { "to" } else { "date" };
             match object.get("args") {
                 Some(Value::Object(map)) => {

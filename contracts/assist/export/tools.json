@@ -1,29 +1,7 @@
 [
   {
     "function": {
-      "description": "Fuzzy name search across the vault, any kind.",
-      "name": "search",
-      "parameters": {
-        "properties": {
-          "kind": {
-            "description": "any, a kind or a comma list",
-            "type": "string"
-          },
-          "text": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "text"
-        ],
-        "type": "object"
-      }
-    },
-    "type": "function"
-  },
-  {
-    "function": {
-      "description": "Rows a selector matches, numbered #n, as result @n.",
+      "description": "Rows a selector matches, numbered #n, as result @n; text searches names; rows=#n opens one row.",
       "name": "find",
       "parameters": {
         "properties": {
@@ -48,6 +26,14 @@
           },
           "order": {
             "description": "field asc|desc; one kind only",
+            "type": "string"
+          },
+          "rows": {
+            "description": "#n: every fact and link of one row",
+            "type": "string"
+          },
+          "text": {
+            "description": "fuzzy name search across the vault; kind narrows it",
             "type": "string"
           },
           "trashed": {
@@ -108,28 +94,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "kind"
-        ],
-        "type": "object"
-      }
-    },
-    "type": "function"
-  },
-  {
-    "function": {
-      "description": "Every fact and link of one row.",
-      "name": "open",
-      "parameters": {
-        "properties": {
-          "row": {
-            "description": "#n",
-            "type": "string"
-          }
-        },
-        "required": [
-          "row"
-        ],
+        "required": [],
         "type": "object"
       }
     },
@@ -148,7 +113,7 @@
             "type": "string"
           },
           "group": {
-            "description": "field to group by",
+            "description": "a field to group by, or a period of the kind's date: day, week, month, year",
             "type": "string"
           },
           "kind": {
@@ -167,6 +132,7 @@
             "enum": [
               "count",
               "sum",
+              "avg",
               "min",
               "max"
             ],
@@ -203,47 +169,79 @@
   },
   {
     "function": {
-      "description": "Change the vault. Ends the turn unless more; selector params as in find.",
-      "name": "act",
+      "description": "Add a new row. Ends the turn unless more.",
+      "name": "create",
       "parameters": {
         "properties": {
           "args": {
-            "description": "field: value lines, dates as date expressions (create: name and fields, kind as the kind param · edit: field: value, or body+: / description+: text to add · reschedule, add_to: to · remove_from: from · log: kind · reveal: field)",
-            "type": "string"
-          },
-          "exclude": {
+            "description": "field: value lines, name first, dates as date expressions",
             "type": "string"
           },
           "kind": {
+            "description": "the kind of the new row",
             "type": "string"
           },
-          "limit": {
-            "type": "integer"
-          },
-          "linked_to": {
+          "more": {
+            "description": "another call follows",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Change fields on rows. Ends the turn unless more.",
+      "name": "edit",
+      "parameters": {
+        "properties": {
+          "args": {
+            "description": "only the fields that change, as field: value lines, dates as date expressions; body+: or description+: adds text",
             "type": "string"
           },
           "more": {
             "description": "another call follows",
             "type": "boolean"
           },
-          "name": {
+          "rows": {
+            "description": "#n, @n list",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rows",
+          "args"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Run a verb on rows. Ends the turn unless more.",
+      "name": "do",
+      "parameters": {
+        "properties": {
+          "args": {
+            "description": "at most one argument: reschedule to · add_to to · remove_from from · tag, untag label · log kind · reveal field; the other verbs take none",
             "type": "string"
           },
-          "order": {
-            "type": "string"
+          "more": {
+            "description": "another call follows",
+            "type": "boolean"
           },
           "rows": {
             "description": "#n, @n list",
             "type": "string"
           },
-          "trashed": {
-            "type": "boolean"
-          },
           "verb": {
             "enum": [
-              "create",
-              "edit",
               "reschedule",
               "complete",
               "reopen",
@@ -264,20 +262,11 @@
               "unarchive"
             ],
             "type": "string"
-          },
-          "when": {
-            "description": "date expression, as in find",
-            "type": "object"
-          },
-          "where": {
-            "type": "string"
-          },
-          "within": {
-            "type": "string"
           }
         },
         "required": [
-          "verb"
+          "verb",
+          "rows"
         ],
         "type": "object"
       }
@@ -286,59 +275,16 @@
   },
   {
     "function": {
-      "description": "Answer with rows, a value (op) or value=@n. Ends the turn; selector params as in find.",
+      "description": "End the turn with rows or a value already shown.",
       "name": "answer",
       "parameters": {
         "properties": {
-          "exclude": {
-            "type": "string"
-          },
-          "field": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "limit": {
-            "type": "integer"
-          },
-          "linked_to": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "op": {
-            "enum": [
-              "count",
-              "sum",
-              "min",
-              "max"
-            ],
-            "type": "string"
-          },
-          "order": {
-            "type": "string"
-          },
           "rows": {
             "description": "#n, @n list",
             "type": "string"
           },
-          "trashed": {
-            "type": "boolean"
-          },
           "value": {
             "description": "@n",
-            "type": "string"
-          },
-          "when": {
-            "description": "date expression, as in find",
-            "type": "object"
-          },
-          "where": {
-            "type": "string"
-          },
-          "within": {
             "type": "string"
           }
         },

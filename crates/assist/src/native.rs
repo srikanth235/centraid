@@ -1,8 +1,8 @@
 //! The native tool runtime: the flat tool surface a small on-device model
 //! drives over a vault (`experiments/toolchat/native/SPEC.md`).
 //!
-//! Eight tools (`search`, `find`, `open`, `compute`, `act`, `answer`, `ask`,
-//! `decline`), one metadata table they are all generated from, a date
+//! Eight tools (`find`, `compute`, `create`, `edit`, `do`, `answer`, `ask`,
+//! `decline`; #1166), one metadata table they are all generated from, a date
 //! expression evaluator the model writes typed expressions for, observations,
 //! the system prompt, and the typed commands a write goes through.
 //! The runtime reads the person's message in a few named places only: to retrieve the
@@ -38,6 +38,7 @@ mod failsoft;
 mod follow;
 pub mod ground;
 pub mod identity;
+pub mod legacy;
 pub mod member;
 pub mod meta;
 mod normalize;

@@ -1,5 +1,6 @@
-//! VALUES (SPEC §4.3): `count · sum · min · max`, one number per
-//! currency, one number per group value when `group` is given.
+//! VALUES (SPEC §4.3): `count · sum · avg · min · max`, one number per
+//! currency, one number per group value when `group` is given: a field of the kind, or a period
+//! of its date (`day · week · month · year`).
 
 use std::collections::BTreeMap;
 
@@ -38,6 +39,9 @@ fn number_of(row: &Row, field: &str) -> Option<(i64, Option<String>)> {
     }
 }
 
+/// The periods a `group` may name besides a field: the buckets of the kind's own date.
+pub const PERIODS: [&str; 4] = ["day", "week", "month", "year"];
+
 fn fold_rows(op: &str, field: Option<&str>, rows: &[&Row]) -> Bucket {
     let mut bucket: Bucket = BTreeMap::new();
     if op == "count" {
@@ -47,6 +51,21 @@ fn fold_rows(op: &str, field: Option<&str>, rows: &[&Row]) -> Bucket {
     let Some(field) = field else {
         return bucket;
     };
+    if op == "avg" {
+        // the mean of each currency's rows, rounded to the unit the value is kept in
+        let mut totals: BTreeMap<Option<String>, (i64, i64)> = BTreeMap::new();
+        for row in rows {
+            if let Some((value, currency)) = number_of(row, field) {
+                let slot = totals.entry(currency).or_default();
+                slot.0 += value;
+                slot.1 += 1;
+            }
+        }
+        for (currency, (sum, count)) in totals {
+            bucket.insert(currency, (sum + count / 2).div_euclid(count));
+        }
+        return bucket;
+    }
     for row in rows {
         let Some((value, currency)) = number_of(row, field) else {
             continue;
@@ -68,7 +87,26 @@ fn fold_rows(op: &str, field: Option<&str>, rows: &[&Row]) -> Bucket {
     bucket
 }
 
+fn period_label(row: &Row, period: &str) -> String {
+    let Some(stamp) = row.date else {
+        return "none".to_owned();
+    };
+    let date = stamp.date;
+    match period {
+        "day" => date.to_string(),
+        "week" => {
+            let week = date.iso_week_date();
+            format!("{}-W{:02}", week.year(), week.week())
+        }
+        "month" => format!("{}-{:02}", date.year(), date.month()),
+        _ => date.year().to_string(),
+    }
+}
+
 fn group_label(row: &Row, group: &str) -> String {
+    if PERIODS.contains(&group) && row.kind.spec().field(group).is_none() {
+        return period_label(row, group);
+    }
     match row.field(group) {
         None => "none".to_owned(),
         Some(Val::Text(text)) => text.clone(),
@@ -76,7 +114,7 @@ fn group_label(row: &Row, group: &str) -> String {
     }
 }
 
-/// `count`, `sum`, `min`, `max`, optionally one per group value.
+/// `count`, `sum`, `avg`, `min`, `max`, optionally one per group value.
 #[must_use]
 pub fn fold(
     op: &str,

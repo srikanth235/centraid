@@ -88,7 +88,7 @@ fn an_act_that_names_a_row_and_no_kind_takes_the_kind_of_its_verb() {
     let v4 = session.compile(&slots);
     assert_eq!(
         stated(&v4),
-        json!({"tool": "act", "args": {"verb": "complete", "kind": "task", "name": "Pay rent"}}),
+        json!({"tool": "do", "args": {"verb": "complete", "kind": "task", "name": "Pay rent"}}),
         "{v4}"
     );
     assert_eq!(

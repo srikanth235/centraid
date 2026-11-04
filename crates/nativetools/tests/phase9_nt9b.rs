@@ -776,7 +776,7 @@ fn a_secret_the_item_lacks_names_the_one_it_holds() {
         json!({"verb": "reveal", "rows": wifi, "args": "field: cvv"}),
     );
     assert!(
-        says(&reply).contains("It holds: password. Send act verb: reveal, rows: #")
+        says(&reply).contains("It holds: password. Send do verb: reveal, rows: #")
             && says(&reply).ends_with(", args: field: password."),
         "{reply}"
     );
@@ -839,7 +839,7 @@ fn a_wrong_kind_row_in_a_write_is_a_repair_naming_the_rows_the_words_fit() {
     assert_eq!(put["ends_turn"], false, "{put}");
     assert!(says(&put).contains("a task goes into a list, and"), "{put}");
     assert!(
-        says(&put).contains("list \"Home\"? Send act verb: add_to, rows: #"),
+        says(&put).contains("list \"Home\"? Send do verb: add_to, rows: #"),
         "{put}"
     );
     // an album that is not one: the albums the words fit
@@ -852,7 +852,7 @@ fn a_wrong_kind_row_in_a_write_is_a_repair_naming_the_rows_the_words_fit() {
         json!({"verb": "add_to", "rows": hike, "args": format!("to: {scan}")}),
     );
     assert!(
-        says(&filed).contains("album \"Scan club\"? Send act verb: add_to, rows: #")
+        says(&filed).contains("album \"Scan club\"? Send do verb: add_to, rows: #")
             && says(&filed).contains(", args: to: #"),
         "{filed}"
     );

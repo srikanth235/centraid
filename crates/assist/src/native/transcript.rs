@@ -736,12 +736,12 @@ mod tests {
     #[test]
     fn a_compiled_call_is_written_as_text() {
         let call = Call {
-            tool: "act".to_owned(),
+            tool: "do".to_owned(),
             args: vec![("verb".to_owned(), "star".to_owned())],
         };
         assert_eq!(
             call_text_of(&call),
-            call_text("act", &[("verb".to_owned(), Json::str("star"))])
+            call_text("do", &[("verb".to_owned(), Json::str("star"))])
         );
     }
 }

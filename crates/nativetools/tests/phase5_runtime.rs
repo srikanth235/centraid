@@ -622,7 +622,7 @@ fn ten_slot_sets_compile_to_the_calls_the_reference_run_makes() {
             "tick off the rent".into(),
             json!({"intent": "write", "verb": "complete",
                    "pick": [{"row": rent, "verdict": "ok"}]}),
-            json!({"tool": "act", "args": {"verb": "complete", "rows": [rent]}}),
+            json!({"tool": "do", "args": {"verb": "complete", "rows": [rent]}}),
         )
     });
     // 5. a write by name
@@ -630,7 +630,7 @@ fn ten_slot_sets_compile_to_the_calls_the_reference_run_makes() {
         (
             "star ray".into(),
             json!({"intent": "write", "verb": "star", "kind": "person", "name": "Ray"}),
-            json!({"tool": "act", "args": {"verb": "star", "kind": "person", "name": "Ray"}}),
+            json!({"tool": "do", "args": {"verb": "star", "kind": "person", "name": "Ray"}}),
         )
     });
     // 6. a create with set lines and a date
@@ -640,7 +640,7 @@ fn ten_slot_sets_compile_to_the_calls_the_reference_run_makes() {
             json!({"intent": "write", "verb": "create", "kind": "task",
                    "set": [{"key": "name", "value": "Water the plants"},
                            {"key": "date", "date": {"unit": "day", "rel": 1}}]}),
-            json!({"tool": "act", "args": {"verb": "create", "kind": "task",
+            json!({"tool": "create", "args": {"kind": "task",
                    "args": "name: Water the plants\ndate: {\"unit\":\"day\",\"rel\":1}"}}),
         )
     });
@@ -650,7 +650,7 @@ fn ten_slot_sets_compile_to_the_calls_the_reference_run_makes() {
             "move the dentist to next tuesday".into(),
             json!({"intent": "write", "verb": "reschedule", "kind": "event", "name": "Dentist",
                    "pick": [{"date": 0, "into": "set:to"}]}),
-            json!({"tool": "act", "args": {"verb": "reschedule", "kind": "event", "name": "Dentist",
+            json!({"tool": "do", "args": {"verb": "reschedule", "kind": "event", "name": "Dentist",
                    "args": "to: {\"date\":\"2026-09-29\"}"}}),
         )
     });

@@ -626,10 +626,7 @@ fn nt15_r1s_the_hint_to_send_the_held_secret_is_for_a_message_that_names_it() {
     let mut session = world.session();
     session.user("what is the cvv or the password of the home wifi");
     let refused = reveal(&mut session, "Home wifi", "cvv");
-    assert!(
-        text(&refused).contains("Send act verb: reveal"),
-        "{refused}"
-    );
+    assert!(text(&refused).contains("Send do verb: reveal"), "{refused}");
     let mut session = world.session();
     session.user("what is the cvv of the home wifi");
     let refused = reveal(&mut session, "Home wifi", "cvv");
@@ -1031,7 +1028,7 @@ fn nt15_r2b_the_append_is_one_line_of_the_prompt() {
         .filter(|line| line.contains("body+"))
         .collect();
     assert_eq!(lines.len(), 1, "{lines:?}");
-    assert!(lines[0].contains("act(verb"), "{lines:?}");
+    assert!(lines[0].contains("edit(rows"), "{lines:?}");
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1635,7 +1632,7 @@ fn nt15_r1s_a_guess_the_message_never_named_is_repaired_to_what_the_item_holds()
     let guess = reveal(&mut session, "Alarm code", "password");
     // the error says what the item holds with the names reveal takes, and offers the call
     assert!(text(&guess).contains("It holds: content."), "{guess}");
-    assert!(text(&guess).contains("Send act verb: reveal"), "{guess}");
+    assert!(text(&guess).contains("Send do verb: reveal"), "{guess}");
     let repaired = reveal(&mut session, "Alarm code", "content");
     assert!(
         text(&repaired).contains("offered to the member: reveal notes of")
