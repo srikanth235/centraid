@@ -293,8 +293,7 @@ fn the_tools_block_the_model_reads_is_the_one_the_run_names() {
             .expect("runner")
             .with_tools(tools);
         runner.run_session(&source.sessions[0]).expect("session");
-        let prompt = seen.0.lock().expect("lock").clone().expect("a prompt");
-        prompt
+        seen.0.lock().expect("lock").take().expect("a prompt")
     };
     let (s2, new) = (shown(ToolsMode::S2), shown(ToolsMode::Sig));
     assert_ne!(s2, new);
