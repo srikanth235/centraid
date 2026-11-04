@@ -341,7 +341,11 @@ fn a_signature_names_every_parameter_its_schema_has() {
             }
             if part == "field…" {
                 // a create's and an edit's fields are parameters of their own, one per field name
-                named.extend(meta::flat_field_names().iter().map(|field| (*field).to_owned()));
+                named.extend(
+                    meta::flat_field_names()
+                        .iter()
+                        .map(|field| (*field).to_owned()),
+                );
                 continue;
             }
             let (param, list) = part.split_once(": ").unwrap_or((part, ""));

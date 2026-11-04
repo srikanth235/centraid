@@ -71,7 +71,9 @@ pub fn fold_fields(tool: &str, args: &Value) -> Option<Value> {
     let mut folded = Map::new();
     let mut fields_map = match object.get("args") {
         Some(Value::Object(map)) => map.clone(),
-        Some(Value::String(text)) => crate::native::act::act_args(Some(&Value::String(text.clone()))).unwrap_or_default(),
+        Some(Value::String(text)) => {
+            crate::native::act::act_args(Some(&Value::String(text.clone()))).unwrap_or_default()
+        }
         _ => Map::new(),
     };
     for (key, value) in object {

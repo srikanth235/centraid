@@ -296,7 +296,9 @@ fn escape_lit(text: &str) -> String {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
-            control if (control as u32) < 0x20 => out.push_str(&format!("\\x{:02X}", control as u32)),
+            control if (control as u32) < 0x20 => {
+                out.push_str(&format!("\\x{:02X}", control as u32))
+            }
             other => out.push(other),
         }
     }
@@ -318,7 +320,11 @@ fn gbnf(rule: &Rule, top: bool) -> String {
     match rule {
         Rule::Lit(text) => escape_lit(text),
         Rule::Class(class) => {
-            let body: String = class.chars.iter().map(|letter| escape_class_char(*letter)).collect();
+            let body: String = class
+                .chars
+                .iter()
+                .map(|letter| escape_class_char(*letter))
+                .collect();
             format!("[{}{body}]", if class.negated { "^" } else { "" })
         }
         Rule::Seq(parts) => {
@@ -382,7 +388,10 @@ impl<'a> Builder<'a> {
         let rest = || {
             alt(vec![
                 stop(),
-                seq(vec![any_but(&format!("{excluded}0123456789#@d")), rf(&state(0))]),
+                seq(vec![
+                    any_but(&format!("{excluded}0123456789#@d")),
+                    rf(&state(0)),
+                ]),
                 seq(vec![lit("d"), rf(&state(1))]),
             ])
         };
@@ -402,13 +411,17 @@ impl<'a> Builder<'a> {
                 for digit in '0'..='9' {
                     let next = format!("{prefix}{digit}");
                     if prefixes.contains(&next) {
-                        options.push(seq(vec![lit(&digit.to_string()), rf(&format!("{family}-{tag}{next}"))]));
+                        options.push(seq(vec![
+                            lit(&digit.to_string()),
+                            rf(&format!("{family}-{tag}{next}")),
+                        ]));
                     }
                 }
                 if prefix.is_empty() || words.contains(prefix) {
                     options.push(rest());
                 }
-                this.grammar.add(&format!("{family}-{tag}{prefix}"), alt(options));
+                this.grammar
+                    .add(&format!("{family}-{tag}{prefix}"), alt(options));
             }
         };
         let rows = self.seen.rows.clone();
@@ -436,12 +449,7 @@ impl<'a> Builder<'a> {
                 let indices = (0..self.seen.dates)
                     .map(|index| lit(&index.to_string()))
                     .collect();
-                options.push(seq(vec![
-                    lit("["),
-                    alt(indices),
-                    lit("]"),
-                    rf(&state(0)),
-                ]));
+                options.push(seq(vec![lit("["), alt(indices), lit("]"), rf(&state(0))]));
             }
             // at `d` itself the chain character is `d`, which the restart above already is
             if k == 0 {
@@ -502,7 +510,11 @@ pub fn grammar_for(mode: GrammarMode, seen: &Visible, prefix: &str) -> Option<Gr
         GrammarMode::Handles => Some(handles(seen)),
         GrammarMode::Full => {
             let extra = prefix.lines().any(|line| !line.starts_with("retry: "));
-            Some(if extra { handles(seen) } else { full(seen, !prefix.is_empty()) })
+            Some(if extra {
+                handles(seen)
+            } else {
+                full(seen, !prefix.is_empty())
+            })
         }
     }
 }
@@ -540,8 +552,19 @@ pub fn full_ending(seen: &Visible, retried: bool, via_words: &[&str], end: &str)
     b.list("lhash", "hrow");
 
     // quoted phrase of a slot value: no quote, no newline
-    b.grammar.add("phrase", seq(vec![lit("\""), any_but("\"\n"), opt(rf("phrase-rest")), lit("\"")]));
-    b.grammar.add("phrase-rest", seq(vec![any_but("\"\n"), opt(rf("phrase-rest"))]));
+    b.grammar.add(
+        "phrase",
+        seq(vec![
+            lit("\""),
+            any_but("\"\n"),
+            opt(rf("phrase-rest")),
+            lit("\""),
+        ]),
+    );
+    b.grammar.add(
+        "phrase-rest",
+        seq(vec![any_but("\"\n"), opt(rf("phrase-rest"))]),
+    );
     // the text of a line, free
     let text_line = |label: &str| line(label, rf("ln-s0"));
     b.grammar.add("l-name", text_line("name"));
@@ -551,8 +574,12 @@ pub fn full_ending(seen: &Visible, retried: bool, via_words: &[&str], end: &str)
     b.grammar.add("l-question", text_line("question"));
     b.grammar.add("l-reason", text_line("reason"));
     b.grammar.add("l-value", line("value", rf("hany")));
-    b.grammar.add("l-limit", line("limit", seq(vec![one_of("123456789"), opt(rf("digits"))])));
-    b.grammar.add("digits", seq(vec![one_of("0123456789"), opt(rf("digits"))]));
+    b.grammar.add(
+        "l-limit",
+        line("limit", seq(vec![one_of("123456789"), opt(rf("digits"))])),
+    );
+    b.grammar
+        .add("digits", seq(vec![one_of("0123456789"), opt(rf("digits"))]));
     b.grammar.add("l-more", line("more", lit("true")));
     b.grammar.add("l-trashed", line("trashed", lit("true")));
     b.grammar.add("l-retry", line("retry", lit("rejected")));
@@ -574,9 +601,18 @@ pub fn full_ending(seen: &Visible, retried: bool, via_words: &[&str], end: &str)
     );
     b.grammar.add(
         "hhmm",
-        seq(vec![one_of("012"), one_of("0123456789"), lit(":"), one_of("012345"), one_of("0123456789")]),
+        seq(vec![
+            one_of("012"),
+            one_of("0123456789"),
+            lit(":"),
+            one_of("012345"),
+            one_of("0123456789"),
+        ]),
     );
-    b.grammar.add("hhmm-rest", seq(vec![lit(" · "), rf("hhmm"), opt(rf("hhmm-rest"))]));
+    b.grammar.add(
+        "hhmm-rest",
+        seq(vec![lit(" · "), rf("hhmm"), opt(rf("hhmm-rest"))]),
+    );
     b.grammar.add(
         "l-when",
         line(
@@ -620,7 +656,11 @@ pub fn full_ending(seen: &Visible, retried: bool, via_words: &[&str], end: &str)
         }
         sets.extend(fields.iter().copied());
         sets.extend(["kind", "to", "from", "label", "choice", "row", "field"]);
-        sets.extend(spec.links.iter().flat_map(|link| [link.label, link.kind.name()]));
+        sets.extend(
+            spec.links
+                .iter()
+                .flat_map(|link| [link.label, link.kind.name()]),
+        );
         sets.sort_unstable();
         sets.dedup();
         let mut order_fields = fields.clone();
@@ -654,26 +694,32 @@ pub fn full_ending(seen: &Visible, retried: bool, via_words: &[&str], end: &str)
                 opt(rf(&format!("conds-{tag}"))),
             ]),
         );
-        b.grammar.add(&format!("l-field-{tag}"), line("field", words(&fields)));
-        b.grammar.add(&format!("l-group-{tag}"), line("group", words(&group)));
+        b.grammar
+            .add(&format!("l-field-{tag}"), line("field", words(&fields)));
+        b.grammar
+            .add(&format!("l-group-{tag}"), line("group", words(&group)));
         b.grammar.add(
             &format!("l-order-{tag}"),
-            line("order", seq(vec![words(&order_fields), alt(vec![lit(" asc"), lit(" desc")])])),
+            line(
+                "order",
+                seq(vec![
+                    words(&order_fields),
+                    alt(vec![lit(" asc"), lit(" desc")]),
+                ]),
+            ),
         );
         b.grammar.add(
             &format!("entry-{tag}"),
-            seq(vec![
-                words(&sets),
-                lit(" = "),
-                opt(lit("~")),
-                rf("sg-s0"),
-            ]),
+            seq(vec![words(&sets), lit(" = "), opt(lit("~")), rf("sg-s0")]),
         );
         b.grammar.add(
             &format!("l-set-{tag}"),
             line(
                 "set",
-                seq(vec![rf(&format!("entry-{tag}")), opt(rf(&format!("entries-{tag}")))]),
+                seq(vec![
+                    rf(&format!("entry-{tag}")),
+                    opt(rf(&format!("entries-{tag}"))),
+                ]),
             ),
         );
         b.grammar.add(
@@ -685,10 +731,7 @@ pub fn full_ending(seen: &Visible, retried: bool, via_words: &[&str], end: &str)
             ]),
         );
         // the tail after the kind line
-        b.grammar.add(
-            &format!("tail-{tag}"),
-            tail(&tag),
-        );
+        b.grammar.add(&format!("tail-{tag}"), tail(&tag));
         b.grammar.add(
             &format!("kind-{tag}"),
             seq(vec![
@@ -717,7 +760,12 @@ pub fn full_ending(seen: &Visible, retried: bool, via_words: &[&str], end: &str)
     );
     b.grammar.add(
         "kind-more",
-        seq(vec![lit(","), opt(lit(" ")), words(&kind_names), opt(rf("kind-more"))]),
+        seq(vec![
+            lit(","),
+            opt(lit(" ")),
+            words(&kind_names),
+            opt(rf("kind-more")),
+        ]),
     );
 
     b.grammar.add(
@@ -748,16 +796,14 @@ pub fn full_ending(seen: &Visible, retried: bool, via_words: &[&str], end: &str)
             alt(after),
         ]));
     }
-        b.grammar.add("write-verb", alt(verb_alts));
+    b.grammar.add("write-verb", alt(verb_alts));
     // a step with no verb: a read, a count, a lookup, an ask, a decline
     let mut kinds_alts = vec![rf("tail-any"), rf("kind-multi")];
     for spec in meta::KINDS {
         kinds_alts.push(rf(&format!("kind-{}", kind_tag(spec.kind))));
     }
-    b.grammar.add(
-        "no-verb",
-        seq(vec![rf("handles"), alt(kinds_alts)]),
-    );
+    b.grammar
+        .add("no-verb", seq(vec![rf("handles"), alt(kinds_alts)]));
     b.grammar.add(
         "think",
         seq(vec![
@@ -1031,7 +1077,10 @@ mod tests {
         let spec = kind.spec();
         think
             .lines()
-            .filter_map(|line| line.strip_prefix("where: ").or_else(|| line.strip_prefix("set: ")))
+            .filter_map(|line| {
+                line.strip_prefix("where: ")
+                    .or_else(|| line.strip_prefix("set: "))
+            })
             .flat_map(|line| line.split(" · "))
             .filter_map(|part| part.split_whitespace().next())
             .any(|field| {
@@ -1039,7 +1088,10 @@ mod tests {
                     && field != "date"
                     && spec.field(field).is_none()
                     && !["to", "from", "list", "kind"].contains(&field)
-                    && !spec.links.iter().any(|link| link.kind.name() == field || link.label == field)
+                    && !spec
+                        .links
+                        .iter()
+                        .any(|link| link.kind.name() == field || link.label == field)
             })
     }
 
@@ -1069,7 +1121,12 @@ mod tests {
             }
         }
         refused.retain(|text| !stale(text));
-        assert!(refused.is_empty(), "{} refused: {:#?}", refused.len(), &refused[..refused.len().min(40)]);
+        assert!(
+            refused.is_empty(),
+            "{} refused: {:#?}",
+            refused.len(),
+            &refused[..refused.len().min(40)]
+        );
     }
 
     #[test]
@@ -1110,10 +1167,15 @@ mod tests {
     #[test]
     fn after_the_kind_only_that_kinds_fields_are_decoded() {
         let seen = Visible::default();
-        let ok = think("intent: read \"open tasks\"\nkind: task\nwhere: status = open · effort > 60\norder: date asc\nlimit: 3");
+        let ok = think(
+            "intent: read \"open tasks\"\nkind: task\nwhere: status = open · effort > 60\norder: date asc\nlimit: 3",
+        );
         assert!(full(&seen).accepts(&ok), "task fields");
         let wrong = think("intent: read \"open tasks\"\nkind: task\nwhere: amount > 60");
-        assert!(!full(&seen).accepts(&wrong), "amount is a transaction's field");
+        assert!(
+            !full(&seen).accepts(&wrong),
+            "amount is a transaction's field"
+        );
         let wrong_order = think("intent: read \"open tasks\"\nkind: task\norder: amount desc");
         assert!(!full(&seen).accepts(&wrong_order));
         let money = think("intent: read \"big ones\"\nkind: transaction\nwhere: amount > 60");
@@ -1127,7 +1189,8 @@ mod tests {
         let seen = Visible::of("(#4)", None);
         let ok = think("intent: write \"complete it\"\nverb: complete\nkind: task\nname: pay rent");
         assert!(full(&seen).accepts(&ok));
-        let wrong = think("intent: write \"complete it\"\nverb: complete\nkind: person\nname: pay rent");
+        let wrong =
+            think("intent: write \"complete it\"\nverb: complete\nkind: person\nname: pay rent");
         assert!(!full(&seen).accepts(&wrong));
         let unknown = think("intent: write \"x\"\nverb: teleport\npick: #4 (name)");
         assert!(!full(&seen).accepts(&unknown));
@@ -1141,7 +1204,11 @@ mod tests {
     #[test]
     fn free_text_cannot_name_a_handle_that_is_not_shown() {
         let seen = Visible::of("(#5)", None);
-        let name = |text: &str| think(&format!("intent: write \"add\"\nverb: create\nkind: task\nname: {text}"));
+        let name = |text: &str| {
+            think(&format!(
+                "intent: write \"add\"\nverb: create\nkind: task\nname: {text}"
+            ))
+        };
         assert!(full(&seen).accepts(&name("Room #5 clean")));
         assert!(!full(&seen).accepts(&name("Room #9 clean")));
         assert!(full(&seen).accepts(&name("Room # clean and a@b.com")));
@@ -1157,12 +1224,16 @@ mod tests {
         for line in text.lines() {
             let (name, _) = line.split_once(" ::= ").expect("a rule per line");
             assert!(
-                name.chars().all(|letter| letter.is_ascii_alphanumeric() || letter == '-'),
+                name.chars()
+                    .all(|letter| letter.is_ascii_alphanumeric() || letter == '-'),
                 "{name}"
             );
         }
         // a reference to a rule that is not there would be refused by the engine
-        let defined: BTreeSet<&str> = text.lines().filter_map(|l| l.split_once(" ::= ").map(|p| p.0)).collect();
+        let defined: BTreeSet<&str> = text
+            .lines()
+            .filter_map(|l| l.split_once(" ::= ").map(|p| p.0))
+            .collect();
         for (_, rule) in &grammar.rules {
             check_refs(rule, &defined);
         }
@@ -1171,7 +1242,9 @@ mod tests {
     fn check_refs(rule: &Rule, defined: &BTreeSet<&str>) {
         match rule {
             Rule::Ref(name) => assert!(defined.contains(name.as_str()), "undefined rule {name}"),
-            Rule::Seq(parts) | Rule::Alt(parts) => parts.iter().for_each(|part| check_refs(part, defined)),
+            Rule::Seq(parts) | Rule::Alt(parts) => {
+                parts.iter().for_each(|part| check_refs(part, defined))
+            }
             Rule::Opt(inner) => check_refs(inner, defined),
             Rule::Lit(_) | Rule::Class(_) => {}
         }

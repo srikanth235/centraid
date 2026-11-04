@@ -149,7 +149,10 @@ mod tests {
         assert_eq!(request.prompt, "<|im_start|>assistant\n<think>\n");
         assert_eq!(request.dates, None);
         assert_eq!(request.options().unwrap(), StepOptions::default());
-        assert!(request.options().unwrap().temperature.abs() < f32::EPSILON, "greedy");
+        assert!(
+            request.options().unwrap().temperature.abs() < f32::EPSILON,
+            "greedy"
+        );
     }
 
     #[test]

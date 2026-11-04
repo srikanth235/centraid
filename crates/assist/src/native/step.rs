@@ -173,7 +173,12 @@ pub fn decode_step(
     }
 
     // 1. the think, under the guard (and under the message's own token budget), under the grammar when there is one
-    let grammar = grammar_for_step(opts.grammar, opts.tools, &Visible::of(&prompt, dates), prefix);
+    let grammar = grammar_for_step(
+        opts.grammar,
+        opts.tools,
+        &Visible::of(&prompt, dates),
+        prefix,
+    );
     info.grammar = grammar.as_ref().map(|(mode, _)| *mode);
     let grammar = grammar.map(|(_, text)| text);
     let mut think = String::new();
@@ -657,7 +662,10 @@ mod tests {
                 request: &GenerateRequest<'_>,
                 on_token: &mut dyn FnMut(&str) -> Control,
             ) -> Result<Generation, ModelError> {
-                self.1.lock().unwrap().push(request.grammar.map(str::to_owned));
+                self.1
+                    .lock()
+                    .unwrap()
+                    .push(request.grammar.map(str::to_owned));
                 self.0.generate(request, on_token)
             }
         }
@@ -675,12 +683,22 @@ mod tests {
         )
         .unwrap();
         let seen = seen.lock().unwrap();
-        assert_eq!(seen.len(), 2, "the think, then the call the think did not state");
+        assert_eq!(
+            seen.len(),
+            2,
+            "the think, then the call the think did not state"
+        );
         let think = seen[0].as_deref().expect("the think is under a grammar");
         assert!(think.starts_with("root ::= think\n"), "{think}");
-        assert!(think.contains("\"#6\""), "the handle the prompt shows is in it: {think}");
+        assert!(
+            think.contains("\"#6\""),
+            "the handle the prompt shows is in it: {think}"
+        );
         assert!(!think.contains("\"#7\""));
-        assert!(think.contains("</think>"), "the think ends with its closing tag");
+        assert!(
+            think.contains("</think>"),
+            "the think ends with its closing tag"
+        );
         assert_eq!(seen[1], None, "the call is free");
         assert_eq!(out.info.grammar, Some(GrammarMode::Full));
     }
@@ -707,7 +725,13 @@ mod tests {
         assert_eq!(off.info.grammar, None);
         // `full` over S2's tools is `handles`: S2 writes `search` and `open`, and a create's kind in `set`
         assert_eq!(s2.info.grammar, Some(GrammarMode::Handles));
-        assert!(requests[1].grammar.as_deref().unwrap().starts_with("root ::= any-s0\n"));
+        assert!(
+            requests[1]
+                .grammar
+                .as_deref()
+                .unwrap()
+                .starts_with("root ::= any-s0\n")
+        );
         assert_eq!(sig.info.grammar, Some(GrammarMode::Handles));
     }
 
@@ -715,7 +739,10 @@ mod tests {
     fn a_given_prefix_of_slots_leaves_the_structure_to_the_handles() {
         // `retry: where` is a line of the grammar's own; a prefix with more than that is not placed
         let model = ScriptedModel::new([THINK, "kind: event\n", ""]);
-        for (given, root) in [("retry: where\n", "root ::= think\n"), ("intent: read\n", "root ::= any-s0\n")] {
+        for (given, root) in [
+            ("retry: where\n", "root ::= think\n"),
+            ("intent: read\n", "root ::= any-s0\n"),
+        ] {
             decode_step(
                 &model,
                 &format!("{}{given}", prompt()),
@@ -726,7 +753,13 @@ mod tests {
             )
             .unwrap();
             let requests = model.requests();
-            let grammar = requests.last().unwrap().grammar.as_deref().unwrap().to_owned();
+            let grammar = requests
+                .last()
+                .unwrap()
+                .grammar
+                .as_deref()
+                .unwrap()
+                .to_owned();
             assert!(grammar.starts_with(root), "{given}: {grammar}");
         }
     }

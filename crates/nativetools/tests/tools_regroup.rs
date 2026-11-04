@@ -598,11 +598,18 @@ fn create_and_edit_carry_their_fields_as_parameters() {
         "edit",
         json!({"rows": row, "kind": "task", "effort": 5}),
     );
-    assert!(refused.contains("edit has no parameter \"kind\""), "{refused}");
+    assert!(
+        refused.contains("edit has no parameter \"kind\""),
+        "{refused}"
+    );
     // the args lines still work (S2's, and a model that writes them)
     session.user("");
     let row = number(&mut session, "task", "Call the plumber");
-    let old = call(&mut session, "edit", json!({"rows": row, "args": "effort: 10"}));
+    let old = call(
+        &mut session,
+        "edit",
+        json!({"rows": row, "args": "effort: 10"}),
+    );
     assert_eq!(old["effect"]["verb"], "edit", "{old}");
 }
 
@@ -624,7 +631,8 @@ fn no_field_is_named_like_a_parameter_the_tool_takes_itself() {
 
 #[test]
 fn a_think_states_a_create_with_its_fields_flat_and_s2_with_args() {
-    let think = "intent: write \"add\"\nverb: create\nkind: task\nset: name = Pay rent · effort = 30";
+    let think =
+        "intent: write \"add\"\nverb: create\nkind: task\nset: name = Pay rent · effort = 30";
     let new = compile_think_for(think, None, TraceMode::V4, ToolsMode::Sig).unwrap();
     assert_eq!(new.tool, "create");
     let pairs: Vec<(&str, &str)> = new
@@ -632,9 +640,15 @@ fn a_think_states_a_create_with_its_fields_flat_and_s2_with_args() {
         .iter()
         .map(|(key, value)| (key.as_str(), value.as_str()))
         .collect();
-    assert_eq!(pairs, [("kind", "task"), ("name", "Pay rent"), ("effort", "30")]);
+    assert_eq!(
+        pairs,
+        [("kind", "task"), ("name", "Pay rent"), ("effort", "30")]
+    );
     let s2 = compile_think(think, None, TraceMode::V4).unwrap();
-    assert_eq!(s2.args[1], ("args".to_owned(), "name: Pay rent\neffort: 30".to_owned()));
+    assert_eq!(
+        s2.args[1],
+        ("args".to_owned(), "name: Pay rent\neffort: 30".to_owned())
+    );
     // a field that is also a slot of the call is refused, not written twice
     let twice = compile_think_for(
         "intent: write\nverb: create\nkind: task\nset: kind = event",
