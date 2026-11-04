@@ -17,6 +17,8 @@
 //! the first request the process writes one `ready` line (the model, the threads, the context), so a caller knows the
 //! load finished and which engine settings it scores.
 
+use centraid_assist::native::grammar::GrammarMode;
+use centraid_assist::native::prompt::ToolsMode;
 use centraid_assist::native::step::{StepOptions, StepOutput};
 use serde::{Deserialize, Serialize};
 
@@ -35,19 +37,38 @@ pub struct Request {
     /// The most tokens of the whole message.
     #[serde(default)]
     pub max_new: Option<u32>,
+    /// `off` (the phone's), `handles` or `full`: how much of the think the grammar holds to (`native/grammar.rs`).
+    #[serde(default)]
+    pub grammar: Option<String>,
+    /// The tools block the prompt was rendered with, `s2` (the default: S2's, the phone's) or `sig`.
+    #[serde(default)]
+    pub tools: Option<String>,
 }
 
 impl Request {
     /// The decode options of this request: the phone's, with the two limits the request overrides. Always greedy.
-    #[must_use]
-    pub fn options(&self) -> StepOptions {
+    ///
+    /// # Errors
+    /// The words of the `error` reply when `grammar` or `tools` names nothing there is.
+    pub fn options(&self) -> Result<StepOptions, String> {
         let phone = StepOptions::default();
-        StepOptions {
+        let grammar = match self.grammar.as_deref() {
+            None => phone.grammar,
+            Some(word) => GrammarMode::parse(word)
+                .ok_or_else(|| format!("grammar is off, handles or full, not {word:?}"))?,
+        };
+        let tools = match self.tools.as_deref() {
+            None => phone.tools,
+            Some(word) => ToolsMode::parse(word)
+                .ok_or_else(|| format!("tools is s2, sig, compact or full, not {word:?}"))?,
+        };
+        Ok(StepOptions {
             think_limit: self.think_limit.unwrap_or(phone.think_limit),
             max_new: self.max_new.unwrap_or(phone.max_new),
             temperature: phone.temperature,
-            tools: phone.tools,
-        }
+            tools,
+            grammar,
+        })
     }
 }
 
@@ -68,6 +89,10 @@ pub struct Reply {
     pub stopped: bool,
     pub new_tokens: Option<u32>,
     pub think_tokens: Option<u32>,
+    /// The grammar the think was decoded under (`off`, `handles`, `full`).
+    pub grammar: &'static str,
+    /// Spans of the think that are not in the user's message, `slot: value`.
+    pub unspanned: Vec<String>,
     /// Tokens of the prompt the first generation (the think) was given; `None` when the step ran no generation.
     pub prompt_tokens: Option<u32>,
     /// Wall time of the step, in milliseconds.
@@ -84,6 +109,8 @@ impl Reply {
             stopped: output.info.stopped,
             new_tokens: output.info.new_tokens,
             think_tokens: output.info.think_tokens,
+            grammar: output.info.grammar.map_or("off", GrammarMode::name),
+            unspanned: output.info.unspanned,
             prompt_tokens,
             ms,
         }
@@ -121,8 +148,8 @@ mod tests {
         let request = parse_request(r#"{"prompt": "<|im_start|>assistant\n<think>\n"}"#).unwrap();
         assert_eq!(request.prompt, "<|im_start|>assistant\n<think>\n");
         assert_eq!(request.dates, None);
-        assert_eq!(request.options(), StepOptions::default());
-        assert!(request.options().temperature.abs() < f32::EPSILON, "greedy");
+        assert_eq!(request.options().unwrap(), StepOptions::default());
+        assert!(request.options().unwrap().temperature.abs() < f32::EPSILON, "greedy");
     }
 
     #[test]
@@ -132,12 +159,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(request.dates.as_deref(), Some("dates: today = 2026-03-16"));
-        let options = request.options();
+        let options = request.options().unwrap();
         assert_eq!(options.think_limit, 50);
         assert_eq!(options.max_new, StepOptions::default().max_new);
         let request = parse_request(r#"{"prompt": "p", "dates": null, "max_new": 8}"#).unwrap();
         assert_eq!(request.dates, None);
-        assert_eq!(request.options().max_new, 8);
+        assert_eq!(request.options().unwrap().max_new, 8);
     }
 
     #[test]
@@ -167,6 +194,7 @@ mod tests {
                 cancelled: false,
                 think_tokens: Some(7),
                 new_tokens: Some(9),
+                ..StepInfo::default()
             },
         };
         let line = Reply::of(output.clone(), Some(1304), 912).line();
@@ -184,6 +212,8 @@ mod tests {
                 "stopped": true,
                 "new_tokens": 9,
                 "think_tokens": 7,
+                "grammar": "off",
+                "unspanned": [],
                 "prompt_tokens": 1304,
                 "ms": 912,
             })

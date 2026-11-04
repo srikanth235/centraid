@@ -36,6 +36,7 @@ mod dates_ctx;
 pub mod door;
 mod failsoft;
 mod follow;
+pub mod grammar;
 pub mod ground;
 pub mod identity;
 pub mod legacy;
