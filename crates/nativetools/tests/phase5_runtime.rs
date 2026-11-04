@@ -216,7 +216,7 @@ fn the_container_default_can_be_switched_off() {
             active: false,
             ..Defaults::default()
         },
-        ..Flags::default()
+        ..common::s2_flags()
     };
     let mut session = world.session_with(common::TODAY, flags);
     let home = number(&mut session, "list", "Home");
@@ -299,7 +299,7 @@ fn next_is_the_nearest_upcoming_one_when_the_call_states_no_order_or_limit() {
             next: false,
             ..Defaults::default()
         },
-        ..Flags::default()
+        ..common::s2_flags()
     };
     let mut session = world.session_with(common::TODAY, flags);
     session.user("when's the next standup");
@@ -351,7 +351,7 @@ fn biggest_with_a_number_field_is_a_value() {
             biggest: true,
             ..Defaults::default()
         },
-        ..Flags::default()
+        ..common::s2_flags()
     };
     let mut session = world.session_with(common::TODAY, on());
     session.user("which is the biggest");
@@ -422,7 +422,17 @@ fn run_example(calls: &[ExampleCall]) -> String {
     let world = seeded();
     // the table documents what each family says when it is said: the asks and declines the
     // runtime composes (`Flags::compose`) are not said to the model, so they run uncomposed
-    let mut session = world.session_uncomposed();
+    let mut session = if calls.iter().any(|call| call.strict) {
+        world.session_with(
+            common::TODAY,
+            Flags {
+                compose: false,
+                ..Flags::default()
+            },
+        )
+    } else {
+        world.session_uncomposed()
+    };
     let mut last = String::new();
     for (index, example) in calls.iter().enumerate() {
         if index == 0 || example.user.is_some() {
@@ -905,8 +915,9 @@ fn the_compile_op_answers_on_the_session_protocol() {
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect();
+    // the default is the eight tools: a count is a compute, and the answer comes after it
     let compiled = &lines[1];
-    assert_eq!(compiled["call"]["tool"], "answer", "{compiled}");
+    assert_eq!(compiled["call"]["tool"], "compute", "{compiled}");
     assert_eq!(
         compiled["call"]["args"]["where"], "status = \"open\"",
         "{compiled}"

@@ -299,6 +299,9 @@ pub struct ExampleCall {
     pub args: Value,
     /// The think block the call is written under (the trace guard reads it).
     pub think: Option<String>,
+    /// Run in a session that takes the eight tools as the issue states them (#1166). Without it
+    /// the call runs where S2's shapes are taken too, which is where most of the table was written.
+    pub strict: bool,
 }
 
 /// An error family: one message template of the runtime.
@@ -578,6 +581,7 @@ fn example_calls(entry: &Value) -> Option<Vec<ExampleCall>> {
             tool: text(call, "tool").unwrap_or_default(),
             args: call.get("args").cloned().unwrap_or(Value::Null),
             think: text(call, "think"),
+            strict: call.get("strict").and_then(Value::as_bool).unwrap_or(false),
         })
         .collect();
     (!out.is_empty()).then_some(out)
@@ -646,6 +650,7 @@ pub fn errors() -> Value {
                                 "tool": call.tool,
                                 "args": call.args,
                                 "think": call.think,
+                                "strict": call.strict,
                             })
                         })
                         .collect(),

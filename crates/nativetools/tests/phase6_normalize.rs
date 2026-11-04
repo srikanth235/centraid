@@ -717,9 +717,9 @@ fn without_normalize_a_malformed_call_is_refused_as_it_was() {
     let world = seeded();
     let flags = Flags {
         normalize: false,
-        ..Flags::default()
+        ..common::s2_flags()
     };
-    assert!(Flags::default().normalize, "on by default");
+    assert!(common::s2_flags().normalize, "on by default");
     let mut session = world.session_with(common::TODAY, flags);
     session.user("add one");
     let reply = call(

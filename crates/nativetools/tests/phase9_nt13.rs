@@ -29,7 +29,7 @@ fn replay(world: &World) -> centraid_nativetools::Session {
         common::TODAY,
         Flags {
             normalize: false,
-            ..Flags::default()
+            ..common::s2_flags()
         },
     )
 }

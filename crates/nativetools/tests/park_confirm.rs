@@ -19,7 +19,7 @@ fn park(world: &World) -> Session {
         common::TODAY,
         Flags {
             writes: Writes::Park,
-            ..Flags::default()
+            ..common::s2_flags()
         },
     )
 }

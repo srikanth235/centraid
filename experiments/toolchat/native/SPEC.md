@@ -58,7 +58,7 @@ Eight tools ([#1166](https://github.com/srikanth235/centraid/issues/1166)): `fin
 | tool | parameters | returns | ends turn |
 | --- | --- | --- | --- |
 | `find` | a selector; or `text` (+ `kind?`); or `rows` (one `#n`) | the matching rows as `@n`, a name that reaches nothing being a plain miss with a hint, never an answer (§4.8); `text` is ranked, fuzzy rows of any kind with their numbered links; `rows` is every fact of the row and its links, with counts | no |
-| `compute` | `op` (count · sum · avg · min · max), `field?`, `group?` (a field, or `day` · `week` · `month` · `year` of the kind's date), `rows` or selector | `@n` = one number per group | no |
+| `compute` | `op` (count · sum · avg · min · max · compare), `field?`, `group?` (a field, or `day` · `week` · `month` · `year` of the kind's date), `rows` or selector; `op=compare` takes `rows=@a,@b`, two plain values | `@n` = one number per group; for `compare`, the two values side by side and their difference | no |
 | `create` | `kind`, `args` (that kind's fields, `name` first), `more?` | what was added, dates resolved | yes, unless `more=true`; the runtime also ends it itself for a refusal of the vault (§4.6) |
 | `edit` | `rows`, `args` (only the fields that change), `more?` | what changed, dates resolved | as `create`; also for a selector that fits several rows or none (§4.8) |
 | `do` | `verb`, `rows`, `args?` (at most one argument), `more?` | what changed | as `edit`; also for a write over the cap (§4.6) |
@@ -68,7 +68,7 @@ Eight tools ([#1166](https://github.com/srikanth235/centraid/issues/1166)): `fin
 
 `more=true` on a write means "another call follows" — another write, or an `answer` ("mark it done and tell me what's left"), or a `find`. Without it the turn ends. A turn the runtime ends itself (§4.6) ends whatever `more` says.
 
-The runtime still reads what S2 sent to `edit`, `do`, `answer` and `compute` besides these parameters: a selector in place of `rows`, and `answer` with `op`. The tools block does not offer them and a model trained on the new data does not write them; the per-step grammar is where they stop being decodable.
+`answer`, `edit` and `do` name rows (or, for `answer`, a value) and never a selector; a read is a `find` and then `answer rows=@k`, a count a `compute` and then `answer value=@k`, a write on a row the model looked up a `find` and then `edit` or `do rows=@k`. The runtime takes S2's one-call shapes (a selector or `op` on `answer`, a `name` on `edit` and `do`) only under `--tools s2` and for the names only S2 writes; anywhere else they are an error that names the step missing (CONTRACT_V3.md §9).
 
 ### 4.1 Selector
 

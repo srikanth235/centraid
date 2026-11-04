@@ -108,7 +108,8 @@ pub fn parse_call(text: &str) -> Result<Value, String> {
 /// and with a kind name is `kind`. Only when the value says which. A key the
 /// tool really takes is never renamed.
 fn salvage(tool: &str, key: &str, raw: &str) -> Option<(String, Value)> {
-    if (key != "result" && key != "row") || crate::native::session::tool_params(tool).contains(&key)
+    if (key != "result" && key != "row")
+        || crate::native::session::tool_params(tool, true).contains(&key)
     {
         return None;
     }

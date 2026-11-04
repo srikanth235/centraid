@@ -27,10 +27,11 @@ use std::collections::BTreeMap;
 use serde_json::Value;
 
 use crate::native::compile::{
-    CALL_ORDER, HANDLE_SLOTS, PICK_REASONS, date_text, default_tool, infers_kind,
-    kind_a_verb_fixes, pick_states_rows, reading_expr,
+    CALL_ORDER, HANDLE_SLOTS, PICK_REASONS, Shape, date_text, default_tool, infers_kind,
+    kind_a_verb_fixes, outside_the_tool, pick_states_rows, reading_expr,
 };
 use crate::native::meta::{Verb, is_write};
+use crate::native::prompt::ToolsMode;
 use text::{
     focus_sets, has_time_phrase, is_word, nickname, normal_int, own_text, py_repr, py_rstrip,
     py_split_ws, py_strip, same, shows_date, words,
@@ -1118,17 +1119,24 @@ fn has_arg(args: &[(String, String)], key: &str) -> bool {
 
 /// The tool a think calls: its `via` (`search` and `open` being the `find` of S2's names), else the
 /// tool its intent and verb call.
-fn tool_of(slots: &Slots) -> String {
+fn tool_of(slots: &Slots, lenient: bool) -> String {
     match slots.via.as_deref() {
         Some("find" | "search" | "open") => "find".to_owned(),
         Some(other) => other.to_owned(),
-        None => default_tool(&slots.intent.0, slots.verb.as_deref()).to_owned(),
+        None => {
+            let shape = Shape {
+                rows: slots.has("rows") || slots.has("row") || derived_rows(slots).is_some(),
+                value: slots.has("value"),
+                op: slots.has("op"),
+            };
+            default_tool(&slots.intent.0, slots.verb.as_deref(), shape, lenient).to_owned()
+        }
     }
 }
 
 /// `trace.py` `compile_call` over parsed slots.
-fn compile_slots(slots: &Slots, dates: Option<&str>) -> Result<Call, Refusal> {
-    let tool = tool_of(slots);
+fn compile_slots(slots: &Slots, dates: Option<&str>, lenient: bool) -> Result<Call, Refusal> {
+    let tool = tool_of(slots, lenient);
     let mut args: Vec<(String, String)> = Vec::new();
     let mut times: Vec<String> = slots.time.clone().unwrap_or_default();
     if slots.intent.0 == "write" && is_write(&tool) {
@@ -1205,6 +1213,14 @@ fn compile_slots(slots: &Slots, dates: Option<&str>) -> Result<Call, Refusal> {
     if !times.is_empty() {
         return refuse(format!("{} time values with no `t` marker", times.len()));
     }
+    // the tools of the regroup name rows: a selector on `answer`, `edit` or `do` is a step missing
+    if !lenient
+        && let Some(key) = outside_the_tool(&tool, args.iter().map(|(name, _)| name.as_str()))
+    {
+        return refuse(format!(
+            "{tool} takes rows, not {key}; find or compute first, then {tool} rows"
+        ));
+    }
     let mut ordered: Vec<(String, String)> = Vec::new();
     for key in CALL_ORDER {
         if let Some((_, value)) = args.iter().find(|(name, _)| name == key) {
@@ -1243,8 +1259,26 @@ fn kind_of_exact_verb(verb: &str) -> Option<&'static str> {
 ///
 /// A [`Refusal`] when the text is no trace, or does not state a whole call.
 pub fn compile_think(think: &str, dates: Option<&str>, mode: TraceMode) -> Result<Call, Refusal> {
+    compile_think_for(think, dates, mode, ToolsMode::S2)
+}
+
+/// [`compile_think`] for the model that calls these `tools`. S2 answered a read or a count in one
+/// call (`answer` with a selector or an `op`) and wrote a by-name write as `do`/`edit` with a
+/// selector; every other tools mode is the eight tools of the regroup (#1166): a read is a `find`
+/// and then an `answer` on rows or a value, a count a `compute`, a write names its rows. A think
+/// that states a selector on `answer`, `edit` or `do` is refused naming the slot.
+///
+/// # Errors
+///
+/// A [`Refusal`] when the text is no trace, or does not state a whole call.
+pub fn compile_think_for(
+    think: &str,
+    dates: Option<&str>,
+    mode: TraceMode,
+    tools: ToolsMode,
+) -> Result<Call, Refusal> {
     match parse_any(think, mode) {
-        Ok(slots) => compile_slots(&slots, dates),
+        Ok(slots) => compile_slots(&slots, dates, tools == ToolsMode::S2),
         Err(message) => refuse(message),
     }
 }
@@ -1366,7 +1400,7 @@ fn v4_slots(slots: &Slots, context: Option<&Context>) -> Result<Slots, Skip> {
     if slots.has("rows") && slots.has("row") {
         return skip("rows+row", "");
     }
-    let tool = tool_of(slots);
+    let tool = tool_of(slots, true);
     let mut out = slots.clone();
     out.scope = None;
     out.refer = None;
@@ -1566,7 +1600,7 @@ pub fn v4_think(
     }
     let new = v4_slots(&old, context)?;
     let rendered = render4(&new);
-    let compile = |slots: &Slots| compile_slots(slots, dates);
+    let compile = |slots: &Slots| compile_slots(slots, dates, true);
     let (want, got) = match (compile(&old), parse4(&rendered)) {
         (Ok(want), Ok(reread)) => match compile(&reread) {
             Ok(got) => (want, got),
