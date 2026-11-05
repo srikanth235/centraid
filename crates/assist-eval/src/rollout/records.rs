@@ -7,8 +7,9 @@
 //! and `ref` otherwise. The record is cut after the last turn it holds: an RFT record after its passing prefix, a DPO
 //! record after the turn the pair is about.
 //!
-//! `render` comes from a [`RenderRecord`], the data version's renderer (M4). Without one the records are written
-//! without `render` and cannot be trained on yet; the writer says so.
+//! `render` comes from a [`RenderRecord`], the data version's renderer (M4), which this crate cannot link (`datagen`
+//! depends on it): `datagen rollout-records` supplies it and calls [`cut`]. `assist-eval rollout-records` has none, so
+//! its records are written without `render` and cannot be trained on.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -27,10 +28,8 @@ pub struct Rendered {
     pub text: String,
 }
 
-/// The data version's renderer. M4 implements it over `datagen`'s render module; this crate never renders.
-///
-/// TODO(M4): implement for the datagen renderer and pass it to the `rollout-records` command; until then records go
-/// out unrendered.
+/// The data version's renderer. `datagen` implements it over its M4 render module (`centraid_datagen::rollout`); this
+/// crate never renders.
 pub trait RenderRecord {
     /// Render a record the way the data version renders its sessions.
     ///
@@ -138,6 +137,23 @@ pub struct Needs {
 }
 
 impl Needs {
+    /// Read a report file ([`Self::from_report`]).
+    ///
+    /// # Errors
+    /// [`crate::EvalError::Read`] when the file cannot be read, [`crate::EvalError::Json`] when it is not JSON.
+    pub fn read(path: &std::path::Path, min_samples: usize) -> Result<Self, crate::EvalError> {
+        let name = path.display().to_string();
+        let text = std::fs::read_to_string(path).map_err(|e| crate::EvalError::Read {
+            path: name.clone(),
+            message: e.to_string(),
+        })?;
+        let report = serde_json::from_str(&text).map_err(|e| crate::EvalError::Json {
+            what: name,
+            message: e.to_string(),
+        })?;
+        Ok(Self::from_report(&report, min_samples))
+    }
+
     /// Read the needs out of a report: a rollout report (`by_cell`, `by_tag`, `arguments`) or an `assist-eval`
     /// report (`by_tag`, `arguments`). An entry with fewer than `min_samples` samples is left out: a rate over two
     /// turns steers nothing.
@@ -486,4 +502,71 @@ pub fn render_all(
         one(&mut p.chosen)?;
         one(&mut p.rejected)
     })
+}
+
+/// How [`cut`] turns rollouts into records.
+#[derive(Debug, Clone, Copy)]
+pub struct Cutting<'a> {
+    pub needs: &'a Needs,
+    pub weighing: Weighing,
+    /// At most this many DPO pairs from one turn.
+    pub pairs_per_turn: usize,
+}
+
+/// Cut the RFT records and DPO pairs of `rollouts` over `sessions`, render them with `renderer` when there is one, and
+/// write `rft.jsonl`, `dpo.jsonl` and `stats.json` under `out`.
+///
+/// # Errors
+/// [`EvalError::Data`] with the id of a record the renderer refuses (nothing is written then), and
+/// [`EvalError::Read`] when a file cannot be written.
+pub fn cut(
+    sessions: &[Session],
+    rollouts: &[Rollout],
+    how: &Cutting<'_>,
+    renderer: Option<&dyn RenderRecord>,
+    out: &std::path::Path,
+) -> Result<RecordStats, crate::EvalError> {
+    let mut stats = RecordStats::default();
+    let mut rft = rft_records(sessions, rollouts, how.needs, how.weighing, &mut stats);
+    let mut pairs = dpo_pairs(sessions, rollouts, how.pairs_per_turn, &mut stats);
+    if let Some(renderer) = renderer {
+        render_all(renderer, &mut rft, &mut pairs).map_err(crate::EvalError::Data)?;
+    }
+    let write = |name: &str, lines: Vec<String>| -> Result<(), crate::EvalError> {
+        let path = out.join(name);
+        let mut text = lines.join("\n");
+        if !text.is_empty() {
+            text.push('\n');
+        }
+        std::fs::write(&path, text).map_err(|e| crate::EvalError::Read {
+            path: path.display().to_string(),
+            message: e.to_string(),
+        })
+    };
+    std::fs::create_dir_all(out).map_err(|e| crate::EvalError::Read {
+        path: out.display().to_string(),
+        message: e.to_string(),
+    })?;
+    let json = |e: serde_json::Error| crate::EvalError::Json {
+        what: "a record".to_owned(),
+        message: e.to_string(),
+    };
+    write(
+        "rft.jsonl",
+        rft.iter()
+            .map(|r| serde_json::to_string(r).map_err(json))
+            .collect::<Result<_, _>>()?,
+    )?;
+    write(
+        "dpo.jsonl",
+        pairs
+            .iter()
+            .map(|p| serde_json::to_string(p).map_err(json))
+            .collect::<Result<_, _>>()?,
+    )?;
+    write(
+        "stats.json",
+        vec![serde_json::to_string_pretty(&stats).map_err(json)?],
+    )?;
+    Ok(stats)
 }

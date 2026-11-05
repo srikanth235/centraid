@@ -8,6 +8,7 @@
 //! assist-eval rollout-compare BEFORE.rollout.json AFTER.rollout.json [--out FILE.json]
 //! assist-eval rollout-records --rollouts PREFIX.rollouts.jsonl… --set SET.jsonl [--worlds DIR]… --out DIR
 //!                             [--needs REPORT.json] [--min-samples 5] [--max-copies 4] [--pairs-per-turn 2]
+//!                             (unrendered; `datagen rollout-records` writes the same files with `render`)
 //! ```
 
 use std::io::Write;
@@ -17,9 +18,9 @@ use anyhow::{Context, Result, bail};
 use centraid_assist::native::grammar::GrammarMode;
 use centraid_assist::native::prompt::ToolsMode;
 use centraid_assist_eval::EvalError;
-use centraid_assist_eval::rollout::records::{self, Needs, RecordStats, Weighing};
+use centraid_assist_eval::rollout::records::{self, Cutting, Needs, Weighing};
 use centraid_assist_eval::rollout::report::{self, RolloutReport};
-use centraid_assist_eval::rollout::{Rollout, Sampling, run_rollouts};
+use centraid_assist_eval::rollout::{Rollout, Sampling, read_rollouts, run_rollouts};
 use centraid_assist_eval::run::{DeclineStepper, Runner, Stepper};
 use centraid_assist_eval::source::{EvalSource, JsonlSource};
 use centraid_assist_eval::tally::{WithoutInProgress, WithoutTally};
@@ -162,24 +163,6 @@ fn source(f: &Flags, native: &Path) -> Result<impl EvalSource> {
     Ok(WithoutInProgress::new(WithoutTally::new(JsonlSource::new(
         set, worlds,
     ))))
-}
-
-fn read_rollouts(files: &[PathBuf]) -> Result<Vec<Rollout>> {
-    let mut out = Vec::new();
-    for path in files {
-        for line in std::fs::read_to_string(path)
-            .with_context(|| path.display().to_string())?
-            .lines()
-        {
-            if !line.trim().is_empty() {
-                out.push(
-                    serde_json::from_str::<Rollout>(line)
-                        .with_context(|| path.display().to_string())?,
-                );
-            }
-        }
-    }
-    Ok(out)
 }
 
 fn write_report(prefix: Option<&PathBuf>, report: &RolloutReport) -> Result<()> {
@@ -365,42 +348,26 @@ fn cut_records(f: &Flags) -> Result<()> {
     let rollouts = read_rollouts(&f.rollouts)?;
     let sessions = source.sessions()?;
     let needs = match &f.needs {
-        Some(path) => Needs::from_report(
-            &serde_json::from_str(
-                &std::fs::read_to_string(path).with_context(|| path.display().to_string())?,
-            )?,
-            f.min_samples.unwrap_or(5),
-        ),
+        Some(path) => Needs::read(path, f.min_samples.unwrap_or(5))?,
         None => Needs::default(),
     };
-    let how = Weighing {
-        max_copies: f.max_copies.unwrap_or(4),
-        ..Weighing::default()
-    };
-    let mut stats = RecordStats::default();
-    let rft = records::rft_records(&sessions, &rollouts, &needs, how, &mut stats);
-    let pairs = records::dpo_pairs(
+    let stats = records::cut(
         &sessions,
         &rollouts,
-        f.pairs_per_turn.unwrap_or(2),
-        &mut stats,
-    );
-    // TODO(M4): render with the data version's renderer (`records::RenderRecord`) before writing; until it lands the
-    // lines carry no `render` and the trainer cannot read them.
-    std::fs::create_dir_all(&out)?;
-    let mut file = std::fs::File::create(out.join("rft.jsonl"))?;
-    for r in &rft {
-        writeln!(file, "{}", serde_json::to_string(r)?)?;
-    }
-    let mut file = std::fs::File::create(out.join("dpo.jsonl"))?;
-    for p in &pairs {
-        writeln!(file, "{}", serde_json::to_string(p)?)?;
-    }
-    std::fs::write(
-        out.join("stats.json"),
-        serde_json::to_string_pretty(&stats)?,
+        &Cutting {
+            needs: &needs,
+            weighing: Weighing {
+                max_copies: f.max_copies.unwrap_or(4),
+                ..Weighing::default()
+            },
+            pairs_per_turn: f.pairs_per_turn.unwrap_or(2),
+        },
+        None,
+        &out,
     )?;
     println!("{}", serde_json::to_string_pretty(&stats)?);
-    eprintln!("records are UNRENDERED (no `render`): the M4 renderer is not wired in yet");
+    eprintln!(
+        "records are UNRENDERED (no `render`): render them with `datagen rollout-records`, which has the data version's renderer"
+    );
     Ok(())
 }
