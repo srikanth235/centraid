@@ -18,6 +18,7 @@ import UIKit
 /// (`RenderEdit`, performed by `PhotoEffects`).
 struct PhotosEditorView: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     let state: Centraid_Core_V1_PhotosEditorState
     let send: (Centraid_Core_V1_PhotosEditorEvent.OneOf_Kind) -> Void
@@ -43,13 +44,13 @@ struct PhotosEditorView: View {
 
     var body: some View {
         ZStack {
-            Theme.color("stage", scheme).ignoresSafeArea()
+            Theme.color("bg", scheme).ignoresSafeArea()
             switch state.content {
             case .loading?, nil:
                 // A STAGE'S OWN WORD, not a spinner: this ground is the stage.
                 Text(state.words.loading)
                     .centraidType("small")
-                    .foregroundStyle(Theme.color("onStageSoft", scheme))
+                    .foregroundStyle(Theme.color("textSoft", scheme))
             case let .denied(denied)?:
                 DeniedGate(denied)
             case let .failure(failure)?:
@@ -60,7 +61,7 @@ struct PhotosEditorView: View {
                     } label: {
                         Text(state.words.cancel)
                             .centraidType("control")
-                            .foregroundStyle(Theme.color("onStage", scheme))
+                            .foregroundStyle(Theme.color("text", scheme))
                             .frame(minHeight: CentraidGeometry.targetMinCoarse)
                             .contentShape(Rectangle())
                     }
@@ -71,8 +72,7 @@ struct PhotosEditorView: View {
                 editor(data)
             }
         }
-        // A STAGE HAS NO HEADER, and the system back is not a way out of an edit:
-        // Cancel is, because Cancel asks first when there is something to lose.
+        // Cancel asks before discarding an edited plan.
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
         .sheet(
@@ -99,35 +99,53 @@ struct PhotosEditorView: View {
 
     @ViewBuilder
     private func editor(_ data: Centraid_Core_V1_PhotosEditorData) -> some View {
-        VStack(spacing: 8) {
-            // THE TOP BAR: the way out and the commit at its ends, and between them the stamp,
-            // what this is and where it came from.
-            HStack(alignment: .center, spacing: 8) {
-                barButton(state.words.cancel, identifier: "photos.editor.cancel", live: isEditing) {
-                    send(.cancel(.init()))
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                if typeSize.isAccessibilitySize {
+                    Text(state.title).centraidType("title")
+                    HStack(spacing: 8) {
+                        cancel
+                        Spacer(minLength: 0)
+                        commit
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        cancel
+                        Text(state.title).centraidType("control")
+                            .frame(maxWidth: .infinity)
+                        commit
+                    }
                 }
-                VStack(spacing: 2) {
-                    Text(state.title).centraidType("control")
-                        .foregroundStyle(Theme.color("onStage", scheme))
-                    Text(data.meta).centraidType("small")
-                        .foregroundStyle(Theme.color("onStageSoft", scheme))
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity)
-                commit
-            }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.top, 8)
 
-            GeometryReader { geometry in
-                stage(in: geometry.size)
-                    .frame(width: geometry.size.width, height: geometry.size.height)
+                GeometryReader { geometry in
+                    stage(in: geometry.size)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                }
+                .frame(height: 322)
+                .background(Theme.color("stage", scheme))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+
+                Text(state.words.cropHint)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textFaint", scheme))
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+                editBar
+                Text(data.meta)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textFaint", scheme))
             }
             .padding(CentraidGeometry.pageMargin)
-
-            editBar
         }
+        .foregroundStyle(Theme.color("text", scheme))
+        .accessibilityIdentifier("photos-editor")
         .task(id: stagePath(data)) { await loadPreview(stagePath(data)) }
+    }
+
+    private var cancel: some View {
+        KitIconKey(iconKey: "X", label: state.words.cancel, framed: true, round: true,
+                   identifier: "photos.editor.cancel") { send(.cancel(.init())) }
+            .disabled(!isEditing)
     }
 
     /// The original when it is here (it is what Save renders), else the
@@ -274,61 +292,60 @@ struct PhotosEditorView: View {
 
     private var editBar: some View {
         let editing = isEditing
-        return VStack(alignment: .leading, spacing: 8) {
-            // TWO ORDERLY ROWS, every tool the same width: what to do, then what shape.
-            HStack(spacing: 6) {
-                // "CROP" IS ALWAYS SELECTED: it is the mode this editor is in,
-                // and pressing it returns the crop to the whole frame.
-                tool(state.words.crop, selected: true, enabled: editing) {
-                    send(.ratio(.with {
-                        $0.ratio = .original
-                        $0.frameRatio = 0
-                    }))
-                }
-                tool(state.words.rotate, enabled: editing) { send(.rotate(.init())) }
-                tool(state.straightenLabel, enabled: editing) { send(.straighten(.init())) }
-                tool(state.flipLabel, selected: plan.flip != .unspecified, enabled: editing) {
-                    send(.flip(.init()))
-                }
-            }
-            HStack(spacing: 6) {
-                ForEach(state.ratios, id: \.ratio.rawValue) { ratio in
-                    // ORIGINAL IS NEVER DRAWN SELECTED, as in v0: it is the
-                    // absence of a ratio.
-                    tool(
-                        ratio.label,
-                        selected: ratio.selected && ratio.ratio != .original,
-                        enabled: editing
-                    ) {
-                        send(.ratio(.with {
-                            $0.ratio = ratio.ratio
-                            $0.frameRatio = frameRatio
-                        }))
+        return VStack(alignment: .leading, spacing: 12) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(state.ratios, id: \.ratio.rawValue) { ratio in
+                        tool(ratio.label, selected: ratio.selected, enabled: editing) {
+                            send(.ratio(.with {
+                                $0.ratio = ratio.ratio
+                                $0.frameRatio = frameRatio
+                            }))
+                        }
                     }
                 }
-                tool(state.words.reset, enabled: editing && state.edited) { send(.reset(.init())) }
+                .padding(3)
+            }
+            .background(Theme.color("bgSunken", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
+            if !state.statusLine.isEmpty {
+                Text(state.statusLine)
+                    .centraidType("bodyStrong")
+                    .accessibilityIdentifier("photos.editor.status")
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(state.straightenLabel).centraidType("body")
+                Slider(value: Binding(
+                    get: { Double(plan.straighten) },
+                    set: { degrees in send(.straighten(.with { $0.degrees = Int32(degrees) })) }
+                ), in: Double(state.straightenMin)...Double(max(state.straightenMin + 1, state.straightenMax)), step: 1)
+                    .tint(Theme.color("photosFill", scheme))
+                    .disabled(!editing)
+                    .accessibilityLabel(state.straightenLabel)
+                    .accessibilityIdentifier("photos.editor.straighten")
+            }
+            .padding(14)
+            .background(Theme.color("bgElev", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    tool(state.words.rotate, enabled: editing) { send(.rotate(.init())) }
+                    tool(state.flipLabel, selected: plan.flip != .unspecified, enabled: editing) {
+                        send(.flip(.init()))
+                    }
+                    tool(state.words.reset, enabled: editing && state.edited) { send(.reset(.init())) }
+                }
             }
             Text(state.words.saveExplanation)
                 .centraidType("small")
-                .foregroundStyle(Theme.color("onStageSoft", scheme))
+                .foregroundStyle(Theme.color("textFaint", scheme))
             // THE REFUSAL IS VISIBLE TEXT, never only an accessibility hint, and
             // a save that did not land says so in the same place.
             if let refusal = refusalLine {
                 Text(refusal)
                     .centraidType("small")
-                    .foregroundStyle(Theme.color("onStage", scheme))
+                    .foregroundStyle(Theme.color("text", scheme))
                     .accessibilityIdentifier("photos.editor.refusal")
             }
-            // THE ONE STATUS LINE, drawn when there is something to say.
-            if !state.statusLine.isEmpty {
-                Text(state.statusLine)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("onStageSoft", scheme))
-                    .accessibilityIdentifier("photos.editor.status")
-            }
         }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
-        .padding(.bottom, 8)
     }
 
     private var refusalLine: String? {
@@ -342,39 +359,24 @@ struct PhotosEditorView: View {
 
     private var commit: some View {
         let live = isEditing && state.saveRefusal.isEmpty
-        let shape = RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+        let shape = Capsule()
         return Button {
             guard live else { return }
             send(.save(.init()))
         } label: {
             Text(state.words.save)
                 .centraidType("control")
-                .foregroundStyle(Theme.color(live ? "stage" : "onStageSoft", scheme))
+                .foregroundStyle(Theme.color(live ? "onAccent" : "textDisabled", scheme))
                 .padding(.horizontal, 16)
                 .frame(minHeight: 44)
-                .background(live ? Theme.color("onStage", scheme) : Color.clear, in: shape)
-                .overlay(shape.strokeBorder(Theme.color(live ? "onStage" : "stageLine", scheme), lineWidth: 1))
+                .background(live ? Theme.color("photosFill", scheme) : Color.clear, in: shape)
+                .overlay(shape.strokeBorder(Theme.color(live ? "photosFill" : "lineStrong", scheme), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .disabled(!live)
         .accessibilityLabel(state.words.save)
         .accessibilityHint(state.saveRefusal)
         .accessibilityIdentifier("photos.editor.save")
-    }
-
-    /// A WORD IN THE TOP BAR: Cancel, with the commit's target and none of its plate.
-    private func barButton(_ label: String, identifier: String, live: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label)
-                .centraidType("control")
-                .foregroundStyle(Theme.color(live ? "onStage" : "onStageSoft", scheme))
-                .padding(.horizontal, 4)
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!live)
-        .accessibilityIdentifier(identifier)
     }
 
     private func tool(
@@ -390,17 +392,11 @@ struct PhotosEditorView: View {
         } label: {
             Text(label)
                 .centraidType("control")
-                .foregroundStyle(Theme.color(enabled ? "onStage" : "onStageSoft", scheme))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .padding(.horizontal, 6)
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .overlay(
-                    shape.strokeBorder(
-                        Theme.color(selected ? "onStage" : "stageLine", scheme),
-                        lineWidth: 1
-                    )
-                )
+                .foregroundStyle(Theme.color(enabled ? (selected ? "photosText" : "text") : "textDisabled", scheme))
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 44)
+                .background(Theme.color("bgElev", scheme), in: shape)
                 .contentShape(shape)
         }
         .buttonStyle(.plain)

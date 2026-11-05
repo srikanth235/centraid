@@ -194,10 +194,10 @@ private let tileMinHeight: CGFloat = 152
 private let tilePad: CGFloat = 12
 
 /// The gutter between slots — v0's two 4pt half-gutters, added up.
-private let tileGap: CGFloat = 8
+private let tileGap: CGFloat = 12
 
 /// The container rung.
-private let tileRadius: CGFloat = 12
+private let tileRadius: CGFloat = 16
 
 /// The one sub-control rung, for a detail nested inside a control.
 private let subRadius: CGFloat = 4
@@ -217,37 +217,6 @@ private let mosaicCellHeight: CGFloat = 88
 
 private let hairline = CentraidGeometry.hairline
 
-/// THE HUE KEY'S SPELLING IN THE EMITTED TABLE, and nothing more.
-///
-/// Rust's identity wheel decides WHICH of the eight a face gets and puts
-/// the answer on the wire; this is the eight-row spelling that turns that key
-/// into a `Theme` role, and `HomeScreen.kt` carries the same eight. It is a
-/// dictionary and not `"c" + key.capitalized` because the string form would
-/// hand any key at all to `Theme.color`, which trips a `preconditionFailure`
-/// correctly for a role that does not exist — the wrong failure for a launcher
-/// tile drawing whatever a producer sent. `crates/screens/tests/shell_home.rs` asserts
-/// both view trees name all eight.
-private let partyHueRoles: [String: String] = [
-    "rose": "cRose",
-    "amber": "cAmber",
-    "ochre": "cOchre",
-    "forest": "cForest",
-    "teal": "cTeal",
-    "slate": "cSlate",
-    "indigo": "cIndigo",
-    "violet": "cViolet",
-]
-
-/// The vault at a glance, and how it stands on this device.
-///
-/// The ONLY feedback channel on this screen — no spinner, no toast, no badge, no
-/// red dot. `quiet` is deliberately ignorable and earns no rule; the other two
-
-/// The vault at a glance, and how it stands on this device.
-///
-/// The ONLY feedback channel on this screen — no spinner, no toast, no badge, no
-/// red dot. `quiet` is deliberately ignorable and earns no rule; the other two
-/// get one rule and one action, never a filled warning plate.
 private struct StatusRibbon: View {
     let status: Centraid_Core_V1_HomeStatus
     @ObservedObject var store: ScreenStore
@@ -284,8 +253,6 @@ private struct StatusRibbon: View {
                 Text(status.copy)
                     .centraidType(loud ? "small" : "mono")
                     .foregroundStyle(Theme.color(loud ? "text" : "textFaint", scheme))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
             }
             Spacer(minLength: 0)
             if !status.action.isEmpty {
@@ -353,6 +320,8 @@ private struct Springboard: View {
 private struct TileGrid: View {
     let data: Centraid_Core_V1_HomeData
     @ObservedObject var shell: ShellModel
+    @Environment(\.dynamicTypeSize) private var textSize
+    @Environment(\.colorScheme) private var scheme
 
     /// `grid_rows` is Rust's packing, so this view looks each id up
     /// and draws it. The first build packed rows here and let Compose's span
@@ -366,26 +335,33 @@ private struct TileGrid: View {
     var body: some View {
         let tiles = byID
         VStack(spacing: tileGap) {
-            ForEach(Array(data.gridRows.enumerated()), id: \.offset) { _, row in
-                let drawn = row.appIds.compactMap { tiles[$0] }
-                HStack(spacing: tileGap) {
-                    ForEach(drawn, id: \.appID) { tile in
-                        TileCard(tile: tile, shell: shell)
-                    }
-                    // A lone small keeps its column rather than
-                    // stretching over both: a tile that changed width
-                    // with its neighbours' arrival would be layout
-                    // overruling the body rule that chose its size.
-                    if drawn.count == 1 && !drawn[0].wide { Color.clear }
+            if textSize.isAccessibilitySize {
+                ForEach(data.gridRows.flatMap { $0.appIds }.compactMap { tiles[$0] }, id: \.appID) { tile in
+                    TileCard(tile: tile, shell: shell)
                 }
-                .frame(maxWidth: .infinity)
-                // THE ROW HUGS ITS TALLEST TILE. Without this each card's
-                // foot-pinning `Spacer` is flexible all the way up
-                // through the scroll view, which proposes its own
-                // height — so three rows split a screen between them and
-                // every tile came out three times its floor.
-                .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Grid(horizontalSpacing: tileGap, verticalSpacing: tileGap) {
+                    ForEach(Array(data.gridRows.enumerated()), id: \.offset) { _, row in
+                        let drawn = row.appIds.compactMap { tiles[$0] }
+                        GridRow {
+                            ForEach(drawn, id: \.appID) { tile in
+                                TileCard(tile: tile, shell: shell)
+                                    .gridCellColumns(Int(tile.columnSpan))
+                            }
+                            let remaining = 4 - drawn.reduce(0) { $0 + Int($1.columnSpan) }
+                            if remaining > 0 {
+                                Color.clear.gridCellColumns(remaining)
+                                    .gridCellUnsizedAxes([.horizontal, .vertical])
+                            }
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             }
+            Text(data.widgetHint)
+                .centraidType("mono")
+                .foregroundStyle(Theme.color("textFaint", scheme))
+                .frame(maxWidth: .infinity)
         }
         // A CONTAINER, OR THE ID LEAKS: on a plain stack SwiftUI hands its
         // identifier down to every child, so each tile read `home-grid` and no
@@ -423,33 +399,54 @@ private struct TileCard: View {
             // A tile with no route is not tappable (loading, or unreadable).
             if tile.hasRoute { shell.open(tile.route) }
         } label: {
-            VStack(alignment: .leading, spacing: 16) {
-                // Invariant header — see this type's comment.
-                HStack(spacing: 8) {
-                    AppMark(appID: tile.appID, size: 22)
-                    Text(tile.name)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                    Text(count)
-                        .centraidType("mono")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
+            Group {
+                if tile.size == .small {
+                    VStack(spacing: 6) {
+                        AppMark(appID: tile.sourceApp, size: 24)
+                        Text(tile.compactValue)
+                            .centraidType("smallStrong")
+                            .foregroundStyle(Theme.color("text", scheme))
+                        Text(tile.compactLabel)
+                            .centraidType("meta")
+                            .foregroundStyle(Theme.color("textSoft", scheme))
+                    }
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, minHeight: 100)
+                } else {
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack(spacing: 8) {
+                            AppMark(appID: tile.sourceApp, size: 22)
+                            Text(tile.name)
+                                .centraidType("smallStrong")
+                                .foregroundStyle(Theme.color(tile.accentRole, scheme))
+                            Spacer(minLength: 0)
+                            Text(count)
+                                .centraidType("mono")
+                                .foregroundStyle(Theme.color("textFaint", scheme))
+                        }
+                        TileBodyView(tile: tile)
+                        if !bodyTakesTheSlack { Spacer(minLength: 0) }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: tile.size == .large ? 216 : tileMinHeight - tilePad * 2, alignment: .topLeading)
                 }
-                TileBodyView(tile: tile)
-                if !bodyTakesTheSlack { Spacer(minLength: 0) }
             }
-            // PADDING FIRST, THEN THE FLOOR: the floor is the CARD's height.
             .padding(tilePad)
-            .frame(maxWidth: .infinity, minHeight: tileMinHeight, alignment: .topLeading)
-            .background(Theme.color("bgElev", scheme))
+            .background(Theme.color(tile.backgroundRole, scheme))
             .clipShape(RoundedRectangle(cornerRadius: tileRadius))
-            .overlay(
-                RoundedRectangle(cornerRadius: tileRadius)
-                    .strokeBorder(Theme.color("line", scheme), lineWidth: hairline)
-            )
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            ForEach(Array(tile.widgetActions.enumerated()), id: \.offset) { index, action in
+                Button {
+                    shell.screens?.sendHome(.widgetChanged(action.change))
+                } label: {
+                    if action.selected { Label(action.label, systemImage: "checkmark") }
+                    else { Text(action.label) }
+                }
+                .accessibilityIdentifier("home-widget-\(tile.appID)-\(index)")
+                .accessibilityAddTraits(action.selected ? .isSelected : [])
+            }
+        }
         // Keyed on the app id. The label carries the live count, so it changes
         // with the vault; the id does not.
         .accessibilityIdentifier("home-tile-\(tile.appID)")
@@ -536,10 +533,11 @@ private struct ContentBody: View {
                         .centraidType("mono")
                         .foregroundStyle(Theme.color("textSoft", scheme))
                 }
-                Text(agenda.title)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .lineLimit(2)
+                if !agenda.title.isEmpty {
+                    Text(agenda.title)
+                        .centraidType("smallStrong")
+                        .foregroundStyle(Theme.color("text", scheme))
+                }
                 // Pinned to the foot: the sparse tiles leave their slack above.
                 Spacer(minLength: 0)
                 // TODAY'S DUE TASKS (#1128): the machine's words, drawn after a
@@ -577,7 +575,7 @@ private struct ContentBody: View {
                 // mirrors under RTL rather than stacking the wrong way.
                 HStack(spacing: -7) {
                     ForEach(people.faces, id: \.partyID) { face in
-                        // THE PARTY'S OWN HUE, not a grey disc. `face.color` is
+                        // Rust supplies the identity color token.
                         // the key Rust already resolved with the one
                         // port of the identity wheel; all this does is spell
                         // the emitted role. An unrecognised key draws the
@@ -585,7 +583,7 @@ private struct ContentBody: View {
                         // which trips a `preconditionFailure` by design — a
                         // tile is not the place to take the shell down over a
                         // hue.
-                        let hue = face.hasColor ? partyHueRoles[face.color] : nil
+                        let hue = face.hasColor ? face.color : nil
                         Circle()
                             .fill(Theme.color(hue ?? "bgSunken", scheme))
                             .overlay(
@@ -599,7 +597,7 @@ private struct ContentBody: View {
                                 Text(face.initials)
                                     .centraidType("smallStrong")
                                     // `textInv` is the SOLVED foreground for a
-                                    // filled identity disc (`DESIGN.md`'s rule
+                                    // filled identity disc (`product-intuition screen contracts`'s rule
                                     // 7 — `onAccent` in the hand-off's role
                                     // map). Ink on a saturated fill is the
                                     // contrast failure this tile had.

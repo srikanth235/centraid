@@ -97,6 +97,7 @@ pub(crate) fn board(
                     reminders: count(counts.reminders),
                     open: count(data.open_count),
                     closed: count(data.closed_count),
+                    flagged: count(data.open.iter().filter(|task| task.flagged).count()),
                 }),
                 projects: data
                     .projects
@@ -356,6 +357,10 @@ fn project_to_wire(project: &ProjectRow, open: &[Placed]) -> wire::AgendaTaskPro
         name: project.name.clone().unwrap_or_default(),
         area: project.area.clone(),
         color: project.color.clone(),
+        icon_key: project
+            .icon_key
+            .clone()
+            .unwrap_or_else(|| "List".to_owned()),
         sort_order: project.sort_order.unwrap_or_default(),
         open_count: count(
             open.iter()
@@ -416,6 +421,8 @@ fn task_to_wire(placed: &Placed) -> wire::AgendaTask {
     let small =
         |value: i64| i32::try_from(value).unwrap_or(if value < 0 { i32::MIN } else { i32::MAX });
     wire::AgendaTask {
+        flagged: task.flagged,
+        url: task.url.clone(),
         task_id: task.task_id.clone(),
         parent_task_id: task.parent_task_id.clone(),
         project_id: task.project_id.clone(),
@@ -461,6 +468,8 @@ fn task_to_wire(placed: &Placed) -> wire::AgendaTask {
             .attachments
             .iter()
             .map(|attachment| wire::AgendaTaskAttachment {
+                title: attachment.title.clone(),
+                kind: attachment.kind.clone(),
                 attachment_id: attachment.attachment_id.clone(),
                 content_id: attachment.content_id.clone(),
                 media_type: attachment.media_type.clone(),

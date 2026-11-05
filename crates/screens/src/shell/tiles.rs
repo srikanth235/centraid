@@ -126,6 +126,7 @@ pub fn read(ctx: &Ctx, app: &str) -> Made {
         "photos" => photos(ctx),
         "docs" => docs(ctx),
         "agenda" => agenda(ctx),
+        "reminders" => reminders(ctx),
         "notes" => notes(ctx),
         "money" => money(ctx),
         "health" => health(ctx),
@@ -449,7 +450,18 @@ fn agenda(ctx: &Ctx) -> Made {
     ) else {
         return unknown();
     };
-    let board = read::read(
+    let mut made = agenda_tile(ctx.locale(), &upcoming, None);
+    made.count_label = match made.count {
+        Some(count) if count.value == 1 && !count.capped => words::widget_event(ctx.locale()),
+        _ => words::widget_events(ctx.locale()),
+    };
+    made
+}
+
+/// Reminders has its own read verdict: a Calendar result never turns a failed
+/// task-board read into an empty list.
+fn reminders(ctx: &Ctx) -> Made {
+    let Reading::Data(board) = read::read(
         ctx,
         load::agenda::Board {
             limit: 100,
@@ -460,8 +472,21 @@ fn agenda(ctx: &Ctx) -> Made {
             Answer::AgendaTaskBoard(board) => Some(board),
             _ => None,
         },
-    );
-    agenda_tile(ctx.locale(), &upcoming, board.data())
+    ) else {
+        return unknown();
+    };
+    let owed = Due::of(&board);
+    let label = words::widget_due(ctx.locale());
+    if owed.count == 0 {
+        return empty_with(0, label.clone(), label);
+    }
+    content(
+        owed.count,
+        false,
+        label.clone(),
+        label,
+        Body::Agenda(owed.on(ctx.locale(), wire::home_tile_body::Agenda::default())),
+    )
 }
 
 /// The count is the occurrences of the next [`COUNT_DAYS`] days plus what is
@@ -767,17 +792,7 @@ fn health_tile(locale: Locale, today: &wire::HealthToday) -> Made {
 /// first and LAST word's for more, because a middle name is not the letter
 /// anybody recognises.
 fn initials(name: &str) -> String {
-    let words: Vec<&str> = name.split_whitespace().collect();
-    let first = |word: &str| {
-        word.chars()
-            .next()
-            .map(|c| c.to_uppercase().collect::<String>())
-    };
-    match words.as_slice() {
-        [] => "?".to_owned(),
-        [only] => first(only).unwrap_or_default(),
-        [head, .., last] => first(head).unwrap_or_default() + &first(last).unwrap_or_default(),
-    }
+    centraid_design::identity_initials(name)
 }
 
 /// THE CIRCLE People's own roster lists (live, neither the owner nor a pet), so
@@ -815,7 +830,7 @@ fn people_tile(locale: Locale, roster: &wire::PeopleRoster) -> Made {
             initials: initials(&person.name),
             // THE HUE IS RESOLVED HERE, ONCE, FOR BOTH SHELLS: derived from the
             // id, so a corrected spelling never repaints a person.
-            color: centraid_design::party_hue_key(&person.party_id, None).map(str::to_owned),
+            color: Some(centraid_design::identity_fill_key(&person.party_id).to_owned()),
         })
         .collect();
     let total = u32::try_from(roster.people.len())

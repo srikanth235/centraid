@@ -6,8 +6,8 @@
 //! ## Home reads synchronously and grades once
 //!
 //! A tile is no longer an event: `ctx.load` answers in the same call, so every
-//! tile lands in one pass and the grid is graded from all eight at once. A tile
-//! that is refused is `UNKNOWN`, never `EMPTY` (see [`tiles`]); the other seven
+//! tile lands in one pass and the grid is graded from every app at once. A tile
+//! that is refused is `UNKNOWN`, never `EMPTY` (see [`tiles`]); the other apps
 //! still draw.
 //!
 //! ## What the shell tells Home, and what Home decides
@@ -39,6 +39,7 @@ use super::policy;
 use super::routes;
 use super::row_routes;
 use super::tiles::{self, Made};
+use super::widgets;
 use crate::custody::secrets::{self as secrets, VaultSecrets};
 use crate::passes::{Rules, TransferRule, rule};
 use crate::screen::{Ctx, Screen};
@@ -113,7 +114,7 @@ enum Ask {
 }
 
 struct Home {
-    /// One per app, in [`policy::ORDER`].
+    /// One read per widget, in [`policy::WIDGETS`].
     tiles: Vec<(String, Made)>,
     read: bool,
     /// The one in front, the roster in the shelf's order, and whether the phone
@@ -134,6 +135,7 @@ struct Home {
     transfer_sheet_open: bool,
     /// The rule write in flight, to be folded into the cache when it is answered.
     keeping: Option<Vec<wire::SecretOp>>,
+    widget_failed: bool,
 }
 
 /// The registry factory. Home shares the cache of what the shell keeps (the
@@ -149,7 +151,7 @@ impl Home {
     fn new(secrets: VaultSecrets) -> Self {
         Self {
             secrets,
-            tiles: policy::ORDER
+            tiles: policy::WIDGETS
                 .iter()
                 .map(|app| ((*app).to_owned(), tiles::loading()))
                 .collect(),
@@ -166,6 +168,7 @@ impl Home {
             phone_dark: false,
             transfer_sheet_open: false,
             keeping: None,
+            widget_failed: false,
         }
     }
 }
@@ -187,11 +190,19 @@ fn select(tab: &str) -> wire::Effect {
 }
 
 /// The page an outside caller asked for, as a route the shell pushes.
-fn entry_route(entry: wire::home_event::entry_asked::Entry) -> Vec<wire::Effect> {
+fn entry_route(asked: wire::home_event::EntryAsked) -> Vec<wire::Effect> {
     use wire::home_event::entry_asked::Entry as E;
-    let route = match entry {
+    let route = match asked.entry() {
         E::LockerLock => crate::locker::routes::lock(),
         E::HealthConnect => crate::health::routes::connect(""),
+        E::AgendaCalendar => crate::agenda::routes::home(wire::AgendaDestination::Day, ""),
+        E::AgendaReminders => crate::agenda::routes::home(wire::AgendaDestination::Todo, ""),
+        E::AgendaNewReminder if !asked.title.trim().is_empty() => {
+            crate::agenda::routes::home(wire::AgendaDestination::Todo, asked.title.trim())
+        }
+        E::AgendaNewReminder => {
+            crate::agenda::routes::editor("", "", None, "", wire::AgendaEditorKind::Task)
+        }
         E::Unspecified => return Vec::new(),
     };
     vec![effect(wire::effect::Kind::OpenRoute(wire::OpenRoute {
@@ -212,7 +223,7 @@ impl Home {
         if self.none {
             return;
         }
-        self.tiles = policy::ORDER
+        self.tiles = policy::WIDGETS
             .iter()
             .map(|app| ((*app).to_owned(), tiles::read(ctx, app)))
             .collect();
@@ -246,7 +257,20 @@ impl Home {
         match event {
             H::Backup(_) => return open_backup(),
             H::Status(_) => return self.status_pressed(),
-            H::EntryAsked(asked) => return entry_route(asked.entry()),
+            H::EntryAsked(asked) => return entry_route(asked),
+            H::WidgetChanged(choice) => {
+                if self.keeping.is_some() {
+                    return Vec::new();
+                }
+                let mut layout =
+                    widgets::Layout::read(self.secrets.device_value(widgets::KEY).as_deref());
+                if layout.change(&choice) {
+                    self.widget_failed = false;
+                    let ops = vec![VaultSecrets::device_set(widgets::KEY, &layout.stored())];
+                    self.keeping = Some(ops.clone());
+                    return vec![secrets::effect(ops)];
+                }
+            }
             H::Appearance(_) => {
                 self.appearance = self.appearance.toggled(self.phone_dark);
                 return vec![keychain_set(self.appearance.stored())];
@@ -308,6 +332,9 @@ impl Home {
             H::TransferRulesPressed(_) => self.transfer_sheet_open = true,
             H::TransferRulesClosed(_) => self.transfer_sheet_open = false,
             H::TransferRuleChosen(chosen) => {
+                if self.keeping.is_some() {
+                    return Vec::new();
+                }
                 // THE BACKUP PAGE'S WRITE, not a second one: the rule goes to the
                 // phone's device store as a `SecretBatch`, and its answer is what
                 // tells the pass service (`rule_kept`).
@@ -325,7 +352,7 @@ impl Home {
                 if switched {
                     self.sheet_open = false;
                     self.ask = Ask::None;
-                    self.tiles = policy::ORDER
+                    self.tiles = policy::WIDGETS
                         .iter()
                         .map(|app| ((*app).to_owned(), tiles::loading()))
                         .collect();
@@ -363,7 +390,11 @@ impl Home {
             return;
         };
         self.secrets.absorb(&ops, &batched.answers);
-        if batched.answers.len() >= ops.len() && batched.answers.iter().all(|answer| answer.ok) {
+        let success =
+            batched.answers.len() >= ops.len() && batched.answers.iter().all(|answer| answer.ok);
+        if ops.iter().any(|op| op.key == widgets::KEY) {
+            self.widget_failed = !success;
+        } else if success {
             self.secrets
                 .conductor()
                 .ask(ctx, wire::pass_asked::Ask::RuleChanged);
@@ -437,8 +468,14 @@ impl Home {
     // -- the view -------------------------------------------------------------
 
     fn dress(&self, locale: Locale, app: &str, made: &Made) -> wire::HomeTile {
-        let name = app_name(locale, app);
+        let name = match app {
+            "agenda" => words::widget_calendar(locale),
+            "reminders" => words::widget_reminders(locale),
+            _ => app_name(locale, app),
+        };
+        let source_app = if app == "reminders" { "agenda" } else { app };
         let open = fill(&words::open_app(locale), &[("name", &name)]);
+        let (compact_value, compact_label) = widgets::compact(made, &name);
         wire::HomeTile {
             app_id: app.to_owned(),
             name,
@@ -446,7 +483,6 @@ impl Home {
             count: made.count,
             count_label: made.count_label.clone(),
             size: policy::size_of(app) as i32,
-            wide: policy::is_wide(app),
             empty_copy: empty_copy(locale, app),
             body: made
                 .body
@@ -455,22 +491,34 @@ impl Home {
             accessibility_label: spoken(&open, made),
             open_label: open,
             route: tile_route(app, made),
+            widget_actions: Vec::new(),
+            background_role: "bgElev".to_owned(),
+            accent_role: format!("{source_app}Text"),
+            source_app: source_app.to_owned(),
+            column_span: policy::span(policy::size_of(app)),
+            compact_value,
+            compact_label,
         }
     }
 
     fn data(&self, locale: Locale) -> wire::HomeData {
-        let tiles: Vec<wire::HomeTile> = self
+        let mut tiles: Vec<wire::HomeTile> = self
             .tiles
             .iter()
             .map(|(app, made)| self.dress(locale, app, made))
             .collect();
+        widgets::Layout::read(self.secrets.device_value(widgets::KEY).as_deref())
+            .apply(&mut tiles, locale);
         let springboard = policy::springboard(&tiles);
+        let agenda_widget = Some(widgets::agenda_snapshot(locale, &tiles));
         wire::HomeData {
             springboard: springboard as i32,
             grid_rows: policy::rows(&tiles),
             day_one_title: words::home_day_one_title(locale),
             day_one_body: words::home_day_one_body(locale),
             tiles,
+            widget_hint: words::widget_hint(locale),
+            agenda_widget,
         }
     }
 
@@ -661,15 +709,26 @@ impl Screen for Home {
         wire::ViewState {
             kind: Some(wire::view_state::Kind::Home(Box::new(wire::HomeState {
                 bar: Some(self.bar(locale)),
-                status: self.status.clone().map(|mut status| {
-                    status.accessibility_label = [status.copy.as_str(), status.action.as_str()]
-                        .iter()
-                        .filter(|part| !part.is_empty())
-                        .copied()
-                        .collect::<Vec<_>>()
-                        .join(". ");
-                    status
-                }),
+                status: self
+                    .status
+                    .clone()
+                    .or_else(|| {
+                        self.widget_failed.then(|| wire::HomeStatus {
+                            copy: words::widget_save_failed(locale),
+                            tone: wire::HomeTone::Attention as i32,
+                            destination: wire::home_status::Destination::None as i32,
+                            ..Default::default()
+                        })
+                    })
+                    .map(|mut status| {
+                        status.accessibility_label = [status.copy.as_str(), status.action.as_str()]
+                            .iter()
+                            .filter(|part| !part.is_empty())
+                            .copied()
+                            .collect::<Vec<_>>()
+                            .join(". ");
+                        status
+                    }),
                 content: Some(content),
                 sheet: self.sheet(locale),
                 scheme: match self.appearance {
@@ -686,32 +745,35 @@ impl Screen for Home {
     }
 }
 
-/// THE FIRST-LAUNCH GATE: what a phone that holds no vault opens onto. The house
-/// is Home's own roster ([`policy::ORDER`]), so an app that gets a tile is in the
-/// house the same day; the doors are `MakePressed` and `RestorePressed`.
+/// One welcome page, with all three benefits and both doors visible (#1173).
 fn first_launch(locale: Locale) -> wire::HomeFirstLaunch {
-    let slide = |title: String, body: String| wire::HomeFirstLaunchSlide { title, body };
+    let slide = |title: String, body: String, icon: &str| wire::HomeFirstLaunchSlide {
+        title,
+        body,
+        icon_key: icon.to_owned(),
+    };
     wire::HomeFirstLaunch {
+        title: words::first_launch_title(locale),
         body: words::first_launch_body(locale),
         make_label: words::first_launch_make(locale),
         restore_label: words::first_launch_restore(locale),
-        apps: policy::ORDER.iter().map(|app| (*app).to_owned()).collect(),
         slides: vec![
             slide(
                 words::first_launch_house_title(locale),
                 words::first_launch_house_body(locale),
+                "Grid",
             ),
             slide(
                 words::first_launch_assistant_title(locale),
                 words::first_launch_assistant_body(locale),
+                "Sparkle",
             ),
             slide(
                 words::first_launch_backup_title(locale),
                 words::first_launch_backup_body(locale),
+                "Lock",
             ),
         ],
-        next_label: words::first_launch_next(locale),
-        skip_label: words::first_launch_skip(locale),
     }
 }
 
@@ -724,6 +786,10 @@ fn tile_route(app: &str, made: &Made) -> Option<wire::Route> {
         (_, Status::Loading) => None,
         ("notes", Status::Empty) => Some(crate::notes::routes::new_note()),
         ("notes", Status::Unknown) => None,
+        ("reminders", _) => Some(crate::agenda::routes::home(
+            wire::AgendaDestination::Todo,
+            "",
+        )),
         _ => row_routes::app_home(app),
     }
 }
@@ -764,6 +830,7 @@ pub(crate) fn app_name(locale: Locale, app: &str) -> String {
 fn empty_copy(locale: Locale, app: &str) -> String {
     match app {
         "agenda" => words::tile_empty_agenda(locale),
+        "reminders" => words::widget_no_reminders(locale),
         "docs" => words::tile_empty_docs(locale),
         "health" => words::tile_empty_health(locale),
         "locker" => words::tile_empty_locker(locale),

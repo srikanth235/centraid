@@ -9,7 +9,16 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `home-day-one` | Home | the first-run page |
 | `home-first-moves` | Home | the first-moves band |
 | `home-failure` | Home | the failed-read sentence (no grid) |
-| `home-tile-<appId>` | Home | one springboard tile, keyed on the app id — every launchable app has one (Tasks has none: it folded into Agenda, whose tile also carries today's due tasks, #1128), an empty app drawing what to do (R-ONBOARD-11) |
+| `home-tile-<appId>` | Home | one Home widget, keyed on the widget id; Calendar is `agenda`, Reminders is `reminders`, and the other seven widgets use their app id; an empty app draws what to do |
+| `home-widget-<widgetId>-<index>` | Home context menu | Small, Medium, Large, Move to top and Move to bottom choices supplied by Rust; long press `home-tile-<widgetId>` to open |
+| `home-status` | Home | one status surface, including a failed widget save; the last saved layout remains rendered |
+| `agenda-quick-preview` | Agenda quick add | exact date/time preview, or ambiguity explanation that prevents saving |
+| `agenda-quick-tool-<key>` | Agenda quick add | keyboard tool from Rust: `today`, `tomorrow`, `no_date`, `flag` |
+| `agenda-calendar-day-<YYYY-MM-DD>` | Agenda Calendar | a day in the month grid |
+| `photos.cell.<photoId>` | Photos | a real photograph tile, shared by the library and square grids |
+| `notes-row-<noteId>`, `docs-row-<documentId>`, `people-row-<partyId>`, `money-row-<txnId>` | App libraries | a real note, document, person or transaction row |
+| `locker-wall` | Locker | the locked state, before the native owner check |
+| `agenda-widget`, `agenda-widget-new`, `agenda-widget-updated` | iOS home-screen widget | widget root, New reminder link and snapshot date/time; Android RemoteViews use resource IDs `widget_root`, `widget_new`, `widget_updated` |
 | `home-vault-switch` | Home | the vault lockup, which IS the switch |
 | `home-search-open` | Home | the framed search key at the lockup's trailing edge — opens Home's search (R-CHROME-6) |
 | `home-appearance` | Home | the framed appearance key right of search — flips light and dark (R-CHROME-7) |
@@ -47,6 +56,12 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `agenda-project-<projectId>` | Agenda (To-do) | one project row; a tap pushes the project's page (`tasks-project`) |
 | `agenda-new-project` | Agenda (To-do) | the foot-of-list verb that opens the new-project sheet, whose field is `tasks-new-project-field` |
 | `agenda-more-<key>` | Agenda's More sheet | one row: `calendar-<id>`, `anytime`, `logbook`, `reminders`, `trash`, `reads` |
+| `agenda-more-new-calendar`, `agenda-more-import`, `agenda-more-tags`, `agenda-more-edit-calendar-<id>` | Agenda More | create a calendar, import, filter tags, or edit a calendar |
+| `agenda-calendar-name`, `agenda-color-<listRole>`, `agenda-icon-<Icon>` | Calendar/list editor | name, color and icon choices |
+| `agenda-import-completed`, `agenda-import-calendar`, `agenda-import-reminders`, `agenda-import-reminders-file` | Agenda import | include completed or choose the import source |
+| `tasks-tag-<conceptId>` | Reminder tag filter | select a tag; the empty suffix selects All tags |
+| `agenda-attachment-add`, `agenda-attachment-<id>`, `agenda-attachment-remove-<id>`, `agenda-attachment-retry` | Agenda attachments | add, open, remove, or retry an attachment |
+| `agenda-event-status-action`, `agenda-editor-status-action` | Agenda event/editor | the inline notification Settings or Retry action when shown |
 | `agenda-status-action` | Agenda | the status line's Undo (after a check-off, a filing or a refused write) |
 | `agenda-notice-verb` | Agenda (Day on today) | the absence notice's verb |
 | `tasks-title-field` | a task's page | the title field, the page's mark that it is open; its Done closes it |
@@ -64,7 +79,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `chat-drawer-delete-all` | Chat drawer | "Delete all chats", offered over the plain list and never over search results |
 | `chat-message-user`, `chat-message-answer` | Chat | the member's message and the assistant's answer in the open thread |
 | `home-band` | Home | the floating band plate |
-| `home-band-<placeId>` | Home | one band destination (`home`, `notifs`, `stats`, `data`) |
+| `home-band-<placeId>` | Home | one band destination (`home`, `chat`, `backup`) |
 | `home-band-backup` | Home | the band's Backup tab — opens the Backup screen |
 | `home-backup-status` | Home | the lockup's second line: the backup's status, the door to the Backup tab ([#1080](https://github.com/srikanth235/centraid/issues/1080), R-ONBOARD-11) |
 | `backup-screen` | Backup | the Backup screen itself |
@@ -87,12 +102,13 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `vault-rename-<vaultId>` | Home | one switcher row's Rename (a swipe on iOS, also in the row's long-press menu; a button on Android), and `vault-rename-field` / `vault-rename-save` in its dialog |
 | `vault-found-button` | Home | the vault switcher's "Make a vault" (R-ONBOARD-11) |
 | `vault-restore-button` | Home | the vault switcher's "Restore my vaults" |
-| `first-launch` | First launch | the deck (and `first-launch-skip`, `first-launch-<id>` for its actions) |
+| `first-launch` | First launch | the welcome page (`first-launch-feature-0` through `-2`, `first-launch-primary`, `first-launch-secondary`) |
 | `chat` | Chat | the tab's root |
 | `chat-field` | Chat | the composer's text field (ready phase only) |
 | `chat-send` | Chat | Send, which becomes `chat-stop` while a turn runs |
 | `chat-stop` | Chat | Stop, while a turn runs |
 | `chat-download` | Chat | "Download model", in the model step |
+| `chat-error` | Chat | a model or engine failure, absent from a successful setup capture |
 | `chat-model-note` | Chat | the model step's one sentence |
 | `chat-empty` | Chat | the empty thread's one line |
 | `chat-suggestion-<n>` | Chat | the n-th suggested question, from 0 |
@@ -110,7 +126,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `words-make-primary` | words.make | the sheet's primary ("I've saved it", "Done") |
 | `health-band-<tab>` | Health | one band tab (`today`, `trends`, `workouts`, `more`, the label lowercased); `health-band` is the plate (#1129) |
 | `health-connect-open` | Health | the not-connected empty state's one action, which pushes Connect |
-| `health-hero`, `health-metric-<key>`, `health-trend-<key>` | Health | Today's steps card, a Today metric line and a Trends row, each the tap to its metric page (`<key>` is `steps`, `sleep_min`, …) |
+| `health-metric-<key>`, `health-trend-<key>` | Health | A pinned Summary metric card and a Trends row, each the tap to its metric page (`<key>` is `steps`, `sleep_min`, …) |
 | `health-today-foot` | Health | Today's foot: where the numbers were read from |
 | `health-workout-<activityId>` | Health | one workout row (Today and Workouts) |
 | `health-range`, `health-metric-range` | Health, a metric | the segmented range (Trends; Week · Month · Year) |
@@ -120,7 +136,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `kit-pushed-back` | any pushed page (iOS) | the kit's back control, named for the parent |
 | `BackButton` | any pushed page (iOS) | the navigation bar's back — UIKit's own id; Maestro's `back` is Android's system key and does nothing on iOS |
 
-Home, its Settings and vault sheets, the Backup screen, the first-launch deck and Chat set tags; the Backup screen's ids are written in both shells and selected by no flow yet. The iOS shell runs on a simulator against the real `HomeMachine` through `HomeBridge`, so the iOS half of each id renders; the Android half is compiled and unobserved, because no machine here has an Android emulator.
+The hosted visual suite under `../visual/` uses these tags to assert real content before saving screenshots on both platforms. Its uploaded results record which cases actually ran and passed; neither the existence of a selector nor a compiled shell proves a device run.
 
 **A CONTAINER'S ID LEAKS ONTO ITS CHILDREN ON iOS.** `.accessibilityIdentifier` on a plain `VStack`/`HStack` is handed down to every child that is not an element of its own, over the child's own id — every Home tile read `home-grid`, and the empty state's buttons read `kit-empty`. A container that carries an id and has selectable children marks itself `.accessibilityElement(children: .contain)` first (`TileGrid`, `KitEmpty`). The Docs band's buttons all still read `docs-band`; no flow selects them yet.
 

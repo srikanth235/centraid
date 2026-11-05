@@ -915,6 +915,8 @@ fn task_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
         cx,
     );
     row.fields.insert("status", Val::Enum("open"));
+    let flagged = input.get("flagged").and_then(Value::as_bool) == Some(true);
+    row.fields.insert("starred", Val::Bool(flagged));
     row.date = text(input, "due").and_then(Stamp::parse);
     put(&mut row, "effort", int(input, "effort_min").map(Val::Num));
     put(

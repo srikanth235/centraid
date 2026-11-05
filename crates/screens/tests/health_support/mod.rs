@@ -23,6 +23,7 @@ pub fn driver_on(platform: &str, locale: &str) -> Driver {
         ..Default::default()
     }));
     driver.start();
+    driver.serve(&mut centraid_screens::testing::FakeShell::default());
     driver
 }
 

@@ -1,0 +1,21 @@
+# No model is installed by this suite. Verify the real setup state and do not
+# download a multi-GB model or claim that a rendered preview is engine evidence.
+appId: ${APP_ID}
+name: Chat model setup
+---
+- launchApp:
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible:
+      id: home-band-chat
+    timeout: 30000
+- tapOn:
+    id: home-band-chat
+- extendedWaitUntil:
+    visible:
+      id: chat-download
+    timeout: 30000
+- assertNotVisible:
+    id: chat-error
+- takeScreenshot: chat-setup

@@ -26,6 +26,9 @@ pub(super) fn title(drive: &Drive, locale: Locale) -> String {
             }
         }
         Dest::Recent => words::more_recent(locale),
+        Dest::All => words::band_all(locale),
+        Dest::Folders => words::band_folders(locale),
+        Dest::Starred => words::band_starred(locale),
         _ => words::app_title(locale),
     }
 }

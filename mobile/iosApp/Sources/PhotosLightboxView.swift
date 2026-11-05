@@ -53,8 +53,11 @@ struct PhotosLightboxView: View {
                 ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
                     .padding(CentraidGeometry.pageMargin)
             case let .photo(photo)?:
-                stage(model).ignoresSafeArea()
-                if model.drawablePath == nil {
+                if state.detailsVisible {
+                    details(photo, model: model)
+                } else {
+                    stage(model).ignoresSafeArea()
+                    if model.drawablePath == nil {
                     // NEVER A BROKEN IMAGE. Each of these is a truthful state.
                     Text(photo.stageLabel)
                         .centraidType("body")
@@ -62,11 +65,12 @@ struct PhotosLightboxView: View {
                         .foregroundStyle(Theme.color("onStage", scheme))
                         .padding(CentraidGeometry.pageMargin)
                         .allowsHitTesting(false)
+                    }
+                    if chromeVisible { chrome(photo) }
                 }
-                if chromeVisible { chrome(photo) }
             }
         }
-        // THE STAGE ROOM TAKES NO HEADER (DESIGN.md): its way out is the close
+        // THE STAGE ROOM TAKES NO HEADER (product-intuition screen contracts): its way out is the close
         // chip and the swipe down, both the same act.
         .toolbar(.hidden, for: .navigationBar)
         .sheet(item: sheetBinding) { item in
@@ -92,6 +96,51 @@ struct PhotosLightboxView: View {
             send: send,
             onClose: onClose
         )
+    }
+
+    /// Info expands on the photograph's page. Opening a place, album or share
+    /// choice may present a sheet; photo details never move into the editor.
+    private func details(_ photo: Centraid_Core_V1_PhotosLightboxPhoto, model: PhotosLightboxModel) -> some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                HStack {
+                    KitIconKey(iconKey: "X", label: state.words.close, tint: "text", identifier: "photos.lightbox.close", action: onClose)
+                    Spacer()
+                    KitIconKey(iconKey: "more", label: state.words.more, tint: "text", identifier: "photos.lightbox.more") { send(sheetEvent(.more)) }
+                }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.vertical, 8)
+                stage(model)
+                    .frame(height: 268)
+                    .clipped()
+                    .overlay {
+                        if model.drawablePath == nil {
+                            Text(photo.stageLabel).centraidType("body")
+                                .foregroundStyle(Theme.color("onStage", scheme))
+                        }
+                    }
+                if let video = media.video {
+                    LightboxTransport(player: video, words: state.words)
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .background(Theme.color("stage", scheme))
+                }
+                if let live = media.live { LiveChip(live: live, words: state.words) }
+                if photo.offersFetch {
+                    KitLink(label: state.words.loadOriginal) { send(.fetchOriginal(.init())) }
+                        .padding(.top, 8)
+                }
+                PhotosLightboxInfoSheet(state: state, photo: photo, send: send)
+                    .accessibilityIdentifier("photos.lightbox.details")
+            }
+        }
+        .background(Theme.color("bg", scheme))
+        .safeAreaInset(edge: .bottom) {
+            toolbar(onPage: true)
+                .padding(.vertical, 8)
+                .bandGround(RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)), solid: "bgElev")
+                .padding(.horizontal, 8)
+                .padding(.bottom, 8)
+        }
     }
 
     // MARK: - The chrome
@@ -170,7 +219,7 @@ struct PhotosLightboxView: View {
                 // goes away with the rest of the chrome.
                 LightboxFilmstrip(state: PhotosLightboxModel(state: state), send: send)
                     .padding(.bottom, 4)
-                toolbar
+                toolbar()
             }
         }
         .padding(.vertical, 8)
@@ -210,13 +259,13 @@ struct PhotosLightboxView: View {
         }
     }
 
-    private func pagerButton(icon: String, label: String, target: String) -> some View {
+    private func pagerButton(icon: String, label: String, target: String, onPage: Bool = false) -> some View {
         Button {
             if !target.isEmpty { send(.moved(.with { $0.photoID = target })) }
         } label: {
             CentraidIconView(
                 iconKey: icon,
-                tint: Theme.color(target.isEmpty ? "onStageSoft" : "onStage", scheme),
+                tint: Theme.color(target.isEmpty ? (onPage ? "textFaint" : "onStageSoft") : (onPage ? "text" : "onStage"), scheme),
                 size: 20
             )
             .frame(width: 44, height: 44)
@@ -229,7 +278,7 @@ struct PhotosLightboxView: View {
 
     /// THE BOTTOM ROW. Every verb is live or visibly refused, and the refusal is
     /// a VISIBLE sentence and not only an accessibility hint.
-    private var toolbar: some View {
+    private func toolbar(onPage: Bool = false) -> some View {
         let reasons = Array(Set(state.toolbar.filter { !$0.enabled && !$0.why.isEmpty }.map(\.why))).sorted()
         var trashed = false
         if case let .photo(photo)? = state.content { trashed = photo.trashed }
@@ -240,21 +289,21 @@ struct PhotosLightboxView: View {
         return VStack(spacing: 4) {
             HStack(spacing: 0) {
                 if paged {
-                    pagerButton(icon: "ChevronLeft", label: state.words.previous, target: state.previousID)
+                    pagerButton(icon: "ChevronLeft", label: state.words.previous, target: state.previousID, onPage: onPage)
                 }
                 ForEach(state.toolbar, id: \.kind.rawValue) { verb in
-                    toolbarKey(verb, labelled: trashed)
+                    toolbarKey(verb, labelled: trashed, onPage: onPage)
                         .frame(maxWidth: .infinity)
                 }
                 if paged {
-                    pagerButton(icon: "ChevronRight", label: state.words.next, target: state.nextID)
+                    pagerButton(icon: "ChevronRight", label: state.words.next, target: state.nextID, onPage: onPage)
                 }
             }
             ForEach(reasons, id: \.self) { reason in
                 Text(reason)
                     .centraidType("small")
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(Theme.color("onStageSoft", scheme))
+                    .foregroundStyle(Theme.color(onPage ? "textFaint" : "onStageSoft", scheme))
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -263,13 +312,16 @@ struct PhotosLightboxView: View {
     /// ONE VERB OF THE BAR. A toggle that is ON is drawn solid (a filled star) and is
     /// announced as selected; over a trashed photograph the verbs carry their words, because
     /// a restore and a delete-forever side by side are two marks a member must tell apart.
-    private func toolbarKey(_ verb: Centraid_Core_V1_PhotosLightboxVerb, labelled: Bool = false) -> some View {
+    private func toolbarKey(_ verb: Centraid_Core_V1_PhotosLightboxVerb, labelled: Bool = false, onPage: Bool = false) -> some View {
         Button {
             guard verb.enabled else { return }
             // Edit is a page: the shell pushes the route Rust built.
             if verb.hasRoute { open(verb.route) } else { send(verbEvent(verb)) }
         } label: {
-            let ink = Theme.color(verb.enabled ? (verb.destructive ? "net" : "onStage") : "onStageSoft", scheme)
+            let normal = onPage ? "text" : "onStage"
+            let selected = onPage ? "photosText" : "photosOnStage"
+            let disabled = onPage ? "textFaint" : "onStageSoft"
+            let ink = Theme.color(verb.enabled ? (verb.destructive ? "net" : (verb.on ? selected : normal)) : disabled, scheme)
             VStack(spacing: 2) {
                 CentraidIconView(
                     iconKey: verb.iconKey,
@@ -334,7 +386,7 @@ struct PhotosLightboxView: View {
         if state.albumChoice.open { return LightboxSheetItem(kind: .album) }
         if state.hasConfirm { return LightboxSheetItem(kind: .confirm) }
         switch state.sheet {
-        case .info: return LightboxSheetItem(kind: .info)
+        case .info: return nil
         case .share: return LightboxSheetItem(kind: .share)
         case .more: return LightboxSheetItem(kind: .more)
         case .place: return LightboxSheetItem(kind: .place)
@@ -490,14 +542,15 @@ private struct PhotosLightboxPlaceSheet: View {
     }
 }
 
-// MARK: - The info sheet
+// MARK: - Details beneath the photograph
 
-/// THE INFO SHEET — everything the vault knows about this photograph, and the four
+/// Everything the vault knows about this photograph, and the four
 /// things a member may change about it: the caption, the labels, the place, and a
 /// copy of where it was taken. No destructive control here, ever: Trash lives on
 /// the bar alone. A field the record lacks is omitted, never invented.
 private struct PhotosLightboxInfoSheet: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var typeSize
     let state: Centraid_Core_V1_PhotosLightboxState
     let photo: Centraid_Core_V1_PhotosLightboxPhoto
     let send: (PhotosLightboxSend) -> Void
@@ -509,8 +562,7 @@ private struct PhotosLightboxInfoSheet: View {
 
     var body: some View {
         let words = state.words
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
                 Text(words.infoTitle).centraidType("title").padding(.top, 8)
 
                 // A REFUSED EDIT IS SAID HERE, where the member made it.
@@ -518,8 +570,9 @@ private struct PhotosLightboxInfoSheet: View {
                     Text(state.status.sentence).centraidType("small").foregroundStyle(Theme.color("net", scheme))
                 }
 
-                heading(words.captionLabel, icon: "FileEdit")
-                TextField(words.captionPlaceholder, text: $caption)
+                VStack(alignment: .leading, spacing: 6) {
+                    heading(words.captionLabel, icon: "FileEdit")
+                    TextField(words.captionPlaceholder, text: $caption)
                     .centraidType("body")
                     .focused($captionFocused)
                     .submitLabel(.done)
@@ -530,16 +583,29 @@ private struct PhotosLightboxInfoSheet: View {
                     .onChange(of: captionFocused) { _, focused in
                         if !focused { commitCaption() }
                     }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.color("bgElev", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
 
                 ForEach(photo.facts, id: \.label) { fact in
                     VStack(alignment: .leading, spacing: 2) {
                         heading(fact.label, icon: fact.iconKey)
                         Text(fact.text).centraidType("body")
                     }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.color("bgElev", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
                 }
 
                 place(words)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.color("bgElev", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
                 labels(words)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.color("bgElev", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
 
                 // WHERE THE BYTES ARE, in a sentence that says what fetching costs.
                 Text(photo.whereabouts)
@@ -553,11 +619,11 @@ private struct PhotosLightboxInfoSheet: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .foregroundStyle(Theme.color("text", scheme))
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.top, CentraidGeometry.pageMargin)
-            // NOTHING UNDER THE SHEET'S CORNERS: the last line scrolls clear of the radius.
-            .padding(.bottom, 48)
-        }
+            // The final line clears the floating toolbar.
+            .padding(.bottom, 16)
         .onAppear(perform: resetCaption)
         .onChange(of: state.photoID) { _, _ in resetCaption() }
         .onDisappear { if captionFocused { commitCaption() } }
@@ -575,10 +641,13 @@ private struct PhotosLightboxInfoSheet: View {
     }
 
     private func place(_ words: Centraid_Core_V1_PhotosLightboxWords) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(spacing: 16))
+        return VStack(alignment: .leading, spacing: 4) {
             heading(words.placeTitle, icon: "MapPin")
             Text(photo.placePhrase).centraidType("body")
-            HStack(spacing: 16) {
+            layout {
                 KitLink(label: photo.hasPlace_p ? words.change : words.addPlace) {
                     send(.sheet(.with { $0.sheet = .place }))
                 }

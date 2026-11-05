@@ -8,6 +8,7 @@ import centraid.core.v1.CalendarSnapshot
 import centraid.core.v1.PhoneCalendar
 import centraid.core.v1.PhoneCalendarEvent
 import centraid.core.v1.PhoneCalendarSeries
+import centraid.core.v1.PhoneCalendarAttendee
 import dev.centraid.android.kit.PhoneOrigins
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -55,7 +56,7 @@ private class CalendarsRead(
 private class CalendarRow(val key: String, val calendar: PhoneCalendar)
 
 /** What an event row says about where it lives and what it is called on every device. */
-private class EventMeta(val calendarId: Long, val uid: String?)
+private class EventMeta(val calendarId: Long, val uid: String?, val url: String)
 
 /**
  * THE PHONE'S CALENDAR, ONE [PhoneCalendarEvent] PER OCCURRENCE: `Instances` over
@@ -122,6 +123,8 @@ private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: 
     val masterIds = rows.mapNotNull { row -> row.originalId ?: row.eventId.takeIf { row.rrule.isNotEmpty() } }.toSet()
     val metas = readEventMeta(resolver, masterIds + rows.map { it.eventId })
     val series = readSeries(resolver, masterIds, device, metas)
+    val alarms = readCalendarAlarms(resolver, masterIds + rows.map { it.eventId })
+    val guests = readCalendarGuests(resolver, masterIds + rows.map { it.eventId })
     val events = rows.mapNotNull { row ->
         // AN INSTANCE WHOSE CALENDAR IS NOT ONE OF THE MEMBER'S VISIBLE, WRITABLE ONES is not read.
         val meta = metas[row.eventId] ?: return@mapNotNull null
@@ -146,6 +149,11 @@ private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: 
                 phone_id = PhoneOrigins.eventId(meta.uid, row.eventId),
                 calendar_key = calendar.key,
                 location = row.location,
+                url = meta.url,
+                native_id = row.eventId.toString(),
+                native_series_id = own?.let { masterId.toString() }.orEmpty(),
+                alarms_before_min = alarms[row.eventId] ?: alarms[masterId].orEmpty(),
+                attendees = guests[row.eventId] ?: guests[masterId].orEmpty(),
             )
         } else {
             // A TIMED INSTANCE IS A WALL CLOCK IN ITS OWN ZONE — the zone the
@@ -161,11 +169,16 @@ private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: 
                 tz = zone.id,
                 free = row.free,
                 series = own?.series,
-                original_start = if (moved && own != null) row.originalTime?.let { wallClock(it, own.zone) }.orEmpty() else "",
+                original_start = if (moved) row.originalTime?.let { wallClock(it, own.zone) }.orEmpty() else "",
                 moved = moved,
                 phone_id = PhoneOrigins.eventId(meta.uid, row.eventId),
                 calendar_key = calendar.key,
                 location = row.location,
+                url = meta.url,
+                native_id = row.eventId.toString(),
+                native_series_id = own?.let { masterId.toString() }.orEmpty(),
+                alarms_before_min = alarms[row.eventId] ?: alarms[masterId].orEmpty(),
+                attendees = guests[row.eventId] ?: guests[masterId].orEmpty(),
             )
         }
     }
@@ -217,13 +230,15 @@ private fun readEventMeta(resolver: ContentResolver, ids: Collection<Long>): Map
     val found = mutableMapOf<Long, EventMeta>()
     for (chunk in ids.distinct().chunked(META_CHUNK)) {
         val selection = "${CalendarContract.Events._ID} IN (${chunk.joinToString(",")})"
-        val withUid = arrayOf(CalendarContract.Events._ID, CalendarContract.Events.CALENDAR_ID, UID_2445)
+        val withUid = arrayOf(CalendarContract.Events._ID, CalendarContract.Events.CALENDAR_ID, UID_2445, CalendarContract.Events.CUSTOM_APP_URI)
         val cursor = runCatching { resolver.query(CalendarContract.Events.CONTENT_URI, withUid, selection, null, null) }.getOrNull()
-            ?: resolver.query(CalendarContract.Events.CONTENT_URI, arrayOf(CalendarContract.Events._ID, CalendarContract.Events.CALENDAR_ID), selection, null, null)
+            ?: resolver.query(CalendarContract.Events.CONTENT_URI, arrayOf(CalendarContract.Events._ID, CalendarContract.Events.CALENDAR_ID, CalendarContract.Events.CUSTOM_APP_URI), selection, null, null)
         cursor?.use {
             while (it.moveToNext()) {
-                val uid = if (it.columnCount > 2) it.getString(2) else null
-                found[it.getLong(0)] = EventMeta(it.getLong(1), uid)
+                val uidIndex = it.getColumnIndex(UID_2445)
+                val uid = if (uidIndex >= 0) it.getString(uidIndex) else null
+                val urlIndex = it.getColumnIndex(CalendarContract.Events.CUSTOM_APP_URI)
+                found[it.getLong(0)] = EventMeta(it.getLong(1), uid, if (urlIndex >= 0) it.getString(urlIndex).orEmpty() else "")
             }
         }
     }
@@ -282,9 +297,9 @@ private fun readSeries(resolver: ContentResolver, ids: Set<Long>, device: TimeZo
             val zone = zoneOf(cursor.getString(5), device)
             val seriesId = PhoneOrigins.eventId(metas[id]?.uid, id)
             val series = if (cursor.getInt(6) == 1) {
-                PhoneCalendarSeries(id = seriesId, rrule = rule, start = utcDay(start), end = utcDay(maxOf(start, end - 1)))
+                PhoneCalendarSeries(id = seriesId, rrule = rule, start = utcDay(start), end = utcDay(maxOf(start, end - 1)), tz = "UTC")
             } else {
-                PhoneCalendarSeries(id = seriesId, rrule = rule, start = wallClock(start, zone), end = wallClock(maxOf(start, end), zone))
+                PhoneCalendarSeries(id = seriesId, rrule = rule, start = wallClock(start, zone), end = wallClock(maxOf(start, end), zone), tz = zone.id)
             }
             found[id] = SeriesRow(series, zone)
         }
@@ -323,3 +338,38 @@ internal fun wallClock(millis: Long, zone: TimeZone): String = format("yyyy-MM-d
 // `java.time` needs API 26 where `minSdk` is 24.
 private fun format(pattern: String, zone: TimeZone, millis: Long): String =
     SimpleDateFormat(pattern, Locale.US).apply { timeZone = zone }.format(Date(millis))
+
+
+internal fun readCalendarAlarms(resolver: ContentResolver, ids: Set<Long>): Map<Long, List<Int>> {
+    val out = mutableMapOf<Long, MutableList<Int>>()
+    ids.chunked(200).forEach { chunk ->
+        resolver.query(CalendarContract.Reminders.CONTENT_URI,
+            arrayOf(CalendarContract.Reminders.EVENT_ID, CalendarContract.Reminders.MINUTES),
+            "${CalendarContract.Reminders.EVENT_ID} IN (${chunk.joinToString(",") { "?" }})",
+            chunk.map(Long::toString).toTypedArray(), null)?.use { cursor ->
+            while (cursor.moveToNext()) out.getOrPut(cursor.getLong(0)) { mutableListOf() }.add(cursor.getInt(1))
+        }
+    }
+    return out.mapValues { it.value.distinct().sorted() }
+}
+
+internal fun readCalendarGuests(resolver: ContentResolver, ids: Set<Long>): Map<Long, List<PhoneCalendarAttendee>> {
+    val out = mutableMapOf<Long, MutableList<PhoneCalendarAttendee>>()
+    ids.chunked(200).forEach { chunk ->
+        resolver.query(CalendarContract.Attendees.CONTENT_URI,
+            arrayOf(CalendarContract.Attendees.EVENT_ID, CalendarContract.Attendees.ATTENDEE_EMAIL, CalendarContract.Attendees.ATTENDEE_NAME, CalendarContract.Attendees.ATTENDEE_STATUS),
+            "${CalendarContract.Attendees.EVENT_ID} IN (${chunk.joinToString(",") { "?" }})",
+            chunk.map(Long::toString).toTypedArray(), null)?.use { cursor ->
+            while (cursor.moveToNext()) out.getOrPut(cursor.getLong(0)) { mutableListOf() }.add(PhoneCalendarAttendee(
+                email = cursor.getString(1).orEmpty(), name = cursor.getString(2).orEmpty(), state = when(cursor.getInt(3)) {
+                    CalendarContract.Attendees.ATTENDEE_STATUS_ACCEPTED -> "accepted"
+                    CalendarContract.Attendees.ATTENDEE_STATUS_DECLINED -> "declined"
+                    CalendarContract.Attendees.ATTENDEE_STATUS_TENTATIVE -> "tentative"
+                    else -> "needs-action"
+                }))
+        }
+    }
+    return out
+}
+
+internal fun calendarIdForKey(resolver: ContentResolver, key: String): Long? = readCalendars(resolver).entries.firstOrNull { it.value.key == key }?.key

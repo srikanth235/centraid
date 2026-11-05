@@ -171,3 +171,26 @@ pub fn plant_canary(vault: &Vault, canary: &str) -> Result<()> {
     })?;
     Ok(())
 }
+
+/// Build the actual earlier released schema, before the current binary opens
+/// and migrates it. Fixture rows are inserted through this connection.
+pub fn earlier_schema(path: &Path, version: usize) -> rusqlite::Connection {
+    let db = rusqlite::Connection::open(path).unwrap();
+    db.pragma_update(None, "foreign_keys", "OFF").unwrap();
+    db.pragma_update(
+        None,
+        "application_id",
+        centraid_vault::format::APPLICATION_ID,
+    )
+    .unwrap();
+    for rung in &centraid_vault::migrations::LADDER[..version] {
+        db.execute_batch(rung.sql).unwrap();
+        db.pragma_update(None, "user_version", rung.version)
+            .unwrap();
+    }
+    db.execute_batch("INSERT INTO entity(id,kind,title,created_at,updated_at) VALUES ('legacy-owner','person','Owner','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
+        INSERT INTO person(id) VALUES ('legacy-owner');
+        INSERT INTO vault(id,name,self_id,currency,zone,created_at) VALUES (1,'Home','legacy-owner','USD','UTC','2026-01-01T00:00:00Z');").unwrap();
+    db.pragma_update(None, "foreign_keys", "ON").unwrap();
+    db
+}

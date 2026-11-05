@@ -41,7 +41,7 @@ struct ConfirmSheet: View {
                     .foregroundStyle(Theme.color("textSoft", scheme))
             }
         }
-        .presentationDetents(Self.detents)
+        .modifier(SheetPresentation(detents: Self.detents))
         // NO IDENTIFIER ON THE CONTAINER (#1047): one there is handed down to
         // every child and replaced theirs (`kit-destructive`,
         // `kit-confirm-cancel`) even under `.contain`. The sheet is found by
@@ -49,7 +49,7 @@ struct ConfirmSheet: View {
     }
 }
 
-/// A REFUSAL TOLD IN A SHEET, NOT AN ALERT (DESIGN.md "The controls (mobile)"):
+/// A REFUSAL TOLD IN A SHEET, NOT AN ALERT (product-intuition screen contracts "The controls (mobile)"):
 /// the act that was refused as the title, the sentence saying what happened
 /// and what to do, and one way out, the outline [doneLabel]. A swipe away is
 /// the same as Done.
@@ -73,7 +73,7 @@ struct NoticeSheet: View {
                 .centraidType("body")
                 .foregroundStyle(Theme.color("textSoft", scheme))
         }
-        .presentationDetents(Self.detents)
+        .modifier(SheetPresentation(detents: Self.detents))
     }
 }
 

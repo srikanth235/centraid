@@ -7,7 +7,52 @@ use centraid_api_proto::core_v1 as wire;
 
 use crate::kit::civil;
 
-pub type Draft = wire::AgendaDraft;
+/// The editor keeps domain values privately. Native shells receive the basic
+/// date draft and the finished extra-field rows; they do not receive duplicate
+/// copies of values those rows already bind.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Draft {
+    pub title: String,
+    pub notes: String,
+    pub all_day: bool,
+    pub start_day: String,
+    pub start_time: String,
+    pub end_day: String,
+    pub end_time: String,
+    pub calendar_id: String,
+    pub guest_ids: Vec<String>,
+    pub repeat_key: String,
+    pub reminder_key: String,
+    pub link: String,
+    pub custom_rule: String,
+    pub project_id: String,
+    pub priority: u32,
+    pub time_zone: String,
+    pub place_id: String,
+    pub second_reminder_key: String,
+    pub travel_minutes: u32,
+    pub busy: bool,
+    pub tags: String,
+}
+
+impl Draft {
+    pub fn to_wire(&self) -> wire::AgendaDraft {
+        wire::AgendaDraft {
+            title: self.title.clone(),
+            notes: self.notes.clone(),
+            all_day: self.all_day,
+            start_day: self.start_day.clone(),
+            start_time: self.start_time.clone(),
+            end_day: self.end_day.clone(),
+            end_time: self.end_time.clone(),
+            calendar_id: self.calendar_id.clone(),
+            guest_ids: self.guest_ids.clone(),
+            repeat_key: self.repeat_key.clone(),
+            reminder_key: self.reminder_key.clone(),
+            link: self.link.clone(),
+        }
+    }
+}
 
 pub const REPEAT_NONE: &str = "none";
 pub const REPEAT_DAILY: &str = "daily";
@@ -212,6 +257,7 @@ pub fn new_draft(day: &str, upcoming: &wire::AgendaUpcoming) -> Draft {
         |at| from_minutes(at + HOUR),
     );
     Draft {
+        busy: true,
         start_day,
         start_time,
         end_day,
@@ -230,29 +276,54 @@ pub fn new_draft(day: &str, upcoming: &wire::AgendaUpcoming) -> Draft {
 /// The values an occurrence has, as the editor binds them.
 #[must_use]
 pub fn draft_of(event: &wire::AgendaEvent) -> Draft {
-    let start_day = event.local_start.get(..DAY).unwrap_or_default().to_owned();
-    let start_time = Some(civil::clock(&event.local_start))
+    // Pickers display the event's named zone, so editing a time never applies
+    // another zone to a wall clock that was shown in the phone's zone.
+    let own_clock = |stamp: &str| -> Option<String> {
+        let zone = centraid_vault::time::zone::FireZone::named(event.start_tz.as_deref()?).ok()?;
+        let at = centraid_vault::time::recurrence::parse_instant_ms(stamp)?;
+        let wall = zone.wall_clock(at);
+        Some(format!(
+            "{:04}-{:02}-{:02}T{:02}:{:02}",
+            wall.year, wall.month, wall.day, wall.hour, wall.minute
+        ))
+    };
+    let local_start = if event.all_day {
+        event.local_start.clone()
+    } else {
+        own_clock(&event.dtstart).unwrap_or_else(|| event.local_start.clone())
+    };
+    let local_end = if event.all_day {
+        event.local_end.clone()
+    } else {
+        event
+            .dtend
+            .as_deref()
+            .and_then(own_clock)
+            .unwrap_or_else(|| event.local_end.clone())
+    };
+    let start_day = local_start.get(..DAY).unwrap_or_default().to_owned();
+    let start_time = Some(civil::clock(&local_start))
         .filter(|clock| !clock.is_empty())
         .unwrap_or_else(|| DEFAULT_START.to_owned());
     let (end_day, end_time) = if event.all_day {
-        let last = if event.local_end.is_empty() {
-            &event.local_start
+        let last = if local_end.is_empty() {
+            &local_start
         } else {
-            &event.local_end
+            &local_end
         };
         (
             last.get(..DAY).unwrap_or_default().to_owned(),
             DEFAULT_END.to_owned(),
         )
-    } else if event.local_end.is_empty() {
+    } else if local_end.is_empty() {
         minutes_of(&start_day, &start_time).map_or_else(
             || (start_day.clone(), DEFAULT_END.to_owned()),
             |at| from_minutes(at + HOUR),
         )
     } else {
         (
-            event.local_end.get(..DAY).unwrap_or_default().to_owned(),
-            civil::clock(&event.local_end),
+            local_end.get(..DAY).unwrap_or_default().to_owned(),
+            civil::clock(&local_end),
         )
     };
     Draft {
@@ -276,6 +347,17 @@ pub fn draft_of(event: &wire::AgendaEvent) -> Draft {
             |reminder| reminder.minutes_before.to_string(),
         ),
         link: event.conferencing_uri.clone().unwrap_or_default(),
+        custom_rule: event.rrule.clone().unwrap_or_default(),
+        time_zone: event.start_tz.clone().unwrap_or_default(),
+        place_id: event.location_place_id.clone().unwrap_or_default(),
+        second_reminder_key: event
+            .reminders
+            .get(1)
+            .map(|reminder| reminder.minutes_before.to_string())
+            .unwrap_or_else(|| REMINDER_NONE.to_owned()),
+        travel_minutes: u32::try_from(event.travel_minutes).unwrap_or_default(),
+        busy: event.busy,
+        ..Default::default()
     }
 }
 
@@ -341,7 +423,14 @@ pub fn guests_changed(draft: &Draft, base: &Draft) -> bool {
 /// reminder or guests.
 #[must_use]
 pub fn series_only(draft: &Draft, base: &Draft) -> bool {
-    (draft.calendar_id != base.calendar_id && !draft.calendar_id.is_empty())
+    draft.place_id != base.place_id
+        || draft.tags != base.tags
+        || draft.custom_rule != base.custom_rule
+        || draft.time_zone != base.time_zone
+        || draft.second_reminder_key != base.second_reminder_key
+        || draft.travel_minutes != base.travel_minutes
+        || draft.busy != base.busy
+        || (draft.calendar_id != base.calendar_id && !draft.calendar_id.is_empty())
         || draft.link.trim() != base.link.trim()
         || draft.reminder_key != base.reminder_key
         || guests_changed(draft, base)
@@ -350,7 +439,16 @@ pub fn series_only(draft: &Draft, base: &Draft) -> bool {
 /// Whether the draft differs from the values as loaded.
 #[must_use]
 pub fn dirty(draft: &Draft, base: &Draft) -> bool {
-    draft.title.trim() != base.title.trim()
+    draft.tags != base.tags
+        || draft.custom_rule != base.custom_rule
+        || draft.project_id != base.project_id
+        || draft.priority != base.priority
+        || draft.time_zone != base.time_zone
+        || draft.place_id != base.place_id
+        || draft.second_reminder_key != base.second_reminder_key
+        || draft.travel_minutes != base.travel_minutes
+        || draft.busy != base.busy
+        || draft.title.trim() != base.title.trim()
         || draft.notes.trim() != base.notes.trim()
         || times_changed(draft, base)
         || draft.calendar_id != base.calendar_id

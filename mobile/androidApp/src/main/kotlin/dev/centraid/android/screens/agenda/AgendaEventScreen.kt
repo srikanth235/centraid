@@ -21,6 +21,7 @@ import centraid.core.v1.AgendaGone
 import centraid.core.v1.AgendaScopeChoice
 import centraid.core.v1.Route
 import centraid.core.v1.EmptyState
+import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
@@ -60,7 +61,7 @@ internal fun AgendaEventScreen(
         title = chrome?.title.orEmpty(),
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
-        status = state.status?.sentence.orEmpty(),
+        status = "",
     ) {
         val gone = state.gone
         if (gone != null) {
@@ -68,6 +69,7 @@ internal fun AgendaEventScreen(
             return@PushedPage
         }
         Column(Modifier.fillMaxSize()) {
+            StatusLine(state.status, actTag = "agenda-event-status-action") { onEvent(AgendaEventEvent(status_acted = AgendaEventEvent.StatusActed())) }
             ReadStateView(
                 content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
                 onRetry = { onEvent(AgendaEventEvent(refreshed = AgendaEventEvent.Refreshed())) },
@@ -139,6 +141,7 @@ private fun EventBody(
                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
             )
         }
+        data.attachments?.let { AgendaAttachmentCard(it, onEvent = { change -> onEvent(AgendaEventEvent(attachment = change)) }, onOpen = onOpen) }
         val rsvp = data.rsvp
         if (rsvp != null) {
             Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)) {

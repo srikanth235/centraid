@@ -304,6 +304,9 @@ fn read(
                 tz,
             },
         )?,
+        ("agenda", "notifications") => {
+            app_query::agenda_notifications::read(vault, door, now, &tz)?
+        }
         ("agenda", "upcoming") => app_query::agenda_upcoming(
             vault,
             door,

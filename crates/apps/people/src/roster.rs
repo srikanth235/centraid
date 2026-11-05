@@ -61,6 +61,7 @@ pub struct RosterRow {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct PeopleData {
     pub people: Vec<RosterRow>,
+    pub my_card: Option<RosterRow>,
     pub lists: Vec<ListEntry>,
     /// Older people exist beyond the window: the walk's own answer.
     pub truncated: bool,
@@ -167,10 +168,23 @@ pub fn load_people(
     };
     let circle = asked!(read_circle(door, window), empty.clone());
     let lists = asked!(lists(door), empty.clone());
-    let people = asked!(rows_of(door, &circle.members, &lists, true), empty);
+    let people = asked!(rows_of(door, &circle.members, &lists, true), empty.clone());
+    let my_card = if let Some(id) = asked!(crate::queries::owner(door), empty.clone()) {
+        let own = asked!(
+            crate::queries::people_among_with_self(door, &[id], true, true),
+            empty.clone()
+        );
+        let own: Vec<_> = own.into_values().collect();
+        asked!(rows_of(door, &own, &lists, false), empty)
+            .into_iter()
+            .next()
+    } else {
+        None
+    };
     Ok((
         PeopleData {
             people,
+            my_card,
             lists,
             truncated: circle.filled,
             window,

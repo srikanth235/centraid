@@ -5,8 +5,9 @@
 //! padded window around the occurrence, which is a range read standing in for
 //! an id read and misses an occurrence the padding did not reach. This reads
 //! the series row by id, decorates it exactly as `upcoming` does, and — for an
-//! occurrence — expands the series over [`search_window`] around the
-//! occurrence's own wall clock and keeps the one whose key matches.
+//! occurrence — resolves exactly the occurrence's own wall clock and applies
+//! its exceptions. Dense minute/second series do not spend their read budget
+//! enumerating a padded window before the selected occurrence.
 //!
 //! An occurrence is named by `original_start_local`, or by the list's
 //! `instance_key` (`<event_id>:<wall clock>`) when that is what the screen
@@ -17,9 +18,11 @@
 
 use centraid_apps_kit::error::{KitError, KitResult};
 use centraid_apps_kit::reads::PageDoor;
-use centraid_vault::time::occurrence::{SEARCH_WINDOW_DAYS, search_window};
 
-use crate::expansion::expand_recurring_events;
+use crate::expansion::{
+    MAX_SERIES_INSTANCES, event_duration_ms, expand_recurring_events, expand_series_window,
+    named_occurrence,
+};
 use crate::queries::{
     CalendarRow, EventRow, events_among, name_places, read_calendars, read_exceptions,
 };
@@ -78,14 +81,12 @@ pub fn load_event(
     let key = occurrence_key(event_id, instance_key, original_start_local);
     let event = match (key, event.rrule.as_ref()) {
         (Some(key), Some(_)) => {
-            let Some((from, to)) = search_window(key, SEARCH_WINDOW_DAYS) else {
-                return Ok((EventDetailData::default(), None));
-            };
             let exceptions = read_exceptions(door, std::slice::from_ref(&event))?;
-            let mut days = expand_recurring_events(vec![event], &from, &to, &exceptions)?;
+            let mut days: Vec<_> = named_occurrence(&event, key, &exceptions)?
+                .into_iter()
+                .collect();
             name_places(door, &mut days)?;
-            days.into_iter()
-                .find(|row| row.original_start_local.as_deref() == Some(key))
+            days.into_iter().next()
         }
         // A one-off, or the series itself: the row, keyed as `search` keys it.
         _ => {
@@ -127,36 +128,81 @@ pub fn next_occurrence(
         return Ok(None);
     };
     let reach = NEXT_OCCURRENCE_REACH_DAYS * 86_400_000;
-    let at = centraid_vault::clock::format_iso_ms;
     let exceptions = read_exceptions(door, std::slice::from_ref(event))?;
-    let ahead = expand_recurring_events(
-        vec![event.clone()],
-        &at(now_ms),
-        &at(now_ms + reach),
-        &exceptions,
-    )?;
-    // A RANGE WITH NO OCCURRENCE ANSWERS THE ANCHOR (the expansion keeps an
-    // unsupported rule visible that way), so a series that ended comes back
-    // as its first start: only a start at or after now is "next". Compared to
-    // the minute, because a floating start carries no zone suffix.
-    let minute = |text: &str| text.get(..16).unwrap_or(text).to_owned();
-    let floor = minute(&at(now_ms));
-    if let Some(next) = ahead
+    let start = |row: &EventRow| {
+        centraid_vault::time::recurrence::parse_instant_ms(&row.dtstart).unwrap_or(i64::MIN)
+    };
+    let Ok(zone) =
+        centraid_vault::time::zone::FireZone::named(event.start_tz.as_deref().unwrap_or("Etc/UTC"))
+    else {
+        return Ok(None);
+    };
+    let invalid = event.rrule.as_deref().is_some_and(|rule| {
+        centraid_vault::time::rrule::inspect_for_date(
+            rule,
+            event.semantics() == centraid_vault::time::recurrence::Semantics::AllDay,
+        )
+        .is_err()
+    });
+    let window = |from: i64, to: i64| -> KitResult<Vec<EventRow>> {
+        let rows = if invalid {
+            let at = centraid_vault::clock::format_iso_ms;
+            expand_recurring_events(vec![event.clone()], &at(from), &at(to), &exceptions)?
+        } else {
+            expand_series_window(
+                event,
+                &exceptions,
+                from,
+                to,
+                &zone,
+                MAX_SERIES_INSTANCES + 1,
+            )?
+        };
+        Ok(rows
+            .into_iter()
+            .filter(|row| (from..to).contains(&start(row)))
+            .collect())
+    };
+    let duration = event_duration_ms(event).max(
+        if event.semantics() == centraid_vault::time::recurrence::Semantics::AllDay {
+            86_400_000
+        } else {
+            0
+        },
+    );
+    if let Some(next) = window(now_ms - duration.min(reach), now_ms + reach)?
         .into_iter()
-        .filter(|row| minute(&row.dtstart) >= floor)
-        .min_by_key(|row| minute(&row.dtstart))
+        .filter(|row| {
+            start(row) >= now_ms
+                || row
+                    .dtend
+                    .as_deref()
+                    .and_then(centraid_vault::time::recurrence::parse_instant_ms)
+                    .unwrap_or_else(|| start(row).saturating_add(duration))
+                    > now_ms
+        })
+        .min_by_key(start)
     {
         return Ok(Some(next));
     }
-    Ok(expand_recurring_events(
-        vec![event.clone()],
-        &at(now_ms - reach),
-        &at(now_ms),
-        &exceptions,
-    )?
-    .into_iter()
-    .filter(|row| minute(&row.dtstart) < floor)
-    .max_by_key(|row| minute(&row.dtstart)))
+    let mut from = now_ms - reach;
+    let mut to = now_ms;
+    let mut past = window(from, to)?;
+    // A forward prefix cannot identify the last occurrence of a dense series.
+    // Bisect only while a window is full; each step keeps the latest nonempty
+    // half. Work is bounded by the interval's bit length, not its event count.
+    while past.len() > MAX_SERIES_INSTANCES && to - from > 1 {
+        let middle = from + (to - from) / 2;
+        let later = window(middle, to)?;
+        if later.is_empty() {
+            to = middle;
+            past.retain(|row| start(row) < middle);
+        } else {
+            from = middle;
+            past = later;
+        }
+    }
+    Ok(past.into_iter().max_by_key(start))
 }
 
 #[cfg(test)]

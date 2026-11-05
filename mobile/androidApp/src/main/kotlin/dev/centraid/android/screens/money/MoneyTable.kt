@@ -22,6 +22,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -185,24 +188,36 @@ internal fun MoneyCategoryRow(line: MoneyCategoryLine, accessibility: String, te
             },
     ) {
         MoneyHairline()
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = CATEGORY_ROW_MIN)
-                .padding(horizontal = KitGeometry.GUTTER),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                line.label,
-                style = centraidType("body"),
-                color = centraidColor("text"),
-                maxLines = 2,
-                modifier = Modifier.weight(1f),
-            )
-            MoneyColumnFigure(figures.planned, ink = centraidColor("textSoft"))
-            MoneyColumnFigure(figures.spent, ink = centraidColor("text"))
-            MoneyColumnFigure(figures.left, ink = centraidColor(if (line.over) "net" else "textSoft"), strong = line.over)
+        Column(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+            if (LocalDensity.current.fontScale > 1.3f) {
+                Text(line.accessibility_label, style = centraidType("body"), color = centraidColor("text"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))
+            } else {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = CATEGORY_ROW_MIN)
+                        .padding(horizontal = KitGeometry.GUTTER),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(8.dp).background(centraidColor(line.color_key), CircleShape))
+                    Text(
+                        line.label,
+                        style = centraidType("body"),
+                        color = centraidColor("text"),
+                        maxLines = 2,
+                        modifier = Modifier.weight(1f),
+                    )
+                    MoneyColumnFigure(figures.planned, ink = centraidColor("textSoft"))
+                    MoneyColumnFigure(figures.spent, ink = centraidColor("text"))
+                    MoneyColumnFigure(figures.left, ink = centraidColor(if (line.over) "net" else "textSoft"), strong = line.over)
+                }
+            }
+            if (line.has_plan) {
+                Box(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER).padding(top = 8.dp).height(5.dp).clip(moneyRadius("sm")).background(centraidColor("bgSunken"))) {
+                    Box(Modifier.fillMaxWidth(line.progress_bp.toFloat() / 10_000f).height(5.dp).background(centraidColor(if (line.over) "errorFill" else line.color_key)))
+                }
+            }
         }
     }
 }
@@ -218,8 +233,11 @@ internal fun MoneyNeedsRow(label: String, figures: List<MoneyFigure>, onTap: () 
         Modifier
             .fillMaxWidth()
             .heightIn(min = KitGeometry.ROW_MIN)
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+            .clip(moneyRadius("md"))
+            .background(centraidColor("moneyTint"))
             .clickable(onClick = onTap)
-            .padding(horizontal = KitGeometry.GUTTER)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
             .testTag("money-needs-category")
             .clearAndSetSemantics {
                 contentDescription = spoken(label, figures.firstOrNull()?.amount)
@@ -231,14 +249,13 @@ internal fun MoneyNeedsRow(label: String, figures: List<MoneyFigure>, onTap: () 
         Text(
             label,
             style = centraidType("annotLabelOn"),
-            color = centraidColor("seam"),
+            color = centraidColor("moneyText"),
             modifier = Modifier.weight(1f),
         )
         Text(
             MoneyGeometry.needsAmounts(figures.map { money(it.amount) }),
             style = centraidType("annotLabel").copy(fontFeatureSettings = TABULAR),
             color = centraidColor("textSoft"),
-            maxLines = 1,
         )
         CentraidIcon("ChevronRight", tint = centraidColor("textGhost"), size = NEEDS_CHEVRON)
     }

@@ -9,6 +9,8 @@ agenda,restore-event,restore,event,direct,no,no
 agenda,attach,attach,event,card,no,no
 agenda,detach,detach,event,card,no,no
 agenda,add-task,create,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
+agenda,import-reminders,import,task,card,yes: crates/screens/src/agenda/home/mod.rs; crates/screens/src/imports/reminders.rs,no
+agenda,calendar-written,edit,event,card,yes: crates/screens/src/agenda/calendar.rs; crates/screens/src/agenda/calendar_write.rs,no
 agenda,edit-task,edit,task,direct,yes: crates/screens/src/agenda/detail.rs,yes
 agenda,complete-task,complete,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
 agenda,reopen-task,reopen,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
@@ -23,6 +25,12 @@ agenda,create-section,create,section,card,yes: crates/screens/src/agenda/todo/op
 agenda,add-task-tag,tag,task,direct,yes: crates/screens/src/agenda/detail.rs,no
 agenda,remove-task-tag,untag,task,direct,yes: crates/screens/src/agenda/detail.rs,no
 agenda,follow-calendar,import,event,card,yes: crates/screens/src/agenda/calendar.rs,no
+agenda,flag-task,star,task,direct,yes: crates/screens/src/agenda/todo/ops.rs; crates/screens/src/agenda/detail.rs,yes
+agenda,unflag-task,unstar,task,direct,yes: crates/screens/src/agenda/todo/ops.rs; crates/screens/src/agenda/detail.rs,yes
+agenda,reorder-task,edit:before_id,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
+agenda,create-calendar,create,event,card,yes: crates/screens/src/agenda/home/mod.rs,no
+agenda,style-list,edit,list,card,yes: crates/screens/src/agenda/home/mod.rs; crates/screens/src/agenda/project.rs,no
+agenda,clear-completed,delete,task,card,yes: crates/screens/src/agenda/list.rs; crates/screens/src/agenda/project.rs,no
 docs,upload,import,document,card,yes: crates/screens/src/docs/drive/ingest.rs,no
 docs,create-text,create,document,direct,yes: crates/screens/src/docs/drive/ingest.rs,yes
 docs,rename,edit,document,direct,yes: crates/screens/src/docs/rename.rs,yes
@@ -41,6 +49,7 @@ docs,restore-version,restore,document,card,yes: crates/screens/src/docs/versions
 docs,create-folder,create,folder,direct,yes: crates/screens/src/docs/drive/mod.rs,yes
 docs,rename-folder,edit,folder,direct,no,yes
 docs,delete-folder,delete,folder,direct,no,yes
+docs,color-label,edit:color,tag,card,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs; crates/screens/src/docs/fold.rs,no
 health,record-days,log,daily_figure,card,yes: crates/screens/src/health/follow.rs,no
 health,follow-workouts,import,workout,card,yes: crates/screens/src/health/follow.rs,no
 health,delete-workout,delete,workout,direct,no,yes

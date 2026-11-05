@@ -38,7 +38,7 @@ struct HomeBand: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack(spacing: 0) {
+        BandItems(spacing: 0) {
             ForEach(places, id: \.id) { place in
                 BandTab(
                     iconKey: place.iconKey,
@@ -93,10 +93,8 @@ private struct BandTab: View {
                 }
                 .frame(width: BandMetrics.markSize, height: BandMetrics.markSize)
                 Text(label)
-                    // The same 11/15 rung either way, so a tap cannot reflow
-                    // the strip, and it HOLDS at every text size: `control`
-                    // scales elsewhere, so the active half says `scales: false`.
-                    .centraidType(selected ? "control" : "band", scales: false)
+                    // At larger sizes the plate scrolls; labels keep the system size.
+                    .centraidType(selected ? "control" : "band")
                     .foregroundStyle(Theme.color(selected ? "text" : "textSoft", scheme))
                     .lineLimit(1)
                     .multilineTextAlignment(.center)
@@ -115,7 +113,7 @@ private struct BandTab: View {
     }
 }
 
-/// AN APP'S BAND — the `AppPlace` room's band (DESIGN.md, "The seven rooms"),
+/// AN APP'S BAND — the `AppPlace` room's band (product-intuition screen contracts, "The seven rooms"),
 /// copied from v0's (`apps/mobile/src/apps/photos/PhotosBand.tsx`,
 /// `kit/band/BandCapsule.tsx`, `kit/band-surface.ts`).
 ///
@@ -131,7 +129,7 @@ private struct BandTab: View {
 /// the held pair (`band` 400 → `control` 600, same rung, so nothing reflows),
 /// the ink step (`textFaint` mark and `textSoft` label → full `text`), and the
 /// rule. v0 said it with ink and the rule alone and set every label at 600,
-/// which left four grey bold words and a hairline to hunt for; DESIGN.md's held
+/// which left four grey bold words and a hairline to hunt for; product-intuition screen contracts's held
 /// pair is what makes the lit tab legible at a glance.
 ///
 /// **THE RULE SLIDES, AND IT SITS INSIDE THE PLATE.** Drawn on the plate's
@@ -152,7 +150,7 @@ private struct BandTab: View {
 /// that lies.
 ///
 /// **THE GROUND IS THE PLATFORM'S OWN, AND CONTENT RUNS UNDER IT** (`BandGround`): real Liquid
-/// Glass on iOS 26 and later, the system material before it. The Home circle, the plate and the
+/// Glass on iOS 26 and later, a solid surface before it. The Home circle, the plate and the
 /// search key are one glass family (`BandGlassGroup`). Under Reduce Transparency or Increase
 /// Contrast it is the solid paper it used to be, so contrast then depends on nothing that was
 /// photographed.
@@ -211,7 +209,7 @@ struct AppBand: View {
             // ONE plate; the gutter between the tabs is the seam. NO PLATE
             // AT ALL with no tabs (a locked Locker, #1047): an empty capsule
             // is a control that does nothing.
-            HStack(spacing: BandMetrics.groupGutter) {
+            BandItems(spacing: BandMetrics.groupGutter) {
                 ForEach(tabs, id: \.self) { tab in
                     AppBandTab(
                         iconKey: tab.iconKey,
@@ -296,14 +294,13 @@ struct BandSegmented: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack(spacing: BandMetrics.groupGutter) {
+        BandItems(spacing: BandMetrics.groupGutter) {
             ForEach(segments, id: \.id) { segment in
                 Button { onPick(segment.id) } label: {
                     Text(segment.label)
-                        .centraidType(segment.selected ? "control" : "band", scales: false)
+                        .centraidType(segment.selected ? "control" : "band")
                         .foregroundStyle(Theme.color(segment.selected ? "text" : "textSoft", scheme))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity, minHeight: BandMetrics.tabMinHeight)
                         .background(
                             Capsule().fill(segment.selected ? Theme.color("bgSunken", scheme) : .clear)
@@ -319,6 +316,27 @@ struct BandSegmented: View {
         .padding(BandMetrics.platePad)
         .frame(maxWidth: .infinity)
         .bandGround(Capsule(), solid: "bgElev")
+    }
+}
+
+/// Preserve the full text size in a horizontally scrollable plate when labels no longer fit.
+/// Home and search remain outside the app plate and always stay reachable.
+struct BandItems<Content: View>: View {
+    let spacing: CGFloat
+    @ViewBuilder let content: () -> Content
+    @Environment(\.dynamicTypeSize) private var textSize
+
+    var body: some View {
+        if textSize >= .xxLarge {
+            ScrollView(.horizontal) {
+                HStack(spacing: spacing) { content() }
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .scrollIndicators(.hidden)
+            .fixedSize(horizontal: false, vertical: true)
+        } else {
+            HStack(spacing: spacing) { content() }
+        }
     }
 }
 
@@ -382,14 +400,14 @@ private struct AppBandTab: View {
                 )
                 .frame(width: BandMetrics.markSize, height: BandMetrics.markSize)
                 Text(label)
-                    // THE HELD PAIR: one rung, two weights, no reflow — and it
-                    // holds at every text size (`control` scales elsewhere).
-                    .centraidType(selected ? "control" : "band", scales: false)
+                    // Selection changes weight; every label follows Dynamic Type.
+                    .centraidType(selected ? "control" : "band")
                     .foregroundStyle(Theme.color(selected ? "text" : "textSoft", scheme))
                     .lineLimit(1)
             }
             .padding(.top, BandMetrics.tabTop)
             .padding(.bottom, BandMetrics.tabBottom)
+            .padding(.horizontal, 8)
             .frame(maxWidth: .infinity, minHeight: BandMetrics.tabMinHeight)
             .overlay(alignment: .top) {
                 if selected {
@@ -418,7 +436,7 @@ private struct AppBandTab: View {
 
 /// THE BAND'S PRESS: `bgPress` under the finger, on the pill rung like the
 /// plate it sits in, eased on the state-change curve. A ground and not a
-/// scale, a dim or an opacity — DESIGN.md refuses all three — so the tab stays
+/// scale, a dim or an opacity — product-intuition screen contracts refuses all three — so the tab stays
 /// exactly where it was and only its floor answers.
 private struct BandPress: ButtonStyle {
     /// How far the pressed ground stands in from the tab's top and bottom, so
@@ -448,7 +466,7 @@ private struct BandPress: ButtonStyle {
     }
 }
 
-/// THE BAND'S GROUND, ONCE FOR EVERY BAND (DESIGN.md, "Elevation & Depth"): the platform's own
+/// THE BAND'S GROUND, ONCE FOR EVERY BAND (product-intuition screen contracts, "Elevation & Depth"): the platform's own
 /// glass over whatever the page scrolls under it, or the paper it falls back to. This is the ONE
 /// place the shell asks which OS it is on; no band, key or bar decides that for itself.
 ///
@@ -459,12 +477,8 @@ private struct BandPress: ButtonStyle {
 /// each tab's. The glass draws its own edge and its own depth, so nothing is added to it: no
 /// tint, no hairline, no shadow.
 ///
-/// **THE FALLBACK IS ONE SIMPLE RULE, NOT A SECOND DESIGN.** iOS 17.5 to 25 has no glass, so the
-/// plate is the system's own material (`.thinMaterial`) with no tint laid over it. Reduce
-/// Transparency and Increase Contrast, on any OS, both mean "do not make me read through a blur",
-/// so either one puts the plate on `solid` (the token it was always drawn on, which the caller
-/// names) and `BandStrip` puts the page colour back under the strip. Either fallback keeps the
-/// plate's hairline; glass has no need of one.
+/// Before iOS 26, and under Reduce Transparency or Increase Contrast, the
+/// floating surface is solid. Both fallbacks keep the token's hairline.
 struct BandGround<S: InsettableShape>: ViewModifier {
     let shape: S
     /// The token the plate is drawn on when it is not glass.
@@ -481,13 +495,7 @@ struct BandGround<S: InsettableShape>: ViewModifier {
             content.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
         } else {
             content
-                .background {
-                    if BandMetrics.isGlass(reduceTransparency: reduceTransparency, contrast: contrast) {
-                        shape.fill(.thinMaterial)
-                    } else {
-                        shape.fill(Theme.color(solid, scheme))
-                    }
-                }
+                .background(shape.fill(Theme.color(solid, scheme)))
                 .overlay(
                     shape.strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
                 )

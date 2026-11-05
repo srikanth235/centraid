@@ -214,6 +214,8 @@ message AgendaEvent {
   string next_original_start_local = 35;
   // That occurrence's start in the request's `tz`, spelled as `local_start`.
   string next_local_start = 36;
+  bool busy = 37;
+  int64 travel_minutes = 38;
 }
 
 // One reminder: how long before the start it fires.
@@ -236,6 +238,8 @@ message AgendaAttachment {
   // `ContentUrlRequest` by `content_id`, never through this.
   string content_uri = 6;
   int64 byte_size = 7;
+  string title = 8;
+  string kind = 9;
 }
 
 // One guest, and their reply.
@@ -263,6 +267,7 @@ message AgendaCalendar {
   string calendar_id = 1;
   optional string name = 3;
   optional string color = 4;
+  string icon_key = 7;
 }
 
 // One birthday inside the range.
@@ -334,6 +339,7 @@ message AgendaDayContext {
 }
 
 message AgendaParties {
+  repeated AgendaParty places = 3;
   // The owner first and flagged, then by name. People only: an invitation is a
   // commitment asked of a person, so agents, orgs and groups are left out.
   repeated AgendaParty parties = 1;
@@ -550,6 +556,9 @@ message AgendaTask {
   // `created_at`'s civil day (`YYYY-MM-DD`) in the request zone — what
   // "sitting since" names. EMPTY when there is no `created_at`.
   string created_local_day = 39;
+  // A task uses the vault's shared starred flag; Reminders calls it Flagged.
+  bool flagged = 40;
+  optional string url = 41;
 }
 
 message AgendaTaskTag {
@@ -571,6 +580,8 @@ message AgendaTaskAttachment {
   string media_type = 5;
   string content_uri = 6;
   int64 byte_size = 7;
+  string title = 8;
+  string kind = 9;
 }
 
 // An `@`-mention, resolved through a live link and its anchor. The entity
@@ -591,6 +602,7 @@ message AgendaTaskProject {
   int64 sort_order = 5;
   // Open ROOTS filed here, in the board window read.
   uint32 open_count = 6;
+  string icon_key = 7;
 }
 
 message AgendaTaskSection {
@@ -653,6 +665,7 @@ message AgendaTaskCounts {
   // was read, not what the table holds.
   uint32 open = 7;
   uint32 closed = 8;
+  uint32 flagged = 9;
 }
 
 // ---------------------------------------------------------------------------

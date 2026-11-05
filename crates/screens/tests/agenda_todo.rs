@@ -35,7 +35,7 @@ fn a_projects_hue_is_a_colour_role_never_the_wheels_word() {
         color: Some("var(--c-teal)".into()),
         ..Default::default()
     };
-    assert_eq!(rows::hue_of("p1", Some(&project)), "cTeal");
+    assert_eq!(rows::hue_of("p1", Some(&project)), "listPetrol");
     // No stored hue: the id's own, still a role.
     let own = rows::hue_of(
         "p1",
@@ -44,8 +44,8 @@ fn a_projects_hue_is_a_colour_role_never_the_wheels_word() {
             ..Default::default()
         }),
     );
-    assert!(own.starts_with('c') && own.len() > 1, "{own}");
-    assert!(rows::hue_of("p1", None).starts_with('c'));
+    assert!(own.starts_with("list") && own.len() > 1, "{own}");
+    assert!(rows::hue_of("p1", None).starts_with("list"));
 }
 
 #[test]
@@ -119,7 +119,7 @@ fn a_rows_meta_line_says_project_repeats_missed_effort_tags_and_family() {
         "Home admin · Monthly · missed 2 · next is Fri 19 June · ~25 min · #home · 1 of 2"
     );
     let row = rows::row(EN, &behind, &ctx, false);
-    assert_eq!(row.priority_label, "Now");
+    assert_eq!(row.priority_label, "!!!");
     assert!(row.children.iter().all(|child| child.subtask));
 }
 
@@ -128,11 +128,11 @@ fn priority_runs_higher_more_urgent_and_anything_above_three_is_now() {
     for none in [0, -1] {
         assert_eq!(rows::priority_label(EN, none), "");
     }
-    assert_eq!(rows::priority_label(EN, 1), "Soon");
-    assert_eq!(rows::priority_label(EN, 2), "Next");
-    assert_eq!(rows::priority_label(EN, 3), "Now");
+    assert_eq!(rows::priority_label(EN, 1), "!");
+    assert_eq!(rows::priority_label(EN, 2), "!!");
+    assert_eq!(rows::priority_label(EN, 3), "!!!");
     for high in [4, 5, 9] {
-        assert_eq!(rows::priority_label(EN, high), "Now");
+        assert_eq!(rows::priority_label(EN, high), "!!!");
     }
 }
 
@@ -156,7 +156,7 @@ fn the_list_reads_its_view_and_names_it() {
     for (view, title, expect_idea, expect_dated) in [
         (wire::TodoView::Anytime, "Anytime", true, false),
         (wire::TodoView::All, "All", true, true),
-        (wire::TodoView::Logbook, "Logbook", false, false),
+        (wire::TodoView::Logbook, "Completed", false, false),
         (wire::TodoView::Reminders, "Reminders", false, false),
     ] {
         let i = d.push(agenda::TAB, routes::todo_list(view));
@@ -799,7 +799,7 @@ fn catch_up_piles_what_came_due_and_names_the_absence() {
     );
     let i = d.push(agenda::TAB, routes::catch_up());
     let state = catch_up(d.view(i));
-    assert_eq!(state.chrome.as_ref().unwrap().title, "Reschedule");
+    assert_eq!(state.chrome.as_ref().unwrap().title, "Catch up");
     let data = catch_up_data(d.view(i));
     assert_eq!(data.head, "14 days away · 2 tasks came due");
     let keys: Vec<&str> = data.piles.iter().map(|p| p.key.as_str()).collect();
@@ -980,4 +980,158 @@ fn the_board_view_of_the_project_page_is_the_projects_own() {
     assert!(rows(&project_data(d.view(i)).groups).is_empty());
     let board = load_board(&d, load::agenda::BoardView::Project, Some(&garden));
     assert!(board.groups.iter().all(|g| g.tasks.is_empty()));
+}
+
+#[test]
+fn flags_are_real_row_actions_and_the_flagged_list_follows_them() {
+    let mut d = driver();
+    clear_tasks(&d);
+    let first = task(&d, "Milk");
+    let second = task(&d, "Bread");
+    arrange(
+        &d,
+        act::agenda::FlagTask {
+            task_id: first.clone(),
+        },
+    );
+    let i = d.push(agenda::TAB, routes::todo_list(wire::TodoView::Flagged));
+    let ids = |d: &centraid_screens::testing::Driver| {
+        list_data(d.view(i))
+            .groups
+            .iter()
+            .flat_map(|group| &group.rows)
+            .map(|row| row.task_id.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(ids(&d), [first.clone()]);
+    send_list(
+        &mut d,
+        i,
+        le::Kind::RowAction(wire::TodoRowAction {
+            task_id: first.clone(),
+            key: "flag".into(),
+            ..Default::default()
+        }),
+    );
+    assert!(ids(&d).is_empty());
+    assert!(!task_of(&d, &first).flagged);
+    assert!(!task_of(&d, &second).flagged);
+}
+
+#[test]
+fn show_completed_and_clear_only_affect_the_projects_completed_work() {
+    let mut d = driver();
+    clear_tasks(&d);
+    let garden = project(&d, "Garden");
+    let elsewhere = task(&d, "Elsewhere");
+    let finished = add(
+        &d,
+        act::agenda::AddTask {
+            title: "Water".into(),
+            project_id: Field::Is(garden.clone()),
+            ..Default::default()
+        },
+    );
+    let open_id = add(
+        &d,
+        act::agenda::AddTask {
+            title: "Plant".into(),
+            project_id: Field::Is(garden.clone()),
+            ..Default::default()
+        },
+    );
+    complete(&d, &finished);
+    complete(&d, &elsewhere);
+    let i = d.push(agenda::TAB, routes::project(&garden, "Garden"));
+    assert!(
+        !project_data(d.view(i))
+            .groups
+            .iter()
+            .flat_map(|group| &group.rows)
+            .any(|row| row.task_id == finished)
+    );
+    send_project(
+        &mut d,
+        i,
+        pe::Kind::CompletedChanged(pe::CompletedChanged { on: true }),
+    );
+    assert!(
+        project_data(d.view(i))
+            .groups
+            .iter()
+            .flat_map(|group| &group.rows)
+            .any(|row| row.task_id == finished)
+    );
+    send_project(&mut d, i, pe::Kind::ClearCompleted(pe::ClearCompleted {}));
+    assert_eq!(task_of(&d, &open_id).status, "open");
+    assert_eq!(task_of(&d, &elsewhere).status, "done");
+    let wire::app_query_response::Answer::AgendaTask(detail) =
+        answer(&d, load::agenda::Task { task_id: finished })
+    else {
+        panic!("task detail")
+    };
+    assert!(detail.task.is_none());
+}
+
+#[test]
+fn drag_reorders_siblings_and_cannot_move_a_task_across_lists() {
+    let mut d = driver();
+    clear_tasks(&d);
+    let garden = project(&d, "Garden");
+    // Created first, but the untouched fallback order is A, B, C.
+    let c = add(
+        &d,
+        act::agenda::AddTask {
+            title: "C".into(),
+            project_id: Field::Is(garden.clone()),
+            ..Default::default()
+        },
+    );
+    let a = add(
+        &d,
+        act::agenda::AddTask {
+            title: "A".into(),
+            project_id: Field::Is(garden.clone()),
+            ..Default::default()
+        },
+    );
+    let b = add(
+        &d,
+        act::agenda::AddTask {
+            title: "B".into(),
+            project_id: Field::Is(garden.clone()),
+            ..Default::default()
+        },
+    );
+    let foreign = task(&d, "Foreign");
+    let i = d.push(agenda::TAB, routes::project(&garden, "Garden"));
+    send_project(
+        &mut d,
+        i,
+        pe::Kind::RowAction(wire::TodoRowAction {
+            task_id: b.clone(),
+            key: "reorder".into(),
+            before_id: a.clone(),
+        }),
+    );
+    assert_eq!(
+        project_data(d.view(i))
+            .groups
+            .iter()
+            .flat_map(|group| &group.rows)
+            .map(|row| row.task_id.as_str())
+            .collect::<Vec<_>>(),
+        [b.as_str(), a.as_str(), c.as_str()]
+    );
+    send_project(
+        &mut d,
+        i,
+        pe::Kind::RowAction(wire::TodoRowAction {
+            task_id: a.clone(),
+            key: "reorder".into(),
+            before_id: foreign,
+        }),
+    );
+    assert!(project_state(d.view(i)).status.as_ref().unwrap().refused);
+    assert_eq!(task_of(&d, &a).project_id.as_deref(), Some(garden.as_str()));
 }

@@ -14,6 +14,19 @@ use locker_support::*;
 use wire::locker_home_event::Kind as H;
 use wire::screen_event::Kind as E;
 
+/// Tests of the full inventory explicitly open the All category.
+fn open_all(d: &mut Driver) -> u64 {
+    let id = open_home(d);
+    home_event(
+        d,
+        id,
+        H::Category(wire::locker_home_event::CategoryPicked {
+            key: "all".to_owned(),
+        }),
+    );
+    id
+}
+
 #[test]
 fn opening_locker_asks_at_once_and_a_cancel_leaves_the_wall_to_try_again() {
     let mut d = driver();
@@ -153,7 +166,7 @@ fn a_refused_check_is_counted_said_on_the_wall_and_told_once_after_the_unlock() 
 fn leaving_the_foreground_relocks_at_once_and_returning_does_not_prompt() {
     let mut d = driver();
     login(&d, "i1", "Bank");
-    let id = open_home(&mut d);
+    let id = open_all(&mut d);
     assert_eq!(home_data(&d, id).rows.len(), 1);
     d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
         foreground: false,
@@ -221,7 +234,7 @@ fn options(d: &Driver, id: u64) -> Vec<(String, u32, bool)> {
 #[test]
 fn items_fold_into_a_menu_rows_and_a_day_one_state() {
     let mut d = driver();
-    let id = open_home(&mut d);
+    let id = open_all(&mut d);
     let data = home_data(&d, id);
     assert!(data.rows.is_empty());
     let empty = data.items_empty.expect("day one");
@@ -282,7 +295,7 @@ fn items_fold_into_a_menu_rows_and_a_day_one_state() {
 #[test]
 fn starred_and_archived_join_the_menu_when_there_are_some_and_clear_returns_to_all() {
     let mut d = driver();
-    let id = open_home(&mut d);
+    let id = open_all(&mut d);
     login(&d, "i1", "Bank");
     login(&d, "i2", "Mail");
     login(&d, "i3", "Old");
@@ -343,7 +356,7 @@ fn starred_and_archived_join_the_menu_when_there_are_some_and_clear_returns_to_a
 #[test]
 fn a_pick_in_another_section_changes_nothing_and_search_has_no_menu() {
     let mut d = driver();
-    let id = open_home(&mut d);
+    let id = open_all(&mut d);
     login(&d, "i1", "Bank");
     arrange(
         &d,
@@ -386,7 +399,7 @@ fn the_menu_is_not_drawn_under_the_wall() {
 #[test]
 fn the_band_is_places_then_more_and_search_is_the_bar() {
     let mut d = driver();
-    let id = open_home(&mut d);
+    let id = open_all(&mut d);
     let band = home(&d, id).band;
     let keys: Vec<&str> = band.iter().map(|t| t.key.as_str()).collect();
     assert_eq!(keys, ["items", "review", "generate", "more"]);
@@ -429,7 +442,7 @@ fn the_band_is_places_then_more_and_search_is_the_bar() {
 fn search_finds_by_title_and_never_offers_ask() {
     let mut d = driver();
     login(&d, "i1", "Bank");
-    let id = open_home(&mut d);
+    let id = open_all(&mut d);
     home_event(
         &mut d,
         id,
@@ -468,7 +481,7 @@ fn review_names_a_compromised_item_and_the_checks_this_phone_does_not_run() {
             ..Default::default()
         },
     );
-    let id = open_home(&mut d);
+    let id = open_all(&mut d);
     home_event(
         &mut d,
         id,
@@ -486,7 +499,7 @@ fn review_names_a_compromised_item_and_the_checks_this_phone_does_not_run() {
 fn a_relock_wipes_what_the_home_held() {
     let mut d = driver();
     login(&d, "i1", "Bank");
-    let id = open_home(&mut d);
+    let id = open_all(&mut d);
     home_event(
         &mut d,
         id,
@@ -553,4 +566,66 @@ fn generate_draws_from_the_given_bytes_and_a_relock_drops_the_candidate() {
         k,
         wire::effect::Kind::ClipboardSet(set) if set.sensitive && set.clear_after_ms == 30_000
     )));
+}
+
+#[test]
+fn the_overview_reads_categories_stars_and_real_recent_use_without_revealing_a_secret() {
+    let mut d = driver();
+    login(&d, "bank", "Bank");
+    arrange(
+        &d,
+        centraid_screens::catalog::act::locker::AddItem {
+            item_id: Some("code".to_owned()),
+            title: "Mail".to_owned(),
+            r#type: centraid_screens::catalog::act::locker::AddItemType::Login,
+            otp_seed: Some("JBSWY3DPEHPK3PXP".to_owned()),
+            ..Default::default()
+        },
+    );
+    arrange(
+        &d,
+        centraid_screens::catalog::act::locker::StarItem {
+            locker_item_id: "bank".to_owned(),
+        },
+    );
+    let id = open_home(&mut d);
+    let data = home_data(&d, id);
+    assert_eq!(
+        data.categories
+            .iter()
+            .map(|category| category.key.as_str())
+            .collect::<Vec<_>>(),
+        ["all", "codes", "card", "wifi", "review", "trash"]
+    );
+    assert_eq!(
+        data.starred_rows
+            .iter()
+            .map(|row| row.title.as_str())
+            .collect::<Vec<_>>(),
+        ["Bank"]
+    );
+    assert!(
+        data.recent_rows.is_empty(),
+        "never used items do not become recently used"
+    );
+    assert!(
+        data.rows.is_empty(),
+        "the overview keeps the inventory behind All"
+    );
+    home_event(
+        &mut d,
+        id,
+        H::Category(wire::locker_home_event::CategoryPicked {
+            key: "codes".to_owned(),
+        }),
+    );
+    let data = home_data(&d, id);
+    assert_eq!(
+        data.rows
+            .iter()
+            .map(|row| row.title.as_str())
+            .collect::<Vec<_>>(),
+        ["Mail"]
+    );
+    assert!(!format!("{data:?}").contains("JBSWY3DPEHPK3PXP"));
 }

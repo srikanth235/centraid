@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -51,7 +52,7 @@ import dev.centraid.design.CentraidGeometry
  *
  * One trailing verb, and only when there is something to say: Settings, the
  * door to the transfer rules, drawn beside the originals-waiting line. A key
- * with no destination is not drawn (DESIGN.md, HomeRoom).
+ * with no destination is not drawn (product-intuition screen contracts, HomeRoom).
  */
 @Composable
 public fun VaultHeader(
@@ -116,7 +117,7 @@ public fun VaultHeader(
         ) {
             Box(
                 Modifier
-                    .size(30.dp)
+                    .sizeIn(minWidth = 30.dp, minHeight = 30.dp)
                     // The control rung from the token scale, not the chip
                     // ratio — that is for app marks.
                     .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["md"] ?: 0).dp))
@@ -134,8 +135,6 @@ public fun VaultHeader(
                     name,
                     style = centraidType("smallStrong"),
                     color = centraidColor("text"),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
                 if (status.isNotEmpty()) {
                     // THE BACKUP STATUS (R-ONBOARD-11): a dot in the tone's
@@ -167,27 +166,21 @@ public fun VaultHeader(
                             status,
                             style = centraidType("mono"),
                             color = centraidColor(if (loud) "text" else "textFaint"),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                                        )
                     }
                 } else if (line.isNotEmpty()) {
                     Text(
                         line,
                         style = centraidType("mono"),
                         color = centraidColor("textFaint"),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                            )
                 }
                 if (waiting.isNotEmpty()) {
                     Text(
                         waiting,
                         style = centraidType("mono"),
                         color = centraidColor("textFaint"),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.testTag("home-originals-waiting"),
+                                modifier = Modifier.testTag("home-originals-waiting"),
                     )
                 }
             }
@@ -210,10 +203,10 @@ public fun VaultHeader(
                 )
             }
             if (onSearch != null) {
-                IconKey(iconKey = "Search", label = bar.search_label, testTag = "home-search-open", onPress = onSearch)
+                IconKey(iconKey = "Search", label = bar.search_label, testTag = "home-search-open", floating = true, onPress = onSearch)
             }
             if (onAppearance != null) {
-                IconKey(iconKey = bar.appearance_icon, label = bar.appearance_label, testTag = "home-appearance", onPress = onAppearance)
+                IconKey(iconKey = bar.appearance_icon, label = bar.appearance_label, testTag = "home-appearance", floating = true, onPress = onAppearance)
             }
         }
     }
@@ -223,7 +216,7 @@ public fun VaultHeader(
  * A vault's own hue, and the one wash that is not emitted.
  *
  * Every APP hue is resolved and composited by
- * `contracts/tools/export-native-catalog.ts`, because the eight apps are known
+ * `cargo xtask design`, because the eight apps are known
  * at build time. A vault's colour is the MEMBER's, chosen at runtime, so it
  * cannot be in that table — and this is the one place the blend is computed
  * rather than read. It uses the same tint share the emitter uses, from the same

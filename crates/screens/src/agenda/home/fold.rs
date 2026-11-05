@@ -49,7 +49,7 @@ const NEEDS_ACTION: &str = "needs-action";
 const MIDNIGHT: &str = "00:00";
 const META_SEPARATOR: &str = " · ";
 /// A party hue for an event on no calendar: neutral, and never a brand.
-const NO_CALENDAR_HUE: &str = "cSlate";
+const NO_CALENDAR_HUE: &str = "listGraphite";
 
 /// What a fold reads besides the held answers.
 pub struct Fold<'a> {
@@ -84,9 +84,7 @@ impl<'a> Hues<'a> {
             return NO_CALENDAR_HUE.to_owned();
         };
         let stored = self.stored.get(id).copied().flatten();
-        let key = centraid_design::party_hue_key(id, stored)
-            .unwrap_or_else(|| centraid_design::identity_hue_key(id));
-        rows::hue_role(key)
+        crate::agenda::appearance::color(id, stored)
     }
 }
 
@@ -371,6 +369,7 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
             .map(|calendar| {
                 let hidden = fold.hidden.contains(&calendar.calendar_id);
                 wire::AgendaCalendarChoice {
+                    icon_key: calendar.icon_key.clone(),
                     calendar_id: calendar.calendar_id.clone(),
                     name: calendar
                         .name
@@ -620,6 +619,32 @@ fn event_row(
         .collect::<Vec<_>>()
         .join(", ");
     wire::AgendaEventRow {
+        adjustments: if event.all_day {
+            Vec::new()
+        } else {
+            vec![
+                wire::AgendaEventAdjustment {
+                    label: words::earlier(locale),
+                    delta_minutes: -15,
+                    resize: false,
+                },
+                wire::AgendaEventAdjustment {
+                    label: words::later(locale),
+                    delta_minutes: 15,
+                    resize: false,
+                },
+                wire::AgendaEventAdjustment {
+                    label: words::shorter(locale),
+                    delta_minutes: -15,
+                    resize: true,
+                },
+                wire::AgendaEventAdjustment {
+                    label: words::longer(locale),
+                    delta_minutes: 15,
+                    resize: true,
+                },
+            ]
+        },
         instance_key: event.instance_key.clone(),
         row_key: format!("{day}|{}", event.instance_key),
         title,
@@ -821,11 +846,13 @@ mod tests {
                 events,
                 calendars: vec![
                     wire::AgendaCalendar {
+                        icon_key: String::new(),
                         calendar_id: "cal-1".to_owned(),
                         name: Some("Personal".to_owned()),
                         color: Some("var(--c-teal)".to_owned()),
                     },
                     wire::AgendaCalendar {
+                        icon_key: String::new(),
                         calendar_id: "cal-2".to_owned(),
                         name: Some("Work".to_owned()),
                         color: Some("steelblue".to_owned()),
@@ -958,7 +985,7 @@ mod tests {
             Dest::Schedule,
             &[],
         );
-        assert_eq!(data.calendars[0].hue_key, "cTeal");
+        assert_eq!(data.calendars[0].hue_key, "listPetrol");
         assert_eq!(
             data.calendars[1].hue_key,
             rows::hue_role(centraid_design::identity_hue_key("cal-2")),
@@ -968,7 +995,7 @@ mod tests {
             .iter()
             .map(|row| row.calendar_hue_key.as_str())
             .collect();
-        assert_eq!(hues, ["cTeal", "cSlate"]);
+        assert_eq!(hues, ["listPetrol", "listGraphite"]);
     }
 
     #[test]

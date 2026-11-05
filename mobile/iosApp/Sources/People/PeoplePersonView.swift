@@ -16,6 +16,7 @@ struct PeoplePersonView: View {
     let onBack: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var content: ScreenContent<Centraid_Core_V1_PeoplePersonData> {
         switch state.content {
@@ -100,12 +101,27 @@ private struct PeoplePersonBody: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 header
+                heroActions
                 actions(chrome)
                 if state.hasStatus, !state.status.sentence.isEmpty {
                     PeopleStatusLine(text: state.status.sentence)
                 }
                 ForEach(Array(person.facts.enumerated()), id: \.offset) { _, fact in
                     FieldRow(key: fact.label, value: fact.value)
+                }
+
+                if !person.vaultLinks.isEmpty {
+                    SectionHeader(title: person.vaultLinksTitle)
+                    ForEach(person.vaultLinks, id: \.id) { link in
+                        HStack(spacing: 8) {
+                            CentraidIconView(iconKey: link.iconKey, tint: Theme.color(link.colorKey, scheme), size: 22)
+                                .padding(.leading, CentraidGeometry.pageMargin)
+                            CentraidRow(title: link.title, meta: link.appLabel, identifier: "people-vault-link-\(link.id)") {
+                                open(link.route)
+                            }
+                        }
+                    }
+                    if !person.vaultLinksNote.isEmpty { PeopleStatusLine(text: person.vaultLinksNote) }
                 }
 
                 SectionHeader(
@@ -206,11 +222,11 @@ private struct PeoplePersonBody: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
-            PeopleAvatarView(avatar: person.avatar, size: 56)
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(spacing: 12) {
+            PeopleAvatarView(avatar: person.avatar, size: 88)
+            VStack(spacing: 4) {
                 Text(person.name)
-                    .centraidType("title")
+                    .centraidType("display")
                     .foregroundStyle(Theme.color("text", scheme))
                     .accessibilityAddTraits(.isHeader)
                 if !person.role.isEmpty {
@@ -227,7 +243,6 @@ private struct PeoplePersonBody: View {
                     StatusChipView(person.dueChip)
                 }
             }
-            Spacer(minLength: 0)
             PeopleStarButton(
                 starred: person.starred,
                 label: person.starLabel,
@@ -237,6 +252,33 @@ private struct PeoplePersonBody: View {
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.vertical, 12)
+        .frame(maxWidth: .infinity)
+        .multilineTextAlignment(.center)
+    }
+
+    private var heroActions: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 160 : 72), spacing: 8)], spacing: 8) {
+            ForEach(person.heroActions, id: \.key) { action in
+                Button {
+                    send(PeopleEvents.person { $0.hero = .with { $0.key = action.key } })
+                } label: {
+                    VStack(spacing: 6) {
+                        CentraidIconView(iconKey: action.iconKey, tint: Theme.color("peopleText", scheme), size: 22)
+                        Text(action.label).centraidType("smallStrong")
+                    }
+                    .foregroundStyle(Theme.color("peopleText", scheme))
+                    .frame(maxWidth: .infinity, minHeight: 60)
+                    .padding(8)
+                    .background(Theme.color("bgElev", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+                }
+                .buttonStyle(.plain)
+                .disabled(!action.enabled)
+                .accessibilityLabel(action.label)
+                .accessibilityIdentifier("people-hero-\(action.key)")
+            }
+        }
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.bottom, 16)
     }
 
     private func actions(_ chrome: Centraid_Core_V1_PeoplePersonChrome) -> some View {

@@ -1,7 +1,7 @@
 //! The kit's sentences, shared by every app's screens: civil words (weekdays,
 //! months, Today), trash, autosave and search. The native kit's
 //! fixed words (`KitWords`) are emitted from this file by
-//! `contracts/tools/export-native-words.ts`. A lane that needs another shared
+//! `cargo xtask design`. A lane that needs another shared
 //! sentence adds it here in its own block.
 
 catalog! {

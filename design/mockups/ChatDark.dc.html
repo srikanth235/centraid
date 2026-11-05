@@ -1,10 +1,8 @@
-<!doctype html>
-<html lang="en">
-<head>
+<!DOCTYPE html><html lang="en" data-theme="dark"><head>
 <meta charset="utf-8">
 <title>Chat (dark)</title>
 <script src="./support.js"></script>
-</head>
+<link rel="stylesheet" href="./tokens.css"></head>
 <body>
 <x-dc>
 <helmet>
@@ -14,67 +12,68 @@ body{margin:0}
 button{font:inherit;color:inherit}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: Geist, system-ui, sans-serif; color: #F2EFEA;">
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: var(--ds-bgList); font-family: Geist, system-ui, sans-serif; color: var(--ds-text);">
   <div style="display: flex; align-items: center; gap: 10px; padding: 56px 20px 8px;">
-    <button aria-label="Chats" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; border: 1px solid #3A3733; background: rgba(44,42,39,0.85); display: flex; align-items: center; justify-content: center;">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h16"/></svg>
+    <button aria-label="Chats" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; border: 1px solid var(--ds-lineStrong); background: var(--ds-glass); display: flex; align-items: center; justify-content: center;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ds-text)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h16"></path></svg>
     </button>
     <div style="flex-grow: 1; text-align: center;">
       <div style="font-size: 16px; font-weight: 600;">Lunch with Ana</div>
-      <div style="font-size: 12px; color: #A39E95; display: flex; align-items: center; justify-content: center; gap: 5px;"><svg width="16" height="16" viewBox="22 22 76 76" aria-hidden="true" data-centraid-icon="1"><path d="M60 60 L84.04 35.96 A34 34 0 0 1 84.04 84.04 Z" fill="#FCB048"/><path d="M60 60 L84.04 84.04 A34 34 0 0 1 35.96 84.04 Z" fill="#85B4FA"/><path d="M60 60 L35.96 84.04 A34 34 0 0 1 35.96 35.96 Z" fill="#FB84A2"/><path d="M60 60 L35.96 35.96 A34 34 0 0 1 84.04 35.96 Z" fill="#00F6DC"/><path d="M60 60 L86.87 33.13" stroke="#1C1B19" stroke-width="5"/><path d="M60 60 L86.87 86.87" stroke="#1C1B19" stroke-width="5"/><path d="M60 60 L33.13 86.87" stroke="#1C1B19" stroke-width="5"/><path d="M60 60 L33.13 33.13" stroke="#1C1B19" stroke-width="5"/><rect x="49.4" y="49.4" width="21.2" height="21.2" fill="#1C1B19" stroke="#1C1B19" stroke-width="2" stroke-linejoin="round"/></svg>My vault · on this phone</div>
+      <div style="font-size: 12px; color: var(--ds-textFaint); display: flex; align-items: center; justify-content: center; gap: 5px;"><svg width="16" height="16" viewBox="22 22 76 76" aria-hidden="true" data-centraid-icon="1"><path d="M60 60 L84.04 35.96 A34 34 0 0 1 84.04 84.04 Z" fill="#F48E04"></path><path d="M60 60 L84.04 84.04 A34 34 0 0 1 35.96 84.04 Z" fill="#5698F8"></path><path d="M60 60 L35.96 84.04 A34 34 0 0 1 35.96 35.96 Z" fill="#F83F6E"></path><path d="M60 60 L35.96 35.96 A34 34 0 0 1 84.04 35.96 Z" fill="#00AA98"></path><path d="M60 60 L86.87 33.13" stroke="var(--ds-brandTile)" stroke-width="5"></path><path d="M60 60 L86.87 86.87" stroke="var(--ds-brandTile)" stroke-width="5"></path><path d="M60 60 L33.13 86.87" stroke="var(--ds-brandTile)" stroke-width="5"></path><path d="M60 60 L33.13 33.13" stroke="var(--ds-brandTile)" stroke-width="5"></path><rect x="49.4" y="49.4" width="21.2" height="21.2" fill="var(--ds-brandTile)" stroke="var(--ds-brandTile)" stroke-width="2" stroke-linejoin="round"></rect></svg>My vault · on this phone</div>
     </div>
-    <button aria-label="New chat" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; border: 1px solid #3A3733; background: rgba(44,42,39,0.85); display: flex; align-items: center; justify-content: center;">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
+    <button aria-label="New chat" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; border: 1px solid var(--ds-lineStrong); background: var(--ds-glass); display: flex; align-items: center; justify-content: center;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ds-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"></path></svg>
     </button>
   </div>
 
   <div style="padding: 10px 16px 0; display: flex; flex-direction: column; gap: 12px;">
-    <div style="align-self: flex-end; max-width: 75%; background: #3A3733; color: #FFFFFF; padding: 10px 14px; border-radius: 20px 20px 6px 20px; font-size: 16px;">When am I seeing Ana this week?</div>
+    <div style="align-self: flex-end; max-width: 75%; background: var(--ds-text); color: #FFFFFF; padding: 10px 14px; border-radius: 20px 20px 6px 20px; font-size: 16px;">When am I seeing Ana this week?</div>
 
     <div style="max-width: 92%; font-size: 16px; line-height: 1.45;">Lunch today, 11:15 to 12:30 at Café Lume. It's also her birthday today.</div>
-    <div style="background: #1F1E1C; border: 1px solid #2C2A27; border-radius: 16px; padding: 10px 12px; display: flex; gap: 10px; align-items: center;">
-      <span style="width: 4px; align-self: stretch; border-radius: 2px; background: #3077CD;"></span>
-      <div style="flex-grow: 1;"><div style="font-size: 15px; font-weight: 600;">Lunch with Ana</div><div style="font-size: 13px; color: #A39E95;">Today · 11:15 – 12:30 · Café Lume</div></div>
-      <span style="font-size: 12px; color: #569EF7; font-weight: 600;">Agenda</span>
+    <div style="background: var(--ds-bgElev); border: 1px solid var(--ds-line); border-radius: 16px; padding: 10px 12px; display: flex; gap: 10px; align-items: center;">
+      <span style="width: 4px; align-self: stretch; border-radius: 2px; background: var(--ds-agendaFill);"></span>
+      <div style="flex-grow: 1;"><div style="font-size: 15px; font-weight: 600;">Lunch with Ana</div><div style="font-size: 13px; color: var(--ds-textFaint);">Today · 11:15 – 12:30 · Café Lume</div></div>
+      <span style="font-size: 12px; color: var(--ds-agendaText); font-weight: 600;">Agenda</span>
     </div>
-    <div style="background: #1F1E1C; border: 1px solid #2C2A27; border-radius: 16px; padding: 10px 12px; display: flex; gap: 10px; align-items: center;">
-      <span style="width: 32px; height: 32px; border-radius: 16px; background: #1D3044; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px; color: #569EF7;">AD</span>
-      <div style="flex-grow: 1;"><div style="font-size: 15px; font-weight: 600;">Ana Díaz</div><div style="font-size: 13px; color: #A39E95;">Landlord · birthday today</div></div>
-      <span style="font-size: 12px; color: #BA82F5; font-weight: 600;">People</span>
+    <div style="background: var(--ds-bgElev); border: 1px solid var(--ds-line); border-radius: 16px; padding: 10px 12px; display: flex; gap: 10px; align-items: center;">
+      <span style="width: 32px; height: 32px; border-radius: 16px; background: var(--ds-agendaTint); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px; color: var(--ds-agendaText);">AD</span>
+      <div style="flex-grow: 1;"><div style="font-size: 15px; font-weight: 600;">Ana Díaz</div><div style="font-size: 13px; color: var(--ds-textFaint);">Landlord · birthday today</div></div>
+      <span style="font-size: 12px; color: var(--ds-peopleText); font-weight: 600;">People</span>
     </div>
 
-    <div style="align-self: flex-end; max-width: 75%; background: #3A3733; color: #FFFFFF; padding: 10px 14px; border-radius: 20px 20px 6px 20px; font-size: 16px;">Remind me to bring her a card</div>
+    <div style="align-self: flex-end; max-width: 75%; background: var(--ds-text); color: #FFFFFF; padding: 10px 14px; border-radius: 20px 20px 6px 20px; font-size: 16px;">Remind me to bring her a card</div>
 
-    <div style="background: #1F1E1C; border: 1px solid #3A3733; border-radius: 16px; padding: 12px 14px;">
-      <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.4px; color: #A39E95;">PROPOSED CHANGE</div>
+    <div style="background: var(--ds-bgElev); border: 1px solid var(--ds-lineStrong); border-radius: 16px; padding: 12px 14px;">
+      <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.4px; color: var(--ds-textFaint);">PROPOSED CHANGE</div>
       <div style="display: flex; gap: 10px; align-items: center; margin-top: 8px;">
-        <span style="width: 20px; height: 20px; border-radius: 10px; border: 1.6px solid #5C5852;"></span>
-        <div><div style="font-size: 15px; font-weight: 600;">Bring Ana a birthday card</div><div style="font-size: 13px; color: #A39E95;">Reminders · today, 10:45</div></div>
+        <span style="width: 20px; height: 20px; border-radius: 10px; border: 1.6px solid var(--ds-textDisabled);"></span>
+        <div><div style="font-size: 15px; font-weight: 600;">Bring Ana a birthday card</div><div style="font-size: 13px; color: var(--ds-textFaint);">Reminders · today, 10:45</div></div>
       </div>
       <div style="display: flex; gap: 8px; margin-top: 12px;">
-        <button style="flex-grow: 1; height: 40px; border-radius: 20px; border: none; background: #2E7268; color: #F3EDE2; font-weight: 600; font-size: 15px;">Add reminder</button>
-        <button style="flex-grow: 1; height: 40px; border-radius: 20px; border: 1px solid #3A3733; background: #1F1E1C; font-weight: 600; font-size: 15px;">Not now</button>
+        <button style="flex-grow: 1; height: 40px; border-radius: 20px; border: none; background: var(--ds-shellFill); color: #F3EDE2; font-weight: 600; font-size: 15px;">Add reminder</button>
+        <button style="flex-grow: 1; height: 40px; border-radius: 20px; border: 1px solid var(--ds-lineStrong); background: var(--ds-bgElev); font-weight: 600; font-size: 15px;">Not now</button>
       </div>
     </div>
   </div>
 
   <div style="position: absolute; left: 16px; right: 16px; bottom: 96px; display: flex; gap: 8px; overflow: hidden;">
-    <span style="flex-shrink: 0; font-size: 13px; padding: 7px 12px; border-radius: 16px; background: #1F1E1C; border: 1px solid #3A3733;">What's due this week?</span>
-    <span style="flex-shrink: 0; font-size: 13px; padding: 7px 12px; border-radius: 16px; background: #1F1E1C; border: 1px solid #3A3733;">How did I sleep?</span>
-    <span style="flex-shrink: 0; font-size: 13px; padding: 7px 12px; border-radius: 16px; background: #1F1E1C; border: 1px solid #3A3733;">Spent on eating out</span>
+    <span style="flex-shrink: 0; font-size: 13px; padding: 7px 12px; border-radius: 16px; background: var(--ds-bgElev); border: 1px solid var(--ds-lineStrong);">What's due this week?</span>
+    <span style="flex-shrink: 0; font-size: 13px; padding: 7px 12px; border-radius: 16px; background: var(--ds-bgElev); border: 1px solid var(--ds-lineStrong);">How did I sleep?</span>
+    <span style="flex-shrink: 0; font-size: 13px; padding: 7px 12px; border-radius: 16px; background: var(--ds-bgElev); border: 1px solid var(--ds-lineStrong);">Spent on eating out</span>
   </div>
-  <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; min-height: 56px; border-radius: 28px; border: 1px solid rgba(44,42,39,0.72); background: rgba(44,42,39,0.82); box-shadow: 0 6px 20px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 6px; padding: 6px;">
-    <button aria-label="Attach" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; border: none; background: #2A2826; display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
-    <span style="flex-grow: 1; font-size: 16px; color: #75716A; padding-left: 4px;">Ask your vault</span>
-    <button aria-label="Chat scope: All apps" style="height: 32px; padding: 0 10px; border-radius: 16px; border: 1px solid #3A3733; background: #1F1E1C; font-size: 13px; font-weight: 600;">All apps</button>
-    <button aria-label="Send" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; border: none; background: #2E7268; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+  <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; min-height: 56px; border-radius: 28px; border: 1px solid var(--ds-glass); background: var(--ds-glass); box-shadow: 0 6px 20px rgba(0,0,0,0.08); display: flex; align-items: center; gap: 6px; padding: 6px;">
+    <button aria-label="Attach" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; border: none; background: var(--ds-bgSunken); display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ds-text)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+    <span style="flex-grow: 1; font-size: 16px; color: var(--ds-textFaint); padding-left: 4px;">Ask your vault</span>
+    <button aria-label="Chat scope: All apps" style="height: 32px; padding: 0 10px; border-radius: 16px; border: 1px solid var(--ds-lineStrong); background: var(--ds-bgElev); font-size: 13px; font-weight: 600;">All apps</button>
+    <button aria-label="Send" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; border: none; background: var(--ds-shellFill); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"></path></svg></button>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:390,&quot;height&quot;:844}}">
 class Component extends DCLogic {
 renderVals() { return {}; }
 }
 </script>
-</body>
-</html>
+
+
+</body></html>

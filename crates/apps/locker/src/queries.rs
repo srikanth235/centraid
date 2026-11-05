@@ -43,7 +43,7 @@ pub const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at, deleted_at,
 /// What a statement reads of an item's KIND row (`locker_item`): its typed
 /// plain columns and the memo, never a sealed cell.
 pub const KIND_COLUMNS: &str = "id, type, username, url, notes, cardholder, expiry, brand, \
-     fullname, email, phone, address, network, compromised, password_set_at, memo, last_used_at";
+     fullname, email, phone, address, network, compromised, password_set_at, memo, last_used_at, otp_seed IS NOT NULL AS has_code";
 
 /// The five columns of `locker_item` that hold ciphertext under `K`, named here
 /// only so [`tests`] can assert none of them is in [`ITEM_COLUMNS`].
@@ -74,6 +74,8 @@ pub fn items_window(limit: Option<i64>) -> usize {
 /// One raw `locker_item` row, in the browsable projection.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ItemRow {
+    /// Presence only; a list never reads the seed.
+    pub has_code: bool,
     pub item_id: String,
     pub item_type: String,
     pub title: String,
@@ -115,6 +117,7 @@ impl ItemRow {
     #[must_use]
     pub fn of(row: &Row) -> Self {
         Self {
+            has_code: truthy(row, "has_code"),
             item_id: text_of(row, "item_id").unwrap_or_default(),
             item_type: text_of(row, "type").unwrap_or_default(),
             title: text_of(row, "title").unwrap_or_default(),

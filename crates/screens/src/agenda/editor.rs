@@ -12,7 +12,7 @@
 //! ## Which command
 //!
 //! - CREATE an event: `propose`. CREATE a task: `add-task` through
-//!   [`Ops::add`], the to-do surfaces' one add.
+//!   the typed `add-task` command with every field in the task draft.
 //! - EDIT of a one-off, or of a series with "the whole series": `edit-event`
 //!   with the CHANGED fields only, a clear spelt `null`.
 //! - EDIT of one occurrence, or it and the ones after: `edit-occurrence`,
@@ -56,7 +56,6 @@ use self::draft::{
 use super::event::{
     calendar_hue, is_series_occurrence, long_day, person_hue, reminder_label, scope_word, scopes,
 };
-use super::todo::ops::Ops;
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil;
@@ -106,8 +105,9 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         scope: None,
         save_tried: false,
         status: None,
+        notification_status: super::notification_status::Status::default(),
         dismissed: false,
-        ops: Ops::default(),
+        more_details: false,
     }))
 }
 
@@ -122,6 +122,7 @@ enum Phase {
 struct Loaded {
     upcoming: wire::AgendaUpcoming,
     parties: wire::AgendaParties,
+    projects: wire::AgendaTaskProjects,
     /// An edit's event, read by id.
     detail: Option<wire::AgendaEventDetail>,
 }
@@ -148,9 +149,9 @@ struct Editor {
     save_tried: bool,
     /// The vault's refusal of the last Save, over the draft that stays.
     status: Option<wire::StatusLine>,
+    notification_status: super::notification_status::Status,
     dismissed: bool,
-    /// The to-do write law, for a task add.
-    ops: Ops,
+    more_details: bool,
 }
 
 impl Editor {
@@ -182,6 +183,10 @@ impl Editor {
                 _ => None,
             },
         );
+        let projects = kit_read::read(ctx, load::agenda::Projects {}, |answer| match answer {
+            Answer::AgendaTaskProjects(projects) => Some(projects),
+            _ => None,
+        });
         // AN EDIT READS ITS EVENT BY ID: a search hit on a repeating event is the
         // series row, which no window lists. Absent there is gone.
         let detail = (self.mode == Mode::Edit).then(|| {
@@ -206,6 +211,7 @@ impl Editor {
         let denial = [
             denial_of(&upcoming),
             denial_of(&parties),
+            denial_of(&projects),
             detail.as_ref().and_then(denial_of),
         ]
         .into_iter()
@@ -231,7 +237,12 @@ impl Editor {
             }
             return;
         };
+        let Reading::Data(projects) = projects else {
+            self.phase = Phase::Failed;
+            return;
+        };
         self.loaded = Some(Loaded {
+            projects,
             upcoming,
             parties,
             detail,
@@ -242,6 +253,12 @@ impl Editor {
                 Mode::Edit => self.event().map(draft::draft_of),
                 _ => self.loaded.as_ref().map(|loaded| {
                     let fresh = draft::new_draft(&self.route.day, &loaded.upcoming);
+                    let fresh = if self.route.start_time.is_empty() {
+                        fresh
+                    } else {
+                        draft::move_start(&fresh, &self.route.day, &self.route.start_time)
+                            .unwrap_or(fresh)
+                    };
                     if self.is_task() {
                         draft::shaped(&fresh, self.kind)
                     } else {
@@ -318,8 +335,17 @@ impl Editor {
         };
         if draft.title.trim().is_empty() {
             words::block_title(locale)
+        } else if !draft.custom_rule.trim().is_empty()
+            && draft.repeat_key == REPEAT_CUSTOM
+            && centraid_vault::time::rrule::inspect_for_date(&draft.custom_rule, draft.all_day)
+                .is_err()
+        {
+            if draft.all_day && centraid_vault::time::rrule::inspect(&draft.custom_rule).is_ok() {
+                crate::strings::task::repeat_needs_time(locale)
+            } else {
+                crate::strings::task::repeat_invalid(locale)
+            }
         } else if self.is_task() {
-            // A TASK NEEDS A TITLE AND A DAY, and the pickers only give days.
             String::new()
         } else if draft.calendar_id.is_empty() && self.mode == Mode::Create {
             words::block_calendar(locale)
@@ -428,27 +454,49 @@ impl Editor {
     /// A task saves as `add-task`: the trimmed title and the due, a bare day or
     /// a floating local time.
     fn save_task(&mut self, ctx: &Ctx, draft: &Draft) -> Vec<wire::Effect> {
-        let locale = ctx.locale();
-        let today = self
-            .loaded
-            .as_ref()
-            .map(|loaded| loaded.upcoming.today.clone())
-            .unwrap_or_default();
-        let lands = civil::relative_day(locale, &draft.start_day, &today);
-        self.status = None;
-        if self.ops.add(
-            ctx,
-            draft.title.trim(),
-            &draft::due_of(draft),
-            &lands,
-            None,
-            None,
-        ) {
-            self.dismissed = true;
-            return self.remember_kind();
-        }
-        self.status = self.ops.status.clone();
-        Vec::new()
+        use crate::field::Field;
+        let nonempty = |value: &str| {
+            if value.trim().is_empty() {
+                Field::Keep
+            } else {
+                Field::Is(value.trim().to_owned())
+            }
+        };
+        let request = act::agenda::AddTask {
+            title: draft.title.trim().to_owned(),
+            due: Field::Is(draft::due_of(draft)),
+            description: nonempty(&draft.notes),
+            project_id: nonempty(&draft.project_id),
+            priority: Some(i64::from(draft.priority)),
+            url: nonempty(&draft.link),
+            place_id: nonempty(&draft.place_id),
+            tags: Some(
+                serde_json::to_string(
+                    &draft
+                        .tags
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|tag| !tag.is_empty())
+                        .collect::<Vec<_>>(),
+                )
+                .unwrap_or_else(|_| "[]".to_owned()),
+            ),
+            rule: if draft.repeat_key == REPEAT_CUSTOM {
+                nonempty(&draft.custom_rule)
+            } else {
+                draft::rule_of(&draft.repeat_key)
+                    .map_or(Field::Keep, |rule| Field::Is(rule.to_owned()))
+            },
+            remind_before_min: draft
+                .reminder_key
+                .parse()
+                .ok()
+                .map_or(Field::Keep, Field::Is),
+            zone: nonempty(&draft.time_zone),
+            ..Default::default()
+        };
+        let key = kit_act::key(&["add-task", &draft.title], kit_act::fresh());
+        self.committed(ctx, request, &key)
     }
 
     /// Submit a write that ends the sitting when it commits.
@@ -523,24 +571,78 @@ impl Editor {
     fn on_editor_event(&mut self, event: K, ctx: &Ctx) -> Vec<wire::Effect> {
         // A TASK HAS NO EVENT FIELDS (#1128): their pickers are not drawn, and a
         // stray event for one changes nothing.
-        if self.is_task()
-            && matches!(
-                event,
-                K::Notes(_)
-                    | K::End(_)
-                    | K::Calendar(_)
-                    | K::Guest(_)
-                    | K::Repeat(_)
-                    | K::Reminder(_)
-                    | K::Link(_)
-                    | K::SheetOpened(_)
-                    | K::Skip(_)
-            )
+        if self.is_task() && matches!(event, K::End(_) | K::Calendar(_) | K::Guest(_) | K::Skip(_))
         {
             return Vec::new();
         }
         match event {
+            K::StatusActed(_) => {
+                if self.status.is_none() {
+                    return self.notification_status.act(ctx);
+                }
+            }
             K::Refreshed(_) => self.reload(ctx),
+            K::MoreDetails(_) => self.more_details = !self.more_details,
+            K::ExtraChanged(change) => {
+                let known = match change.key.as_str() {
+                    "project" => {
+                        change.value.is_empty()
+                            || self.loaded.as_ref().is_some_and(|loaded| {
+                                loaded
+                                    .projects
+                                    .projects
+                                    .iter()
+                                    .any(|project| project.project_id == change.value)
+                            })
+                    }
+                    "place" => {
+                        change.value.is_empty()
+                            || self.loaded.as_ref().is_some_and(|loaded| {
+                                loaded
+                                    .parties
+                                    .places
+                                    .iter()
+                                    .any(|place| place.party_id == change.value)
+                            })
+                    }
+                    _ => true,
+                };
+                if known {
+                    self.edit(|draft| {
+                        let mut draft = draft.clone();
+                        match change.key.as_str() {
+                            "rule" => {
+                                draft.custom_rule = change.value;
+                                draft.repeat_key = REPEAT_CUSTOM.to_owned();
+                            }
+                            "project" => draft.project_id = change.value,
+                            "tags" => draft.tags = change.value,
+                            "priority" => {
+                                draft.priority = change
+                                    .value
+                                    .parse()
+                                    .ok()
+                                    .filter(|value| *value <= 3)
+                                    .unwrap_or(draft.priority)
+                            }
+                            "zone" => draft.time_zone = change.value,
+                            "place" => draft.place_id = change.value,
+                            "second_alert" => draft.second_reminder_key = change.value,
+                            "travel" => {
+                                draft.travel_minutes = change
+                                    .value
+                                    .parse()
+                                    .ok()
+                                    .filter(|value| *value <= 10080)
+                                    .unwrap_or(draft.travel_minutes)
+                            }
+                            "busy" => draft.busy = change.value == "busy",
+                            _ => return None,
+                        }
+                        Some(draft)
+                    });
+                }
+            }
             K::KindPicked(picked) => {
                 let kind = wire::AgendaEditorKind::try_from(picked.kind)
                     .unwrap_or(wire::AgendaEditorKind::Unspecified);
@@ -628,7 +730,10 @@ impl Editor {
             }
             K::SheetOpened(opened) => {
                 let sheet = Sheet::try_from(opened.sheet).unwrap_or(Sheet::Unspecified);
-                if !matches!(sheet, Sheet::Unspecified | Sheet::Scope) && self.draft.is_some() {
+                if !matches!(sheet, Sheet::Unspecified | Sheet::Scope)
+                    && self.draft.is_some()
+                    && (!self.is_task() || matches!(sheet, Sheet::Repeat | Sheet::Reminder))
+                {
                     self.sheet = sheet;
                 }
             }
@@ -698,13 +803,7 @@ impl Editor {
     fn repeat_keys(&self) -> Vec<String> {
         let mut keys = vec![REPEAT_NONE.to_owned()];
         keys.extend(RULES.iter().map(|(key, _)| (*key).to_owned()));
-        if self
-            .baseline
-            .as_ref()
-            .is_some_and(|base| base.repeat_key == REPEAT_CUSTOM)
-        {
-            keys.push(REPEAT_CUSTOM.to_owned());
-        }
+        keys.push(REPEAT_CUSTOM.to_owned());
         keys
     }
 
@@ -806,6 +905,10 @@ impl Screen for Editor {
                 }
                 Vec::new()
             }
+            Some(E::Announced(announced)) => {
+                self.notification_status.hear(&announced.topic);
+                Vec::new()
+            }
             Some(E::AgendaEditor(event)) => event
                 .kind
                 .map_or_else(Vec::new, |kind| self.on_editor_event(kind, ctx)),
@@ -846,7 +949,10 @@ impl Screen for Editor {
             chrome: Some(chrome(locale)),
             dismissed: self.dismissed,
             kind: self.kind as i32,
-            status: self.status.clone(),
+            status: self
+                .status
+                .clone()
+                .or_else(|| self.notification_status.view(locale)),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::AgendaEditor(state)),
@@ -960,7 +1066,7 @@ impl Editor {
             }
         };
         wire::AgendaEditorData {
-            draft: Some(draft.clone()),
+            draft: Some(draft.to_wire()),
             heading: if task {
                 words::new_task(locale)
             } else if self.mode == Mode::Create {
@@ -1057,6 +1163,13 @@ impl Editor {
             } else {
                 Vec::new()
             },
+            more_details_label: if task {
+                words::more_details(locale)
+            } else {
+                String::new()
+            },
+            more_details_open: self.more_details,
+            extra_fields: self.extra_fields(locale, draft),
             show_event_fields: !task,
             start_field_label: if task {
                 words::field_due(locale)
@@ -1064,6 +1177,158 @@ impl Editor {
                 words::field_starts(locale)
             },
         }
+    }
+
+    fn extra_fields(&self, locale: Locale, draft: &Draft) -> Vec<wire::TodoField> {
+        let Some(loaded) = &self.loaded else {
+            return Vec::new();
+        };
+        let choice = |key: String, label: String, selected: bool| wire::TodoChoice {
+            key,
+            label,
+            selected,
+            enabled: true,
+            ..Default::default()
+        };
+        let field = |key: &str,
+                     label: String,
+                     value: String,
+                     choices: Vec<wire::TodoChoice>,
+                     edit_text: bool| wire::TodoField {
+            key: key.to_owned(),
+            label: label.clone(),
+            value: value.clone(),
+            text_value: value,
+            choices,
+            edit_text,
+            enabled: true,
+            add_placeholder: label,
+            ..Default::default()
+        };
+        let mut fields = Vec::new();
+        if self.is_task() {
+            let mut lists = vec![choice(
+                String::new(),
+                crate::strings::task::inbox(locale),
+                draft.project_id.is_empty(),
+            )];
+            lists.extend(loaded.projects.projects.iter().map(|project| {
+                choice(
+                    project.project_id.clone(),
+                    project.name.clone(),
+                    draft.project_id == project.project_id,
+                )
+            }));
+            fields.push(field(
+                "project",
+                crate::strings::task::field_project(locale),
+                String::new(),
+                lists,
+                false,
+            ));
+        }
+        if self.more_details || !self.is_task() {
+            fields.push(field(
+                "rule",
+                crate::strings::task::custom_rule(locale),
+                draft.custom_rule.clone(),
+                Vec::new(),
+                true,
+            ));
+            fields.push(field(
+                "zone",
+                words::field_time_zone(locale),
+                draft.time_zone.clone(),
+                Vec::new(),
+                true,
+            ));
+            let mut places = vec![choice(
+                String::new(),
+                words::guests_none(locale),
+                draft.place_id.is_empty(),
+            )];
+            places.extend(loaded.parties.places.iter().map(|place| {
+                choice(
+                    place.party_id.clone(),
+                    place.name.clone(),
+                    draft.place_id == place.party_id,
+                )
+            }));
+            fields.push(field(
+                "place",
+                words::field_location(locale),
+                String::new(),
+                places,
+                false,
+            ));
+            if !self.is_task() {
+                fields.push(field(
+                    "busy",
+                    words::field_availability(locale),
+                    String::new(),
+                    vec![
+                        choice("busy".into(), words::busy(locale), draft.busy),
+                        choice("free".into(), words::available(locale), !draft.busy),
+                    ],
+                    false,
+                ));
+                fields.push(field(
+                    "travel",
+                    words::field_travel(locale),
+                    draft.travel_minutes.to_string(),
+                    Vec::new(),
+                    true,
+                ));
+                let mut alerts = vec![choice(
+                    REMINDER_NONE.into(),
+                    words::reminder_none(locale),
+                    draft.second_reminder_key == REMINDER_NONE
+                        || draft.second_reminder_key.is_empty(),
+                )];
+                alerts.extend(REMINDERS.iter().map(|minutes| {
+                    choice(
+                        minutes.to_string(),
+                        reminder_label(locale, *minutes),
+                        draft.second_reminder_key == minutes.to_string(),
+                    )
+                }));
+                fields.push(field(
+                    "second_alert",
+                    words::field_second_alert(locale),
+                    String::new(),
+                    alerts,
+                    false,
+                ));
+            } else {
+                fields.push(field(
+                    "tags",
+                    crate::strings::task::tags_comma(locale),
+                    draft.tags.clone(),
+                    Vec::new(),
+                    true,
+                ));
+                fields.push(field(
+                    "priority",
+                    crate::strings::task::field_priority(locale),
+                    String::new(),
+                    (0..=3)
+                        .map(|priority| {
+                            choice(
+                                priority.to_string(),
+                                if priority == 0 {
+                                    crate::strings::task::priority_none(locale)
+                                } else {
+                                    "!".repeat(priority as usize)
+                                },
+                                draft.priority == priority,
+                            )
+                        })
+                        .collect(),
+                    false,
+                ));
+            }
+        }
+        fields
     }
 
     /// The Event | Task switch, the kind in hand marked.
@@ -1112,7 +1377,7 @@ impl Editor {
             REPEAT_CUSTOM => self
                 .event()
                 .and_then(|event| event.recurrence_summary.clone())
-                .unwrap_or_else(|| words::field_repeat(locale)),
+                .unwrap_or_else(|| crate::strings::task::custom_repeat(locale)),
             _ => words::repeat_never(locale),
         }
     }

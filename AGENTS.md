@@ -14,6 +14,7 @@ Guidance lives in [`.claude/skills/`](.claude/skills): `product-intuition` for w
 
 ## Conventions
 
+- **Design starts in the mockups.** Every visual or UX change starts in [`design/mockups/`](design/mockups/), and the same PR updates the committed light mockups. Change [`design/tokens.toml`](design/tokens.toml) whenever a shared value changes, then run `cargo xtask design`; never edit dark mockups or generated native resources by hand. Behavioural contracts live in [`product-intuition`](.claude/skills/product-intuition/SKILL.md).
 - **Docs describe current state.** When a change makes a doc wrong, fix the doc in the same change.
 - **Product calls go to the owner.** When a choice is about what the product should be and the `product-intuition` skill does not settle it, ask rather than guess.
 - **Vocabulary**: a machine running `centraid-gateway` is a _gateway_, not a server or host.

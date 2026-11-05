@@ -1,6 +1,6 @@
 import SwiftUI
 
-// THE CONTROLS (DESIGN.md "The controls (mobile)").
+// THE CONTROLS (product-intuition screen contracts "The controls (mobile)").
 //
 // Chrome is the platform's; content is the kit's. The navigation bar draws its
 // own back, title and trailing verb; everything under it is one of these, so
@@ -28,6 +28,7 @@ struct KitIconKey: View {
     /// A floating key over content (Home's header): a round plate on the band's ground — Liquid
     /// Glass on iOS 26 — in place of the hairline frame.
     var glass: Bool = false
+    var fill: String? = nil
     var tint: String = "text"
     var identifier: String = ""
     let action: () -> Void
@@ -38,7 +39,10 @@ struct KitIconKey: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                if glass {
+                if let fill {
+                    Circle().fill(Theme.color(enabled ? fill : "bgSunken", scheme))
+                        .frame(width: 40, height: 40)
+                } else if glass {
                     Color.clear
                         .frame(width: 40, height: 40)
                         .bandGround(Circle(), solid: "bg", interactive: true)
@@ -190,7 +194,7 @@ struct KitSegmented<Key: Hashable>: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack(spacing: BandMetrics.groupGutter) {
+        BandItems(spacing: BandMetrics.groupGutter) {
             ForEach(Array(options.enumerated()), id: \.offset) { _, option in
                 segment(option.key, option.label)
             }
@@ -206,7 +210,7 @@ struct KitSegmented<Key: Hashable>: View {
         let active = key == selected
         return Button { onSelect(key) } label: {
             Text(label)
-                .centraidType(active ? "control" : "band", scales: false)
+                .centraidType(active ? "control" : "band")
                 .foregroundStyle(Theme.color(active ? "text" : "textSoft", scheme))
                 .lineLimit(1)
                 .padding(.horizontal, CentraidGeometry.pageMargin)

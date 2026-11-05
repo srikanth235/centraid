@@ -3,6 +3,8 @@ package dev.centraid.android.screens
 import dev.centraid.android.kit.LocalShellLine
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +26,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,8 +40,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,6 +58,7 @@ import centraid.core.v1.HomeState
 import centraid.core.v1.HomeStatus
 import centraid.core.v1.HomeTile
 import centraid.core.v1.HomeTileBody
+import centraid.core.v1.HomeTileSize
 import centraid.core.v1.HomeTileStatus
 import centraid.core.v1.HomeTone
 import centraid.core.v1.HomeVault
@@ -101,7 +108,7 @@ import dev.centraid.android.screens.words.FirstLaunchScreen
  * **EVERY VALUE HERE IS A TOKEN OR A STATED GEOMETRY.** The card's ground, its
  * one hairline, the tile floor, the mosaic's bleed and every type rung come from
  * the emitted table or from the constants below, which carry v0's own names and
- * reasons — the two shells were drawn from one `packages/design`, and a number
+ * reasons — the two shells were drawn from one `design/tokens.toml`, and a number
  * typed into a view is a number nobody chose.
  */
 @Composable
@@ -175,13 +182,13 @@ public fun HomeScreen(
         Box(Modifier.weight(1f)) {
             when {
                 failure != null -> FailureBody(failure)
-                data == null -> SpringboardGrid(HomeData(), state.loading_label, onOpen)
+                data == null -> SpringboardGrid(HomeData(), state.loading_label, onOpen, onEvent)
                 data.springboard == HomeSpringboard.HOME_SPRINGBOARD_FIRST_RUN ->
-                    DayOne(data, state.loading_label, onOpen)
-                else -> SpringboardGrid(data, state.loading_label, onOpen)
+                    DayOne(data, state.loading_label, onOpen, onEvent)
+                else -> SpringboardGrid(data, state.loading_label, onOpen, onEvent)
             }
         }
-        // THE IMPORT'S LINE, on the band (DESIGN.md's one status line).
+        // THE IMPORT'S LINE, on the band (product-intuition screen contracts's one status line).
         LocalShellLine.current?.invoke()
         Band(band, onSelectTab)
     }
@@ -488,8 +495,6 @@ private fun StatusRibbon(
             text = status.copy,
             style = centraidType(if (loud) "small" else "mono"),
             color = if (loud) centraidColor("text") else centraidColor("textFaint"),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
         if (status.action.isNotEmpty()) {
@@ -542,10 +547,10 @@ private val TILE_MIN_HEIGHT = 152.dp
 private val TILE_PAD = 12.dp
 
 /** The gutter between slots — v0's two 4pt half-gutters, added up. */
-private val TILE_GAP = 8.dp
+private val TILE_GAP = 12.dp
 
 /** The container rung. */
-private val TILE_RADIUS = 12.dp
+private val TILE_RADIUS = 16.dp
 
 /** The one sub-control rung, for a detail nested inside a control. */
 private val SUB_RADIUS = 4.dp
@@ -567,28 +572,7 @@ private val MOSAIC_CELL_HEIGHT = 88.dp
 
 private val HAIRLINE = CentraidGeometry.HAIRLINE.dp
 
-/**
- * THE HUE KEY'S SPELLING IN THE EMITTED TABLE, and nothing more.
- *
- * Rust (`crates/screens/src/shell/tiles.rs`) decides WHICH of the eight a face gets and puts
- * the answer on the wire; this is the eight-row spelling that turns that key
- * into a `NativeTheme` role, and `HomeView.swift` carries the same eight. It is
- * a map and not `"c" + key.replaceFirstChar(…)` because the string form would
- * hand any key at all to `centraidColor`, which fails loudly and correctly for
- * a role that does not exist — the wrong failure for a launcher tile drawing
- * whatever a producer sent. `PartyHueWheelSpec` asserts every key here has a
- * role in `NATIVE_COLOR_ROLES` and that both view trees name all eight.
- */
-private val PARTY_HUE_ROLES: Map<String, String> = mapOf(
-    "rose" to "cRose",
-    "amber" to "cAmber",
-    "ochre" to "cOchre",
-    "forest" to "cForest",
-    "teal" to "cTeal",
-    "slate" to "cSlate",
-    "indigo" to "cIndigo",
-    "violet" to "cViolet",
-)
+
 
 /**
  * A NEGATIVE MARGIN, which Compose has no token for.
@@ -631,7 +615,7 @@ private fun Modifier.bleed(amount: Dp, toFloor: Boolean): Modifier = this
     .offset(x = -amount)
 
 @Composable
-private fun SpringboardGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit) {
+private fun SpringboardGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit, onEvent: (HomeEvent) -> Unit) {
     // WHICH tiles are drawn and in WHICH rows both arrive decided: `grid_rows`
     // is the machine's packing over every tile, so this
     // file looks each id up and draws it. Nothing here is allowed to disagree
@@ -643,7 +627,7 @@ private fun SpringboardGrid(data: HomeData, loading: String, onOpen: (Route) -> 
             .padding(horizontal = PAGE_MARGIN)
             .padding(top = 10.dp, bottom = 24.dp),
     ) {
-        TileGrid(data, loading, onOpen)
+        TileGrid(data, loading, onOpen, onEvent)
     }
 }
 
@@ -653,8 +637,9 @@ private fun SpringboardGrid(data: HomeData, loading: String, onOpen: (Route) -> 
  * always here to open. Shared by the springboard and day one.
  */
 @Composable
-private fun TileGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit) {
+private fun TileGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit, onEvent: (HomeEvent) -> Unit) {
     val byId = data.tiles.associateBy { it.app_id }
+    val largeText = LocalDensity.current.fontScale > 1.3f
     Column(
         Modifier.fillMaxWidth().testTag("home-grid"),
         verticalArrangement = Arrangement.spacedBy(TILE_GAP),
@@ -662,17 +647,17 @@ private fun TileGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit) {
         for (row in data.grid_rows) {
             val tiles = row.app_ids.mapNotNull { byId[it] }
             if (tiles.isEmpty()) continue
-            Row(horizontalArrangement = Arrangement.spacedBy(TILE_GAP)) {
+            if (largeText) {
+                tiles.forEach { tile -> TileCard(tile, Modifier.fillMaxWidth(), loading, onOpen, onEvent) }
+            } else Row(horizontalArrangement = Arrangement.spacedBy(TILE_GAP)) {
                 for (tile in tiles) {
-                    TileCard(tile, Modifier.weight(1f), loading, onOpen)
+                    TileCard(tile, Modifier.weight(tile.column_span.toFloat()), loading, onOpen, onEvent)
                 }
-                // A lone small keeps its column rather than stretching over
-                // both: a tile that changed width with its neighbours'
-                // arrival would be layout overruling the body rule that
-                // chose its size.
-                if (tiles.size == 1 && !tiles[0].wide) Spacer(Modifier.weight(1f))
+                val remaining = 4 - tiles.sumOf { it.column_span }
+                if (remaining > 0) Spacer(Modifier.weight(remaining.toFloat()))
             }
         }
+        Text(data.widget_hint, style = centraidType("mono"), color = centraidColor("textFaint"))
     }
 }
 
@@ -683,20 +668,26 @@ private fun TileGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit) {
  * identity hue; the hue belongs to the app a tile previews, and it appears on
  * the chip alone.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TileCard(tile: HomeTile, modifier: Modifier, loading: String, onOpen: (Route) -> Unit) {
+private fun TileCard(tile: HomeTile, modifier: Modifier, loading: String, onOpen: (Route) -> Unit, onEvent: (HomeEvent) -> Unit) {
+    var menuOpen by remember(tile.app_id) { mutableStateOf(false) }
     val name = tile.name
     val count = countText(tile)
     // The em dash is a glyph; a screen reader gets `accessibility_label`.
+    Box(modifier) {
     Column(
-        modifier
-            .heightIn(min = TILE_MIN_HEIGHT)
+        Modifier.fillMaxWidth()
+            .heightIn(min = when (tile.size) {
+                HomeTileSize.HOME_TILE_SIZE_LARGE -> 240.dp
+                HomeTileSize.HOME_TILE_SIZE_SMALL -> 124.dp
+                else -> TILE_MIN_HEIGHT
+            })
             .clip(RoundedCornerShape(TILE_RADIUS))
-            .background(centraidColor("bgElev"))
-            .border(HAIRLINE, centraidColor("line"), RoundedCornerShape(TILE_RADIUS))
+            .background(centraidColor(tile.background_role))
             // WHERE A TAP GOES is the tile's own route; Kotlin names no destination.
             // A TILE WITH NO ROUTE (it is still reading, or could not be) is not a control.
-            .clickable(enabled = tile.route != null) { tile.route?.let(onOpen) }
+            .combinedClickable(onClick = { tile.route?.let(onOpen) }, onLongClick = { menuOpen = true })
             .padding(TILE_PAD)
             // Keyed on the app id. The label carries the live count, so it
             // changes with the vault; the id does not.
@@ -704,23 +695,36 @@ private fun TileCard(tile: HomeTile, modifier: Modifier, loading: String, onOpen
             .semantics { contentDescription = tile.accessibility_label },
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            AppMark(appId = tile.app_id, size = 22.dp)
-            Text(
-                name,
-                style = centraidType("smallStrong"),
-                color = centraidColor("text"),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            Text(count, style = centraidType("mono"), color = centraidColor("textFaint"))
+        if (tile.size == HomeTileSize.HOME_TILE_SIZE_SMALL) {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                AppMark(appId = tile.source_app, size = 24.dp)
+                Text(tile.compact_value, style = centraidType("smallStrong"), color = centraidColor("text"), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text(tile.compact_label, style = centraidType("meta"), color = centraidColor("textSoft"), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                AppMark(appId = tile.source_app, size = 22.dp)
+                Text(name, style = centraidType("smallStrong"), color = centraidColor(tile.accent_role), modifier = Modifier.weight(1f))
+                Text(count, style = centraidType("mono"), color = centraidColor("textFaint"))
+            }
+            TileBodyView(tile, loading)
         }
-        TileBodyView(tile, loading)
     }
+    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+        tile.widget_actions.forEachIndexed { index, action ->
+            DropdownMenuItem(
+                text = { Text(action.label) },
+                onClick = { menuOpen = false; action.change?.let { onEvent(HomeEvent(widget_changed = it)) } },
+                trailingIcon = { if (action.selected) CentraidIcon("Check", centraidColor("text"), size = 18.dp) },
+                modifier = Modifier.testTag("home-widget-${tile.app_id}-$index").semantics { selected = action.selected },
+            )
+        }
+    }
+    }
+
 }
 
 /**
@@ -940,12 +944,10 @@ private fun ColumnScope.FilledBody(body: HomeTileBody) {
             if (agenda.at.isNotEmpty()) {
                 Text(agenda.at, style = centraidType("mono"), color = centraidColor("textSoft"))
             }
-            Text(
+            if (agenda.title.isNotEmpty()) Text(
                 agenda.title,
                 style = centraidType("smallStrong"),
                 color = centraidColor("text"),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
             )
             // Pinned to the foot: the sparse tiles leave their slack above.
             Spacer(Modifier.weight(1f))
@@ -1003,7 +1005,7 @@ private fun ColumnScope.FilledBody(body: HomeTileBody) {
                     // An unrecognised key draws the neutral disc rather than
                     // reaching `centraidColor`, which fails LOUDLY by design —
                     // a tile is not the place to take a shell down over a hue.
-                    val hue = face.color?.let { PARTY_HUE_ROLES[it] }
+                    val hue = face.color
                     Box(
                         Modifier
                             .size(30.dp)
@@ -1021,7 +1023,7 @@ private fun ColumnScope.FilledBody(body: HomeTileBody) {
                         androidx.compose.foundation.text.BasicText(
                             face.initials,
                             // `textInv` is the SOLVED foreground for a filled
-                            // identity disc (`DESIGN.md`'s rule 7 — `onAccent`
+                            // identity disc (`product-intuition screen contracts`'s rule 7 — `onAccent`
                             // in the hand-off's role map). Ink on a saturated
                             // fill is the contrast failure this tile had.
                             style = initialsStyle.copy(
@@ -1181,7 +1183,7 @@ private fun ColumnScope.Skeleton(body: HomeTileBody?, loading: String) {
  * about the vault, and an unanswered read has not earned it.
  */
 @Composable
-private fun DayOne(data: HomeData, loading: String, onOpen: (Route) -> Unit) {
+private fun DayOne(data: HomeData, loading: String, onOpen: (Route) -> Unit, onEvent: (HomeEvent) -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -1196,7 +1198,7 @@ private fun DayOne(data: HomeData, loading: String, onOpen: (Route) -> Unit) {
             style = centraidType("small"),
             color = centraidColor("textSoft"),
         )
-        TileGrid(data, loading, onOpen)
+        TileGrid(data, loading, onOpen, onEvent)
     }
 }
 

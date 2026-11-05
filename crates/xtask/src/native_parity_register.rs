@@ -115,13 +115,6 @@ pub const REGISTER: &[Entry] = &[
         ),
     ),
     (
-        "HomeEvent.entry_asked",
-        platform(
-            Shell::Android,
-            "Health Connect's rationale page returns to the app asking for the Health entry; HealthKit has no such page",
-        ),
-    ),
-    (
         "LibraryStage.changed_in_place",
         platform(Shell::Android, EDITED_IN_PLACE),
     ),
@@ -162,7 +155,6 @@ pub const REGISTER: &[Entry] = &[
             "an original that lives only in iCloud; Android's media store holds what is on the device",
         ),
     ),
-    ("PhoneReminder.due", platform(Shell::Ios, REMINDERS)),
     ("ShellFact.settled", platform(Shell::Ios, OS_UPLOADS)),
     (
         "UploadSettled.http_status",
@@ -217,12 +209,6 @@ pub const REGISTER: &[Entry] = &[
     ("AgendaDraft.guest_ids", rust_only(AGENDA_DRAFT)),
     ("AgendaDraft.reminder_key", rust_only(AGENDA_DRAFT)),
     ("AgendaDraft.repeat_key", rust_only(AGENDA_DRAFT)),
-    (
-        "AgendaEventRow.instance_key",
-        rust_only(
-            "the Agenda fold reads its own wire rows back to count the distinct occurrences it drew (agenda/home/fold.rs); the shells open a row by its route",
-        ),
-    ),
     (
         "Autosave.remote_changed",
         rust_only(

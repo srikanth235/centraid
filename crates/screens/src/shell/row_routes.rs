@@ -44,7 +44,7 @@ pub fn app_home(app: &str) -> Option<wire::Route> {
         "docs" => docs::routes::drive(wire::DocsDestination::All, "", "", ""),
         "health" => health::routes::home(wire::HealthDestination::Today),
         "locker" => locker::routes::home(wire::LockerDestination::Items),
-        "money" => money::routes::home(wire::MoneyDestination::Spending),
+        "money" => money::routes::home(wire::MoneyDestination::Activity),
         "notes" => notes::routes::home(wire::NotesPlace::Notes, "", "", false),
         "people" => people::routes::home(wire::PeopleDestination::People),
         "photos" => photos::routes::home(wire::PhotosDestination::Library, None),

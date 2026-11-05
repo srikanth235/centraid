@@ -118,6 +118,8 @@ fn date_order(order: DateOrder) -> i32 {
 
 fn activity_row(row: phone::ActivityRow) -> wire::MoneyActivityRow {
     wire::MoneyActivityRow {
+        color_key: centraid_design::list_hue_key(row.category_id.as_deref().unwrap_or_default())
+            .to_owned(),
         txn_id: row.txn_id,
         posted_on: row.posted_on,
         display_name: row.display_name,
@@ -201,6 +203,7 @@ pub(crate) fn spending(
                 .categories
                 .iter()
                 .map(|c| wire::money_spending::SpendingCategory {
+                    color_key: centraid_design::list_hue_key(&c.category_id).to_owned(),
                     currency: c.currency.clone(),
                     category_id: c.category_id.clone(),
                     label: c.label.clone(),
@@ -256,6 +259,29 @@ pub(crate) fn spending(
                     account_name: l.account_name,
                 }),
             truncated: data.truncated,
+            weeks: data
+                .weeks
+                .into_iter()
+                .map(|week| wire::money_spending::SpendingWeek {
+                    start: week.start,
+                    end: week.end,
+                    currency: week.currency,
+                    total: Some(amount(&week.total)),
+                    refund_credit: Some(amount(&week.refund_credit)),
+                    categories: week
+                        .categories
+                        .into_iter()
+                        .map(|(category_id, label, color_key, spent)| {
+                            wire::money_spending::WeekCategory {
+                                category_id,
+                                label,
+                                color_key,
+                                spent: Some(amount(&spent)),
+                            }
+                        })
+                        .collect(),
+                })
+                .collect(),
         })
     })
 }
@@ -314,6 +340,14 @@ pub(crate) fn activity(
                     .cursor
                     .map(|(sort_key, pk)| wire::MoneyCursor { sort_key, pk }),
                 truncated: data.truncated,
+                day_totals: data
+                    .day_totals
+                    .into_iter()
+                    .map(|(day, amounts)| wire::money_activity::DayTotal {
+                        day,
+                        amounts: amounts.iter().map(amount).collect(),
+                    })
+                    .collect(),
             })
         },
     )

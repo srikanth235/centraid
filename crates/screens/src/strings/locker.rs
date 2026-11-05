@@ -2,6 +2,9 @@
 //! A sentence with a hole (`{field}`, `{n}`) is filled with `strings::fill`.
 
 catalog! {
+    plain category_codes = ("Codes", "Codes");
+    plain recently_used = ("Recently used", "Recently used");
+    plain change_password = ("Change password on website", "Change password on website");
     plain address = ("Address", "Address");
     plain addresses_head = ("Addresses", "Addresses");
     plain add_item = ("New item", "New item");

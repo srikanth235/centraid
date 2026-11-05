@@ -29,6 +29,11 @@ struct AgendaEventView: View {
         PushedPage(title: chrome.title, parentTitle: chrome.back, onBack: onBack) {
             EmptyView()
         } content: {
+            if state.hasStatus {
+                StatusLineView(status: state.status, identifier: "agenda-event-status-action") {
+                    send(event { $0.statusActed = .init() })
+                }
+            }
             if case let .gone(gone)? = state.content {
                 EmptyStateView(headline: gone.title, body: gone.body, actionLabel: gone.actionLabel, onAction: onBack)
                     .accessibilityIdentifier("agenda-event-gone")
@@ -130,6 +135,7 @@ struct AgendaEventView: View {
                         .padding(CentraidGeometry.pageMargin)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                AgendaAttachmentCard(value: detail.attachments, send: { change in send(.with { $0.attachment = change }) }, open: open)
                 if detail.hasRsvp {
                     rsvpView(detail.rsvp)
                 }
@@ -138,15 +144,6 @@ struct AgendaEventView: View {
                     ForEach(detail.guests, id: \.partyID) { guest in
                         guestRow(guest)
                     }
-                }
-                let sentence = writeSentence(state)
-                if !sentence.isEmpty, state.sheet != .cancelScope {
-                    Text(sentence)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color("net", scheme))
-                        .padding(.horizontal, CentraidGeometry.pageMargin)
-                        .padding(.top, 12)
-                        .accessibilityIdentifier("agenda-event-status")
                 }
                 KitChoiceStack {
                     ForEach(detail.actions, id: \.key) { action in

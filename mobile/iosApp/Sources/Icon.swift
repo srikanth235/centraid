@@ -3,8 +3,8 @@ import SwiftUI
 
 /// ONE ICON SET, DRAWN FROM THE EMITTED SILHOUETTES (#1020, wave A).
 ///
-/// The path data is `packages/design`'s, lowered by
-/// `contracts/tools/export-native-catalog.ts` — the same 24×24 silhouettes the
+/// The path data is `design/tokens.toml`'s, lowered by
+/// `cargo xtask design` — the same 24×24 silhouettes the
 /// web renderer and Compose draw. SF Symbols are deliberately NOT used here: a
 /// second set is a second product, and Home's invariant header promises that
 /// seven unlike bodies read as one grid. A `lock.fill` beside Compose's Lucide
@@ -66,7 +66,7 @@ struct CentraidIconView: View {
 /// It implements exactly what the shipped icons use: `M m L l H h V v C c S s
 /// A a Z z`. An unrecognised command ABORTS the path rather than skipping the
 /// segment — half a silhouette drawn confidently is worse than none, and the
-/// contract test in `packages/design` is what keeps the set inside this grammar.
+/// contract test in `design/tokens.toml` is what keeps the set inside this grammar.
 enum SVGPath {
     static func parse(_ d: String) -> CGPath? {
         var scanner = Tokens(d)

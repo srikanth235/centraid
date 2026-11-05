@@ -83,6 +83,7 @@ pub(crate) fn roster(
     settle(door, people::roster::load_people(door, input), |data| {
         let (kept, counts) = phone::arrange(data.people, filter, sort, clock.now_ms);
         Answer::PeopleRoster(wire::PeopleRoster {
+            my_card: data.my_card.map(|row| row_to_wire(row, &clock)),
             people: kept
                 .into_iter()
                 .map(|row| row_to_wire(row, &clock))
@@ -435,6 +436,16 @@ fn sheet_to_wire(person: people::person::Person, clock: &Clock) -> wire::PeopleS
         clock.now_ms,
     );
     wire::PeopleSheet {
+        vault_links: person
+            .vault_links
+            .into_iter()
+            .map(|link| wire::PeopleVaultLink {
+                id: link.id,
+                kind: link.kind,
+                title: link.title,
+            })
+            .collect(),
+        vault_links_truncated: person.vault_links_truncated,
         person: Some(row_to_wire_with(
             header,
             cadence,
@@ -667,10 +678,10 @@ mod tests {
         }
     }
 
-    /// AN EMPTY VAULT IS AN EMPTY ANSWER, NOT A REFUSAL — and the owner and a
-    /// pet are not People rows.
+    /// An empty contact directory still has the owner's My card. The owner
+    /// and pets stay outside contact counts, reconnect lists and search.
     #[test]
-    fn an_empty_vault_answers_empty_everywhere() {
+    fn an_empty_directory_keeps_my_card_and_no_contact_or_touch_rows() {
         let scratch = Scratch::founded();
         let owner = scratch
             .handle()
@@ -699,7 +710,13 @@ mod tests {
         assert_eq!(touch.count_all, 0);
 
         assert!(scratch.trash().people.is_empty());
-        for id in [&owner, &pet, "no-such-person"] {
+        let my_card = roster.my_card.expect("a founded vault has My card");
+        assert_eq!(my_card.party_id, owner);
+        let owner_sheet = scratch.person(&owner).sheet.expect("My card opens");
+        let owner_header = owner_sheet.person.expect("the owner's identity");
+        assert_eq!(owner_header.party_id, owner);
+        assert_eq!(owner_header.name, my_card.name);
+        for id in [&pet, "no-such-person"] {
             assert!(scratch.person(id).sheet.is_none(), "{id} has no sheet");
         }
         assert!(scratch.search("Rex").people.is_empty());

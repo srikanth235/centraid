@@ -177,7 +177,7 @@ pub(crate) fn drive(
             documents: shelf
                 .documents
                 .into_iter()
-                .map(|row| row_to_wire(row, &zone, clock.now_ms))
+                .map(|row| row_to_wire(vault, row, &zone, clock.now_ms))
                 .collect(),
             folders: data
                 .folders
@@ -278,7 +278,7 @@ pub(crate) fn search(
             documents: data
                 .documents
                 .into_iter()
-                .map(|row| row_to_wire(row, &zone, clock.now_ms))
+                .map(|row| row_to_wire(vault, row, &zone, clock.now_ms))
                 .collect(),
             today: clock.today,
             containers: found.into_iter().map(named::to_wire).collect(),
@@ -317,7 +317,14 @@ pub(crate) fn document(
     };
     settle(door, loaded, |(data, history)| {
         Answer::DocsDocument(wire::DocsDocument {
-            document: data.row.map(|row| row_to_wire(row, &zone, clock.now_ms)),
+            file_path: held
+                .as_ref()
+                .and_then(|location| location.path.as_ref())
+                .map(|path| path.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            document: data
+                .row
+                .map(|row| row_to_wire(vault, row, &zone, clock.now_ms)),
             path: data
                 .path
                 .into_iter()
@@ -391,7 +398,28 @@ fn surface_to_wire(surface: Surface) -> wire::DocsSurface {
     }
 }
 
-fn row_to_wire(row: DocumentRow, zone: &FireZone, now_ms: i64) -> wire::DocsDocumentRow {
+fn row_to_wire(
+    vault: &Vault,
+    row: DocumentRow,
+    zone: &FireZone,
+    now_ms: i64,
+) -> wire::DocsDocumentRow {
+    let preview_path = if row.byte_size.is_some()
+        && centraid_vault::blob::may_serve_inline(row.media_type.as_deref().unwrap_or_default())
+    {
+        vault
+            .blobs()
+            .and_then(|store| store.locate(&row.content_id).ok())
+            .and_then(|located| match located {
+                centraid_vault::bytes::Located::Store(path) => {
+                    Some(path.to_string_lossy().into_owned())
+                }
+                _ => None,
+            })
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
     let kind = kind::kind_of(row.media_type.as_deref(), row.title.as_deref());
     let surface = kind::surface_of(row.media_type.as_deref(), row.title.as_deref());
     let created_at = row.created_at.unwrap_or_default();
@@ -408,6 +436,7 @@ fn row_to_wire(row: DocumentRow, zone: &FireZone, now_ms: i64) -> wire::DocsDocu
     };
     let purge_local_day = phone::local_day(zone, &purge_at);
     wire::DocsDocumentRow {
+        preview_path,
         kind: kind_to_wire(kind) as i32,
         kind_name: kind.name().to_owned(),
         surface: surface_to_wire(surface) as i32,
@@ -432,6 +461,7 @@ fn row_to_wire(row: DocumentRow, zone: &FireZone, now_ms: i64) -> wire::DocsDocu
             .tags
             .into_iter()
             .map(|tag| wire::DocsLabel {
+                color_key: tag.color.unwrap_or_default(),
                 tag_id: tag.tag_id,
                 label: tag.label,
             })

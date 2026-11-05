@@ -148,6 +148,7 @@ impl Made {
                     vec![effect(wire::effect::Kind::RemindersRead(
                         wire::RemindersRead {
                             ask_permission: true,
+                            include_completed: false,
                         },
                     ))]
                 } else {
@@ -239,7 +240,7 @@ impl Screen for Made {
             }
             (E::EffectResult(result), Step::Reminders) => match &result.outcome {
                 Some(O::RemindersSnapshot(snapshot)) => {
-                    let outcome = reminders::run(ctx, &snapshot.reminders);
+                    let outcome = reminders::run_snapshot(ctx, snapshot);
                     if outcome.added > 0 {
                         self.came.push(Came {
                             app: "agenda",

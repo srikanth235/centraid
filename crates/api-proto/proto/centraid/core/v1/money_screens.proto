@@ -74,6 +74,8 @@ message MoneyRow {
   bool dimmed = 9;
   // Where a tap goes: the transaction's page.
   Route route = 10;
+  string color_key = 11;
+  bool is_income = 12;
 }
 
 message MoneyDaySection {
@@ -82,6 +84,8 @@ message MoneyDaySection {
   // "Today", "Yesterday", "Mon 12 October".
   string heading = 2;
   repeated MoneyRow rows = 3;
+  // One signed total per currency, formatted by Rust; empty if the read was bounded.
+  string total = 4;
 }
 
 message MoneyAction {
@@ -215,6 +219,25 @@ message MoneySpendingData {
   string recurring_meta = 9;
   Route recurring_route = 10;
   string window_note = 11;
+  repeated MoneyWeeklySeries weekly_series = 12;
+}
+
+message MoneyWeeklySeries {
+  string heading = 1;
+  repeated MoneyWeekBar weeks = 2;
+}
+
+message MoneyWeekBar {
+  string label = 1;
+  string total = 2;
+  string accessibility_label = 3;
+  repeated MoneyWeekSegment segments = 4;
+}
+
+message MoneyWeekSegment {
+  string color_key = 1;
+  uint32 height_bp = 2;
+  string label = 3;
 }
 
 message MoneyHero {
@@ -258,6 +281,8 @@ message MoneyCategoryLine {
   string accessibility_label = 7;
   // The target page for this category and month.
   Route route = 8;
+  string color_key = 9;
+  uint32 progress_bp = 10;
 }
 
 message MoneyActivityData {
@@ -276,6 +301,8 @@ message MoneyActivityData {
   // The category filter that lists the rows `needs_label` counts; empty while
   // there are none. A tap on the Needs row sends it as `category_picked`.
   string needs_key = 9;
+  repeated MoneyHero overview = 10;
+  string overview_title = 11;
 }
 
 message MoneyCashflowData {

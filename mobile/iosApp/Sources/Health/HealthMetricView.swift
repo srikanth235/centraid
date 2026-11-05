@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// `health.metric` — one metric over a week, a month or a year (#1129, #1135), on the kit.
+/// `health.metric` — one metric over a week, a month, six months or a year (#1129, #1135), on the kit.
 ///
 /// **THE VIEW DECIDES NOTHING.** The segments, the caption, the average and its unit, the line
 /// against the typical, every bar's height and which bar is the current one, the ticks, the facts
@@ -79,6 +79,13 @@ struct HealthMetricView: View {
         .accessibilityElement(children: .combine)
         HealthCard {
             HealthBarChart(data: metric)
+            if metric.hasSelectedBucket {
+                HealthFactRow(label: metric.selectedBucket.label, detail: metric.selectedBucket.detail)
+                ChartScrubber(label: metric.scrubberLabel, valueLabel: [metric.selectedBucket.label, metric.selectedBucket.detail].joined(separator: ", "), index: metric.selectedIndex, count: metric.bars.count) { index in
+                    send(event { $0.bucket = .with { $0.index = index } })
+                }
+                .tint(Theme.color("healthFill", scheme))
+            }
         }
         if !metric.facts.isEmpty {
             HealthCard(padding: 0) {

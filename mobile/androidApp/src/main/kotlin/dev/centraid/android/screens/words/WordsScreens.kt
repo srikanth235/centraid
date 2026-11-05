@@ -582,7 +582,7 @@ private fun RestoredLine(line: RestoredVaultLine, index: Int) {
 /**
  * One vault that stayed with the other phone (`WordsEnterState.stayed`,
  * R-1047-R5): the machine's sentence behind a `seam` rule — "not yet, and not
- * wrong" (DESIGN.md), since the vault is safe where it is. The retry under the
+ * wrong" (product-intuition screen contracts), since the vault is safe where it is. The retry under the
  * list is [StayedRetry].
  */
 @Composable

@@ -1,0 +1,38 @@
+appId: ${APP_ID}
+name: Reminder date preview and keyboard tools
+---
+- launchApp:
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible:
+      id: home-grid
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: home-tile-reminders
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: home-tile-reminders
+- extendedWaitUntil:
+    visible:
+      id: agenda-add-task
+    timeout: 30000
+- tapOn:
+    id: agenda-add-task
+- extendedWaitUntil:
+    visible:
+      id: agenda-quick-add
+    timeout: 10000
+- tapOn:
+    id: agenda-quick-add
+- inputText: Visual check tomorrow at 9am
+- extendedWaitUntil:
+    visible:
+      id: agenda-quick-preview
+    timeout: 10000
+- assertVisible: "Due .*09:00"
+- assertVisible:
+    id: agenda-quick-tool-today
+- takeScreenshot: reminder-preview

@@ -2,6 +2,7 @@ package dev.centraid.android.screens.health
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,8 +51,8 @@ import dev.centraid.android.theme.centraidType
  * HEALTH'S SHARED DRAWING PARTS (#1129, #1135). Every word, figure and position is the state's: Rust
  * (`crates/screens/src/health`) finished them, and a bar's length or a point's height
  * arrives in basis points of its own span. A part draws, and decides nothing — not a unit, not a
- * comparison, not which bar is today's. The identity hue (olive, R-1129-10) is drawn in exactly
- * one place here: the chart bar the state marks `current`.
+ * comparison, not which bar is today's. Health's raspberry identifies every metric;
+ * a stronger fill distinguishes the current or selected bucket without judging it.
  */
 
 /** A quiet sentence in the gutter. Empty is nothing. */
@@ -70,6 +71,20 @@ internal fun HealthNote(text: String, ink: String = "textSoft", style: String = 
 @Composable
 internal fun HealthSection(title: String) {
     if (title.isNotEmpty()) SectionHeader(SectionHead(title = title))
+}
+
+/** A finished highlight, kept independent of the metric's positive or negative direction. */
+@Composable
+internal fun HealthHighlight(label: String, detail: String) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)
+            .background(centraidColor("bgElev"), RoundedCornerShape((LocalCentraidTokens.current.radii["lg"] ?: 0).dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(label, style = centraidType("smallStrong"), color = centraidColor("healthText"))
+        Text(detail, style = centraidType("body"), color = centraidColor("text"))
+    }
 }
 
 /** A value and its unit, baseline to baseline: "8,412" "steps". */
@@ -130,20 +145,24 @@ internal fun HealthHero(line: HealthMetricLine, onTap: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)
+            .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["lg"] ?: 0).dp))
+            .background(centraidColor("bgElev"))
             .clickable(onClick = onTap)
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
-            .testTag("health-hero")
+            .padding(16.dp)
+            .testTag("health-metric-${line.metric}")
             .clearAndSetSemantics {
                 contentDescription = line.accessibility_label
                 role = Role.Button
             },
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(line.label, style = centraidType("smallStrong"), color = centraidColor("textSoft"))
+            Text(line.label, style = centraidType("smallStrong"), color = centraidColor("healthText"))
             Text(line.when_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
         }
         HealthValue(line.value_, line.unit, "display")
         if (line.typical.isNotEmpty()) Text(line.typical, style = centraidType("body"), color = centraidColor("textSoft"))
+        if (line.points_bp.isNotEmpty()) Sparkline(line.points_bp, -1, Modifier.fillMaxWidth().height(44.dp).padding(top = 8.dp))
         line.bar?.let { HealthRangeBarView(it, thickness = 8.dp, dot = 14.dp) }
     }
 }
@@ -232,8 +251,8 @@ internal fun HealthTrendRowView(row: HealthTrendRow, onTap: () -> Unit) {
 /** Points oldest first in basis points of the row's span; -1 is a gap, never a zero. */
 @Composable
 private fun Sparkline(points: List<Int>, averageBp: Int, modifier: Modifier) {
-    val ink = centraidColor("textSoft")
-    val mark = centraidColor("text")
+    val ink = centraidColor("healthText")
+    val mark = centraidColor("healthText")
     val rule = centraidColor("line")
     Canvas(modifier) {
         if (points.isEmpty()) return@Canvas
@@ -257,7 +276,7 @@ private fun Sparkline(points: List<Int>, averageBp: Int, modifier: Modifier) {
  * today falls in is the one mark in Health's hue; above-typical bars are the stronger ink.
  */
 @Composable
-internal fun HealthChart(bars: List<HealthChartBar>, hasTypical: Boolean, typicalBp: Int, typicalLabel: String, ticks: List<String>, spoken: String) {
+internal fun HealthChart(bars: List<HealthChartBar>, hasTypical: Boolean, typicalBp: Int, typicalLabel: String, ticks: List<String>, spoken: String, selectedIndex: Int) {
     val radius = RoundedCornerShape((LocalCentraidTokens.current.radii["sm"] ?: 0).dp)
     Column(
         Modifier
@@ -269,7 +288,7 @@ internal fun HealthChart(bars: List<HealthChartBar>, hasTypical: Boolean, typica
         BoxWithConstraints(Modifier.fillMaxWidth().height(CHART_HEIGHT)) {
             val height = maxHeight
             Row(Modifier.fillMaxWidth().fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(if (bars.size > 14) 2.dp else 6.dp)) {
-                bars.forEach { bar ->
+                bars.forEachIndexed { index, bar ->
                     Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.BottomCenter) {
                         if (bar.has_value) {
                             Box(
@@ -277,12 +296,13 @@ internal fun HealthChart(bars: List<HealthChartBar>, hasTypical: Boolean, typica
                                     .fillMaxWidth()
                                     .height(height * fraction(bar.height_bp))
                                     .clip(radius)
+                                    .then(if (index == selectedIndex) Modifier.border(2.dp, centraidColor("healthText"), radius) else Modifier)
                                     .background(
                                         centraidColor(
                                             when {
-                                                bar.current -> "cOlive"
-                                                bar.above_typical -> "textFaint"
-                                                else -> "lineStrong"
+                                                bar.current -> "healthFill"
+                                                bar.above_typical -> "healthText"
+                                                else -> "healthTint"
                                             },
                                         ),
                                     ),

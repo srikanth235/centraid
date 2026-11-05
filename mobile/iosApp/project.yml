@@ -63,6 +63,7 @@ targets:
         # `CentraidApp.swiftmodule` — "Multiple commands produce", four
         # times over.
         PRODUCT_MODULE_NAME: CentraidApp
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # THE C ABI AS A SWIFT MODULE (#1135, lane C2): `import CentraidCoreC`
         # in `Sources/Core.swift`, over the committed header
         # `crates/core-ffi/include/centraid.h`.
@@ -120,7 +121,12 @@ targets:
       # spells it. `Resources/Fonts` and not `Resources`, so the plist and the
       # entitlements are not ALSO copied in as loose resources beside their
       # generated selves.
+      - path: WidgetShared
       - path: Resources/Fonts
+        buildPhase: resources
+      - path: Resources/Design.xcassets
+        buildPhase: resources
+      - path: Resources/Brand.xcassets
         buildPhase: resources
     # THE SWIFT PROTOBUF TYPES ARE BUILT, NOT CARRIED (#1020).
     #
@@ -148,6 +154,8 @@ targets:
         outputFileLists:
           - $(SRCROOT)/.generated/protos.output.xcfilelist
     dependencies:
+      - target: CentraidAgendaWidget
+        embed: true
       - package: SwiftProtobuf
     # WITHOUT THIS THE KEYCHAIN IS DEAD AND PAIRING CANNOT PERSIST (#1025).
     #
@@ -169,6 +177,8 @@ targets:
     entitlements:
       path: Resources/Centraid.entitlements
       properties:
+        com.apple.security.application-groups:
+          - group.dev.centraid.agenda
         keychain-access-groups:
           - $(AppIdentifierPrefix)$(CFBundleIdentifier)
         # HEALTH READS APPLE HEALTH, AND NOTHING ELSE (#1129, R-1129-7). The
@@ -196,6 +206,10 @@ targets:
       path: Resources/Info.plist
       properties:
         CFBundleDisplayName: Centraid
+        CFBundleURLTypes:
+          - CFBundleURLName: dev.centraid.agenda
+            CFBundleURLSchemes:
+              - centraid
         # WITHOUT THIS THE APP RUNS LETTERBOXED, AND EVERY SCREENSHOT LIES.
         #
         # An iOS app with neither a launch storyboard nor `UILaunchScreen` is
@@ -214,17 +228,16 @@ targets:
         # `FontRegistrationTests` asserts both names resolve.
         #
         # The files are copied into `Resources/Fonts` by
-        # `contracts/tools/export-native-theme.ts` from `packages/design/fonts`,
+        # `cargo xtask design` from `design/fonts`,
         # the one source, and the emitted `centraidFontFiles` in
         # `Design/Theme.swift` is this list's other half — they must agree.
         #
-        # `InstrumentSans_470Book.ttf` IS THE 400 REGISTER'S FACE HERE, and is
-        # not a third weight: the ramp still says 400, the file is a derived
-        # instance at `usWeightClass` 470, because a
-        # touch surface needs it where a desktop pane does not.
+        # Geist and Geist Mono match the committed redesign mockups.
         UIAppFonts:
-          - InstrumentSans_470Book.ttf
-          - InstrumentSans-SemiBold.ttf
+          - Geist-Regular.ttf
+          - Geist-SemiBold.ttf
+          - Geist-Bold.ttf
+          - GeistMono-Regular.ttf
         # BGTaskScheduler does NOT refuse an undeclared identifier politely: it
         # raises an NSInternalInconsistencyException on `register` and on
         # `submit`, and the app TERMINATES. This file is the SOURCE — the
@@ -263,9 +276,9 @@ targets:
         # their own vault on this phone.
         NSContactsUsageDescription: Centraid copies the contacts you choose into People, in your own vault on this phone.
         # AND CALENDAR → AGENDA, REMINDERS → AGENDA'S TO-DO: asked at the tap on each
-        # app's day-one empty state. iOS 17's full-access keys; the import reads.
-        NSCalendarsFullAccessUsageDescription: Centraid copies your calendar's events into Agenda, in your own vault on this phone.
-        NSRemindersFullAccessUsageDescription: Centraid copies your open reminders into Agenda, in your own vault on this phone.
+        # app's Import action. Calendar reads and writes; Reminders only reads.
+        NSCalendarsFullAccessUsageDescription: Centraid reads your calendars into Agenda and saves your Agenda edits back to them.
+        NSRemindersFullAccessUsageDescription: Centraid copies your reminders into Agenda, in your own vault on this phone.
         # WHY HEALTH ASKS FOR APPLE HEALTH (#1129): asked at the member's tap on
         # Connect, never at launch, for the types they chose there, READ ONLY
         # (R-1129-7). The sentence says both halves: what is read, and that
@@ -321,3 +334,40 @@ targets:
     dependencies:
       - target: Centraid
       - package: SwiftProtobuf
+
+  CentraidAgendaWidget:
+    type: app-extension
+    platform: iOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.centraid.agenda-widget
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+    sources:
+      - path: AgendaWidget
+        excludes: [Info.plist, AgendaWidget.entitlements]
+      - path: Sources/ThemeAccess.swift
+      - path: Resources/Design.xcassets
+        buildPhase: resources
+      - path: Resources/Fonts
+        buildPhase: resources
+      - path: WidgetShared
+      - path: Design/Catalog.swift
+      - path: Design/Theme.swift
+      - path: Design/Words.swift
+    entitlements:
+      path: AgendaWidget/AgendaWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.dev.centraid.agenda
+    info:
+      path: AgendaWidget/Info.plist
+      properties:
+        CFBundleDisplayName: Centraid
+        UIAppFonts:
+          - Geist-Regular.ttf
+          - Geist-SemiBold.ttf
+          - Geist-Bold.ttf
+          - GeistMono-Regular.ttf
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension

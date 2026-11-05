@@ -37,6 +37,7 @@ syntax = "proto3";
 package centraid.core.v1;
 
 import "centraid/core/v1/agenda.proto";
+import "centraid/core/v1/notifications.proto";
 import "centraid/core/v1/backup_screens.proto";
 import "centraid/core/v1/chat.proto";
 import "centraid/core/v1/docs.proto";
@@ -184,6 +185,7 @@ message AppQueryResponse {
     AgendaTaskSearch agenda_task_search = 9;
     AgendaTaskCatchUp agenda_task_catch_up = 17;
     AgendaTaskTrash agenda_task_trash = 18;
+    AgendaAlerts agenda_alerts = 19;
     DocsDrive docs_drive = 30;
     DocsSearch docs_search = 31;
     DocsDocument docs_document = 32;

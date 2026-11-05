@@ -23,8 +23,8 @@ import dev.centraid.design.CentraidGeometry
 /**
  * ONE ICON SET, DRAWN FROM THE EMITTED SILHOUETTES (#1020, wave A).
  *
- * The path data is `packages/design`'s, lowered by
- * `contracts/tools/export-native-catalog.ts` — the same 24x24 silhouettes the
+ * The path data is `design/tokens.toml`'s, lowered by
+ * `cargo xtask design` — the same 24x24 silhouettes the
  * web renderer draws. Material's icon set is deliberately NOT used here: a
  * second set is a second product, and the one thing Home's invariant header
  * promises is that eight unlike bodies read as one grid.

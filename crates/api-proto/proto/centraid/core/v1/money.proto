@@ -111,6 +111,7 @@ message MoneyActivityRow {
   optional string category_id = 8;
   optional string category_label = 9;
   repeated MoneyFlag flags = 10;
+  string color_key = 11;
 }
 
 // A count and the sum of what it counts, in one currency.
@@ -158,6 +159,24 @@ message MoneySpending {
   optional LastImportLine last_import = 15;
   // A month window held more than the ceiling: the figures are over a window.
   bool truncated = 16;
+  // Seven-day windows starting on the first of this month, per currency.
+  repeated SpendingWeek weeks = 17;
+
+  message SpendingWeek {
+    string start = 1;
+    string end = 2;
+    string currency = 3;
+    repeated WeekCategory categories = 4;
+    MoneyAmount total = 5;
+    MoneyAmount refund_credit = 6;
+  }
+
+  message WeekCategory {
+    string category_id = 1;
+    string label = 2;
+    string color_key = 3;
+    MoneyAmount spent = 4;
+  }
 
   message SpendingCurrency {
     MoneyAmount spent = 1;
@@ -179,6 +198,7 @@ message MoneySpending {
     optional MoneyAmount left = 8;
     bool over = 9;
     MoneyAmount refund_credit = 10;
+    string color_key = 11;
   }
 
   message InOutNet {
@@ -237,6 +257,12 @@ message MoneyActivity {
   // Absent on the last page.
   optional MoneyCursor next = 5;
   bool truncated = 6;
+  // Totals over the complete filtered month, independent of the visible page.
+  repeated DayTotal day_totals = 7;
+  message DayTotal {
+    string day = 1;
+    repeated MoneyAmount amounts = 2;
+  }
 }
 
 // `money.transaction`: one transaction and everything derived about it.

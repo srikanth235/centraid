@@ -184,6 +184,7 @@ enum PeopleEvents {
 // MARK: - Roster
 
 private struct PeopleRosterList: View {
+    @Environment(\.colorScheme) private var scheme
     let roster: Centraid_Core_V1_PeopleRosterData
     let importLabel: String
     let send: (Centraid_Core_V1_PeopleHomeEvent) -> Void
@@ -191,6 +192,11 @@ private struct PeopleRosterList: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if roster.hasMyCard {
+                PeopleRosterRowView(row: roster.myCard, send: send, open: open)
+                    .accessibilityIdentifier("people-my-card")
+                    .accessibilityLabel("\(roster.myCard.name), \(roster.myCardLabel)")
+            }
             if roster.hasEmpty {
                 // WHERE THE PHONE HOLDS CONTACTS, ITS IMPORT IS DAY ONE'S ACTION, sent to Rust as
                 // `ImportContactsTapped`; "Add person" stays in the header.
@@ -201,14 +207,39 @@ private struct PeopleRosterList: View {
                 }
                 Spacer(minLength: 0)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(roster.rows, id: \.partyID) { row in
-                            PeopleRosterRowView(row: row, send: send, open: open)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            if roster.sections.isEmpty {
+                                ForEach(roster.rows, id: \.partyID) { row in
+                                    PeopleRosterRowView(row: row, send: send, open: open)
+                                }
+                            } else {
+                                ForEach(roster.sections, id: \.key) { section in
+                                    SectionHeader(title: section.title).id(section.key)
+                                    ForEach(section.rows, id: \.partyID) { row in
+                                        PeopleRosterRowView(row: row, send: send, open: open)
+                                    }
+                                }
+                            }
+                            if !roster.statusLine.isEmpty {
+                                PeopleStatusLine(text: roster.statusLine)
+                            }
                         }
-                        if !roster.statusLine.isEmpty {
-                            PeopleStatusLine(text: roster.statusLine)
-                        }
+                        .padding(.trailing, roster.sections.isEmpty ? 0 : 44)
+                    }
+                    .overlay(alignment: .trailing) {
+                        ScrollView(.vertical, showsIndicators: false) { VStack(spacing: 0) {
+                            ForEach(roster.sections, id: \.key) { section in
+                                Button { proxy.scrollTo(section.key, anchor: .top) } label: {
+                                    Text(section.title).centraidType("smallStrong")
+                                        .foregroundStyle(Theme.color("peopleText", scheme))
+                                        .frame(minWidth: 44, minHeight: 44)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("people-index-\(section.key)")
+                            }
+                        } }.frame(width: 44)
                     }
                 }
                 .refreshable { send(PeopleEvents.home { $0.refreshed = .init() }) }
@@ -252,13 +283,14 @@ private struct PeopleRosterRowView: View {
                 identifier: "people-row-\(row.partyID)",
                 onTap: { open(row.route) }
             )
-            PeopleStarButton(
+            if !row.starLabel.isEmpty { PeopleStarButton(
                 starred: row.starred,
                 label: row.starLabel,
                 identifier: "people-star-\(row.partyID)",
                 onTap: { send(PeopleEvents.home { $0.star = .with { $0.partyID = row.partyID } }) }
             )
             .padding(.trailing, 8)
+            }
         }
     }
 }
@@ -425,10 +457,10 @@ struct PeopleAvatarView: View {
     var body: some View {
         Text(avatar.initials)
             .centraidType(size > 40 ? "title" : "annotLabelOn")
-            .foregroundStyle(Theme.color("text", scheme))
+            .foregroundStyle(Theme.color("onAccent", scheme))
             .frame(width: size, height: size)
             .background(
-                Circle().fill(Theme.color(peopleHue(avatar.hueKey, else: "bgSunken"), scheme).opacity(0.28))
+                Circle().fill(Theme.color(avatar.hueKey.isEmpty ? "peopleFill" : avatar.hueKey, scheme))
             )
             .overlay(
                 Circle().strokeBorder(
@@ -451,7 +483,7 @@ struct PeopleStarButton: View {
         KitIconKey(
             iconKey: "Star",
             label: label,
-            tint: starred ? "warning" : "textFaint",
+            tint: starred ? "peopleText" : "textFaint",
             identifier: identifier,
             action: onTap
         )

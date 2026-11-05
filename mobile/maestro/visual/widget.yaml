@@ -1,0 +1,31 @@
+# CONTENT must identify a real row, calendar cell, or honest first-use control.
+# Merely seeing a page container is insufficient: errors can draw one too.
+appId: ${APP_ID}
+name: Seeded app content from Home
+---
+- launchApp:
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible:
+      id: home-grid
+    timeout: 30000
+- assertNotVisible:
+    id: home-failure
+- scrollUntilVisible:
+    element:
+      id: home-tile-${WIDGET}
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn:
+    id: home-tile-${WIDGET}
+- scrollUntilVisible:
+    element:
+      id: ${CONTENT}
+    direction: DOWN
+    timeout: 30000
+    centerElement: true
+- assertVisible:
+    id: ${CONTENT}
+- takeScreenshot: screen

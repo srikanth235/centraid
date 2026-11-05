@@ -240,13 +240,17 @@ impl Home {
             }
             self.anchor.clone_from(&context.today);
         }
-        let span = span_of(self.destination);
-        let key = format!("{span}|{}", self.anchor);
+        let (start, span) = if self.destination == wire::AgendaDestination::Day {
+            super::grid::window(&self.calendar_view, &self.anchor)
+        } else {
+            (self.anchor.clone(), span_of(self.destination))
+        };
+        let key = format!("{span}|{start}");
         if self.held.window.as_deref() != Some(key.as_str()) {
             let (Some(before), Some(after), Some(last)) = (
-                civil::plus_days(&self.anchor, -1).and_then(|day| midnight(&day)),
-                civil::plus_days(&self.anchor, span + 1).and_then(|day| midnight(&day)),
-                civil::plus_days(&self.anchor, span - 1),
+                civil::plus_days(&start, -1).and_then(|day| midnight(&day)),
+                civil::plus_days(&start, span + 1).and_then(|day| midnight(&day)),
+                civil::plus_days(&start, span - 1),
             ) else {
                 return Err(Stop::Failed);
             };
@@ -264,7 +268,7 @@ impl Home {
             let context = get(read(
                 ctx,
                 query::DayContext {
-                    from: Some(self.anchor.clone()),
+                    from: Some(start),
                     to: Some(last),
                 },
                 pick_context,

@@ -131,6 +131,226 @@ fn calendar(w: &World, complete: bool, records: Vec<Value>) -> Value {
     )
 }
 
+#[test]
+fn reminders_keep_source_identity_lists_hierarchy_history_and_all_alarms() {
+    let w = World::new();
+    let parent = json!({"external_id":"uid:parent", "fields":{"title":"Trip", "status":"open"}});
+    let mut child = json!({"external_id":"uid:child", "fields":{"title":"Tickets", "description":"Bring ID", "url":"https://example.org/trip", "due":"2026-03-08T09:30:00", "zone":"America/New_York", "priority":3, "rule":"FREQ=WEEKLY;COUNT=3", "status":"done", "done_at":"2026-03-08T13:35:00Z", "flagged":true, "parent_key":"uid:parent", "reminders":[30,-10,15,30]}});
+    let import = |child: &Value| {
+        w.ok("follow.reminders", json!({"origin":{"ref":"reminders:travel","label":"Travel","device_id":"phone-1"},"complete":false,"records":[parent,child]}))
+    };
+    assert_eq!(import(&child)["added"], 2);
+    let id = w.id_of("Tickets");
+    assert_eq!(
+        w.one::<String>(
+            "SELECT e.title FROM task t JOIN entity e ON e.id = t.project_id WHERE t.id = ?1",
+            &[&id]
+        ),
+        "Travel"
+    );
+    assert_eq!(
+        w.one::<String>(
+            "SELECT e.title FROM task t JOIN entity e ON e.id = t.parent_id WHERE t.id = ?1",
+            &[&id]
+        ),
+        "Trip"
+    );
+    assert_eq!(
+        w.one::<String>("SELECT reminders FROM task WHERE id = ?1", &[&id]),
+        "[-10,15,30]"
+    );
+    assert_eq!(
+        w.one::<i64>("SELECT remind_before_min FROM task WHERE id = ?1", &[&id]),
+        30
+    );
+    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'tagged' AND to_id = 'flag:starred'", &[&id]), 1);
+    assert_eq!(
+        w.one::<String>("SELECT status FROM task WHERE id = ?1", &[&id]),
+        "done"
+    );
+    assert_eq!(import(&child)["added"], 0);
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM task", &[]),
+        2,
+        "historical completion never spawns a successor"
+    );
+    w.ok("task.edit", json!({"id":id,"title":"My tickets"}));
+    child["fields"]["title"] = json!("Provider tickets");
+    child["fields"]["due"] = json!("2026-03-15T09:30:00");
+    import(&child);
+    assert_eq!(
+        w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&id]),
+        "My tickets"
+    );
+    assert_eq!(
+        w.one::<String>("SELECT due FROM task WHERE id = ?1", &[&id]),
+        "2026-03-15T09:30:00"
+    );
+    w.ok("task.edit", json!({"id":id,"rule":"FREQ=WEEKLY"}));
+    w.ok("task.reopen", json!({"id":id}));
+    let done = w.ok("task.complete", json!({"id":id}));
+    let next = done["next_id"]
+        .as_str()
+        .expect("the recurring task continues");
+    assert_eq!(
+        w.one::<String>("SELECT reminders FROM task WHERE id = ?1", &[next]),
+        "[-10,15,30]"
+    );
+}
+
+#[test]
+fn matching_a_member_task_keeps_its_existing_star_and_custom_alarm() {
+    let w = World::new();
+    let made = w.ok(
+        "task.add",
+        json!({"title":"Call","due":"2026-11-05","remind_before_min":15,"flagged":true}),
+    );
+    let id = made["id"].as_str().unwrap();
+    let result = w.ok("follow.reminders",json!({"origin":{"ref":"reminders:phone","label":"Phone","device_id":"phone-1"},"records":[{"external_id":"uid:call","fields":{"title":"Call","due":"2026-11-05","flagged":false,"reminders":[30]}}]}));
+    assert_eq!(result["matched"], 1);
+    assert_eq!(
+        w.one::<i64>("SELECT remind_before_min FROM task WHERE id = ?1", &[id]),
+        15
+    );
+    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'tagged' AND to_id = 'flag:starred'",&[id]),1);
+}
+
+#[test]
+fn calendar_write_receipts_stop_echoes_and_contact_names_are_not_invitation_edits() {
+    let w = World::new();
+    let mut record = event(0);
+    record["fields"]["reminders"] = json!([-10, 15]);
+    record["fields"]["location"] = json!("Library");
+    record["fields"]["attendees"] =
+        json!([{"name":"Alex","email":"alex@example.org","state":"accepted"}]);
+    assert_eq!(
+        calendar(&w, true, vec![record.clone()])["writes"],
+        json!([])
+    );
+    let id = w.id_of("Event 0");
+    assert_eq!(
+        w.one::<String>(
+            "SELECT p.title FROM event v JOIN entity p ON p.id = v.place_id WHERE v.id = ?1",
+            &[&id]
+        ),
+        "Library"
+    );
+    let guest = w.id_of("Alex");
+    w.ok("person.edit", json!({"id":guest,"title":"Alex from work"}));
+    assert_eq!(
+        calendar(&w, true, vec![record.clone()])["writes"],
+        json!([])
+    );
+    w.ok("event.edit", json!({"id":id,"title":"Planning"}));
+    let answer = calendar(&w, true, vec![record.clone()]);
+    assert_eq!(answer["writes"][0]["fields"], json!(["title"]));
+    w.ok("follow.calendar_written", json!({"origin":"calendar:work","entity_id":id,"external_id":"uid:0","fields":{"title":"Planning"}}));
+    record["fields"]["title"] = json!("Planning");
+    assert_eq!(
+        calendar(&w, true, vec![record.clone()])["writes"],
+        json!([])
+    );
+    w.ok("entity.trash", json!({"id":id}));
+    assert_eq!(
+        calendar(&w, true, vec![record])["writes"][0]["deleted"],
+        true
+    );
+}
+
+#[test]
+fn a_calendar_window_does_not_delete_past_or_future_events_it_cannot_see() {
+    let w = World::new();
+    let mut past = event(0);
+    past["fields"]["starts"] = json!("2020-03-01T09:00:00");
+    past["fields"]["ends"] = json!("2020-03-01T10:00:00");
+    let mut future = event(1);
+    future["fields"]["starts"] = json!("2040-03-01T09:00:00");
+    future["fields"]["ends"] = json!("2040-03-01T10:00:00");
+    calendar(&w, true, vec![past, future]);
+    let result = w.ok("follow.calendar", json!({"origin":{"ref":"calendar:work","label":"Work","device_id":"phone-1","config":{"read_from":"2026-03-01T00:00:00Z","read_to":"2026-05-01T00:00:00Z"}},"complete":true,"records":[]}));
+    assert_eq!(result["trashed"], 0);
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM source WHERE entity_id IS NOT NULL",
+            &[]
+        ),
+        2
+    );
+}
+
+#[test]
+fn a_calendar_provider_assigning_a_uid_keeps_the_local_link_and_member_edits() {
+    let w = World::new();
+    let mut record = event(0);
+    record["external_id"] = json!("local:42");
+    record["device_id"] = json!("phone-1");
+    calendar(&w, true, vec![record.clone()]);
+    let id = w.id_of("Event 0");
+    w.ok("event.edit", json!({"id":id,"title":"My meeting"}));
+    record["external_id"] = json!("uid:assigned-by-provider");
+    record["previous_external_id"] = json!("local:42");
+    record["device_id"] = Value::Null;
+    let result = calendar(&w, true, vec![record]);
+    assert_eq!(result["added"], 0);
+    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM event", &[]), 1);
+    assert_eq!(
+        w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&id]),
+        "My meeting"
+    );
+    assert_eq!(
+        w.one::<String>(
+            "SELECT external_id FROM source WHERE entity_id = ?1",
+            &[&id]
+        ),
+        "uid:assigned-by-provider"
+    );
+    assert_eq!(
+        w.one::<Option<String>>("SELECT device_id FROM source WHERE entity_id = ?1", &[&id]),
+        None
+    );
+}
+
+#[test]
+fn a_changed_occurrence_writes_only_that_day_then_stops_on_the_source_echo() {
+    let w = World::new();
+    let mut record = series("2026-03-02T09:00:00", "FREQ=WEEKLY");
+    record["fields"]["ends"] = json!("2026-03-02T10:00:00");
+    record["fields"]["overrides"] = json!({"from":"2026-03-01T00:00:00Z","to":"2026-03-16T00:00:00Z","shown":["2026-03-02T09:00:00","2026-03-09T09:00:00"],"moved":[]});
+    calendar(&w, true, vec![record.clone()]);
+    let id = w.one::<String>("SELECT entity_id FROM source", &[]);
+    w.ok("event.edit_occurrence", json!({"id":id,"original_start":"2026-03-09T09:00:00","scope":"occurrence","action":"override","title":"Moved meeting","starts":"2026-03-09T11:00:00","ends":"2026-03-09T12:00:00"}));
+    let answer = calendar(&w, true, vec![record.clone()]);
+    assert_eq!(answer["writes"].as_array().unwrap().len(), 1);
+    assert_eq!(answer["writes"][0]["original_start"], "2026-03-09T09:00:00");
+    assert_eq!(answer["writes"][0]["desired"]["title"], "Moved meeting");
+    record["fields"]["overrides"]["shown"] = json!(["2026-03-02T09:00:00"]);
+    record["fields"]["overrides"]["moved"] = json!([{"original_start":"2026-03-09T09:00:00","starts":"2026-03-09T11:00:00","ends":"2026-03-09T12:00:00","title":"Moved meeting"}]);
+    assert_eq!(calendar(&w, true, vec![record])["writes"], json!([]));
+}
+
+#[test]
+fn future_edits_write_concrete_days_in_the_read_window_and_acknowledge_their_echoes() {
+    let w = World::new();
+    let mut record = series("2026-03-02T09:00:00", "FREQ=WEEKLY");
+    record["fields"]["ends"] = json!("2026-03-02T10:00:00");
+    record["fields"]["overrides"] = json!({"from":"2026-03-01T00:00:00Z","to":"2026-03-23T00:00:00Z","shown":["2026-03-02T09:00:00","2026-03-09T09:00:00","2026-03-16T09:00:00"],"moved":[]});
+    calendar(&w, true, vec![record.clone()]);
+    let id = w.one::<String>("SELECT entity_id FROM source", &[]);
+    w.ok("event.edit_occurrence", json!({"id":id,"original_start":"2026-03-09T09:00:00","scope":"future","action":"override","title":"New standup"}));
+    let answer = calendar(&w, true, vec![record.clone()]);
+    assert_eq!(answer["writes"].as_array().unwrap().len(), 2);
+    for write in answer["writes"].as_array().unwrap() {
+        assert!(write["original_start"].as_str().unwrap() >= "2026-03-09T09:00:00");
+        assert_eq!(write["desired"]["title"], "New standup");
+    }
+    record["fields"]["overrides"]["shown"] = json!(["2026-03-02T09:00:00"]);
+    record["fields"]["overrides"]["moved"] = json!([
+        {"original_start":"2026-03-09T09:00:00","starts":"2026-03-09T09:00:00","ends":"2026-03-09T10:00:00","title":"New standup","description":""},
+        {"original_start":"2026-03-16T09:00:00","starts":"2026-03-16T09:00:00","ends":"2026-03-16T10:00:00","title":"New standup","description":""}
+    ]);
+    assert_eq!(calendar(&w, true, vec![record])["writes"], json!([]));
+}
+
 // ---------------------------------------------------------------------------
 // The owner
 // ---------------------------------------------------------------------------

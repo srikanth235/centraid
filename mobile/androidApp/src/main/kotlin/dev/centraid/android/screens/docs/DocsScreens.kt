@@ -9,6 +9,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -129,6 +131,7 @@ internal class DocsSheetActions(
     val onChoice: (String) -> Unit,
     val onLabelAdded: (String) -> Unit,
     val onLabelRemoved: (String) -> Unit,
+    val onLabelColor: (String, String) -> Unit = { _, _ -> },
     val onLabelDraft: (String) -> Unit,
     val onFolderName: (String) -> Unit = {},
     val onFolderCreated: () -> Unit = {},
@@ -164,6 +167,7 @@ internal fun DocsSheetView(sheet: DocsSheet?, actions: DocsSheetActions) {
         }
         labels != null -> SheetRoom(title = sheet.title, onDismiss = actions.onClose) {
             labels.current.forEach { chip ->
+                DocsLabelColorMenu(chip, labels.colors, labels.color_label) { color -> actions.onLabelColor(chip.tag_id, color) }
                 SheetRow(
                     label = chip.label,
                     detail = labels.remove_label,
@@ -367,6 +371,7 @@ internal fun DocsDriveScreen(
             onChoice = { key -> onEvent(DocsDriveEvent(choice = DocsDriveEvent.ChoicePicked(key = key))) },
             onLabelAdded = { onEvent(DocsDriveEvent(label_added = DocsDriveEvent.LabelAdded(label = it))) },
             onLabelRemoved = { onEvent(DocsDriveEvent(label_removed = DocsDriveEvent.LabelRemoved(tag_id = it))) },
+            onLabelColor = { tag, color -> onEvent(DocsDriveEvent(label_color = centraid.core.v1.DocsLabelColorPicked(tag_id = tag, color_key = color))) },
             onLabelDraft = { onEvent(DocsDriveEvent(label_draft = DocsDriveEvent.LabelDraftEdited(text = it))) },
             onFolderName = { onEvent(DocsDriveEvent(folder_name = DocsDriveEvent.FolderNameEdited(name = it))) },
             onFolderCreated = { onEvent(DocsDriveEvent(folder_created = DocsDriveEvent.FolderCreated())) },
@@ -436,7 +441,7 @@ private fun DriveData(
     }
     val chrome = state.chrome
     if (state.layout == DocsDriveState.Layout.LAYOUT_GRID) {
-        LazyVerticalGrid(columns = GridCells.Adaptive(150.dp), modifier = Modifier.fillMaxSize()) {
+        LazyVerticalGrid(columns = GridCells.Adaptive(if (androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.8f) 280.dp else 104.dp), modifier = Modifier.fillMaxSize()) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "head") { DriveHead(data, onOpen) }
             items(containers, span = { GridItemSpan(maxLineSpan) }, key = { "c-${it.entity}-${it.id}" }) { container ->
                 SearchContainerRow(container, onOpen = onOpen)
@@ -447,7 +452,7 @@ private fun DriveData(
                 }
             }
             items(data.rows, key = { "d-" + it.document_id }) { row ->
-                Tile(row.title, row.meta, row.kind_icon_key, row.accessibility_label, "docs-row-${row.document_id}", chrome?.row_menu, { openMenu(row) }) {
+                Tile(row.title, row.meta, row.kind_icon_key, row.accessibility_label, "docs-row-${row.document_id}", chrome?.row_menu, { openMenu(row) }, row = row) {
                     row.route?.let(onOpen)
                 }
             }
@@ -509,9 +514,11 @@ private fun FolderLine(folder: DocsFolderNode, onTap: () -> Unit) {
 @Composable
 private fun DocumentLine(row: DocsRowView, starredWord: String, menuLabel: String, onTap: () -> Unit, onMenu: () -> Unit) {
     Column(Modifier.fillMaxWidth()) {
-        CentraidRow(
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            DocsThumbnail(row, Modifier.padding(start = KitGeometry.GUTTER).size(64.dp, 72.dp))
+            Box(Modifier.weight(1f)) { CentraidRow(
             title = row.title,
-            meta = listOf(row.meta, row.labels.joinToString(" · ") { it.label }).filter { it.isNotEmpty() }.joinToString(" · "),
+            meta = row.meta,
             chips = listOfNotNull(if (row.starred && starredWord.isNotEmpty()) StatusChip(label = starredWord, tone = StatusChip.Tone.TONE_NEUTRAL) else null),
             dimmed = row.trashed,
             testTag = "docs-row-${row.document_id}",
@@ -519,9 +526,12 @@ private fun DocumentLine(row: DocsRowView, starredWord: String, menuLabel: Strin
             accessory = {
                 // The row opens; its words are the state's accessibility label.
                 Box(Modifier.semantics { contentDescription = row.accessibility_label })
+                if (row.starred) CentraidIcon("Star", tint = centraidColor("docsText"), size = 16.dp)
                 if (menuLabel.isNotEmpty()) IconKey("MoreVert", menuLabel, "docs-row-menu-${row.document_id}", bordered = false, onPress = onMenu)
             },
         )
+            } }
+        DocsLabelChips(row.labels)
         if (row.snippet.isNotEmpty()) {
             val snippet = buildAnnotatedString {
                 row.snippet.forEach { run ->
@@ -549,6 +559,7 @@ private fun Tile(
     tag: String,
     menuLabel: String?,
     onMenu: (() -> Unit)?,
+    row: DocsRowView? = null,
     onTap: () -> Unit,
 ) {
     Column(
@@ -560,8 +571,10 @@ private fun Tile(
             .padding(10.dp)
             .testTag(tag),
     ) {
+        if (row != null) DocsThumbnail(row, Modifier.fillMaxWidth().height(126.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CentraidIcon(iconKey.ifEmpty { "FileText" }, tint = centraidColor("textSoft"), size = 20.dp)
+            if (row == null) CentraidIcon(iconKey.ifEmpty { "FileText" }, tint = centraidColor("docsText"), size = 20.dp)
+            if (row?.starred == true) CentraidIcon("Star", tint = centraidColor("docsText"), size = 16.dp)
             Box(Modifier.weight(1f))
             if (menuLabel != null && menuLabel.isNotEmpty() && onMenu != null) {
                 IconKey("MoreVert", menuLabel, "$tag-menu", bordered = false, onPress = onMenu)
@@ -571,6 +584,7 @@ private fun Tile(
             Text(title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (meta.isNotEmpty()) Text(meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"), maxLines = 1)
         }
+        if (row != null) DocsLabelChips(row.labels)
     }
 }
 
@@ -626,6 +640,9 @@ internal fun DocsDocumentScreen(
                         onDone = { onEvent(DocsDocumentEvent(rename_closed = DocsDocumentEvent.RenameClosed())) },
                     )
                 }
+                item(key = "document-actions") {
+                    DocsDocumentActions(document.actions) { action -> onEvent(DocsDocumentEvent(action = DocsDocumentEvent.ActionPicked(key = action.key))) }
+                }
                 item(key = "surface") {
                     val reading = document.reading
                     val stage = document.stage
@@ -680,6 +697,7 @@ internal fun DocsDocumentScreen(
             onChoice = { key -> onEvent(DocsDocumentEvent(choice = DocsDocumentEvent.ChoicePicked(key = key))) },
             onLabelAdded = { onEvent(DocsDocumentEvent(label_added = DocsDocumentEvent.LabelAdded(label = it))) },
             onLabelRemoved = { onEvent(DocsDocumentEvent(label_removed = DocsDocumentEvent.LabelRemoved(tag_id = it))) },
+            onLabelColor = { tag, color -> onEvent(DocsDocumentEvent(label_color = centraid.core.v1.DocsLabelColorPicked(tag_id = tag, color_key = color))) },
             onLabelDraft = { onEvent(DocsDocumentEvent(label_draft = DocsDocumentEvent.LabelDraftEdited(text = it))) },
             onClose = { onEvent(DocsDocumentEvent(sheet_closed = DocsDocumentEvent.SheetClosed())) },
         ),
@@ -726,7 +744,7 @@ internal fun DocsVersionsScreen(state: DocsVersionsState, onEvent: (DocsVersions
                     CentraidRow(
                         title = version.label,
                         meta = version.meta,
-                        dimmed = !version.current,
+
                         testTag = "docs-version-${version.key}",
                         accessory = if (version.restore_label.isNotEmpty()) {
                             {
@@ -752,7 +770,7 @@ private fun Heading(title: String) {
 /**
  * THE STAGE. The bytes are here to draw (`bytes_path`) or they are not, and
  * the state says why not. An image decodes upright and no larger than the
- * screen needs (Photos' `decodeUpright`); a PDF draws its first page through
+ * screen needs (Photos' `decodeUpright`); a PDF lazily draws its pages through
  * the platform's `PdfRenderer`; a video or a recording plays through Photos'
  * player and transport, on the stage ground. A file that will not open draws
  * the card, never a broken glyph.
@@ -762,7 +780,8 @@ private fun StageCard(stage: DocsStage) {
     val path = stage.bytes_path.takeIf { stage.held && it.isNotEmpty() }
     val drawn = when {
         path == null -> false
-        stage.media == DocsStage.Media.MEDIA_IMAGE || stage.media == DocsStage.Media.MEDIA_PDF -> StageStill(stage, path)
+        stage.media == DocsStage.Media.MEDIA_PDF -> StagePdf(stage, path)
+        stage.media == DocsStage.Media.MEDIA_IMAGE -> StageStill(stage, path)
         stage.media == DocsStage.Media.MEDIA_VIDEO || stage.media == DocsStage.Media.MEDIA_AUDIO -> {
             StagePlayer(stage, path)
             true
@@ -772,12 +791,33 @@ private fun StageCard(stage: DocsStage) {
     if (!drawn) StageFacts(stage)
 }
 
-/** An image or a PDF's first page, fit to the column; false while it will not open. */
+/** All PDF pages are individually decoded as they enter the bounded viewport. */
+@Composable
+private fun StagePdf(stage: DocsStage, path: String): Boolean {
+    val count by produceState(0, path) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { ParcelFileDescriptor.open(File(path), ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor -> PdfRenderer(descriptor).use { it.pageCount } } }.getOrDefault(0)
+        }
+    }
+    if (count == 0) return false
+    LazyColumn(Modifier.fillMaxWidth().height(480.dp).padding(KitGeometry.GUTTER).testTag("docs-stage")) {
+        items(count, key = { it }) { index ->
+            val bitmap by produceState<ImageBitmap?>(null, path, index) { value = withContext(Dispatchers.IO) { pdfPage(path, index) } }
+            bitmap?.let { page ->
+                Image(bitmap = page, contentDescription = "${stage.accessibility_label}, ${index + 1} / $count", contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxWidth().aspectRatio(page.width.toFloat() / page.height.coerceAtLeast(1)).padding(bottom = 8.dp).testTag("docs-page-$index"))
+            }
+        }
+    }
+    return true
+}
+
+/** An image, fit to the column; false while it will not open. */
 @Composable
 private fun StageStill(stage: DocsStage, path: String): Boolean {
     val decoded by produceState<ImageBitmap?>(initialValue = null, path, stage.media) {
         value = withContext(Dispatchers.IO) {
-            if (stage.media == DocsStage.Media.MEDIA_PDF) firstPdfPage(path) else decodeUpright(path, maxDimension = STAGE_DECODE)?.asImageBitmap()
+            if (stage.media == DocsStage.Media.MEDIA_PDF) pdfPage(path) else decodeUpright(path, maxDimension = STAGE_DECODE)?.asImageBitmap()
         }
     }
     val bitmap = decoded ?: return false
@@ -860,11 +900,11 @@ private fun StageFacts(stage: DocsStage) {
  * page is transparent where nothing is printed). Null when the file is not a
  * PDF the platform can open — encrypted, damaged, or not a PDF at all.
  */
-private fun firstPdfPage(path: String): ImageBitmap? = runCatching {
+private fun pdfPage(path: String, index: Int = 0): ImageBitmap? = runCatching {
     ParcelFileDescriptor.open(File(path), ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
         PdfRenderer(descriptor).use { renderer ->
             if (renderer.pageCount == 0) return@use null
-            renderer.openPage(0).use { page ->
+            renderer.openPage(index).use { page ->
                 val width = STAGE_DECODE
                 val height = (width.toLong() * page.height / page.width.coerceAtLeast(1)).toInt().coerceIn(1, STAGE_DECODE * 2)
                 val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)

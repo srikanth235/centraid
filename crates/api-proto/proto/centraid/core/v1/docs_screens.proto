@@ -248,6 +248,8 @@ message DocsRowView {
   string accessibility_label = 13;
   // WHERE A TAP GOES: the document's page.
   Route route = 14;
+  string preview_path = 15;
+  string media_type = 16;
 }
 
 enum DocsSurfaceKind {
@@ -264,6 +266,7 @@ message DocsLabelChip {
   // The label's words are its identity: `tag.remove` takes them.
   string tag_id = 1;
   string label = 2;
+  string color_key = 3;
 }
 
 message DocsSnippetRun {
@@ -361,6 +364,18 @@ message DocsLabelsSheet {
   string add_label = 5;
   string placeholder = 6;
   string remove_label = 7;
+  repeated DocsLabelColor colors = 8;
+  string color_label = 9;
+}
+
+message DocsLabelColor {
+  string key = 1;
+  string label = 2;
+}
+
+message DocsLabelColorPicked {
+  string tag_id = 1;
+  string color_key = 2;
 }
 
 message DocsNewFolderSheet {
@@ -396,7 +411,7 @@ message DocsIngestView {
   // Bytes streamed into the core so far and the file's size, as thousandths
   // for a bar. 0 is unknown.
   uint32 progress_permille = 3;
-  // THE STATUS LINE'S CONTROLS (DESIGN.md: at most one inline text action).
+  // THE STATUS LINE'S CONTROLS (product-intuition screen contracts: at most one inline text action).
   // `retry_label` is that one text action — FAILED only, EMPTY otherwise.
   // `dismiss_label` is the line's CLOSE KEY (an icon control; this is its
   // accessibility label), set at FILED and at FAILED, EMPTY otherwise.
@@ -444,6 +459,7 @@ message DocsDriveEvent {
     // ---- The header's filter menu ----
     FilterMenuPicked filter_menu_picked = 26;
     FilterMenuCleared filter_menu_cleared = 27;
+    DocsLabelColorPicked label_color = 28;
   }
   // `FollowedChanged`: the drive reads what the vault follows itself.
   reserved 23;
@@ -618,6 +634,8 @@ message DocsDocumentData {
   // The drive's folders and labels, for the move and labels sheets.
   repeated DocsFolderNode folders = 13;
   repeated string labels = 14;
+  string file_path = 15;
+  string preview_label = 16;
 }
 
 // The row that opens the version history.
@@ -705,6 +723,7 @@ message DocsDocumentEvent {
     LabelDraftEdited label_draft = 10;
     Confirmed confirmed = 11;
     Dismissed dismissed = 12;
+    DocsLabelColorPicked label_color = 13;
   }
 
   message Refreshed {}

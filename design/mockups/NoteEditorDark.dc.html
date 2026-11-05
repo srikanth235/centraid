@@ -1,10 +1,8 @@
-<!doctype html>
-<html lang="en">
-<head>
+<!DOCTYPE html><html lang="en" data-theme="dark"><head>
 <meta charset="utf-8">
 <title>Notes editor (dark)</title>
 <script src="./support.js"></script>
-</head>
+<link rel="stylesheet" href="./tokens.css"></head>
 <body>
 <x-dc>
 <helmet>
@@ -15,78 +13,79 @@ body{margin:0}
 button{font:inherit;color:inherit}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: Geist, system-ui, sans-serif; color: #F2EFEA;">
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: var(--ds-bgList); font-family: Geist, system-ui, sans-serif; color: var(--ds-text);">
   <div style="display: flex; align-items: center; justify-content: space-between; padding: 56px 20px 8px;">
-    <a href="NotesHomeDark.dc.html" aria-label="Done, back to Notes" style="height: 44px; padding: 0 18px; border-radius: 22px; border: 1px solid #3A3733; background: rgba(44,42,39,0.85); display: flex; align-items: center; text-decoration: none; color: #BF9738; font-size: 16px; font-weight: 600;">Done</a>
-    <span style="font-size: 13px; color: #A39E95;">Saved</span>
-    <button aria-label="Note actions" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #3A3733; background: rgba(44,42,39,0.85); display: flex; align-items: center; justify-content: center;">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="#F2EFEA" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+    <a href="NotesHomeDark.dc.html" aria-label="Done, back to Notes" style="height: 44px; padding: 0 18px; border-radius: 22px; border: 1px solid var(--ds-lineStrong); background: var(--ds-glass); display: flex; align-items: center; text-decoration: none; color: var(--ds-notesText); font-size: 16px; font-weight: 600;">Done</a>
+    <span style="font-size: 13px; color: var(--ds-textFaint);">Saved</span>
+    <button aria-label="Note actions" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid var(--ds-lineStrong); background: var(--ds-glass); display: flex; align-items: center; justify-content: center;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--ds-text)" aria-hidden="true"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg>
     </button>
   </div>
 
-  <div style="display: flex; align-items: center; gap: 6px; margin: 6px 20px 0; font-size: 13px; color: #A39E95;">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#BF9738" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-label="Pinned" role="img"><path d="M9 4h6l-1 5 3 3H7l3-3zM12 12v8"/></svg>
+  <div style="display: flex; align-items: center; gap: 6px; margin: 6px 20px 0; font-size: 13px; color: var(--ds-textFaint);">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8C6802" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-label="Pinned" role="img"><path d="M9 4h6l-1 5 3 3H7l3-3zM12 12v8"></path></svg>
     Travel · Edited Wed 4 November
   </div>
   <h1 style="margin: 4px 20px 10px; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">Lisbon trip</h1>
 
   <div style="display: flex; flex-wrap: wrap; gap: 6px; margin: 0 20px 18px;">
-    <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #C9C4BA; background: #2A2826; border-radius: 14px; padding: 5px 6px 5px 10px;">travel
-      <button aria-label="Remove tag travel" style="border: none; background: none; padding: 0 2px; display: flex;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#75716A" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--ds-textSoft); background: var(--ds-bgSunken); border-radius: 14px; padding: 5px 6px 5px 10px;">travel
+      <button aria-label="Remove tag travel" style="border: none; background: none; padding: 0 2px; display: flex;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ds-textFaint)" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
     </span>
-    <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #C9C4BA; background: #2A2826; border-radius: 14px; padding: 5px 6px 5px 10px;">december
-      <button aria-label="Remove tag december" style="border: none; background: none; padding: 0 2px; display: flex;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#75716A" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--ds-textSoft); background: var(--ds-bgSunken); border-radius: 14px; padding: 5px 6px 5px 10px;">december
+      <button aria-label="Remove tag december" style="border: none; background: none; padding: 0 2px; display: flex;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ds-textFaint)" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
     </span>
-    <span style="font-size: 13px; color: #5C5852; border: 1px dashed #4A4741; border-radius: 14px; padding: 4px 10px;">Add a tag</span>
+    <span style="font-size: 13px; color: var(--ds-textDisabled); border: 1px dashed var(--ds-lineStrong); border-radius: 14px; padding: 4px 10px;">Add a tag</span>
   </div>
 
-  <div style="padding: 0 20px; font-size: 16px; line-height: 1.5; color: #F2EFEA;">
+  <div style="padding: 0 20px; font-size: 16px; line-height: 1.5; color: var(--ds-text);">
     <p style="margin: 0 0 12px;">Flights are booked: out on 12 December, back on the 18th. The flat is up the hill from the Alfama tram stop.</p>
-    <p style="margin: 0 0 14px;">Day by day is in <span style="display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 8px; background: #443B1D; color: #30A9C6; font-weight: 600; font-size: 15px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#30A9C6" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg>Lisbon itinerary</span></p>
+    <p style="margin: 0 0 14px;">Day by day is in <span style="display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 8px; background: var(--ds-notesTint); color: var(--ds-docsText); font-weight: 600; font-size: 15px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ds-docsText)" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v4h4"></path></svg>Lisbon itinerary</span></p>
 
     <div style="display: flex; gap: 12px; align-items: flex-start; padding: 6px 0;">
-      <span style="width: 22px; height: 22px; border-radius: 11px; background: #967002; flex-shrink: 0; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span>
-      <span style="color: #75716A; text-decoration: line-through;">Book the flights</span>
+      <span style="width: 22px; height: 22px; border-radius: 11px; background: var(--ds-notesFill); flex-shrink: 0; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>
+      <span style="color: var(--ds-textFaint); text-decoration: line-through;">Book the flights</span>
     </div>
     <div style="display: flex; gap: 12px; align-items: flex-start; padding: 6px 0;">
-      <span style="width: 22px; height: 22px; border-radius: 11px; background: #967002; flex-shrink: 0; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span>
-      <span style="color: #75716A; text-decoration: line-through;">Book the flat in Alfama</span>
+      <span style="width: 22px; height: 22px; border-radius: 11px; background: var(--ds-notesFill); flex-shrink: 0; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>
+      <span style="color: var(--ds-textFaint); text-decoration: line-through;">Book the flat in Alfama</span>
     </div>
     <div style="display: flex; gap: 12px; align-items: flex-start; padding: 6px 0;">
-      <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid #5C5852; box-sizing: border-box; flex-shrink: 0;"></span>
+      <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid var(--ds-textDisabled); box-sizing: border-box; flex-shrink: 0;"></span>
       <span>Travel insurance</span>
     </div>
     <div style="display: flex; gap: 12px; align-items: flex-start; padding: 6px 0;">
-      <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid #5C5852; box-sizing: border-box; flex-shrink: 0;"></span>
-      <span>Ask <span style="display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 8px; background: #2C2140; color: #BA82F5; font-weight: 600; font-size: 15px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#BA82F5" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg>Ana Díaz</span> to water the plants</span>
+      <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid var(--ds-textDisabled); box-sizing: border-box; flex-shrink: 0;"></span>
+      <span>Ask <span style="display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 8px; background: var(--ds-peopleTint); color: var(--ds-peopleText); font-weight: 600; font-size: 15px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ds-peopleText)" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0116 0"></path></svg>Ana Díaz</span> to water the plants</span>
     </div>
     <div style="display: flex; gap: 12px; align-items: flex-start; padding: 6px 0;">
-      <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid #5C5852; box-sizing: border-box; flex-shrink: 0;"></span>
-      <span>Print the boarding passes<span style="display: inline-block; width: 2px; height: 20px; background: #967002; vertical-align: -4px; margin-left: 1px;"></span></span>
+      <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid var(--ds-textDisabled); box-sizing: border-box; flex-shrink: 0;"></span>
+      <span>Print the boarding passes<span style="display: inline-block; width: 2px; height: 20px; background: var(--ds-notesFill); vertical-align: -4px; margin-left: 1px;"></span></span>
     </div>
   </div>
 
-  <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; height: 56px; border-radius: 28px; border: 1px solid rgba(44,42,39,0.72); background: rgba(44,42,39,0.72); box-shadow: 0 6px 20px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: space-around;">
+  <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; height: 56px; border-radius: 28px; border: 1px solid var(--ds-glass); background: var(--ds-glass); box-shadow: 0 6px 20px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: space-around;">
     <button aria-label="Checklist" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="7" r="2.5"/><circle cx="6" cy="17" r="2.5"/><path d="M5 17l1 1 1.6-2M11 7h10M11 17h10"/></svg>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ds-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="7" r="2.5"></circle><circle cx="6" cy="17" r="2.5"></circle><path d="M5 17l1 1 1.6-2M11 7h10M11 17h10"></path></svg>
     </button>
-    <button aria-label="Text style" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; color: #F2EFEA;">Aa</button>
+    <button aria-label="Text style" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; color: var(--ds-text);">Aa</button>
     <button aria-label="Add link" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 14a4 4 0 006 0l3-3a4 4 0 00-6-6l-1 1"/><path d="M14 10a4 4 0 00-6 0l-3 3a4 4 0 006 6l1-1"/></svg>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ds-text)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 14a4 4 0 006 0l3-3a4 4 0 00-6-6l-1 1"></path><path d="M14 10a4 4 0 00-6 0l-3 3a4 4 0 006 6l1-1"></path></svg>
     </button>
     <button aria-label="Add a tag" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 4L7 20M17 4l-2 16M4 9h16M3 15h16"/></svg>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ds-text)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 4L7 20M17 4l-2 16M4 9h16M3 15h16"></path></svg>
     </button>
     <button aria-label="Hide keyboard" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="11" rx="2"/><path d="M7 8h.01M11 8h.01M15 8h.01M8 11.5h8M9 19l3 2 3-2"/></svg>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ds-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="11" rx="2"></rect><path d="M7 8h.01M11 8h.01M15 8h.01M8 11.5h8M9 19l3 2 3-2"></path></svg>
     </button>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:390,&quot;height&quot;:844}}">
 class Component extends DCLogic {
 renderVals() { return {}; }
 }
 </script>
-</body>
-</html>
+
+
+</body></html>

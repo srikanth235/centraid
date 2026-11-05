@@ -19,6 +19,10 @@ pub const BAND_TODO: &str = "todo";
 pub const BAND_MORE: &str = "more";
 
 /// `AgendaMoreRow.key`s: what `MoreRowPicked` carries.
+pub const MORE_NEW_CALENDAR: &str = "new-calendar";
+pub const MORE_EDIT_CALENDAR: &str = "edit-calendar-";
+pub const MORE_IMPORT: &str = "import";
+pub const MORE_TAGS: &str = "tags";
 pub const MORE_READS: &str = "reads";
 pub const MORE_CALENDAR: &str = "calendar-";
 pub const MORE_ANYTIME: &str = "anytime";
@@ -27,7 +31,13 @@ pub const MORE_REMINDERS: &str = "reminders";
 pub const MORE_TRASH: &str = "trash";
 
 /// The Tasks places a More row opens as a page.
-pub const TASK_PLACES: [&str; 4] = [MORE_ANYTIME, MORE_LOGBOOK, MORE_REMINDERS, MORE_TRASH];
+pub const TASK_PLACES: [&str; 5] = [
+    MORE_ANYTIME,
+    MORE_LOGBOOK,
+    MORE_REMINDERS,
+    MORE_TRASH,
+    MORE_TAGS,
+];
 
 /// The band: places only, then More (R-CHROME-5). SEARCH IS A MODE OVER THE
 /// PLACE, not a place: the destination's tab stays lit while the field is open.
@@ -40,20 +50,17 @@ pub fn band(locale: Locale, destination: Dest, sheet_up: bool) -> Vec<wire::Agen
         current: destination == of,
     };
     vec![
-        tab(BAND_DAY, words::band_day(locale), "Clock", Dest::Day),
-        tab(
-            BAND_SCHEDULE,
-            words::band_schedule(locale),
-            "List",
-            Dest::Schedule,
-        ),
+        wire::AgendaBandTab {
+            current: matches!(destination, Dest::Day | Dest::Schedule),
+            ..tab(BAND_DAY, words::band_day(locale), "Calendar", Dest::Day)
+        },
+        tab(BAND_TODO, words::band_todo(locale), "Todo", Dest::Todo),
         tab(
             BAND_WAITING,
             words::band_waiting(locale),
             "Inbox",
             Dest::Waiting,
         ),
-        tab(BAND_TODO, words::band_todo(locale), "Todo", Dest::Todo),
         wire::AgendaBandTab {
             key: BAND_MORE.to_owned(),
             label: words::band_more(locale),
@@ -117,6 +124,9 @@ pub fn more_rows(
         .enumerate()
         .map(|(index, calendar)| wire::AgendaMoreRow {
             key: format!("{MORE_CALENDAR}{}", calendar.calendar_id),
+            edit_key: format!("{MORE_EDIT_CALENDAR}{}", calendar.calendar_id),
+            edit_label: words::calendar_edit(locale),
+            icon_key: calendar.icon_key.clone(),
             label: calendar.name.clone(),
             meta: calendar.state_label.clone(),
             hue_key: calendar.hue_key.clone(),
@@ -142,7 +152,26 @@ pub fn more_rows(
             ..wire::AgendaMoreRow::default()
         }
     };
+    out.push(wire::AgendaMoreRow {
+        key: MORE_NEW_CALENDAR.to_owned(),
+        label: words::calendar_new(locale),
+        icon_key: "Plus".to_owned(),
+        ..Default::default()
+    });
+    out.push(wire::AgendaMoreRow {
+        key: MORE_IMPORT.to_owned(),
+        label: words::import_title(locale),
+        icon_key: "Download".to_owned(),
+        ..Default::default()
+    });
     let mut places = vec![
+        place(
+            MORE_TAGS,
+            words::tags_title(locale),
+            String::new(),
+            "Tag",
+            routes::todo_list(wire::TodoView::Tags),
+        ),
         place(
             MORE_ANYTIME,
             task::view_anytime(locale),

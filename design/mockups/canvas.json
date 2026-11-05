@@ -5,7 +5,7 @@
     "AgendaCatchUp.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "4 · Reschedule (catch-up)",
+      "title": "4 \u00b7 Reschedule (catch-up)",
       "w": 390,
       "x": 1410,
       "y": 15080
@@ -13,7 +13,7 @@
     "AgendaCatchUpDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "4 · Reschedule (catch-up) · dark",
+      "title": "4 \u00b7 Reschedule (catch-up) \u00b7 dark",
       "w": 390,
       "x": 1410,
       "y": 15080
@@ -21,7 +21,7 @@
     "AgendaEvent.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · Event details",
+      "title": "1 \u00b7 Event details",
       "w": 390,
       "x": 0,
       "y": 15080
@@ -29,7 +29,7 @@
     "AgendaEventCancel.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · Cancel a repeating event",
+      "title": "2 \u00b7 Cancel a repeating event",
       "w": 390,
       "x": 470,
       "y": 15080
@@ -37,7 +37,7 @@
     "AgendaEventCancelDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · Cancel a repeating event · dark",
+      "title": "2 \u00b7 Cancel a repeating event \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 15080
@@ -45,7 +45,7 @@
     "AgendaEventDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · Event details · dark",
+      "title": "1 \u00b7 Event details \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 15080
@@ -53,7 +53,7 @@
     "AgendaProject.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "3 · Project",
+      "title": "3 \u00b7 Project",
       "w": 390,
       "x": 940,
       "y": 15080
@@ -61,7 +61,7 @@
     "AgendaProjectDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "3 · Project · dark",
+      "title": "3 \u00b7 Project \u00b7 dark",
       "w": 390,
       "x": 940,
       "y": 15080
@@ -69,7 +69,7 @@
     "AndroidChat.dc.html": {
       "h": 915,
       "page": "light",
-      "title": "7 · Chat on Android",
+      "title": "7 \u00b7 Chat on Android",
       "w": 412,
       "x": 2820,
       "y": 22040
@@ -77,7 +77,7 @@
     "AndroidChatDark.dc.html": {
       "h": 915,
       "page": "dark",
-      "title": "7 · Chat on Android · dark",
+      "title": "7 \u00b7 Chat on Android \u00b7 dark",
       "w": 412,
       "x": 2820,
       "y": 22040
@@ -85,7 +85,7 @@
     "AndroidDetails.dc.html": {
       "h": 915,
       "page": "light",
-      "title": "3 · Details sheet on Android",
+      "title": "3 \u00b7 Details sheet on Android",
       "w": 412,
       "x": 940,
       "y": 20880
@@ -93,7 +93,7 @@
     "AndroidDetailsDark.dc.html": {
       "h": 915,
       "page": "dark",
-      "title": "3 · Details sheet on Android · dark",
+      "title": "3 \u00b7 Details sheet on Android \u00b7 dark",
       "w": 412,
       "x": 940,
       "y": 20880
@@ -101,7 +101,7 @@
     "AndroidDocs.dc.html": {
       "h": 915,
       "page": "light",
-      "title": "3 · Docs on Android",
+      "title": "3 \u00b7 Docs on Android",
       "w": 412,
       "x": 940,
       "y": 22040
@@ -109,7 +109,7 @@
     "AndroidDocsDark.dc.html": {
       "h": 915,
       "page": "dark",
-      "title": "3 · Docs on Android · dark",
+      "title": "3 \u00b7 Docs on Android \u00b7 dark",
       "w": 412,
       "x": 940,
       "y": 22040
@@ -117,7 +117,7 @@
     "AndroidHealth.dc.html": {
       "h": 915,
       "page": "light",
-      "title": "4 · Health on Android",
+      "title": "4 \u00b7 Health on Android",
       "w": 412,
       "x": 1410,
       "y": 20880
@@ -125,7 +125,7 @@
     "AndroidHealthDark.dc.html": {
       "h": 915,
       "page": "dark",
-      "title": "4 · Health on Android · dark",
+      "title": "4 \u00b7 Health on Android \u00b7 dark",
       "w": 412,
       "x": 1410,
       "y": 20880
@@ -133,7 +133,7 @@
     "AndroidHome.dc.html": {
       "h": 915,
       "page": "light",
-      "title": "1 · Home on Android",
+      "title": "1 \u00b7 Home on Android",
       "w": 412,
       "x": 0,
       "y": 20880
@@ -141,7 +141,7 @@
     "AndroidHomeDark.dc.html": {
       "h": 915,
       "page": "dark",
-      "title": "1 · Home on Android · dark",
+      "title": "1 \u00b7 Home on Android \u00b7 dark",
       "w": 412,
       "x": 0,
       "y": 20880
@@ -149,7 +149,7 @@
     "AndroidLocker.dc.html": {
       "h": 915,
       "page": "light",
-      "title": "1 · Locker on Android",
+      "title": "1 \u00b7 Locker on Android",
       "w": 412,
       "x": 0,
       "y": 22040
@@ -157,7 +157,7 @@
     "AndroidLockerDark.dc.html": {
       "h": 915,
       "page": "dark",
-      "title": "1 · Locker on Android · dark",
+      "title": "1 \u00b7 Locker on Android \u00b7 dark",
       "w": 412,
       "x": 0,
       "y": 22040
@@ -165,7 +165,7 @@
     "AndroidMoney.dc.html": {
       "h": 915,
       "page": "light",
-      "title": "4 · Money on Android",
+      "title": "4 \u00b7 Money on Android",
       "w": 412,
       "x": 1410,
       "y": 22040
@@ -173,7 +173,7 @@
     "AndroidMoneyDark.dc.html": {
       "h": 915,
       "page": "dark",
-      "title": "4 · Money on Android · dark",
+      "title": "4 \u00b7 Money on Android \u00b7 dark",
       "w": 412,
       "x": 1410,
       "y": 22040
@@ -181,7 +181,7 @@
     "AndroidNotes.dc.html": {
       "h": 915,
       "page": "light",
-      "title": "5 · Notes on Android",
+      "title": "5 \u00b7 Notes on Android",
       "w": 412,
       "x": 1880,
       "y": 22040
@@ -189,7 +189,7 @@
     "AndroidNotesDark.dc.html": {
       "h": 915,
       "page": "dark",
-      "title": "5 · Notes on Android · dark",
+      "title": "5 \u00b7 Notes on Android \u00b7 dark",
       "w": 412,
       "x": 1880,
       "y": 22040
@@ -197,7 +197,7 @@
     "AndroidPeople.dc.html": {
       "h": 915,
       "page": "light",
-      "title": "2 · People on Android",
+      "title": "2 \u00b7 People on Android",
       "w": 412,
       "x": 470,
       "y": 22040
@@ -205,7 +205,7 @@
     "AndroidPeopleDark.dc.html": {
       "h": 915,
       "page": "dark",
-      "title": "2 · People on Android · dark",
+      "title": "2 \u00b7 People on Android \u00b7 dark",
       "w": 412,
       "x": 470,
       "y": 22040
@@ -213,7 +213,7 @@
     "AndroidPhotos.dc.html": {
       "h": 915,
       "page": "light",
-      "title": "6 · Photos on Android",
+      "title": "6 \u00b7 Photos on Android",
       "w": 412,
       "x": 2350,
       "y": 22040
@@ -221,7 +221,7 @@
     "AndroidPhotosDark.dc.html": {
       "h": 915,
       "page": "dark",
-      "title": "6 · Photos on Android · dark",
+      "title": "6 \u00b7 Photos on Android \u00b7 dark",
       "w": 412,
       "x": 2350,
       "y": 22040
@@ -229,7 +229,7 @@
     "AndroidRecoveryKey.dc.html": {
       "h": 915,
       "page": "light",
-      "title": "8 · Recovery key on Android",
+      "title": "8 \u00b7 Recovery key on Android",
       "w": 412,
       "x": 3290,
       "y": 22040
@@ -237,7 +237,7 @@
     "AndroidRecoveryKeyDark.dc.html": {
       "h": 915,
       "page": "dark",
-      "title": "8 · Recovery key on Android · dark",
+      "title": "8 \u00b7 Recovery key on Android \u00b7 dark",
       "w": 412,
       "x": 3290,
       "y": 22040
@@ -245,7 +245,7 @@
     "AndroidReminders.dc.html": {
       "h": 915,
       "page": "light",
-      "title": "2 · Reminders on Android",
+      "title": "2 \u00b7 Reminders on Android",
       "w": 412,
       "x": 470,
       "y": 20880
@@ -253,7 +253,7 @@
     "AndroidRemindersDark.dc.html": {
       "h": 915,
       "page": "dark",
-      "title": "2 · Reminders on Android · dark",
+      "title": "2 \u00b7 Reminders on Android \u00b7 dark",
       "w": 412,
       "x": 470,
       "y": 20880
@@ -269,7 +269,7 @@
     "BackupFailed.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "4 · Backup needs attention",
+      "title": "4 \u00b7 Backup needs attention",
       "w": 390,
       "x": 1410,
       "y": 18560
@@ -277,7 +277,7 @@
     "BackupFailedDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "4 · Backup needs attention · dark",
+      "title": "4 \u00b7 Backup needs attention \u00b7 dark",
       "w": 390,
       "x": 1410,
       "y": 18560
@@ -285,7 +285,7 @@
     "BackupRunning.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "4 · Backing up",
+      "title": "4 \u00b7 Backing up",
       "w": 390,
       "x": 1410,
       "y": 2320
@@ -293,7 +293,7 @@
     "BackupRunningDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "4 · Backing up · dark",
+      "title": "4 \u00b7 Backing up \u00b7 dark",
       "w": 390,
       "x": 1410,
       "y": 2320
@@ -301,7 +301,7 @@
     "BackupSettings.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "3 · Backup",
+      "title": "3 \u00b7 Backup",
       "w": 390,
       "x": 940,
       "y": 0
@@ -309,7 +309,7 @@
     "BackupSettingsDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "3 · Backup · dark",
+      "title": "3 \u00b7 Backup \u00b7 dark",
       "w": 390,
       "x": 940,
       "y": 0
@@ -317,7 +317,7 @@
     "BackupSettingsEnd.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · Backup, further down",
+      "title": "1 \u00b7 Backup, further down",
       "w": 390,
       "x": 0,
       "y": 2320
@@ -325,7 +325,7 @@
     "BackupSettingsEndDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · Backup, further down · dark",
+      "title": "1 \u00b7 Backup, further down \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 2320
@@ -333,7 +333,7 @@
     "Calendar.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · Calendar (Day view)",
+      "title": "1 \u00b7 Calendar (Day view)",
       "w": 390,
       "x": 0,
       "y": 3480
@@ -341,7 +341,7 @@
     "CalendarDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · Calendar (Day view) · dark",
+      "title": "1 \u00b7 Calendar (Day view) \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 3480
@@ -349,7 +349,7 @@
     "Chat.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "4 · Chat",
+      "title": "4 \u00b7 Chat",
       "w": 390,
       "x": 1410,
       "y": 0
@@ -357,7 +357,7 @@
     "ChatDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "4 · Chat · dark",
+      "title": "4 \u00b7 Chat \u00b7 dark",
       "w": 390,
       "x": 1410,
       "y": 0
@@ -365,7 +365,7 @@
     "ChatList.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "5 · Chats drawer",
+      "title": "5 \u00b7 Chats drawer",
       "w": 390,
       "x": 1880,
       "y": 15080
@@ -373,7 +373,7 @@
     "ChatListDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "5 · Chats drawer · dark",
+      "title": "5 \u00b7 Chats drawer \u00b7 dark",
       "w": 390,
       "x": 1880,
       "y": 15080
@@ -413,7 +413,7 @@
     "Details.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "5 · Details sheet",
+      "title": "5 \u00b7 Details sheet",
       "w": 390,
       "x": 1880,
       "y": 3480
@@ -421,7 +421,7 @@
     "DetailsDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "5 · Details sheet · dark",
+      "title": "5 \u00b7 Details sheet \u00b7 dark",
       "w": 390,
       "x": 1880,
       "y": 3480
@@ -429,7 +429,7 @@
     "DocEditor.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "4 · Edit document",
+      "title": "4 \u00b7 Edit document",
       "w": 390,
       "x": 1410,
       "y": 13920
@@ -437,7 +437,7 @@
     "DocEditorDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "4 · Edit document · dark",
+      "title": "4 \u00b7 Edit document \u00b7 dark",
       "w": 390,
       "x": 1410,
       "y": 13920
@@ -445,7 +445,7 @@
     "DocVersions.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "7 · Document versions",
+      "title": "7 \u00b7 Document versions",
       "w": 390,
       "x": 2820,
       "y": 15080
@@ -453,7 +453,7 @@
     "DocVersionsDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "7 · Document versions · dark",
+      "title": "7 \u00b7 Document versions \u00b7 dark",
       "w": 390,
       "x": 2820,
       "y": 15080
@@ -461,7 +461,7 @@
     "Docs.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · Docs home",
+      "title": "1 \u00b7 Docs home",
       "w": 390,
       "x": 0,
       "y": 6960
@@ -469,7 +469,7 @@
     "DocsDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · Docs home · dark",
+      "title": "1 \u00b7 Docs home \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 6960
@@ -477,7 +477,7 @@
     "DocsFolder.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · A document",
+      "title": "2 \u00b7 A document",
       "w": 390,
       "x": 470,
       "y": 6960
@@ -485,7 +485,7 @@
     "DocsFolderDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · A document · dark",
+      "title": "2 \u00b7 A document \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 6960
@@ -493,7 +493,7 @@
     "EmptyReminders.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · Empty Reminders",
+      "title": "1 \u00b7 Empty Reminders",
       "w": 390,
       "x": 0,
       "y": 18560
@@ -501,7 +501,7 @@
     "EmptyRemindersDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · Empty Reminders · dark",
+      "title": "1 \u00b7 Empty Reminders \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 18560
@@ -509,7 +509,7 @@
     "FilterMenu.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · Filter and sort menu",
+      "title": "2 \u00b7 Filter and sort menu",
       "w": 390,
       "x": 470,
       "y": 17400
@@ -517,7 +517,7 @@
     "FilterMenuDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · Filter and sort menu · dark",
+      "title": "2 \u00b7 Filter and sort menu \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 17400
@@ -525,7 +525,7 @@
     "FirstHome.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · Home on first run",
+      "title": "2 \u00b7 Home on first run",
       "w": 390,
       "x": 470,
       "y": 18560
@@ -533,7 +533,7 @@
     "FirstHomeDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · Home on first run · dark",
+      "title": "2 \u00b7 Home on first run \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 18560
@@ -541,7 +541,7 @@
     "FirstImports.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "5 · Home after the first imports",
+      "title": "5 \u00b7 Home after the first imports",
       "w": 390,
       "x": 1880,
       "y": 1160
@@ -549,7 +549,7 @@
     "FirstImportsDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "5 · Home after the first imports · dark",
+      "title": "5 \u00b7 Home after the first imports \u00b7 dark",
       "w": 390,
       "x": 1880,
       "y": 1160
@@ -557,7 +557,7 @@
     "Health.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · Health summary",
+      "title": "1 \u00b7 Health summary",
       "w": 390,
       "x": 0,
       "y": 8120
@@ -565,7 +565,7 @@
     "HealthConnect.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "3 · Connect Apple Health",
+      "title": "3 \u00b7 Connect Apple Health",
       "w": 390,
       "x": 940,
       "y": 8120
@@ -573,7 +573,7 @@
     "HealthConnectDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "3 · Connect Apple Health · dark",
+      "title": "3 \u00b7 Connect Apple Health \u00b7 dark",
       "w": 390,
       "x": 940,
       "y": 8120
@@ -581,7 +581,7 @@
     "HealthDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · Health summary · dark",
+      "title": "1 \u00b7 Health summary \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 8120
@@ -589,7 +589,7 @@
     "HealthMetric.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · Steps detail",
+      "title": "2 \u00b7 Steps detail",
       "w": 390,
       "x": 470,
       "y": 8120
@@ -597,7 +597,7 @@
     "HealthMetricDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · Steps detail · dark",
+      "title": "2 \u00b7 Steps detail \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 8120
@@ -605,7 +605,7 @@
     "HealthWorkout.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · One workout",
+      "title": "1 \u00b7 One workout",
       "w": 390,
       "x": 0,
       "y": 16240
@@ -613,7 +613,7 @@
     "HealthWorkoutDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · One workout · dark",
+      "title": "1 \u00b7 One workout \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 16240
@@ -621,7 +621,7 @@
     "HomeWidgets.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · Home as widgets",
+      "title": "2 \u00b7 Home as widgets",
       "w": 390,
       "x": 470,
       "y": 0
@@ -629,7 +629,7 @@
     "HomeWidgetsDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · Home as widgets · dark",
+      "title": "2 \u00b7 Home as widgets \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 0
@@ -653,7 +653,7 @@
     "LargeText.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · Largest text size",
+      "title": "1 \u00b7 Largest text size",
       "w": 390,
       "x": 0,
       "y": 19720
@@ -661,7 +661,7 @@
     "LargeTextDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · Largest text size · dark",
+      "title": "1 \u00b7 Largest text size \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 19720
@@ -669,7 +669,7 @@
     "List.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "4 · A list, adding inline",
+      "title": "4 \u00b7 A list, adding inline",
       "w": 390,
       "x": 1410,
       "y": 3480
@@ -677,7 +677,7 @@
     "ListDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "4 · A list, adding inline · dark",
+      "title": "4 \u00b7 A list, adding inline \u00b7 dark",
       "w": 390,
       "x": 1410,
       "y": 3480
@@ -685,7 +685,7 @@
     "LockScreen.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "5 · Locker locked",
+      "title": "5 \u00b7 Locker locked",
       "w": 390,
       "x": 1880,
       "y": 17400
@@ -693,7 +693,7 @@
     "LockScreenDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "5 · Locker locked · dark",
+      "title": "5 \u00b7 Locker locked \u00b7 dark",
       "w": 390,
       "x": 1880,
       "y": 17400
@@ -701,7 +701,7 @@
     "Locker.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · Locker home",
+      "title": "1 \u00b7 Locker home",
       "w": 390,
       "x": 0,
       "y": 4640
@@ -709,7 +709,7 @@
     "LockerDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · Locker home · dark",
+      "title": "1 \u00b7 Locker home \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 4640
@@ -717,7 +717,7 @@
     "LockerEditor.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "3 · Edit item",
+      "title": "3 \u00b7 Edit item",
       "w": 390,
       "x": 940,
       "y": 13920
@@ -725,7 +725,7 @@
     "LockerEditorDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "3 · Edit item · dark",
+      "title": "3 \u00b7 Edit item \u00b7 dark",
       "w": 390,
       "x": 940,
       "y": 13920
@@ -733,7 +733,7 @@
     "LockerExport.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "5 · Export everything",
+      "title": "5 \u00b7 Export everything",
       "w": 390,
       "x": 1880,
       "y": 16240
@@ -741,7 +741,7 @@
     "LockerExportDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "5 · Export everything · dark",
+      "title": "5 \u00b7 Export everything \u00b7 dark",
       "w": 390,
       "x": 1880,
       "y": 16240
@@ -749,7 +749,7 @@
     "LockerItem.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · An item",
+      "title": "2 \u00b7 An item",
       "w": 390,
       "x": 470,
       "y": 4640
@@ -757,7 +757,7 @@
     "LockerItemDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · An item · dark",
+      "title": "2 \u00b7 An item \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 4640
@@ -765,7 +765,7 @@
     "Main.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · Reminders home",
+      "title": "2 \u00b7 Reminders home",
       "w": 390,
       "x": 470,
       "y": 3480
@@ -773,7 +773,7 @@
     "MainDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · Reminders home · dark",
+      "title": "2 \u00b7 Reminders home \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 3480
@@ -781,7 +781,7 @@
     "Money.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · Activity",
+      "title": "1 \u00b7 Activity",
       "w": 390,
       "x": 0,
       "y": 9280
@@ -789,7 +789,7 @@
     "MoneyAccounts.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · Accounts",
+      "title": "1 \u00b7 Accounts",
       "w": 390,
       "x": 0,
       "y": 10440
@@ -797,7 +797,7 @@
     "MoneyAccountsDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · Accounts · dark",
+      "title": "1 \u00b7 Accounts \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 10440
@@ -805,7 +805,7 @@
     "MoneyCategories.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · Categories",
+      "title": "2 \u00b7 Categories",
       "w": 390,
       "x": 470,
       "y": 10440
@@ -813,7 +813,7 @@
     "MoneyCategoriesDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · Categories · dark",
+      "title": "2 \u00b7 Categories \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 10440
@@ -821,7 +821,7 @@
     "MoneyDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · Activity · dark",
+      "title": "1 \u00b7 Activity \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 9280
@@ -829,7 +829,7 @@
     "MoneyImport.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "6 · Import statement",
+      "title": "6 \u00b7 Import statement",
       "w": 390,
       "x": 2350,
       "y": 10440
@@ -837,7 +837,7 @@
     "MoneyImportDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "6 · Import statement · dark",
+      "title": "6 \u00b7 Import statement \u00b7 dark",
       "w": 390,
       "x": 2350,
       "y": 10440
@@ -845,7 +845,7 @@
     "MoneyRecurring.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "4 · Recurring",
+      "title": "4 \u00b7 Recurring",
       "w": 390,
       "x": 1410,
       "y": 10440
@@ -853,7 +853,7 @@
     "MoneyRecurringDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "4 · Recurring · dark",
+      "title": "4 \u00b7 Recurring \u00b7 dark",
       "w": 390,
       "x": 1410,
       "y": 10440
@@ -861,7 +861,7 @@
     "MoneyRules.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "3 · Rules",
+      "title": "3 \u00b7 Rules",
       "w": 390,
       "x": 940,
       "y": 10440
@@ -869,7 +869,7 @@
     "MoneyRulesDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "3 · Rules · dark",
+      "title": "3 \u00b7 Rules \u00b7 dark",
       "w": 390,
       "x": 940,
       "y": 10440
@@ -877,7 +877,7 @@
     "MoneySearch.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "7 · Search",
+      "title": "7 \u00b7 Search",
       "w": 390,
       "x": 2820,
       "y": 10440
@@ -885,7 +885,7 @@
     "MoneySearchDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "7 · Search · dark",
+      "title": "7 \u00b7 Search \u00b7 dark",
       "w": 390,
       "x": 2820,
       "y": 10440
@@ -893,7 +893,7 @@
     "MoneySpending.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · Spending",
+      "title": "2 \u00b7 Spending",
       "w": 390,
       "x": 470,
       "y": 9280
@@ -901,7 +901,7 @@
     "MoneySpendingDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · Spending · dark",
+      "title": "2 \u00b7 Spending \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 9280
@@ -909,7 +909,7 @@
     "MoneyTarget.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "5 · Target",
+      "title": "5 \u00b7 Target",
       "w": 390,
       "x": 1880,
       "y": 10440
@@ -917,7 +917,7 @@
     "MoneyTargetDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "5 · Target · dark",
+      "title": "5 \u00b7 Target \u00b7 dark",
       "w": 390,
       "x": 1880,
       "y": 10440
@@ -925,7 +925,7 @@
     "MoneyTransaction.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "6 · Set a category",
+      "title": "6 \u00b7 Set a category",
       "w": 390,
       "x": 2350,
       "y": 13920
@@ -933,7 +933,7 @@
     "MoneyTransactionDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "6 · Set a category · dark",
+      "title": "6 \u00b7 Set a category \u00b7 dark",
       "w": 390,
       "x": 2350,
       "y": 13920
@@ -941,7 +941,7 @@
     "MoreMenu.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "3 · More",
+      "title": "3 \u00b7 More",
       "w": 390,
       "x": 940,
       "y": 17400
@@ -949,7 +949,7 @@
     "MoreMenuDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "3 · More · dark",
+      "title": "3 \u00b7 More \u00b7 dark",
       "w": 390,
       "x": 940,
       "y": 17400
@@ -957,7 +957,7 @@
     "NoteEditor.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · A note",
+      "title": "2 \u00b7 A note",
       "w": 390,
       "x": 470,
       "y": 11600
@@ -965,7 +965,7 @@
     "NoteEditorDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · A note · dark",
+      "title": "2 \u00b7 A note \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 11600
@@ -973,7 +973,7 @@
     "NoteHistory.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "6 · Note history",
+      "title": "6 \u00b7 Note history",
       "w": 390,
       "x": 2350,
       "y": 15080
@@ -981,7 +981,7 @@
     "NoteHistoryDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "6 · Note history · dark",
+      "title": "6 \u00b7 Note history \u00b7 dark",
       "w": 390,
       "x": 2350,
       "y": 15080
@@ -989,7 +989,7 @@
     "NotesHome.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · Notes home",
+      "title": "1 \u00b7 Notes home",
       "w": 390,
       "x": 0,
       "y": 11600
@@ -997,7 +997,7 @@
     "NotesHomeDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · Notes home · dark",
+      "title": "1 \u00b7 Notes home \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 11600
@@ -1005,7 +1005,7 @@
     "PairCheck.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "3 · Check the safety number",
+      "title": "3 \u00b7 Check the safety number",
       "w": 390,
       "x": 940,
       "y": 2320
@@ -1013,7 +1013,7 @@
     "PairCheckDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "3 · Check the safety number · dark",
+      "title": "3 \u00b7 Check the safety number \u00b7 dark",
       "w": 390,
       "x": 940,
       "y": 2320
@@ -1021,7 +1021,7 @@
     "PairDevice.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · Pair with your backup device",
+      "title": "2 \u00b7 Pair with your backup device",
       "w": 390,
       "x": 470,
       "y": 2320
@@ -1029,7 +1029,7 @@
     "PairDeviceDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · Pair with your backup device · dark",
+      "title": "2 \u00b7 Pair with your backup device \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 2320
@@ -1037,7 +1037,7 @@
     "People.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · People",
+      "title": "1 \u00b7 People",
       "w": 390,
       "x": 0,
       "y": 5800
@@ -1045,7 +1045,7 @@
     "PeopleDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · People · dark",
+      "title": "1 \u00b7 People \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 5800
@@ -1053,7 +1053,7 @@
     "PermissionPhotos.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "3 · Asking for photos",
+      "title": "3 \u00b7 Asking for photos",
       "w": 390,
       "x": 940,
       "y": 18560
@@ -1061,7 +1061,7 @@
     "PermissionPhotosDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "3 · Asking for photos · dark",
+      "title": "3 \u00b7 Asking for photos \u00b7 dark",
       "w": 390,
       "x": 940,
       "y": 18560
@@ -1069,7 +1069,7 @@
     "Person.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · A person",
+      "title": "2 \u00b7 A person",
       "w": 390,
       "x": 470,
       "y": 5800
@@ -1077,7 +1077,7 @@
     "PersonDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · A person · dark",
+      "title": "2 \u00b7 A person \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 5800
@@ -1085,7 +1085,7 @@
     "PersonEditor.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · Edit person",
+      "title": "2 \u00b7 Edit person",
       "w": 390,
       "x": 470,
       "y": 13920
@@ -1093,7 +1093,7 @@
     "PersonEditorDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · Edit person · dark",
+      "title": "2 \u00b7 Edit person \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 13920
@@ -1101,7 +1101,7 @@
     "PhotoEditor.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "5 · Crop and rotate",
+      "title": "5 \u00b7 Crop and rotate",
       "w": 390,
       "x": 1880,
       "y": 13920
@@ -1109,7 +1109,7 @@
     "PhotoEditorDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "5 · Crop and rotate · dark",
+      "title": "5 \u00b7 Crop and rotate \u00b7 dark",
       "w": 390,
       "x": 1880,
       "y": 13920
@@ -1117,7 +1117,7 @@
     "PhotoViewer.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · A photo",
+      "title": "2 \u00b7 A photo",
       "w": 390,
       "x": 470,
       "y": 12760
@@ -1125,7 +1125,7 @@
     "PhotoViewerDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · A photo · dark",
+      "title": "2 \u00b7 A photo \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 12760
@@ -1133,7 +1133,7 @@
     "PhotosLibrary.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · Library",
+      "title": "1 \u00b7 Library",
       "w": 390,
       "x": 0,
       "y": 12760
@@ -1141,7 +1141,7 @@
     "PhotosLibraryDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · Library · dark",
+      "title": "1 \u00b7 Library \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 12760
@@ -1149,7 +1149,7 @@
     "PhotosPicker.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "3 · Add to an album",
+      "title": "3 \u00b7 Add to an album",
       "w": 390,
       "x": 940,
       "y": 16240
@@ -1157,7 +1157,7 @@
     "PhotosPickerDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "3 · Add to an album · dark",
+      "title": "3 \u00b7 Add to an album \u00b7 dark",
       "w": 390,
       "x": 940,
       "y": 16240
@@ -1165,7 +1165,7 @@
     "PhotosPlaces.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · Places",
+      "title": "2 \u00b7 Places",
       "w": 390,
       "x": 470,
       "y": 16240
@@ -1173,7 +1173,7 @@
     "PhotosPlacesDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · Places · dark",
+      "title": "2 \u00b7 Places \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 16240
@@ -1181,7 +1181,7 @@
     "PhotosShelf.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "4 · An album",
+      "title": "4 \u00b7 An album",
       "w": 390,
       "x": 1410,
       "y": 16240
@@ -1189,7 +1189,7 @@
     "PhotosShelfDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "4 · An album · dark",
+      "title": "4 \u00b7 An album \u00b7 dark",
       "w": 390,
       "x": 1410,
       "y": 16240
@@ -1197,7 +1197,7 @@
     "QuartersIcon.dc.html": {
       "h": 1060,
       "page": "icon",
-      "title": "Centraid icon · four quarters",
+      "title": "Centraid icon \u00b7 four quarters",
       "w": 1200,
       "x": 0,
       "y": 0
@@ -1205,7 +1205,7 @@
     "RecoveryKey.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · Your recovery key (key only on this phone)",
+      "title": "1 \u00b7 Your recovery key (key only on this phone)",
       "w": 390,
       "x": 0,
       "y": 1160
@@ -1213,7 +1213,7 @@
     "RecoveryKeyDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · Your recovery key (key only on this phone) · dark",
+      "title": "1 \u00b7 Your recovery key (key only on this phone) \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 1160
@@ -1221,7 +1221,7 @@
     "RestoreDone.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "4 · Restore done, one vault stayed",
+      "title": "4 \u00b7 Restore done, one vault stayed",
       "w": 390,
       "x": 1410,
       "y": 1160
@@ -1229,7 +1229,7 @@
     "RestoreDoneDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "4 · Restore done, one vault stayed · dark",
+      "title": "4 \u00b7 Restore done, one vault stayed \u00b7 dark",
       "w": 390,
       "x": 1410,
       "y": 1160
@@ -1237,7 +1237,7 @@
     "RestoreHeld.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "3 · Restore: key came back with the account",
+      "title": "3 \u00b7 Restore: key came back with the account",
       "w": 390,
       "x": 940,
       "y": 1160
@@ -1245,7 +1245,7 @@
     "RestoreHeldDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "3 · Restore: key came back with the account · dark",
+      "title": "3 \u00b7 Restore: key came back with the account \u00b7 dark",
       "w": 390,
       "x": 940,
       "y": 1160
@@ -1253,7 +1253,7 @@
     "RestoreWords.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · Restore: typing the 24 words",
+      "title": "2 \u00b7 Restore: typing the 24 words",
       "w": 390,
       "x": 470,
       "y": 1160
@@ -1261,7 +1261,7 @@
     "RestoreWordsDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · Restore: typing the 24 words · dark",
+      "title": "2 \u00b7 Restore: typing the 24 words \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 1160
@@ -1269,7 +1269,7 @@
     "Search.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · Search",
+      "title": "1 \u00b7 Search",
       "w": 390,
       "x": 0,
       "y": 17400
@@ -1277,7 +1277,7 @@
     "SearchDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · Search · dark",
+      "title": "1 \u00b7 Search \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 17400
@@ -1285,7 +1285,7 @@
     "Settings.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "6 · Settings",
+      "title": "6 \u00b7 Settings",
       "w": 390,
       "x": 2350,
       "y": 17400
@@ -1293,7 +1293,7 @@
     "SettingsDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "6 · Settings · dark",
+      "title": "6 \u00b7 Settings \u00b7 dark",
       "w": 390,
       "x": 2350,
       "y": 17400
@@ -1301,7 +1301,7 @@
     "SolidBand.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · Reduce Transparency",
+      "title": "2 \u00b7 Reduce Transparency",
       "w": 390,
       "x": 470,
       "y": 19720
@@ -1309,7 +1309,7 @@
     "SolidBandDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · Reduce Transparency · dark",
+      "title": "2 \u00b7 Reduce Transparency \u00b7 dark",
       "w": 390,
       "x": 470,
       "y": 19720
@@ -1317,7 +1317,7 @@
     "StatusLine.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "5 · Status line, not a toast",
+      "title": "5 \u00b7 Status line, not a toast",
       "w": 390,
       "x": 1880,
       "y": 18560
@@ -1325,7 +1325,7 @@
     "StatusLineDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "5 · Status line, not a toast · dark",
+      "title": "5 \u00b7 Status line, not a toast \u00b7 dark",
       "w": 390,
       "x": 1880,
       "y": 18560
@@ -1333,7 +1333,7 @@
     "Swipe.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "6 · Swipe, flag, notification",
+      "title": "6 \u00b7 Swipe, flag, notification",
       "w": 390,
       "x": 2350,
       "y": 3480
@@ -1341,7 +1341,7 @@
     "SwipeDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "6 · Swipe, flag, notification · dark",
+      "title": "6 \u00b7 Swipe, flag, notification \u00b7 dark",
       "w": 390,
       "x": 2350,
       "y": 3480
@@ -1349,7 +1349,7 @@
     "TaskEditor.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · New task",
+      "title": "1 \u00b7 New task",
       "w": 390,
       "x": 0,
       "y": 13920
@@ -1357,7 +1357,7 @@
     "TaskEditorDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · New task · dark",
+      "title": "1 \u00b7 New task \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 13920
@@ -1365,7 +1365,7 @@
     "Today.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "3 · Today",
+      "title": "3 \u00b7 Today",
       "w": 390,
       "x": 940,
       "y": 3480
@@ -1373,7 +1373,7 @@
     "TodayDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "3 · Today · dark",
+      "title": "3 \u00b7 Today \u00b7 dark",
       "w": 390,
       "x": 940,
       "y": 3480
@@ -1381,7 +1381,7 @@
     "Trash.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "4 · Trash",
+      "title": "4 \u00b7 Trash",
       "w": 390,
       "x": 1410,
       "y": 17400
@@ -1389,7 +1389,7 @@
     "TrashDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "4 · Trash · dark",
+      "title": "4 \u00b7 Trash \u00b7 dark",
       "w": 390,
       "x": 1410,
       "y": 17400
@@ -1397,7 +1397,7 @@
     "Welcome.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · Welcome (onboarding)",
+      "title": "1 \u00b7 Welcome (onboarding)",
       "w": 390,
       "x": 0,
       "y": 0
@@ -1405,7 +1405,7 @@
     "WelcomeDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · Welcome (onboarding) · dark",
+      "title": "1 \u00b7 Welcome (onboarding) \u00b7 dark",
       "w": 390,
       "x": 0,
       "y": 0
@@ -1417,6 +1417,22 @@
       "w": 1200,
       "x": 3840,
       "y": 0
+    },
+    "AgendaWidgets.dc.html": {
+      "h": 680,
+      "page": "light",
+      "title": "Agenda widgets and quick add",
+      "w": 800,
+      "x": 0,
+      "y": 23040
+    },
+    "AgendaWidgetsDark.dc.html": {
+      "h": 680,
+      "page": "dark",
+      "title": "Agenda widgets and quick add \u00b7 dark",
+      "w": 800,
+      "x": 0,
+      "y": 23040
     }
   },
   "createdOnFiles": {

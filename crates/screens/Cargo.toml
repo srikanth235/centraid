@@ -15,6 +15,8 @@ path = "src/lib.rs"
 [dependencies]
 centraid-api-proto = { path = "../api-proto" }
 centraid-core = { path = "../core" }
+centraid-apps-agenda = { path = "../apps/agenda" }
+centraid-vault = { path = "../vault" }
 # The folder walk: a document's path, a folder page's crumbs and a Move sheet's labels are
 # the docs crate's one `folder_path` (#1135).
 centraid-apps-docs = { path = "../apps/docs" }

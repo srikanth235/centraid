@@ -50,11 +50,19 @@ struct BackupHomeView: View {
         return ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                Text(model.title)
+                    .centraidType("display")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.bottom, 16)
                 // WHERE THE BACKUP STANDS, and the one act that moves it: with
                 // nothing paired that act is adding a backup device, drawn as
                 // the page's primary; once one is paired it is "Back up now".
                 VStack(alignment: .leading, spacing: 12) {
-                    WordsHead(title: model.title, lead: model.line.sentence)
+                    Text(model.line.sentence)
+                        .centraidType("bodyStrong")
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .fixedSize(horizontal: false, vertical: true)
                     if !model.line.detail.isEmpty {
                         sentence(model.line.detail)
                     }
@@ -103,7 +111,10 @@ struct BackupHomeView: View {
                         sentence(model.notice, id: "backup-notice")
                     }
                 }
-                .padding(.bottom, 24)
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.color("bgElev", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+                .padding(.bottom, 8)
 
                 // A KEY ON THIS PHONE ALONE IS THE PAGE'S FIRST CONCERN: a lost
                 // phone takes every vault with it, whatever is backed up.
@@ -121,24 +132,23 @@ struct BackupHomeView: View {
                     section(model.devicesHeading) { destinations(model) }
                 }
 
-                if !model.ruleChoices.isEmpty {
-                    section(model.ruleLabel) { rule(model) }
-                }
-
-                if !model.includeVideosLabel.isEmpty {
-                    divider
-                    Toggle(isOn: Binding(
-                        get: { model.includeVideos },
-                        set: { value in send(event { $0.setIncludeVideos = .with { $0.include = value } }) }
-                    )) {
-                        Text(model.includeVideosLabel)
-                            .centraidType("body")
-                            .foregroundStyle(Theme.color("text", scheme))
+                if !model.ruleChoices.isEmpty || !model.includeVideosLabel.isEmpty {
+                    section(model.ruleLabel) {
+                        if !model.ruleChoices.isEmpty { rule(model) }
+                        if !model.includeVideosLabel.isEmpty {
+                            Toggle(isOn: Binding(
+                                get: { model.includeVideos },
+                                set: { value in send(event { $0.setIncludeVideos = .with { $0.include = value } }) }
+                            )) {
+                                Text(model.includeVideosLabel)
+                                    .centraidType("body")
+                                    .foregroundStyle(Theme.color("text", scheme))
+                            }
+                            .kitToggle()
+                            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                            .accessibilityIdentifier("backup-include-videos")
+                        }
                     }
-                    .kitToggle()
-                    .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                    .padding(.vertical, 8)
-                    .accessibilityIdentifier("backup-include-videos")
                 }
 
                 // THE RECOVERY KEY BELONGS HERE: it is the other half of
@@ -230,17 +240,21 @@ struct BackupHomeView: View {
     /// (sentence case, never an eyebrow), then its rows.
     @ViewBuilder
     private func section<Content: View>(_ heading: String, @ViewBuilder content: () -> Content) -> some View {
-        divider
         VStack(alignment: .leading, spacing: 8) {
             if !heading.isEmpty {
                 Text(heading)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color("text", scheme))
+                    .centraidType("eyebrow")
+                    .foregroundStyle(Theme.color("textFaint", scheme))
+                    .textCase(.uppercase)
                     .accessibilityAddTraits(.isHeader)
+                    .padding(.horizontal, 16)
             }
-            content()
+            VStack(alignment: .leading, spacing: 8) { content() }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.color("bgElev", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
         }
-        .padding(.vertical, 20)
+        .padding(.vertical, 12)
     }
 
     /// One of the screen's sentences, drawn quietly.

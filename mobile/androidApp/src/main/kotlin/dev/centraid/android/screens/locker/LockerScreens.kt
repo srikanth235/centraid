@@ -300,7 +300,7 @@ internal fun LockerHomeScreen(
                         when (state.destination) {
                             LockerDestination.LOCKER_DESTINATION_REVIEW -> reviewTab(home, onOpen)
                             LockerDestination.LOCKER_DESTINATION_SEARCH -> searchTab(state, home, onOpen)
-                            else -> itemsTab(home, chrome?.add_route, onOpen)
+                            else -> itemsTab(home, chrome?.add_route, onOpen, onEvent)
                         }
                     }
                 }
@@ -326,7 +326,16 @@ internal fun LockerHomeScreen(
     }
 }
 
-private fun LazyListScope.itemsTab(home: LockerHomeData, add: Route?, onOpen: (Route) -> Unit) {
+private fun LazyListScope.itemsTab(home: LockerHomeData, add: Route?, onOpen: (Route) -> Unit, onEvent: (LockerHomeEvent) -> Unit) {
+    item(key = "categories") { LockerCategories(home.categories) { category ->
+        val route = category.route
+        if (route != null) onOpen(route) else onEvent(LockerHomeEvent(category = LockerHomeEvent.CategoryPicked(key = category.key)))
+    } }
+    if (home.starred_rows.isNotEmpty()) item(key = "starred-head") { SectionHeader(SectionHead(title = home.starred_title)) }
+    items(home.starred_rows, key = { "star-" + it.item_id }) { row -> LockerRowView(row) { row.route?.let(onOpen) } }
+    if (home.recent_rows.isNotEmpty()) item(key = "recent-head") { SectionHeader(SectionHead(title = home.recent_title)) }
+    items(home.recent_rows, key = { "recent-" + it.item_id }) { row -> LockerRowView(row) { row.route?.let(onOpen) } }
+    if (home.rows.isNotEmpty()) item(key = "all-head") { SectionHeader(SectionHead(title = home.items_title)) }
     val empty = home.items_empty
     if (home.rows.isEmpty() && empty != null) {
         item(key = "empty") {
@@ -392,7 +401,7 @@ internal fun LockerRowView(row: LockerRow, onTap: () -> Unit) {
         if (row.starred) {
             CentraidIcon(
                 iconKey = "Star",
-                tint = centraidColor("textSoft"),
+                tint = centraidColor("lockerText"),
                 size = 14.dp,
                 modifier = Modifier.padding(end = KitGeometry.GUTTER).clearAndSetSemantics { },
             )
@@ -619,11 +628,19 @@ internal fun LockerItemScreen(
                                 color = centraidColor("textSoft"),
                                 modifier = Modifier.padding(start = 10.dp).weight(1f),
                             )
-                            if (item.starred) CentraidIcon(iconKey = "Star", tint = centraidColor("textSoft"), size = 16.dp)
+                            if (item.starred) CentraidIcon(iconKey = "Star", tint = centraidColor("lockerText"), size = 16.dp)
                             item.chips.forEach { chip -> StatusChipView(chip, Modifier.padding(start = 8.dp)) }
                         }
                         LockerNote(item.trashed_note, ink = "net")
                         LockerNote(item.status_line)
+                    }
+                    item.code_card?.let { code -> item(key = "verification-code") { LockerCodeCard(code) { verb ->
+                        onEvent(LockerItemEvent(verb = LockerItemEvent.VerbTapped(key = code.key, verb = verb)))
+                    } } }
+                    if (item.change_password_label.isNotEmpty()) item(key = "change-password") {
+                        OutlineButton(item.change_password_label, testTag = "locker-change-password", modifier = Modifier.padding(KitGeometry.GUTTER)) {
+                            onEvent(LockerItemEvent(verb = LockerItemEvent.VerbTapped(key = "url", verb = "open")))
+                        }
                     }
                     item.sections.forEachIndexed { index, section ->
                         item(key = "sec-$index") { if (section.title.isNotEmpty()) SectionHeader(SectionHead(title = section.title)) }
@@ -877,7 +894,7 @@ internal fun LockerFieldView(row: LockerFieldRow, onVerb: (String) -> Unit) {
  * seconds are in the row's note too, so the ring carries no semantics.
  */
 @Composable
-private fun LockerCountdownRing(countdown: LockerCountdown) {
+internal fun LockerCountdownRing(countdown: LockerCountdown) {
     val fraction = if (countdown.period > 0) (countdown.seconds_left.toFloat() / countdown.period.toFloat()).coerceIn(0f, 1f) else 0f
     val track = centraidColor("line")
     val ink = centraidColor(if (countdown.seconds_left <= 5) "net" else "textSoft")

@@ -21,6 +21,7 @@ struct DocsDriveView: View {
     let onHome: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// A folder is a pushed page; the drive at its tab is an app place with the band.
     private var isFolderPage: Bool {
@@ -304,19 +305,13 @@ struct DocsDriveView: View {
     }
 
     private func grid(_ rows: [Centraid_Core_V1_DocsRowView], _ state: Centraid_Core_V1_DocsDriveState) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], spacing: 8) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 280 : 104), spacing: 8)], spacing: 8) {
             ForEach(rows, id: \.documentID) { row in
                 Button {
                     open(row.route)
                 } label: {
                     VStack(alignment: .leading, spacing: 6) {
-                        CentraidIconView(iconKey: row.kindIconKey, tint: Theme.color("textSoft", scheme), size: 28)
-                            .frame(maxWidth: .infinity, minHeight: 72)
-                            .background(
-                                RoundedRectangle(cornerRadius: Theme.radius("sm", scheme))
-                                    .fill(Theme.color("bgSunken", scheme))
-                            )
-                            .accessibilityHidden(true)
+                        DocsThumbnail(row: row).frame(height: 126)
                         Text(row.title)
                             .centraidType("smallStrong")
                             .foregroundStyle(Theme.color("text", scheme))
@@ -325,8 +320,11 @@ struct DocsDriveView: View {
                             .centraidType("annotLabel")
                             .foregroundStyle(Theme.color("textFaint", scheme))
                             .lineLimit(1)
+                        DocsLabelChips(labels: row.labels)
+                        if row.starred { CentraidIconView(iconKey: "Star", tint: Theme.color("docsText", scheme), size: 14) }
                     }
                     .padding(8)
+                    .background(Theme.color("bgElev", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .overlay(
                         RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
@@ -385,13 +383,14 @@ struct DocsDriveView: View {
             onChoice: { key in send(Self.event { $0.choice = .with { $0.key = key } }) },
             onLabelAdd: { label in send(Self.event { $0.labelAdded = .with { $0.label = label } }) },
             onLabelRemove: { tag in send(Self.event { $0.labelRemoved = .with { $0.tagID = tag } }) },
+            onLabelColor: { tag, color in send(Self.event { $0.labelColor = .with { $0.tagID = tag; $0.colorKey = color } }) },
             onLabelDraft: { text in send(Self.event { $0.labelDraft = .with { $0.text = text } }) },
             onFolderName: { name in send(Self.event { $0.folderName = .with { $0.name = name } }) },
             onFolderCreate: { send(Self.event { $0.folderCreated = .init() }) }
         )
     }
 
-    /// THE INGEST'S LINE (DESIGN.md: one line, at most one text action, never
+    /// THE INGEST'S LINE (product-intuition screen contracts: one line, at most one text action, never
     /// clears itself): its words, a determinate bar while bytes move, Try again
     /// on a failure, and the close key once there is something to put away.
     @ViewBuilder

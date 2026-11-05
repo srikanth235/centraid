@@ -16,6 +16,7 @@ pub mod kit;
 pub mod locker;
 pub mod money;
 pub mod notes;
+pub mod notifications;
 pub mod pairing;
 pub mod passes;
 pub mod people;
@@ -60,6 +61,7 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
             .with(proof::NAME, proof::build)
             .merge(shell::registry(&secrets))
             .merge(agenda::registry())
+            .merge(notifications::registry())
             .merge(locker::registry())
             .merge(money::registry())
             .merge(docs::registry())
@@ -89,7 +91,15 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
         .concat(),
     )
     .with_band(shell::band::view)
-    .with_services([passes::services(), custody::services(), vault::services()].concat());
+    .with_services(
+        [
+            passes::services(),
+            custody::services(),
+            vault::services(),
+            notifications::services(),
+        ]
+        .concat(),
+    );
     (runtime, shelf)
 }
 

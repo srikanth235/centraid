@@ -29,6 +29,9 @@ catalog! {
     plain action_restore = ("Restore", "Restore");
     plain action_unlink = ("Not a transfer", "Not a transfer");
     plain action_void = ("Void transaction", "Void transaction");
+    plain overview_title = ("Month overview", "Month overview");
+    plain weekly_spending = ("Weekly spending", "Weekly spending");
+    plain week_range = ("{start}–{end}", "{start}–{end}");
     plain activity_empty = ("Nothing this month.", "Nothing this month.");
     plain add_account = ("Add account", "Add account");
     plain all_accounts = ("All accounts", "All accounts");

@@ -185,29 +185,11 @@ pub fn rule(rrule: &str, start: &str) -> String {
     let Some(freq) = parts.iter().find_map(|part| part.strip_prefix("FREQ=")) else {
         return String::new();
     };
-    let day = start.get(8..10).unwrap_or_default().trim_start_matches('0');
-    let month = start.get(5..7).unwrap_or_default().trim_start_matches('0');
-    // `WKST` only moves a WEEKLY rule's `BYDAY` days when it steps more than one
-    // week; anywhere else it changes nothing, and iOS writes it on every rule of
-    // a Monday-first phone.
-    let interval: i64 = parts
-        .iter()
-        .find_map(|part| part.strip_prefix("INTERVAL="))
-        .and_then(|n| n.parse().ok())
-        .unwrap_or(1);
-    let week_start_matters =
-        freq == "WEEKLY" && interval > 1 && parts.iter().any(|part| part.starts_with("BYDAY="));
-    parts
-        .iter()
-        .filter(|part| {
-            let restates_anchor = freq == "YEARLY"
-                && (**part == format!("BYMONTHDAY={day}") || **part == format!("BYMONTH={month}"));
-            let idle_week_start = !week_start_matters && part.starts_with("WKST=");
-            !(restates_anchor || idle_week_start)
-        })
-        .copied()
-        .collect::<Vec<_>>()
-        .join(";")
+    // Keep every selector and WKST. Even a value matching the anchor can
+    // constrain another selector (YEARLY + BYMONTH + positional BYDAY).
+    // The shared RFC engine now accepts these parts without lossy rewriting.
+    let _ = freq;
+    parts.join(";")
 }
 
 /// One series to import: its own event, its rule, and its occurrences in the window.
@@ -313,7 +295,7 @@ fn observed(now_ms: i64) -> (String, String) {
 /// The key an occurrence is matched on: the series-local wall clock to the
 /// second, or the day for an all-day series (the shape of the vault's
 /// `original_start`).
-fn key(start: &str, all_day: bool) -> String {
+pub(super) fn key(start: &str, all_day: bool) -> String {
     start
         .get(..if all_day { DAY } else { 19 })
         .unwrap_or(start)
@@ -469,6 +451,27 @@ fn fields(
         },
     );
     fields.insert("busy".into(), json!(!event.free));
+    fields.insert("reminders".into(), json!(event.alarms_before_min));
+    fields.insert(
+        "location".into(),
+        if event.location.trim().is_empty() {
+            Value::Null
+        } else {
+            json!(event.location.trim())
+        },
+    );
+    fields.insert(
+        "attendees".into(),
+        json!(
+            event
+                .attendees
+                .iter()
+                .map(|guest| json!({
+                    "name": guest.name, "email": guest.email, "state": guest.state
+                }))
+                .collect::<Vec<_>>()
+        ),
+    );
     if let Some(series) = series {
         fields.insert("overrides".into(), overrides(series, now_ms, device_zone));
     }
@@ -480,6 +483,7 @@ fn fields(
 #[derive(Clone, Debug)]
 pub struct EventRecord {
     pub phone_id: String,
+    pub previous_phone_id: Option<String>,
     pub origin: String,
     pub fields: Value,
 }
@@ -513,6 +517,16 @@ pub fn batch(locale: Locale, snapshot: &wire::CalendarSnapshot) -> Batch {
         if records.iter().all(|record| record.phone_id != id) {
             records.push(EventRecord {
                 phone_id: id.to_owned(),
+                previous_phone_id: if is_portable_id(id) {
+                    let native = if event.native_series_id.is_empty() {
+                        &event.native_id
+                    } else {
+                        &event.native_series_id
+                    };
+                    (!native.is_empty()).then(|| format!("local:{native}"))
+                } else {
+                    None
+                },
                 origin: event_origin(event),
                 fields: fields(event, rrule, series, snapshot.now_ms, &snapshot.device_zone),
             });
@@ -576,6 +590,7 @@ pub fn follow_request(
         .map(|record| {
             json!({
                 "external_id": record.phone_id,
+                "previous_external_id": record.previous_phone_id,
                 // A phone id that means something on this phone only is kept under the phone (R-1127-10).
                 "device_id": if is_portable_id(&record.phone_id) { Value::Null } else { json!(device) },
                 "fields": record.fields,
@@ -653,6 +668,7 @@ enum Waiting {
     /// The keychain's answer to "did this device import?".
     Flag,
     Read(Purpose),
+    Write,
 }
 
 /// When a following pass runs. Pure: the timers are the runtime's.
@@ -680,6 +696,7 @@ pub struct CalendarFollow {
     import_queued: bool,
     status: Option<wire::StatusLine>,
     outcome: Option<Outcome>,
+    pending: Vec<super::calendar_write::Pending>,
 }
 
 impl Default for CalendarFollow {
@@ -699,6 +716,7 @@ impl CalendarFollow {
             import_queued: false,
             status: None,
             outcome: None,
+            pending: Vec::new(),
         }
     }
 
@@ -766,7 +784,14 @@ impl CalendarFollow {
     pub fn on_event(&mut self, event: &E, ctx: &Ctx) -> Option<Vec<wire::Effect>> {
         match event {
             E::TimerFired(fired) if fired.timer == SETTLE_TIMER => Some(self.settled(ctx)),
-            E::TimerFired(fired) if fired.timer == READ_TIMER => Some(self.read_ended(ctx, None)),
+            E::TimerFired(fired) if fired.timer == READ_TIMER => {
+                Some(if self.waiting == Waiting::Write {
+                    self.pending.clear();
+                    self.finish(ctx)
+                } else {
+                    self.read_ended(ctx, None)
+                })
+            }
             E::EffectResult(result) => self.on_result(result, ctx),
             _ => None,
         }
@@ -775,6 +800,38 @@ impl CalendarFollow {
     fn on_result(&mut self, result: &wire::EffectResult, ctx: &Ctx) -> Option<Vec<wire::Effect>> {
         use wire::effect_result::Outcome as O;
         match (&self.waiting, &result.outcome) {
+            (Waiting::Write, Some(O::CalendarWritten(answer))) => {
+                super::calendar_write::acknowledge(ctx, &self.pending, answer);
+                self.pending.clear();
+                if answer.refused > 0 || answer.conflicted > 0 {
+                    self.status = Some(wire::StatusLine {
+                        sentence: if answer.unsupported_fields.is_empty() {
+                            calendar_words::calendar_write_refused(ctx.locale())
+                        } else {
+                            calendar_words::calendar_write_unsupported(ctx.locale())
+                        },
+                        action_label: String::new(),
+                        refused: true,
+                    });
+                }
+                let mut effects = self.finish(ctx);
+                if self.followed && !self.watching {
+                    effects.extend(self.begin_following(ctx));
+                }
+                if answer.applied > 0 {
+                    self.request(ctx);
+                }
+                Some(effects)
+            }
+            (Waiting::Write, Some(O::Failed(_))) => {
+                self.pending.clear();
+                self.status = Some(wire::StatusLine {
+                    sentence: calendar_words::calendar_write_refused(ctx.locale()),
+                    action_label: String::new(),
+                    refused: true,
+                });
+                Some(self.finish(ctx))
+            }
             (_, Some(O::PhoneChanged(changed)))
                 if changed.source == wire::ImportSource::Calendar as i32 =>
             {
@@ -889,6 +946,24 @@ impl CalendarFollow {
                 ));
             }
         }
+        if outcome.refused > 0 {
+            self.status = Some(wire::StatusLine {
+                sentence: calendar_words::calendar_write_unsupported(ctx.locale()),
+                action_label: String::new(),
+                refused: true,
+            });
+        }
+        if !self.pending.is_empty() {
+            self.waiting = Waiting::Write;
+            ctx.cancel_timer(READ_TIMER);
+            ctx.start_timer(READ_TIMER, READ_TIMEOUT);
+            effects.push(wire::Effect {
+                kind: Some(wire::effect::Kind::CalendarWrite(wire::CalendarWrite {
+                    changes: self.pending.iter().map(|p| p.change.clone()).collect(),
+                })),
+            });
+            return effects;
+        }
         effects.extend(self.finish(ctx));
         if self.followed && !self.watching {
             effects.extend(self.begin_following(ctx));
@@ -910,7 +985,11 @@ impl CalendarFollow {
                 .iter()
                 .filter(|record| record.origin == origin.id)
                 .collect();
-            let request = follow_request(origin, &records, batch.complete, &snapshot.device_id);
+            let mut request = follow_request(origin, &records, batch.complete, &snapshot.device_id);
+            let (from, to) = observed(snapshot.now_ms);
+            let mut metadata: Value = serde_json::from_str(&request.origin).unwrap_or_default();
+            metadata["config"] = json!({"read_from":from,"read_to":to});
+            request.origin = metadata.to_string();
             let key = kit_act::key(
                 &["follow-calendar", &origin.id, &snapshot.now_ms.to_string()],
                 kit_act::fresh(),
@@ -922,6 +1001,13 @@ impl CalendarFollow {
             }
             told = true;
             let output: Value = serde_json::from_slice(&settled.output).unwrap_or(Value::Null);
+            let plans = super::calendar_write::plans(&output["writes"], &origin.id, snapshot);
+            let omitted = output["writes"]
+                .as_array()
+                .map_or(0, Vec::len)
+                .saturating_sub(plans.len());
+            outcome.refused += u32::try_from(omitted).unwrap_or(u32::MAX);
+            self.pending.extend(plans);
             outcome.added += count(&output, "added") + count(&output, "matched");
             outcome.refused += count(&output, "refused");
             outcome.updated += count(&output, "updated");

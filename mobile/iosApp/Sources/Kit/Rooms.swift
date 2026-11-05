@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-// THE ROOMS (K5; DESIGN.md "The seven rooms (mobile)").
+// THE ROOMS (K5; product-intuition screen contracts "The seven rooms (mobile)").
 //
 // A mobile screen is one of seven rooms and nothing else. The room owns the
 // header, the back control, search, the empty/loading/error states (through
@@ -142,11 +142,17 @@ struct SearchOpener: View {
 /// THE TRAILING SLOT, drawn: the bar's glyph for the one action, or nothing.
 struct RoomTrailing: View {
     let action: RoomAction?
+    var app: String? = nil
 
     var body: some View {
         if let action {
-            ToolbarIcon(iconKey: action.iconKey, label: action.label, identifier: action.identifier, action: action.action)
-                .disabled(!action.enabled)
+            if let app, action.iconKey == "Plus" {
+                KitIconKey(iconKey: action.iconKey, label: action.label, fill: app + "Fill", tint: "onAccent", identifier: action.identifier, action: action.action)
+                    .disabled(!action.enabled)
+            } else {
+                ToolbarIcon(iconKey: action.iconKey, label: action.label, identifier: action.identifier, action: action.action)
+                    .disabled(!action.enabled)
+            }
         }
     }
 }
@@ -315,7 +321,7 @@ extension AppPlace where Trailing == RoomTrailing {
             filter: filter,
             subtitle: subtitle,
             showsBand: showsBand,
-            trailing: { RoomTrailing(action: trailing) },
+            trailing: { RoomTrailing(action: trailing, app: app) },
             band: band,
             content: content
         )
@@ -327,6 +333,7 @@ extension AppPlace where Trailing == RoomTrailing {
 /// title, never a literal "Back".
 struct PushedPage<Trailing: View, Content: View>: View {
     let title: String
+    let titleColorRole: String?
     let parentTitle: String
     let onBack: () -> Void
     let trailing: () -> Trailing
@@ -336,12 +343,14 @@ struct PushedPage<Trailing: View, Content: View>: View {
 
     init(
         title: String,
+        titleColorRole: String? = nil,
         parentTitle: String,
         onBack: @escaping () -> Void,
         @ViewBuilder trailing: @escaping () -> Trailing,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
+        self.titleColorRole = titleColorRole
         self.parentTitle = parentTitle
         self.onBack = onBack
         self.trailing = trailing
@@ -356,6 +365,13 @@ struct PushedPage<Trailing: View, Content: View>: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
             .toolbar {
+                if let titleColorRole {
+                    ToolbarItem(placement: .principal) {
+                        Text(title).centraidType("title")
+                            .foregroundStyle(Theme.color(titleColorRole, scheme))
+                            .accessibilityAddTraits(.isHeader)
+                    }
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     Button(action: onBack) {
                         HStack(spacing: 2) {
@@ -552,15 +568,13 @@ struct SheetPresentation: ViewModifier {
     var detents: Set<PresentationDetent> = [.medium, .large]
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var textSize
 
     func body(content: Content) -> some View {
         content
-            .presentationBackground(Theme.color("bgElev", scheme))
+            .presentationBackground(Theme.color("bgChrome", scheme))
             .presentationDragIndicator(.visible)
-            .presentationDetents(detents)
-            // THE TEXT-SIZE CAP, STATED AGAIN: a sheet does not inherit the app
-            // root's (see `Theme.textSizeCap`).
-            .dynamicTypeSize(...Theme.textSizeCap)
+            .presentationDetents(textSize.isAccessibilitySize ? [.large] : detents)
     }
 }
 

@@ -1,12 +1,11 @@
-//! THE SEVEN ACTIONS, as command invocations.
+//! Agenda actions as typed command invocations.
 //!
 //! Every Agenda action is a thin invocation of ONE typed vault command: the
 //! projection lives in the command, not the app. So this module is a
 //! table, not logic.
 //!
-//! **FIVE OF THE SEVEN ARE `event.*`** and two are the shared edge verbs the
-//! attachment pair is everywhere (`edge.add`, `edge.remove`: an attachment is an
-//! `attached` edge from the event to a document or a photo). An action's input
+//! Events and tasks use their domain commands. Lists, tags, flags, imports and
+//! attachments share the same commands used by other apps. An action's input
 //! is its command's input, verbatim. [`tests::every_command_this_app_names_is_registered`]
 //! checks the table against the vault's own catalogue rather than against a
 //! list. **A button that mapped a gesture onto a command nobody registered would
@@ -129,7 +128,11 @@ pub const ACTIONS: &[ActionRow] = &[
     act("detach", "edge.remove"),
     // THE TASK HALF (#1128). Each action says its kind next to the event ones.
     act("add-task", "task.add"),
+    act("import-reminders", "follow.reminders"),
+    act("calendar-written", "follow.calendar_written"),
     act("edit-task", "task.edit"),
+    act("flag-task", "flag.set"),
+    act("unflag-task", "flag.clear"),
     // AN ACTION SAYS THE STATE IT WANTS (R-1135-3-10): the v0 `set-status` took a
     // status word the caller had not read, and `in-process` is no state of the
     // model. Completing is the one operation Agenda, People and automations share
@@ -139,6 +142,8 @@ pub const ACTIONS: &[ActionRow] = &[
     act("reopen-task", "task.reopen"),
     act("cancel-task", "task.cancel"),
     act("organize-task", "task.organize"),
+    act("reorder-task", "task.reorder"),
+    act("clear-completed", "task.clear_completed"),
     act("delete-task", "entity.trash"),
     // EMPTYING THE TRASH (#1015 D1), behind the manifest's confirmation.
     confirmed("purge-task", "entity.purge"),
@@ -146,6 +151,8 @@ pub const ACTIONS: &[ActionRow] = &[
     act("restore-task", "entity.restore"),
     // A project, an area and a section are containers: the shared verb.
     act("create-project", "container.create"),
+    act("create-calendar", "container.create"),
+    act("style-list", "container.style"),
     // A project or an area is renamed through the shared retitle verb.
     act("rename-list", "entity.retitle"),
     act("create-section", "container.create"),
@@ -185,7 +192,7 @@ mod tests {
 
     #[test]
     fn the_events_own_and_the_tasks_own_are_the_verbs_the_rest_are_shared() {
-        assert_eq!(ACTIONS.len(), 24);
+        assert_eq!(ACTIONS.len(), 32);
         let own = |prefix: &str| -> Vec<&str> {
             ACTIONS
                 .iter()
@@ -211,7 +218,9 @@ mod tests {
                 "task.complete",
                 "task.reopen",
                 "task.cancel",
-                "task.organize"
+                "task.organize",
+                "task.reorder",
+                "task.clear_completed"
             ]
         );
         // The shared verbs serve several actions without a wrapper: a project and a section are
@@ -221,8 +230,20 @@ mod tests {
             .filter(|row| row.command == "container.create")
             .map(|row| row.action)
             .collect();
-        assert_eq!(creates, ["create-project", "create-section"]);
-        assert_eq!(act_scope_tables().len(), 21);
+        assert_eq!(
+            creates,
+            ["create-project", "create-calendar", "create-section"]
+        );
+        assert_eq!(own("flag."), ["flag.set", "flag.clear"]);
+        assert_eq!(
+            own("follow."),
+            [
+                "follow.reminders",
+                "follow.calendar_written",
+                "follow.calendar"
+            ]
+        );
+        assert_eq!(act_scope_tables().len(), 28);
     }
 
     /// EVERY command this app names is in the vault's own catalogue. **A button

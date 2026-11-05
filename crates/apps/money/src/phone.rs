@@ -254,6 +254,7 @@ pub struct MoneySpending {
     pub days_left: u32,
     pub per_currency: Vec<SpendingCurrency>,
     pub categories: Vec<SpendingCategory>,
+    pub weeks: Vec<SpendingWeek>,
     pub uncategorised: Vec<Uncategorised>,
     pub in_out_net: Vec<InOutNet>,
     pub transfers_excluded: Vec<Excluded>,
@@ -265,6 +266,16 @@ pub struct MoneySpending {
     pub last_import: Option<LastImportLine>,
     /// A month window held more than the ceiling: the figures are over a window.
     pub truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpendingWeek {
+    pub start: String,
+    pub end: String,
+    pub currency: String,
+    pub categories: Vec<(String, String, String, Money)>,
+    pub total: Money,
+    pub refund_credit: Money,
 }
 
 /// The Spending screen for `month` (today decides how much of it is "so far").
@@ -440,6 +451,40 @@ pub fn spending(door: &dyn PageDoor, month: &str, today: &str) -> KitResult<Mone
         days_left: days_in_month.saturating_sub(day_of_month),
         per_currency,
         categories,
+        weeks: engine::weekly_spending(&window.value, month, &ctx)
+            .into_iter()
+            .flat_map(|week| {
+                week.currencies
+                    .into_iter()
+                    .map(|currency| SpendingWeek {
+                        start: week.start.clone(),
+                        end: week.end.clone(),
+                        total: money(currency.spent_minor, &currency.currency),
+                        refund_credit: money(currency.refund_credit_minor, &currency.currency),
+                        categories: currency
+                            .lines
+                            .into_iter()
+                            .map(|line| {
+                                let id = line.category_id.unwrap_or_default();
+                                let label = if id.is_empty() {
+                                    String::new()
+                                } else {
+                                    data.label(&id)
+                                };
+                                let color = centraid_design::list_hue_key(&id).to_owned();
+                                (
+                                    id,
+                                    label,
+                                    color,
+                                    money(line.spent_minor, &currency.currency),
+                                )
+                            })
+                            .collect(),
+                        currency: currency.currency,
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect(),
         uncategorised,
         in_out_net: folded
             .iter()
@@ -518,6 +563,7 @@ pub struct MoneyActivity {
     pub cursor: Option<(String, String)>,
     /// The month's own count is over the window the needs-category count reads.
     pub truncated: bool,
+    pub day_totals: BTreeMap<String, Vec<Money>>,
 }
 
 fn activity_row(row: &TxnRow, data: &MoneyData, today: &str) -> ActivityRow {
@@ -545,23 +591,46 @@ pub fn activity(
 ) -> KitResult<MoneyActivity> {
     let data = MoneyData::load(door)?;
     let page = queries::load_activity_page(door, month, filter, request)?;
-    let needing = queries::load_month_plain(
+    let month_rows = queries::load_month_plain(
         door,
         month,
         &ActivityFilter {
             account_id: filter.account_id.clone(),
-            category: queries::CategoryFilter::Uncategorised,
+            category: queries::CategoryFilter::Any,
         },
     )?;
     let mut per: BTreeMap<String, (usize, i64)> = BTreeMap::new();
-    for row in needing
-        .value
-        .iter()
-        .filter(|r| !data.linked.contains(&r.txn_id))
-    {
+    for row in month_rows.value.iter().filter(|r| {
+        !data.linked.contains(&r.txn_id) && r.category_concept_id.is_none() && !r.is_void()
+    }) {
         let slot = per.entry(row.currency.clone()).or_default();
         slot.0 += 1;
         slot.1 += row.amount_minor;
+    }
+    let mut totals: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
+    if !month_rows.truncated {
+        for row in &month_rows.value {
+            let included = match &filter.category {
+                queries::CategoryFilter::Any => true,
+                queries::CategoryFilter::Uncategorised => row.category_concept_id.is_none(),
+                queries::CategoryFilter::Is(id) => row.category_concept_id.as_ref() == Some(id),
+            };
+            if included
+                && filter
+                    .account_id
+                    .as_ref()
+                    .is_none_or(|id| id == &row.account_id)
+                && row.status == "posted"
+                && !row.is_void()
+                && !data.linked.contains(&row.txn_id)
+            {
+                *totals
+                    .entry(row.posted_on.clone())
+                    .or_default()
+                    .entry(row.currency.clone())
+                    .or_default() += signed(row).amount_minor;
+            }
+        }
     }
     Ok(MoneyActivity {
         month: month.to_owned(),
@@ -578,7 +647,19 @@ pub fn activity(
             })
             .collect(),
         cursor: page.next,
-        truncated: needing.truncated,
+        truncated: month_rows.truncated,
+        day_totals: totals
+            .into_iter()
+            .map(|(day, currencies)| {
+                (
+                    day,
+                    currencies
+                        .into_iter()
+                        .map(|(currency, minor)| money(minor, &currency))
+                        .collect(),
+                )
+            })
+            .collect(),
     })
 }
 

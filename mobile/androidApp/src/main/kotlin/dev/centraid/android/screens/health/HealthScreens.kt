@@ -32,7 +32,7 @@ import dev.centraid.android.kit.ShowMoreFooter
 import dev.centraid.android.kit.screenContentOf
 
 // ---------------------------------------------------------------------------
-// health.home: Today · Trends · Workouts, More as a sheet (#1129, #1135)
+// health.home: Summary · Trends · Workouts, More as a sheet (#1129, #1135)
 // ---------------------------------------------------------------------------
 
 /**
@@ -135,9 +135,16 @@ internal fun HealthHomeScreen(
 
 private fun LazyListScope.today(state: HealthHomeState, onOpen: (Route) -> Unit) {
     val today = state.data_?.today_data ?: return
-    today.hero?.let { hero -> item(key = "hero") { HealthHero(hero) { hero.route?.let(onOpen) } } }
     item(key = "metrics-heading") { HealthSection(today.metrics_heading) }
-    items(today.metrics, key = { "m-${it.metric}" }) { line -> HealthMetricRow(line) { line.route?.let(onOpen) } }
+    item(key = "pinned-empty") { HealthNote(today.pinned_empty) }
+    today.hero?.let { hero -> item(key = "hero") { HealthHero(hero) { hero.route?.let(onOpen) } } }
+    items(today.metrics, key = { "m-${it.metric}" }) { line -> HealthHero(line) { line.route?.let(onOpen) } }
+    if (today.highlights.isNotEmpty()) {
+        item(key = "highlights-heading") { HealthSection(today.highlights_heading) }
+        items(today.highlights.size, key = { "highlight-$it" }) { index ->
+            HealthHighlight(today.highlights[index].label, today.highlights[index].detail)
+        }
+    }
     if (today.workouts.isNotEmpty()) {
         item(key = "workouts-heading") { HealthSection(today.workouts_heading) }
         items(today.workouts, key = { "w-${it.activity_id}" }) { line -> HealthWorkoutRow(line) { line.route?.let(onOpen) } }

@@ -70,6 +70,8 @@ pub fn fold(locale: Locale, held: &Held, limit: u32) -> Option<wire::AgendaHomeD
         today: board.today.clone(),
         catch_up: Some(routes::catch_up()),
         todo: Some(wire::AgendaTodo {
+            smart_lists: smart_lists(locale, board),
+            lists_title: words::my_lists(locale),
             groups,
             projects: project_groups,
             empty: Some(empty),
@@ -84,6 +86,70 @@ pub fn fold(locale: Locale, held: &Held, limit: u32) -> Option<wire::AgendaHomeD
         }),
         ..wire::AgendaHomeData::default()
     })
+}
+
+fn smart_lists(locale: Locale, board: &wire::AgendaTaskBoard) -> Vec<wire::TodoSmartList> {
+    let counts = board.counts.unwrap_or_default();
+    [
+        (
+            "today",
+            words::when_today(locale),
+            counts.today + counts.overdue,
+            "Calendar",
+            "agendaFill",
+            wire::TodoView::Today,
+        ),
+        (
+            "scheduled",
+            words::smart_scheduled(locale),
+            counts.today + counts.overdue + counts.upcoming,
+            "Calendar",
+            "dangerFill",
+            wire::TodoView::Scheduled,
+        ),
+        (
+            "all",
+            words::view_all(locale),
+            counts.open,
+            "Inbox",
+            "lockerFill",
+            wire::TodoView::All,
+        ),
+        (
+            "flagged",
+            words::flagged(locale),
+            counts.flagged,
+            "Flag",
+            "warningFill",
+            wire::TodoView::Flagged,
+        ),
+        (
+            "completed",
+            words::smart_completed(locale),
+            counts.closed,
+            "Check",
+            "successFill",
+            wire::TodoView::Logbook,
+        ),
+    ]
+    .into_iter()
+    .map(|(key, title, count, icon, color, view)| {
+        let count_label = if board.truncated && view != wire::TodoView::Logbook {
+            format!("{count}+")
+        } else {
+            count.to_string()
+        };
+        wire::TodoSmartList {
+            key: key.to_owned(),
+            accessibility_label: format!("{title}, {count_label}"),
+            title,
+            count_label,
+            icon_key: icon.to_owned(),
+            color_role: color.to_owned(),
+            route: Some(routes::todo_list(view)),
+        }
+    })
+    .collect()
 }
 
 /// Named areas A→Z, then the projects in none.
@@ -114,6 +180,7 @@ fn project_groups(
                 .map(|project| {
                     let count = rows::count(locale, project.open_count as usize);
                     wire::TodoProjectRow {
+                        icon_key: project.icon_key.clone(),
                         row: Some(wire::ListRow {
                             id: project.project_id.clone(),
                             title: project.name.clone(),

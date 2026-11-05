@@ -79,7 +79,7 @@ pub fn runtime() -> crate::Runtime {
         registry(),
         vec![(
             TAB.to_owned(),
-            routes::home(wire::MoneyDestination::Spending),
+            routes::home(wire::MoneyDestination::Activity),
         )],
     )
 }

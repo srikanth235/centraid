@@ -61,6 +61,7 @@ public fun CentraidRow(
     trailing: String = "",
     trailingNote: String = "",
     trailingTone: StatusChip.Tone = StatusChip.Tone.TONE_UNSPECIFIED,
+    trailingInk: String? = null,
     chips: List<StatusChip> = emptyList(),
     hueKey: String = "",
     dimmed: Boolean = false,
@@ -138,7 +139,7 @@ public fun CentraidRow(
             // THE FIGURE: right-aligned, with its sub-label under it.
             Column(Modifier.padding(start = 8.dp), horizontalAlignment = Alignment.End) {
                 if (trailing.isNotEmpty()) {
-                    val figureInk = if (dimmed) titleInk else toneInk(trailingTone, neutral = "text")
+                    val figureInk = if (dimmed) titleInk else toneInk(trailingTone, neutral = trailingInk ?: "text")
                     Text(trailing, style = centraidType("bodyStrong"), color = figureInk, textAlign = TextAlign.End, maxLines = 1)
                 }
                 val note = if (pending) pendingLabel else trailingNote
@@ -434,19 +435,23 @@ public fun AutosaveStatus(autosave: Autosave?, modifier: Modifier = Modifier) {
 @Composable
 public fun hueColor(key: String): Color {
     val role = when {
-        key in PARTY_ROLES -> key
+        key in PARTY_ROLES || key in IDENTITY_FILL_ROLES -> key
         key in PARTY_HUES -> "c" + key.replaceFirstChar { it.uppercase() }
         else -> "cSlate"
     }
     return centraidColor(role)
 }
 
-/** `packages/design`'s eight party hues. */
+/** `design/tokens.toml`'s eight party hues. */
 private val PARTY_HUES: Set<String> =
     setOf("rose", "amber", "ochre", "forest", "teal", "slate", "indigo", "violet")
 
 /** The same eight, as the theme's colour roles. */
 private val PARTY_ROLES: Set<String> = PARTY_HUES.mapTo(mutableSetOf()) { "c" + it.replaceFirstChar(Char::uppercaseChar) }
+
+private val IDENTITY_FILL_ROLES: Set<String> = setOf(
+    "agendaFill", "notesFill", "peopleFill", "docsFill", "moneyFill", "lockerFill", "healthFill", "photosFill",
+)
 
 
 /**

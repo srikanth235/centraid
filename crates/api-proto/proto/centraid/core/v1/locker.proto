@@ -52,6 +52,10 @@ message LockerItemsRequest {
 }
 
 message LockerItems {
+  repeated LockerItemRow starred_items = 10;
+  repeated LockerItemRow recent_items = 11;
+  repeated LockerItemRow code_items = 12;
+  optional uint32 code_count = 13;
   repeated LockerItemRow items = 1;
   // The shelf is longer than `window`.
   bool truncated = 2;

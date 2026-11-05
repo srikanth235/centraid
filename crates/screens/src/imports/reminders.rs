@@ -5,7 +5,8 @@
 //! reminder becomes `add-task` with its notes and due day: an ordinary task of the member's, no
 //! mark. Duplicates within the read (one title, one due day) are folded.
 
-use std::collections::BTreeSet;
+use serde_json::{Value, json};
+use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_api_proto::core_v1 as wire;
 
@@ -20,6 +21,8 @@ use crate::strings::{Locale, fill, task as words};
 pub struct Outcome {
     pub added: u32,
     pub refused: u32,
+    pub limited: bool,
+    pub alarms_omitted: u32,
 }
 
 /// The tasks a read makes: titled, trimmed, one per title and due day.
@@ -31,7 +34,16 @@ pub fn tasks(reminders: &[wire::PhoneReminder]) -> Vec<wire::PhoneReminder> {
         .filter_map(|reminder| {
             let title = reminder.title.trim();
             if title.is_empty()
-                || !seen.insert(format!("{}|{}", title.to_lowercase(), reminder.due))
+                || !seen.insert(if reminder.phone_id.is_empty() {
+                    format!(
+                        "{}|{}|{}",
+                        reminder.list_key,
+                        title.to_lowercase(),
+                        reminder.due
+                    )
+                } else {
+                    format!("{}|{}", reminder.list_key, reminder.phone_id)
+                })
             {
                 return None;
             }
@@ -43,6 +55,7 @@ pub fn tasks(reminders: &[wire::PhoneReminder]) -> Vec<wire::PhoneReminder> {
                 } else {
                     String::new()
                 },
+                ..reminder.clone()
             })
         })
         .collect()
@@ -76,19 +89,96 @@ pub fn request(reminder: &wire::PhoneReminder) -> act::agenda::AddTask {
     }
 }
 
-/// Write the read's tasks, one `add-task` each; a refused one is counted and the rest kept.
+/// Stable source records are reimported through the one follower. A list is a
+/// project; historical completion is a field, never a "complete now" gesture.
 pub fn run(ctx: &Ctx, reminders: &[wire::PhoneReminder]) -> Outcome {
-    let mut outcome = Outcome::default();
-    for reminder in tasks(reminders) {
-        let key = kit_act::key(
-            &["import-reminder", &reminder.title, &reminder.due],
-            kit_act::fresh(),
-        );
-        if kit_act::act(ctx, request(&reminder), &key).committed {
-            outcome.added += 1;
-        } else {
-            outcome.refused += 1;
+    run_snapshot(
+        ctx,
+        &wire::RemindersSnapshot {
+            reminders: reminders.to_vec(),
+            ..Default::default()
+        },
+    )
+}
+
+pub fn run_snapshot(ctx: &Ctx, snapshot: &wire::RemindersSnapshot) -> Outcome {
+    let mut outcome = Outcome {
+        limited: snapshot.native_hierarchy_unavailable,
+        ..Outcome::default()
+    };
+    let mut lists: BTreeMap<String, Vec<wire::PhoneReminder>> = BTreeMap::new();
+    for reminder in tasks(&snapshot.reminders) {
+        outcome.alarms_omitted += reminder.unsupported_alarms;
+        lists
+            .entry(reminder.list_key.clone())
+            .or_default()
+            .push(reminder);
+    }
+    for (list, mut reminders) in lists {
+        let title = reminders
+            .first()
+            .map(|r| r.list_title.clone())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| words::view_reminders(ctx.locale()));
+        let origin = json!({"ref": format!("reminders:{list}"), "label": title, "device_id": snapshot.device_id});
+        // Parents precede their children; a cycle is counted as a refused record.
+        let mut ordered = Vec::new();
+        let mut seen = BTreeSet::new();
+        while !reminders.is_empty() {
+            let Some(index) = reminders
+                .iter()
+                .position(|r| r.parent_phone_id.is_empty() || seen.contains(&r.parent_phone_id))
+            else {
+                outcome.refused += u32::try_from(reminders.len()).unwrap_or(u32::MAX);
+                break;
+            };
+            let reminder = reminders.remove(index);
+            seen.insert(reminder.phone_id.clone());
+            ordered.push(reminder);
         }
+        let records: Vec<Value> = ordered.iter().map(|reminder| {
+            let key = if reminder.phone_id.is_empty() { format!("legacy:{}|{}", reminder.title.to_lowercase(), reminder.due) } else { reminder.phone_id.clone() };
+            let due = if reminder.due.is_empty() { None } else if reminder.time.is_empty() { Some(reminder.due.clone()) } else { Some(format!("{}T{}", reminder.due, reminder.time)) };
+            let optional = |text: &str| if text.is_empty() { Value::Null } else { json!(text) };
+            let priority = match reminder.priority { 1..=4 => 3, 5 => 2, 6..=9 => 1, _ => 0 };
+            let mut fields = json!({
+                "title": reminder.title, "description": optional(&reminder.notes), "url": optional(&reminder.url),
+                "due": due, "zone": optional(&reminder.zone), "priority": priority,
+                "rule": optional(&crate::agenda::calendar::rule(&reminder.rule, &reminder.due)),
+                "status": if reminder.completed { "done" } else { "open" },
+                "done_at": if reminder.completed { optional(&reminder.completed_at) } else { Value::Null },
+                "reminders": reminder.alarms_before_min,
+            });
+            if let Some(flagged) = reminder.flagged { fields["flagged"] = json!(flagged); }
+            if !snapshot.native_hierarchy_unavailable { fields["parent_key"] = optional(&reminder.parent_phone_id); }
+            json!({"external_id": key, "device_id": if crate::agenda::calendar::is_portable_id(&reminder.phone_id) { Value::Null } else { json!(snapshot.device_id) }, "fields": fields})
+        }).collect();
+        let request = act::agenda::ImportReminders {
+            origin: origin.to_string(),
+            records: json!(records).to_string(),
+            complete: Some(false),
+            since: None,
+        }
+        .request();
+        let settled = kit_act::act(
+            ctx,
+            request,
+            &kit_act::key(&["import-reminders", &list], kit_act::fresh()),
+        );
+        if !settled.committed {
+            outcome.refused += u32::try_from(records.len()).unwrap_or(u32::MAX);
+            continue;
+        }
+        let output: Value = serde_json::from_slice(&settled.output).unwrap_or(Value::Null);
+        let count = |name: &str| {
+            output
+                .get(name)
+                .and_then(Value::as_u64)
+                .and_then(|n| u32::try_from(n).ok())
+                .unwrap_or(0)
+        };
+        outcome.added += count("added") + count("matched");
+        outcome.refused += count("refused");
     }
     outcome
 }
@@ -96,7 +186,7 @@ pub fn run(ctx: &Ctx, reminders: &[wire::PhoneReminder]) -> Outcome {
 /// The one sentence an import ends on.
 #[must_use]
 pub fn sentence(locale: Locale, outcome: Outcome) -> String {
-    match (outcome.added, outcome.refused) {
+    let mut sentence = match (outcome.added, outcome.refused) {
         (0, 0) => words::import_reminders_none(locale),
         (0, _) => words::import_reminders_failed(locale),
         (1, _) => words::import_reminders_one(locale),
@@ -104,7 +194,16 @@ pub fn sentence(locale: Locale, outcome: Outcome) -> String {
             &words::import_reminders_done(locale),
             &[("count", &added.to_string())],
         ),
+    };
+    if outcome.limited {
+        sentence.push_str(". ");
+        sentence.push_str(&words::import_reminders_native_limit(locale));
     }
+    if outcome.alarms_omitted > 0 {
+        sentence.push_str(". ");
+        sentence.push_str(&words::import_reminders_alarm_limit(locale));
+    }
+    sentence
 }
 
 #[cfg(test)]
@@ -116,6 +215,7 @@ mod tests {
             title: title.to_owned(),
             notes: notes.to_owned(),
             due: due.to_owned(),
+            ..Default::default()
         }
     }
 
@@ -150,7 +250,8 @@ mod tests {
                 l,
                 Outcome {
                     added: 0,
-                    refused: 2
+                    refused: 2,
+                    ..Outcome::default()
                 }
             ),
             "Reminders did not import."
@@ -160,7 +261,8 @@ mod tests {
                 l,
                 Outcome {
                     added: 1,
-                    refused: 0
+                    refused: 0,
+                    ..Outcome::default()
                 }
             ),
             "1 task imported"
@@ -170,7 +272,8 @@ mod tests {
                 l,
                 Outcome {
                     added: 4,
-                    refused: 1
+                    refused: 1,
+                    ..Outcome::default()
                 }
             ),
             "4 tasks imported"

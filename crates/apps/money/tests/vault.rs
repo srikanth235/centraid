@@ -24,6 +24,82 @@ fn read<T>(world: &World, body: impl FnOnce(&TestDoor<'_>) -> T) -> T {
 }
 
 #[test]
+fn weekly_spending_and_day_totals_keep_currencies_and_exclusions_when_activity_is_paged() {
+    use centraid_apps_kit::page::PageRequest;
+    use centraid_apps_money::phone;
+    let world = World::founded("weekly");
+    world.account("usd", "Everyday", "checking", "USD");
+    world.account("eur", "Travel", "checking", "EUR");
+    world.import(
+        "usd",
+        &[
+            ("csv:a0001", "2024-03-01", -1000, "GROCERIES"),
+            ("csv:a0002", "2024-03-01", -2000, "GROCERIES"),
+            ("csv:a0003", "2024-03-09", -500, "GROCERIES"),
+            ("csv:a0004", "2024-03-09", 1500, "REFUND"),
+            ("csv:a0005", "2024-03-30", -9999, "FUTURE"),
+            ("csv:a0006", "2024-03-01", -9999, "VOID"),
+        ],
+    );
+    world.import("eur", &[("csv:b0001", "2024-03-01", -700, "GROCERIES")]);
+    world.ok("txn.void", json!({ "id": world.line("csv:a0006") }));
+    world.ok("txn.categorize", json!({ "ids": [world.line("csv:a0003"), world.line("csv:a0004")], "category_id": "category:food.groceries" }));
+    let spending = read(&world, |door| {
+        phone::spending(door, "2024-03", "2024-03-15").unwrap()
+    });
+    let usd: Vec<_> = spending
+        .weeks
+        .iter()
+        .filter(|week| week.currency == "USD")
+        .collect();
+    let eur: Vec<_> = spending
+        .weeks
+        .iter()
+        .filter(|week| week.currency == "EUR")
+        .collect();
+    assert_eq!((usd.len(), eur.len()), (5, 5));
+    assert_eq!(usd[0].total.amount_minor, 3000);
+    assert_eq!(eur[0].total.amount_minor, 700);
+    assert_eq!(usd[1].refund_credit.amount_minor, 1000);
+    assert!(usd[1..].iter().all(|week| week.total.amount_minor == 0));
+    assert!(
+        usd[0]
+            .categories
+            .iter()
+            .all(|(_, _, color, _)| color.starts_with("list"))
+    );
+    let activity = read(&world, |door| {
+        phone::activity(
+            door,
+            "2024-03",
+            &ActivityFilter::default(),
+            &PageRequest::first(1),
+            "2024-03-15",
+        )
+        .unwrap()
+    });
+    assert_eq!(activity.rows.len(), 1);
+    assert!(activity.cursor.is_some());
+    let first_day = activity.day_totals.get("2024-03-01").unwrap();
+    assert_eq!(
+        first_day
+            .iter()
+            .find(|amount| amount.currency.code() == "USD")
+            .unwrap()
+            .amount_minor,
+        -3000
+    );
+    assert_eq!(
+        first_day
+            .iter()
+            .find(|amount| amount.currency.code() == "EUR")
+            .unwrap()
+            .amount_minor,
+        -700
+    );
+}
+
+#[test]
 fn a_line_reads_back_with_the_banks_words_the_members_name_and_the_statements_own_columns() {
     let world = World::founded("lines");
     world.account("acct-1", "Everyday", "checking", "USD");

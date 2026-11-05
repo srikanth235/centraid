@@ -77,6 +77,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         camera: None,
         film: HashMap::new(),
         chrome_visible: true,
+        details_visible: false,
         sheet: Sheet::None,
         slideshow: false,
         status: None,
@@ -158,6 +159,7 @@ struct Lightbox {
     film: HashMap<String, wire::PhotosCell>,
     chrome_visible: bool,
     sheet: Sheet,
+    details_visible: bool,
     slideshow: bool,
     status: Option<wire::StatusLine>,
     albums: AlbumChoice,
@@ -495,7 +497,10 @@ impl Lightbox {
                 }
             }
             V::DeleteForever => self.confirm = true,
-            V::Info => self.sheet = Sheet::Info,
+            V::Info => {
+                self.details_visible = !self.details_visible;
+                self.sheet = Sheet::None;
+            }
             // WHICH LOCATION TRAVELS IS ASKED ONLY OF A PHOTOGRAPH THAT HAS ONE;
             // without a place there is nothing to choose and the copy goes out bare.
             V::Share | V::SendCopy => {
@@ -1113,10 +1118,13 @@ impl Screen for Lightbox {
                     K::Chrome(toggled) => self.chrome_visible = toggled.visible,
                     K::Sheet(changed) => {
                         let sheet = Sheet::try_from(changed.sheet).unwrap_or(Sheet::None);
+                        if sheet == Sheet::Info {
+                            self.details_visible = true;
+                        }
                         if sheet == Sheet::Place {
                             self.read_places(ctx);
                         }
-                        self.sheet = if sheet == Sheet::Unspecified {
+                        self.sheet = if matches!(sheet, Sheet::Unspecified | Sheet::Info) {
                             Sheet::None
                         } else {
                             sheet
@@ -1286,7 +1294,7 @@ impl Screen for Lightbox {
             .detail()
             .map(|d| editor::edit_refusal(locale, Some(&d.cell), self.fetching))
             .unwrap_or_else(|| editor::edit_refusal(locale, None, false));
-        let (toolbar, menu) = verbs(
+        let (mut toolbar, menu) = verbs(
             locale,
             self.detail(),
             refusal.as_deref(),
@@ -1295,6 +1303,11 @@ impl Screen for Lightbox {
             &self.album_id,
             self.neighbours.len() > 1,
         );
+        for verb in &mut toolbar {
+            if verb.kind == V::Info as i32 {
+                verb.on = self.details_visible;
+            }
+        }
         let at = self.position();
         let neighbour = |index: Option<usize>| {
             index
@@ -1317,6 +1330,7 @@ impl Screen for Lightbox {
             content: Some(content),
             chrome_visible: self.chrome_visible || self.slideshow,
             sheet: self.sheet as i32,
+            details_visible: self.details_visible && !self.slideshow,
             slideshow: self.slideshow,
             slideshow_meta: at.map_or_else(String::new, |at| {
                 fill(

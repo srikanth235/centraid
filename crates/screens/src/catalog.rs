@@ -68,6 +68,7 @@ pub mod act {
             pub rule: Field<String>,
             pub status: Option<ProposeStatus>,
             pub timing: Option<ProposeTiming>,
+            pub travel_minutes: Option<i64>,
             pub url: Field<String>,
             pub zone: Field<String>,
         }
@@ -89,6 +90,7 @@ pub mod act {
                 put_field(&mut map, "rule", self.rule, |it| text(it));
                 if let Some(it) = self.status { map.insert("status".to_owned(), text(it.wire())); }
                 if let Some(it) = self.timing { map.insert("timing".to_owned(), text(it.wire())); }
+                if let Some(it) = self.travel_minutes { map.insert("travel_minutes".to_owned(), whole(it)); }
                 put_field(&mut map, "url", self.url, |it| text(it));
                 put_field(&mut map, "zone", self.zone, |it| text(it));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
@@ -191,6 +193,7 @@ pub mod act {
             pub status: Option<EditEventStatus>,
             pub timing: Option<EditEventTiming>,
             pub title: Option<String>,
+            pub travel_minutes: Option<i64>,
             pub url: Field<String>,
             pub zone: Field<String>,
         }
@@ -212,6 +215,7 @@ pub mod act {
                 if let Some(it) = self.status { map.insert("status".to_owned(), text(it.wire())); }
                 if let Some(it) = self.timing { map.insert("timing".to_owned(), text(it.wire())); }
                 if let Some(it) = self.title { map.insert("title".to_owned(), text(it)); }
+                if let Some(it) = self.travel_minutes { map.insert("travel_minutes".to_owned(), whole(it)); }
                 put_field(&mut map, "url", self.url, |it| text(it));
                 put_field(&mut map, "zone", self.zone, |it| text(it));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
@@ -441,14 +445,18 @@ pub mod act {
             pub description: Field<String>,
             pub due: Field<String>,
             pub effort_min: Field<i64>,
+            pub flagged: Option<bool>,
             pub id: Option<String>,
             pub parent_id: Field<String>,
+            pub place_id: Field<String>,
             pub position: Option<f64>,
             pub priority: Option<i64>,
             pub project_id: Field<String>,
             pub remind_before_min: Field<i64>,
             pub rule: Field<String>,
             pub section_id: Field<String>,
+            pub tags: Option<String>,
+            pub url: Field<String>,
             pub zone: Field<String>,
         }
         impl AddTask {
@@ -461,20 +469,78 @@ pub mod act {
                 put_field(&mut map, "description", self.description, |it| text(it));
                 put_field(&mut map, "due", self.due, |it| text(it));
                 put_field(&mut map, "effort_min", self.effort_min, |it| whole(it));
+                if let Some(it) = self.flagged { map.insert("flagged".to_owned(), flag(it)); }
                 if let Some(it) = self.id { map.insert("id".to_owned(), text(it)); }
                 put_field(&mut map, "parent_id", self.parent_id, |it| text(it));
+                put_field(&mut map, "place_id", self.place_id, |it| text(it));
                 if let Some(it) = self.position { map.insert("position".to_owned(), real(it)); }
                 if let Some(it) = self.priority { map.insert("priority".to_owned(), whole(it)); }
                 put_field(&mut map, "project_id", self.project_id, |it| text(it));
                 put_field(&mut map, "remind_before_min", self.remind_before_min, |it| whole(it));
                 put_field(&mut map, "rule", self.rule, |it| text(it));
                 put_field(&mut map, "section_id", self.section_id, |it| text(it));
+                if let Some(it) = self.tags { map.insert("tags".to_owned(), text(it)); }
+                put_field(&mut map, "url", self.url, |it| text(it));
                 put_field(&mut map, "zone", self.zone, |it| text(it));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
         impl From<AddTask> for wire::ActRequest {
             fn from(value: AddTask) -> Self {
+                value.request()
+            }
+        }
+
+        /// Import reminders with source identities and lists. Reimport merges fields while preserving member edits; a completed source reminder imports its history without generating a recurrence successor.
+        #[derive(Clone, Debug, Default)]
+        pub struct ImportReminders {
+            pub origin: String,
+            pub records: String,
+            pub complete: Option<bool>,
+            pub since: Option<String>,
+        }
+        impl ImportReminders {
+            pub const NAME: &str = "import-reminders";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("origin".to_owned(), text(self.origin));
+                map.insert("records".to_owned(), text(self.records));
+                if let Some(it) = self.complete { map.insert("complete".to_owned(), flag(it)); }
+                if let Some(it) = self.since { map.insert("since".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ImportReminders> for wire::ActRequest {
+            fn from(value: ImportReminders) -> Self {
+                value.request()
+            }
+        }
+
+        /// Record a successful native calendar write under its durable source identity. This acknowledges only fields the native store saved, leaving concurrent member edits intact.
+        #[derive(Clone, Debug, Default)]
+        pub struct CalendarWritten {
+            pub entity_id: String,
+            pub external_id: String,
+            pub fields: String,
+            pub origin: String,
+            pub device_id: Field<String>,
+        }
+        impl CalendarWritten {
+            pub const NAME: &str = "calendar-written";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("entity_id".to_owned(), text(self.entity_id));
+                map.insert("external_id".to_owned(), text(self.external_id));
+                map.insert("fields".to_owned(), text(self.fields));
+                map.insert("origin".to_owned(), text(self.origin));
+                put_field(&mut map, "device_id", self.device_id, |it| text(it));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<CalendarWritten> for wire::ActRequest {
+            fn from(value: CalendarWritten) -> Self {
                 value.request()
             }
         }
@@ -490,6 +556,7 @@ pub mod act {
             pub remind_before_min: Field<i64>,
             pub rule: Field<String>,
             pub title: Option<String>,
+            pub url: Field<String>,
         }
         impl EditTask {
             pub const NAME: &str = "edit-task";
@@ -504,6 +571,7 @@ pub mod act {
                 put_field(&mut map, "remind_before_min", self.remind_before_min, |it| whole(it));
                 put_field(&mut map, "rule", self.rule, |it| text(it));
                 if let Some(it) = self.title { map.insert("title".to_owned(), text(it)); }
+                put_field(&mut map, "url", self.url, |it| text(it));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
@@ -699,6 +767,7 @@ pub mod act {
             pub kind: CreateProjectKind,
             pub title: String,
             pub color: Field<String>,
+            pub icon_key: Field<String>,
             pub id: Option<String>,
             pub parent: Field<String>,
             pub position: Field<f64>,
@@ -711,6 +780,7 @@ pub mod act {
                 map.insert("kind".to_owned(), text(self.kind.wire()));
                 map.insert("title".to_owned(), text(self.title));
                 put_field(&mut map, "color", self.color, |it| text(it));
+                put_field(&mut map, "icon_key", self.icon_key, |it| text(it));
                 if let Some(it) = self.id { map.insert("id".to_owned(), text(it)); }
                 put_field(&mut map, "parent", self.parent, |it| text(it));
                 put_field(&mut map, "position", self.position, |it| real(it));
@@ -838,6 +908,180 @@ pub mod act {
         }
         impl From<FollowCalendar> for wire::ActRequest {
             fn from(value: FollowCalendar) -> Self {
+                value.request()
+            }
+        }
+
+        /// Flag a reminder through the shared starred flag. The flag follows the task through completion, reopening and restore.
+        #[derive(Clone, Debug, Default)]
+        pub struct FlagTask {
+            pub task_id: String,
+        }
+        impl FlagTask {
+            pub const NAME: &str = "flag-task";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("flag".to_owned(), text("starred"));
+                map.insert("id".to_owned(), text(self.task_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<FlagTask> for wire::ActRequest {
+            fn from(value: FlagTask) -> Self {
+                value.request()
+            }
+        }
+
+        /// Remove a reminder’s flag through the shared flag.clear command.
+        #[derive(Clone, Debug, Default)]
+        pub struct UnflagTask {
+            pub task_id: String,
+        }
+        impl UnflagTask {
+            pub const NAME: &str = "unflag-task";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("flag".to_owned(), text("starred"));
+                map.insert("id".to_owned(), text(self.task_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<UnflagTask> for wire::ActRequest {
+            fn from(value: UnflagTask) -> Self {
+                value.request()
+            }
+        }
+
+        /// Move a task before a sibling in the same list, section and parent; null moves it to the end. Positions are rewritten atomically.
+        #[derive(Clone, Debug, Default)]
+        pub struct ReorderTask {
+            pub task_id: String,
+            pub before_id: Field<String>,
+        }
+        impl ReorderTask {
+            pub const NAME: &str = "reorder-task";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.task_id));
+                put_field(&mut map, "before_id", self.before_id, |it| text(it));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ReorderTask> for wire::ActRequest {
+            fn from(value: ReorderTask) -> Self {
+                value.request()
+            }
+        }
+
+        /// Create a named calendar with a list palette color and an icon through container.create.
+        #[derive(Clone, Debug, Default)]
+        pub struct CreateCalendar {
+            pub title: String,
+            pub color: Field<String>,
+            pub icon_key: Field<String>,
+            pub id: Option<String>,
+            pub parent: Field<String>,
+            pub position: Field<f64>,
+        }
+        impl CreateCalendar {
+            pub const NAME: &str = "create-calendar";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("kind".to_owned(), text("calendar"));
+                map.insert("title".to_owned(), text(self.title));
+                put_field(&mut map, "color", self.color, |it| text(it));
+                put_field(&mut map, "icon_key", self.icon_key, |it| text(it));
+                if let Some(it) = self.id { map.insert("id".to_owned(), text(it)); }
+                put_field(&mut map, "parent", self.parent, |it| text(it));
+                put_field(&mut map, "position", self.position, |it| real(it));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<CreateCalendar> for wire::ActRequest {
+            fn from(value: CreateCalendar) -> Self {
+                value.request()
+            }
+        }
+
+        /// Set the color and icon of a calendar or reminder list through the shared container.style command.
+        #[derive(Clone, Debug, Default)]
+        pub struct StyleList {
+            pub list_id: String,
+            pub color: Field<String>,
+            pub icon_key: Field<String>,
+        }
+        impl StyleList {
+            pub const NAME: &str = "style-list";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.list_id));
+                put_field(&mut map, "color", self.color, |it| text(it));
+                put_field(&mut map, "icon_key", self.icon_key, |it| text(it));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<StyleList> for wire::ActRequest {
+            fn from(value: StyleList) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum ClearCompletedView {
+            #[default]
+            All,
+            Today,
+            Scheduled,
+            Anytime,
+            Flagged,
+            Reminders,
+            Project,
+            Tags,
+        }
+        impl ClearCompletedView {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::All => "all",
+                    Self::Today => "today",
+                    Self::Scheduled => "scheduled",
+                    Self::Anytime => "anytime",
+                    Self::Flagged => "flagged",
+                    Self::Reminders => "reminders",
+                    Self::Project => "project",
+                    Self::Tags => "tags",
+                }
+            }
+        }
+
+        /// Move all completed reminders in the selected list to Trash atomically, including rows beyond the visible window; preserve unfinished children.
+        #[derive(Clone, Debug, Default)]
+        pub struct ClearCompleted {
+            pub day: String,
+            pub view: ClearCompletedView,
+            pub zone: String,
+            pub project_id: Field<String>,
+            pub tag_id: Field<String>,
+        }
+        impl ClearCompleted {
+            pub const NAME: &str = "clear-completed";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("day".to_owned(), text(self.day));
+                map.insert("view".to_owned(), text(self.view.wire()));
+                map.insert("zone".to_owned(), text(self.zone));
+                put_field(&mut map, "project_id", self.project_id, |it| text(it));
+                put_field(&mut map, "tag_id", self.tag_id, |it| text(it));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ClearCompleted> for wire::ActRequest {
+            fn from(value: ClearCompleted) -> Self {
                 value.request()
             }
         }
@@ -1287,6 +1531,55 @@ pub mod act {
                 value.request()
             }
         }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum ColorLabelColor {
+            #[default]
+            ListBlue,
+            ListYellow,
+            ListViolet,
+            ListPetrol,
+            ListNavy,
+            ListGraphite,
+            ListRaspberry,
+            ListOrchid,
+        }
+        impl ColorLabelColor {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::ListBlue => "listBlue",
+                    Self::ListYellow => "listYellow",
+                    Self::ListViolet => "listViolet",
+                    Self::ListPetrol => "listPetrol",
+                    Self::ListNavy => "listNavy",
+                    Self::ListGraphite => "listGraphite",
+                    Self::ListRaspberry => "listRaspberry",
+                    Self::ListOrchid => "listOrchid",
+                }
+            }
+        }
+
+        /// Choose one palette color for a shared label. Every document wearing it reads the same color.
+        #[derive(Clone, Debug, Default)]
+        pub struct ColorLabel {
+            pub color: ColorLabelColor,
+            pub tag_id: String,
+        }
+        impl ColorLabel {
+            pub const NAME: &str = "color-label";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("color".to_owned(), text(self.color.wire()));
+                map.insert("id".to_owned(), text(self.tag_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ColorLabel> for wire::ActRequest {
+            fn from(value: ColorLabel) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod health {
@@ -1369,6 +1662,7 @@ pub mod act {
             Files,
             Health,
             Statement,
+            Reminders,
         }
         impl StopFollowingSystem {
             fn wire(self) -> &'static str {
@@ -1378,6 +1672,7 @@ pub mod act {
                     Self::Files => "files",
                     Self::Health => "health",
                     Self::Statement => "statement",
+                    Self::Reminders => "reminders",
                 }
             }
         }
@@ -4918,6 +5213,24 @@ pub mod load {
                 value.request()
             }
         }
+
+        /// The live task reminders and expanded event alerts, ordered by instant. Open reminder tasks are read in bounded pages independently of the visible board; events cover the past seven and next 45 days. The phone schedules the earliest 60 future alerts and refreshes on changes and foreground.
+        #[derive(Clone, Debug, Default)]
+        pub struct Notifications {
+        }
+        impl Notifications {
+            pub const NAME: &str = "notifications";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Notifications> for wire::LoadRequest {
+            fn from(value: Notifications) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod docs {
@@ -5048,6 +5361,7 @@ pub mod load {
             #[default]
             Week,
             Month,
+            SixMonths,
             Year,
         }
         impl SeriesRange {
@@ -5055,12 +5369,13 @@ pub mod load {
                 match self {
                     Self::Week => "week",
                     Self::Month => "month",
+                    Self::SixMonths => "six_months",
                     Self::Year => "year",
                 }
             }
         }
 
-        /// One metric over a week, a month or a year: its buckets, the period's per-day average against the one before, the typical, the best day or month, the total for a count, and how many days were above typical.
+        /// One metric over a week, a month, six months or a year: its buckets, the period's per-day average against the one before, the typical, the best day or month, the total for a count, and how many days were above typical.
         #[derive(Clone, Debug, Default)]
         pub struct Series {
             pub metric: SeriesMetric,

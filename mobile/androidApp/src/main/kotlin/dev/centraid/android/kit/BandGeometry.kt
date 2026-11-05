@@ -1,7 +1,7 @@
 package dev.centraid.android.kit
 
 /**
- * THE BAND'S GEOMETRY, IN DP (DESIGN.md's invariant 1; the iOS band draws the same numbers): the
+ * THE BAND'S GEOMETRY, IN DP (product-intuition screen contracts's invariant 1; the iOS band draws the same numbers): the
  * plate's inset and floor, its padding and corner, a place's height and spacing, its mark. Pure
  * layout: which places the band holds, their words and which is lit are Rust's (`ShellBand`).
  */

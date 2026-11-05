@@ -25,7 +25,10 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/phone_calendar.proto";
+import "centraid/core/v1/phone_reminders.proto";
 import "centraid/core/v1/agenda_screens.proto";
+import "centraid/core/v1/notifications_screens.proto";
 import "centraid/core/v1/assist.proto";
 import "centraid/core/v1/chat_screens.proto";
 import "centraid/core/v1/imports_screens.proto";
@@ -478,6 +481,8 @@ message Effect {
     RenderEdit render_edit = 25;
     ReadCamera read_camera = 26;
     LibraryDelete library_delete = 27;
+    AgendaNotificationSync agenda_notifications = 28;
+    CalendarWrite calendar_write = 29;
     ContactsRead contacts_read = 18;
     // Open the OS maps app at an address (People's address channel).
     OpenMap open_map = 19;
@@ -562,6 +567,9 @@ message Haptic {
 }
 
 message Share {
+  // A held local original, exported through the native share sheet.
+  string file_path = 4;
+  string media_type = 5;
   string text = 1;
   string url = 2;
   // Already localized: it is shown by the OS share sheet.
@@ -610,13 +618,7 @@ message ScreenshotShield {
 
 // Read the phone's calendars over a window around the shell's clock. A shell
 // that is denied (or has no calendar) answers `EffectFailed{denied}`.
-message CalendarRead {
-  // The member's Import tap lets the OS ask for permission; a following pass
-  // never does.
-  bool ask_permission = 1;
-  uint32 days_back = 2;
-  uint32 days_on = 3;
-}
+
 
 // Read the phone's address book. A shell that is denied (or has none) answers
 // `EffectFailed{denied}`; a pass that only follows never asks the OS for
@@ -870,6 +872,8 @@ message EffectResult {
     CameraRead camera_read = 15;
     ContactsSnapshot contacts = 16;
     LibraryDeleted library_deleted = 17;
+    AgendaNotificationState agenda_notifications = 28;
+    CalendarWritten calendar_written = 29;
     // ---- docs (200-299): files ----
     FilePicked file_picked = 200;
     FileProgress file_progress = 201;
@@ -981,61 +985,28 @@ message KeychainValue {
 
 // The phone's calendars as the OS holds them, every occurrence in the window
 // its own event; Rust folds a series back into one and makes every record.
-message CalendarSnapshot {
-  // The shell's clock when it read, epoch milliseconds, and its zone.
-  int64 now_ms = 1;
-  string device_zone = 2;
-  // False when the read may have missed events: nothing is then trashed.
-  bool complete = 3;
-  // Every visible calendar the member writes to, an empty one included.
-  repeated PhoneCalendar calendars = 4;
-  repeated PhoneCalendarEvent events = 5;
-  // This install's id, minted once and kept off the vault: an id that means
-  // something on this phone only is followed under it (R-1127-10).
-  string device_id = 6;
-}
 
-message PhoneCalendar {
-  // The platform's own id for the calendar, not yet prefixed.
-  string key = 1;
-  string source_title = 2;
-  string title = 3;
-  // The colour the phone paints it with, `#RRGGBB`; empty when it has none.
-  string color = 4;
-}
+
+
 
 // One occurrence. An all-day `start`/`end` is `YYYY-MM-DD` with `end` the LAST
 // day, inclusive; a timed one is `YYYY-MM-DDTHH:MM:SS` in `tz`, `end` exclusive.
-message PhoneCalendarEvent {
-  string title = 1;
-  string notes = 2;
-  bool all_day = 3;
-  string start = 4;
-  string end = 5;
-  // The event's IANA zone; empty is the device's.
-  string tz = 6;
-  // The calendar holds it as not blocking its time.
-  bool free = 7;
-  optional PhoneCalendarSeries series = 8;
-  // Where the series' rule puts this occurrence, when the member moved it.
-  string original_start = 9;
-  bool moved = 10;
-  // The phone's most durable id, kind-prefixed (`uid:`, `lookup:`, `local:`).
-  string phone_id = 11;
-  string calendar_key = 12;
-  // The event's link and where it is, as the phone holds them; empty when it has none.
-  string url = 13;
-  string location = 14;
-}
+
+
+
+
+// Core-computed, per-field calendar writes after a three-way source merge.
+
+
+
+
+
+
+
 
 // A repeating series as the phone holds it; `start`/`end` are the series' OWN
 // first occurrence, in the form of the occurrences'.
-message PhoneCalendarSeries {
-  string id = 1;
-  string rrule = 2;
-  string start = 3;
-  string end = 4;
-}
+
 
 // The phone's address book as the OS holds it. Rust makes every record: it
 // squashes the names, keeps one contact once, labels each account and decides

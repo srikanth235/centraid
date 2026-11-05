@@ -8,30 +8,10 @@ use centraid_api_proto::core_v1 as wire;
 use crate::kit::civil;
 use crate::strings::{Locale, people as words, shared};
 
-/// A person's initials: one letter for one word, first and last for more
-/// (v0's rule). "?" for a name that is only spaces.
+/// Initials follow the shared identity rule for every app.
 #[must_use]
 pub fn initials(name: &str) -> String {
-    let words: Vec<&str> = name.split_whitespace().collect();
-    let first = |word: &str| word.chars().next().map(|c| c.to_uppercase().to_string());
-    match words.as_slice() {
-        [] => "?".to_owned(),
-        [only] => first(only).unwrap_or_default(),
-        [head, .., last] => format!(
-            "{}{}",
-            first(head).unwrap_or_default(),
-            first(last).unwrap_or_default()
-        ),
-    }
-}
-
-/// A wheel key as the theme's colour role: `rose` → `cRose`.
-fn hue_role(key: &str) -> String {
-    let mut chars = key.chars();
-    match chars.next() {
-        Some(first) => format!("c{}{}", first.to_uppercase(), chars.as_str()),
-        None => String::new(),
-    }
+    centraid_design::identity_initials(name)
 }
 
 /// An avatar, finished. A person's hue is drawn from their id; nothing stores
@@ -40,7 +20,7 @@ fn hue_role(key: &str) -> String {
 pub fn avatar(party_id: &str, name: &str) -> wire::PeopleAvatar {
     wire::PeopleAvatar {
         initials: initials(name),
-        hue_key: hue_role(centraid_design::identity_hue_key(party_id)),
+        hue_key: centraid_design::identity_fill_key(party_id).to_owned(),
     }
 }
 

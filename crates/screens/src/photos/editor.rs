@@ -447,7 +447,12 @@ impl Editor {
                 plan.crop = Some(FULL_CROP);
                 plan.ratio = Ratio::Original as i32;
             }
-            K::Straighten(_) => plan.straighten = next_straighten(plan.straighten),
+            K::Straighten(chosen) => {
+                plan.straighten = chosen.degrees.map_or_else(
+                    || next_straighten(plan.straighten),
+                    |degrees| degrees.clamp(-STRAIGHTEN_LIMIT, STRAIGHTEN_LIMIT),
+                );
+            }
             K::Flip(_) => plan.flip = next_flip(plan.flip),
             K::Ratio(chosen) => {
                 let ratio = Ratio::try_from(chosen.ratio).unwrap_or(Ratio::Unspecified);
@@ -690,6 +695,8 @@ impl Screen for Editor {
                 &own::edit_straighten(locale),
                 &[("degrees", &signed_degrees(self.plan.straighten))],
             ),
+            straighten_min: -STRAIGHTEN_LIMIT,
+            straighten_max: STRAIGHTEN_LIMIT,
             flip_label: flip_label(
                 locale,
                 Flip::try_from(self.plan.flip).unwrap_or(Flip::Unspecified),

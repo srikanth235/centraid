@@ -160,9 +160,10 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
             measure(session, json!({"verb": "restore", "rows": row}))
         }
         "star" | "unstar" => {
-            // the fixture's notes are pinned, not starred: star one first to have one to unstar
-            if kind == Kind::Note && verb == "unstar" {
-                let row = number(session, name, "Dal");
+            // Notes are pinned and tasks are unflagged in this fixture. Set the
+            // shared star first so each unstar case measures a real change.
+            if matches!(kind, Kind::Note | Kind::Task) && verb == "unstar" {
+                let row = number(session, name, subject);
                 let starred = settled(session, "act", json!({"verb": "star", "rows": row}));
                 assert!(
                     starred["text"].as_str().unwrap().starts_with("starred"),
@@ -171,6 +172,7 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
                 );
             }
             let row_name = match (kind, verb) {
+                (Kind::Task, _) => subject,
                 (Kind::Note, _) => "Dal",
                 (Kind::Person, "star") => "Benedikt",
                 (Kind::Person, _) => "Neha Rao",

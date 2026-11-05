@@ -202,6 +202,39 @@ impl Document {
         );
     }
 
+    fn label_color(&mut self, ctx: &Ctx, tag_id: &str, key: &str) {
+        if !matches!(self.sheet, Sheet::Labels(_))
+            || !self
+                .row()
+                .is_some_and(|row| row.labels.iter().any(|label| label.tag_id == tag_id))
+        {
+            return;
+        }
+        if let Some(action) = fold::color_action(tag_id, key) {
+            self.write(ctx, action);
+        }
+    }
+
+    fn share(&self) -> Vec<wire::Effect> {
+        let Some(answer) = self.phase.data() else {
+            return Vec::new();
+        };
+        let Some(row) = answer.document.document.as_ref() else {
+            return Vec::new();
+        };
+        if answer.document.file_path.is_empty() {
+            return Vec::new();
+        }
+        vec![wire::Effect {
+            kind: Some(wire::effect::Kind::Share(wire::Share {
+                file_path: answer.document.file_path.clone(),
+                media_type: row.media_type.clone(),
+                subject: row.title.clone(),
+                ..Default::default()
+            })),
+        }]
+    }
+
     fn label_added(&mut self, ctx: &Ctx, raw: &str) {
         let Some(row) = self.row().cloned() else {
             return;
@@ -301,6 +334,7 @@ impl Document {
             Some(D::RenameClosed(_)) => self.close_rename(ctx),
             Some(D::LabelAdded(added)) => self.label_added(ctx, &added.label),
             Some(D::LabelRemoved(removed)) => self.label_removed(ctx, &removed.tag_id),
+            Some(D::LabelColor(picked)) => self.label_color(ctx, &picked.tag_id, &picked.color_key),
             Some(D::LabelDraft(typed)) => {
                 if let Sheet::Labels(draft) = &mut self.sheet {
                     *draft = typed.text;
@@ -417,7 +451,13 @@ impl Screen for Document {
                     let _ = rename.close(ctx);
                 }
             }
-            Some(E::DocsDocument(event)) => self.event(event, ctx),
+            Some(E::DocsDocument(event)) => {
+                if matches!(&event.kind, Some(D::Action(picked)) if picked.key == fold::KEY_SHARE) {
+                    self.sheet = Sheet::None;
+                    return self.share();
+                }
+                self.event(event, ctx);
+            }
             _ => {}
         }
         Vec::new()

@@ -1,10 +1,8 @@
-<!doctype html>
-<html lang="en">
-<head>
+<!DOCTYPE html><html lang="en"><head>
 <meta charset="utf-8">
 <title>Agenda reminder details, Android</title>
 <script src="./support.js"></script>
-</head>
+<link rel="stylesheet" href="./tokens.css"></head>
 <body>
 <x-dc>
 <helmet>
@@ -14,7 +12,7 @@ body{margin:0}
 button{font:inherit;color:inherit}
 </style>
 </helmet>
-<div style="width: 412px; height: 915px; box-sizing: border-box; position: relative; overflow: hidden; background: #8E897F; font-family: 'Roboto Flex', Roboto, system-ui, sans-serif; color: #1C1B19;">
+<div style="width: 412px; height: 915px; box-sizing: border-box; position: relative; overflow: hidden; background: var(--ds-textDisabled); font-family: 'Roboto Flex', Roboto, system-ui, sans-serif; color: var(--ds-text);">
   <div style="height: 40px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; font-weight: 500; color: #FFFFFF;">
     <span>9:30</span>
     <span style="display: flex; align-items: center; gap: 6px;">
@@ -24,94 +22,95 @@ button{font:inherit;color:inherit}
     </span>
   </div>
 
-  <div role="dialog" aria-label="Details" style="position: absolute; left: 0; right: 0; top: 44px; bottom: 0; background: #F4F2EE; border-radius: 28px 28px 0 0; padding: 0 16px; box-sizing: border-box; overflow: hidden;">
-    <div aria-hidden="true" style="width: 32px; height: 4px; border-radius: 2px; background: #8E897F; margin: 16px auto 0;"></div>
+  <div role="dialog" aria-label="Details" style="position: absolute; left: 0; right: 0; top: 44px; bottom: 0; background: var(--ds-bg); border-radius: 28px 28px 0 0; padding: 0 16px; box-sizing: border-box; overflow: hidden;">
+    <div aria-hidden="true" style="width: 32px; height: 4px; border-radius: 2px; background: var(--ds-textDisabled); margin: 16px auto 0;"></div>
     <div style="display: flex; align-items: center; gap: 4px; height: 56px; margin: 0 -4px 4px;">
       <button aria-label="Close" style="width: 48px; height: 48px; border-radius: 24px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ds-text)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
       </button>
       <span style="flex-grow: 1; font-size: 22px; font-weight: 500;">Details</span>
-      <button style="height: 40px; padding: 0 24px; border-radius: 20px; border: none; background: #266FC4; color: #FFFFFF; font-size: 14px; font-weight: 500;">Done</button>
+      <button style="height: 40px; padding: 0 24px; border-radius: 20px; border: none; background: var(--ds-agendaFill); color: #FFFFFF; font-size: 14px; font-weight: 500;">Done</button>
     </div>
 
-    <div style="background: #FFFFFF; border-radius: 20px; padding: 16px;">
+    <div style="background: var(--ds-bgElev); border-radius: 20px; padding: 16px;">
       <div style="font-size: 22px; font-weight: 500; line-height: 28px;">Pay electricity bill</div>
-      <div style="font-size: 14px; color: #4A4741; margin-top: 6px;">Account ends 4411. Due the 3rd each month.</div>
-      <div style="font-size: 14px; color: #266FC4; margin-top: 6px; text-decoration: underline;">energy-co.example/pay</div>
+      <div style="font-size: 14px; color: var(--ds-textSoft); margin-top: 6px;">Account ends 4411. Due the 3rd each month.</div>
+      <div style="font-size: 14px; color: var(--ds-agendaText); margin-top: 6px; text-decoration: underline;">energy-co.example/pay</div>
     </div>
 
-    <div style="font-size: 14px; font-weight: 600; color: #266FC4; margin: 14px 16px 6px;">Date &amp; time</div>
+    <div style="font-size: 14px; font-weight: 600; color: var(--ds-agendaText); margin: 14px 16px 6px;">Date &amp; time</div>
     <div style="display: flex; flex-direction: column; gap: 2px;">
-      <div style="display: flex; align-items: center; gap: 16px; min-height: 60px; padding: 0 16px; background: #FFFFFF; border-radius: 20px 20px 4px 4px;">
-        <span style="width: 32px; height: 32px; border-radius: 12px; background: #C8392F; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"></rect><path d="M3 10h18"></path></svg></span>
-        <div style="flex-grow: 1;"><div style="font-size: 16px;">Date</div><div style="font-size: 14px; color: #266FC4;">Tuesday 3 November · overdue</div></div>
-        <span role="switch" aria-checked="true" aria-label="Date" style="width: 52px; height: 32px; border-radius: 16px; background: #266FC4; position: relative; flex-shrink: 0;"><span style="position: absolute; right: 4px; top: 4px; width: 24px; height: 24px; border-radius: 12px; background: #FFFFFF; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#266FC4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span></span>
+      <div style="display: flex; align-items: center; gap: 16px; min-height: 60px; padding: 0 16px; background: var(--ds-bgElev); border-radius: 20px 20px 4px 4px;">
+        <span style="width: 32px; height: 32px; border-radius: 12px; background: var(--ds-dangerFill); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"></rect><path d="M3 10h18"></path></svg></span>
+        <div style="flex-grow: 1;"><div style="font-size: 16px;">Date</div><div style="font-size: 14px; color: var(--ds-agendaText);">Tuesday 3 November · overdue</div></div>
+        <span role="switch" aria-checked="true" aria-label="Date" style="width: 52px; height: 32px; border-radius: 16px; background: var(--ds-agendaFill); position: relative; flex-shrink: 0;"><span style="position: absolute; right: 4px; top: 4px; width: 24px; height: 24px; border-radius: 12px; background: #FFFFFF; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ds-agendaText)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span></span>
       </div>
-      <div style="display: flex; align-items: center; gap: 16px; min-height: 60px; padding: 0 16px; background: #FFFFFF; border-radius: 4px;">
-        <span style="width: 32px; height: 32px; border-radius: 12px; background: #468DE5; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
-        <div style="flex-grow: 1;"><div style="font-size: 16px;">Time</div><div style="font-size: 14px; color: #266FC4;">09:00</div></div>
-        <span role="switch" aria-checked="true" aria-label="Time" style="width: 52px; height: 32px; border-radius: 16px; background: #266FC4; position: relative; flex-shrink: 0;"><span style="position: absolute; right: 4px; top: 4px; width: 24px; height: 24px; border-radius: 12px; background: #FFFFFF; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#266FC4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span></span>
+      <div style="display: flex; align-items: center; gap: 16px; min-height: 60px; padding: 0 16px; background: var(--ds-bgElev); border-radius: 4px;">
+        <span style="width: 32px; height: 32px; border-radius: 12px; background: var(--ds-listBlue); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
+        <div style="flex-grow: 1;"><div style="font-size: 16px;">Time</div><div style="font-size: 14px; color: var(--ds-agendaText);">09:00</div></div>
+        <span role="switch" aria-checked="true" aria-label="Time" style="width: 52px; height: 32px; border-radius: 16px; background: var(--ds-agendaFill); position: relative; flex-shrink: 0;"><span style="position: absolute; right: 4px; top: 4px; width: 24px; height: 24px; border-radius: 12px; background: #FFFFFF; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ds-agendaText)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span></span>
       </div>
-      <div style="display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 0 16px; background: #FFFFFF; border-radius: 4px;">
-        <span style="width: 32px; height: 32px; border-radius: 12px; background: #6E6B66; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 8a6 6 0 0112 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 004 0"></path></svg></span>
+      <div style="display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 0 16px; background: var(--ds-bgElev); border-radius: 4px;">
+        <span style="width: 32px; height: 32px; border-radius: 12px; background: var(--ds-lockerFill); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 8a6 6 0 0112 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 004 0"></path></svg></span>
         <span style="flex-grow: 1; font-size: 16px;">Early reminder</span>
-        <span style="font-size: 14px; color: #4A4741;">1 day before</span>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4A4741" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 10l5 5 5-5"></path></svg>
+        <span style="font-size: 14px; color: var(--ds-textSoft);">1 day before</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ds-textSoft)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 10l5 5 5-5"></path></svg>
       </div>
-      <div style="display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 0 16px; background: #FFFFFF; border-radius: 4px 4px 20px 20px;">
-        <span style="width: 32px; height: 32px; border-radius: 12px; background: #6E6B66; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M17 2l4 4-4 4M3 11V9a4 4 0 014-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 01-4 4H3"></path></svg></span>
+      <div style="display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 0 16px; background: var(--ds-bgElev); border-radius: 4px 4px 20px 20px;">
+        <span style="width: 32px; height: 32px; border-radius: 12px; background: var(--ds-lockerFill); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M17 2l4 4-4 4M3 11V9a4 4 0 014-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 01-4 4H3"></path></svg></span>
         <span style="flex-grow: 1; font-size: 16px;">Repeat</span>
-        <span style="font-size: 14px; color: #4A4741;">Monthly, on the 3rd</span>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4A4741" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 10l5 5 5-5"></path></svg>
+        <span style="font-size: 14px; color: var(--ds-textSoft);">Monthly, on the 3rd</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ds-textSoft)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 10l5 5 5-5"></path></svg>
       </div>
     </div>
 
-    <div style="font-size: 14px; font-weight: 600; color: #266FC4; margin: 14px 16px 6px;">Organisation</div>
+    <div style="font-size: 14px; font-weight: 600; color: var(--ds-agendaText); margin: 14px 16px 6px;">Organisation</div>
     <div style="display: flex; flex-direction: column; gap: 2px;">
-      <div style="display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 0 16px; background: #FFFFFF; border-radius: 20px 20px 4px 4px;">
-        <span style="width: 32px; height: 32px; border-radius: 16px; background: #7638AD; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3z"></path></svg></span>
+      <div style="display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 0 16px; background: var(--ds-bgElev); border-radius: 20px 20px 4px 4px;">
+        <span style="width: 32px; height: 32px; border-radius: 16px; background: var(--ds-peopleFill); display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3z"></path></svg></span>
         <span style="flex-grow: 1; font-size: 16px;">List</span>
-        <span style="font-size: 14px; color: #4A4741;">Home</span>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4A4741" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 10l5 5 5-5"></path></svg>
+        <span style="font-size: 14px; color: var(--ds-textSoft);">Home</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ds-textSoft)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 10l5 5 5-5"></path></svg>
       </div>
-      <div style="display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 0 16px; background: #FFFFFF; border-radius: 4px;">
-        <span style="width: 32px; height: 32px; border-radius: 12px; background: #874300; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="#FFFFFF" aria-hidden="true"><path d="M5 21V4h11l-2 4 2 4H5"></path></svg></span>
+      <div style="display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 0 16px; background: var(--ds-bgElev); border-radius: 4px;">
+        <span style="width: 32px; height: 32px; border-radius: 12px; background: var(--ds-warningFill); display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="#FFFFFF" aria-hidden="true"><path d="M5 21V4h11l-2 4 2 4H5"></path></svg></span>
         <span style="flex-grow: 1; font-size: 16px;">Flag</span>
-        <span role="switch" aria-checked="true" aria-label="Flag" style="width: 52px; height: 32px; border-radius: 16px; background: #266FC4; position: relative; flex-shrink: 0;"><span style="position: absolute; right: 4px; top: 4px; width: 24px; height: 24px; border-radius: 12px; background: #FFFFFF; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#266FC4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span></span>
+        <span role="switch" aria-checked="true" aria-label="Flag" style="width: 52px; height: 32px; border-radius: 16px; background: var(--ds-agendaFill); position: relative; flex-shrink: 0;"><span style="position: absolute; right: 4px; top: 4px; width: 24px; height: 24px; border-radius: 12px; background: #FFFFFF; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ds-agendaText)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span></span>
       </div>
-      <div style="display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 0 16px; background: #FFFFFF; border-radius: 4px;">
-        <span style="width: 32px; height: 32px; border-radius: 12px; background: #C8392F; display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-weight: 700; font-size: 13px;">!!</span>
+      <div style="display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 0 16px; background: var(--ds-bgElev); border-radius: 4px;">
+        <span style="width: 32px; height: 32px; border-radius: 12px; background: var(--ds-dangerFill); display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-weight: 700; font-size: 13px;">!!</span>
         <span style="flex-grow: 1; font-size: 16px;">Priority</span>
-        <span style="font-size: 14px; color: #4A4741;">Medium</span>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4A4741" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 10l5 5 5-5"></path></svg>
+        <span style="font-size: 14px; color: var(--ds-textSoft);">Medium</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ds-textSoft)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 10l5 5 5-5"></path></svg>
       </div>
-      <div style="display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 0 16px; background: #FFFFFF; border-radius: 4px 4px 20px 20px;">
-        <span style="width: 32px; height: 32px; border-radius: 12px; background: #6E6B66; display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-weight: 700;">#</span>
+      <div style="display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 0 16px; background: var(--ds-bgElev); border-radius: 4px 4px 20px 20px;">
+        <span style="width: 32px; height: 32px; border-radius: 12px; background: var(--ds-lockerFill); display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-weight: 700;">#</span>
         <span style="flex-grow: 1; font-size: 16px;">Tags</span>
-        <span style="height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #CFCAC1; display: flex; align-items: center; font-size: 14px; font-weight: 500; color: #4A4741;">#bills</span>
+        <span style="height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--ds-lineStrong); display: flex; align-items: center; font-size: 14px; font-weight: 500; color: var(--ds-textSoft);">#bills</span>
       </div>
     </div>
 
-    <div style="font-size: 14px; font-weight: 600; color: #266FC4; margin: 14px 16px 6px;">Linked in your vault</div>
+    <div style="font-size: 14px; font-weight: 600; color: var(--ds-agendaText); margin: 14px 16px 6px;">Linked in your vault</div>
     <div style="display: flex; flex-direction: column; gap: 2px;">
-      <div style="display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 0 16px; background: #FFFFFF; border-radius: 20px 20px 4px 4px;">
-        <span style="width: 32px; height: 32px; border-radius: 12px; background: #E9E5F4; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7638AD" stroke-width="2.2" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"></path></svg></span>
+      <div style="display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 0 16px; background: var(--ds-bgElev); border-radius: 20px 20px 4px 4px;">
+        <span style="width: 32px; height: 32px; border-radius: 12px; background: var(--ds-peopleTint); display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ds-peopleText)" stroke-width="2.2" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"></path></svg></span>
         <span style="flex-grow: 1; font-size: 16px;">October bill.pdf</span>
-        <span style="font-size: 12px; font-weight: 500; color: #6F6B64;">Docs</span>
+        <span style="font-size: 12px; font-weight: 500; color: var(--ds-textFaint);">Docs</span>
       </div>
-      <div style="display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 0 16px; background: #FFFFFF; border-radius: 4px 4px 20px 20px;">
-        <span style="width: 32px; height: 32px; border-radius: 12px; background: #E2EEF8; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#266FC4" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span>
-        <span style="font-size: 16px; font-weight: 500; color: #266FC4;">Add a photo, note or person</span>
+      <div style="display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 0 16px; background: var(--ds-bgElev); border-radius: 4px 4px 20px 20px;">
+        <span style="width: 32px; height: 32px; border-radius: 12px; background: var(--ds-agendaTint); display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ds-agendaText)" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span>
+        <span style="font-size: 16px; font-weight: 500; color: var(--ds-agendaText);">Add a photo, note or person</span>
       </div>
     </div>
   </div>
-  <div aria-hidden="true" style="position: absolute; left: 152px; bottom: 6px; width: 108px; height: 4px; border-radius: 2px; background: #1C1B19;"></div>
+  <div aria-hidden="true" style="position: absolute; left: 152px; bottom: 6px; width: 108px; height: 4px; border-radius: 2px; background: var(--ds-text);"></div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":915}}'>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:412,&quot;height&quot;:915}}">
 class Component extends DCLogic {
 renderVals() { return {}; }
 }
 </script>
-</body>
-</html>
+
+
+</body></html>

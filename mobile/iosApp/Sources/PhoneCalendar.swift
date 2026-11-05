@@ -111,12 +111,32 @@ enum PhoneCalendar {
             out.calendarKey = event.calendar?.calendarIdentifier ?? ""
             out.url = event.url?.absoluteString ?? ""
             out.location = event.location ?? ""
+            out.nativeID = event.eventIdentifier ?? event.calendarItemIdentifier
+            out.nativeSeriesID = master?.nativeID ?? ""
+            out.alarmsBeforeMin = (event.alarms ?? []).compactMap { alarm in
+                if alarm.structuredLocation != nil { return nil }
+                let interval = alarm.absoluteDate.map { start.timeIntervalSince($0) } ?? -alarm.relativeOffset
+                return Int32(exactly: (interval / 60).rounded())
+            }
+            out.attendees = (event.attendees ?? []).map { guest in
+                var attendee = Centraid_Core_V1_PhoneCalendarAttendee()
+                attendee.email = guest.url.absoluteString.replacingOccurrences(of: "mailto:", with: "")
+                attendee.name = guest.name ?? attendee.email
+                switch guest.participantStatus {
+                case .accepted: attendee.state = "accepted"
+                case .declined: attendee.state = "declined"
+                case .tentative: attendee.state = "tentative"
+                default: attendee.state = "needs-action"
+                }
+                return attendee
+            }
             if event.isAllDay {
                 // EventKit ends an all-day event at the next midnight (or
                 // 23:59:59); the all-day end is the LAST day, inclusive.
                 let last = end.addingTimeInterval(-1)
                 out.start = civil(start, zone, "yyyy-MM-dd")
                 out.end = civil(max(last, start), zone, "yyyy-MM-dd")
+                out.tz = zone.identifier
                 out.originalStart = master.flatMap { m in original.map { civil($0, m.zone, "yyyy-MM-dd") } } ?? ""
             } else {
                 out.start = civil(start, zone, "yyyy-MM-dd'T'HH:mm:ss")
@@ -142,6 +162,7 @@ enum PhoneCalendar {
     private struct Master {
         let series: Centraid_Core_V1_PhoneCalendarSeries
         let zone: TimeZone
+        let nativeID: String
     }
 
     /// THE SERIES AN OCCURRENCE BELONGS TO: its `eventIdentifier` without the
@@ -167,6 +188,7 @@ enum PhoneCalendar {
             var series = Centraid_Core_V1_PhoneCalendarSeries()
             series.id = phoneId(first, fallback: id)
             series.rrule = rrule(rules[0])
+            series.tz = zone.identifier
             if first.isAllDay {
                 series.start = civil(start, zone, "yyyy-MM-dd")
                 series.end = civil(max(end.addingTimeInterval(-1), start), zone, "yyyy-MM-dd")
@@ -174,7 +196,7 @@ enum PhoneCalendar {
                 series.start = civil(start, zone, "yyyy-MM-dd'T'HH:mm:ss")
                 series.end = civil(end, zone, "yyyy-MM-dd'T'HH:mm:ss")
             }
-            found = Master(series: series, zone: zone)
+            found = Master(series: series, zone: zone, nativeID: id)
         }
         cache[id] = found
         return found
@@ -217,7 +239,7 @@ enum PhoneCalendar {
                 parts.append("UNTIL=" + civil(until, TimeZone(identifier: "UTC")!, "yyyyMMdd'T'HHmmss'Z'"))
             }
         }
-        if (1...7).contains(rule.firstDayOfTheWeek), rule.firstDayOfTheWeek != 1 {
+        if (1...7).contains(rule.firstDayOfTheWeek) {
             parts.append("WKST=" + days[rule.firstDayOfTheWeek - 1])
         }
         return parts.joined(separator: ";")

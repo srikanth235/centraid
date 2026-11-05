@@ -107,6 +107,8 @@ message HealthMetricLine {
   string accessibility_label = 8;
   // The metric's page.
   Route route = 9;
+  // Seven daily points, scaled by Rust; -1 means no reading, never zero.
+  repeated int32 points_bp = 10;
 }
 
 // One workout as a list draws it.
@@ -224,6 +226,9 @@ message HealthTodayData {
   repeated HealthWorkoutLine workouts = 5;
   // Where the numbers come from, never when (R-1129-13).
   string foot = 6;
+  string highlights_heading = 7;
+  repeated HealthFact highlights = 8;
+  string pinned_empty = 9;
 }
 
 message HealthTrendsData {
@@ -347,6 +352,10 @@ message HealthMetricData {
   string chart_label = 12;
   // No row in the period at all.
   optional EmptyState empty = 13;
+  // The scrubber selection, with its date and formatted value from Rust.
+  optional HealthFact selected_bucket = 14;
+  uint32 selected_index = 15;
+  string scrubber_label = 16;
 }
 
 message HealthChartBar {
@@ -364,12 +373,17 @@ message HealthMetricEvent {
     Refreshed refreshed = 1;
     // `week`, `month`, `year`.
     RangePicked range = 2;
+    BucketPicked bucket = 3;
   }
 
   message Refreshed {}
 
   message RangePicked {
     string key = 1;
+  }
+
+  message BucketPicked {
+    uint32 index = 1;
   }
 }
 

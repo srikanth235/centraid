@@ -17,8 +17,8 @@ use centraid_apps_kit::statement::PageBindValue;
 use crate::Denial;
 pub use crate::queries::RelationDirection;
 use crate::queries::{
-    DateRow, RelationRow, Touch, WIDE, asked, dates, describe, lists, people_among, relations,
-    touch_stubs, words_about,
+    DateRow, RelationRow, Touch, WIDE, asked, dates, describe, lists, people_among,
+    people_among_with_self, relations, touch_stubs, words_about,
 };
 use crate::roster::{RosterRow, rows_of};
 
@@ -59,6 +59,8 @@ pub struct Person {
     pub touches: Vec<Touch>,
     /// Who they are related to, both directions, by name.
     pub relations: Vec<RelationRow>,
+    pub vault_links: Vec<crate::queries::VaultLink>,
+    pub vault_links_truncated: bool,
 }
 
 /// What `person` answers.
@@ -141,8 +143,11 @@ pub fn load_person(
         return Ok((PersonData::default(), None));
     }
     let empty = PersonData::default;
-    let Some(person) = asked!(people_among(door, &[id.to_owned()], true), empty()).remove(id)
-    else {
+    let Some(person) = asked!(
+        people_among_with_self(door, &[id.to_owned()], true, true),
+        empty()
+    )
+    .remove(id) else {
         return Ok((empty(), None));
     };
     let lists = asked!(lists(door), empty());
@@ -166,6 +171,8 @@ pub fn load_person(
     let stubs = asked!(touch_stubs(door, &[id.to_owned()]), empty());
     let touches = asked!(describe(door, &stubs), empty());
     let relations = asked!(relations(door, id), empty());
+    let (vault_links, vault_links_truncated) =
+        asked!(crate::queries::vault_links(door, id), empty());
     Ok((
         PersonData {
             person: Some(Person {
@@ -177,6 +184,8 @@ pub fn load_person(
                 notes,
                 touches,
                 relations,
+                vault_links,
+                vault_links_truncated,
             }),
         },
         None,

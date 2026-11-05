@@ -1167,7 +1167,7 @@ pub fn walker_platform_law(root: &Path) -> RuleReport {
 /// `first-launch-asks-nothing` — the first-launch gate lists Home's roster
 /// without typing app ids, and asks the phone for nothing: Health asks on its
 /// own Connect button (#1129, R-1127-15). The roster itself is Rust's ORDER,
-/// held to the catalogue by `packages/design/src/native-emission.test.ts`.
+/// held to the catalogue by the Rust design generator's drift check.
 pub fn first_launch_asks_nothing(root: &Path) -> RuleReport {
     const NAME: &str = "first-launch-asks-nothing";
     let mut views: Vec<PathBuf> = swift_sources(root)

@@ -16,10 +16,10 @@ The compiler uses `strict`, `noUncheckedIndexedAccess`, and ES2023. The configur
 
 ## Centraid constraints
 
-- TypeScript is repository tooling: the design token registry and emitters, test kit, and scripts. There is no React app or web server.
+- TypeScript is repository tooling: the test kit, release tools and scripts. Design values and native exporters are Rust-owned. There is no React app or web server.
 - Generated files are outputs: edit the registry or emitter and regenerate; never hand-edit emitted Kotlin, Swift, catalogue, words, or CSS.
 - Tests use `@centraid/test-kit`: `tempDir()`, `useFakeClock()`, and `seededRandom()` instead of raw APIs.
-- Token changes come from `packages/design/src`; use semantic tokens and regenerate consumers. Budgets only go down.
+- Token changes come from `design/tokens.toml`; use semantic tokens and regenerate consumers with `cargo xtask design`. Budgets only go down.
 - Design token, theme, font, spacing, and generated-source assertion pitfalls are recorded below.
 
 ### Diagnostic table
@@ -39,13 +39,12 @@ Fix the first error first: later ones are often its echo. Rerun after each fix.
 | `unicorn/catch-error-name` | Name the catch binding `error` |
 | A restricted `mkdtemp`, `vi.useFakeTimers`, `Math.random` in a test | `tempDir()`, `useFakeClock()`, `seededRandom()` from `@centraid/test-kit` (the lint message names the subpath) |
 | vitest fails a test with no assertions | `expect.requireAssertions` is on in the kit presets: assert something, or call `expect.assertions(0)` for a deliberate assertion-free test |
-| `emitters` step or `mobile-jvm` reports drift in `packages/design` or `mobile` | Never edit the generated file: change the registry or emitter, rerun `bun contracts/tools/export-native-theme.ts` and `bun run format`, commit the result |
+| Design generation or `mobile-jvm` reports drift | Never edit the generated file: change `design/tokens.toml`, the Rust generator, the string catalogue or the light mockup; rerun `cargo xtask design` and commit the result |
 
 ### Pitfalls
 
-- **Tokens have one source: `packages/design/src`.** Hardcoded hex or `rgb()`, a parallel CSS variable or Kotlin/Swift colour table, a deep import (`@centraid/design/src/themes/...`), or a font-family override in app CSS all cause drift across the shells and web surfaces. Use `var(--...)` or the emitted native theme. After a token edit, rerun `bun contracts/tools/export-native-theme.ts` and `bun run format`, commit the regenerated files, and run `bun run --cwd packages/design build` so `dist/` consumers see the change. Run `bun run --cwd packages/design test`.
-- **Theme rules that fail silently.** The registry is `light` and `dark`, and a registry key must equal its `kind`, because stylesheets key on `[data-theme='dark']` (a dark preset under another key paints light chrome on a dark surface). An appearance pref written as an inline style on `<html>` outranks every theme block, so write it only when the member chose one and remove it otherwise. There is one dark ramp (neutral greyscale off `--bg-l`); when a declaration and the rendered product disagree, the product wins.
-- **There is one page and one face.** Shell and every app share `--bg` / `colors.bg`; an app never retunes it (a per-app tone moved only `--bg` and inverted the paper metaphor; if a tone ever returns it must carry the whole surface set). `PAGE` and `WALL` are deliberately not re-exported. Every role is Instrument Sans; `--t-mono` is tabular figures, not monospace; `--font-code` is only for code, an inline literal or a path. Under 4px only `--sp-hair` (1px), `--sp-gutter` (2px) or `--sp-chip` (3px) exist. The element layer (`packages/design/src/elements`, `kit.css`) holds no design decisions: a literal or new `--name` there belongs in the token layer and `src/contract.ts`. No linter checks the face, radius and spacing rules; review does.
+- **Tokens have one source: `design/tokens.toml`.** Do not add a TypeScript palette, font registry or design emitter. The Rust compiler produces native resources, dark mockups and shared design artifacts; consumers read those outputs. A visual or UX change starts in `design/mockups/` in the same PR.
+- **Themes and accessibility are designed together.** Light and dark use the explicit values in the tokens and mockups. A stored appearance preference must not defeat the system choice when the member has not selected an override. Large text reflows rather than being capped; content colours are preserved.
 - **A guard on a generated-and-committed pair must watch the source.** When a file is generated and also committed (`mobile/iosApp/Resources/Info.plist` from `mobile/iosApp/project.yml`), a test pointed at the visible generated file goes green while the source is wrong, and the next regeneration restores the defect (a background-task identifier was right in the plist and wrong in `project.yml`, so iOS would have terminated the app). Assert against the source, and separately that the generated half matches it; if only one is affordable, take the source. Being in git says nothing about which file a human edits. To find the next pair, list the tracked files under `mobile/iosApp/Resources` and grep for `GENERATED` / `DO NOT EDIT`.
 
 ## General TypeScript guidance

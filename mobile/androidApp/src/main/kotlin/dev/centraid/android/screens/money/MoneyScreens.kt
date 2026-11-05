@@ -128,7 +128,6 @@ internal fun MoneyHomeScreen(
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
         ) { home ->
             LazyColumn {
-                if (home.shows_month) item(key = "month") { MonthStepper(state, onEvent) }
                 when (state.destination) {
                     MoneyHomeState.Destination.DESTINATION_ACTIVITY -> activity(state, onEvent, onOpen, addStatement)
                     MoneyHomeState.Destination.DESTINATION_CASHFLOW -> cashflow(state, addStatement)
@@ -150,12 +149,16 @@ internal fun MoneyHomeScreen(
             },
             onDismiss = close,
         )
-        MoneyHomeState.Sheet.SHEET_MONTH -> OptionSheet(
-            title = chrome?.month_sheet_title.orEmpty(),
-            options = data?.month_options.orEmpty().map { SheetOption(key = it.key, label = it.label, selected = it.selected) },
-            onPick = { key -> onEvent(MoneyHomeEvent(month_picked = MoneyHomeEvent.MonthPicked(month = key))) },
-            onDismiss = close,
-        )
+        MoneyHomeState.Sheet.SHEET_MONTH -> dev.centraid.android.kit.SheetRoom(
+            title = chrome?.month_sheet_title.orEmpty(), onDismiss = close,
+        ) {
+            if (data?.shows_month == true) MonthStepper(state, onEvent)
+            data?.month_options.orEmpty().forEach { choice ->
+                dev.centraid.android.kit.SheetRow(label = choice.label, detail = choice.detail,
+                    selected = choice.selected, testTag = "money-month-option-${choice.key}",
+                    onTap = { onEvent(MoneyHomeEvent(month_picked = MoneyHomeEvent.MonthPicked(month = choice.key))) })
+            }
+        }
         else -> Unit
     }
 }
@@ -191,6 +194,7 @@ private fun LazyListScope.spending(state: MoneyHomeState, onOpen: (Route) -> Uni
         return
     }
     items(spending.heroes.size, key = { "hero-$it" }) { index -> MoneyHeroView(spending.heroes[index]) }
+    items(spending.weekly_series.size, key = { "weekly-$it" }) { index -> MoneyWeeklyChart(spending.weekly_series[index]) }
     item(key = "days") { MoneyNote(spending.days_left_label) }
     items(spending.in_out_net.size, key = { "net-$it" }) { index ->
         MoneyFigureCard(spending.in_out_net[index].figures)
@@ -243,6 +247,8 @@ private fun LazyListScope.activity(
         item(key = "empty") { EmptyStateView(empty, onAction = addStatement) }
         return
     }
+    item(key = "overview-title") { MoneySection(activity.overview_title) }
+    items(activity.overview.size, key = { "overview-$it" }) { index -> MoneyHeroView(activity.overview[index]) }
     if (activity.needs_label.isNotEmpty()) {
         item(key = "needs") {
             // THE FILTER THAT LISTS THESE ROWS is the state's own `needs_key`.
@@ -252,7 +258,7 @@ private fun LazyListScope.activity(
         }
     }
     activity.sections.forEach { section ->
-        item(key = "day-${section.day}") { MoneySection(section.heading) }
+        item(key = "day-${section.day}") { MoneyDayHeader(section.heading, section.total) }
         items(section.rows, key = { "t-${it.txn_id}" }) { row ->
             MoneyRowView(row) { row.route?.let(onOpen) }
         }

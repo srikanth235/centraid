@@ -270,8 +270,8 @@ fn target_event(kind: tg::Kind) -> wire::screen_event::Kind {
 }
 
 /// A category line of Spending: its target route's arguments.
-fn a_category(d: &centraid_screens::testing::Driver) -> wire::Route {
-    let i = home(d);
+fn a_category(d: &mut centraid_screens::testing::Driver) -> wire::Route {
+    let i = land_on(d, wire::MoneyDestination::Spending);
     home_data(d.view(i))
         .spending
         .as_ref()
@@ -287,7 +287,7 @@ fn a_category(d: &centraid_screens::testing::Driver) -> wire::Route {
 #[test]
 fn a_target_is_seeded_from_the_stored_plan_and_previews_next_month() {
     let mut d = driver();
-    let route = a_category(&d);
+    let route = a_category(&mut d);
     let i = push(&mut d, route);
     let data = target_data(d.view(i));
     assert!(data.title.ends_with("target"));
@@ -303,7 +303,7 @@ fn a_target_is_seeded_from_the_stored_plan_and_previews_next_month() {
 #[test]
 fn typing_an_amount_asks_the_core_again_and_saving_finishes_the_page() {
     let mut d = driver();
-    let route = a_category(&d);
+    let route = a_category(&mut d);
     // The category comes from the live example month and can already have a
     // carry-enabled plan. This test starts with no plan before testing its toggle.
     let Some(wire::route::Args::MoneyTarget(args)) = &route.args else {
@@ -343,7 +343,7 @@ fn typing_an_amount_asks_the_core_again_and_saving_finishes_the_page() {
     event(&mut d, i, target_event(tg::Kind::Save(tg::Save {})));
     assert!(target_state(d.view(i)).finished);
     // the plan is stored: a fresh page for the same category is seeded from it
-    let route = a_category(&d);
+    let route = a_category(&mut d);
     let again = push(&mut d, route);
     assert_eq!(target_state(d.view(again)).amount_text, "250.00");
     assert!(target_state(d.view(again)).carry);
@@ -353,7 +353,7 @@ fn typing_an_amount_asks_the_core_again_and_saving_finishes_the_page() {
 #[test]
 fn a_bad_amount_says_so_and_cannot_be_saved() {
     let mut d = driver();
-    let route = a_category(&d);
+    let route = a_category(&mut d);
     let i = push(&mut d, route);
     event(
         &mut d,
@@ -372,7 +372,7 @@ fn a_bad_amount_says_so_and_cannot_be_saved() {
 #[test]
 fn removing_a_stored_target_finishes_the_page_and_clears_the_plan() {
     let mut d = driver();
-    let route = a_category(&d);
+    let route = a_category(&mut d);
     let i = push(&mut d, route.clone());
     event(
         &mut d,
@@ -383,7 +383,7 @@ fn removing_a_stored_target_finishes_the_page_and_clears_the_plan() {
     let again = push(&mut d, route);
     event(&mut d, again, target_event(tg::Kind::Remove(tg::Remove {})));
     assert!(target_state(d.view(again)).finished);
-    let route = a_category(&d);
+    let route = a_category(&mut d);
     let last = push(&mut d, route);
     assert!(target_data(d.view(last)).remove_label.is_empty());
 }

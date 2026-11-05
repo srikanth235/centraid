@@ -64,6 +64,87 @@ const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at, deleted_at, pur
 const PERSON_COLUMNS: &str =
     "id, form, nickname, role, met, birthday, birthday_reminder, cadence_days";
 
+/// An existing note, event, task or attachment connected to one person.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VaultLink {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+}
+
+pub(crate) fn vault_links(
+    door: &dyn PageDoor,
+    person_id: &str,
+) -> KitResult<(Vec<VaultLink>, bool)> {
+    const WINDOW: usize = 48;
+    let incoming = read_window(
+        door,
+        &PageQuery::new(
+            "people.vault_links.incoming",
+            "from_id, rel, to_id",
+            "edge",
+            PageOrder::asc("rel", "from_id"),
+        )
+        .filter(
+            "to_id = ? AND rel IN ('about','attendee','links')",
+            vec![text(person_id)],
+        ),
+        WINDOW,
+    )?;
+    let outgoing = read_window(
+        door,
+        &PageQuery::new(
+            "people.vault_links.attached",
+            "from_id, rel, to_id",
+            "edge",
+            PageOrder::asc("to_id", "rel"),
+        )
+        .filter("from_id = ? AND rel = 'attached'", vec![text(person_id)]),
+        WINDOW,
+    )?;
+    let ids: Vec<String> = incoming
+        .rows
+        .iter()
+        .filter_map(|row| text_of(row, "from_id"))
+        .chain(outgoing.rows.iter().filter_map(|row| text_of(row, "to_id")))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let entities = Read {
+        name: "people.vault_links.entities",
+        table: "entity",
+        select: "id, kind, title",
+        order: ("id", "id"),
+        column: "id",
+    }
+    .among(
+        WIDE,
+        door,
+        &ids,
+        Some((
+            "deleted_at IS NULL AND kind IN ('note','task','event','document','photo')",
+            vec![],
+        )),
+    )?;
+    let mut links: Vec<_> = entities
+        .iter()
+        .filter_map(|row| {
+            Some(VaultLink {
+                id: text_of(row, "id")?,
+                kind: text_of(row, "kind")?,
+                title: text_of(row, "title").unwrap_or_default(),
+            })
+        })
+        .collect();
+    links.sort_by(|a, b| {
+        a.kind
+            .cmp(&b.kind)
+            .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    Ok((links, incoming.filled || outgoing.filled))
+}
+
 fn text(word: &str) -> PageBindValue {
     PageBindValue::Text(word.to_owned())
 }
@@ -146,7 +227,7 @@ impl PersonCard {
 }
 
 /// The owner's own person: the one the circle leaves out.
-fn owner(door: &dyn PageDoor) -> KitResult<Option<String>> {
+pub(crate) fn owner(door: &dyn PageDoor) -> KitResult<Option<String>> {
     let page = door.page(
         &PageQuery::new(
             "people.owner",
@@ -162,6 +243,14 @@ fn owner(door: &dyn PageDoor) -> KitResult<Option<String>> {
 /// The people the `entity` rows are, in their order: the kind row's columns
 /// joined on, the owner and the pets left out.
 fn members(door: &dyn PageDoor, entities: &[Row]) -> KitResult<Vec<PersonRow>> {
+    members_with_self(door, entities, false)
+}
+
+fn members_with_self(
+    door: &dyn PageDoor,
+    entities: &[Row],
+    include_self: bool,
+) -> KitResult<Vec<PersonRow>> {
     let ids: Vec<String> = entities
         .iter()
         .filter_map(|row| text_of(row, "id"))
@@ -185,7 +274,7 @@ fn members(door: &dyn PageDoor, entities: &[Row]) -> KitResult<Vec<PersonRow>> {
             let id = text_of(entity, "id")?;
             let kind = by_id.get(&id)?;
             let form = text_of(kind, "form").unwrap_or_default();
-            if form == "pet" || owner.as_deref() == Some(id.as_str()) {
+            if form == "pet" || (!include_self && owner.as_deref() == Some(id.as_str())) {
                 return None;
             }
             Some(PersonRow {
@@ -218,6 +307,15 @@ pub(crate) fn people_among(
     ids: &[String],
     live: bool,
 ) -> KitResult<BTreeMap<String, PersonRow>> {
+    people_among_with_self(door, ids, live, false)
+}
+
+pub(crate) fn people_among_with_self(
+    door: &dyn PageDoor,
+    ids: &[String],
+    live: bool,
+    include_self: bool,
+) -> KitResult<BTreeMap<String, PersonRow>> {
     let entities = Read {
         name: "people.rows.entity",
         table: "entity",
@@ -238,7 +336,7 @@ pub(crate) fn people_among(
             vec![text("person")],
         )),
     )?;
-    Ok(members(door, &entities)?
+    Ok(members_with_self(door, &entities, include_self)?
         .into_iter()
         .map(|person| (person.id.clone(), person))
         .collect())

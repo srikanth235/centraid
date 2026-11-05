@@ -151,17 +151,20 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     }
     Some(Box::new(Detail {
         task_id: args.task_id.clone(),
+        attachments: super::attachments::Attachments::default(),
         phase: Phase::Loading,
         projects: None,
         autosave: Autosave::new(),
         asking: Asking::None,
         open_field: String::new(),
         ops: Ops::default(),
+        notification_status: super::notification_status::Status::default(),
         finished: false,
     }))
 }
 
 struct Detail {
+    attachments: super::attachments::Attachments,
     task_id: String,
     phase: Phase<Answered>,
     /// The last projects read that landed, kept over a read that does not.
@@ -170,6 +173,7 @@ struct Detail {
     asking: Asking,
     open_field: String,
     ops: Ops,
+    notification_status: super::notification_status::Status,
     /// The task left (deleted): the shell pops.
     finished: bool,
 }
@@ -282,6 +286,25 @@ impl Detail {
             ..Default::default()
         };
         match field {
+            "flag" => {
+                if key == "on" && !task.flagged {
+                    self.write(
+                        ctx,
+                        act::agenda::FlagTask {
+                            task_id: task.task_id.clone(),
+                        },
+                        &["flag", &task.task_id],
+                    );
+                } else if key == "off" && task.flagged {
+                    self.write(
+                        ctx,
+                        act::agenda::UnflagTask {
+                            task_id: task.task_id.clone(),
+                        },
+                        &["unflag", &task.task_id],
+                    );
+                }
+            }
             WHEN => {
                 if key == NONE {
                     if !task.due_day.is_empty() {
@@ -539,6 +562,25 @@ impl Detail {
     fn event(&mut self, event: wire::TodoDetailEvent, ctx: &Ctx) {
         match event.kind {
             Some(D::Refreshed(_)) => self.reload(ctx),
+            Some(D::FieldText(change)) => {
+                if let Some(task) = self.task() {
+                    let value = if change.text.trim().is_empty() {
+                        Field::Clear
+                    } else {
+                        Field::Is(change.text.trim().to_owned())
+                    };
+                    let mut request = act::agenda::EditTask {
+                        task_id: task.task_id.clone(),
+                        ..Default::default()
+                    };
+                    match change.field.as_str() {
+                        "repeats" => request.rule = value,
+                        "url" => request.url = value,
+                        _ => return,
+                    }
+                    self.write(ctx, request, &["field-text", &task.task_id, &change.field]);
+                }
+            }
             Some(D::Title(typed)) => self.autosave.edit(ctx, |draft| draft.title = typed.title),
             Some(D::Notes(typed)) => self.autosave.edit(ctx, |draft| draft.notes = typed.notes),
             Some(D::FieldChoice(choice)) => self.choose(ctx, &choice.field, &choice.key),
@@ -638,7 +680,7 @@ impl Detail {
             Some(D::Release(_)) => self.asking = Asking::Release,
             Some(D::Confirmed(_)) => self.confirmed(ctx),
             Some(D::Dismissed(_)) => self.asking = Asking::None,
-            None => {}
+            Some(D::Attachment(_)) | None => {}
         }
     }
 
@@ -689,6 +731,22 @@ impl Detail {
             .unwrap_or_default();
         let draft = self.autosave.draft();
         wire::TodoDetailData {
+            attachments: Some(
+                self.attachments.view(
+                    locale,
+                    task.attachments
+                        .iter()
+                        .map(|item| {
+                            super::attachments::row(
+                                locale,
+                                &item.attachment_id,
+                                &item.title,
+                                &item.kind,
+                            )
+                        })
+                        .collect(),
+                ),
+            ),
             draft: Some(wire::TodoDraft {
                 title: draft.map_or_else(|| task.title.clone(), |d| d.title.clone()),
                 notes: draft.map_or_else(
@@ -766,7 +824,41 @@ impl Screen for Detail {
             Some(E::Left(_)) => {
                 let _ = self.autosave.flush(ctx);
             }
-            Some(E::TodoDetail(detail)) => self.event(detail, ctx),
+            Some(E::Announced(announced)) => self.notification_status.hear(&announced.topic),
+            Some(E::EffectResult(result)) => {
+                if result
+                    .outcome
+                    .as_ref()
+                    .is_some_and(|outcome| self.attachments.result(ctx, &self.task_id, outcome))
+                {
+                    self.reload(ctx);
+                }
+            }
+            Some(E::TodoDetail(detail)) => {
+                if let Some(D::Attachment(event)) = &detail.kind {
+                    let known: Vec<_> = self
+                        .phase
+                        .data()
+                        .and_then(Answered::task)
+                        .map(|task| {
+                            task.attachments
+                                .iter()
+                                .map(|item| item.attachment_id.clone())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let effects = self.attachments.event(ctx, &self.task_id, &known, event);
+                    self.reload(ctx);
+                    return effects;
+                }
+                if matches!(detail.kind, Some(D::StatusActed(_)))
+                    && self.ops.status.is_none()
+                    && self.notification_status.active()
+                {
+                    return self.notification_status.act(ctx);
+                }
+                self.event(detail, ctx);
+            }
             _ => {}
         }
         Vec::new()
@@ -796,7 +888,11 @@ impl Screen for Detail {
                 confirm: self.confirm(locale),
                 open_field: self.open_field.clone(),
                 chrome: Some(rows::chrome(locale)),
-                status: self.ops.status.clone(),
+                status: self
+                    .ops
+                    .status
+                    .clone()
+                    .or_else(|| self.notification_status.view(locale)),
                 finished: self.finished,
             })),
             ..wire::ViewState::default()
@@ -1001,6 +1097,18 @@ fn fields(
         ..wire::TodoField::default()
     });
 
+    out.push(wire::TodoField {
+        key: "url".into(),
+        label: words::field_url(locale),
+        value: task.url.clone().unwrap_or_default(),
+        edit_text: true,
+        text_value: task.url.clone().unwrap_or_default(),
+        save_label: words::apply(locale),
+        add_placeholder: words::field_url(locale),
+        enabled: true,
+        ..Default::default()
+    });
+
     let mut repeat_choices = vec![simple(NONE, words::repeats_never(locale), !task.repeats)];
     repeat_choices.extend(REPEAT_RULES.iter().map(|(key, rule)| {
         let label = match *key {
@@ -1019,6 +1127,10 @@ fn fields(
     }));
     out.push(wire::TodoField {
         key: REPEATS.to_owned(),
+        edit_text: dated,
+        text_value: task.rrule.clone().unwrap_or_default(),
+        save_label: words::apply(locale),
+        add_placeholder: words::custom_rule(locale),
         label: words::field_repeats(locale),
         value: task
             .recurrence_summary
@@ -1077,6 +1189,21 @@ fn fields(
         });
     }
 
+    out.push(wire::TodoField {
+        key: "flag".to_owned(),
+        label: words::flag(locale),
+        value: if task.flagged {
+            words::flagged(locale)
+        } else {
+            words::not_flagged(locale)
+        },
+        choices: vec![
+            simple("on", words::flagged(locale), task.flagged),
+            simple("off", words::not_flagged(locale), !task.flagged),
+        ],
+        enabled: true,
+        ..wire::TodoField::default()
+    });
     let level = task.priority.clamp(0, 3);
     out.push(wire::TodoField {
         key: PRIORITY.to_owned(),
@@ -1084,7 +1211,7 @@ fn fields(
         value: Some(rows::priority_label(locale, task.priority))
             .filter(|label| !label.is_empty())
             .unwrap_or_else(|| words::priority_none(locale)),
-        // THE LABEL CARRIES IT (DESIGN.md, Copy): "None" is a choice on the
+        // THE LABEL CARRIES IT (product-intuition screen contracts, Copy): "None" is a choice on the
         // row, so no note says that priority is optional.
         choices: vec![
             simple(NONE, words::priority_none(locale), level == 0),

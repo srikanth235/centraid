@@ -52,7 +52,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
 
 ## Get started
 
-Prereqs: a Rust toolchain (the version is pinned in [`rust-toolchain.toml`](rust-toolchain.toml)); [Bun](https://bun.sh) for `packages/design` and repository tooling; a JDK and the Android SDK or Xcode for the mobile shells ([mobile/README.md](mobile/README.md)).
+Prereqs: a Rust toolchain (the version is pinned in [`rust-toolchain.toml`](rust-toolchain.toml)); [Bun](https://bun.sh) for the TypeScript test kit and repository tooling; a JDK and the Android SDK or Xcode for the mobile shells ([mobile/README.md](mobile/README.md)).
 
 ```sh
 # the gateway: mints its identity, listens on 8443, and prints a pairing QR
@@ -71,7 +71,8 @@ Scan the QR from a phone build, then compare the safety number the phone shows w
 | `crates/` | The Rust core: the identity model, the vault and its backup plane, the ontology, the gateway protocol and its one deployment, the byte plane, one crate per app, the five-symbol C ABI, the protobuf schema workspace and the `xtask` gate. |
 | `contracts/` | The layer every language reads: the DDL of a new vault and the list of its commands, the migration ladder, the screen fixtures, the crypto vectors and the down-only ledgers. |
 | `mobile/` | The C ABI binding, the Jetpack Compose shell, the SwiftUI shell, and the Maestro flows. **The only shell.** |
-| `packages/design`, `packages/test-kit` | The design tokens every surface lowers, and shared TypeScript test helpers. |
+| `design/`, `crates/design` | Mockups, values-only tokens and Rust-owned identity decisions; generate resources with `cargo xtask design`. |
+| `packages/test-kit` | Shared TypeScript test helpers. |
 | `design/`, `copy/` | Emitted artifacts — the native theme and one copy leaf per app — written by one command and gated against drift. |
 | `deploy/` | The container images, the OS service units and the installer. |
 
@@ -130,7 +131,7 @@ bun install
 
 iOS needs an Apple toolchain and is an owner hand-off — the exact commands are in [`mobile/README.md`](mobile/README.md).
 
-Formatting, linting and the TypeScript that remains (`packages/design`, `packages/test-kit` and the tooling under `scripts/`) run through the root scripts: `bun run format`, `bun run lint`, `bun run typecheck`, and `bun run check` for all of them plus the tests. Enable the commit hooks once per clone with `git config core.hooksPath .githooks`.
+Formatting, linting and the TypeScript that remains (`packages/test-kit` and the tooling under `scripts/`) run through the root scripts: `bun run format`, `bun run lint`, `bun run typecheck`, and `bun run check` for all of them plus the tests. Enable the commit hooks once per clone with `git config core.hooksPath .githooks`.
 
 ## Documentation
 

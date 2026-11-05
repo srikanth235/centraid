@@ -247,6 +247,36 @@
       "verb": "untag"
     },
     {
+      "action": "flag-task",
+      "app": "agenda",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "star"
+    },
+    {
+      "action": "unflag-task",
+      "app": "agenda",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "unstar"
+    },
+    {
+      "action": "reorder-task",
+      "app": "agenda",
+      "command": "task.reorder",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": "before_id",
+      "verb": "edit"
+    },
+    {
       "action": "create-text",
       "app": "docs",
       "command": "document.create_text",
@@ -1327,6 +1357,42 @@
         "verb": "create"
       },
       {
+        "action": "import-reminders",
+        "also": [],
+        "app": "agenda",
+        "bulk": true,
+        "chat": "card",
+        "command": "follow.reminders",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "import my reminders",
+          "import reminders from a task file",
+          "bring in my reminder lists"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "import"
+      },
+      {
+        "action": "calendar-written",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "card",
+        "command": "follow.calendar_written",
+        "inverse": null,
+        "kind": "event",
+        "phrasings": [
+          "record my calendar changes",
+          "acknowledge the calendar update",
+          "remember the saved calendar event"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
         "action": "edit-task",
         "also": [
           "reschedule"
@@ -1581,6 +1647,114 @@
         "qualifier": null,
         "sealed": [],
         "verb": "import"
+      },
+      {
+        "action": "flag-task",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "flag.set",
+        "inverse": "unflag-task",
+        "kind": "task",
+        "phrasings": [
+          "Flag buy milk",
+          "Flag this reminder",
+          "Mark this task as flagged"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "star"
+      },
+      {
+        "action": "unflag-task",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "flag.clear",
+        "inverse": "flag-task",
+        "kind": "task",
+        "phrasings": [
+          "Remove flag from buy milk",
+          "Unflag this reminder",
+          "Clear the flag on this task"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unstar"
+      },
+      {
+        "action": "reorder-task",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "task.reorder",
+        "inverse": "reorder-task",
+        "kind": "task",
+        "phrasings": [
+          "Move buy milk before call plumber",
+          "Reorder this reminder to the end",
+          "Put this task before that one"
+        ],
+        "qualifier": "before_id",
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "create-calendar",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "card",
+        "command": "container.create",
+        "inverse": null,
+        "kind": "event",
+        "phrasings": [
+          "Create a calendar called Work",
+          "Add a Personal calendar",
+          "Make a calendar for family events"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "style-list",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "card",
+        "command": "container.style",
+        "inverse": null,
+        "kind": "list",
+        "phrasings": [
+          "Make my Work list blue",
+          "Change the Family calendar icon",
+          "Use a heart icon for this list"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "clear-completed",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "card",
+        "command": "task.clear_completed",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "Clear all completed reminders",
+          "Clear completed tasks in this list",
+          "Remove completed reminders from Today"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "delete"
       },
       {
         "action": "upload",
@@ -1907,6 +2081,24 @@
         "qualifier": null,
         "sealed": [],
         "verb": "delete"
+      },
+      {
+        "action": "color-label",
+        "also": [],
+        "app": "docs",
+        "bulk": false,
+        "chat": "card",
+        "command": "tag.color",
+        "inverse": null,
+        "kind": "tag",
+        "phrasings": [
+          "make the travel label violet",
+          "set the tax label to blue",
+          "change the home label color to petrol"
+        ],
+        "qualifier": "color",
+        "sealed": [],
+        "verb": "edit"
       },
       {
         "action": "record-days",
@@ -4148,6 +4340,14 @@
         "query": "trash"
       },
       {
+        "app": "agenda",
+        "figures": [
+          "alerts"
+        ],
+        "kind": "event",
+        "query": "notifications"
+      },
+      {
         "app": "docs",
         "figures": [
           "folders",
@@ -4858,7 +5058,7 @@
       ]
     },
     {
-      "card": "task: name, date (due), status (open|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen cancel delete restore add_to remove_from tag untag",
+      "card": "task: name, date (due), status (open|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen cancel delete restore star unstar add_to remove_from tag untag",
       "container": false,
       "date": {
         "label": "due",
@@ -4969,6 +5169,8 @@
         "cancel",
         "delete",
         "restore",
+        "star",
+        "unstar",
         "add_to",
         "remove_from",
         "tag",
@@ -6097,6 +6299,7 @@
     "task.edit",
     "task.organize",
     "task.reopen",
+    "task.reorder",
     "txn.unlink_transfer",
     "workout.edit",
     "workout.log"
@@ -6473,6 +6676,10 @@
           "flag.set"
         ],
         [
+          "task",
+          "flag.set"
+        ],
+        [
           "note",
           "flag.set"
         ],
@@ -6499,6 +6706,10 @@
       "commands": [
         [
           "person",
+          "flag.clear"
+        ],
+        [
+          "task",
           "flag.clear"
         ],
         [

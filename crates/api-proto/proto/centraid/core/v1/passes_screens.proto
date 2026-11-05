@@ -9,6 +9,7 @@ syntax = "proto3";
 package centraid.core.v1;
 
 import "centraid/core/v1/phone.proto";
+import "centraid/core/v1/notifications_screens.proto";
 
 // ---------------------------------------------------------------------------
 // Facts the shell reports (ScreenRequest 1500 / ScreenEvent 1500)
@@ -23,6 +24,7 @@ message ShellFact {
     PassAsked asked = 5;
     UploadSettled settled = 6;
     UploadsDrained drained = 7;
+    AgendaNotificationAction agenda_notification = 8;
   }
 }
 

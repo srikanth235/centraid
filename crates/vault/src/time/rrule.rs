@@ -1,53 +1,18 @@
-//! ONE RRULE PARSER, THREE CALL SHAPES (#1020, D-1020-S1).
+//! One RFC 5545 RRULE parser shared by write validation, inspection and expansion.
 //!
-//! The reason: every part outside the supported subset used to be read past
-//! in silence, so `FREQ=MONTHLY;BYSETPOS=-1` parsed as a plain monthly rule
-//! and a "last Friday of the month" reminder fired on the wrong date forever.
-//! A silently dropped part is worse than an unsupported one — the wrong
-//! answer wears the same face as the right one.
-//!
-//! The three shapes, and which surface takes which:
-//!
-//! | Shape | Who calls it | What it answers |
-//! |---|---|---|
-//! | [`assert_supported`] | a WRITE boundary — `schedule.propose_event`, `schedule.edit_event`, `schedule.add_task`, `schedule.edit_task` | accept the rule, or refuse it where the member wrote it |
-//! | [`inspect`] | a surface that can REPORT — a precondition, a doctor, a manifest validator | the parsed rule, or the typed refusal and its sentence |
-//! | [`parse`] | a READ surface with nothing to say | the rule, or `None` — **never a plausible series that means something else** |
-//!
-//! [`super::recurrence::expand`] is built on [`parse`], so a refused rule
-//! expands to NO occurrences rather than to a plausible-but-wrong series.
-//!
-//! ## The subset
-//!
-//! Supported: `FREQ ∈ DAILY | WEEKLY | MONTHLY | YEARLY`, with
-//! `INTERVAL`, `COUNT`, `UNTIL`, and a day part under exactly two shapes:
-//!
-//! - **WEEKLY** takes a `BYDAY` list of plain day tokens (`MO,WE`).
-//! - **MONTHLY** takes ONE of (#1119, R-1119-1) — never both, never a list:
-//!   - one **positional `BYDAY`**, `1MO`..`4SU` or `-1MO`..`-1SU` (the nth
-//!     weekday of the month, or the last);
-//!   - one **`BYMONTHDAY`**, `1..=31` or `-1` (the last day). RFC 5545's
-//!     meaning: a month that lacks the day has NO occurrence that month
-//!     (`BYMONTHDAY=31` skips February, April, June, September, November),
-//!     and a rule that never lands expands to nothing. `COUNT` counts the
-//!     occurrences, not the months.
-//!
-//! Refused, each with the reason accepting it would be a lie: `BYSETPOS`,
-//! `BYMONTH`, `BYYEARDAY`, `BYWEEKNO`, `BYHOUR`, `BYMINUTE`, `BYSECOND`;
-//! sub-daily `FREQ` (`HOURLY`, `MINUTELY`, `SECONDLY`); a `BYDAY` that is not
-//! WEEKLY's day list or MONTHLY's one positional day (a MONTHLY list, a
-//! MONTHLY plain day, the ordinals 5 and -2..-5, anything under YEARLY or
-//! DAILY); a `BYMONTHDAY` outside MONTHLY, a list, a value outside `1..=31`
-//! and `-1`, or one beside a `BYDAY`; and a non-`SU` `WKST` under
-//! `INTERVAL > 1`.
+//! All seven frequencies and the standard BY* parts are supported. The civil
+//! candidate engine applies filters before BYSETPOS, then resolves each wall
+//! time through FireZone. Unknown extensions, malformed values and invalid RFC
+//! combinations are refused instead of silently changing the requested series.
+//! The vault clock has no leap-second slot: RFC 5545 maps second 60 to 59.
 
-/// The seven day tokens, in the order `BYDAY` offsets are taken from — Sunday
-/// first, because `weekly_candidates` anchors on the week's Sunday.
 pub const DAY_TOKENS: [&str; 7] = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
-/// How often a rule repeats. A CLOSED set: everything else is refused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Freq {
+    Secondly,
+    Minutely,
+    Hourly,
     Daily,
     Weekly,
     Monthly,
@@ -58,15 +23,20 @@ impl Freq {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::Secondly => "SECONDLY",
+            Self::Minutely => "MINUTELY",
+            Self::Hourly => "HOURLY",
             Self::Daily => "DAILY",
             Self::Weekly => "WEEKLY",
             Self::Monthly => "MONTHLY",
             Self::Yearly => "YEARLY",
         }
     }
-
     const fn unit(self) -> &'static str {
         match self {
+            Self::Secondly => "second",
+            Self::Minutely => "minute",
+            Self::Hourly => "hour",
             Self::Daily => "day",
             Self::Weekly => "week",
             Self::Monthly => "month",
@@ -75,160 +45,89 @@ impl Freq {
     }
 }
 
-/// The ONE day a `FREQ=MONTHLY` rule pins each month to (#1119, R-1119-1).
+/// A simple monthly pin, retained for the familiar recurrence sentences.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MonthlyPin {
-    /// `BYMONTHDAY`: `1..=31`, or `-1` for the month's last day.
     MonthDay(i64),
-    /// A positional `BYDAY`: `ordinal` is `1..=4` or `-1` (the last).
     NthWeekday { ordinal: i64, day: &'static str },
 }
 
-/// A rule this engine will expand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ByWeekday {
+    pub day: i64,
+    pub ordinal: Option<i64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedRrule {
     pub freq: Freq,
     pub interval: i64,
     pub count: Option<i64>,
     pub until: Option<String>,
-    /// WEEKLY only, and in the order they were written. MONTHLY's one
-    /// positional day is [`ParsedRrule::monthly_pin`], not a list.
+    /// Plain weekly days, in written order, for the recurrence sentence.
     pub by_day: Option<Vec<&'static str>>,
-    /// MONTHLY only: the one day each month is pinned to, if any.
     pub monthly_pin: Option<MonthlyPin>,
+    pub weekdays: Vec<ByWeekday>,
+    pub month_days: Vec<i64>,
+    pub months: Vec<i64>,
+    pub year_days: Vec<i64>,
+    pub week_numbers: Vec<i64>,
+    pub hours: Vec<i64>,
+    pub minutes: Vec<i64>,
+    pub seconds: Vec<i64>,
+    pub set_positions: Vec<i64>,
+    /// Sunday zero; RFC 5545 defaults to Monday.
+    pub week_start: i64,
 }
 
-/// The parts the expander cannot honour, each with the reason accepting it
-/// would be a lie. **A table, not a chain of `if`s**: this list IS the
-/// engine's stated scope, and the refusal message quotes it back. (`BYMONTHDAY`
-/// is here for the refusals it still gets, with the sentence the corpus holds:
-/// MONTHLY's one day is read past this table in [`inspect`].)
-const UNSUPPORTED_PARTS: [(&str, &str); 8] = [
-    (
-        "BYSETPOS",
-        "selects the nth candidate within each period; the expander emits every candidate",
-    ),
-    (
-        "BYMONTHDAY",
-        "pins occurrences to days of the month, which only a MONTHLY rule may do, with one day \
-         (1 to 31, or -1 for the last) and no BYDAY beside it",
-    ),
-    (
-        "BYMONTH",
-        "restricts occurrences to named months; the expander does not filter by month",
-    ),
-    (
-        "BYYEARDAY",
-        "pins occurrences to days of the year; the expander steps from the anchor day",
-    ),
-    (
-        "BYWEEKNO",
-        "pins occurrences to ISO week numbers, which the expander does not compute",
-    ),
-    (
-        "BYHOUR",
-        "moves the time of day; the expander carries the anchor's wall clock unchanged",
-    ),
-    (
-        "BYMINUTE",
-        "moves the time of day; the expander carries the anchor's wall clock unchanged",
-    ),
-    (
-        "BYSECOND",
-        "moves the time of day; the expander carries the anchor's wall clock unchanged",
-    ),
-];
-
-const UNSUPPORTED_FREQS: [&str; 3] = ["HOURLY", "MINUTELY", "SECONDLY"];
-
-/// Why a rule was refused. Typed, so a caller reports the PART rather than a
-/// sentence it has to pattern-match.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Refusal {
-    /// No `FREQ` this engine recognises at all.
     Malformed,
-    /// A sub-daily frequency, named so the refusal can say which one arrived.
     UnsupportedFreq { freq: String },
-    /// A part outside the subset — one of [`UNSUPPORTED_PARTS`], or `BYDAY`
-    /// / `WKST` in a shape the expander cannot honour.
     UnsupportedPart { part: String },
+    InvalidPart { part: String, why: String },
 }
 
 impl Refusal {
-    /// ONE SENTENCE naming the part and why the engine will not pretend to
-    /// honour it. v0's `rruleRefusalMessage`, word for word — the corpus in
-    /// `contracts/time/rrule-cases.json` compares these strings — except the
-    /// `BYDAY` and `BYMONTHDAY` sentences, which #1119 rewrote when the subset
-    /// took one month position: v0's words said no positional day could ever
-    /// be honoured, which a member would now read as false
-    /// (`time_corpus.rs::REWORDED_1119`).
     #[must_use]
     pub fn message(&self) -> String {
         match self {
-            Self::Malformed => "recurrence rule has no supported FREQ (expected DAILY, WEEKLY, \
-                                MONTHLY or YEARLY)"
-                .to_owned(),
-            Self::UnsupportedFreq { freq } => format!(
-                "recurrence rule uses FREQ={freq}, which this engine does not expand (sub-daily \
-                 recurrence is not supported)"
-            ),
-            Self::UnsupportedPart { part } if part == "BYDAY" => {
-                "recurrence rule uses a BYDAY this engine cannot honour: a list of days steers \
-                 WEEKLY expansion, a MONTHLY rule takes one positional day (\"2MO\", \"-1FR\") \
-                 and nothing else, and a non-day token is not a rule it can expand"
-                    .to_owned()
-            }
-            Self::UnsupportedPart { part } if part == "WKST" => {
-                "recurrence rule sets WKST to a day other than SU with INTERVAL>1; this engine \
-                 starts every week on Sunday, so the periods would not line up"
-                    .to_owned()
-            }
-            Self::UnsupportedPart { part } => {
-                let why = UNSUPPORTED_PARTS
-                    .iter()
-                    .find(|(name, _)| name == part)
-                    .map_or("is outside the supported subset", |(_, why)| *why);
-                format!("recurrence rule uses {part}, which this engine cannot honour: it {why}")
-            }
+            Self::Malformed => "recurrence rule has no supported FREQ (expected SECONDLY, MINUTELY, HOURLY, DAILY, WEEKLY, MONTHLY or YEARLY)".to_owned(),
+            Self::UnsupportedFreq { freq } => format!("recurrence rule uses an unsupported FREQ={freq}"),
+            Self::UnsupportedPart { part } => format!("recurrence rule uses {part}, which is not a supported RFC 5545 rule part"),
+            Self::InvalidPart { part, why } => format!("recurrence rule has invalid {part}: {why}"),
         }
     }
-
-    /// The refusal's own tag, for a fixture and a receipt.
     #[must_use]
     pub fn reason(&self) -> &'static str {
         match self {
             Self::Malformed => "malformed",
             Self::UnsupportedFreq { .. } => "unsupported-freq",
             Self::UnsupportedPart { .. } => "unsupported-part",
+            Self::InvalidPart { .. } => "invalid-part",
         }
     }
 }
-
 impl std::fmt::Display for Refusal {
     fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         out.write_str(&self.message())
     }
 }
-
 impl std::error::Error for Refusal {}
 
-/// Canonical bare RRULE body (`FREQ=…`).
-///
-/// Strips a leading `RRULE:` (Google Calendar and ICS both emit the prefixed
-/// form) and removes all whitespace, so schedule preconditions, the parser and
-/// an ICS export share one shape.
 #[must_use]
 pub fn canonicalize(value: &str) -> String {
     let trimmed = value.trim_start();
-    let body = if trimmed.len() >= 6 && trimmed[..6].eq_ignore_ascii_case("RRULE:") {
+    let body = if trimmed
+        .get(..6)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("RRULE:"))
+    {
         &trimmed[6..]
     } else {
         trimmed
     };
     body.chars().filter(|c| !c.is_whitespace()).collect()
 }
-
-/// Prefixed RRULE line for Google/ICS writeback, without double-prefixing.
 #[must_use]
 pub fn rrule_line(value: &str) -> String {
     let bare = canonicalize(value);
@@ -239,212 +138,279 @@ pub fn rrule_line(value: &str) -> String {
     }
 }
 
-/// `NAME=value` pairs of a canonical rule, upper-cased on both sides.
-fn parts_of(value: &str) -> Vec<(String, String)> {
-    canonicalize(value)
-        .split(';')
-        .filter_map(|segment| {
-            let equals = segment.find('=')?;
-            Some((
-                segment[..equals].trim().to_ascii_uppercase(),
-                segment[equals + 1..].trim().to_ascii_uppercase(),
-            ))
-        })
-        .collect()
-}
-
-fn part(parts: &[(String, String)], name: &str) -> Option<String> {
-    parts
-        .iter()
-        .find(|(key, _)| key == name)
-        .map(|(_, value)| value.clone())
-}
-
-/// v0's `positiveInteger`: `COUNT=0` is invalid ICS, and a non-positive bound
-/// is treated as a single occurrence rather than as unbounded expansion.
-fn positive_integer(value: Option<&str>) -> Option<i64> {
-    let text = value?;
-    let parsed = text.parse::<f64>().ok()?;
-    if !parsed.is_finite() {
-        return None;
+fn invalid(part: &str, why: impl Into<String>) -> Refusal {
+    Refusal::InvalidPart {
+        part: part.to_owned(),
+        why: why.into(),
     }
-    let truncated = parsed.trunc() as i64;
-    Some(if truncated > 0 { truncated } else { 1 })
 }
 
-/// A positional BYDAY member: `2MO`, `-1FR` — the nth weekday of a period.
-/// Returns the ordinal as written (`0` and `5..=99` included) and the day.
-fn positional_day(token: &str) -> Option<(i64, &'static str)> {
-    let (negative, rest) = match token.as_bytes().first() {
-        Some(b'-') => (true, &token[1..]),
-        Some(b'+') => (false, &token[1..]),
-        _ => (false, token),
+fn numbers(
+    parts: &std::collections::BTreeMap<String, String>,
+    name: &str,
+    min: i64,
+    max: i64,
+    zero: bool,
+) -> Result<Vec<i64>, Refusal> {
+    let Some(raw) = parts.get(name) else {
+        return Ok(Vec::new());
     };
-    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
-    if digits.is_empty() || digits.len() > 2 {
-        return None;
-    }
-    let day = DAY_TOKENS
-        .iter()
-        .copied()
-        .find(|day| *day == &rest[digits.len()..])?;
-    let ordinal: i64 = digits.parse().ok()?;
-    Some((if negative { -ordinal } else { ordinal }, day))
-}
-
-/// Which BYDAY reading a rule asked for.
-enum ByDay {
-    /// WEEKLY's day list, in the order it was written.
-    Weekly(Vec<&'static str>),
-    /// MONTHLY's one positional day.
-    Monthly(MonthlyPin),
-}
-
-/// The days, or the refusal that stops them being dropped.
-///
-/// WEEKLY expansion reads a list of plain days, and MONTHLY reads ONE
-/// positional day (`2MO`, `-1FR`; ordinals 1..=4 and -1: the 5th is a day
-/// some months lack and `-2`..`-5` count from the end, and the expander does
-/// neither). Anywhere else BYDAY names a different rule ("every Monday IN the
-/// month", a MONTHLY list), and filtering it left a rule that parsed and meant
-/// something else — `BYDAY=1MO` became plain WEEKLY, firing every Monday.
-fn read_by_day(raw: Option<&str>, freq: Freq) -> Result<Option<ByDay>, Refusal> {
-    let Some(raw) = raw else { return Ok(None) };
-    let refused = || Refusal::UnsupportedPart {
-        part: "BYDAY".to_owned(),
-    };
-    match freq {
-        Freq::Weekly => {
-            let mut days = Vec::new();
-            for token in raw.split(',') {
-                let token = token.trim();
-                if positional_day(token).is_some() {
-                    return Err(refused());
-                }
-                match DAY_TOKENS.iter().find(|day| **day == token) {
-                    Some(day) => days.push(*day),
-                    None => return Err(Refusal::Malformed),
-                }
-            }
-            Ok(Some(ByDay::Weekly(days)))
+    let mut values = Vec::new();
+    for text in raw.split(',') {
+        let value = text
+            .parse::<i64>()
+            .map_err(|_| invalid(name, "expected comma-separated integers"))?;
+        if !(min..=max).contains(&value) || (!zero && value == 0) {
+            return Err(invalid(
+                name,
+                format!(
+                    "expected values from {min} to {max}{}",
+                    if zero { "" } else { ", excluding zero" }
+                ),
+            ));
         }
-        Freq::Monthly => match positional_day(raw.trim()) {
-            Some((ordinal, day)) if matches!(ordinal, 1..=4 | -1) => {
-                Ok(Some(ByDay::Monthly(MonthlyPin::NthWeekday {
-                    ordinal,
-                    day,
-                })))
-            }
-            _ => Err(refused()),
-        },
-        _ => Err(refused()),
+        values.push(value);
     }
+    values.sort_unstable();
+    values.dedup();
+    Ok(values)
 }
 
-/// The one `BYMONTHDAY` a MONTHLY rule may carry: `1..=31` or `-1`. `Err(())`
-/// is "present and not honourable" — outside MONTHLY, a list, out of range,
-/// not a number, or beside a `BYDAY`.
-fn read_month_day(
-    raw: Option<&str>,
-    freq: Freq,
-    has_by_day: bool,
-) -> Result<Option<MonthlyPin>, ()> {
-    let Some(raw) = raw else { return Ok(None) };
-    if freq != Freq::Monthly || has_by_day {
-        return Err(());
+fn positive(
+    parts: &std::collections::BTreeMap<String, String>,
+    name: &str,
+) -> Result<Option<i64>, Refusal> {
+    let Some(raw) = parts.get(name) else {
+        return Ok(None);
+    };
+    let value = raw
+        .parse::<i64>()
+        .map_err(|_| invalid(name, "expected a positive integer"))?;
+    // Old vaults used non-positive COUNT as one, never as an unbounded series. Keep
+    // that safe interpretation; nonsensical text no longer becomes infinite.
+    if !(-i64::from(i32::MAX)..=i64::from(i32::MAX)).contains(&value) {
+        return Err(invalid(name, "expected an integer from 1 to 2147483647"));
     }
-    match raw.trim().parse::<i64>() {
-        Ok(day @ (1..=31 | -1)) => Ok(Some(MonthlyPin::MonthDay(day))),
-        _ => Err(()),
-    }
+    Ok(Some(value.max(1)))
 }
 
-/// **Shape 2 — parse a rule, or say why it cannot be honoured.** THE parser:
-/// [`parse`] and [`assert_supported`] both read a rule through here.
-///
-/// WKST is refused rather than implemented: it only changes an expansion when
-/// `INTERVAL > 1`, and `WKST=SU` is what the weekly candidate walk already
-/// assumes, so refusing exactly the cases that would differ leaves every
-/// accepted rule identical and never relocates a fortnightly series by up to
-/// six days.
+/// Parse exactly the RFC parts the candidate engine can honour.
 pub fn inspect(value: &str) -> Result<ParsedRrule, Refusal> {
-    let parts = parts_of(value);
-    let freq_text = part(&parts, "FREQ");
-    if let Some(freq) = freq_text.as_deref()
-        && UNSUPPORTED_FREQS.contains(&freq)
+    const PARTS: [&str; 14] = [
+        "FREQ",
+        "UNTIL",
+        "COUNT",
+        "INTERVAL",
+        "BYSECOND",
+        "BYMINUTE",
+        "BYHOUR",
+        "BYDAY",
+        "BYMONTHDAY",
+        "BYYEARDAY",
+        "BYWEEKNO",
+        "BYMONTH",
+        "BYSETPOS",
+        "WKST",
+    ];
+    let mut parts = std::collections::BTreeMap::new();
+    for segment in canonicalize(value)
+        .to_ascii_uppercase()
+        .split(';')
+        .filter(|segment| !segment.is_empty())
     {
-        return Err(Refusal::UnsupportedFreq {
-            freq: freq.to_owned(),
-        });
+        let Some((key, value)) = segment.split_once('=') else {
+            return Err(Refusal::Malformed);
+        };
+        if !PARTS.contains(&key) {
+            return Err(Refusal::UnsupportedPart {
+                part: key.to_owned(),
+            });
+        }
+        if parts.insert(key.to_owned(), value.to_owned()).is_some() {
+            return Err(invalid(key, "each part may appear only once"));
+        }
     }
-    let freq = match freq_text.as_deref() {
+    let freq = match parts.get("FREQ").map(String::as_str) {
+        Some("SECONDLY") => Freq::Secondly,
+        Some("MINUTELY") => Freq::Minutely,
+        Some("HOURLY") => Freq::Hourly,
         Some("DAILY") => Freq::Daily,
         Some("WEEKLY") => Freq::Weekly,
         Some("MONTHLY") => Freq::Monthly,
         Some("YEARLY") => Freq::Yearly,
         _ => return Err(Refusal::Malformed),
     };
-    let month_day = read_month_day(
-        part(&parts, "BYMONTHDAY").as_deref(),
-        freq,
-        part(&parts, "BYDAY").is_some(),
-    );
-    for (name, _) in UNSUPPORTED_PARTS {
-        // The one `BYMONTHDAY` a MONTHLY rule may carry is read below.
-        if name == "BYMONTHDAY" && matches!(month_day, Ok(Some(_))) {
-            continue;
-        }
-        if part(&parts, name).is_some() {
-            return Err(Refusal::UnsupportedPart {
-                part: name.to_owned(),
+    let interval = positive(&parts, "INTERVAL")?.unwrap_or(1);
+    let count = positive(&parts, "COUNT")?;
+    let until = parts.get("UNTIL").cloned();
+    if count.is_some() && until.is_some() {
+        return Err(invalid("UNTIL", "COUNT and UNTIL cannot be used together"));
+    }
+    if let Some(until) = &until {
+        // The shared civil parser accepts both ICS basic and existing vault ISO dates.
+        let basic = matches!(until.len(), 8 | 15 | 16)
+            && until.as_bytes().get(4).is_some_and(u8::is_ascii_digit);
+        let shape = basic || super::temporal::classify(until).is_some();
+        let valid = shape
+            && super::recurrence::parse_basic_instant(until).is_some_and(|value| {
+                let wall = super::zone::wall_from_epoch(value);
+                (1..=9999).contains(&wall.year)
             });
+        if !valid {
+            return Err(invalid("UNTIL", "expected a valid date or date-time"));
         }
     }
-    let interval = positive_integer(part(&parts, "INTERVAL").as_deref()).unwrap_or(1);
-    if let Some(wkst) = part(&parts, "WKST")
-        && wkst != "SU"
-        && interval > 1
-    {
-        return Err(Refusal::UnsupportedPart {
-            part: "WKST".to_owned(),
-        });
+    let mut weekdays = Vec::new();
+    let mut plain = Vec::new();
+    if let Some(raw) = parts.get("BYDAY") {
+        for token in raw.split(',') {
+            let Some((day, suffix)) = DAY_TOKENS
+                .iter()
+                .enumerate()
+                .find(|(_, day)| token.ends_with(**day))
+            else {
+                return Err(invalid(
+                    "BYDAY",
+                    "expected MO, TU, WE, TH, FR, SA or SU with an optional ordinal",
+                ));
+            };
+            let prefix = &token[..token.len() - suffix.len()];
+            let ordinal = if prefix.is_empty() {
+                None
+            } else {
+                let n = prefix
+                    .parse::<i64>()
+                    .map_err(|_| invalid("BYDAY", "invalid weekday ordinal"))?;
+                if n == 0 || !(-53..=53).contains(&n) {
+                    return Err(invalid(
+                        "BYDAY",
+                        "weekday ordinals run from -53 to 53, excluding zero",
+                    ));
+                }
+                if !matches!(freq, Freq::Monthly | Freq::Yearly)
+                    || (freq == Freq::Yearly && parts.contains_key("BYWEEKNO"))
+                {
+                    return Err(invalid(
+                        "BYDAY",
+                        "ordinal weekdays require MONTHLY or YEARLY without BYWEEKNO",
+                    ));
+                }
+                Some(n)
+            };
+            weekdays.push(ByWeekday {
+                day: day as i64,
+                ordinal,
+            });
+            if ordinal.is_none() {
+                plain.push(*suffix);
+            }
+        }
     }
-    let (by_day, day_pin) = match read_by_day(part(&parts, "BYDAY").as_deref(), freq)? {
-        Some(ByDay::Weekly(days)) => (Some(days), None),
-        Some(ByDay::Monthly(pin)) => (None, Some(pin)),
-        None => (None, None),
+    let month_days = numbers(&parts, "BYMONTHDAY", -31, 31, false)?;
+    let months = numbers(&parts, "BYMONTH", 1, 12, false)?;
+    let year_days = numbers(&parts, "BYYEARDAY", -366, 366, false)?;
+    let week_numbers = numbers(&parts, "BYWEEKNO", -53, 53, false)?;
+    let hours = numbers(&parts, "BYHOUR", 0, 23, true)?;
+    let minutes = numbers(&parts, "BYMINUTE", 0, 59, true)?;
+    let mut seconds = numbers(&parts, "BYSECOND", 0, 60, true)?;
+    // RFC 5545 §3.3.5: a clock without leap-second support interprets 60 as
+    // 59. The recurrence set still contains that instant only once.
+    for second in &mut seconds {
+        *second = (*second).min(59);
+    }
+    seconds.dedup();
+    let set_positions = numbers(&parts, "BYSETPOS", -366, 366, false)?;
+    if freq == Freq::Weekly && !month_days.is_empty() {
+        return Err(invalid("BYMONTHDAY", "not valid with WEEKLY"));
+    }
+    if matches!(freq, Freq::Daily | Freq::Weekly | Freq::Monthly) && !year_days.is_empty() {
+        return Err(invalid(
+            "BYYEARDAY",
+            "requires YEARLY or a subdaily frequency",
+        ));
+    }
+    if freq != Freq::Yearly && !week_numbers.is_empty() {
+        return Err(invalid("BYWEEKNO", "requires YEARLY"));
+    }
+    if !set_positions.is_empty() && !parts.keys().any(|p| p.starts_with("BY") && p != "BYSETPOS") {
+        return Err(invalid(
+            "BYSETPOS",
+            "requires another BY part to select candidates from",
+        ));
+    }
+    let week_start = match parts.get("WKST") {
+        None => 1,
+        Some(day) => DAY_TOKENS
+            .iter()
+            .position(|token| token == day)
+            .ok_or_else(|| invalid("WKST", "expected a weekday token"))?
+            as i64,
+    };
+    let monthly_pin = if freq == Freq::Monthly
+        && months.is_empty()
+        && year_days.is_empty()
+        && week_numbers.is_empty()
+        && hours.is_empty()
+        && minutes.is_empty()
+        && seconds.is_empty()
+        && set_positions.is_empty()
+    {
+        if let [weekday] = weekdays.as_slice() {
+            if month_days.is_empty() {
+                weekday.ordinal.map(|ordinal| MonthlyPin::NthWeekday {
+                    ordinal,
+                    day: DAY_TOKENS[weekday.day as usize],
+                })
+            } else {
+                None
+            }
+        } else if weekdays.is_empty() && month_days.len() == 1 {
+            Some(MonthlyPin::MonthDay(month_days[0]))
+        } else {
+            None
+        }
+    } else {
+        None
     };
     Ok(ParsedRrule {
         freq,
         interval,
-        count: positive_integer(part(&parts, "COUNT").as_deref()),
-        until: part(&parts, "UNTIL"),
-        by_day,
-        monthly_pin: day_pin.or(month_day.ok().flatten()),
+        count,
+        until,
+        by_day: (freq == Freq::Weekly && !plain.is_empty()).then_some(plain),
+        monthly_pin,
+        weekdays,
+        month_days,
+        months,
+        year_days,
+        week_numbers,
+        hours,
+        minutes,
+        seconds,
+        set_positions,
+        week_start,
     })
 }
+/// Validate the DTSTART value type as well as the rule. RFC date anchors
+/// cannot carry a subdaily frequency; date/time selectors never invent a time.
+pub fn inspect_for_date(value: &str, all_day: bool) -> Result<ParsedRrule, Refusal> {
+    let rule = inspect(value)?;
+    if all_day && rule.freq < Freq::Daily {
+        return Err(invalid(
+            "FREQ",
+            "a repeat more often than daily needs a start time",
+        ));
+    }
+    Ok(rule)
+}
 
-/// **Shape 3 — the parsed rule, or `None`.** For read surfaces with nothing to
-/// say about a refusal: the expander returns no occurrences rather than a
-/// series that means something else.
 #[must_use]
 pub fn parse(value: &str) -> Option<ParsedRrule> {
     inspect(value).ok()
 }
-
-/// **Shape 1 — accept the rule, or refuse it.** A command that STORES an
-/// RRULE calls this, so an unhonourable rule is refused where the member wrote
-/// it instead of becoming a row whose expansion is quietly wrong.
-///
-/// # Errors
-///
-/// The typed [`Refusal`], carrying the sentence the member reads.
 pub fn assert_supported(value: &str) -> Result<ParsedRrule, Refusal> {
     inspect(value)
 }
-
-/// The refusal sentence a command precondition prints, with the rule quoted —
-/// v0's `UnsupportedRruleError`'s message.
 #[must_use]
 pub fn refusal_sentence(refusal: &Refusal, rrule: &str) -> String {
     format!("{} (rule: {})", refusal.message(), canonicalize(rrule))
@@ -489,11 +455,12 @@ fn join_days(days: &[&str]) -> String {
     }
 }
 
-const ORDINAL_WORDS: [(i64, &str); 5] = [
+const ORDINAL_WORDS: [(i64, &str); 6] = [
     (1, "first"),
     (2, "second"),
     (3, "third"),
     (4, "fourth"),
+    (5, "fifth"),
     (-1, "last"),
 ];
 
@@ -514,12 +481,22 @@ fn day_of_month_label(day: i64) -> String {
 fn pin_label(pin: MonthlyPin) -> String {
     match pin {
         MonthlyPin::MonthDay(-1) => "the last day".to_owned(),
+        MonthlyPin::MonthDay(day) if day < 0 => {
+            format!("the {} day from the end", day_of_month_label(-day))
+        }
         MonthlyPin::MonthDay(day) => format!("the {}", day_of_month_label(day)),
         MonthlyPin::NthWeekday { ordinal, day } => {
             let word = ORDINAL_WORDS
                 .iter()
                 .find(|(value, _)| *value == ordinal)
-                .map_or("", |(_, word)| *word);
+                .map(|(_, word)| (*word).to_owned())
+                .unwrap_or_else(|| {
+                    if ordinal < 0 {
+                        format!("{} from last", day_of_month_label(-ordinal))
+                    } else {
+                        day_of_month_label(ordinal)
+                    }
+                });
             format!("the {word} {}", day_name(day))
         }
     }
@@ -560,6 +537,98 @@ fn cadence(rule: &ParsedRrule) -> String {
         return format!("Every other {}", join_days(days));
     }
     format!("{every} on {}", join_days(days))
+}
+
+fn custom_details(rule: &ParsedRrule) -> String {
+    let mut details = Vec::new();
+    if rule.monthly_pin.is_none() {
+        if rule.by_day.is_none() && !rule.weekdays.is_empty() {
+            let days: Vec<String> = rule
+                .weekdays
+                .iter()
+                .map(|day| {
+                    let token = DAY_TOKENS[day.day as usize];
+                    day.ordinal.map_or_else(
+                        || day_name(token).to_owned(),
+                        |ordinal| {
+                            pin_label(MonthlyPin::NthWeekday {
+                                ordinal,
+                                day: token,
+                            })
+                        },
+                    )
+                })
+                .collect();
+            details.push(format!("on {}", days.join(", ")));
+        }
+        if !rule.month_days.is_empty() {
+            details.push(format!(
+                "on {}",
+                rule.month_days
+                    .iter()
+                    .map(|day| pin_label(MonthlyPin::MonthDay(*day)))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+    }
+    if !rule.months.is_empty() {
+        details.push(format!(
+            "in {}",
+            rule.months
+                .iter()
+                .map(|month| MONTH_NAMES[(*month - 1) as usize])
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    for (name, values) in [
+        ("year days", &rule.year_days),
+        ("weeks", &rule.week_numbers),
+        ("hours", &rule.hours),
+        ("minutes", &rule.minutes),
+        ("seconds", &rule.seconds),
+    ] {
+        if !values.is_empty() {
+            details.push(format!(
+                "{name} {}",
+                values
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+    }
+    if !rule.set_positions.is_empty() {
+        let positions: Vec<String> = rule
+            .set_positions
+            .iter()
+            .map(|position| match position {
+                -1 => "last".to_owned(),
+                n if *n < 0 => format!("{} from last", day_of_month_label(-n)),
+                n => day_of_month_label(*n),
+            })
+            .collect();
+        details.push(format!(
+            "{} matching occurrence in each {}",
+            positions.join(", "),
+            rule.freq.unit()
+        ));
+    }
+    if ((rule.freq == Freq::Weekly && rule.interval > 1) || !rule.week_numbers.is_empty())
+        && rule.week_start != 1
+    {
+        details.push(format!(
+            "weeks start on {}",
+            day_name(DAY_TOKENS[rule.week_start as usize])
+        ));
+    }
+    if details.is_empty() {
+        String::new()
+    } else {
+        format!(" · {}", details.join(" · "))
+    }
 }
 
 /// UNTIL is a UTC instant in the rule itself; it carries no zone of its own.
@@ -603,7 +672,12 @@ fn ending(rule: &ParsedRrule) -> String {
 #[must_use]
 pub fn describe(value: &str) -> Option<String> {
     let rule = parse(value)?;
-    Some(format!("{}{}", cadence(&rule), ending(&rule)))
+    Some(format!(
+        "{}{}{}",
+        cadence(&rule),
+        custom_details(&rule),
+        ending(&rule)
+    ))
 }
 
 #[cfg(test)]
@@ -611,267 +685,126 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_cautionary_case_is_refused_and_says_why() {
-        let refusal = inspect("FREQ=MONTHLY;BYSETPOS=-1").expect_err("BYSETPOS is refused");
+    fn accepted_parts_have_typed_values_and_no_part_is_silently_dropped() {
+        let rule = inspect("RRULE:FREQ=YEARLY;INTERVAL=2;BYMONTH=3,11;BYDAY=-2MO,FR;BYHOUR=9,17;BYMINUTE=30;BYSECOND=15;BYSETPOS=-1;WKST=WE;COUNT=4").expect("RFC rule");
+        assert_eq!(rule.freq, Freq::Yearly);
+        assert_eq!(rule.interval, 2);
+        assert_eq!(rule.months, [3, 11]);
         assert_eq!(
-            refusal,
-            Refusal::UnsupportedPart {
-                part: "BYSETPOS".to_owned()
-            }
+            rule.weekdays,
+            [
+                ByWeekday {
+                    day: 1,
+                    ordinal: Some(-2)
+                },
+                ByWeekday {
+                    day: 5,
+                    ordinal: None
+                }
+            ]
         );
+        assert_eq!(rule.hours, [9, 17]);
+        assert_eq!(rule.minutes, [30]);
+        assert_eq!(rule.seconds, [15]);
+        assert_eq!(rule.set_positions, [-1]);
+        assert_eq!(rule.week_start, 3);
+        assert_eq!(rule.count, Some(4));
         assert!(
-            refusal.message().contains("emits every candidate"),
-            "the sentence names the reason: {}",
-            refusal.message()
+            matches!(inspect("FREQ=DAILY;BYEASTER=1"), Err(Refusal::UnsupportedPart { part }) if part == "BYEASTER")
         );
-        assert_eq!(parse("FREQ=MONTHLY;BYSETPOS=-1"), None);
     }
 
     #[test]
-    fn a_positional_byday_is_bysetpos_by_another_spelling() {
-        assert!(matches!(
-            inspect("FREQ=WEEKLY;BYDAY=-1FR"),
-            Err(Refusal::UnsupportedPart { ref part }) if part == "BYDAY"
-        ));
-        assert!(matches!(
-            inspect("FREQ=MONTHLY;BYDAY=MO"),
-            Err(Refusal::UnsupportedPart { ref part }) if part == "BYDAY"
-        ));
-        assert_eq!(inspect("FREQ=WEEKLY;BYDAY=XX"), Err(Refusal::Malformed));
+    fn all_standard_frequencies_are_supported() {
+        for frequency in [
+            "SECONDLY", "MINUTELY", "HOURLY", "DAILY", "WEEKLY", "MONTHLY", "YEARLY",
+        ] {
+            assert_eq!(
+                inspect(&format!("FREQ={frequency}"))
+                    .expect("frequency")
+                    .freq
+                    .as_str(),
+                frequency
+            );
+        }
+        assert_eq!(inspect("FREQ=FORTNIGHTLY"), Err(Refusal::Malformed));
     }
 
     #[test]
-    fn wkst_is_refused_only_where_it_would_differ() {
-        assert!(
-            inspect("FREQ=WEEKLY;WKST=MO").is_ok(),
-            "INTERVAL=1 cannot differ"
+    fn invalid_parts_are_named_and_cannot_become_infinite_series() {
+        for (part, rule) in [
+            ("COUNT", "FREQ=DAILY;COUNT=banana"),
+            ("COUNT", "FREQ=DAILY;COUNT=1.3"),
+            ("INTERVAL", "FREQ=DAILY;INTERVAL=1.5"),
+            ("FREQ", "FREQ=DAILY;FREQ=MONTHLY"),
+            ("UNTIL", "FREQ=DAILY;UNTIL=20260231T090000Z"),
+            ("UNTIL", "FREQ=DAILY;UNTIL=20260101T250000Z"),
+            ("UNTIL", "FREQ=DAILY;COUNT=2;UNTIL=20261231"),
+            ("BYSECOND", "FREQ=MINUTELY;BYSECOND=61"),
+            ("BYDAY", "FREQ=WEEKLY;BYDAY=-1FR"),
+            ("BYDAY", "FREQ=MONTHLY;BYDAY=MO,"),
+            ("BYDAY", "FREQ=YEARLY;BYWEEKNO=1;BYDAY=2MO"),
+            ("BYDAY", "FREQ=MONTHLY;BYDAY=0MO"),
+            ("BYMONTHDAY", "FREQ=WEEKLY;BYMONTHDAY=1"),
+            ("BYYEARDAY", "FREQ=DAILY;BYYEARDAY=2"),
+            ("BYWEEKNO", "FREQ=MONTHLY;BYWEEKNO=2"),
+            ("BYSETPOS", "FREQ=MONTHLY;BYSETPOS=-1"),
+            ("BYMONTH", "FREQ=YEARLY;BYMONTH=13"),
+            ("WKST", "FREQ=WEEKLY;WKST=XX"),
+        ] {
+            let error = inspect(rule).expect_err(rule);
+            assert!(
+                matches!(&error, Refusal::InvalidPart { part: found, .. } if found == part),
+                "{rule}: {error}"
+            );
+            assert!(error.message().contains(part));
+            assert!(parse(rule).is_none());
+        }
+        assert_eq!(
+            inspect("FREQ=DAILY;COUNT=0")
+                .expect("safe old-vault zero")
+                .count,
+            Some(1)
         );
-        assert!(matches!(
-            inspect("FREQ=WEEKLY;INTERVAL=2;WKST=MO"),
-            Err(Refusal::UnsupportedPart { ref part }) if part == "WKST"
-        ));
-        assert!(inspect("FREQ=WEEKLY;INTERVAL=2;WKST=SU").is_ok());
     }
 
     #[test]
-    fn the_prefixed_form_is_canonicalised() {
-        assert_eq!(canonicalize("RRULE:FREQ=DAILY"), "FREQ=DAILY");
+    fn familiar_sentences_and_new_custom_constraints_are_described() {
+        for (rule, expected) in [
+            ("FREQ=DAILY", "Daily"),
+            ("FREQ=WEEKLY;BYDAY=MO,FR", "Every Monday and Friday"),
+            ("FREQ=WEEKLY;INTERVAL=2;BYDAY=FR", "Every other Friday"),
+            ("FREQ=MONTHLY;BYDAY=2MO", "Monthly on the second Monday"),
+            ("FREQ=MONTHLY;BYDAY=5MO", "Monthly on the fifth Monday"),
+            ("FREQ=MONTHLY;BYDAY=-1FR", "Monthly on the last Friday"),
+            (
+                "FREQ=MONTHLY;BYMONTHDAY=-1;COUNT=4",
+                "Monthly on the last day · 4 times",
+            ),
+            (
+                "FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=22",
+                "Every 3 months on the 22nd",
+            ),
+            (
+                "FREQ=DAILY;UNTIL=20260301T000000Z",
+                "Daily · until Mar 1, 2026",
+            ),
+            ("FREQ=MINUTELY;INTERVAL=15", "Every 15 minutes"),
+        ] {
+            assert_eq!(describe(rule).as_deref(), Some(expected));
+        }
+        let custom =
+            describe("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1").expect("custom summary");
+        assert!(custom.contains("Monday"));
+        assert!(custom.contains("last matching occurrence in each month"));
+        assert!(!custom.contains("FREQ="));
+    }
+
+    #[test]
+    fn canonicalization_is_prefix_safe_even_for_unicode() {
         assert_eq!(canonicalize(" rrule:FREQ=DAILY "), "FREQ=DAILY");
-        assert_eq!(rrule_line("FREQ=DAILY"), "RRULE:FREQ=DAILY");
         assert_eq!(rrule_line("RRULE:FREQ=DAILY"), "RRULE:FREQ=DAILY");
         assert_eq!(rrule_line("   "), "");
-        assert!(inspect("RRULE:FREQ=DAILY").is_ok());
-    }
-
-    #[test]
-    fn count_zero_is_one_occurrence_never_unbounded() {
-        assert_eq!(
-            inspect("FREQ=DAILY;COUNT=0").expect("parses").count,
-            Some(1)
-        );
-        assert_eq!(
-            inspect("FREQ=DAILY;COUNT=-3").expect("parses").count,
-            Some(1)
-        );
-        assert_eq!(
-            inspect("FREQ=DAILY;COUNT=banana").expect("parses").count,
-            None
-        );
-    }
-
-    #[test]
-    fn sub_daily_frequencies_are_named_in_the_refusal() {
-        let refusal = inspect("FREQ=HOURLY").expect_err("sub-daily is refused");
-        assert!(
-            refusal.message().contains("FREQ=HOURLY"),
-            "{}",
-            refusal.message()
-        );
-        assert_eq!(inspect("FREQ=FORTNIGHTLY"), Err(Refusal::Malformed));
-        assert_eq!(inspect(""), Err(Refusal::Malformed));
-    }
-
-    #[test]
-    fn the_summariser_is_the_only_thing_a_member_reads() {
-        assert_eq!(describe("FREQ=DAILY").as_deref(), Some("Daily"));
-        assert_eq!(describe("FREQ=WEEKLY").as_deref(), Some("Weekly"));
-        assert_eq!(
-            describe("FREQ=WEEKLY;BYDAY=MO,FR").as_deref(),
-            Some("Every Monday and Friday")
-        );
-        assert_eq!(
-            describe("FREQ=WEEKLY;INTERVAL=2;BYDAY=FR").as_deref(),
-            Some("Every other Friday")
-        );
-        assert_eq!(
-            describe("FREQ=MONTHLY;INTERVAL=3").as_deref(),
-            Some("Every 3 months")
-        );
-        assert_eq!(
-            describe("FREQ=DAILY;COUNT=1").as_deref(),
-            Some("Daily · once")
-        );
-        assert_eq!(
-            describe("FREQ=DAILY;UNTIL=20260301T000000Z").as_deref(),
-            Some("Daily · until Mar 1, 2026")
-        );
-        assert_eq!(describe("FREQ=MONTHLY;BYSETPOS=-1"), None);
-    }
-
-    // -----------------------------------------------------------------------
-    // MONTHLY with one positional BYDAY or one BYMONTHDAY (#1119, R-1119-1).
-    // -----------------------------------------------------------------------
-
-    fn pin(rule: &str) -> Option<MonthlyPin> {
-        inspect(rule).expect("accepted").monthly_pin
-    }
-
-    #[test]
-    fn monthly_takes_one_positional_day_from_first_to_fourth_or_last() {
-        assert_eq!(
-            pin("FREQ=MONTHLY;BYDAY=2MO"),
-            Some(MonthlyPin::NthWeekday {
-                ordinal: 2,
-                day: "MO"
-            })
-        );
-        assert_eq!(
-            pin("FREQ=MONTHLY;BYDAY=-1FR"),
-            Some(MonthlyPin::NthWeekday {
-                ordinal: -1,
-                day: "FR"
-            })
-        );
-        assert_eq!(
-            pin("FREQ=MONTHLY;BYDAY=+3WE;INTERVAL=2;COUNT=5"),
-            Some(MonthlyPin::NthWeekday {
-                ordinal: 3,
-                day: "WE"
-            })
-        );
-        for ordinal in ["1", "2", "3", "4", "-1"] {
-            assert!(inspect(&format!("FREQ=MONTHLY;BYDAY={ordinal}SU")).is_ok());
-        }
-        // A positional day is not a weekly day list.
-        assert_eq!(inspect("FREQ=MONTHLY;BYDAY=2MO").expect("ok").by_day, None);
-    }
-
-    #[test]
-    fn monthly_takes_one_day_of_the_month_from_1_to_31_or_the_last() {
-        assert_eq!(
-            pin("FREQ=MONTHLY;BYMONTHDAY=1"),
-            Some(MonthlyPin::MonthDay(1))
-        );
-        assert_eq!(
-            pin("FREQ=MONTHLY;BYMONTHDAY=31"),
-            Some(MonthlyPin::MonthDay(31))
-        );
-        assert_eq!(
-            pin("FREQ=MONTHLY;BYMONTHDAY=-1"),
-            Some(MonthlyPin::MonthDay(-1))
-        );
-        assert_eq!(pin("FREQ=MONTHLY"), None);
-    }
-
-    #[test]
-    fn what_the_widening_does_not_reach_is_still_refused_with_its_part() {
-        let part_of = |rule: &str| match inspect(rule) {
-            Err(Refusal::UnsupportedPart { part }) => part,
-            other => panic!("{rule}: expected an unsupported part, got {other:?}"),
-        };
-        // Ordinals the engine does not honour.
-        for rule in [
-            "FREQ=MONTHLY;BYDAY=5MO",
-            "FREQ=MONTHLY;BYDAY=-2MO",
-            "FREQ=MONTHLY;BYDAY=-5SU",
-            "FREQ=MONTHLY;BYDAY=0MO",
-            "FREQ=MONTHLY;BYDAY=2MO,3TU",
-            "FREQ=MONTHLY;BYDAY=MO",
-            "FREQ=MONTHLY;BYDAY=MO,FR",
-            "FREQ=YEARLY;BYDAY=2MO",
-            "FREQ=DAILY;BYDAY=2MO",
-        ] {
-            assert_eq!(part_of(rule), "BYDAY", "{rule}");
-            assert_eq!(parse(rule), None, "{rule}");
-        }
-        for rule in [
-            "FREQ=MONTHLY;BYMONTHDAY=0",
-            "FREQ=MONTHLY;BYMONTHDAY=32",
-            "FREQ=MONTHLY;BYMONTHDAY=-2",
-            "FREQ=MONTHLY;BYMONTHDAY=1,15",
-            "FREQ=MONTHLY;BYMONTHDAY=-1,1",
-            "FREQ=MONTHLY;BYMONTHDAY=x",
-            "FREQ=MONTHLY;BYMONTHDAY=",
-            "FREQ=WEEKLY;BYMONTHDAY=1",
-            "FREQ=DAILY;BYMONTHDAY=-1",
-            "FREQ=YEARLY;BYMONTHDAY=1",
-            // BYDAY and BYMONTHDAY together.
-            "FREQ=MONTHLY;BYDAY=2MO;BYMONTHDAY=8",
-            "FREQ=MONTHLY;BYMONTHDAY=8;BYDAY=2MO",
-        ] {
-            assert_eq!(part_of(rule), "BYMONTHDAY", "{rule}");
-            assert_eq!(parse(rule), None, "{rule}");
-        }
-        // BYSETPOS is refused, with or without a day that would now parse.
-        assert_eq!(part_of("FREQ=MONTHLY;BYDAY=MO;BYSETPOS=2"), "BYSETPOS");
-        assert_eq!(part_of("FREQ=MONTHLY;BYDAY=2MO;BYSETPOS=1"), "BYSETPOS");
-        assert_eq!(part_of("FREQ=MONTHLY;BYMONTHDAY=1;BYSETPOS=1"), "BYSETPOS");
-        assert!(
-            inspect("FREQ=MONTHLY;BYMONTHDAY=1,15")
-                .expect_err("a list is refused")
-                .message()
-                .contains("pins occurrences to days of the month")
-        );
-    }
-
-    #[test]
-    fn the_new_shapes_are_described_in_the_one_summariser() {
-        let said = |rule: &str| describe(rule).expect("described");
-        assert_eq!(
-            said("FREQ=MONTHLY;BYDAY=2MO"),
-            "Monthly on the second Monday"
-        );
-        assert_eq!(
-            said("FREQ=MONTHLY;BYDAY=1SU"),
-            "Monthly on the first Sunday"
-        );
-        assert_eq!(
-            said("FREQ=MONTHLY;BYDAY=3WE"),
-            "Monthly on the third Wednesday"
-        );
-        assert_eq!(
-            said("FREQ=MONTHLY;BYDAY=4TH"),
-            "Monthly on the fourth Thursday"
-        );
-        assert_eq!(
-            said("FREQ=MONTHLY;BYDAY=-1FR"),
-            "Monthly on the last Friday"
-        );
-        assert_eq!(
-            said("FREQ=MONTHLY;BYMONTHDAY=-1"),
-            "Monthly on the last day"
-        );
-        assert_eq!(said("FREQ=MONTHLY;BYMONTHDAY=1"), "Monthly on the 1st");
-        assert_eq!(said("FREQ=MONTHLY;BYMONTHDAY=2"), "Monthly on the 2nd");
-        assert_eq!(said("FREQ=MONTHLY;BYMONTHDAY=3"), "Monthly on the 3rd");
-        assert_eq!(said("FREQ=MONTHLY;BYMONTHDAY=11"), "Monthly on the 11th");
-        assert_eq!(said("FREQ=MONTHLY;BYMONTHDAY=22"), "Monthly on the 22nd");
-        assert_eq!(said("FREQ=MONTHLY;BYMONTHDAY=31"), "Monthly on the 31st");
-        assert_eq!(
-            said("FREQ=MONTHLY;INTERVAL=2;BYDAY=-1FR"),
-            "Every other month on the last Friday"
-        );
-        assert_eq!(
-            said("FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=-1;COUNT=4"),
-            "Every 3 months on the last day · 4 times"
-        );
-        assert_eq!(
-            said("FREQ=MONTHLY;BYDAY=2MO;UNTIL=20261231T000000Z"),
-            "Monthly on the second Monday · until Dec 31, 2026"
-        );
-        assert_eq!(describe("FREQ=MONTHLY;BYDAY=5MO"), None);
-        // The old sentences are untouched.
-        assert_eq!(said("FREQ=MONTHLY"), "Every month");
-        assert_eq!(said("FREQ=MONTHLY;INTERVAL=3"), "Every 3 months");
+        assert_eq!(canonicalize("🗓️"), "🗓️");
     }
 }

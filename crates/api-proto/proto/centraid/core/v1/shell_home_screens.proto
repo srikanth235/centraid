@@ -159,7 +159,8 @@ message HomeTile {
   optional HomeTileCount count = 4;
   string count_label = 5;
   HomeTileSize size = 6;
-  bool wide = 7;
+  reserved 7;
+  reserved "wide";
   // What an empty tile says to do ("Add your first document").
   string empty_copy = 8;
   optional HomeTileBody body = 9;
@@ -169,6 +170,21 @@ message HomeTile {
   string accessibility_label = 11;
   // WHERE A TAP GOES: the app's home, as the route the shell pushes.
   Route route = 12;
+  // Native long-press menu, worded and decided by Rust.
+  repeated HomeWidgetAction widget_actions = 13;
+  string background_role = 14;
+  string accent_role = 15;
+  // The app whose catalogue mark this widget uses (Calendar and Reminders share Agenda).
+  string source_app = 16;
+  uint32 column_span = 17;
+  string compact_value = 18;
+  string compact_label = 19;
+}
+
+message HomeWidgetAction {
+  string label = 1;
+  bool selected = 2;
+  HomeEvent.WidgetChanged change = 3;
 }
 
 message HomeTileRow {
@@ -205,7 +221,7 @@ message HomeData {
   HomeSpringboard springboard = 1;
   // In the springboard's order.
   repeated HomeTile tiles = 2;
-  // Which tiles share a row (two small ones, or one wide one).
+  // Which widgets share a row in four columns: small 1, medium 2, large 4.
   repeated HomeTileRow grid_rows = 3;
   // 4 was `every_tile_unreadable`: nothing read it (#1152).
   reserved 4;
@@ -213,6 +229,24 @@ message HomeData {
   // The day-one page's words, set when `springboard` is `FIRST_RUN`.
   string day_one_title = 5;
   string day_one_body = 6;
+  string widget_hint = 7;
+  reserved 8;
+  reserved "widget_status";
+  AgendaWidgetSnapshot agenda_widget = 9;
+}
+
+// Public Agenda snapshot for an OS widget. The host republishes it after every
+// vault update and clears it when no vault is open; extensions never open vaults.
+message AgendaWidgetSnapshot {
+  string title = 1;
+  string event_title = 2;
+  string event_when = 3;
+  string reminders = 4;
+  string reminder_title = 5;
+  string open_label = 6;
+  string new_label = 7;
+  string empty_label = 8;
+  string updated_label = 9;
 }
 
 enum HomeVaultState {
@@ -364,22 +398,23 @@ message HomeTransferSheet {
   repeated BackupRuleChoice choices = 3;
 }
 
-// What a phone that holds no vault opens onto: every app's mark as one house,
-// one sentence and two doors, and the slides a shell may page through first.
+// One welcome screen: the brand, three benefits and both entry actions.
 message HomeFirstLaunch {
   string body = 1;
   string make_label = 2;
   string restore_label = 3;
-  // The app ids the house's marks are drawn from: Home's tiles, in Home's order.
-  repeated string apps = 4;
+  reserved 4, 6, 7;
+  reserved "apps", "next_label", "skip_label";
+  // The three benefits now appear together on one welcome page. The wire name
+  // is retained for existing decoders; there is no carousel or reading state.
   repeated HomeFirstLaunchSlide slides = 5;
-  string next_label = 6;
-  string skip_label = 7;
+  string title = 8;
 }
 
 message HomeFirstLaunchSlide {
   string title = 1;
   string body = 2;
+  string icon_key = 3;
 }
 
 message HomeEvent {
@@ -417,6 +452,7 @@ message HomeEvent {
     // The phone asked for a page from outside Home (a key slot, a system rationale link):
     // Home answers with the route, so the shell names no screen.
     EntryAsked entry_asked = 25;
+    WidgetChanged widget_changed = 26;
   }
 
   message BackupPressed {}
@@ -436,6 +472,16 @@ message HomeEvent {
   message TransferRulesPressed {}
   message TransferRuleChosen { string stored = 1; }
   message TransferRulesClosed {}
+  message WidgetChanged {
+    string app_id = 1;
+    HomeTileSize size = 2;
+    enum Position {
+      POSITION_UNSPECIFIED = 0;
+      POSITION_FIRST = 1;
+      POSITION_LAST = 2;
+    }
+    Position position = 3;
+  }
 
   message VaultsTold {
     // The one in front, and the roster in the shelf's order.
@@ -452,8 +498,12 @@ message HomeEvent {
       ENTRY_LOCKER_LOCK = 1;
       // What Health may read, and Connect (the system's permission rationale).
       ENTRY_HEALTH_CONNECT = 2;
+      ENTRY_AGENDA_CALENDAR = 3;
+      ENTRY_AGENDA_REMINDERS = 4;
+      ENTRY_AGENDA_NEW_REMINDER = 5;
     }
     Entry entry = 1;
+    string title = 2;
   }
   message BackupLineTold { optional HomeBackupLine line = 1; }
   message StatusTold { optional HomeStatus status = 1; }
@@ -488,7 +538,7 @@ message VaultCommand {
 // The band, and the one navigation Rust asks of itself
 // ---------------------------------------------------------------------------
 
-// THE BAND (DESIGN.md's invariant 1): one strip at the foot of every tab root,
+// THE BAND (product-intuition screen contracts's invariant 1): one strip at the foot of every tab root,
 // never app-themed, frame destinations only. Which places it holds, in what
 // order, their words and which is lit are Rust's, from the tabs that exist; the
 // shell draws it under a tab's root and presses select a tab.

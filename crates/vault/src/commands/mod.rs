@@ -44,6 +44,7 @@
 //! its own content, or by an id the phone minted before the first attempt.
 
 pub mod blob;
+pub mod calendar_sync;
 pub mod contact_point;
 pub mod container;
 pub mod document;
@@ -60,10 +61,12 @@ pub mod person;
 pub mod person_reminder;
 pub mod photo;
 pub mod place;
+pub mod reminder_import;
 pub mod rule;
 pub mod sealed;
 pub mod tag;
 pub mod task;
+mod task_clear;
 pub mod thread;
 pub mod vault;
 pub mod workout;
@@ -297,7 +300,7 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 23] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 24] = [
             blob::definitions,
             contact_point::definitions,
             container::definitions,
@@ -307,6 +310,7 @@ impl Registry {
             event::definitions,
             flag::definitions,
             follow::definitions,
+            calendar_sync::definitions,
             locker::definitions,
             measurement::definitions,
             money::definitions,

@@ -1,25 +1,12 @@
 /* Centraid docs — shared shell.
 
-   Same design as the product, not a design of its own. Every colour, face,
-   radius, duration and type rung resolves through assets/centraid-tokens.css,
-   which scripts/site-tokens.mjs lowers from packages/design's `toCss()` — the
-   SAME emitter the desktop shell and the PWA render on. The landing page at
-   scripts/home-site/public/index.html drinks from the same file.
+   Every colour, font, radius, duration and type role comes from the shared
+   assets/centraid-tokens.css generated from design/tokens.toml. The landing
+   page uses the same file. Screen compositions and colour meanings are in
+   design/mockups/; behavioural and copy contracts live in product-intuition.
 
-   What that binds these pages to (DESIGN.md is the rulebook):
-     · One ramp, one face. Instrument Sans at 400/600, self-hosted, no CDN.
-       `--font-code` is reached only by commands, paths and literals.
-     · The shell spends no colour. The accent IS the ink, emphasis is a step
-       on the ink ramp, and `--link` is prose links and selection only.
-     · Very little elevation. A card is a hairline and a raised ground; the
-       three shadow tokens are for the search popover and the mobile sheet.
-     · One motion grammar, 140ms / 280ms on two curves, and no tilt, drift or
-       scale under the pointer.
-
-   The one step beyond the product ramp is `--t-chapter-size`, which scales
-   the display ROLE for a chapter opener; it is registered in
-   the site token layer. The ontology route keeps its own sheet
-   (src/content/ontology-style.css) and drinks from the same tokens. */
+   The chapter-size role scales the display role for a long-form page. The
+   ontology route keeps its layout sheet and consumes the same tokens. */
 
 :root {
   --rail-w: 224px;
@@ -98,7 +85,7 @@ button {
   outline-offset: 2px;
 }
 
-/* Prose link: the one reserved hue, always underlined (DESIGN.md,
+/* Prose link: the one reserved hue, always underlined (design/mockups/DesignRules.dc.html,
    "Link is not a size role"). Never permitted on a control. */
 .u {
   color: var(--link);
@@ -143,7 +130,7 @@ button {
   white-space: nowrap;
 }
 /* An identity mark is 26% of its own size, with no gradient, no gloss and no
-   drop shadow (DESIGN.md, "Elevation & Depth"). */
+   drop shadow (design/mockups/DesignRules.dc.html, "Elevation & Depth"). */
 .brand .mark {
   width: 28px;
   height: 28px;
@@ -534,7 +521,7 @@ button {
   overflow-y: auto;
 }
 /* Navigation labels never fall below `--text-soft` when they are the active
-   one; the resting rung is the faint ink (DESIGN.md, invariant 2). */
+   one; the resting rung is the faint ink (design/mockups/DesignRules.dc.html, invariant 2). */
 .rail a {
   position: relative;
   display: block;
@@ -743,7 +730,7 @@ pre code {
 
 /* ---------- dark bands (a fixed ground inside a themed page) ---------- */
 /* These bands do not follow the theme, so they take the product's STAGE — the
-   opaque ground and its ink, the same literal in both themes (DESIGN.md,
+   opaque ground and its ink, the same literal in both themes (design/mockups/DesignRules.dc.html,
    "Colors"). The stage carries exactly two ink rungs, so a band has two, and
    no third one is invented here. */
 body:not(.ontology-page) section.dark {
@@ -1003,7 +990,7 @@ body:not(.ontology-page) section.dark .tool-chip {
     border-color var(--dur-1) var(--ease);
 }
 /* Hover moves the ground and the boundary, never the geometry: no lift, no
-   scale, no offset shadow (DESIGN.md, invariant 5). */
+   scale, no offset shadow (design/mockups/DesignRules.dc.html, invariant 5). */
 .card:hover {
   border-color: var(--line-strong);
   background: var(--bg-hover);
@@ -1065,7 +1052,7 @@ body:not(.ontology-page) section.dark .card p {
   white-space: nowrap;
 }
 /* `--attention` is the one amber rung, and it is type and border only —
-   never a fill (DESIGN.md, "Colors"). */
+   never a fill (design/mockups/DesignRules.dc.html, "Colors"). */
 .pill.hot {
   border-color: var(--attention);
   background: transparent;
@@ -1385,7 +1372,7 @@ footer.site-foot {
 }
 
 /* ---------- next/prev chapter ---------- */
-/* Secondary button: the default raised action (DESIGN.md, "Components"). */
+/* Secondary button: the default raised action (design/mockups/DesignRules.dc.html, "Components"). */
 .chapter-next {
   margin-top: clamp(var(--sp-6), 7vh, var(--sp-band));
   display: flex;

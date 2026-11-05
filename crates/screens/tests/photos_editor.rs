@@ -301,7 +301,11 @@ fn a_quarter_turn_resets_the_crop_and_the_ratio_and_every_tool_updates_the_words
     assert_eq!(plan.quarters, 1);
     assert_eq!(plan.crop, Some(FULL_CROP));
     assert_eq!(plan.ratio, Ratio::Original as i32);
-    send(&mut d, at, ev::Kind::Straighten(ev::Straightened {}));
+    send(
+        &mut d,
+        at,
+        ev::Kind::Straighten(ev::Straightened { degrees: None }),
+    );
     send(&mut d, at, ev::Kind::Flip(ev::Flipped {}));
     let state = state_of(&d, at);
     assert_eq!(state.straighten_label, "Straighten −1°");
@@ -337,6 +341,30 @@ fn a_quarter_turn_resets_the_crop_and_the_ratio_and_every_tool_updates_the_words
         state_of(&d, at).plan.expect("plan").crop,
         Some(crop(0.5, 0.5, 0.5, 0.5))
     );
+}
+
+#[test]
+fn straighten_slider_accepts_both_directions_and_clamps_to_the_displayed_limits() {
+    let (mut d, at, _) = opened(b"editor-slider-1");
+    let initial = state_of(&d, at);
+    assert_eq!((initial.straighten_min, initial.straighten_max), (-15, 15));
+    for (requested, expected) in [(3, 3), (-4, -4), (99, 15), (-99, -15), (0, 0)] {
+        send(
+            &mut d,
+            at,
+            ev::Kind::Straighten(ev::Straightened {
+                degrees: Some(requested),
+            }),
+        );
+        let state = state_of(&d, at);
+        assert_eq!(state.plan.expect("plan").straighten, expected);
+        assert_eq!(state.edited, expected != 0);
+        assert!(
+            state
+                .straighten_label
+                .ends_with(&editor::signed_degrees(expected))
+        );
+    }
 }
 
 #[test]
@@ -400,7 +428,11 @@ fn title_of(d: &Driver, id: &str) -> (String, Option<String>) {
 fn save_asks_the_shell_to_render_and_the_answer_becomes_a_new_photograph_over_the_original() {
     let (mut d, at, original) = opened(b"editor-save-original");
     send(&mut d, at, ev::Kind::Rotate(ev::Rotated {}));
-    send(&mut d, at, ev::Kind::Straighten(ev::Straightened {}));
+    send(
+        &mut d,
+        at,
+        ev::Kind::Straighten(ev::Straightened { degrees: None }),
+    );
     let before = d.effects.len();
     send(&mut d, at, ev::Kind::Save(ev::Saved {}));
     assert_eq!(d.effects.len(), before + 1);

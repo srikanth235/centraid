@@ -48,8 +48,10 @@ use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempoten
 use crate::error::{Result, VaultError};
 use crate::model::{DEFAULT_CALENDAR_ID, Kind, Rel};
 use crate::time::occurrence::{SEARCH_WINDOW_DAYS, search_window};
-use crate::time::recurrence::{ExpandInput, Occurrence, Semantics, expand, parse_instant_ms};
-use crate::time::zone::{FireZone, parse_wall_iso};
+use crate::time::recurrence::{
+    ExpandInput, Occurrence, Semantics, expand, parse_instant_ms, shift_temporal,
+};
+use crate::time::zone::{FireZone, parse_wall_iso, wall_epoch};
 use crate::time::{rrule, temporal};
 
 // ---------------------------------------------------------------------------
@@ -74,6 +76,7 @@ pub struct NewEvent<'a> {
     pub reminders: Option<&'a str>,
     pub description: Option<&'a str>,
     pub place_id: Option<&'a str>,
+    pub travel_minutes: Option<i64>,
     pub url: Option<&'a str>,
     /// `confirmed` when none is said.
     pub status: Option<&'a str>,
@@ -93,8 +96,8 @@ pub fn found(ctx: &CommandCtx<'_, '_>, event: &NewEvent<'_>) -> Result<String> {
     };
     ctx.connection().execute(
         "INSERT INTO event (id, starts, ends, timing, zone, rule, rule_supported, status, busy,
-                            calendar_id, place_id, url, reminders, description)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                            calendar_id, place_id, url, reminders, description, travel_minutes)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
         rusqlite::params![
             id,
             event.starts,
@@ -102,7 +105,11 @@ pub fn found(ctx: &CommandCtx<'_, '_>, event: &NewEvent<'_>) -> Result<String> {
             event.timing.as_str(),
             event.zone,
             event.rule,
-            event.rule.is_none_or(|rule| rrule::inspect(rule).is_ok()),
+            event.rule.is_none_or(|rule| rrule::inspect_for_date(
+                rule,
+                event.timing == Semantics::AllDay
+            )
+            .is_ok()),
             event.status.unwrap_or("confirmed"),
             event.busy.unwrap_or(true),
             event.calendar_id.unwrap_or(DEFAULT_CALENDAR_ID),
@@ -110,6 +117,7 @@ pub fn found(ctx: &CommandCtx<'_, '_>, event: &NewEvent<'_>) -> Result<String> {
             event.url,
             event.reminders,
             event.description,
+            event.travel_minutes.unwrap_or(0),
         ],
     )?;
     Ok(id)
@@ -135,6 +143,17 @@ struct Times {
     ends: Option<String>,
     timing: Semantics,
     zone: Option<String>,
+}
+
+fn series_duration_ms(times: &Times) -> i64 {
+    let millis =
+        |value: &str| parse_instant_ms(value).or_else(|| parse_wall_iso(value).map(wall_epoch));
+    times
+        .ends
+        .as_deref()
+        .and_then(millis)
+        .zip(millis(&times.starts))
+        .map_or(0, |(end, start)| end - start)
 }
 
 /// The event as it stands, for an edit to complete a half-stated change from.
@@ -590,7 +609,15 @@ fn pre_propose(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if let Some(sentence) = references_refusal(ctx)? {
         return Ok(Some(sentence));
     }
-    Ok(times(ctx, None).err())
+    let times = match times(ctx, None) {
+        Ok(times) => times,
+        Err(reason) => return Ok(Some(reason)),
+    };
+    Ok(ctx.optional_str("rule").and_then(|rule| {
+        rrule::inspect_for_date(rule, times.timing == Semantics::AllDay)
+            .err()
+            .map(|why| why.message())
+    }))
 }
 
 /// A busy event does not land on another busy one: its own condition, so a caller that can lift
@@ -628,6 +655,11 @@ fn pre_edit(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         Some(_) => None,
         None => row.rule.as_deref(),
     };
+    if let Some(rule) = rule
+        && let Err(why) = rrule::inspect_for_date(rule, after.timing == Semantics::AllDay)
+    {
+        return Ok(Some(why.message()));
+    }
     let n = stranded(ctx.connection(), id, &after, rule)?;
     Ok(
         (n > 0 && (after != row.times || rule != row.rule.as_deref())).then(|| {
@@ -773,6 +805,7 @@ fn propose(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             url: ctx.optional_str("url"),
             status: ctx.optional_str("status"),
             busy: ctx.input.get("busy").and_then(Json::as_bool),
+            travel_minutes: ctx.input.get("travel_minutes").and_then(Json::as_i64),
         },
     )?;
     set_guests(ctx, &id, &guests(ctx))?;
@@ -800,6 +833,7 @@ fn write_event(ctx: &CommandCtx<'_, '_>, id: &str, after: &Times) -> Result<()> 
         "calendar_id",
         "status",
         "busy",
+        "travel_minutes",
     ] {
         if let Some(value) = ctx.input.get(column) {
             connection.execute(
@@ -948,23 +982,27 @@ fn edit_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 /// is one the expander can expand. A source states the rule; it does not know
 /// the engine.
 pub(crate) fn settle(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<()> {
-    let rule: Option<String> = ctx
+    let held: Option<(Option<String>, String)> = ctx
         .connection()
-        .query_row("SELECT rule FROM event WHERE id = ?1", [id], |row| {
-            row.get(0)
-        })
-        .optional()?
-        .flatten();
+        .query_row(
+            "SELECT rule, timing FROM event WHERE id = ?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    let supported = held.is_none_or(|(rule, timing)| {
+        rule.is_none_or(|rule| rrule::inspect_for_date(&rule, timing == "all-day").is_ok())
+    });
     ctx.connection().execute(
         "UPDATE event SET rule_supported = ?2 WHERE id = ?1",
-        rusqlite::params![id, rule.is_none_or(|rule| rrule::inspect(&rule).is_ok())],
+        rusqlite::params![id, supported],
     )?;
     // The rule or the start may have moved: no day is left that nothing reads.
     rekey_stranded(ctx.connection(), id)
 }
 
 /// What happened to one day of a series, as the row holds it.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct Day {
     cancelled: bool,
     starts: Option<String>,
@@ -1002,6 +1040,20 @@ impl PartialEq for Day {
 }
 
 impl Eq for Day {}
+
+impl Day {
+    fn unchanged(&self) -> bool {
+        !self.cancelled
+            && self.starts.is_none()
+            && self.ends.is_none()
+            && self.timing.is_none()
+            && self.zone.is_none()
+            && self.title.is_none()
+            && self.description.is_none()
+            && self.url.is_none()
+            && self.place.is_none()
+    }
+}
 
 /// What a source's `overrides` field says: over the window `from`..`to` (UTC
 /// instants) it showed these days of the series as the rule has them (`shown`,
@@ -1074,8 +1126,12 @@ fn derive(connection: &Connection, id: &str, said: &Observed) -> Result<Derived>
                 let said = day
                     .get(name)
                     .and_then(Json::as_str)
-                    .filter(|text| !text.is_empty());
-                said.filter(|said| Some(*said) != own).map(str::to_owned)
+                    .filter(|text| name != "location" || !text.is_empty());
+                said.filter(|said| {
+                    Some(*said) != own
+                        && (!said.is_empty() || own.is_some_and(|own| !own.is_empty()))
+                })
+                .map(str::to_owned)
             };
             let text_of = |name: &str| day.get(name).and_then(Json::as_str);
             // The day's own timing, when the phone says one that is not its series'.
@@ -1098,9 +1154,12 @@ fn derive(connection: &Connection, id: &str, said: &Observed) -> Result<Derived>
                 value.and_then(|value| resolve_one("starts", value, timing, zone.as_ref()).ok())
             };
             let starts = at(text_of("starts")).filter(|starts| own || *starts != occurrence.start);
+            let ends = at(text_of("ends")).filter(|ends| {
+                own || *ends != shift_temporal(&occurrence.start, series_duration_ms(&times))
+            });
             Day {
                 cancelled: false,
-                ends: starts.as_ref().and_then(|_| at(text_of("ends"))),
+                ends,
                 starts,
                 timing: own.then(|| timing.as_str().to_owned()),
                 zone: day_zone.filter(|_| own && timing == Semantics::Zoned),
@@ -1126,6 +1185,7 @@ fn derive(connection: &Connection, id: &str, said: &Observed) -> Result<Derived>
         };
         // A day the phone calls moved and says nothing different of is the series' own.
         if day.starts.is_some()
+            || day.ends.is_some()
             || day.cancelled
             || day.title.is_some()
             || day.description.is_some()
@@ -1140,14 +1200,22 @@ fn derive(connection: &Connection, id: &str, said: &Observed) -> Result<Derived>
 
 /// The rows an event's days hold now, by series-local wall clock.
 fn held(connection: &Connection, id: &str) -> Result<std::collections::BTreeMap<String, Day>> {
+    held_scope(connection, id, "occurrence")
+}
+
+fn held_scope(
+    connection: &Connection,
+    id: &str,
+    scope: &str,
+) -> Result<std::collections::BTreeMap<String, Day>> {
     connection
         .prepare(
             "SELECT o.original_start, o.cancelled, o.starts, o.ends, o.timing, o.zone, o.title,
                     o.description, o.url, p.title
                FROM occurrence o LEFT JOIN entity p ON p.id = o.place_id
-              WHERE o.series_id = ?1 AND o.scope = 'occurrence'",
+              WHERE o.series_id = ?1 AND o.scope = ?2",
         )?
-        .query_map([id], |row| {
+        .query_map([id, scope], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 Day {
@@ -1203,6 +1271,128 @@ pub(crate) fn overrides_read(connection: &Connection, id: &str) -> Result<Json> 
 
 pub(crate) fn overrides_canon(statement: &Json) -> Json {
     statement.clone()
+}
+
+/// Member-edited days in the phone's bounded read window. A native adapter gets
+/// an explicit occurrence key; it must never infer a series edit from its id.
+pub(crate) fn override_writes(
+    connection: &Connection,
+    id: &str,
+    statement: &Json,
+    base: &serde_json::Map<String, Json>,
+) -> Result<Vec<Json>> {
+    let Some(seen) = observed(statement) else {
+        return Ok(Vec::new());
+    };
+    let source = derive(connection, id, &seen)?;
+    let rows = held(connection, id)?;
+    let futures = held_scope(connection, id, "future")?;
+    let row = row_of(connection, id)?;
+    let Some(rule) = row.rule else {
+        return Ok(Vec::new());
+    };
+    let millis =
+        |value: &str| parse_instant_ms(value).or_else(|| parse_wall_iso(value).map(wall_epoch));
+    let duration = series_duration_ms(&row.times);
+    let mut out = Vec::new();
+    for occurrence in expand_series(&row.times, &rule, &seen.from, &seen.to, 2_000) {
+        let key = occurrence.wall_start;
+        let mut future = None;
+        let direct = rows.get(&key);
+        if direct == source.rows.get(&key)
+            && let Some((anchor_key, day)) = futures.range(..=key.clone()).next_back()
+        {
+            let mut day = day.clone();
+            if let Some(anchor) = occurrence_at(&row.times, &rule, anchor_key)
+                && let Some(delta) = millis(&occurrence.start)
+                    .zip(millis(&anchor.start))
+                    .map(|(at, anchor)| at - anchor)
+            {
+                day.starts = day
+                    .starts
+                    .as_deref()
+                    .map(|start| shift_temporal(start, delta));
+                day.ends = day.ends.as_deref().map(|end| shift_temporal(end, delta));
+            }
+            let changed = day;
+            let mut day = direct.cloned().unwrap_or_default();
+            day.cancelled |= changed.cancelled;
+            for (target, value) in [
+                (&mut day.starts, changed.starts),
+                (&mut day.ends, changed.ends),
+                (&mut day.title, changed.title),
+                (&mut day.description, changed.description),
+                (&mut day.url, changed.url),
+                (&mut day.timing, changed.timing),
+                (&mut day.zone, changed.zone),
+                (&mut day.place, changed.place),
+            ] {
+                if value.is_some() {
+                    *target = value;
+                }
+            }
+            if day.starts.as_deref() == Some(&occurrence.start) {
+                day.starts = None;
+            }
+            if day.ends.as_deref() == Some(&shift_temporal(&occurrence.start, duration)) {
+                day.ends = None;
+            }
+            for (value, name) in [
+                (&mut day.title, "title"),
+                (&mut day.description, "description"),
+                (&mut day.url, "url"),
+                (&mut day.timing, "timing"),
+                (&mut day.zone, "zone"),
+            ] {
+                if value.as_deref() == base.get(name).and_then(Json::as_str) {
+                    *value = None;
+                }
+            }
+            future = Some(day);
+        }
+        let have = future.as_ref().or(direct);
+        if have == source.rows.get(&key)
+            || (!source.rows.contains_key(&key) && have.is_some_and(Day::unchanged))
+        {
+            continue;
+        }
+        let mut desired = base.clone();
+        desired.insert(
+            "ends".to_owned(),
+            json!(shift_temporal(&occurrence.start, duration)),
+        );
+        desired.insert("starts".to_owned(), json!(occurrence.start));
+        if let Some(day) = have {
+            for (name, value) in [
+                ("starts", &day.starts),
+                ("ends", &day.ends),
+                ("timing", &day.timing),
+                ("zone", &day.zone),
+                ("title", &day.title),
+                ("description", &day.description),
+                ("url", &day.url),
+                ("location", &day.place),
+            ] {
+                if let Some(value) = value {
+                    desired.insert(name.to_owned(), json!(value));
+                }
+            }
+        }
+        let mut fields = vec![
+            "title",
+            "description",
+            "url",
+            "starts",
+            "ends",
+            "timing",
+            "zone",
+        ];
+        if have.is_some_and(|day| day.place.is_some()) {
+            fields.push("location");
+        }
+        out.push(json!({"original_start":key,"deleted":have.is_some_and(|day| day.cancelled),"fields":fields,"desired":desired}));
+    }
+    Ok(out)
 }
 
 /// A three-way merge of a series' days: for each day of the window the rule
@@ -1302,11 +1492,12 @@ const PROPOSE_SCHEMA: &str = r#"{
     "calendar_id": { "type": "string", "minLength": 1 },
     "place_id": { "type": ["string", "null"] },
     "url": { "type": ["string", "null"] },
-    "reminders": { "type": ["array", "null"], "items": { "type": "integer", "minimum": 0 },
+    "reminders": { "type": ["array", "null"], "items": { "type": "integer" },
       "description": "Minutes before it starts." },
     "attendees": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "status": { "type": "string", "enum": ["confirmed", "tentative", "cancelled"] },
-    "busy": { "type": "boolean" }
+    "busy": { "type": "boolean" },
+    "travel_minutes": { "type": "integer", "minimum": 0, "maximum": 10080 }
   }
 }"#;
 
@@ -1324,10 +1515,11 @@ const EDIT_SCHEMA: &str = r#"{
     "calendar_id": { "type": "string", "minLength": 1 },
     "place_id": { "type": ["string", "null"] },
     "url": { "type": ["string", "null"] },
-    "reminders": { "type": ["array", "null"], "items": { "type": "integer", "minimum": 0 } },
+    "reminders": { "type": ["array", "null"], "items": { "type": "integer" } },
     "attendees": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "status": { "type": "string", "enum": ["confirmed", "tentative", "cancelled"] },
-    "busy": { "type": "boolean" }
+    "busy": { "type": "boolean" },
+    "travel_minutes": { "type": "integer", "minimum": 0, "maximum": 10080 }
   }
 }"#;
 

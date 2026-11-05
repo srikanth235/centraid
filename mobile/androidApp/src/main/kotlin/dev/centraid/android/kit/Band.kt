@@ -1,15 +1,13 @@
 package dev.centraid.android.kit
 
 
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -18,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ProvidableCompositionLocal
@@ -28,11 +27,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -79,6 +78,7 @@ public fun HomeBand(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val largeText = LocalDensity.current.fontScale > 1.3f
     Row(
         modifier
             .fillMaxWidth()
@@ -99,6 +99,7 @@ public fun HomeBand(
                 centraidColor("lineStrong"),
                 RoundedCornerShape(BandPolicy.BAND_RADIUS.dp),
             )
+            .then(if (largeText) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
             .padding(BandPolicy.BAND_PLATE_PAD.dp)
             .testTag("home-band"),
     ) {
@@ -112,7 +113,7 @@ public fun HomeBand(
                 selected = place.selected,
                 testTag = "home-band-${place.tab}",
                 onPress = { onSelect(place.tab) },
-                modifier = Modifier.weight(1f),
+                modifier = if (largeText) Modifier.widthIn(min = 72.dp) else Modifier.weight(1f),
             )
         }
     }
@@ -178,10 +179,8 @@ private fun BandTab(
         }
         Text(
             label,
-            // The same 11/15 rung either way, so a tap cannot reflow the strip,
-            // and it HOLDS at every font scale: `control` scales elsewhere, so the
-            // active half says `scales = false`.
-            style = centraidType(if (selected) "control" else "band", scales = false),
+            // Larger labels scroll inside the plate and keep their full system size.
+            style = centraidType(if (selected) "control" else "band"),
             color = if (selected) centraidColor("text") else centraidColor("textSoft"),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -252,7 +251,7 @@ internal fun Modifier.bandStrip(): Modifier =
 
 /**
  * THE BAND'S PRESS: `bgPress` under the finger on the pill rung, and no
- * ripple — a ground and not a splash, a scale or an opacity, which DESIGN.md
+ * ripple — a ground and not a splash, a scale or an opacity, which product-intuition screen contracts
  * refuses. The tab stays where it was and only its floor answers.
  */
 @Composable
@@ -286,12 +285,6 @@ public data class AppBandTab(
 
 /** One segment of a band's segmented control: the machine's key, its word, whether it is lit. */
 public data class BandSegment(val id: String, val label: String, val selected: Boolean)
-
-/** The state-change curve, `--ease` at `--dur-1`. */
-private val STATE_CHANGE = tween<Dp>(
-    durationMillis = CentraidGeometry.DURATION_ONE,
-    easing = CubicBezierEasing(0.3f, 0f, 0.4f, 1f),
-)
 
 /**
  * AN APP'S BAND — the `AppPlace` room's band, the Compose twin of iOS's
@@ -336,7 +329,7 @@ public fun AppBand(
         // the band appearing, and a buzz on every screen entry is noise.
         if (first[0]) first[0] = false else haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
     }
-    val height = BandPolicy.BAND_HEIGHT.dp
+    val largeText = LocalDensity.current.fontScale > 1.3f
     Row(
         modifier
             .fillMaxWidth()
@@ -369,26 +362,22 @@ public fun AppBand(
                 onPress = { placesOpen = true },
             )
             BandSegmented(segments, onSegment, Modifier.weight(1f))
-        } else BoxWithConstraints(
-            Modifier
-                .weight(1f)
-                .height(height)
-                .bandGround(plate),
-        ) {
-            val pad = BandPolicy.BAND_PLATE_PAD.dp
-            val tabWidth = (maxWidth - pad * 2) / maxOf(count, 1)
-            Row(Modifier.fillMaxHeight().padding(pad)) {
+        } else if (count > 0) {
+            Row(
+                Modifier.weight(1f)
+                    .bandGround(plate)
+                    .then(if (largeText) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
+                    .height(IntrinsicSize.Min)
+                    .padding(BandPolicy.BAND_PLATE_PAD.dp),
+            ) {
                 tabs.forEach { tab ->
                     AppBandTabView(
                         iconKey = tab.iconKey,
                         label = tab.label,
                         selected = tab.selected,
                         testTag = "$app-band-${tab.key}",
-                        onPress = {
-                            placesOpen = false
-                            onSelect(tab.key)
-                        },
-                        modifier = Modifier.weight(1f),
+                        onPress = { placesOpen = false; onSelect(tab.key) },
+                        modifier = if (largeText) Modifier.widthIn(min = 72.dp) else Modifier.weight(1f),
                     )
                 }
                 if (onMore != null) {
@@ -398,31 +387,13 @@ public fun AppBand(
                         selected = false,
                         testTag = "$app-band-more",
                         onPress = onMore,
-                        modifier = Modifier.weight(1f),
+                        modifier = if (largeText) Modifier.widthIn(min = 72.dp) else Modifier.weight(1f),
                     )
                 }
             }
-            // THE RULE: one mark, sliding, inside the plate and clear of its
-            // hairline, as wide as the mark it stands over.
-            if (lit >= 0) {
-                val mark = BandPolicy.BAND_MARK_SIZE.dp
-                val x by animateDpAsState(
-                    targetValue = pad + tabWidth * lit + (tabWidth - mark) / 2,
-                    animationSpec = STATE_CHANGE,
-                    label = "band-rule",
-                )
-                Box(
-                    Modifier
-                        .offset(x = x, y = pad + CentraidGeometry.HAIRLINE.dp)
-                        .size(width = mark, height = 2.dp)
-                        .clip(CircleShape)
-                        .background(centraidColor("text")),
-                )
-            }
+        } else {
+            Box(Modifier.weight(1f))
         }
-        // THE APP'S SEARCH, at the trailing end: the Home circle's twin (same size, same pill), with
-        // the magnifier Home's own search key wears. An app with no search slot hands none, and draws
-        // none. One id on every app, because the key is the kit's and not the app's.
         if (searchKey != null) {
             BandKey(
                 iconKey = "Search",
@@ -446,18 +417,21 @@ internal fun BandSegmented(
     onPick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val largeText = LocalDensity.current.fontScale > 1.3f
     val plate = RoundedCornerShape(BandPolicy.BAND_RADIUS.dp)
     Row(
         modifier
-            .height(BandPolicy.BAND_HEIGHT.dp)
+            .heightIn(min = BandPolicy.BAND_HEIGHT.dp)
+            .then(if (largeText) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
+            .height(IntrinsicSize.Min)
             .bandGround(plate)
             .padding(BandPolicy.BAND_PLATE_PAD.dp),
     ) {
         segments.forEach { segment ->
             Box(
-                Modifier
-                    .weight(1f)
+                (if (largeText) Modifier.widthIn(min = 72.dp) else Modifier.weight(1f))
                     .fillMaxHeight()
+                    .padding(horizontal = 8.dp)
                     .clip(plate)
                     .background(if (segment.selected) centraidColor("bgSunken") else androidx.compose.ui.graphics.Color.Transparent)
                     .clickable { onPick(segment.id) }
@@ -471,7 +445,7 @@ internal fun BandSegmented(
             ) {
                 Text(
                     segment.label,
-                    style = centraidType(if (segment.selected) "control" else "band", scales = false),
+                    style = centraidType(if (segment.selected) "control" else "band"),
                     color = centraidColor(if (segment.selected) "text" else "textSoft"),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -519,9 +493,9 @@ private fun AppBandTabView(
 ) {
     Column(
         modifier
-            .fillMaxHeight()
+            .heightIn(min = BandPolicy.BAND_TAB_MIN_HEIGHT.dp)
             .bandPress(onPress)
-            .padding(top = BandPolicy.BAND_TAB_TOP.dp, bottom = BandPolicy.BAND_TAB_BOTTOM.dp)
+            .padding(horizontal = 8.dp, vertical = BandPolicy.BAND_TAB_TOP.dp)
             .testTag(testTag)
             .semantics {
                 contentDescription = label + if (selected) ", " + KitWords.BAND_CURRENT else ""
@@ -530,6 +504,9 @@ private fun AppBandTabView(
             },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        Box(Modifier.width(BandPolicy.BAND_MARK_SIZE.dp).height(2.dp)
+            .clip(CircleShape)
+            .background(if (selected) centraidColor("text") else androidx.compose.ui.graphics.Color.Transparent))
         CentraidIcon(
             iconKey = iconKey,
             // Inactive is `textFaint`, as on the Home band: the lit mark is the
@@ -539,9 +516,8 @@ private fun AppBandTabView(
         )
         Text(
             label,
-            // THE HELD PAIR: one rung, two weights, no reflow — and it holds at
-            // every font scale (`control` scales elsewhere).
-            style = centraidType(if (selected) "control" else "band", scales = false),
+            // Every label follows the system font scale.
+            style = centraidType(if (selected) "control" else "band"),
             color = if (selected) centraidColor("text") else centraidColor("textSoft"),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

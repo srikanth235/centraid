@@ -83,6 +83,18 @@ struct DocsDocumentView: View {
                                         .padding(.vertical, 8)
                                 }
                                 surface(document)
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 92))], spacing: 8) {
+                                    ForEach(document.actions.filter { ["share", "star", "unstar", "labels", "move", "trash"].contains($0.key) }, id: \.key) { action in
+                                        Button { send(Self.event { $0.action = .with { $0.key = action.key } }) } label: {
+                                            VStack(spacing: 4) {
+                                                CentraidIconView(iconKey: action.iconKey, tint: Theme.color(action.destructive ? "danger" : "docsText", scheme), size: 20)
+                                                Text(action.label).centraidType("annotLabel").multilineTextAlignment(.center)
+                                            }.frame(maxWidth: .infinity, minHeight: 52)
+                                        }
+                                        .buttonStyle(.plain).disabled(!action.enabled)
+                                        .accessibilityIdentifier("docs-document-\(action.key)")
+                                    }
+                                }.padding(CentraidGeometry.pageMargin)
                                 if !document.path.isEmpty { path(document.path) }
                                 if !document.facts.isEmpty {
                                     SectionHeader(title: state.chrome.factsHeading)
@@ -166,8 +178,13 @@ struct DocsDocumentView: View {
             .padding(CentraidGeometry.pageMargin)
             .accessibilityIdentifier("docs-reader")
         case let .stage(stage)?:
-            DocsStageCard(stage: stage)
+            if !document.filePath.isEmpty {
+                DocsQuickLook(path: document.filePath, title: document.row.title, media: document.row.mediaType).frame(height: 480).accessibilityLabel(document.previewLabel).accessibilityIdentifier("docs-stage")
+            } else { DocsStageCard(stage: stage) }
         case let .factsOnly(facts)?:
+            if !document.filePath.isEmpty {
+                DocsQuickLook(path: document.filePath, title: document.row.title, media: document.row.mediaType).frame(height: 480).accessibilityLabel(document.previewLabel).accessibilityIdentifier("docs-preview")
+            }
             Text(facts.sentence)
                 .centraidType("small")
                 .foregroundStyle(Theme.color("textSoft", scheme))
@@ -237,6 +254,7 @@ struct DocsDocumentView: View {
             onChoice: { key in send(Self.event { $0.choice = .with { $0.key = key } }) },
             onLabelAdd: { label in send(Self.event { $0.labelAdded = .with { $0.label = label } }) },
             onLabelRemove: { tag in send(Self.event { $0.labelRemoved = .with { $0.tagID = tag } }) },
+            onLabelColor: { tag, color in send(Self.event { $0.labelColor = .with { $0.tagID = tag; $0.colorKey = color } }) },
             onLabelDraft: { text in send(Self.event { $0.labelDraft = .with { $0.text = text } }) }
         )
     }
@@ -411,7 +429,7 @@ struct DocsVersionsView: View {
                             LazyVStack(alignment: .leading, spacing: 0) {
                                 ForEach(data.versions, id: \.key) { version in
                                     HStack(spacing: 8) {
-                                        CentraidRow(title: version.label, meta: version.meta, dimmed: !version.current)
+                                        CentraidRow(title: version.label, meta: version.meta)
                                         if !version.restoreLabel.isEmpty {
                                             KitLink(
                                                 label: version.restoreLabel,

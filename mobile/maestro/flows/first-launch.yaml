@@ -1,4 +1,4 @@
-# First launch: a device that holds no vault opens onto the deck, not Home.
+# First launch: a device that holds no vault opens onto the welcome page, not Home.
 #
 # THE POINT OF THIS FLOW is that the first frame a new member sees is the way to
 # make a vault. Home behind it would be a grid with nothing to read, so the gate
@@ -18,22 +18,17 @@ name: first-launch
     id: "first-launch"
 - assertNotVisible:
     id: "home-grid"
-# Restore is one tap from the first slip and stays on every slip.
+# Restore is one tap from the welcome page.
 - assertVisible: "Restore backup"
-# Next throws the top slip; Skip jumps to the last, where the ink button changes
-# its verb and Skip goes away.
-- tapOn:
-    id: "first-launch-primary"
+# All three benefits and both doors share one welcome page.
+- assertVisible: "Apps on this phone"
 - assertVisible: "An assistant on this phone"
-- tapOn:
-    id: "first-launch-skip"
+- assertVisible: "Encrypted backups"
 - assertVisible: "Get started"
-- assertNotVisible:
-    id: "first-launch-skip"
 # GET STARTED (R-ONBOARD-10). Where the keychain synchronises — the simulator
 # counts — the key is kept without being shown and Home comes up with no sheet
 # in between. Where it stays on this phone alone, the key shows once with Save
-# a copy, and Cancel returns to the deck.
+# a copy, and Cancel returns to the welcome page.
 - tapOn:
     id: "first-launch-primary"
 - runFlow:

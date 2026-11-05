@@ -208,6 +208,7 @@ message DocsFolder {
 message DocsLabel {
   string tag_id = 1;
   string label = 2;
+  string color_key = 3;
 }
 
 // One document row, as every list draws it.
@@ -255,6 +256,8 @@ message DocsDocumentRow {
   // `search` only: the index's highlight, `⟦`/`⟧` around the matched words.
   // EMPTY on a hit with none.
   string snippet = 22;
+  // Local file, only for a held, supported inline preview.
+  string preview_path = 23;
 }
 
 // One version, newest first. A→B→A is THREE versions: each is an occurrence,
@@ -323,6 +326,8 @@ message DocsSearch {
 }
 
 message DocsDocument {
+  // Held original for explicit native preview/share; never opened as web content.
+  string file_path = 11;
   // UNSET when no such document exists — deleted elsewhere, or a stale link.
   // A state, not an error.
   optional DocsDocumentRow document = 1;

@@ -147,6 +147,7 @@ pub struct TodayMetric {
     /// Today's figure (see [`today`]), and the day it is for.
     pub value: Option<(String, f64)>,
     pub typical: Option<Typical>,
+    pub week: Vec<Bucket>,
 }
 
 /// Today: the six metrics against the member's own typical, today's workouts, and what the
@@ -197,6 +198,7 @@ pub fn today(door: &dyn PageDoor, today: i64, day_start: &str, day_end: &str) ->
                 metric,
                 value: todays_figure(metric, days, today),
                 typical: figures::typical_before(days, today),
+                week: figures::day_buckets(metric, days, today - 6, today),
             }
         })
         .collect();
@@ -231,6 +233,8 @@ pub enum Range {
     Week,
     /// The 30 days to today.
     Month,
+    /// The six calendar months to today's, compared with the preceding six.
+    SixMonths,
     /// The 12 calendar months to today's.
     Year,
 }
@@ -265,6 +269,10 @@ pub fn series(door: &dyn PageDoor, metric: Metric, range: Range, today: i64) -> 
     let (first, previous_first) = match range {
         Range::Week => (today - 6, today - 13),
         Range::Month => (today - 29, today - 59),
+        Range::SixMonths => (
+            month_start_shifted(today, -5),
+            month_start_shifted(today, -11),
+        ),
         Range::Year => (
             month_start_shifted(today, -11),
             month_start_shifted(today, -23),
@@ -277,6 +285,7 @@ pub fn series(door: &dyn PageDoor, metric: Metric, range: Range, today: i64) -> 
     let buckets = match range {
         Range::Week | Range::Month => figures::day_buckets(metric, &days, first, today),
         Range::Year => figures::month_buckets(metric, &days, today, 12),
+        Range::SixMonths => figures::month_buckets(metric, &days, today, 6),
     };
     let average = figures::period_figure(metric, &days, first, today);
     let previous_average = figures::period_figure(metric, &days, previous_first, first - 1);
@@ -284,7 +293,7 @@ pub fn series(door: &dyn PageDoor, metric: Metric, range: Range, today: i64) -> 
         Range::Week | Range::Month => {
             figures::typical_before(&days, today).map(|typical| typical.typical)
         }
-        Range::Year => previous_average,
+        Range::Year | Range::SixMonths => previous_average,
     };
     let (above_typical, counted) = figures::above(&buckets, typical);
     let (versus_typical, versus_typical_pct) = figures::difference(average, typical);

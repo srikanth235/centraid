@@ -12,6 +12,7 @@ struct DocsSheetActions {
     var onChoice: (String) -> Void = { _ in }
     var onLabelAdd: (String) -> Void = { _ in }
     var onLabelRemove: (String) -> Void = { _ in }
+    var onLabelColor: (String, String) -> Void = { _, _ in }
     var onLabelDraft: (String) -> Void = { _ in }
     var onFolderName: (String) -> Void = { _ in }
     var onFolderCreate: () -> Void = {}
@@ -89,9 +90,26 @@ private struct DocsLabelsSheetView: View {
     var body: some View {
         SheetRoom(title: title) {
             if !labels.current.isEmpty {
-                FlowChips(items: labels.current.map { ($0.tagID, $0.label) }) { tagID in
-                    actions.onLabelRemove(tagID)
-                } spoken: { label in "\(labels.removeLabel) \(label)" }
+                ForEach(labels.current, id: \.tagID) { chip in
+                    HStack {
+                        Circle().fill(Theme.color(chip.colorKey, scheme)).frame(width: 10, height: 10).accessibilityHidden(true)
+                        Text(chip.label).centraidType("body")
+                        Spacer()
+                        Menu {
+                            ForEach(labels.colors, id: \.key) { color in
+                                Button(color.label) { actions.onLabelColor(chip.tagID, color.key) }
+                            }
+                        } label: {
+                            CentraidIconView(iconKey: "Tag", tint: Theme.color("docsText", scheme), size: 20)
+                                .frame(width: 44, height: 44)
+                        }
+                        .accessibilityLabel("\(labels.colorLabel), \(chip.label)")
+                        .accessibilityIdentifier("docs-label-color-\(chip.tagID)")
+                        Button { actions.onLabelRemove(chip.tagID) } label: {
+                            CentraidIconView(iconKey: "X", tint: Theme.color("textSoft", scheme), size: 18).frame(width: 44, height: 44)
+                        }.accessibilityLabel("\(labels.removeLabel) \(chip.label)")
+                    }
+                }
             }
             HStack(spacing: 8) {
                 TextField(labels.placeholder, text: $draft)
@@ -186,9 +204,7 @@ struct DocsRowItem: View {
         HStack(spacing: 4) {
             Button(action: onTap) {
                 HStack(alignment: .top, spacing: 12) {
-                    CentraidIconView(iconKey: row.kindIconKey, tint: Theme.color("textSoft", scheme), size: 20)
-                        .frame(width: 28, height: 28)
-                        .accessibilityHidden(true)
+                    DocsThumbnail(row: row).frame(width: 64, height: 72)
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
                             Text(row.title)
@@ -196,7 +212,7 @@ struct DocsRowItem: View {
                                 .foregroundStyle(Theme.color(row.trashed ? "textFaint" : "text", scheme))
                                 .lineLimit(1)
                             if row.starred {
-                                CentraidIconView(iconKey: "Star", tint: Theme.color("textSoft", scheme), size: 12)
+                                CentraidIconView(iconKey: "Star", tint: Theme.color("docsText", scheme), size: 12)
                                     .accessibilityHidden(true)
                             }
                         }
@@ -210,10 +226,7 @@ struct DocsRowItem: View {
                                 .lineLimit(1)
                         }
                         if !row.labels.isEmpty {
-                            Text(row.labels.map(\.label).joined(separator: " · "))
-                                .centraidType("annotLabel")
-                                .foregroundStyle(Theme.color("textSoft", scheme))
-                                .lineLimit(1)
+                            DocsLabelChips(labels: row.labels)
                         }
                     }
                     Spacer(minLength: 0)

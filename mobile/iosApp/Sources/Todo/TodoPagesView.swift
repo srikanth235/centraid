@@ -41,6 +41,31 @@ struct TodoListView: View {
                 ) { list in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
+                            if state.canShowCompleted {
+                                Toggle(state.showCompletedLabel, isOn: Binding(
+                                    get: { state.showCompleted },
+                                    set: { value in send(event { $0.completedChanged = .with { $0.on = value } }) }
+                                ))
+                                .kitToggle()
+                                .padding(.horizontal, CentraidGeometry.pageMargin)
+                                .accessibilityIdentifier("tasks-show-completed")
+                            }
+                            if !state.clearCompletedLabel.isEmpty {
+                                KitLink(label: state.clearCompletedLabel, identifier: "tasks-clear-completed") { send(event { $0.clearCompleted = .init() }) }
+                                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                            }
+                            if !list.tagChoices.isEmpty {
+                                SectionHeader(title: list.tagHeading)
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        ForEach(list.tagChoices, id: \.key) { choice in
+                                            KitChip(label: choice.label, selected: choice.selected, identifier: "tasks-tag-\(choice.key)") {
+                                                send(event { $0.tagPicked = .with { $0.key = choice.key } })
+                                            }
+                                        }
+                                    }.padding(.horizontal, CentraidGeometry.pageMargin)
+                                }
+                            }
                             TodoCountLine(count: list.countLabel, window: list.windowLabel)
                             if list.groups.isEmpty, list.hasEmpty, !list.empty.headline.isEmpty {
                                 EmptyStateView(list.empty)
@@ -50,7 +75,8 @@ struct TodoListView: View {
                                     group: group,
                                     onVerb: { _ in },
                                     onCheck: { id in send(event { $0.rowChecked = .with { $0.taskID = id } }) },
-                                    onPick: open
+                                    onPick: open,
+                                    onAction: { action in send(event { $0.rowAction = action }) }
                                 )
                             }
                             ShowMoreFooter(visible: list.canShowMore, label: state.chrome.showMore) {
@@ -96,7 +122,7 @@ struct TodoProjectView: View {
     }
 
     var body: some View {
-        PushedPage(title: state.title, parentTitle: state.chrome.back, onBack: onBack) {
+        PushedPage(title: state.title, titleColorRole: state.titleColorRole, parentTitle: state.chrome.back, onBack: onBack) {
             if case let .data(project) = content, project.found {
                 HStack(spacing: 4) {
                     if !project.renameLabel.isEmpty {
@@ -120,6 +146,12 @@ struct TodoProjectView: View {
                 ) { project in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
+                            Toggle(state.showCompletedLabel, isOn: Binding(get: { state.showCompleted }, set: { value in send(event { $0.completedChanged = .with { $0.on = value } }) }))
+                                .kitToggle().padding(.horizontal, CentraidGeometry.pageMargin)
+                                .accessibilityIdentifier("tasks-show-completed")
+                            if !state.clearCompletedLabel.isEmpty {
+                                KitLink(label: state.clearCompletedLabel, identifier: "tasks-clear-completed") { send(event { $0.clearCompleted = .init() }) }
+                            }
                             TodoCountLine(count: project.countLabel, window: "")
                             if project.groups.isEmpty, project.hasEmpty, !project.empty.headline.isEmpty {
                                 EmptyStateView(project.empty)
@@ -129,7 +161,8 @@ struct TodoProjectView: View {
                                     group: group,
                                     onVerb: { key in send(event { $0.groupVerb = .with { $0.key = key } }) },
                                     onCheck: { id in send(event { $0.rowChecked = .with { $0.taskID = id } }) },
-                                    onPick: open
+                                    onPick: open,
+                                    onAction: { action in send(event { $0.rowAction = action }) }
                                 )
                             }
                         }
@@ -146,7 +179,8 @@ struct TodoProjectView: View {
                         placeholder: state.chrome.quickAddPlaceholder,
                         verb: state.chrome.quickAddVerb,
                         onChange: { title in send(event { $0.quickAddChanged = .with { $0.title = title } }) },
-                        onSubmit: { send(event { $0.quickAddSubmitted = .init() }) }
+                        onSubmit: { send(event { $0.quickAddSubmitted = .init() }) },
+                        onTool: { key in send(event { $0.quickAddTool = .with { $0.key = key } }) }
                     )
                 }
             }
@@ -179,10 +213,12 @@ struct TodoProjectView: View {
             if case let .data(project) = content {
                 SheetRoom(
                     title: project.renameTitle,
+                    status: state.status.sentence,
                     primary: state.renameCanSubmit
                         ? SheetPrimary(label: project.renameVerb) { send(event { $0.renameSubmitted = .init() }) }
                         : nil
                 ) {
+                    ScrollView { VStack(alignment: .leading, spacing: 12) {
                     MachineTextField(
                         placeholder: project.renamePlaceholder,
                         value: state.renameName,
@@ -192,6 +228,8 @@ struct TodoProjectView: View {
                     .centraidType("body")
                     .accessibilityLabel(project.renamePlaceholder)
                     .accessibilityIdentifier("tasks-rename-field")
+                    AgendaAppearancePicker(value: state.appearance) { changed in send(event { $0.appearance = changed }) }
+                    } }
                 }
             }
         }

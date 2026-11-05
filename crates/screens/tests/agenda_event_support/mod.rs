@@ -74,13 +74,49 @@ impl World {
     /// run lands in that week. Trash every seeded event: each test arranges the
     /// events it counts.
     fn clear_the_example_agenda(&mut self) {
-        let mut seeded: Vec<String> = self
-            .window("1970-01-01T00:00:00Z", "2099-01-01T00:00:00Z")
+        // Discover identities through the bounded entity page, not a century
+        // of recurrence expansion merely to learn each series' id.
+        let answer = self
+            .driver
+            .handle
+            .call(&wire::Request {
+                kind: Some(wire::request::Kind::Page(wire::PageRequest {
+                    query: Some(wire::PageQuery {
+                        name: "agenda-test.seeded-events".into(),
+                        select: vec!["id".into(), "created_at".into()],
+                        from: "entity".into(),
+                        r#where: Some("kind = 'event' AND deleted_at IS NULL".into()),
+                        order: Some(wire::PageOrder {
+                            sort_column: "created_at".into(),
+                            pk_column: "id".into(),
+                            descending: false,
+                        }),
+                        ..Default::default()
+                    }),
+                    limit: 500,
+                    after: None,
+                })),
+            })
+            .expect("seeded event identities");
+        let Some(wire::response::Kind::Page(page)) = answer.kind else {
+            panic!("event identity page")
+        };
+        assert!(
+            page.next.is_none(),
+            "the small example fixture fits one page"
+        );
+        let seeded: Vec<String> = page
+            .rows
             .into_iter()
-            .map(|event| event.event_id)
+            .map(|row| {
+                let Some(wire::value::Kind::Text(id)) =
+                    row.values.into_iter().next().and_then(|value| value.kind)
+                else {
+                    panic!("event id is text")
+                };
+                id
+            })
             .collect();
-        seeded.sort();
-        seeded.dedup();
         for event_id in seeded {
             self.act(act::agenda::TrashEvent { event_id });
         }

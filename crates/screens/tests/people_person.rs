@@ -652,3 +652,34 @@ fn a_birthday_reminder_is_turned_off_from_the_sheet_and_the_date_stays() {
         "Reminder off · Birthday"
     );
 }
+
+#[test]
+fn the_hero_uses_the_preferred_channel_and_a_message_does_not_log_a_touch() {
+    let mut d = clean();
+    let (i, _) = opened(&mut d);
+    let before = person_data(d.view(i)).touches.clone();
+    let actions = &person_data(d.view(i)).hero_actions;
+    assert_eq!(
+        actions
+            .iter()
+            .map(|action| action.key.as_str())
+            .collect::<Vec<_>>(),
+        ["message", "call", "mail", "touch"]
+    );
+    let effects = d.effects.len();
+    send_person(
+        &mut d,
+        i,
+        P::Hero(ev::HeroTapped {
+            key: "message".to_owned(),
+        }),
+    );
+    assert!(d.effects[effects..].iter().any(|request| matches!(request.effect.as_ref().and_then(|effect| effect.kind.as_ref()), Some(wire::effect::Kind::OpenUrl(url)) if url.url == "sms:+442079460000")));
+    assert_eq!(person_data(d.view(i)).touches, before);
+    assert!(
+        person_data(d.view(i))
+            .vault_links
+            .iter()
+            .all(|link| link.route.is_some() && link.color_key.ends_with("Text"))
+    );
+}

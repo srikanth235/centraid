@@ -1,4 +1,4 @@
-//! THE EIGHTEEN ACTIONS, as command invocations.
+//! THE NINETEEN ACTIONS, as command invocations.
 //!
 //! Every Docs action is a thin invocation of ONE typed vault command: the
 //! projection lives in the command, not the app. So this module is a table, not
@@ -105,8 +105,8 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// THE TABLE. Eighteen actions, eighteen commands, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 18] = [
+/// THE TABLE. Nineteen actions, in the manifest's own order.
+pub const ACTIONS: [ActionRow; 19] = [
     act("upload", "document.add"),
     // The Add sheet's "Text" (#1047): words in, a text document out.
     act("create-text", "document.create_text"),
@@ -122,6 +122,7 @@ pub const ACTIONS: [ActionRow; 18] = [
     act("unstar", "flag.clear"),
     act("tag", "tag.add"),
     act("untag", "tag.remove"),
+    act("color-label", "tag.color"),
     act("edit", "document.edit"),
     act("replace", "document.replace"),
     act("restore-version", "document.restore_version"),
@@ -171,7 +172,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_document_verbs_are_the_documents_own() {
-        assert_eq!(ACTIONS.len(), 18);
+        assert_eq!(ACTIONS.len(), 19);
         let own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)
@@ -237,7 +238,7 @@ mod tests {
     /// family. Widening it would hand Docs every `entity.*` verb it never sends.
     #[test]
     fn the_act_scopes_are_one_per_distinct_command() {
-        assert_eq!(act_scope_tables().len(), 16);
+        assert_eq!(act_scope_tables().len(), 17);
         assert!(act_scope_tables().contains(&("document", "add")));
         assert!(!act_scope_tables().contains(&("person", "merge")));
     }

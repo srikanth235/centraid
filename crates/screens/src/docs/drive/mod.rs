@@ -137,7 +137,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
             String::new()
         },
         query: Query::default(),
-        grid: false,
+        grid: true,
         search: Search::default(),
         phase: Phase::Loading,
         rail: None,
@@ -347,6 +347,7 @@ impl Drive {
             Some(D::RenameClosed(_)) => self.close_rename(ctx),
             Some(D::LabelAdded(added)) => self.label_added(ctx, &added.label),
             Some(D::LabelRemoved(removed)) => self.label_removed(ctx, &removed.tag_id),
+            Some(D::LabelColor(picked)) => self.label_color(ctx, &picked.tag_id, &picked.color_key),
             Some(D::LabelDraft(typed)) => {
                 if let Sheet::Labels { draft, .. } = &mut self.sheet {
                     *draft = typed.text;
@@ -612,6 +613,21 @@ impl Drive {
                 self.asking = Some(document_id.to_owned());
             }
             _ => {}
+        }
+    }
+
+    fn label_color(&mut self, ctx: &Ctx, tag_id: &str, key: &str) {
+        let Sheet::Labels { document_id, .. } = &self.sheet else {
+            return;
+        };
+        if !self
+            .row(document_id)
+            .is_some_and(|row| row.labels.iter().any(|label| label.tag_id == tag_id))
+        {
+            return;
+        }
+        if let Some(action) = super::fold::color_action(tag_id, key) {
+            self.write(ctx, action, tag_id);
         }
     }
 

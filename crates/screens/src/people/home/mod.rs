@@ -86,7 +86,7 @@ impl Home {
         Self {
             destination,
             chip: wire::PeopleChipKey::All,
-            order: wire::PeopleOrder::Recent,
+            order: wire::PeopleOrder::Name,
             roster: Phase::Loading,
             touch: Phase::Loading,
             search: Search::default(),
@@ -467,9 +467,9 @@ impl Screen for Home {
                 Phase::Loading => C::Loading(wire::Loading { first_load: true }),
                 Phase::Failed => failure(),
                 Phase::Denied(denial) => C::Denied(denied(locale, denial)),
-                Phase::Ready(answer) => {
-                    C::Roster(Box::new(rows::roster(locale, answer, self.chip)))
-                }
+                Phase::Ready(answer) => C::Roster(Box::new(rows::roster(
+                    locale, answer, self.chip, self.order,
+                ))),
             },
         });
         let denied_now = self.denied();

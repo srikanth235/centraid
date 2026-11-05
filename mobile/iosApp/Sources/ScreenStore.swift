@@ -91,6 +91,9 @@ final class ScreenStore: ObservableObject {
             self?.sendRoot(RustScreens.cameraRollTab, .importsCameraRoll(event))
         }
         LibraryWatcher.shared.registerIfAllowed()
+        AgendaNotifications.shared.onAction = { [weak self] action in
+            self?.report(.agendaNotification(action))
+        }
         #endif
     }
 
@@ -293,6 +296,7 @@ final class ScreenStore: ObservableObject {
         where !closed.contains(view.instance) && view.revision > (views[view.instance]?.revision ?? 0) {
             views[view.instance] = view
             if let home = view.homeState {
+                AgendaWidgetBridge.publish(home)
                 onHomeScheme?(home.scheme)
                 if homeTold != view.instance {
                     homeTold = view.instance
@@ -436,6 +440,13 @@ final class ScreenStore: ObservableObject {
             #endif
         // THE PASS SCHEDULER (#1135, `passes`): Rust decides which windows exist, when a pass ran
         // and what the OS carries; this performs and answers.
+        case .agendaNotifications(let sync)?:
+            #if os(iOS)
+            do { answer(request, .agendaNotifications(try await AgendaNotifications.shared.sync(sync))) }
+            catch { answer(request, .failed(Self.failure("The notification plan could not be saved."))) }
+            #else
+            answer(request, .failed(Self.failure("Notifications are unavailable on this platform.")))
+            #endif
         case .scheduleWindows(let schedule)?:
             #if os(iOS)
             answer(request, .windowsScheduled(BackgroundPasses.schedule(schedule.windows)))
@@ -483,6 +494,8 @@ final class ScreenStore: ObservableObject {
             }
         case .calendarRead(let read)?:
             answer(request, await PhoneCalendar.snapshot(read))
+        case .calendarWrite(let write)?:
+            answer(request, await PhoneCalendarWrite.perform(write))
         case .contactsRead(let read)?:
             answer(request, await PhoneContacts.snapshot(read))
             if read.askPermission, PhoneContacts.limited { onContactsLimited?() }
@@ -699,7 +712,17 @@ final class ScreenStore: ObservableObject {
 
     /// The OS share sheet over the frontmost screen: the text, then the link.
     private static func present(_ share: Centraid_Core_V1_Share) {
+        Task {
+            let copy = await Task.detached(priority: .userInitiated) {
+                DocsSharedFile.prepare(path: share.filePath, title: share.subject, media: share.mediaType)
+            }.value
+            present(share, copy: copy)
+        }
+    }
+
+    private static func present(_ share: Centraid_Core_V1_Share, copy: URL?) {
         var items: [Any] = []
+        if let copy { items.append(copy) }
         if !share.text.isEmpty { items.append(share.text) }
         if let url = URL(string: share.url), !share.url.isEmpty { items.append(url) }
         guard !items.isEmpty,
@@ -708,6 +731,9 @@ final class ScreenStore: ObservableObject {
         else { return }
         while let next = top.presentedViewController { top = next }
         let sheet = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        sheet.completionWithItemsHandler = { _, _, _, _ in
+            if let copy { try? FileManager.default.removeItem(at: copy.deletingLastPathComponent()) }
+        }
         if !share.subject.isEmpty { sheet.setValue(share.subject, forKey: "subject") }
         sheet.popoverPresentationController?.sourceView = top.view
         top.present(sheet, animated: true)

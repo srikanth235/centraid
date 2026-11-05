@@ -292,7 +292,7 @@ struct NotesHistoryView: View {
                                         CentraidRow(
                                             title: row.label,
                                             meta: row.preview,
-                                            dimmed: row.current,
+                                            dimmed: false,
                                             accessibility: row.accessibilityLabel,
                                             identifier: "notes-version-\(row.contentID)"
                                         )

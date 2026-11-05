@@ -20,9 +20,8 @@ cargo test -p centraid-screens
 cargo xtask rules
 cargo xtask screens-catalog --check   # only when a manifest changed
 bun run lint:product                  # copy, native controls, journey ledger
-bun contracts/tools/export-native-theme.ts
-bun run format
-git diff --exit-code -- design mobile # confirms generated outputs are current
+cargo xtask design
+cargo xtask design --check           # verifies generated resources and dark mockups
 buf lint                              # and buf breaking against the PR base, when installed
 cargo xtask gate --profile pr
 cargo build -p centraid-core-ffi
@@ -54,7 +53,7 @@ Then from `mobile/`:
 If Rust changed, rebuild the Rust core before assembling/running the app:
 
 ```sh
-# From the repository root. This script currently uses the macOS NDK toolchain.
+# From the repository root, on Linux or macOS with the pinned Android NDK.
 mobile/scripts/android-core.sh
 ```
 

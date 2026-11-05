@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="@dimen/design_spacing_4"
+    android:background="@drawable/agenda_widget_background">
+    <TextView android:fontFamily="@font/geist_bold" android:id="@+id/widget_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/design_type_title" android:textStyle="bold" android:textColor="@color/design_agenda_text" />
+    <TextView android:fontFamily="@font/geist_regular" android:id="@+id/widget_event" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/design_spacing_2" android:textSize="@dimen/design_type_body" android:textColor="@color/design_text" android:maxLines="2" android:ellipsize="end" />
+    <TextView android:fontFamily="@font/geist_regular" android:id="@+id/widget_when" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/design_type_small" android:textColor="@color/design_text_soft" />
+    <TextView android:fontFamily="@font/geist_regular" android:id="@+id/widget_reminders" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="@dimen/design_spacing_2" android:textSize="@dimen/design_type_body" android:textColor="@color/design_text" android:maxLines="3" android:ellipsize="end" />
+    <TextView android:fontFamily="@font/geist_regular" android:id="@+id/widget_updated" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/design_type_small" android:textColor="@color/design_text_soft" />
+    <TextView android:fontFamily="@font/geist_regular" android:id="@+id/widget_new" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="@dimen/design_geometry_target_min_coarse" android:gravity="center_vertical" android:textSize="@dimen/design_type_body" android:textColor="@color/design_agenda_text" />
+</LinearLayout>

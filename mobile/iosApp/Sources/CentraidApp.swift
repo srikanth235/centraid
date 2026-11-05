@@ -51,13 +51,13 @@ struct CentraidApp: App {
                         .task(id: route) { shell.opened(route) }
                         // THE ASSISTANT'S DOOR for a search's Ask row (#1097, R-1097-30, #1135).
                         .environment(\.askChat, { shell.open($0) })
-                        // THE IMPORT'S LINE on every route, at the foot (DESIGN.md's
+                        // THE IMPORT'S LINE on every route, at the foot (product-intuition screen contracts's
                         // one status line): above the app's band where the page
                         // has one, at the page's own foot where it does not.
                         .modifier(ShellLineHost(shell: shell))
                     }
             }
-            // THE ROOT'S TINT (DESIGN.md "The controls (mobile)"): `link`
+            // THE ROOT'S TINT (product-intuition screen contracts "The controls (mobile)"): `link`
             // ink on every platform control, not system blue.
             .kitRootTint()
             // THE PICKERS A SCREEN CAN ASK FOR WHEREVER THE MEMBER IS: Docs' file
@@ -79,9 +79,7 @@ struct CentraidApp: App {
             .overlay { if shell.masked { Color.black.ignoresSafeArea() } }
             // THE MEMBER'S APPEARANCE (R-CHROME-7): nil follows the phone.
             .preferredColorScheme(shell.preferredScheme)
-            // THE SYSTEM TEXT SIZE, CAPPED ONCE (DESIGN.md, Dynamic Type): every
-            // role but `band` follows it up to `xxxLarge`, here and nowhere else.
-            .dynamicTypeSize(...Theme.textSizeCap)
+            .onOpenURL { AgendaEntrypoint.open($0) }
             .onChange(of: scenePhase) { _, phase in
                 switch phase {
                 case .active:
@@ -125,6 +123,7 @@ private struct StoreRoot: View {
     @ObservedObject var store: ScreenStore
 
     var body: some View {
+        Group {
         if let home = store.homeView {
             if home.hasFirstLaunch {
                 // THE FIRST-LAUNCH GATE: nothing of Home stands behind it.
@@ -136,6 +135,11 @@ private struct StoreRoot: View {
         } else {
             BarePaper()
         }
+        }
+        // A cold launch may finish opening the vault after the URL or intent.
+        // Retry only when the home state changes; no polling or extra core.
+        .onChange(of: store.homeView) { _, _ in AgendaEntrypoint.consume(store) }
+        .onAppear { AgendaEntrypoint.consume(store) }
     }
 }
 #endif

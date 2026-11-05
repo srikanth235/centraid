@@ -283,7 +283,7 @@ public fun NotesHistoryScreen(
                         CentraidRow(
                             title = row.label,
                             meta = row.preview,
-                            dimmed = row.current,
+                            dimmed = false,
                             a11y = row.accessibility_label,
                             testTag = "notes-version-${row.content_id}",
                         ) {

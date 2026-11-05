@@ -4,12 +4,16 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,6 +28,7 @@ import centraid.core.v1.PeopleSheetFrame
 import centraid.core.v1.Route
 import centraid.core.v1.StatusChip
 import dev.centraid.android.kit.CentraidRow
+import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EmptyStateView
@@ -101,6 +106,7 @@ public fun PeoplePersonScreen(
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun PersonBody(
     person: PeoplePersonData,
     state: PeoplePersonState,
@@ -111,12 +117,13 @@ private fun PersonBody(
     val chrome = state.chrome
     LazyColumn(Modifier.testTag("people-person")) {
         item(key = "head") {
-            Row(
+            Column(
                 Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Avatar(person.avatar, size = 48)
-                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                Avatar(person.avatar, size = 88)
+                Text(person.name, style = centraidType("display"), color = centraidColor("text"), modifier = Modifier.padding(top = 12.dp))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     if (person.role.isNotEmpty()) {
                         Text(person.role, style = centraidType("body"), color = centraidColor("text"))
                     }
@@ -128,6 +135,24 @@ private fun PersonBody(
                     StatusChipView(
                         StatusChip(label = chip.label, tone = StatusChip.Tone.fromValue(chip.tone.value) ?: StatusChip.Tone.TONE_UNSPECIFIED),
                     )
+                }
+            }
+        }
+        item(key = "hero-actions") {
+            FlowRow(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                person.hero_actions.forEach { action ->
+                    Surface(
+                        onClick = { onEvent(PeoplePersonEvent(hero = PeoplePersonEvent.HeroTapped(key = action.key))) },
+                        enabled = action.enabled,
+                        color = centraidColor("bgElev"),
+                        shape = RoundedCornerShape(KitGeometry.RADIUS),
+                        modifier = Modifier.testTag("people-hero-${action.key}"),
+                    ) {
+                        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            CentraidIcon(action.icon_key, centraidColor("peopleText"), size = 22.dp)
+                            Text(action.label, style = centraidType("smallStrong"), color = centraidColor("peopleText"))
+                        }
+                    }
                 }
             }
         }
@@ -162,6 +187,17 @@ private fun PersonBody(
             }
         }
         items(person.facts, key = { "f-" + it.label }) { fact -> FieldRow(fact.label, fact.value_) }
+
+        if (person.vault_links.isNotEmpty()) {
+            item(key = "vault-links-head") { SectionHeader(dev.centraid.android.kit.SectionHead(title = person.vault_links_title)) }
+            items(person.vault_links, key = { "vault-link-${it.id}" }) { link ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = KitGeometry.GUTTER)) {
+                    CentraidIcon(link.icon_key, centraidColor(link.color_key), size = 22.dp)
+                    CentraidRow(title = link.title, meta = link.app_label, testTag = "people-vault-link-${link.id}", onTap = { link.route?.let(onOpen) })
+                }
+            }
+            if (person.vault_links_note.isNotEmpty()) { item(key = "vault-links-note") { RailEmpty(person.vault_links_note) } }
+        }
 
         person.channels_head?.let { head ->
             item(key = "channels-head") { SectionHeader(head.toKit()) { open(Which.WHICH_CHANNEL) } }

@@ -1,7 +1,7 @@
 ---
 name: vault-change
 description: >-
-  How to change the Centraid vault model: add or change a kind, table, column, edge relation, typed command, or read, and keep the schema digest, generated contracts, search index, backup census and app manifests in step. Use when touching contracts/migrations/001_baseline.sql, crates/vault (commands/, migrations.rs, format.rs, log/guard.rs), crates/ontology, crates/search indexing, an app's manifest.json or queries, or when asked to "add a table", "add a column", "add a command", "new kind", "new edge", or "change the schema". For SQL craft itself use the sqlite skill.
+  How to change the Centraid vault model: add or change a kind, table, column, edge relation, typed command, or read, and keep the schema digest, generated contracts, search index, backup census and app manifests in step. Use when touching contracts/migrations/, crates/vault (commands/, migrations.rs, format.rs, log/guard.rs), crates/ontology, crates/search indexing, an app's manifest.json or queries, or when asked to "add a table", "add a column", "add a command", "new kind", "new edge", or "change the schema". For SQL craft itself use the sqlite skill.
 ---
 
 # Changing the vault model
@@ -11,7 +11,7 @@ The vault is one SQLite file on the phone. The Rust core is its only writer. Eve
 ## 1. What a change touches, in order
 
 1. **The model**: [crates/vault/src/model.rs](../../../crates/vault/src/model.rs) (`Kind`, `Rel`, `Flag`, `Kind::host()`, `Kind::CONCEPTS`, `Kind::CONTAINERS`) and [crates/ontology](../../../crates/ontology) (the `Vault` type, DDL helpers, the text tokenizer `text::index_words`).
-2. **The baseline DDL**: [contracts/migrations/001_baseline.sql](../../../contracts/migrations/001_baseline.sql), a hand-written file that founds a new vault and seeds its rows. It is reached with `include_str!` by [crates/vault/src/migrations.rs](../../../crates/vault/src/migrations.rs).
+2. **The migration ladder**: [contracts/migrations](../../../contracts/migrations), beginning with the frozen `001_baseline.sql`. New vaults run every rung; existing and restored vaults run only the rungs they lack. Each is embedded with `include_str!` by [crates/vault/src/migrations.rs](../../../crates/vault/src/migrations.rs).
 3. **The format identity**: [crates/vault/src/format.rs](../../../crates/vault/src/format.rs) `SCHEMA_DIGEST`, a BLAKE3 over `sqlite_schema`. Open and restore refuse a file whose digest differs.
 4. **Generated contracts**: [contracts/schema/vault-ddl.sql](../../../contracts/schema/vault-ddl.sql) (`export-ladder-ddl`), [contracts/schema/vault-commands.txt](../../../contracts/schema/vault-commands.txt) (`export-commands`), and the published ontology page's schema section (`export-ontology-page`, with a sentence per table in `ontology_doc::TABLES`).
 5. **Commands**: [`crates/vault/src/commands/`](../../../crates/vault/src/commands/), registered in [crates/vault/src/commands/mod.rs](../../../crates/vault/src/commands/mod.rs). A command runs inside `Vault::execute`, which runs the commit guard in [crates/vault/src/log/guard.rs](../../../crates/vault/src/log/guard.rs).
@@ -22,9 +22,9 @@ The vault is one SQLite file on the phone. The Rust core is its only writer. Eve
 ## 2. The steps, in order
 
 1. **Decide the table's place in the model first.** A new thing with a title and a trash is a new _kind_: one value in `entity.kind`'s CHECK, one in `Kind`, a host table (its own, `concept` or `container`), and nothing else. A new relation between entities is a CHECK value, a `Rel`, and `edge_shape` rows saying which kinds it may join. A thing that is none of these is a _child row_ of one kind and cascades from it. A star, a pin or an archive is a `tagged` edge to a flag, never a column. Why: the model has one supertype and one cascade; a parallel mechanism is a second truth.
-2. **Edit the baseline.** `001_baseline.sql` is the schema a new vault founds and the only rung; until the first release, change it directly. From the first release on it is frozen: append `002_<name>.sql` as [crates/vault/src/migrations.rs](../../../crates/vault/src/migrations.rs) describes, and prove it against a file wound back to rung one.
+2. **Append a migration.** Existing development and restored vaults must remain openable. Keep every existing rung, including `001_baseline.sql`, unchanged; add the next numbered SQL file and register it in [crates/vault/src/migrations.rs](../../../crates/vault/src/migrations.rs). Prove the upgrade from the previous head with representative rows, and prove that a fresh vault reaches the same shape. Do not reset a vault to accommodate a new schema.
 3. **Write the DDL to the doctrine** (section 3): generated `kind` column and composite `(id, kind)` foreign key for a kind row, an explicit `ON DELETE` on every foreign key, every FK's first child column leading an index (a partial index `WHERE col IS NOT NULL` when mostly NULL), CHECK values that match the Rust enum, `STRICT` where the neighbours are.
-4. **Run the digest test and paste the value.** `cargo test -p centraid-vault the_schema_digest_is_the_founded_files` fails printing `found: <hex>`; put it in `SCHEMA_DIGEST`. Any baseline change, even a column comment that changes a statement, needs this. Comments and whitespace do not change the digest; statements do.
+4. **Run the digest test and paste the value.** `cargo test -p centraid-vault the_schema_digest_is_the_founded_files` fails printing `found: <hex>`; put it in `SCHEMA_DIGEST`. A migration that changes the resulting schema needs this. Comments and whitespace do not change the digest; statements do.
 5. **Regenerate the generated files.** Run `cargo run -p centraid-vault --bin export-ladder-ddl > contracts/schema/vault-ddl.sql` and, when commands change, `cargo run -p centraid-vault --bin export-commands > contracts/schema/vault-commands.txt`. Run `cargo run -p centraid-vault --bin export-ontology-page` for the page after adding a sentence for the table in `ontology_doc::TABLES`. Never hand-edit them. Add the new table to the list in the "no table outside the spec" commitment test ([crates/vault/tests/commitments.rs](../../../crates/vault/tests/commitments.rs)).
 6. **Write the commands.** One typed command per verb, named `<kind>.<verb>`, in the owning app's file. A per-kind verb that duplicates a shared verb (`entity.*`, `tag.*`, `flag.*`, `edge.*`, `container.*`, `blob.*`, `derivative.*`) is not written. Every command that changes an entity's row, its kind row or its child rows calls `ctx.touch(id)` (stamps `updated_at` and queues the re-index); a create uses `insert_entity` and `born`. Refuse with a sentence, not a SQL error. Add or remove of an `about` or `links` edge touches the note at the edge's start.
 7. **Make search see it.** Text a member searches goes in `text_of`; a link written without touching either end calls `mark_for_index` on the labelled end; a title that labels other things (a tag, list, project, calendar, account) belongs in `DEPENDENTS`. The incremental-index-equals-rebuild commitment must stay green for your command.
@@ -60,9 +60,9 @@ An app is a first-party screen, not a principal. It holds no credential and decl
 
 ## 5. Pitfalls
 
-- **Editing `001_baseline.sql` and forgetting the digest.** Four tests go red at once (digest, `ladder_ddl`, `ontology_page`, commitments); fix the digest first, then regenerate.
+- **Appending a migration and forgetting the digest.** Four tests go red at once (digest, `ladder_ddl`, `ontology_page`, commitments); fix the digest first, then regenerate.
 - **A foreign key with no index on its child column.** Deleting a parent then scans the child once per deleted row. A purge or an emptied trash turns quadratic. The commitment test catches it; the query-plan test catches the read-side twin.
-- **A new read that scans or sorts a big table.** [crates/core/tests/query_plans.rs](../../../crates/core/tests/query_plans.rs) plans every page and every hand-written statement over the year-3 corpus. The fix is an index in the baseline, not a row in [contracts/ledgers/query-plans.json](../../../contracts/ledgers/query-plans.json).
+- **A new read that scans or sorts a big table.** [crates/core/tests/query_plans.rs](../../../crates/core/tests/query_plans.rs) plans every page and every hand-written statement over the year-3 corpus. The fix is an index in a new migration, not a row in [contracts/ledgers/query-plans.json](../../../contracts/ledgers/query-plans.json).
 - **Touching a row without `ctx.touch`.** The row changes but search and `updated_at` do not; the index-equals-rebuild commitment fails, or worse, silently does not for a path no test covers.
 - **A command that works on the wrong kind.** Notes and Photos both hold containers; every command states its kind and refuses the other's id with a sentence, and every reader filters on kind.
 - **Adding a CHECK value without its writers.** Sweep mechanically (below); a CHECK value nothing writes is dormant schema.
@@ -97,7 +97,7 @@ cargo xtask gate --profile pr           # the real gate; one crate green is not 
 
 ## 8. Final checklist
 
-- [ ] Place in the model decided (kind, relation or child row); the baseline edited directly.
+- [ ] Place in the model decided (kind, relation or child row); a migration appended and tested against an existing vault.
 - [ ] `SCHEMA_DIGEST` updated; `vault-ddl.sql`, `vault-commands.txt` and the ontology page regenerated, not hand-edited; table added to the commitments spec list.
 - [ ] Every FK has an explicit delete rule and an index on its first child column; any no-action pointer has a purge rule.
 - [ ] Commands upsert (no REPLACE), call `ctx.touch`, refuse with sentences, collect blobs and return `released` where they can drop one.

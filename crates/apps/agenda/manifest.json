@@ -168,6 +168,41 @@
         "schema": "tag",
         "table": "remove",
         "verbs": "act"
+      },
+      {
+        "schema": "flag",
+        "table": "set",
+        "verbs": "act"
+      },
+      {
+        "schema": "flag",
+        "table": "clear",
+        "verbs": "act"
+      },
+      {
+        "schema": "follow",
+        "table": "reminders",
+        "verbs": "act"
+      },
+      {
+        "schema": "container",
+        "table": "style",
+        "verbs": "act"
+      },
+      {
+        "schema": "follow",
+        "table": "calendar_written",
+        "verbs": "act"
+      },
+      {
+        "schema": "task",
+        "table": "reorder",
+        "verbs": "act"
+      },
+      {
+        "schema": "task",
+        "table": "clear_completed",
+        "verbs": "act"
       }
     ]
   },
@@ -222,10 +257,9 @@
           "reminders": {
             "type": ["array", "null"],
             "items": {
-              "type": "integer",
-              "minimum": 0
+              "type": "integer"
             },
-            "description": "Minutes before it starts."
+            "description": "Signed minutes before the start; negative values are after the start."
           },
           "attendees": {
             "type": "array",
@@ -260,6 +294,11 @@
           "zone": {
             "type": ["string", "null"],
             "description": "An IANA zone; with it a wall clock is that zone's."
+          },
+          "travel_minutes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10080
           }
         },
         "required": ["title", "starts"],
@@ -378,10 +417,9 @@
           "reminders": {
             "type": ["array", "null"],
             "items": {
-              "type": "integer",
-              "minimum": 0
+              "type": "integer"
             },
-            "description": "Minutes before it starts."
+            "description": "Signed minutes before the start; negative values are after the start."
           },
           "attendees": {
             "type": "array",
@@ -415,6 +453,11 @@
           "zone": {
             "type": ["string", "null"],
             "description": "An IANA zone; with it a wall clock is that zone's."
+          },
+          "travel_minutes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10080
           }
         },
         "required": ["id"],
@@ -802,6 +845,25 @@
           },
           "position": {
             "type": "number"
+          },
+          "url": {
+            "type": ["string", "null"]
+          },
+          "place_id": {
+            "type": ["string", "null"]
+          },
+          "tags": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "flagged": {
+            "type": "boolean",
+            "description": "Flag the new task in the same write."
           }
         },
         "required": ["title"],
@@ -820,6 +882,142 @@
             "type": "string"
           }
         }
+      }
+    },
+    {
+      "name": "import-reminders",
+      "verb": "import",
+      "kind": "task",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "follow.reminders",
+      "phrasings": [
+        "import my reminders",
+        "import reminders from a task file",
+        "bring in my reminder lists"
+      ],
+      "description": "Import reminders with source identities and lists. Reimport merges fields while preserving member edits; a completed source reminder imports its history without generating a recurrence successor.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "complete": {
+            "type": "boolean"
+          },
+          "origin": {
+            "additionalProperties": false,
+            "properties": {
+              "color": {
+                "description": "The colour the phone paints the store with, as the design wheel names it.",
+                "maxLength": 64,
+                "type": ["string", "null"]
+              },
+              "config": {
+                "type": ["object", "null"]
+              },
+              "device_id": {
+                "type": ["string", "null"]
+              },
+              "fills": {
+                "type": ["string", "null"]
+              },
+              "label": {
+                "type": "string"
+              },
+              "ref": {
+                "type": "string"
+              }
+            },
+            "required": ["ref", "label"],
+            "type": "object"
+          },
+          "records": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "device_id": {
+                  "type": ["string", "null"]
+                },
+                "external_id": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "object"
+                },
+                "size": {
+                  "description": "How large the bytes a record names are, counted by the phone; the command claims them.",
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                }
+              },
+              "required": ["external_id", "fields"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "since": {
+            "type": "string"
+          }
+        },
+        "required": ["origin", "records"],
+        "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "calendar-written",
+      "verb": "edit",
+      "kind": "event",
+      "inverse": null,
+      "sealed": [],
+      "bulk": false,
+      "command": "follow.calendar_written",
+      "phrasings": [
+        "record my calendar changes",
+        "acknowledge the calendar update",
+        "remember the saved calendar event"
+      ],
+      "description": "Record a successful native calendar write under its durable source identity. This acknowledges only fields the native store saved, leaving concurrent member edits intact.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["origin", "entity_id", "external_id", "fields"],
+        "properties": {
+          "origin": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "external_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "device_id": {
+            "type": ["string", "null"]
+          },
+          "fields": {
+            "type": "object"
+          }
+        }
+      },
+      "output": {
+        "type": "object"
       }
     },
     {
@@ -876,6 +1074,9 @@
             "minimum": 0,
             "maximum": 9,
             "aliases": ["priority"]
+          },
+          "url": {
+            "type": ["string", "null"]
           }
         },
         "required": ["id"],
@@ -1234,6 +1435,10 @@
           },
           "position": {
             "type": ["number", "null"]
+          },
+          "icon_key": {
+            "type": ["string", "null"],
+            "maxLength": 64
           }
         },
         "required": ["kind", "title"],
@@ -1537,6 +1742,310 @@
           }
         }
       }
+    },
+    {
+      "name": "flag-task",
+      "verb": "star",
+      "kind": "task",
+      "inverse": "unflag-task",
+      "sealed": [],
+      "command": "flag.set",
+      "phrasings": [
+        "Flag buy milk",
+        "Flag this reminder",
+        "Mark this task as flagged"
+      ],
+      "description": "Flag a reminder through the shared starred flag. The flag follows the task through completion, reopening and restore.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": ["starred"]
+          }
+        },
+        "required": ["id", "flag"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "unflag-task",
+      "verb": "unstar",
+      "kind": "task",
+      "inverse": "flag-task",
+      "sealed": [],
+      "command": "flag.clear",
+      "phrasings": [
+        "Remove flag from buy milk",
+        "Unflag this reminder",
+        "Clear the flag on this task"
+      ],
+      "description": "Remove a reminder\u2019s flag through the shared flag.clear command.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": ["starred"]
+          }
+        },
+        "required": ["id", "flag"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "reorder-task",
+      "verb": "edit:before_id",
+      "kind": "task",
+      "inverse": "reorder-task",
+      "sealed": [],
+      "command": "task.reorder",
+      "phrasings": [
+        "Move buy milk before call plumber",
+        "Reorder this reminder to the end",
+        "Put this task before that one"
+      ],
+      "description": "Move a task before a sibling in the same list, section and parent; null moves it to the end. Positions are rewritten atomically.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "before_id": {
+            "type": ["string", "null"]
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "create-calendar",
+      "verb": "create",
+      "kind": "event",
+      "inverse": null,
+      "sealed": [],
+      "command": "container.create",
+      "phrasings": [
+        "Create a calendar called Work",
+        "Add a Personal calendar",
+        "Make a calendar for family events"
+      ],
+      "description": "Create a named calendar with a list palette color and an icon through container.create.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["calendar"],
+            "default": "calendar"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "aliases": ["name"]
+          },
+          "parent": {
+            "type": ["string", "null"],
+            "aliases": ["area"]
+          },
+          "color": {
+            "type": ["string", "null"]
+          },
+          "position": {
+            "type": ["number", "null"]
+          },
+          "icon_key": {
+            "type": ["string", "null"],
+            "maxLength": 64
+          }
+        },
+        "required": ["kind", "title"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "style-list",
+      "verb": "edit",
+      "kind": "list",
+      "inverse": null,
+      "sealed": [],
+      "command": "container.style",
+      "phrasings": [
+        "Make my Work list blue",
+        "Change the Family calendar icon",
+        "Use a heart icon for this list"
+      ],
+      "description": "Set the color and icon of a calendar or reminder list through the shared container.style command.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "color": {
+            "type": ["string", "null"],
+            "maxLength": 64
+          },
+          "icon_key": {
+            "type": ["string", "null"],
+            "maxLength": 64
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "clear-completed",
+      "verb": "delete",
+      "kind": "task",
+      "sealed": [],
+      "command": "task.clear_completed",
+      "phrasings": [
+        "Clear all completed reminders",
+        "Clear completed tasks in this list",
+        "Remove completed reminders from Today"
+      ],
+      "description": "Move all completed reminders in the selected list to Trash atomically, including rows beyond the visible window; preserve unfinished children.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["view", "day", "zone"],
+        "additionalProperties": false,
+        "properties": {
+          "view": {
+            "type": "string",
+            "enum": [
+              "all",
+              "today",
+              "scheduled",
+              "anytime",
+              "flagged",
+              "reminders",
+              "project",
+              "tags"
+            ]
+          },
+          "day": {
+            "type": "string"
+          },
+          "zone": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": ["string", "null"]
+          },
+          "tag_id": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "inverse": null
     }
   ],
   "queries": [
@@ -1576,7 +2085,7 @@
       "name": "search",
       "kind": "event",
       "figures": ["matches", "tasks"],
-      "description": "Full-text search over events and tasks through the vault's one index — the ranked non-cancelled events (title, description and place) in the upcoming row shape, and the ranked tasks (title, description and project) in the board's row shape, each with a hit snippet, never a whole-table pull.",
+      "description": "Full-text search over events and tasks through the vault's one index \u2014 the ranked non-cancelled events (title, description and place) in the upcoming row shape, and the ranked tasks (title, description and project) in the board's row shape, each with a hit snippet, never a whole-table pull.",
       "input": {
         "type": "object",
         "properties": {
@@ -1606,7 +2115,7 @@
       "name": "day-context",
       "kind": "event",
       "figures": ["birthdays", "holidays"],
-      "description": "The cross-app facts that decorate a calendar day, as one read-only projection: birthdays recurring inside the window (each `{party_id, name, month, day, tier}`, where `tier` is `inner` when the owner starred that person and `outer` otherwise), and holidays. Holidays are always `[]` today — the vault has no holiday source. It reads no task: a dated task is a row in its day, read from `agenda.task.board`. `from`/`to` are inclusive `YYYY-MM-DD` days, defaulting to today plus 45 days and capped at a 400-day span.",
+      "description": "The cross-app facts that decorate a calendar day, as one read-only projection: birthdays recurring inside the window (each `{party_id, name, month, day, tier}`, where `tier` is `inner` when the owner starred that person and `outer` otherwise), and holidays. Holidays are always `[]` today \u2014 the vault has no holiday source. It reads no task: a dated task is a row in its day, read from `agenda.task.board`. `from`/`to` are inclusive `YYYY-MM-DD` days, defaulting to today plus 45 days and capped at a 400-day span.",
       "input": {
         "type": "object",
         "properties": {
@@ -1638,7 +2147,7 @@
       "name": "parties",
       "kind": "person",
       "figures": ["parties"],
-      "description": "Pickable people for the invite picker — each `{party_id, name, is_you}`, you sorted first. `me` is the owner's person id. No event data; just the directory the create-event attendee multi-select draws from.",
+      "description": "Pickable people for the invite picker \u2014 each `{party_id, name, is_you}`, you sorted first. `me` is the owner's person id. No event data; just the directory the create-event attendee multi-select draws from.",
       "input": {
         "type": "object",
         "properties": {},
@@ -1690,7 +2199,7 @@
       "name": "board",
       "kind": "task",
       "figures": ["open", "logbook", "tags", "counts"],
-      "description": "The task board as a bounded window (newest open tasks by creation, caller-sized, families kept whole; the logbook read is capped at its visible 50 most recently closed), each row carrying its tags (`[{concept_id, label}]`) and what it is about, plus the distinct tag list (`[{concept_id, label}]`) seen within the window — never a whole-table pull; `truncated` is the open walk's own cursor — it exists or it does not — rather than a guess from the row count.",
+      "description": "The task board as a bounded window (newest open tasks by creation, caller-sized, families kept whole; the logbook read is capped at its visible 50 most recently closed), each row carrying its tags (`[{concept_id, label}]`) and what it is about, plus the distinct tag list (`[{concept_id, label}]`) seen within the window \u2014 never a whole-table pull; `truncated` is the open walk's own cursor \u2014 it exists or it does not \u2014 rather than a guess from the row count.",
       "input": {
         "type": "object",
         "properties": {
@@ -1846,6 +2355,25 @@
           },
           "vaultDenied": {
             "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "notifications",
+      "kind": "event",
+      "figures": ["alerts"],
+      "description": "The live task reminders and expanded event alerts, ordered by instant. Open reminder tasks are read in bounded pages independently of the visible board; events cover the past seven and next 45 days. The phone schedules the earliest 60 future alerts and refreshes on changes and foreground.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "alerts": {
+            "type": "array"
           }
         }
       }

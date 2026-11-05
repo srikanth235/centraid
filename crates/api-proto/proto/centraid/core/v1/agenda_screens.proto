@@ -100,6 +100,11 @@ message AgendaHomeState {
   // known): the page the Plus pushes where `add_opens_quick_add` is false, and
   // the empty state's `empty_action` too. Absent while denied.
   Route new_event = 30;
+  // Rust owns the calendar window, dates, event buckets and creation routes.
+  AgendaCalendarGrid calendar_grid = 31;
+  AgendaContainerForm container_form = 32;
+  AgendaImportOptions import_options = 33;
+  AgendaAppearance new_project_appearance = 34;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -113,7 +118,50 @@ message AgendaHomeState {
     SHEET_FILE = 4;
     // The new-project name sheet.
     SHEET_NEW_PROJECT = 5;
+    SHEET_CALENDAR_EDITOR = 6;
+    SHEET_IMPORTS = 7;
   }
+}
+
+message AgendaCalendarGrid {
+  string view_key = 1;
+  string view_label = 2;
+  repeated TodoChoice view_choices = 3;
+  repeated AgendaCalendarPanel panels = 4;
+  repeated AgendaHourDay hour_days = 5;
+  string today_label = 6;
+  int32 previous_days = 7;
+  int32 next_days = 8;
+}
+
+message AgendaCalendarPanel {
+  string title = 1;
+  repeated AgendaCalendarDay days = 2;
+}
+
+message AgendaCalendarDay {
+  string day = 1;
+  string label = 2;
+  string weekday = 3;
+  string accessibility_label = 4;
+  bool selected = 5;
+  bool today = 6;
+  bool in_month = 7;
+  bool has_items = 8;
+}
+
+message AgendaHourDay {
+  string day = 1;
+  string heading = 2;
+  repeated AgendaRowItem all_day = 3;
+  repeated AgendaHourSlot hours = 4;
+}
+
+message AgendaHourSlot {
+  string key = 1;
+  string label = 2;
+  Route create_route = 3;
+  repeated AgendaRowItem items = 4;
 }
 
 message AgendaToolbar {
@@ -258,6 +306,19 @@ message AgendaTodo {
   // The verb that opens the new-project sheet, "New project" — drawn at the
   // foot of the list whatever it holds (the sheet is reachable always).
   string new_project_label = 7;
+  // Reminders' smart lists. Counts and navigation come from the same board.
+  repeated TodoSmartList smart_lists = 8;
+  string lists_title = 9;
+}
+
+message TodoSmartList {
+  string key = 1;
+  string title = 2;
+  string count_label = 3;
+  string icon_key = 4;
+  string color_role = 5;
+  string accessibility_label = 6;
+  Route route = 7;
 }
 
 message AgendaLanding {
@@ -339,7 +400,10 @@ message AgendaEventRow {
   bool is_past = 12;
   // WHERE A TAP GOES: this occurrence's page, drawn under the section's day.
   Route route = 13;
+  repeated AgendaEventAdjustment adjustments = 14;
 }
+
+message AgendaEventAdjustment { string label = 1; int32 delta_minutes = 2; bool resize = 3; }
 
 enum AgendaRowStatus {
   // 3 and 4 were PENDING and CANCEL_ASKED, the held-write overlay: a write is
@@ -359,6 +423,7 @@ message AgendaCalendarChoice {
   bool hidden = 4;
   // "Shown" / "Hidden".
   string state_label = 5;
+  string icon_key = 6;
 }
 
 // ONE ROW OF AGENDA'S MORE SHEET. A view draws `label` (with the `hue_key` dot
@@ -391,6 +456,8 @@ message AgendaMoreRow {
   // (`agenda.todo_list`) and Trash (`agenda.trash`). Absent on a calendar and
   // on `reads`, which are the sheet's own.
   Route route = 10;
+  string edit_key = 11;
+  string edit_label = 12;
 }
 
 enum AgendaEmpty {
@@ -442,6 +509,14 @@ message AgendaHomeEvent {
     // The empty state's Import (`EmptyState.import_source` = calendar): Rust asks
     // the shell to read the phone's calendars, imports them, and follows.
     ImportRequested import_requested = 37;
+    CalendarViewChanged calendar_view = 38;
+    CalendarDayPicked calendar_day = 39;
+    TodoRowAction task_action = 40;
+    EventAdjusted event_adjusted = 41;
+    AgendaFormChanged container_form = 42;
+    ContainerSaved container_saved = 43;
+    ImportOptionsChanged import_options = 44;
+    TodoQuickAddTool quick_add_tool = 45;
   }
   // 13 was `due_toggled`; 17, 18 and 33-36 were the intents (`new_event`,
   // `event_picked`, `task_picked`, `project_picked`, `group_verb`,
@@ -451,7 +526,18 @@ message AgendaHomeEvent {
 
   message Refreshed {}
 
-  message ImportRequested {}
+  message ImportRequested {
+    ImportSource source = 1;
+    bool include_completed = 2;
+    bool from_file = 3;
+  }
+
+  message ContainerSaved {}
+  message ImportOptionsChanged { bool include_completed = 1; }
+
+  message CalendarViewChanged { string key = 1; }
+  message CalendarDayPicked { string day = 1; }
+  message EventAdjusted { string instance_key = 1; int32 delta_minutes = 2; bool resize = 3; }
 
   message DestinationChanged {
     AgendaDestination destination = 1;
@@ -626,6 +712,7 @@ message AgendaEventChrome {
 }
 
 message AgendaEventData {
+  AgendaAttachments attachments = 17;
   string title = 1;
   // "Wednesday 11 March", or "Wednesday 11 March – Friday 13 March".
   string date_label = 2;
@@ -682,6 +769,7 @@ message AgendaRsvpChoice {
 }
 
 message AgendaEventEvent {
+  message StatusActed {}
   oneof kind {
     // Read again (the failure's retry).
     Refreshed refreshed = 2;
@@ -694,6 +782,8 @@ message AgendaEventEvent {
     // The confirm, or the scope sheet's commit.
     Confirmed confirmed = 10;
     ConfirmDismissed confirm_dismissed = 11;
+    StatusActed status_acted = 12;
+    AgendaAttachmentEvent attachment = 13;
   }
 
   message Refreshed {}
@@ -819,6 +909,7 @@ message AgendaDraft {
   // `AgendaChoice.key` of the reminder list.
   string reminder_key = 11;
   string link = 12;
+
 }
 
 message AgendaChoice {
@@ -876,6 +967,9 @@ message AgendaEditorData {
   bool show_event_fields = 29;
   // The key of the start row: "Starts" for an event, "Due" for a task.
   string start_field_label = 30;
+  repeated TodoField extra_fields = 31;
+  string more_details_label = 32;
+  bool more_details_open = 33;
 }
 
 // One side of the Event | Task switch (#1128).
@@ -887,6 +981,9 @@ message AgendaKindChoice {
 }
 
 message AgendaEditorEvent {
+  message StatusActed {}
+  message ExtraChanged { string key = 1; string value = 2; }
+  message MoreDetails {}
   oneof kind {
     // Read again (the failure's retry).
     Refreshed refreshed = 2;
@@ -911,6 +1008,9 @@ message AgendaEditorEvent {
     Confirmed confirmed = 22;
     ConfirmDismissed confirm_dismissed = 23;
     KindPicked kind_picked = 25;
+    ExtraChanged extra_changed = 26;
+    MoreDetails more_details = 27;
+    StatusActed status_acted = 28;
   }
 
   // The Event | Task switch (#1128). Ignored on an EDIT.
@@ -995,6 +1095,13 @@ enum TodoCheck {
 }
 
 // ONE TASK AS A ROW, finished. A root carries its family in `children`.
+message TodoRowAction {
+  string task_id = 1;
+  // flag, delete, or reorder; before_id is only used by reorder (empty is end).
+  string key = 2;
+  string before_id = 3;
+}
+
 message TodoRow {
   string task_id = 1;
   string title = 2;
@@ -1019,6 +1126,7 @@ message TodoRow {
   bool can_file = 14;
   // WHERE A TAP GOES: this task's page, as the route the shell pushes.
   Route route = 16;
+  repeated TodoChoice actions = 17;
 }
 
 // A group of rows under one head.
@@ -1125,7 +1233,12 @@ message TodoQuickAdd {
   // to Agenda") opened it, until the keyboard leaves an empty field
   // (`QuickAddClosed`); a pushed page, which has no Plus, keeps it open.
   bool drawn = 7;
+  // Parsed date/time, or how to disambiguate the input. No silent locale guesses.
+  string preview = 8;
+  repeated TodoChoice tools = 9;
 }
+
+message TodoQuickAddTool { string key = 1; }
 
 // One area's projects on To-do (`AgendaTodo.projects`).
 message TodoProjectGroup {
@@ -1140,6 +1253,7 @@ message TodoProjectRow {
   ListRow row = 1;
   // `agenda.project`, named so its head has words before the read lands.
   Route route = 2;
+  string icon_key = 3;
 }
 
 // `agenda.todo_list`: Anytime, All, Logbook or Reminders. The route names the
@@ -1156,6 +1270,10 @@ message TodoListState {
   }
   TodoChrome chrome = 8;
   StatusLine status = 9;
+  bool show_completed = 10;
+  string show_completed_label = 11;
+  bool can_show_completed = 12;
+  string clear_completed_label = 13;
 }
 
 message TodoListData {
@@ -1167,6 +1285,8 @@ message TodoListData {
   // "100 tasks · more not shown" when the window is not everything.
   string window_label = 5;
   bool can_show_more = 6;
+  repeated TodoChoice tag_choices = 7;
+  string tag_heading = 8;
 }
 
 message TodoListEvent {
@@ -1176,6 +1296,10 @@ message TodoListEvent {
     RowChecked row_checked = 3;
     StatusActed status_acted = 4;
     NextPageRequested next_page = 10;
+    CompletedChanged completed_changed = 11;
+    TodoRowAction row_action = 12;
+    ClearCompleted clear_completed = 13;
+    TagPicked tag_picked = 14;
   }
 
   message Refreshed {}
@@ -1190,6 +1314,9 @@ message TodoListEvent {
 
   // "Show more": the window widens by a page.
   message NextPageRequested {}
+  message CompletedChanged { bool on = 1; }
+  message ClearCompleted {}
+  message TagPicked { string key = 1; }
 }
 
 // `agenda.project`: one project, its sections and a quick add into them.
@@ -1218,6 +1345,11 @@ message TodoProjectState {
   // The words typed in the Rename sheet, from the project's own name.
   string rename_name = 15;
   bool rename_can_submit = 16;
+  bool show_completed = 17;
+  string show_completed_label = 18;
+  string clear_completed_label = 19;
+  string title_color_role = 20;
+  AgendaAppearance appearance = 21;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -1262,6 +1394,11 @@ message TodoProjectEvent {
     RenameRequested rename = 12;
     RenameNameChanged rename_name = 13;
     RenameSubmitted rename_submitted = 14;
+    CompletedChanged completed_changed = 15;
+    TodoRowAction row_action = 16;
+    ClearCompleted clear_completed = 17;
+    AgendaFormChanged appearance = 18;
+    TodoQuickAddTool quick_add_tool = 19;
   }
 
   message Refreshed {}
@@ -1301,6 +1438,8 @@ message TodoProjectEvent {
   }
 
   message RenameSubmitted {}
+  message CompletedChanged { bool on = 1; }
+  message ClearCompleted {}
 }
 
 // The words the member types. Autosaved (`Autosave`); every other field is a
@@ -1344,6 +1483,7 @@ message TodoDetailState {
 }
 
 message TodoDetailData {
+  AgendaAttachments attachments = 21;
   TodoDraft draft = 1;
   TodoCheck check = 2;
   string check_label = 3;
@@ -1407,9 +1547,13 @@ message TodoField {
   string time = 14;
   // The words on the picker row: "Pick a date" / "Pick a time".
   string pick_label = 15;
+  bool edit_text = 16;
+  string text_value = 17;
+  string save_label = 18;
 }
 
 message TodoDetailEvent {
+  message FieldTextChanged { string field = 1; string text = 2; }
   oneof kind {
     // The failure's "Try again".
     Refreshed refreshed = 2;
@@ -1429,6 +1573,8 @@ message TodoDetailEvent {
     Confirmed confirmed = 16;
     Dismissed dismissed = 17;
     StatusActed status_acted = 24;
+    FieldTextChanged field_text = 25;
+    AgendaAttachmentEvent attachment = 26;
   }
 
   message Refreshed {}
@@ -1552,4 +1698,50 @@ message TodoCatchUpEvent {
 
   // The status line's verb: Undo.
   message StatusActed {}
+}
+
+// Shared presentation values; the shell draws choices and returns their key.
+message AgendaFormChanged { string field = 1; string value = 2; }
+message AgendaAppearance {
+  string color_label = 1;
+  string icon_label = 2;
+  repeated TodoChoice colors = 3;
+  repeated TodoChoice icons = 4;
+}
+message AgendaContainerForm {
+  string title = 1;
+  string name = 2;
+  string name_label = 3;
+  string save_label = 4;
+  bool can_save = 5;
+  AgendaAppearance appearance = 6;
+}
+message AgendaImportOptions {
+  string title = 1;
+  string include_completed_label = 2;
+  bool include_completed = 3;
+  repeated AgendaImportOption options = 4;
+}
+message AgendaImportOption {
+  string key = 1;
+  string label = 2;
+  ImportSource source = 3;
+  bool from_file = 4;
+}
+
+// Files are documents or photos linked to the task/event; removing an attachment keeps the file.
+message AgendaAttachments {
+  string heading = 1;
+  string add_label = 2;
+  string remove_label = 3;
+  repeated AgendaAttachmentRow rows = 4;
+  optional StatusLine status = 5;
+  bool busy = 6;
+}
+message AgendaAttachmentRow { string id = 1; string title = 2; string meta = 3; Route route = 4; }
+message AgendaAttachmentEvent {
+  oneof kind { Add add = 1; Remove remove = 2; Retry retry = 3; }
+  message Add {}
+  message Remove { string id = 1; }
+  message Retry {}
 }

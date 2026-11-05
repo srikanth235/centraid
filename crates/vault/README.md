@@ -14,7 +14,7 @@ cargo run -p centraid-vault --bin export-ontology-page   # the published page's 
 | Module | What it owns |
 | --- | --- |
 | `file` | `Vault::create` / `open`, the one writable connection, `read` under `query_only`, the pragma set, `finish`. |
-| `migrations`, `format` | The ladder (one rung, `001_baseline.sql`, hand-written); the file's `application_id` and schema digest. |
+| `migrations`, `format` | The append-only ladder in `contracts/migrations/`, starting with the frozen `001_baseline.sql`; the file's `application_id` and schema digest. |
 | `log` | The commit guard — `BEGIN IMMEDIATE`, the body, `COMMIT`, with an `update_hook` reporting which tables a commit touched — and SQL identifier quoting. |
 | `value`, `canonical`, `clock`, `time`, `error` | A SQLite value and its JSON; the one canonical JSON spelling; time and ids as injected facts; civil time and recurrence; `VaultError`, with `DiskFull` typed. |
 | `access` | `Principal`, `Verb`, `evaluate_access` — a deny is a value. |
@@ -53,7 +53,7 @@ Each with its reason in the module, and each recorded as a decision.
 - **The pragmas are stated, not inherited**: `journal_mode = WAL`, `synchronous = FULL`, `journal_size_limit`, no `secure_delete`, a 4 KiB page and no auto-vacuum; checkpoints are SQLite's own since #1080, so a last close folds the WAL into the file.
 - **`VaultError::DiskFull` is a typed answer** (D-1020-D1-8), classified on SQLite's primary code and on `ErrorKind::StorageFull`, so a handler's own `?` carries it.
 - **The vault keeps one full-text index**, `search`, contentless and keyed by `entity.n`, written by the commit guard from the entities a command touched (`index.rs`); `crates/search` only reads it.
-- **The baseline migration and its `contracts/` fixture are ONE file** (D-1020-D1-13): `contracts/migrations/001_baseline.sql`, with `contracts/schema/vault-ddl.sql` rendered from it by `export-ladder-ddl` and held equal by `tests/ladder_ddl.rs`. The model was rebuilt whole in [#1135](https://github.com/srikanth235/centraid/issues/1135).
+- **Every migration and its `contracts/` fixture are one file** (D-1020-D1-13). The frozen `001_baseline.sql` established the #1135 model; new rungs preserve existing development and restored vaults. `export-ladder-ddl` renders `contracts/schema/vault-ddl.sql` from the complete ladder, held equal by `tests/ladder_ddl.rs`. Upgrade tests prove row preservation and the same final schema as a newly founded vault.
 
 ## The interface its consumers use
 

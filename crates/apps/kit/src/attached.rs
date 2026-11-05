@@ -8,7 +8,7 @@
 //! of a window of ids, which of their far ends are live, their blobs and sizes,
 //! one table at a time.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use crate::error::KitResult;
 use crate::reads::{PageDoor, Read};
@@ -24,6 +24,8 @@ pub struct Attachment {
     /// The attached document's or photo's id: an attachment is an edge, and the
     /// thing it joins is its identity.
     pub attachment_id: String,
+    pub title: String,
+    pub kind: String,
     /// The bytes' hash.
     pub content_id: String,
     pub media_type: String,
@@ -56,16 +58,24 @@ pub fn of(door: &dyn PageDoor, ids: &[String]) -> KitResult<BTreeMap<String, Vec
     if targets.is_empty() {
         return Ok(BTreeMap::new());
     }
-    let live: BTreeSet<String> = Read {
+    let live: BTreeMap<String, (String, String)> = Read {
         name: "attached.live",
         table: "entity",
-        select: "id",
+        select: "id, title, kind",
         order: ("id", "id"),
         column: "id",
     }
     .of(door, &targets, Some(("deleted_at IS NULL", Vec::new())))?
     .iter()
-    .filter_map(|row| text_of(row, "id"))
+    .filter_map(|row| {
+        Some((
+            text_of(row, "id")?,
+            (
+                text_of(row, "title").unwrap_or_default(),
+                text_of(row, "kind").unwrap_or_default(),
+            ),
+        ))
+    })
     .collect();
     let mut held: BTreeMap<String, (String, String)> = BTreeMap::new();
     // A document and a photo are both a blob with a media type.
@@ -108,10 +118,19 @@ pub fn of(door: &dyn PageDoor, ids: &[String]) -> KitResult<BTreeMap<String, Vec
         let (Some(owner), Some(target)) = (text_of(edge, "from_id"), text_of(edge, "to_id")) else {
             continue;
         };
-        let Some((blob, media_type)) = held.get(&target).filter(|_| live.contains(&target)) else {
+        let Some((blob, media_type)) = held.get(&target).filter(|_| live.contains_key(&target))
+        else {
             continue;
         };
         by_owner.entry(owner).or_default().push(Attachment {
+            title: live
+                .get(&target)
+                .map(|row| row.0.clone())
+                .unwrap_or_default(),
+            kind: live
+                .get(&target)
+                .map(|row| row.1.clone())
+                .unwrap_or_default(),
             attachment_id: target,
             content_id: blob.clone(),
             media_type: if media_type.is_empty() {

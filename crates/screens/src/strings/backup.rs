@@ -71,7 +71,7 @@ catalog! {
     plain backup_now_running = ("Backing up…", "Backing up…");
     plain backup_progress = ("Backing up — {size} to go", "Backing up — {size} to go");
     plain backup_refused = ("Your backup device refused the backup. It may be full. Nothing was lost.", "Your backup device refused the backup. It may be full. Nothing was lost.");
-    plain backup_rule_heading = ("Wi-Fi and cellular", "Wi-Fi and cellular");
+    plain backup_rule_heading = ("What travels when", "What travels when");
     plain backup_seen = ("Reached {when}", "Reached {when}");
     plain backup_seen_never = ("Not reached yet", "Not reached yet");
     plain backup_status_catching_up = ("Backing up, last {when}", "Backing up, last {when}");

@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -66,6 +67,9 @@ import centraid.core.v1.Route
 import centraid.core.v1.Confirm
 import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.AppMark
+import dev.centraid.android.kit.CentraidBrandMark
+import dev.centraid.android.kit.bandGround
 import dev.centraid.android.kit.CentraidSearchField
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.InkButton
@@ -77,7 +81,9 @@ import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.theme.centraidColor
+import dev.centraid.android.theme.centraidDark
 import dev.centraid.android.theme.centraidType
+import dev.centraid.design.CentraidCatalog
 
 /**
  * THE CHAT TAB (#1135, lane I), drawn from Rust's `ChatState`. Android's twin of iOS's `ChatView`:
@@ -448,6 +454,7 @@ private fun MessageRow(
         return
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        CentraidBrandMark(size = 28.dp)
         if (message.text.isNotEmpty()) {
             MarkdownText(message.text, message.streaming, message.accessibility_label)
         }
@@ -507,11 +514,12 @@ private fun MarkdownText(text: String, streaming: Boolean, spoken: String) {
 @Composable
 private fun CardRow(card: ChatCard, onOpen: () -> Unit) {
     val shape = RoundedCornerShape(KitGeometry.RADIUS)
+    val mark = (if (centraidDark()) CentraidCatalog.darkMarks else CentraidCatalog.lightMarks)[card.app]
     Row(
         Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(centraidColor("bgElev"))
+            .background(centraidColor(if (mark == null) "bgElev" else "${card.app}Tint"))
             .border(KitGeometry.HAIRLINE, centraidColor("line"), shape)
             .clickable(onClick = onOpen)
             .heightIn(min = KitGeometry.ROW_MIN)
@@ -523,8 +531,9 @@ private fun CardRow(card: ChatCard, onOpen: () -> Unit) {
             .testTag("chat-card"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        AppMark(appId = card.app, size = 32.dp, modifier = Modifier.padding(end = 12.dp))
         Column(Modifier.weight(1f)) {
-            Text(card.title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(card.title, style = centraidType("smallStrong"), color = mark?.hue?.let { Color(it) } ?: centraidColor("shellText"))
             if (card.subtitle.isNotEmpty()) {
                 Text(card.subtitle, style = centraidType("small"), color = centraidColor("textSoft"), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
@@ -552,6 +561,7 @@ private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: (
             .testTag("chat-pending"),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        Text(pending.title, style = centraidType("smallStrong"), color = centraidColor("shellText"), modifier = Modifier.semantics { heading() })
         pending.steps.forEach { step ->
             Text(step.summary, style = centraidType("small"), color = centraidColor(if (step.destructive) "net" else "text"))
         }
@@ -562,14 +572,14 @@ private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: (
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                 val working = pending.state == ChatPending.State.STATE_WORKING
                 if (pending.destructive) {
-                    OutlineButton(pending.confirm_label, testTag = "chat-confirm", ink = "net", enabled = !working, onPress = onConfirm)
+                    OutlineButton(pending.confirm_label, modifier = Modifier.weight(1f), testTag = "chat-pending-confirm", ink = "net", enabled = !working, onPress = onConfirm)
                 } else {
-                    InkButton(pending.confirm_label, Modifier.widthIn(max = 160.dp), testTag = "chat-confirm", enabled = !working, onPress = onConfirm)
+                    InkButton(pending.confirm_label, Modifier.weight(1f), testTag = "chat-pending-confirm", enabled = !working, onPress = onConfirm)
                 }
-                OutlineButton(pending.cancel_label, testTag = "chat-cancel", enabled = !working, onPress = onCancel)
+                OutlineButton(pending.cancel_label, modifier = Modifier.weight(1f), testTag = "chat-pending-cancel", enabled = !working, onPress = onCancel)
             }
         } else if (pending.settled_line.isNotEmpty()) {
-            Text(pending.settled_line, style = centraidType("mono"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-settled"))
+            Text(pending.settled_line, style = centraidType("mono"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-pending-settled"))
         }
     }
 }
@@ -606,9 +616,8 @@ private fun ChatComposer(
         Row(
             Modifier
                 .fillMaxWidth()
+                .bandGround(shape)
                 .clip(shape)
-                .background(centraidColor("bgElev"))
-                .border(KitGeometry.HAIRLINE, centraidColor("line"), shape)
                 .padding(start = 4.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
@@ -651,7 +660,7 @@ private fun ChatComposer(
                     cursorBrush = SolidColor(centraidColor("text")),
                     maxLines = 6,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                    modifier = Modifier.fillMaxWidth().testTag("chat-composer").semantics { contentDescription = state.composer_placeholder },
+                    modifier = Modifier.fillMaxWidth().testTag("chat-field").semantics { contentDescription = state.composer_placeholder },
                 )
             }
             if (state.streaming) {

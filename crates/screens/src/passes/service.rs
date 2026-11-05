@@ -337,7 +337,7 @@ impl Service {
             Some(Fact::Window(granted)) => self
                 .conductor
                 .window_granted(&granted.window, granted.deadline_ms),
-            Some(Fact::Expired(_)) | None => Vec::new(),
+            Some(Fact::Expired(_) | Fact::AgendaNotification(_)) | None => Vec::new(),
             Some(Fact::Held(held)) => {
                 self.conductor.set_held(
                     held.vaults

@@ -189,6 +189,82 @@ pub fn person(locale: Locale, sheet: &wire::PeopleSheet, today: &str) -> wire::P
         })
         .collect();
     wire::PeoplePersonData {
+        vault_links_title: words::vault_links_title(locale),
+        vault_links_note: if sheet.vault_links_truncated {
+            words::vault_links_window(locale)
+        } else {
+            String::new()
+        },
+        vault_links: sheet
+            .vault_links
+            .iter()
+            .filter_map(|link| {
+                let (app, icon, label) = match link.kind.as_str() {
+                    "note" => (
+                        "notes",
+                        "Book",
+                        crate::strings::home::search_kind_note(locale),
+                    ),
+                    "task" => (
+                        "agenda",
+                        "CheckCircle",
+                        crate::strings::home::search_kind_task(locale),
+                    ),
+                    "event" => (
+                        "agenda",
+                        "Calendar",
+                        crate::strings::home::search_kind_event(locale),
+                    ),
+                    "document" => (
+                        "docs",
+                        "FileText",
+                        crate::strings::home::search_kind_document(locale),
+                    ),
+                    "photo" => (
+                        "photos",
+                        "Camera",
+                        crate::strings::home::search_kind_photo(locale),
+                    ),
+                    _ => return None,
+                };
+                let row =
+                    crate::shell::row_routes::RowRef::new(app, &link.kind, &link.id, &link.title);
+                Some(wire::PeopleVaultLinkRow {
+                    id: link.id.clone(),
+                    title: link.title.clone(),
+                    app_label: label,
+                    color_key: format!("{app}Text"),
+                    icon_key: icon.to_owned(),
+                    route: crate::shell::row_routes::route(&row, &person.name, &[]),
+                })
+            })
+            .collect(),
+        hero_actions: vec![
+            wire::PeopleHeroAction {
+                key: "message".to_owned(),
+                label: words::kind_message(locale),
+                icon_key: "MessageCircle".to_owned(),
+                enabled: preferred_channel(sheet, "phone").is_some(),
+            },
+            wire::PeopleHeroAction {
+                key: "call".to_owned(),
+                label: words::action_call(locale),
+                icon_key: "Phone".to_owned(),
+                enabled: preferred_channel(sheet, "phone").is_some(),
+            },
+            wire::PeopleHeroAction {
+                key: "mail".to_owned(),
+                label: words::hero_mail(locale),
+                icon_key: "EnvelopeSimple".to_owned(),
+                enabled: preferred_channel(sheet, "email").is_some(),
+            },
+            wire::PeopleHeroAction {
+                key: "touch".to_owned(),
+                label: words::log_touch(locale),
+                icon_key: "Check".to_owned(),
+                enabled: true,
+            },
+        ],
         party_id: person.party_id.clone(),
         name: person.name.clone(),
         avatar: Some(fold::avatar(&person.party_id, &person.name)),
@@ -240,6 +316,21 @@ pub fn person(locale: Locale, sheet: &wire::PeopleSheet, today: &str) -> wire::P
         )),
         relations,
     }
+}
+
+/// The preferred nonempty channel wins; otherwise use the member's first one.
+pub(super) fn preferred_channel<'a>(
+    sheet: &'a wire::PeopleSheet,
+    kind: &str,
+) -> Option<&'a wire::PeopleChannel> {
+    let mut matching = sheet
+        .channels
+        .iter()
+        .filter(|channel| channel.kind == kind && !channel.value.trim().is_empty());
+    matching
+        .clone()
+        .find(|channel| channel.preferred)
+        .or_else(|| matching.next())
 }
 
 /// The page when the person is not there.

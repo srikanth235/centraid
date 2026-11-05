@@ -298,6 +298,7 @@ fn a_write_the_model_parks_is_a_card_in_the_cores_words_and_writes_nothing_until
     );
     let pending = card(&chat);
     assert_eq!(pending.state(), State::Waiting);
+    assert_eq!(pending.title, "Proposed change");
     assert_eq!(pending.steps.len(), 1);
     assert_eq!(
         pending.steps[0].summary,

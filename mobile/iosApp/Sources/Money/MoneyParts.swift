@@ -337,7 +337,7 @@ struct MoneyBar: View {
             ZStack(alignment: .leading) {
                 Rectangle().fill(Theme.color("bgSunken", scheme))
                 Rectangle()
-                    .fill(Theme.color(over ? "net" : "textSoft", scheme))
+                    .fill(Theme.color(over ? "errorFill" : "moneyFill", scheme))
                     .frame(width: width * fraction(fillBp))
                 if tickBp > 0 {
                     Rectangle()
@@ -359,6 +359,7 @@ struct MoneyBar: View {
 
 /// THE TRANSACTION ROW: the one row, the signed amount as its figure.
 struct MoneyRowView: View {
+    @Environment(\.colorScheme) private var scheme
     let row: Centraid_Core_V1_MoneyRow
     var onTap: (() -> Void)? = nil
 
@@ -367,13 +368,17 @@ struct MoneyRowView: View {
             title: row.title,
             meta: MoneyWords.meta(row.categoryLabel, row.meta),
             trailing: MoneyWords.amount(row.amount),
-            trailingTone: StatusChipView.ink(row.amountTone, neutral: "text"),
+            trailingTone: StatusChipView.ink(row.amountTone, neutral: row.isIncome ? "successText" : "text"),
             chips: row.chips,
             dimmed: row.dimmed,
             accessibility: MoneyWords.spoken(row.accessibilityLabel, row.amount),
             identifier: "money-row-\(row.txnID)",
             onTap: onTap
         )
+        .overlay(alignment: .leading) {
+            Circle().fill(Theme.color(row.colorKey, scheme)).frame(width: 8, height: 8)
+                .padding(.leading, 8).accessibilityHidden(true)
+        }
     }
 }
 
@@ -665,7 +670,7 @@ struct MoneyFormSheet<Content: View>: View {
 
 // MARK: - The page's foot
 
-/// THE STATUS LINE a pushed page hosts at its foot (DESIGN.md: no toast).
+/// THE STATUS LINE a pushed page hosts at its foot (product-intuition screen contracts: no toast).
 struct MoneyStatusFoot: View {
     let status: Centraid_Core_V1_StatusLine
     var identifier: String = "money-status"
@@ -782,21 +787,37 @@ struct MoneyCategoryRow: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.moneyInset) private var inset
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private let dash = "\u{2014}"
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 6) {
-                Text(line.label)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                figure(line.hasPlan_p ? MoneyWords.amount(line.planned) : dash, ink: "textSoft")
-                figure(MoneyWords.amount(line.spent), ink: "text")
-                figure(line.hasPlan_p ? MoneyWords.amount(line.left) : dash, ink: line.over ? "net" : "textSoft", strong: line.over)
+            VStack(alignment: .leading, spacing: 8) {
+                if dynamicTypeSize.isAccessibilitySize {
+                    Text(line.accessibilityLabel).centraidType("body").foregroundStyle(Theme.color("text", scheme))
+                } else {
+                    HStack(spacing: 6) {
+                        Circle().fill(Theme.color(line.colorKey, scheme)).frame(width: 8, height: 8)
+                        Text(line.label)
+                            .centraidType("body")
+                            .foregroundStyle(Theme.color("text", scheme))
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        figure(line.hasPlan_p ? MoneyWords.amount(line.planned) : dash, ink: "textSoft")
+                        figure(MoneyWords.amount(line.spent), ink: "text")
+                        figure(line.hasPlan_p ? MoneyWords.amount(line.left) : dash, ink: line.over ? "net" : "textSoft", strong: line.over)
+                    }
+                }
+                if line.hasPlan_p {
+                    GeometryReader { box in
+                        Capsule().fill(Theme.color("bgSunken", scheme))
+                        Capsule().fill(Theme.color(line.over ? "errorFill" : line.colorKey, scheme))
+                            .frame(width: box.size.width * CGFloat(line.progressBp) / 10_000)
+                    }.frame(height: 5).accessibilityHidden(true)
+                }
             }
-            .padding(.horizontal, inset)
+            .padding(.horizontal, inset).padding(.vertical, 12)
             .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
             .overlay(alignment: .top) { KitHairline() }
             .contentShape(Rectangle())
@@ -973,7 +994,7 @@ struct MoneyNeedsRow: View {
             HStack(spacing: 8) {
                 Text(label)
                     .centraidType("annotLabelOn")
-                    .foregroundStyle(Theme.color("seam", scheme))
+                    .foregroundStyle(Theme.color("moneyText", scheme))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(figures.map { MoneyWords.amount($0.amount) }.joined(separator: " \u{00B7} "))
                     .centraidType("annotLabel")
@@ -982,7 +1003,9 @@ struct MoneyNeedsRow: View {
                     .lineLimit(1)
                 CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textGhost", scheme), size: 15)
             }
-            .padding(.horizontal, inset)
+            .padding(.horizontal, 16).padding(.vertical, 8)
+            .background(Theme.color("moneyTint", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
+            .padding(.horizontal, inset).padding(.vertical, 8)
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
             .contentShape(Rectangle())
         }

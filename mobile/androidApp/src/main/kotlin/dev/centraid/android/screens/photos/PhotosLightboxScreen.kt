@@ -7,9 +7,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -33,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -57,6 +63,8 @@ import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StageKey
+import dev.centraid.android.kit.IconKey
+import dev.centraid.android.kit.bandGround
 import dev.centraid.android.kit.StageSpinner
 import dev.centraid.android.kit.StageVerb
 import dev.centraid.android.kit.rememberReducedMotion
@@ -138,8 +146,43 @@ public fun PhotosLightboxScreen(
             )
 
             photo != null -> {
-                LightboxStage(state, reduceMotion, player, live, onEvent, onClose)
-                if (drawnPath(photo) == null) {
+                if (state.details_visible) {
+                    Column(Modifier.fillMaxSize().background(centraidColor("bg")).statusBarsPadding()) {
+                        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                IconKey(iconKey = "X", label = words.close, testTag = "photos.lightbox.close", onPress = onClose)
+                                Spacer(Modifier.weight(1f))
+                                IconKey(iconKey = "more", label = words.more, testTag = "photos.lightbox.more") {
+                                    onEvent(sheetEvent(PhotosLightboxState.Sheet.SHEET_MORE))
+                                }
+                            }
+                            Box(Modifier.fillMaxWidth().height(268.dp)) {
+                                LightboxStage(state, reduceMotion, player, live, onEvent, onClose)
+                                if (drawnPath(photo) == null) {
+                                    Text(photo.stage_label, style = centraidType("body"), color = centraidColor("onStage"), modifier = Modifier.align(Alignment.Center))
+                                }
+                            }
+                            if (player != null) Box(Modifier.background(centraidColor("stage")).padding(horizontal = KitGeometry.GUTTER)) {
+                                LightboxTransport(player, words)
+                            }
+                            if (live != null) LiveChip(live, words)
+                            if (photo.offers_fetch) {
+                                KitLink(label = words.load_original, onClick = { onEvent(PhotosLightboxEvent(fetch_original = PhotosLightboxEvent.FetchTapped())) })
+                            }
+                            Box(Modifier.testTag("photos.lightbox.details")) {
+                                InfoSheet(state, photo, words, onEvent)
+                            }
+                        }
+                        Box(Modifier.navigationBarsPadding().padding(8.dp).bandGround(photosTokenShape("lg")).padding(vertical = 8.dp)) {
+                            Toolbar(state, words, photo.trashed, onEvent, onOpen, centraidColor("textFaint"), onPage = true)
+                        }
+                    }
+                } else {
+                    LightboxStage(state, reduceMotion, player, live, onEvent, onClose)
+                    if (drawnPath(photo) == null) {
                     // NEVER A BROKEN IMAGE. Each of these is a truthful state.
                     Text(
                         text = photo.stage_label,
@@ -148,8 +191,9 @@ public fun PhotosLightboxScreen(
                         style = centraidType("body"),
                         modifier = Modifier.align(Alignment.Center).padding(KitGeometry.GUTTER),
                     )
+                    }
+                    if (chromeVisible) Chrome(state, photo, words, player, live, onEvent, onOpen, onClose)
                 }
-                if (chromeVisible) Chrome(state, photo, words, player, live, onEvent, onOpen, onClose)
             }
         }
         Sheets(state, photo, onEvent)
@@ -297,6 +341,7 @@ private fun Toolbar(
     onEvent: (PhotosLightboxEvent) -> Unit,
     onOpen: (Route) -> Unit,
     soft: Color,
+    onPage: Boolean = false,
 ) {
     val reasons = state.toolbar.filter { !it.enabled && it.why.isNotEmpty() }.map { it.why }.distinct()
     val paged = state.previous_id.isNotEmpty() || state.next_id.isNotEmpty()
@@ -308,6 +353,8 @@ private fun Toolbar(
                     label = words.previous,
                     onClick = { onEvent(movedEvent(state.previous_id)) },
                     enabled = state.previous_id.isNotEmpty(),
+                    ink = if (onPage) "text" else "onStage",
+                    disabledInk = if (onPage) "textFaint" else "onStageSoft",
                 )
             }
             state.toolbar.forEach { verb ->
@@ -321,6 +368,9 @@ private fun Toolbar(
                     },
                     enabled = verb.enabled,
                     on = verb.on,
+                    selectedInk = if (onPage) "photosText" else "photosOnStage",
+                    ink = if (onPage) "text" else "onStage",
+                    disabledInk = if (onPage) "textFaint" else "onStageSoft",
                     showLabel = trashed,
                     destructive = verb.destructive,
                 )
@@ -331,6 +381,8 @@ private fun Toolbar(
                     label = words.next,
                     onClick = { onEvent(movedEvent(state.next_id)) },
                     enabled = state.next_id.isNotEmpty(),
+                    ink = if (onPage) "text" else "onStage",
+                    disabledInk = if (onPage) "textFaint" else "onStageSoft",
                 )
             }
         }
@@ -360,10 +412,7 @@ private fun Sheets(
     val close = { onEvent(sheetEvent(PhotosLightboxState.Sheet.SHEET_NONE)) }
     if (photo != null) {
         when (state.sheet) {
-            PhotosLightboxState.Sheet.SHEET_INFO ->
-                SheetRoom(title = words.info_title, onDismiss = close) {
-                    InfoSheet(state, photo, words, onEvent)
-                }
+            PhotosLightboxState.Sheet.SHEET_INFO -> Unit
 
             PhotosLightboxState.Sheet.SHEET_SHARE -> SheetRoom(title = words.share_title, onDismiss = close) {
                 state.share_choices.forEach { choice -> ShareRow(choice, onEvent) }
@@ -461,6 +510,7 @@ private fun PlaceSheet(
  * where it was taken. No destructive control here, ever: Trash lives on the bar
  * alone. A field the record lacks is omitted, never invented.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InfoSheet(
     state: PhotosLightboxState,
@@ -478,14 +528,16 @@ private fun InfoSheet(
     Column(
         modifier = Modifier
             .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp)
-            .verticalScroll(rememberScrollState()),
+            .padding(vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        InfoLabel(words.info_title)
         // A REFUSED EDIT IS SAID HERE, where the member made it.
         state.status?.takeIf { it.refused && it.sentence.isNotEmpty() }?.let {
             Text(text = it.sentence, style = centraidType("small"), color = centraidColor("net"))
         }
 
+        DetailCard {
         InfoLabel(words.caption_label)
         TextField(
             value = caption,
@@ -502,8 +554,10 @@ private fun InfoSheet(
                 .onFocusChanged { if (!it.isFocused) commitCaption() },
         )
 
+        }
+
         photo.facts.forEach { fact ->
-            Column {
+            DetailCard {
                 InfoLabel(fact.label)
                 Text(text = fact.text, style = centraidType("body"), color = ink)
             }
@@ -511,10 +565,10 @@ private fun InfoSheet(
 
         // WHERE, in words — never a coordinate. "Copy exact location" puts it on
         // the member's own clipboard because they asked.
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        DetailCard {
             InfoLabel(words.place_title)
             Text(text = photo.place_phrase, style = centraidType("body"), color = ink)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 KitLink(
                     label = if (photo.has_place) words.change else words.add_place,
                     onClick = { onEvent(sheetEvent(PhotosLightboxState.Sheet.SHEET_PLACE)) },
@@ -533,7 +587,7 @@ private fun InfoSheet(
         }
 
         // LABELS, each with its own remove, and a field to add one.
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        DetailCard {
             InfoLabel(words.labels_title)
             if (photo.labels_line.isNotEmpty()) {
                 Text(text = photo.labels_line, style = centraidType("small"), color = soft)
@@ -584,6 +638,15 @@ private fun InfoSheet(
             Text(text = it.sentence, style = centraidType("small"), color = soft)
         }
     }
+}
+
+@Composable
+private fun DetailCard(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(photosTokenShape("lg")).background(centraidColor("bgElev")).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        content = content,
+    )
 }
 
 @Composable

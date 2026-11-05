@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -150,7 +152,7 @@ internal fun MoneyBar(fillBp: Int, tickBp: Int, over: Boolean, spokenWords: Stri
             Modifier
                 .fillMaxWidth(fillBp.coerceIn(0, BP) / BP.toFloat())
                 .height(6.dp)
-                .background(centraidColor(if (over) "net" else "textSoft")),
+                .background(centraidColor(if (over) "errorFill" else "moneyFill")),
         )
         if (tickBp > 0) {
             Row(Modifier.fillMaxWidth().height(6.dp)) {
@@ -164,17 +166,21 @@ internal fun MoneyBar(fillBp: Int, tickBp: Int, over: Boolean, spokenWords: Stri
 /** THE TRANSACTION ROW: the one row, the signed amount as its figure. */
 @Composable
 internal fun MoneyRowView(row: MoneyRow, onTap: (() -> Unit)?) {
-    CentraidRow(
-        title = row.title,
-        meta = listOf(row.category_label, row.meta).filter { it.isNotEmpty() }.joinToString(" · "),
-        trailing = money(row.amount),
-        trailingTone = row.amount_tone,
-        chips = row.chips.map { it },
-        dimmed = row.dimmed,
-        a11y = spoken(row.accessibility_label, row.amount),
-        testTag = "money-row-${row.txn_id}",
-        onTap = onTap,
-    )
+    Box {
+        CentraidRow(
+            title = row.title,
+            meta = listOf(row.category_label, row.meta).filter { it.isNotEmpty() }.joinToString(" · "),
+            trailing = money(row.amount),
+            trailingTone = row.amount_tone,
+            trailingInk = if (row.is_income) "successText" else "text",
+            chips = row.chips.map { it },
+            dimmed = row.dimmed,
+            a11y = spoken(row.accessibility_label, row.amount),
+            testTag = "money-row-${row.txn_id}",
+            onTap = onTap,
+        )
+        Box(Modifier.align(Alignment.CenterStart).padding(start = 8.dp).size(8.dp).background(centraidColor(row.color_key), CircleShape))
+    }
 }
 
 /** A switch row: the state's label and whether it is on. The toggle is an event the screen forwards. */

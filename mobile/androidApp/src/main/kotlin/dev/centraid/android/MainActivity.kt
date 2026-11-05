@@ -1,6 +1,7 @@
 package dev.centraid.android
 
 import android.os.Bundle
+import android.content.Intent
 import android.util.Log
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -42,6 +43,15 @@ import kotlinx.coroutines.withContext
 // A `FragmentActivity` AND NOT A PLAIN `ComponentActivity` for one reason: Locker's unlock raises
 // `BiometricPrompt`, which hosts itself in a fragment of the activity it is given (#1047, D-5).
 public class MainActivity : FragmentActivity() {
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        AppSession.current.value?.let { open ->
+            dev.centraid.android.widgets.AgendaWidgetLauncher.take(intent)?.let { entry ->
+                open.scope.launch { dev.centraid.android.widgets.AgendaWidgetLauncher.open(entry, open.screens) }
+            }
+        }
+    }
     /** HEALTH CONNECT (#1129): the reader and the phone's facts Health's screens are stamped with. Read only. */
     private val health: AndroidHealth by lazy { AndroidHealth(this) }
 
@@ -94,6 +104,9 @@ public class MainActivity : FragmentActivity() {
                     if (opened == null) return@produceState
                     try {
                         rust.attach(opened, scope)
+                        dev.centraid.android.widgets.AgendaWidgetLauncher.take(intent)?.let { entry ->
+                            opened.scope.launch { dev.centraid.android.widgets.AgendaWidgetLauncher.open(entry, opened.screens) }
+                        }
                         value = opened
                         awaitCancellation()
                     } finally {

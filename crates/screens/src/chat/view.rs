@@ -431,6 +431,7 @@ fn proposal(held: &Proposal, locale: Locale) -> wire::ChatPending {
         parts.push(held.line.clone());
     }
     wire::ChatPending {
+        title: words::a11y_proposal(locale),
         pending_id: held.id.clone(),
         state: match held.stage {
             Stage::Waiting => State::Waiting,

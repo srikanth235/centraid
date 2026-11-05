@@ -34,20 +34,20 @@
     </script>
     <link rel="icon" href="assets/centraid-mark.svg" />
     <!-- The one bundled face, served from this origin. Nothing here reaches a
-         font CDN: the product ships Instrument Sans with no network fetch, and
+         font CDN: the product ships Geist with no network fetch, and
          a page that advertises "no cloud" should not open with one. -->
     <link
       rel="preload"
       as="font"
-      type="font/woff2"
-      href="assets/fonts/instrument-sans-latin-400-normal.woff2"
+      type="font/ttf"
+      href="assets/fonts/Geist-Regular.ttf"
       crossorigin
     />
     <link
       rel="preload"
       as="font"
-      type="font/woff2"
-      href="assets/fonts/instrument-sans-latin-600-normal.woff2"
+      type="font/ttf"
+      href="assets/fonts/Geist-SemiBold.ttf"
       crossorigin
     />
     <link rel="stylesheet" href="assets/centraid-tokens.css" />
@@ -56,24 +56,16 @@
 
          Every colour, face, radius, duration and rung here comes from
          assets/centraid-tokens.css — the SAME lowering the shell renders on
-         (packages/design's `toCss()`), emitted by scripts/site-tokens.mjs.
+         (the Rust design output), emitted by scripts/site-tokens.mjs.
          This page declares no palette, no second face, and no type scale of
          its own; the one step beyond the product ramp is `--t-hero-size`,
          which scales the display ROLE and is registered in
          the site token layer.
 
-         The invariants this page is bound by, and what they cost it:
-           · One ramp, one face. Instrument Sans at 400/600, self-hosted. The
-             platform code stack appears only on commands, paths and literals.
-           · The shell spends no colour. The accent IS the ink; emphasis is a
-             step on the ink ramp, never a hue. `--link` is prose links only.
-             The eight `--c-*` identity hues appear exactly where the product
-             spends them: an app's mark chip and content markers, never on a
-             control (DESIGN.md, "What an app may set for itself").
-           · Very little elevation. A card is a sheet on the page — a hairline
-             and a raised ground, never an offset shadow.
-           · One motion grammar. 280ms to enter, 140ms for a state change, and
-             no scale, tilt or drift under the pointer. */
+         The mockups and design/tokens.toml own the palette, typography,
+         surfaces and spacing. Shell actions use the shell teal; app identity
+         and state colours keep their distinct meanings. Fonts are bundled.
+         Only floating controls cast shadows; content cards remain solid. */
 
       * {
         box-sizing: border-box;
@@ -103,7 +95,7 @@
       a {
         color: inherit;
       }
-      /* Prose links: the one reserved hue, always underlined (DESIGN.md,
+      /* Prose links: the one reserved hue, always underlined (design/mockups/DesignRules.dc.html,
          "Link is not a size role"). */
       .u,
       .prose a,
@@ -151,7 +143,7 @@
         white-space: nowrap;
       }
       /* The mark is an identity chip: 26% of its own size, no gloss and no
-         drop shadow (DESIGN.md, "Elevation & Depth"). */
+         drop shadow (design/mockups/DesignRules.dc.html, "Elevation & Depth"). */
       .brand .mark {
         width: 28px;
         height: 28px;
@@ -319,7 +311,7 @@
         align-items: center;
         flex-wrap: wrap;
       }
-      /* Badge: `--attention` is type and border, never a fill (DESIGN.md,
+      /* Badge: `--attention` is type and border, never a fill (design/mockups/DesignRules.dc.html,
          "Colors"). Beta is the one genuinely heads-up mark on the page. */
       .beta-pill {
         font: var(--t-control);
@@ -787,7 +779,7 @@
       }
 
       /* the vault-contents artifact: counts are numeric annotations —
-         tabular Sans, never the code stack (DESIGN.md, "Typography"). */
+         tabular Sans, never the code stack (design/mockups/DesignRules.dc.html, "Typography"). */
       .vault-count {
         font: var(--t-mono);
         font-variant-numeric: var(--t-mono-numeric);
@@ -1158,7 +1150,7 @@
   </head>
   <body>
     <!-- The eight app glyphs, once — the product's own icon paths
-         (packages/design/src/icons.ts), referenced by <use> below. -->
+         (design/icons.json), referenced by <use> below. -->
     <svg width="0" height="0" style="position: absolute" aria-hidden="true">
       <defs>
         <g id="i-photos">

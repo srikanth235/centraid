@@ -64,6 +64,7 @@
          read once and written into the member's vault as their own events;
          nothing is synced back. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <!-- Health, READ ONLY (#1129, R-1129-7): Health Connect's daily totals
          and workouts, asked for when the member taps Connect on Health's
          Connect page and for exactly the types chosen there, never at launch
@@ -100,6 +101,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <!-- WHAT HEALTH ASKS THE PACKAGE MANAGER ABOUT (#1129): Health Connect
          itself (Android 9 to 13, where it is an app), and the apps that write
@@ -117,6 +120,8 @@
     </queries>
 
     <application
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:name=".CentraidApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -133,7 +138,18 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="centraid" android:host="agenda" />
+            </intent-filter>
         </activity>
+
+        <receiver android:name="dev.centraid.android.widgets.AgendaAppWidget" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/agenda_widget_info" />
+        </receiver>
 
         <!-- "WHAT HEALTH MAY READ" FOR HEALTH CONNECT (#1129). Health Connect
              shows an app's permissions only when it declares where its
@@ -199,5 +215,14 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/docs_scans" />
         </provider>
+        <receiver
+            android:name=".notifications.AgendaNotificationReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

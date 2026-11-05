@@ -1,8 +1,9 @@
 //! `upcoming` ANSWERS NOTHING THAT WAS OVER BEFORE `from` ([#1046](https://github.com/srikanth235/centraid/issues/1046)).
 //!
-//! The expansion runs from 31 days before `from` — the reach-back that finds a
-//! multi-day occurrence still running when the range opens — and v0 bounded
-//! only one-offs afterwards, so every series answered a month of its own past
+//! The storage window reaches 31 days before `from` to find a multi-day
+//! event still running when the range opens. Recurrence now uses its actual
+//! duration and exception windows; v0 bounded only one-offs afterwards, so
+//! every series answered a month of its own past
 //! (`tests/parity.rs`, `ENDED_BEFORE_FROM_PER_CASE`). This file holds the
 //! bound against a REAL vault written through the registered commands: the
 //! past is gone, the occurrence still running at `from` stays, and an empty
@@ -65,8 +66,25 @@ impl Scratch {
             .expect("the read runs")
     }
 
+    fn search_occurrence(&self, id: &str, now: &str) -> Option<EventRow> {
+        self.vault
+            .read(|connection| {
+                let door = TestDoor::new(connection);
+                let (detail, denial) =
+                    centraid_apps_agenda::load_event(&door, id, None, None).unwrap();
+                assert!(denial.is_none());
+                Ok(centraid_apps_agenda::next_occurrence(
+                    &door,
+                    &detail.event.expect("the series exists"),
+                    now,
+                )
+                .expect("search selects an occurrence"))
+            })
+            .unwrap()
+    }
+
     /// A ZONED event in New York: its `zone` and a `Z` instant.
-    fn propose(&self, summary: &str, dtstart: &str, dtend: &str, rrule: Option<&str>) {
+    fn propose(&self, summary: &str, dtstart: &str, dtend: &str, rrule: Option<&str>) -> String {
         let mut input = json!({
             "title": summary,
             "starts": dtstart,
@@ -90,6 +108,7 @@ impl Scratch {
             "{:?}",
             outcome.reason
         );
+        outcome.output["id"].as_str().expect("event id").to_owned()
     }
 }
 
@@ -196,5 +215,121 @@ fn an_empty_from_is_the_first_instant_of_today_in_the_request_zone() {
         in_utc,
         ["Dinner"],
         "today in UTC began at 00:00Z on the 2nd, when only dinner was still going"
+    );
+}
+
+#[test]
+fn hourly_series_budget_starts_at_the_visible_day_not_the_storage_lookback() {
+    let scratch = Scratch::founded("hourly-window");
+    scratch.propose(
+        "Check",
+        "2098-06-01T00:00:00.000Z",
+        "2098-06-01T00:05:00.000Z",
+        Some("FREQ=HOURLY"),
+    );
+    let events = scratch.upcoming(
+        Some(FROM),
+        Some("2099-06-02T00:00:00.000Z"),
+        FROM,
+        "Etc/UTC",
+    );
+    assert_eq!(events.len(), 24);
+    assert_eq!(events.first().unwrap().dtstart, "2099-06-01T00:00:00.000Z");
+    assert_eq!(events.last().unwrap().dtstart, "2099-06-01T23:00:00.000Z");
+}
+
+#[test]
+fn a_dense_visible_series_reports_its_bound_instead_of_an_empty_or_short_day() {
+    let scratch = Scratch::founded("minute-bound");
+    scratch.propose(
+        "Check",
+        "2098-06-01T00:00:00.000Z",
+        "2098-06-01T00:00:15.000Z",
+        Some("FREQ=MINUTELY"),
+    );
+    let result = scratch
+        .vault
+        .read(|connection| {
+            Ok(load_upcoming(
+                &TestDoor::new(connection),
+                Some(FROM),
+                Some("2099-06-02T00:00:00.000Z"),
+                FROM,
+                &FireZone::named("Etc/UTC").unwrap(),
+            ))
+        })
+        .unwrap();
+    assert!(matches!(
+        result,
+        Err(centraid_apps_kit::error::KitError::FanOutExceeded { cap: 200, .. })
+    ));
+}
+
+#[test]
+fn a_named_minute_occurrence_opens_without_expanding_days_of_history() {
+    let scratch = Scratch::founded("minute-detail");
+    let id = scratch.propose(
+        "Check",
+        "2098-06-01T00:00:00.000Z",
+        "2098-06-01T00:00:15.000Z",
+        Some("FREQ=MINUTELY"),
+    );
+    let detail = scratch
+        .vault
+        .read(|connection| {
+            Ok(centraid_apps_agenda::detail::load_event(
+                &TestDoor::new(connection),
+                &id,
+                None,
+                Some("2099-06-01T08:30:00"),
+            ))
+        })
+        .unwrap()
+        .unwrap()
+        .0;
+    assert_eq!(detail.event.unwrap().dtstart, "2099-06-01T12:30:00.000Z");
+}
+
+#[test]
+fn search_opens_the_final_minute_of_a_finished_dense_series() {
+    let scratch = Scratch::founded("minute-search-past");
+    let id = scratch.propose(
+        "One day of checks",
+        "2099-06-01T00:00:00.000Z",
+        "2099-06-01T00:00:15.000Z",
+        Some("FREQ=MINUTELY;COUNT=1440"),
+    );
+    let last = scratch
+        .search_occurrence(&id, "2099-06-02T12:00:00.000Z")
+        .expect("the final occurrence is within the search reach");
+    assert_eq!(last.dtstart, "2099-06-01T23:59:00.000Z");
+    assert_eq!(
+        last.original_start_local.as_deref(),
+        Some("2099-06-01T19:59:00")
+    );
+}
+
+#[test]
+fn search_opens_a_running_minute_else_the_first_future_minute() {
+    let scratch = Scratch::founded("minute-search-next");
+    let id = scratch.propose(
+        "Check",
+        "2098-06-01T00:00:00.000Z",
+        "2098-06-01T00:00:15.000Z",
+        Some("FREQ=MINUTELY"),
+    );
+    assert_eq!(
+        scratch
+            .search_occurrence(&id, "2099-06-01T12:30:05.000Z")
+            .unwrap()
+            .dtstart,
+        "2099-06-01T12:30:00.000Z"
+    );
+    assert_eq!(
+        scratch
+            .search_occurrence(&id, "2099-06-01T12:30:20.000Z")
+            .unwrap()
+            .dtstart,
+        "2099-06-01T12:31:00.000Z"
     );
 }

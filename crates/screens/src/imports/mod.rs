@@ -24,6 +24,7 @@ pub mod camera_roll;
 pub mod files;
 pub mod gate;
 pub mod made;
+pub mod reminder_file;
 pub mod reminders;
 
 use centraid_api_proto::core_v1 as wire;

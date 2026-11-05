@@ -279,7 +279,8 @@ fn save_proposes_in_the_phones_zone_and_a_commit_ends_the_editor() {
             "Every week on Monday",
             "Every other week on Monday",
             "Every month on the 15th",
-            "Every year on 15 June"
+            "Every year on 15 June",
+            "Custom repeat"
         ]
     );
     assert_eq!(data.reminder_label, "30 minutes before");
@@ -910,12 +911,8 @@ fn a_sheet_opened_on_task_is_a_title_and_a_due_day_all_day_until_a_time_is_wante
     let calendar_id = world.calendar_names()[0].0.clone();
     for stray in [
         guest(&maya),
-        repeat("weekly"),
-        reminder("30"),
         calendar(&calendar_id),
         end("2099-06-18", "10:00"),
-        notes("x"),
-        link("https://x.example"),
         sheet(Sheet::Calendar),
         skip(),
     ] {
@@ -1118,5 +1115,95 @@ fn a_calendar_pick_closes_its_sheet_and_unknown_picks_are_ignored() {
         .iter()
         .map(|c| c.hue_key.as_str())
         .collect();
-    assert!(hues.iter().all(|hue| hue.starts_with('c')), "{hues:?}");
+    assert!(hues.iter().all(|hue| hue.starts_with("list")), "{hues:?}");
+}
+
+fn extra(key: &str, value: &str) -> K {
+    K::ExtraChanged(wire::agenda_editor_event::ExtraChanged {
+        key: key.into(),
+        value: value.into(),
+    })
+}
+
+#[test]
+fn new_task_details_save_notes_list_priority_tags_url_and_custom_repeat_together() {
+    let mut world = World::new();
+    let created = world.act(act::agenda::CreateProject {
+        kind: act::agenda::CreateProjectKind::Project,
+        title: "Trip preparation".into(),
+        ..Default::default()
+    });
+    let output: serde_json::Value = serde_json::from_slice(&created.output).unwrap();
+    let project = output["id"].as_str().unwrap();
+    let page = world.open_new("2099-06-17", Kind::Task);
+    world.title(page, "Book train");
+    world.send_editor(page, notes("Window seat"));
+    world.send_editor(page, link("https://example.com/train"));
+    world.send_editor(page, extra("project", project));
+    world.send_editor(page, extra("priority", "3"));
+    world.send_editor(page, extra("tags", "Travel, Planning"));
+    world.send_editor(page, extra("rule", "FREQ=WEEKLY;BYDAY=MO,WE,FR"));
+    world.send_editor(page, reminder("30"));
+    assert!(
+        world.editor_data(page).can_save,
+        "{:?}",
+        world.editor_data(page)
+    );
+    world.save(page);
+    let tasks = world.tasks_titled("Book train");
+    assert_eq!(tasks.len(), 1);
+    let task = &tasks[0];
+    assert_eq!(task.project_id.as_deref(), Some(project));
+    assert_eq!(task.priority, 3);
+    assert_eq!(task.description.as_deref(), Some("Window seat"));
+    assert_eq!(task.url.as_deref(), Some("https://example.com/train"));
+    assert_eq!(task.tags.len(), 2);
+    assert_eq!(task.remind_before_min, Some(30));
+    assert!(task.repeats);
+}
+
+#[test]
+fn event_metadata_keeps_its_named_zone_when_edited_on_a_different_phone_zone() {
+    let mut world = World::new();
+    let id = world.propose(
+        "Flight",
+        "2099-06-17T09:00:00",
+        "2099-06-17T10:00:00",
+        |request| {
+            request.zone = Field::Is("America/New_York".into());
+        },
+    );
+    let page = world.open_edit(&id, &id, None, "2099-06-17");
+    assert_eq!(
+        world.editor_data(page).draft.as_ref().unwrap().start_time,
+        "09:00"
+    );
+    world.send_editor(page, reminder("10"));
+    world.send_editor(page, extra("second_alert", "60"));
+    world.send_editor(page, extra("busy", "free"));
+    world.send_editor(page, extra("travel", "45"));
+    world.save(page);
+    let saved = world.event_row(&id).unwrap();
+    assert_eq!(saved.dtstart, "2099-06-17T13:00:00.000Z");
+    assert_eq!(saved.start_tz.as_deref(), Some("America/New_York"));
+    assert!(!saved.busy);
+    assert_eq!(saved.travel_minutes, 45);
+    let mut alerts: Vec<_> = saved.reminders.iter().map(|r| r.minutes_before).collect();
+    alerts.sort();
+    assert_eq!(alerts, vec![10, 60]);
+}
+
+#[test]
+fn a_subdaily_custom_repeat_requires_a_time_before_the_editor_enables_save() {
+    let mut world = World::new();
+    let page = world.open_new("2099-06-17", Kind::Task);
+    world.title(page, "Hourly check");
+    world.send_editor(page, extra("rule", "FREQ=HOURLY;COUNT=3"));
+    assert!(!world.editor_data(page).can_save);
+    assert_eq!(
+        world.editor_data(page).blocked_reason,
+        "Add a time to repeat more often than daily."
+    );
+    world.send_editor(page, all_day(false));
+    assert!(world.editor_data(page).can_save);
 }

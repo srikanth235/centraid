@@ -1,4 +1,4 @@
-//! HEALTH'S HOME (#1129): Today · Trends · Workouts, and More as sheets. One
+//! HEALTH'S HOME (#1129): Summary · Trends · Workouts, and More as sheets. One
 //! screen, the tab a parameter (the navigation model's first doctrine), so a tap
 //! on the band swaps what is drawn and never a stack entry.
 //!
@@ -83,6 +83,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         status: None,
         known_connected: false,
         recheck: false,
+        pins: super::pins::Pins::default(),
     }))
 }
 
@@ -108,6 +109,7 @@ struct Home {
     /// The vault just became connected while this phone's habit says it is not
     /// (Connect kept a new one): read the habit again so a pass can run.
     recheck: bool,
+    pins: super::pins::Pins,
 }
 
 impl Home {
@@ -277,6 +279,7 @@ impl Home {
         let parent = words::app_title(locale);
         let lines: Vec<wire::HealthMetricLine> = Metric::ALL
             .into_iter()
+            .filter(|metric| self.pins.contains(*metric))
             .map(|metric| {
                 let answer = loaded
                     .today
@@ -300,10 +303,45 @@ impl Home {
             .iter()
             .map(|row| figures::line(locale, row, day, units, &parent))
             .collect();
+        let pinned_empty = if lines.is_empty() {
+            words::pinned_empty(locale)
+        } else {
+            String::new()
+        };
         let mut lines = lines.into_iter();
         wire::HealthTodayData {
+            pinned_empty,
             hero: lines.next(),
-            metrics_heading: words::today_metrics_heading(locale),
+            highlights_heading: words::highlights_title(locale),
+            highlights: loaded
+                .today
+                .metrics
+                .iter()
+                .filter_map(|answer| {
+                    let metric = Metric::of_wire(answer.metric)?;
+                    let values: Vec<f64> = answer
+                        .week
+                        .iter()
+                        .filter(|bucket| bucket.end < loaded.today.today)
+                        .filter_map(|bucket| bucket.value)
+                        .collect();
+                    if values.len() < 3 {
+                        return None;
+                    }
+                    let average = values.iter().sum::<f64>() / values.len() as f64;
+                    Some(wire::HealthFact {
+                        label: figures::label(locale, metric),
+                        detail: fill(
+                            &words::highlight_average(locale),
+                            &[
+                                ("value", &figures::phrase(locale, metric, average, units)),
+                                ("n", &values.len().to_string()),
+                            ],
+                        ),
+                    })
+                })
+                .collect(),
+            metrics_heading: words::pinned_title(locale),
             metrics: lines.collect(),
             workouts_heading: if workouts.is_empty() {
                 String::new()
@@ -473,6 +511,28 @@ impl Home {
     /// then each kind with a workout), lit while a kind narrows the list.
     fn filter_menu(&self, ctx: &Ctx, loaded: &Loaded) -> Option<wire::FilterMenu> {
         let locale = ctx.locale();
+        if self.destination == wire::HealthDestination::Today {
+            return self.pins.loaded.then(|| {
+                menu::menu(
+                    locale,
+                    vec![menu::multi(
+                        "pinned",
+                        words::pinned_title(locale),
+                        Metric::ALL
+                            .into_iter()
+                            .map(|metric| {
+                                menu::option(
+                                    metric.key(),
+                                    figures::label(locale, metric),
+                                    self.pins.contains(metric),
+                                )
+                            })
+                            .collect(),
+                    )],
+                    self.pins.filtered(),
+                )
+            });
+        }
         let workouts = loaded.workouts.as_ref()?;
         let filtering = !self.kind_concept_id.is_empty();
         // With no kind to choose there is nothing to filter: no button.
@@ -752,6 +812,25 @@ fn metric_line(
         bar,
         accessibility_label,
         route: Some(routes::metric(metric.key(), parent)),
+        points_bp: answer
+            .map(|answer| {
+                let top = answer
+                    .week
+                    .iter()
+                    .filter_map(|bucket| bucket.value)
+                    .fold(0.0_f64, f64::max)
+                    .max(1.0);
+                answer
+                    .week
+                    .iter()
+                    .map(|bucket| {
+                        bucket
+                            .value
+                            .map_or(-1, |value| figures::bp(value, top) as i32)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
     }
 }
 
@@ -762,6 +841,7 @@ impl Screen for Home {
             Some(E::Appeared(_)) => {
                 self.reload(ctx);
                 effects.extend(self.follow.attach());
+                effects.extend(self.pins.attach());
             }
             Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
             Some(E::HealthHome(event)) => match event.kind {
@@ -773,7 +853,10 @@ impl Screen for Home {
                 Some(H::Range(range)) => self.range(ctx, &range.key),
                 Some(H::FilterMenuPicked(picked)) => {
                     let pick = menu::Pick::of(&picked);
-                    if pick.section == KIND {
+                    if pick.section == "pinned" {
+                        self.status = None;
+                        effects.extend(self.pins.toggle(pick.option));
+                    } else if pick.section == KIND {
                         let kind = if pick.option == KIND_ALL {
                             ""
                         } else {
@@ -782,7 +865,13 @@ impl Screen for Home {
                         self.kind(ctx, kind);
                     }
                 }
-                Some(H::FilterMenuCleared(_)) => self.kind(ctx, ""),
+                Some(H::FilterMenuCleared(_)) => {
+                    if self.destination == wire::HealthDestination::Today {
+                        effects.extend(self.pins.reset());
+                    } else {
+                        self.kind(ctx, "");
+                    }
+                }
                 Some(H::ShowMore(_)) => self.show_more(ctx),
                 Some(H::SheetClosed(_)) => self.sheet = Sheet::None,
                 Some(H::More(more)) => self.more(&more.key),
@@ -790,6 +879,26 @@ impl Screen for Home {
                 None => {}
             },
             Some(other) => {
+                if let E::EffectResult(result) = &other {
+                    let answer = match &result.outcome {
+                        Some(wire::effect_result::Outcome::Secrets(batch)) => {
+                            Some(batch.answers.as_slice())
+                        }
+                        Some(wire::effect_result::Outcome::Failed(_)) => Some(&[][..]),
+                        _ => None,
+                    };
+                    if let Some(answers) = answer {
+                        let (next, failed) = self.pins.answered(answers);
+                        effects.extend(next);
+                        if failed {
+                            self.status = Some(wire::StatusLine {
+                                sentence: shared::write_refused(ctx.locale()),
+                                refused: true,
+                                ..Default::default()
+                            });
+                        }
+                    }
+                }
                 if let Some(follow) = self.follow.on_event(&other, ctx) {
                     effects.extend(follow);
                     self.reload(ctx);
@@ -828,7 +937,11 @@ impl Screen for Home {
                         Vec::new()
                     },
                     chrome: Some(wire::HealthHomeChrome {
-                        title: words::app_title(locale),
+                        title: if self.destination == wire::HealthDestination::Today {
+                            words::summary_title(locale)
+                        } else {
+                            words::app_title(locale)
+                        },
                         retry: words::retry(locale),
                         home: words::home(locale),
                         more_title: words::more_title(locale),
@@ -839,8 +952,10 @@ impl Screen for Home {
                     }),
                     filter_menu: if drawing
                         && connected
-                        && self.destination == wire::HealthDestination::Workouts
-                    {
+                        && matches!(
+                            self.destination,
+                            wire::HealthDestination::Today | wire::HealthDestination::Workouts
+                        ) {
                         loaded.and_then(|loaded| self.filter_menu(ctx, loaded))
                     } else {
                         None

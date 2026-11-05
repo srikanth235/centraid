@@ -153,6 +153,16 @@ struct LockerItemView: View {
         .padding(.top, 8)
         LockerNote(text: item.trashedNote)
         LockerNote(text: item.statusLine)
+        if item.hasCodeCard {
+            LockerCodeCard(row: item.codeCard) { verb in
+                send(LockerItemEvents.make { $0.verb = .with { $0.key = item.codeCard.key; $0.verb = verb.key } })
+            }
+        }
+        if !item.changePasswordLabel.isEmpty {
+            KitOutlineButton(label: item.changePasswordLabel) {
+                send(LockerItemEvents.make { $0.verb = .with { $0.key = "url"; $0.verb = "open" } })
+            }.padding(.horizontal, CentraidGeometry.pageMargin).accessibilityIdentifier("locker-change-password")
+        }
         ForEach(Array(item.sections.enumerated()), id: \.offset) { _, section in
             if !section.title.isEmpty { SectionHeader(title: section.title) }
             ForEach(section.rows, id: \.key) { row in

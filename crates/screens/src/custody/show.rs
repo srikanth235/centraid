@@ -228,6 +228,7 @@ impl Show {
                     text: self.words.join(" "),
                     url: String::new(),
                     subject: words::save_subject(ctx.locale()),
+                    ..Default::default()
                 }))]
             }
             _ => Vec::new(),

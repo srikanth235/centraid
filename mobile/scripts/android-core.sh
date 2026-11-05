@@ -25,7 +25,12 @@ abi="${1:-arm64-v8a}"
 api="${CENTRAID_ANDROID_API:-35}"
 ndk_version="${CENTRAID_NDK:-27.0.12077973}"
 sdk="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}"
-toolchain="$sdk/ndk/$ndk_version/toolchains/llvm/prebuilt/darwin-x86_64/bin"
+case "$(uname -s)" in
+  Darwin) ndk_host=darwin-x86_64 ;;
+  Linux)  ndk_host=linux-x86_64 ;;
+  *) echo "unsupported NDK host: $(uname -s)" >&2; exit 2 ;;
+esac
+toolchain="$sdk/ndk/$ndk_version/toolchains/llvm/prebuilt/$ndk_host/bin"
 
 case "$abi" in
   arm64-v8a) triple=aarch64-linux-android; cc_prefix=aarch64-linux-android ;;
@@ -45,6 +50,11 @@ export "CARGO_TARGET_${upper}_LINKER=$toolchain/${cc_prefix}${api}-clang"
 export "CC_${triple//-/_}=$toolchain/${cc_prefix}${api}-clang"
 export "CXX_${triple//-/_}=$toolchain/${cc_prefix}${api}-clang++"
 export "AR_${triple//-/_}=$toolchain/llvm-ar"
+# bindgen runs on the host, but must parse Android headers for the target. This
+# is essential on Linux CI, whose default clang include paths describe glibc.
+bindgen_key="BINDGEN_EXTRA_CLANG_ARGS_${triple//-/_}"
+clang_resources="$("$toolchain/clang" -print-resource-dir)"
+export "$bindgen_key=--sysroot=$toolchain/../sysroot -isystem $clang_resources/include ${!bindgen_key:-}"
 # llama.cpp (the on-device chat's engine, `--features llama` below) is built by
 # CMake against the NDK's own toolchain file, and its build script finds the NDK
 # and the API level from these two — the linker/CC variables above are not what

@@ -107,8 +107,8 @@ fn the_fields_are_computed_and_repeats_is_the_cores_sentence() {
     assert_eq!(
         keys,
         [
-            "when", "time", "reminder", "repeats", "anchor", "priority", "effort", "project",
-            "tags"
+            "when", "time", "reminder", "url", "repeats", "anchor", "flag", "priority", "effort",
+            "project", "tags"
         ]
     );
     let when = field(v, "when");
@@ -138,7 +138,7 @@ fn the_fields_are_computed_and_repeats_is_the_cores_sentence() {
     assert_eq!(selected(repeats), "monthly");
     assert_eq!(selected(field(v, "anchor")), "completion");
     assert_eq!(field(v, "priority").value, "None");
-    // SIGNAGE, NOT AN ESSAY (DESIGN.md, Copy; #1047): "None" is on the row, so
+    // SIGNAGE, NOT AN ESSAY (product-intuition screen contracts, Copy; #1047): "None" is on the row, so
     // no note explains that priority is optional.
     assert_eq!(field(v, "priority").note, "");
     assert_eq!(data.title_placeholder, "Task name");
@@ -199,11 +199,10 @@ fn priority_chips_run_none_soon_next_now() {
         .iter()
         .map(|c| (c.key.clone(), c.label.clone()))
         .collect();
-    let expect: Vec<(String, String)> =
-        [("none", "None"), ("1", "Soon"), ("2", "Next"), ("3", "Now")]
-            .iter()
-            .map(|(k, l)| ((*k).to_owned(), (*l).to_owned()))
-            .collect();
+    let expect: Vec<(String, String)> = [("none", "None"), ("1", "!"), ("2", "!!"), ("3", "!!!")]
+        .iter()
+        .map(|(k, l)| ((*k).to_owned(), (*l).to_owned()))
+        .collect();
     assert_eq!(keys, expect);
 }
 
@@ -447,7 +446,7 @@ fn a_vault_change_never_overwrites_typing_and_the_fields_refresh_around_the_word
     );
     assert_eq!(
         field(v, "priority").value,
-        "Next",
+        "!!",
         "the fields are the vault's"
     );
     assert!(autosave(v).remote_changed);
@@ -614,7 +613,7 @@ fn reminder_repeats_priority_and_effort_are_each_one_write() {
     assert!(!task_of(&d, &id).repeats);
     choose(&mut d, i, "priority", "3");
     assert_eq!(task_of(&d, &id).priority, 3);
-    assert_eq!(field(d.view(i), "priority").value, "Now");
+    assert_eq!(field(d.view(i), "priority").value, "!!!");
     choose(&mut d, i, "effort", "25");
     assert_eq!(task_of(&d, &id).effort_min, Some(25));
     assert_eq!(field(d.view(i), "effort").value, "~25 min");
@@ -978,5 +977,49 @@ fn a_repeated_task_page_row_is_priority_and_check_words_from_the_row_law() {
     assert_eq!(
         detail_data(d.view(i)).check_label,
         rows::check_label(Locale::En, "Rent", true)
+    );
+}
+
+#[test]
+fn custom_repeat_and_url_fields_persist_and_invalid_rules_are_refused() {
+    let mut d = driver();
+    let id = rent(&d);
+    let i = open(&mut d, &id);
+    send_detail(
+        &mut d,
+        i,
+        de::Kind::FieldText(de::FieldTextChanged {
+            field: "repeats".into(),
+            text: "FREQ=WEEKLY;BYDAY=MO,WE,FR".into(),
+        }),
+    );
+    assert_eq!(
+        task_of(&d, &id).rrule.as_deref(),
+        Some("FREQ=WEEKLY;BYDAY=MO,WE,FR")
+    );
+    send_detail(
+        &mut d,
+        i,
+        de::Kind::FieldText(de::FieldTextChanged {
+            field: "url".into(),
+            text: "https://example.com/invoice".into(),
+        }),
+    );
+    assert_eq!(
+        task_of(&d, &id).url.as_deref(),
+        Some("https://example.com/invoice")
+    );
+    send_detail(
+        &mut d,
+        i,
+        de::Kind::FieldText(de::FieldTextChanged {
+            field: "repeats".into(),
+            text: "FREQ=MADEUP".into(),
+        }),
+    );
+    assert!(detail(d.view(i)).status.as_ref().unwrap().refused);
+    assert_eq!(
+        task_of(&d, &id).rrule.as_deref(),
+        Some("FREQ=WEEKLY;BYDAY=MO,WE,FR")
     );
 }

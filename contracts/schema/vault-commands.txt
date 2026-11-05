@@ -12,6 +12,7 @@ category.merge
 checkpoint.record
 container.create
 container.move
+container.style
 derivative.drop
 derivative.write
 document.add
@@ -36,9 +37,11 @@ event.respond
 flag.clear
 flag.set
 follow.calendar
+follow.calendar_written
 follow.contacts
 follow.files
 follow.health
+follow.reminders
 follow.statement
 follow.stop
 locker.add_item
@@ -87,13 +90,16 @@ rule.apply
 rule.delete
 rule.edit
 tag.add
+tag.color
 tag.remove
 task.add
 task.cancel
+task.clear_completed
 task.complete
 task.edit
 task.organize
 task.reopen
+task.reorder
 thread.clear
 thread.save_turn
 thread.settle_proposal

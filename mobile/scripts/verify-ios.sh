@@ -33,3 +33,10 @@ xcodebuild -project Centraid.xcodeproj -scheme Centraid \
   -destination "$destination" -derivedDataPath "$artifacts/app-derived-data" \
   -resultBundlePath "$artifacts/CentraidTests.xcresult" test \
   2>&1 | tee "$artifacts/centraid-tests.log"
+if [ "${CENTRAID_VISUAL:-0}" = 1 ]; then
+  xcrun simctl bootstatus "$simulator" -b
+  xcrun simctl install "$simulator" "$artifacts/app-derived-data/Build/Products/Debug-iphonesimulator/Centraid.app"
+  xcrun simctl install "$simulator" "$artifacts/seeder-derived-data/Build/Products/Debug-iphonesimulator/HealthSeeder.app"
+  CENTRAID_SIMULATOR="$simulator" CENTRAID_VISUAL_ARTIFACTS="$artifacts/visual" \
+    bash "$root/mobile/scripts/visual-ios.sh"
+fi

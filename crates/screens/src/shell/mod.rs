@@ -21,6 +21,7 @@ pub mod policy;
 pub mod row_routes;
 pub mod search;
 pub mod tiles;
+mod widgets;
 
 pub const HOME: &str = "home.springboard";
 pub const SEARCH: &str = "home.search";

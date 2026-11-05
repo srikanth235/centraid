@@ -134,7 +134,7 @@ struct CivilPickSheet: View {
                 }
             }
         }
-        .presentationDetents(pick.time ? [.medium] : [.large])
+        .modifier(SheetPresentation(detents: pick.time ? [.medium] : [.large]))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("civil-pick-sheet")
     }

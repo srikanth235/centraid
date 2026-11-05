@@ -25,7 +25,7 @@ struct AgendaHomeView: View {
 
     @Environment(\.colorScheme) private var scheme
     /// The quick add holds the keyboard: the band is put away while it does
-    /// (as an editor's is, DESIGN.md "The seven rooms"), so the bar sits on the
+    /// (as an editor's is, product-intuition screen contracts "The seven rooms"), so the bar sits on the
     /// keyboard and not behind it, and a scroll or the Done key lets it go.
     @State private var quickAddTyping = false
 
@@ -68,7 +68,7 @@ struct AgendaHomeView: View {
         } content: {
             VStack(spacing: 0) {
                 if state.toolbar.shown {
-                    AgendaToolbarView(toolbar: state.toolbar, eventCountText: eventCountText, chrome: state.chrome, send: send)
+                    AgendaToolbarView(toolbar: state.toolbar, eventCountText: eventCountText, chrome: state.chrome, grid: state.hasCalendarGrid ? state.calendarGrid : nil, send: send)
                 }
                 ReadStateView(
                     content: content,
@@ -87,6 +87,7 @@ struct AgendaHomeView: View {
                         verb: state.chrome.tasks.quickAddVerb,
                         onChange: { title in send(AgendaEvents.make { $0.quickAddChanged = .with { $0.title = title } }) },
                         onSubmit: { send(AgendaEvents.make { $0.quickAddSubmitted = .init() }) },
+                        onTool: { key in send(AgendaEvents.make { $0.quickAddTool = .with { $0.key = key } }) },
                         onFocusChange: { typing in
                             quickAddTyping = typing
                             // THE KEYBOARD LEFT: Rust puts an empty bar away.
@@ -121,12 +122,14 @@ struct AgendaHomeView: View {
         .sheet(isPresented: sheetBinding(state, .newProject)) {
             SheetRoom(
                 title: state.chrome.tasks.newProjectTitle,
+                status: state.status.sentence,
                 primary: state.newProjectCanSubmit
                     ? SheetPrimary(label: state.chrome.tasks.newProjectVerb) {
                         send(AgendaEvents.make { $0.newProjectSubmitted = .init() })
                     }
                     : nil
             ) {
+                ScrollView { VStack(alignment: .leading, spacing: 12) {
                 MachineTextField(
                     placeholder: state.chrome.tasks.newProjectPlaceholder,
                     value: state.newProjectName,
@@ -136,7 +139,15 @@ struct AgendaHomeView: View {
                 .centraidType("body")
                 .accessibilityLabel(state.chrome.tasks.newProjectPlaceholder)
                 .accessibilityIdentifier("tasks-new-project-field")
+                AgendaAppearancePicker(value: state.newProjectAppearance) { changed in send(AgendaEvents.make { $0.containerForm = changed }) }
+                } }
             }
+        }
+        .sheet(isPresented: sheetBinding(state, .calendarEditor)) {
+            AgendaCalendarForm(value: state.containerForm, status: state.status.sentence, send: send)
+        }
+        .sheet(isPresented: sheetBinding(state, .imports)) {
+            AgendaImportOptionsView(value: state.importOptions, send: send)
         }
         // NO IDENTIFIER ON THE WHOLE SCREEN: one set here replaces every
         // descendant's, and the flows tap `agenda-band-*`, `agenda-row-*`.
@@ -212,6 +223,8 @@ struct AgendaHomeView: View {
     ) -> some View {
         if home.hasTodo {
             AgendaTodoList(home: home, state: state, send: send, open: open)
+        } else if state.hasCalendarGrid, state.calendarGrid.viewKey != "list" {
+            AgendaGridView(grid: state.calendarGrid, home: home, chrome: state.chrome, send: send, open: open)
         } else if home.empty != .none, home.empty != .unspecified {
             if home.empty == .noMatch {
                 // A SEARCH THAT FOUND NOTHING: the kit's one no-match state, and the Ask row under it.
@@ -296,6 +309,7 @@ private struct AgendaToolbarView: View {
     /// Rust's `event_count_label`, drawn with the month ("May 2026 · 3 events").
     let eventCountText: String
     let chrome: Centraid_Core_V1_AgendaChrome
+    let grid: Centraid_Core_V1_AgendaCalendarGrid?
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
     @Environment(\.colorScheme) private var scheme
 
@@ -312,13 +326,26 @@ private struct AgendaToolbarView: View {
                     nextLabel: chrome.nextDay,
                     previousIdentifier: "agenda-previous-day",
                     nextIdentifier: "agenda-next-day",
-                    onPrevious: { send(AgendaEvents.make { $0.dayStepped = .with { $0.days = -1 } }) },
-                    onNext: { send(AgendaEvents.make { $0.dayStepped = .with { $0.days = 1 } }) }
+                    onPrevious: { send(AgendaEvents.make { $0.dayStepped = .with { $0.days = grid?.previousDays ?? -1 } }) },
+                    onNext: { send(AgendaEvents.make { $0.dayStepped = .with { $0.days = grid?.nextDays ?? 1 } }) }
                 )
                 if !toolbar.atToday {
                     KitLink(label: chrome.today, identifier: "agenda-today") {
                         send(AgendaEvents.make { $0.today = .init() })
                     }
+                }
+                if let grid {
+                    Menu {
+                        ForEach(grid.viewChoices, id: \.key) { choice in
+                            Button {
+                                send(AgendaEvents.make { $0.calendarView = .with { $0.key = choice.key } })
+                            } label: {
+                                Label(choice.label, systemImage: choice.selected ? "checkmark" : "calendar")
+                            }
+                        }
+                    } label: { Image(systemName: "calendar").frame(minWidth: 44, minHeight: 44) }
+                    .accessibilityLabel(grid.viewLabel)
+                    .accessibilityIdentifier("agenda-calendar-view")
                 }
                 Spacer(minLength: 0)
                 Text([toolbar.monthLabel, eventCountText].filter { !$0.isEmpty }.joined(separator: " \u{00B7} "))
@@ -442,7 +469,8 @@ private struct AgendaTaskGroup: View {
             onPick: open,
             fileVerb: chrome.tasks.fileVerb,
             onFile: { id in send(AgendaEvents.make { $0.fileRequested = .with { $0.taskID = id } }) },
-            identifierPrefix: "agenda-task-row"
+            identifierPrefix: "agenda-task-row",
+                                onAction: { action in send(AgendaEvents.make { $0.taskAction = action }) }
         )
     }
 }
@@ -486,6 +514,29 @@ private struct AgendaTodoList: View {
         let chrome = state.chrome
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+                    ForEach(todo.smartLists, id: \.key) { list in
+                        Button { if list.hasRoute { open(list.route) } } label: {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack(alignment: .top) {
+                                    CentraidIconView(iconKey: list.iconKey, tint: Theme.color("onAccent", scheme), size: 24)
+                                    Spacer(minLength: 8)
+                                    Text(list.countLabel).centraidType("display")
+                                }
+                                Text(list.title).centraidType("bodyStrong")
+                            }
+                            .foregroundStyle(Theme.color("onAccent", scheme))
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Theme.color(list.colorRole, scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(list.accessibilityLabel)
+                        .accessibilityIdentifier("agenda-smart-\(list.key)")
+                    }
+                }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.vertical, 12)
                 TodoCountLine(count: todo.countLabel, window: todo.windowLabel)
                 if !todo.empty.headline.isEmpty {
                     EmptyStateView(todo.empty, onAction: { send(AgendaEvents.make { $0.todoEmptyActed = .init() }) })
@@ -493,10 +544,15 @@ private struct AgendaTodoList: View {
                 ForEach(todo.groups, id: \.key) { group in
                     AgendaTaskGroup(group: group, chrome: chrome, send: send, open: open, catchUp: nil)
                 }
+                if !todo.projects.isEmpty {
+                    SectionHeader(title: todo.listsTitle)
+                }
                 ForEach(todo.projects, id: \.key) { group in
                     SectionHeader(title: group.title, count: UInt32(group.rows.count))
                     ForEach(group.rows, id: \.row.id) { project in
                         let row = project.row
+                        HStack(spacing: 0) {
+                        CentraidIconView(iconKey: project.iconKey, tint: Theme.color(KitHue.role(row.hueKey) ?? "listBlue", scheme), size: 20).padding(.leading, CentraidGeometry.pageMargin)
                         CentraidRow(
                             title: row.title,
                             meta: row.meta,
@@ -509,6 +565,7 @@ private struct AgendaTodoList: View {
                             accessibility: row.accessibilityLabel,
                             identifier: "agenda-project-\(row.id)"
                         ) { open(project.route) }
+                        }
                     }
                 }
                 ShowMoreFooter(visible: todo.canShowMore, label: chrome.tasks.showMore) {
@@ -574,7 +631,8 @@ private struct AgendaSectionView: View {
                                 fileVerb: chrome.tasks.fileVerb,
                                 onFile: { id in send(AgendaEvents.make { $0.fileRequested = .with { $0.taskID = id } }) },
                                 embedded: true,
-                                identifierPrefix: "agenda-task-row"
+                                identifierPrefix: "agenda-task-row",
+                                onAction: { action in send(AgendaEvents.make { $0.taskAction = action }) }
                             )
                         case let .nowLine(now):
                             AgendaNowLineView(now: now).id("now-\(section.day)")
@@ -741,6 +799,11 @@ private struct AgendaMoreSheet: View {
                                 if row.hasRoute { open(row.route) }
                             }
                             .accessibilityLabel(row.spoken.isEmpty ? row.label : row.spoken)
+                            if !row.editKey.isEmpty {
+                                KitIconKey(iconKey: "Pencil", label: row.editLabel, identifier: "agenda-more-\(row.editKey)") {
+                                    send(AgendaEvents.make { $0.moreRow = .with { $0.key = row.editKey } })
+                                }
+                            }
                         }
                     }
                 }
@@ -759,6 +822,135 @@ private struct AgendaReadsSheet: View {
                     FieldRow(key: fact.label, value: fact.detail)
                 }
             }
+        }
+    }
+}
+
+
+/// Civil dates, slots and event rows are supplied by Rust; no device calendar arithmetic.
+private struct AgendaGridView: View {
+    let grid: Centraid_Core_V1_AgendaCalendarGrid
+    let home: Centraid_Core_V1_AgendaHomeData
+    let chrome: Centraid_Core_V1_AgendaChrome
+    let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(grid.panels.enumerated()), id: \.offset) { _, panel in
+                    VStack(alignment: .leading, spacing: 8) {
+                        if !panel.title.isEmpty { Text(panel.title).centraidType("section").accessibilityAddTraits(.isHeader) }
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 4) {
+                            ForEach(panel.days, id: \.day) { day in
+                                Button {
+                                    send(AgendaEvents.make { $0.calendarDay = .with { $0.day = day.day } })
+                                } label: {
+                                    VStack(spacing: 2) {
+                                        Text(day.weekday).centraidType("meta")
+                                        Text(day.label).centraidType("bodyStrong")
+                                        Circle().fill(day.hasItems ? Theme.color("agendaText", scheme) : .clear).frame(width: 4, height: 4)
+                                    }
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                                    .foregroundStyle(Theme.color(day.selected ? "onAccent" : (day.inMonth ? "text" : "textFaint"), scheme))
+                                    .background(day.selected ? Theme.color("agendaFill", scheme) : (day.today ? Theme.color("agendaTint", scheme) : .clear), in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
+                                }
+                                .accessibilityLabel(day.accessibilityLabel)
+                                .accessibilityAddTraits(day.selected ? .isSelected : [])
+                                .accessibilityIdentifier("agenda-calendar-day-\(day.day)")
+                            }
+                        }
+                    }
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .gesture(DragGesture(minimumDistance: 40).onEnded { value in
+                        if abs(value.translation.width) > abs(value.translation.height) {
+                            send(AgendaEvents.make { $0.dayStepped = .with { $0.days = value.translation.width < 0 ? grid.nextDays : grid.previousDays } })
+                        }
+                    })
+                }
+                if home.hasOverdue {
+                    TodoGroupView(group: home.overdue, onVerb: { _ in if home.hasCatchUp { open(home.catchUp) } }, onCheck: check, onPick: open, onAction: { action in send(AgendaEvents.make { $0.taskAction = action }) })
+                }
+                if grid.hourDays.count > 1 {
+                    ScrollView(.horizontal) {
+                        HStack(alignment: .top, spacing: 12) {
+                            ForEach(grid.hourDays, id: \.day) { day in hourDay(day).frame(width: 280) }
+                        }
+                    }
+                } else {
+                    ForEach(grid.hourDays, id: \.day) { day in hourDay(day) }
+                }
+                if grid.hourDays.isEmpty, grid.viewKey != "year" {
+                    ForEach(home.days, id: \.day) { day in AgendaSectionView(section: day, chrome: chrome, send: send, open: open) }
+                }
+                if home.importSource == .calendar {
+                    CalendarImportButton(label: home.importLabel, identifier: "kit-empty-import", send: send)
+                }
+            }
+            .padding(.bottom, 64)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            KitOutlineButton(label: grid.todayLabel) { send(AgendaEvents.make { $0.today = .init() }) }
+                .fixedSize(horizontal: true, vertical: false)
+                .accessibilityIdentifier("agenda-floating-today")
+                .padding(16)
+        }
+    }
+
+    private func check(_ id: String) { send(AgendaEvents.make { $0.taskChecked = .with { $0.taskID = id } }) }
+
+    private func hourDay(_ day: Centraid_Core_V1_AgendaHourDay) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(day.heading).centraidType("section").padding(.horizontal, CentraidGeometry.pageMargin)
+            ForEach(Array(day.allDay.enumerated()), id: \.offset) { _, item in gridItem(item) }
+            ForEach(day.hours, id: \.key) { slot in
+                HStack(alignment: .top, spacing: 8) {
+                    Text(slot.label).centraidType("meta").frame(width: 48, alignment: .trailing)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Divider()
+                        ForEach(Array(slot.items.enumerated()), id: \.offset) { _, item in gridItem(item) }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
+                    .contentShape(Rectangle())
+                    .onLongPressGesture { if slot.hasCreateRoute { open(slot.createRoute) } }
+                    .accessibilityAction(named: Text(chrome.newEvent)) { if slot.hasCreateRoute { open(slot.createRoute) } }
+                    .accessibilityIdentifier("agenda-slot-\(slot.key)")
+                }
+            }
+        }
+    }
+
+    private func adjust(_ row: Centraid_Core_V1_AgendaEventRow, delta: Int32, resize: Bool) {
+        send(AgendaEvents.make { $0.eventAdjusted = .with { $0.instanceKey = row.instanceKey; $0.deltaMinutes = delta; $0.resize = resize } })
+    }
+
+    @ViewBuilder private func gridItem(_ item: Centraid_Core_V1_AgendaRowItem) -> some View {
+        switch item.kind {
+        case let .event(row):
+            VStack(spacing: 0) {
+                AgendaEventRowView(row: row, open: open)
+                    .simultaneousGesture(LongPressGesture(minimumDuration: 0.4).sequenced(before: DragGesture()).onEnded { value in
+                        if case let .second(true, drag?) = value { adjust(row, delta: Int32((drag.translation.height / 64 * 60 / 15).rounded()) * 15, resize: false) }
+                    })
+                    .contextMenu {
+                        ForEach(Array(row.adjustments.enumerated()), id: \.offset) { _, option in
+                            Button(option.label) { adjust(row, delta: option.deltaMinutes, resize: option.resize) }
+                        }
+                    }
+                if let resize = row.adjustments.last {
+                    Capsule().fill(Theme.color("agendaText", scheme)).frame(width: 36, height: 4)
+                        .frame(height: 44).contentShape(Rectangle())
+                        .gesture(DragGesture(minimumDistance: 5).onEnded { drag in adjust(row, delta: Int32((drag.translation.height / 64 * 60 / 15).rounded()) * 15, resize: true) })
+                        .accessibilityLabel(resize.label)
+                        .accessibilityAction { adjust(row, delta: resize.deltaMinutes, resize: true) }
+                        .accessibilityIdentifier("agenda-resize-\(row.instanceKey)")
+                }
+            }
+        case let .task(row): TodoRowView(row: row, onCheck: check, onPick: open, embedded: true, identifierPrefix: "agenda-task-row",
+                                onAction: { action in send(AgendaEvents.make { $0.taskAction = action }) })
+        case let .nowLine(now): AgendaNowLineView(now: now)
+        case .none: EmptyView()
         }
     }
 }

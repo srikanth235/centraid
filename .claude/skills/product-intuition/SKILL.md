@@ -49,6 +49,7 @@ These are decided. Do not build them, propose them in passing, or leave a hook "
 - [Vault and Locker](references/vault-locker.md)
 - [Backup, following, and the assistant](references/backup-following-assistant.md)
 - [Apps and mobile shell](references/apps-shell.md)
+- [Screen rooms, feedback, search, accessibility, and wording](references/screens-and-copy.md)
 - [Identity, search, and performance](references/identity-search-performance.md)
 
 ## Decision process

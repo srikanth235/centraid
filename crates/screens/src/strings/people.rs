@@ -2,6 +2,10 @@
 //! them are filled with [`crate::strings::fill`].
 
 catalog! {
+    plain my_card = ("My card", "My card");
+    plain hero_mail = ("Mail", "Mail");
+    plain vault_links_title = ("In your vault", "In your vault");
+    plain vault_links_window = ("More items about this person are available in their apps.", "More items about this person are available in their apps.");
     plain action_call = ("Call", "Call");
     plain action_copy = ("Copy", "Copy");
     plain action_mail = ("Email", "Email");
