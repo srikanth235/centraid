@@ -80,7 +80,7 @@ impl DatagenSource {
         Self::from_texts(dir, &texts)
     }
 
-    /// Open a data version (`datagen render`, `datagen build`): `<dir>/<name>.jsonl.zst` for each of `names` (`train`,
+    /// Open a data version (`datagen render`, `datagen build`): `<dir>/data/<name>.jsonl.zst` for each of `names` (`train`,
     /// `val`, `test`, `noise`) and the world documents under `<dir>/worlds/`. The records are read as they are written,
     /// the `render` object and `meta` beside the session, and the eval ignores what it does not read.
     ///
@@ -90,7 +90,7 @@ impl DatagenSource {
     pub fn open_version(dir: &Path, names: &[&str]) -> Result<Self> {
         let mut texts = Vec::new();
         for name in names {
-            let path = dir.join(format!("{name}.jsonl.zst"));
+            let path = crate::version::split_path(dir, name);
             if let Ok(file) = std::fs::File::open(&path) {
                 let bytes =
                     zstd::stream::decode_all(file).with_context(|| path.display().to_string())?;

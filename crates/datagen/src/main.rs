@@ -94,8 +94,8 @@ enum Command {
         #[arg(long, default_value = "haiku")]
         model: String,
     },
-    /// Render a messages run (stage 6) and mix it (stage 7) into a data version: `train|val|test|noise.jsonl.zst`
-    /// and a manifest. The sessions are rendered as the phone renders them, tokenized, with per-token loss weights.
+    /// Render a messages run (stage 6) and mix it (stage 7) into a data version: `data/{train,val,test,noise}.jsonl.zst`,
+    /// `worlds/`, `build/` and a manifest. The sessions are rendered as the phone renders them, tokenized, with per-token loss weights.
     Render {
         /// The output directory of `datagen messages`.
         #[arg(long = "in")]
@@ -167,6 +167,16 @@ enum Command {
         /// Characters kept at each end of a stretch of context.
         #[arg(long, default_value_t = 240)]
         keep: usize,
+    },
+    /// Unpack a data version's `build/llm-cache.jsonl.zst` into a messages run's `llm-cache/`, so `datagen messages
+    /// --offline` (or `build --offline`) rebuilds that version with no model calls.
+    UnpackCache {
+        /// The packed cache (`<version>/build/llm-cache.jsonl.zst`).
+        #[arg(long = "in")]
+        input: PathBuf,
+        /// The cache directory to fill (`<messages out>/llm-cache`, or `<build out>/stages/messages/llm-cache`).
+        #[arg(long)]
+        out: PathBuf,
     },
     /// Cut RFT records and DPO pairs from a model's rollouts (`assist-eval rollout`) and render them with the data
     /// version's renderer, so each carries `render {input_ids, weights, text}` as a data-version record does. Writes
@@ -516,6 +526,10 @@ fn main() -> Result<()> {
             )?;
             print!("{text}");
         }
+        Command::UnpackCache { input, out } => {
+            let n = version::unpack_cache(&input, &out)?;
+            eprintln!("unpacked {n} cache entries into {}", out.display());
+        }
         Command::Show {
             input,
             tokenizer,
@@ -524,7 +538,7 @@ fn main() -> Result<()> {
             keep,
         } => {
             let tokenizer = centraid_datagen::render::Tokenizer::open(&tokenizer)?;
-            let path = input.join(format!("{split}.jsonl.zst"));
+            let path = version::split_path(&input, &split);
             let bytes = zstd::stream::decode_all(
                 std::fs::File::open(&path).with_context(|| path.display().to_string())?,
             )?;

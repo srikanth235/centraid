@@ -7,9 +7,8 @@ The data version is not an input: it is pulled from the private HF dataset with 
 
 params.json (make_kit.sh writes it; every key has the default shown):
     arm            "A" | "B" | "C"                       required (train/arms.py)
-    data_folder    "datagen/vN"                          required: the folder of the data version inside the HF dataset
-    hf_repo        "srikanth235/centraid-native-data"
-    hf_revision    null                                  a commit or tag of that dataset; null = main
+    data_version   "v0.N"                                required: the tag of the data version in the HF dataset (a tag, never main)
+    hf_repo        "srikanth235/centraid-native-data"   one data version at the root of each tag: manifest.json, data/, worlds/, build/
     epochs         2        bs 16      max_len 8192      train.py flags
     lr             null                                  null = the arm's (arms.py)
     hours          9.0                                   train.py's wall-clock budget; the kernel's own limit is 12 h
@@ -18,7 +17,7 @@ params.json (make_kit.sh writes it; every key has the default shown):
     s2_baseline    false                                 also score S2 (`--tools s2`) on the same val; deferred by the owner, so off
     shards         null                                  assist-eval processes; null = one per GPU
 
-Steps: pip install -> pull train.jsonl.zst / val.jsonl.zst / manifest.json (test and noise are NOT downloaded) -> train.py --arm
+Steps: pip install -> pull data/train.jsonl.zst / data/val.jsonl.zst / manifest.json / worlds/ (test and noise are NOT downloaded) -> train.py --arm
 -> to_gguf.py (--no-mtp, Q4_0, output tensor Q8_0: its own defaults) -> build assist-eval with CUDA -> score val under the default
 tools (and S2's GGUF under `--tools s2` when asked) -> arm_report.py.
 Output (/kaggle/working): arm-<ARM>.val.json (the report compare_arms.py reads), report-<ARM>.json, summary-<ARM>.txt, the GGUF and its
@@ -36,7 +35,7 @@ import urllib.request
 OUT = "/kaggle/working"
 TMP = "/kaggle/temp"
 SRC = os.path.join(TMP, "src")
-DEFAULTS = {"hf_repo": "srikanth235/centraid-native-data", "hf_revision": None, "epochs": 2, "bs": 16, "max_len": 8192, "lr": None,
+DEFAULTS = {"hf_repo": "srikanth235/centraid-native-data", "epochs": 2, "bs": 16, "max_len": 8192, "lr": None,
             "hours": 9.0, "checkpoints": "1.0", "mark": "final", "s2_baseline": False, "shards": None}
 S2 = {"url": "https://huggingface.co/srikanth235/centraid-native-gguf/resolve/s2-q4_0/centraid-native-s2-Q4_0.gguf",
       "sha256": "b1be1e45024c8e98f670d456edfdf261c786878dd8260117806e285af8e9f668"}
@@ -83,7 +82,7 @@ def load_params():
         sys.exit("no params.json under /kaggle/input: attach the dataset centraid-m6-src to this kernel")
     params = {**DEFAULTS, **json.load(open(hits[0]))}
     params["_input"] = os.path.dirname(hits[0])
-    for key in ("arm", "data_folder"):
+    for key in ("arm", "data_version"):
         if not params.get(key):
             sys.exit("params.json needs %r" % key)
     if params["arm"] not in ("A", "B", "C") or params["mark"] not in ("final", "best"):
@@ -92,22 +91,22 @@ def load_params():
 
 
 def pull_data(p, token):
-    """train.jsonl.zst, val.jsonl.zst and manifest.json of the data version; the held-out test and noise files are not fetched."""
+    """data/train.jsonl.zst, data/val.jsonl.zst, manifest.json and worlds/ of the data version (its tag); the held-out test and noise
+    files are not fetched."""
     from huggingface_hub import hf_hub_download, list_repo_files
 
+    into = os.path.join(TMP, "data")
     got = {}
-    for name in ("train.jsonl.zst", "val.jsonl.zst", "manifest.json"):
-        got[name] = hf_hub_download(p["hf_repo"], "%s/%s" % (p["data_folder"], name), repo_type="dataset", token=token,
-                                    revision=p["hf_revision"], local_dir=os.path.join(TMP, "data"))
+    for name in ("data/train.jsonl.zst", "data/val.jsonl.zst", "manifest.json"):
+        got[os.path.basename(name)] = hf_hub_download(p["hf_repo"], name, repo_type="dataset", token=token, revision=p["data_version"],
+                                                      local_dir=into)
     shutil.copy(got["manifest.json"], os.path.join(OUT, "manifest.json"))
-    # the world JSON the val sessions name: a `worlds/` folder beside the data, if the version carries one (UNVERIFIED against M4's output)
-    prefix = "%s/worlds/" % p["data_folder"]
-    worlds = [f for f in list_repo_files(p["hf_repo"], repo_type="dataset", token=token, revision=p["hf_revision"]) if f.startswith(prefix)]
+    worlds = [f for f in list_repo_files(p["hf_repo"], repo_type="dataset", token=token, revision=p["data_version"]) if f.startswith("worlds/")]
     if not worlds:
-        sys.exit("the data version has no %sworlds/*.json: assist-eval cannot seed val without them" % prefix)
+        sys.exit("data version %s has no worlds/*.json: assist-eval cannot seed val without them" % p["data_version"])
     for f in worlds:
-        hf_hub_download(p["hf_repo"], f, repo_type="dataset", token=token, revision=p["hf_revision"], local_dir=os.path.join(TMP, "data"))
-    return got, os.path.join(TMP, "data", p["data_folder"], "worlds")
+        hf_hub_download(p["hf_repo"], f, repo_type="dataset", token=token, revision=p["data_version"], local_dir=into)
+    return got, os.path.join(into, "worlds")
 
 
 def val_plain(val_zst):
