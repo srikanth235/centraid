@@ -270,32 +270,21 @@ pub fn adjusted_times(
     delta: i32,
     resize: bool,
 ) -> Option<(String, String)> {
-    let minutes = |stamp: &str| {
-        let day = civil::epoch_day_of(stamp.get(..10)?)?;
-        let hour = stamp.get(11..13)?.parse::<i64>().ok()?;
-        let minute = stamp.get(14..16)?.parse::<i64>().ok()?;
-        (hour < 24 && minute < 60).then_some(day * 1440 + hour * 60 + minute)
-    };
-    let start = minutes(&event.local_start)?;
-    let end = minutes(&event.local_end).unwrap_or(start + 60);
-    let moved_start = if resize {
-        start
-    } else {
-        start + i64::from(delta)
-    };
-    let moved_end = end + i64::from(delta);
+    use centraid_vault::time::zone::{parse_wall_iso, wall_epoch, wall_from_epoch, wall_iso};
+    let start = wall_epoch(parse_wall_iso(&event.local_start)?);
+    let end = parse_wall_iso(&event.local_end)
+        .map(wall_epoch)
+        .unwrap_or(start + 3_600_000);
+    let offset = i64::from(delta) * 60_000;
+    let moved_start = if resize { start } else { start + offset };
+    let moved_end = end + offset;
     if moved_end <= moved_start {
         return None;
     }
-    let stamp = |at: i64| {
-        format!(
-            "{}T{:02}:{:02}:00",
-            civil::civil_day_of(at.div_euclid(1440)),
-            at.rem_euclid(1440) / 60,
-            at.rem_euclid(60)
-        )
-    };
-    Some((stamp(moved_start), stamp(moved_end)))
+    Some((
+        wall_iso(wall_from_epoch(moved_start), true),
+        wall_iso(wall_from_epoch(moved_end), true),
+    ))
 }
 
 /// A drag is expressed in the visible zone. Preserve the event's named zone
@@ -334,6 +323,25 @@ mod tests {
             Some(("2026-02-01T00:15:00".into(), "2026-02-01T01:15:00".into()))
         );
         assert_eq!(adjusted_times(&event, -60, true), None);
+        let precise = wire::AgendaEvent {
+            local_start: "2026-01-31T23:30:15.250".into(),
+            local_end: "2026-02-01T00:30:45.500".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            adjusted_times(&precise, 45, false),
+            Some((
+                "2026-02-01T00:15:15.250".into(),
+                "2026-02-01T01:15:45.500".into()
+            ))
+        );
+        assert_eq!(
+            adjusted_times(&precise, 15, true),
+            Some((
+                "2026-01-31T23:30:15.250".into(),
+                "2026-02-01T00:45:45.500".into()
+            ))
+        );
     }
 
     #[test]

@@ -1588,7 +1588,6 @@ const SCHEMA: &str = r#"{
         "properties": {
           "external_id": { "type": "string" },
           "device_id": { "type": ["string", "null"] },
-          "previous_external_id": { "type": ["string", "null"], "description": "A calendar row's former local id on this phone, when the provider assigned its portable UID." },
           "size": { "type": ["integer", "null"], "minimum": 0,
             "description": "How large the bytes a record names are, counted by the phone; the command claims them." },
           "fields": { "type": "object" }
@@ -1599,6 +1598,18 @@ const SCHEMA: &str = r#"{
     "since": { "type": "string" }
   }
 }"#;
+
+fn calendar_schema() -> &'static str {
+    static CALENDAR: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    CALENDAR.get_or_init(|| {
+        let mut schema: Json = serde_json::from_str(SCHEMA).expect("the static follow schema parses");
+        schema["properties"]["records"]["items"]["properties"]["previous_external_id"] = serde_json::json!({
+            "type": ["string", "null"],
+            "description": "A calendar row's former local id on this phone, when the provider assigned its portable UID."
+        });
+        schema.to_string()
+    })
+}
 
 const STOP_SCHEMA: &str = r#"{
   "type": "object",
@@ -1646,7 +1657,11 @@ pub fn definitions() -> Vec<CommandDefinition> {
             CommandDefinition::plain(
                 map.command,
                 "follow",
-                SCHEMA,
+                if map.system == "calendar" {
+                    calendar_schema()
+                } else {
+                    SCHEMA
+                },
                 Idempotency::Idempotent,
                 &[CommandCondition {
                     predicate: "records_say_where_they_came_from",

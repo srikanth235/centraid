@@ -2543,8 +2543,8 @@ fn adjusting_a_calendar_event_moves_both_ends_then_resizes_only_the_end() {
     home.event(
         "calendar-adjustment",
         "Adjustable",
-        &format!("{day}T10:00:00"),
-        Some(&format!("{day}T11:00:00")),
+        &format!("{day}T10:00:15.250"),
+        Some(&format!("{day}T11:00:45.500")),
     );
     home.settle();
     home.send(H::EventAdjusted(wire::agenda_home_event::EventAdjusted {
@@ -2563,15 +2563,15 @@ fn adjusting_a_calendar_event_moves_both_ends_then_resizes_only_the_end() {
         };
         detail.event.unwrap()
     };
-    assert!(read(&home).dtstart.contains("T10:30:"));
-    assert!(read(&home).dtend.unwrap().contains("T11:30:"));
+    assert!(read(&home).dtstart.contains("T10:30:15.250"));
+    assert!(read(&home).dtend.unwrap().contains("T11:30:45.500"));
     home.send(H::EventAdjusted(wire::agenda_home_event::EventAdjusted {
         instance_key: "calendar-adjustment".into(),
         delta_minutes: 15,
         resize: true,
     }));
-    assert!(read(&home).dtstart.contains("T10:30:"));
-    assert!(read(&home).dtend.unwrap().contains("T11:45:"));
+    assert!(read(&home).dtstart.contains("T10:30:15.250"));
+    assert!(read(&home).dtend.unwrap().contains("T11:45:45.500"));
 }
 
 #[test]
