@@ -19,6 +19,7 @@ outcomes="$artifacts/outcomes.tsv"
 : > "$outcomes"
 result=0
 profile=light-default
+driver_ready=0
 trap 'node "$root/mobile/scripts/visual-report.mjs" "$platform" "$artifacts"' EXIT
 
 configure() {
@@ -40,9 +41,14 @@ configure() {
 capture() {
   local name="$1" flow="$2" widget="${3:-}" content="${4:-}"
   local output="$artifacts/$profile/$name"
+  printf 'Visual capture %s / %s: starting\n' "$profile" "$name"
   mkdir -p "$output/screenshots" "$output/debug"
   local passed=1
-  if ! maestro test --device "$device" --format junit --output "$output/results.xml" \
+  # Reuse this run's pinned driver only after real assertions and a capture pass.
+  # Maestro still installs a missing driver when reinstallation is disabled.
+  local driver_option=--reinstall-driver
+  if [ "$driver_ready" = 1 ]; then driver_option=--no-reinstall-driver; fi
+  if ! maestro test "$driver_option" --device "$device" --format junit --output "$output/results.xml" \
     --debug-output "$output/debug" --test-output-dir "$output/screenshots" \
     -e "APP_ID=$app_id" -e "WIDGET=$widget" -e "CONTENT=$content" \
     "$root/mobile/maestro/visual/$flow.yaml" > "$output/maestro.log" 2>&1; then
@@ -59,6 +65,12 @@ capture() {
     fi
   fi
   printf '%s\t%s\t%s\n' "$profile" "$name" "$passed" >> "$outcomes"
+  if [ "$passed" = 1 ]; then
+    driver_ready=1
+    printf 'Visual capture %s / %s: PASS\n' "$profile" "$name"
+  else
+    printf 'Visual capture %s / %s: FAIL\n' "$profile" "$name"
+  fi
 }
 
 # No vault exists for these captures. Never create a key or dismiss a failure
@@ -76,6 +88,7 @@ if [ "$platform" = ios ]; then
 else
   adb shell am force-stop "$app_id"
 fi
+printf 'Seeding the public demo vault for %s; details are in seed.log\n' "$platform"
 bash "$root/mobile/scripts/demo-vault.sh" "$platform" > "$artifacts/seed.log" 2>&1
 if [ "$platform" = ios ]; then
   container="$(xcrun simctl get_app_container "$device" "$app_id" data)"
@@ -83,6 +96,7 @@ if [ "$platform" = ios ]; then
 else
   adb shell run-as "$app_id" test -s files/demo-vault/vault.db
 fi
+printf 'Public demo vault ready for %s\n' "$platform"
 
 for variant in light-default dark-default light-largest dark-largest; do
   configure "$variant"
