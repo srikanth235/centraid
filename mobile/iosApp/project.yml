@@ -340,7 +340,7 @@ targets:
     platform: iOS
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.centraid.agenda-widget
+        PRODUCT_BUNDLE_IDENTIFIER: dev.centraid.Centraid.AgendaWidget
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
     sources:
