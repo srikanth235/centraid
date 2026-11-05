@@ -850,7 +850,7 @@ private struct AgendaGridView: View {
                                     VStack(spacing: 2) {
                                         Text(day.weekday).centraidType("meta")
                                         Text(day.label).centraidType("bodyStrong")
-                                        Circle().fill(day.hasItems ? Theme.color("agendaText", scheme) : .clear).frame(width: 4, height: 4)
+                                        Circle().fill(day.hasItems_p ? Theme.color("agendaText", scheme) : .clear).frame(width: 4, height: 4)
                                     }
                                     .frame(maxWidth: .infinity, minHeight: 44)
                                     .foregroundStyle(Theme.color(day.selected ? "onAccent" : (day.inMonth ? "text" : "textFaint"), scheme))

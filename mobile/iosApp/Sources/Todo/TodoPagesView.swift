@@ -50,8 +50,8 @@ struct TodoListView: View {
                                 .padding(.horizontal, CentraidGeometry.pageMargin)
                                 .accessibilityIdentifier("tasks-show-completed")
                             }
-                            if !state.clearCompletedLabel.isEmpty {
-                                KitLink(label: state.clearCompletedLabel, identifier: "tasks-clear-completed") { send(event { $0.clearCompleted = .init() }) }
+                            if !state.clearCompletedLabel_p.isEmpty {
+                                KitLink(label: state.clearCompletedLabel_p, identifier: "tasks-clear-completed") { send(event { $0.clearCompleted_p = .init() }) }
                                     .padding(.horizontal, CentraidGeometry.pageMargin)
                             }
                             if !list.tagChoices.isEmpty {
@@ -149,8 +149,8 @@ struct TodoProjectView: View {
                             Toggle(state.showCompletedLabel, isOn: Binding(get: { state.showCompleted }, set: { value in send(event { $0.completedChanged = .with { $0.on = value } }) }))
                                 .kitToggle().padding(.horizontal, CentraidGeometry.pageMargin)
                                 .accessibilityIdentifier("tasks-show-completed")
-                            if !state.clearCompletedLabel.isEmpty {
-                                KitLink(label: state.clearCompletedLabel, identifier: "tasks-clear-completed") { send(event { $0.clearCompleted = .init() }) }
+                            if !state.clearCompletedLabel_p.isEmpty {
+                                KitLink(label: state.clearCompletedLabel_p, identifier: "tasks-clear-completed") { send(event { $0.clearCompleted_p = .init() }) }
                             }
                             TodoCountLine(count: project.countLabel, window: "")
                             if project.groups.isEmpty, project.hasEmpty, !project.empty.headline.isEmpty {
