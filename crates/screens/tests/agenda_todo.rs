@@ -1003,7 +1003,7 @@ fn flags_are_real_row_actions_and_the_flagged_list_follows_them() {
             .map(|row| row.task_id.clone())
             .collect::<Vec<_>>()
     };
-    assert_eq!(ids(&d), [first.clone()]);
+    assert_eq!(ids(&d), std::slice::from_ref(&first));
     send_list(
         &mut d,
         i,

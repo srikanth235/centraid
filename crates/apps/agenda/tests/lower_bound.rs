@@ -122,6 +122,30 @@ fn ms(instant: &str) -> i64 {
     parse_instant_ms(instant).expect("an instant")
 }
 
+#[test]
+fn open_ended_upcoming_keeps_distant_one_offs_but_an_explicit_window_does_not() {
+    let scratch = Scratch::founded("distant-one-off");
+    let id = scratch.propose(
+        "Later appointment",
+        "2101-06-01T18:00:00.000Z",
+        "2101-06-01T19:00:00.000Z",
+        None,
+    );
+    let events = scratch.upcoming(None, None, FROM, "Etc/UTC");
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| &event.event_id)
+            .collect::<Vec<_>>(),
+        vec![&id]
+    );
+    assert!(
+        scratch
+            .upcoming(Some(FROM), Some(TO), FROM, "Etc/UTC")
+            .is_empty()
+    );
+}
+
 /// A weekly series anchored a year back, and a three-day run that began two
 /// days before `from`: no occurrence ended before `from` is answered, and the
 /// run still going at `from` is.

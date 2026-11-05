@@ -702,9 +702,22 @@ pub fn load_upcoming(
         None => from_ms.map_or_else(|| from.clone(), |millis| iso_of(millis + DEFAULT_EXPAND_MS)),
     };
     let upper_ms = parse_instant_ms(&expand_to);
+    let explicit_upper_ms = to
+        .filter(|value| !value.is_empty())
+        .and_then(parse_instant_ms);
     let mut expanded = Vec::new();
     for event in events {
-        let mut rows = if let (Some(from_ms), Some(to_ms)) = (from_ms, upper_ms) {
+        let recurring = event.rrule.is_some();
+        let visible_upper_ms = if recurring {
+            upper_ms
+        } else {
+            explicit_upper_ms
+        };
+        // The implicit ceiling bounds recurrence work, not one-off visibility:
+        // a default today-forward read must still include a distant appointment.
+        let mut rows = if !recurring {
+            expand_recurring_events(vec![event], &from_lower, &expand_to, &exceptions)?
+        } else if let (Some(from_ms), Some(to_ms)) = (from_ms, upper_ms) {
             // The storage lookback finds long-running one-offs; recurrence
             // uses actual overlap and separate original-time exception windows.
             let semantics = event.semantics();
@@ -748,7 +761,7 @@ pub fn load_upcoming(
         // Filter their final interpreted interval before claiming a whole answer.
         rows.retain(|event| {
             from_ms.is_none_or(|from| still_running_at(event, from, zone))
-                && upper_ms.is_none_or(|to| {
+                && visible_upper_ms.is_none_or(|to| {
                     crate::local::interval_ms(event, zone).is_none_or(|(start, _)| start < to)
                 })
         });

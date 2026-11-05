@@ -2641,3 +2641,86 @@ fn keyboard_date_and_flag_tools_override_the_preview_and_commit_atomically() {
     assert!(task.due_day.is_empty());
     assert!(!task.flagged);
 }
+
+#[test]
+fn year_reads_a_daily_series_in_bounded_quarters_and_deduplicates_crossing_events() {
+    let mut home = rig(Dest::Day);
+    home.in_zone("Pacific/Kiritimati");
+    home.write(act::agenda::Propose {
+        id: Some("year-daily".into()),
+        title: "Zq Daily all year".into(),
+        starts: "2098-12-31T10:30:00Z".into(),
+        ends: Field::Is("2098-12-31T11:00:00Z".into()),
+        zone: Field::Is("UTC".into()),
+        rule: Field::Is("FREQ=DAILY".into()),
+        busy: Some(false),
+        ..Default::default()
+    });
+    home.all_day(
+        "quarter-crossing",
+        "Zq crossing quarter",
+        "2099-04-01",
+        "2099-04-03",
+    );
+    home.send(H::CalendarDay(wire::agenda_home_event::CalendarDayPicked {
+        day: "2099-04-02".into(),
+    }));
+    home.send(H::CalendarView(
+        wire::agenda_home_event::CalendarViewChanged { key: "year".into() },
+    ));
+    let grid = home.state().calendar_grid.as_ref().unwrap();
+    let days: std::collections::BTreeMap<_, _> = grid
+        .panels
+        .iter()
+        .flat_map(|panel| &panel.days)
+        .filter(|day| day.in_month)
+        .map(|day| (day.day.clone(), day.has_items))
+        .collect();
+    assert_eq!(days.len(), 365);
+    assert!(
+        days.values().all(|has_event| *has_event),
+        "every civil day is represented, including both ends of the year"
+    );
+    let crossing = home
+        .data()
+        .days
+        .iter()
+        .flat_map(events_of)
+        .filter(|event| event.title == "Zq crossing quarter")
+        .count();
+    assert_eq!(crossing, 1);
+}
+
+#[test]
+fn year_preserves_the_aggregate_event_bound_and_allows_a_narrower_view() {
+    let mut home = rig(Dest::Day);
+    for n in 0..5 {
+        home.write(act::agenda::Propose {
+            id: Some(format!("year-daily-{n}")),
+            title: format!("Zq Daily {n}"),
+            starts: "2099-01-01T10:00:00Z".into(),
+            ends: Field::Is("2099-01-01T10:30:00Z".into()),
+            zone: Field::Is("UTC".into()),
+            rule: Field::Is("FREQ=DAILY".into()),
+            busy: Some(false),
+            ..Default::default()
+        });
+    }
+    home.send(H::CalendarDay(wire::agenda_home_event::CalendarDayPicked {
+        day: "2099-06-15".into(),
+    }));
+    home.send(H::CalendarView(
+        wire::agenda_home_event::CalendarViewChanged { key: "year".into() },
+    ));
+    assert!(matches!(home.state().content, Some(Content::Failure(_))));
+    assert_eq!(
+        home.state().calendar_grid.as_ref().unwrap().view_key,
+        "year"
+    );
+    home.send(H::CalendarView(
+        wire::agenda_home_event::CalendarViewChanged {
+            key: "month".into(),
+        },
+    ));
+    assert!(matches!(home.state().content, Some(Content::Data(_))));
+}
