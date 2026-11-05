@@ -259,6 +259,12 @@ mod tests {
     }
 
     #[test]
+    fn a_saved_photos_first_layout_keeps_its_order_and_sizes() {
+        let saved = "photos\tlarge\nagenda\tmedium\nreminders\tmedium\nmoney\tsmall\nhealth\tsmall\npeople\tsmall\nlocker\tsmall\nnotes\tmedium\ndocs\tmedium";
+        assert_eq!(Layout::read(Some(saved)).stored(), saved);
+    }
+
+    #[test]
     fn layout_round_trip_keeps_order_and_size_without_unknown_or_duplicate_apps() {
         let mut layout = Layout::read(Some("notes\tsmall\nunknown\tlarge\nnotes\tlarge"));
         assert!(layout.change(&WidgetChanged {

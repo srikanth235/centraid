@@ -51,7 +51,7 @@ class ScreensRoundTripSpec : StringSpec({
             // Home's tiles are read in the springboard's order, through the apps' own queries.
             val home = screens.views.value[root.instance]!!.home!!
             home.data_!!.tiles.map { it.app_id } shouldBe
-                listOf("photos", "agenda", "reminders", "money", "health", "people", "locker", "notes", "docs")
+                listOf("agenda", "reminders", "photos", "money", "health", "people", "locker", "notes", "docs")
         } finally {
             scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
             core.close()

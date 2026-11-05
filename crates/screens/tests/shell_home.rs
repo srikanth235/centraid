@@ -69,9 +69,9 @@ fn home_is_the_root_of_the_home_tab_and_reads_every_app_in_the_grid_order() {
     assert_eq!(
         order,
         [
-            "photos",
             "agenda",
             "reminders",
+            "photos",
             "money",
             "health",
             "people",
@@ -102,8 +102,8 @@ fn home_is_the_root_of_the_home_tab_and_reads_every_app_in_the_grid_order() {
     assert_eq!(
         rows,
         vec![
-            vec!["photos"],
             vec!["agenda", "reminders"],
+            vec!["photos"],
             vec!["money", "health", "people", "locker"],
             vec!["notes", "docs"],
         ]

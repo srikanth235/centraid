@@ -11,8 +11,17 @@ name: Seeded Home widgets
 - assertNotVisible:
     id: home-failure
 - assertVisible:
-    id: home-tile-photos
+    id: home-tile-agenda
 - takeScreenshot: home-top
+- scrollUntilVisible:
+    element:
+      id: home-tile-photos
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- assertVisible:
+    id: home-tile-photos
+- takeScreenshot: home-photos
 - scrollUntilVisible:
     element:
       id: home-tile-docs

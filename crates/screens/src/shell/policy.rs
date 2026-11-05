@@ -23,9 +23,9 @@ pub const ORDER: [&str; 8] = [
 pub const COLUMNS: usize = 4;
 
 pub const WIDGETS: [&str; 9] = [
-    "photos",
     "agenda",
     "reminders",
+    "photos",
     "money",
     "health",
     "people",
@@ -135,8 +135,8 @@ mod tests {
         assert_eq!(
             ids(&rows(&all(Status::Loading))),
             vec![
-                vec!["photos"],
                 vec!["agenda", "reminders"],
+                vec!["photos"],
                 vec!["money", "health", "people", "locker"],
                 vec!["notes", "docs"],
             ]

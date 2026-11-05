@@ -15,9 +15,6 @@ struct PeoplePersonView: View {
     let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
     private var content: ScreenContent<Centraid_Core_V1_PeoplePersonData> {
         switch state.content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
@@ -53,7 +50,7 @@ struct PeoplePersonView: View {
                     loadingLabel: chrome.loading,
                     onRetry: { send(PeopleEvents.person { $0.refreshed = .init() }) }
                 ) { person in
-                    PeoplePersonBody(person: person, state: state, send: send)
+                    PeoplePersonBody(person: person, state: state, send: send, open: open)
                 }
             }
         }
@@ -89,8 +86,10 @@ private struct PeoplePersonBody: View {
     let person: Centraid_Core_V1_PeoplePersonData
     let state: Centraid_Core_V1_PeoplePersonState
     let send: (Centraid_Core_V1_PeoplePersonEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private func openSheet(_ which: Centraid_Core_V1_PeoplePersonEvent.SheetOpened.Which) {
         send(PeopleEvents.person { $0.sheetOpened = .with { $0.which = which } })
