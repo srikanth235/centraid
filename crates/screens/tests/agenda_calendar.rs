@@ -666,6 +666,16 @@ fn the_import_tap_asks_the_os_reads_say_importing_and_the_vault_merges_what_it_i
     assert_eq!(watches(&world), [true]);
 
     assert!(reads(&world).is_empty(), "the second tap was nothing");
+    assert!(
+        world.driver.effects.iter().all(|request| !matches!(
+            request
+                .effect
+                .as_ref()
+                .and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::CalendarWrite(_))
+        )),
+        "importing unchanged source events never writes them back to the phone"
+    );
 
     // Importing again adds nothing twice.
     tap_import(&mut world, host);
@@ -738,6 +748,10 @@ fn a_denied_read_says_where_to_turn_it_on_and_a_calendarless_phone_says_to_add_a
 fn a_calendar_with_nothing_in_it_is_still_told_and_an_event_that_left_a_complete_read_goes_but_not_from_a_partial_one()
  {
     let mut world = world();
+    let in_range = |events| wire::CalendarSnapshot {
+        now_ms: 4_076_006_400_000, // 2099-03-01, within the phone's window of the event.
+        ..snapshot(events)
+    };
     let host = world.driver.push("agenda", host_route());
     answer(
         &mut world,
@@ -748,7 +762,7 @@ fn a_calendar_with_nothing_in_it_is_still_told_and_an_event_that_left_a_complete
     answer(
         &mut world,
         is_read,
-        wire::effect_result::Outcome::Calendar(snapshot(vec![future(
+        wire::effect_result::Outcome::Calendar(in_range(vec![future(
             "Offsite",
             "2099-03-10",
             "uid:offsite@google",
@@ -763,17 +777,26 @@ fn a_calendar_with_nothing_in_it_is_still_told_and_an_event_that_left_a_complete
         is_read,
         wire::effect_result::Outcome::Calendar(wire::CalendarSnapshot {
             complete: false,
-            ..snapshot(vec![])
+            ..in_range(vec![])
         }),
     );
     assert_eq!(in_window(&world, "Offsite").len(), 1);
 
-    // A complete read that lacks it (the calendar is still there, empty) moves it to the trash.
+    // Even a complete read cannot infer deletion outside the phone's observed window.
     tap_import(&mut world, host);
     answer(
         &mut world,
         is_read,
         wire::effect_result::Outcome::Calendar(snapshot(vec![])),
+    );
+    assert_eq!(in_window(&world, "Offsite").len(), 1);
+
+    // A complete read covering it (the calendar is still there, empty) moves it to the trash.
+    tap_import(&mut world, host);
+    answer(
+        &mut world,
+        is_read,
+        wire::effect_result::Outcome::Calendar(in_range(vec![])),
     );
     assert!(in_window(&world, "Offsite").is_empty());
 }

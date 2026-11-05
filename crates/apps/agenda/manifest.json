@@ -1710,6 +1710,10 @@
                 "fields": {
                   "type": "object"
                 },
+                "previous_external_id": {
+                  "description": "A calendar row's former local id on this phone, when the provider assigned its portable UID.",
+                  "type": ["string", "null"]
+                },
                 "size": {
                   "description": "How large the bytes a record names are, counted by the phone; the command claims them.",
                   "minimum": 0,

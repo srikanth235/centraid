@@ -386,9 +386,12 @@ impl Home {
         {
             return;
         }
-        let Some((starts, ends)) =
-            grid::adjusted_times(&event, adjustment.delta_minutes, adjustment.resize)
-        else {
+        let Some((starts, ends)) = grid::adjusted_times(
+            &event,
+            ctx.zone(),
+            adjustment.delta_minutes,
+            adjustment.resize,
+        ) else {
             return;
         };
         let event_zone = event.start_tz.as_deref().unwrap_or(ctx.zone());

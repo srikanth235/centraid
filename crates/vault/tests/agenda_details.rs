@@ -187,8 +187,11 @@ fn clearing_tagged_completed_work_follows_the_visible_family_and_keeps_other_tag
                 json!({"view":"project","day":"2099-01-01","zone":"UTC"}),
             ),
         )
-        .unwrap();
-    assert_eq!(missing_list.status, CommandStatus::Failed);
+        .unwrap_err();
+    assert!(matches!(
+        missing_list,
+        centraid_vault::VaultError::InvalidInput { name, .. } if name == "project_id"
+    ));
     let still_present: bool = vault
         .read(|db| {
             Ok(db.query_row(

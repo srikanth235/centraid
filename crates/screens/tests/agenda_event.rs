@@ -57,11 +57,7 @@ fn opening_reads_the_occurrence_by_its_key_and_names_its_calendar() {
     let (calendar_id, name) = world.calendar_names().remove(0);
     assert!(!calendar_id.is_empty());
     assert_eq!(data.calendar_name, name);
-    assert!(
-        data.calendar_hue_key.starts_with('c'),
-        "{}",
-        data.calendar_hue_key
-    );
+    assert_eq!(data.calendar_hue_key, "listPetrol");
     assert_eq!(
         world
             .event_state(page)
@@ -131,7 +127,17 @@ fn the_detail_says_every_fact_in_words_the_screen_chose() {
     );
     let initials: Vec<&str> = data.guests.iter().map(|g| g.initial.as_str()).collect();
     assert_eq!(initials, ["M", "J", "M"]);
-    assert!(data.guests.iter().all(|g| g.hue_key.starts_with('c')));
+    assert!(data.guests.iter().all(|g| matches!(
+        g.hue_key.as_str(),
+        "listBlue"
+            | "listYellow"
+            | "listViolet"
+            | "listPetrol"
+            | "listNavy"
+            | "listGraphite"
+            | "listRaspberry"
+            | "listOrchid"
+    )));
     assert_eq!(
         data.guests[0].accessibility_label,
         "Me · you, No answer yet"

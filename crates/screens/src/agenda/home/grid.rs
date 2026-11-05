@@ -267,12 +267,31 @@ fn hours(home: &Home, locale: Locale, day: &str) -> wire::AgendaHourDay {
 
 pub fn adjusted_times(
     event: &wire::AgendaEvent,
+    display_zone: &str,
     delta: i32,
     resize: bool,
 ) -> Option<(String, String)> {
-    use centraid_vault::time::zone::{parse_wall_iso, wall_epoch, wall_from_epoch, wall_iso};
-    let start = wall_epoch(parse_wall_iso(&event.local_start)?);
-    let end = parse_wall_iso(&event.local_end)
+    use centraid_vault::time::{
+        recurrence::{Semantics, parse_instant_ms},
+        zone::{FireZone, parse_wall_iso, wall_epoch, wall_from_epoch, wall_iso},
+    };
+    let semantics = Semantics::from_stored(event.recurrence_semantics.as_deref());
+    if semantics == Semantics::AllDay {
+        return None;
+    }
+    let zone = FireZone::named(display_zone).ok()?;
+    // Local display strings intentionally stop at minutes. Move the canonical
+    // occurrence times so an imported event's seconds and fractions survive.
+    let wall = |value: &str| match semantics {
+        Semantics::Zoned => parse_instant_ms(value).map(|instant| zone.zoned_parts(instant)),
+        Semantics::Floating => parse_wall_iso(value),
+        Semantics::AllDay => None,
+    };
+    let start = wall_epoch(wall(&event.dtstart)?);
+    let end = event
+        .dtend
+        .as_deref()
+        .and_then(wall)
         .map(wall_epoch)
         .unwrap_or(start + 3_600_000);
     let offset = i64::from(delta) * 60_000;
@@ -314,32 +333,51 @@ mod tests {
     #[test]
     fn moving_keeps_duration_and_resizing_cannot_reverse_an_event() {
         let event = wire::AgendaEvent {
+            dtstart: "2026-01-31T23:30:00.000Z".into(),
+            dtend: Some("2026-02-01T00:30:00.000Z".into()),
+            recurrence_semantics: Some("zoned".into()),
             local_start: "2026-01-31T23:30".into(),
             local_end: "2026-02-01T00:30".into(),
             ..Default::default()
         };
         assert_eq!(
-            adjusted_times(&event, 45, false),
+            adjusted_times(&event, "UTC", 45, false),
             Some(("2026-02-01T00:15:00".into(), "2026-02-01T01:15:00".into()))
         );
-        assert_eq!(adjusted_times(&event, -60, true), None);
+        assert_eq!(adjusted_times(&event, "UTC", -60, true), None);
         let precise = wire::AgendaEvent {
-            local_start: "2026-01-31T23:30:15.250".into(),
-            local_end: "2026-02-01T00:30:45.500".into(),
+            dtstart: "2026-01-31T23:30:15.250".into(),
+            dtend: Some("2026-02-01T00:30:45.500".into()),
+            recurrence_semantics: Some("floating".into()),
+            local_start: "2026-01-31T23:30".into(),
+            local_end: "2026-02-01T00:30".into(),
             ..Default::default()
         };
         assert_eq!(
-            adjusted_times(&precise, 45, false),
+            adjusted_times(&precise, "America/New_York", 45, false),
             Some((
                 "2026-02-01T00:15:15.250".into(),
                 "2026-02-01T01:15:45.500".into()
             ))
         );
         assert_eq!(
-            adjusted_times(&precise, 15, true),
+            adjusted_times(&precise, "America/New_York", 15, true),
             Some((
                 "2026-01-31T23:30:15.250".into(),
                 "2026-02-01T00:45:45.500".into()
+            ))
+        );
+        let zoned = wire::AgendaEvent {
+            dtstart: "2026-02-01T04:30:15.250Z".into(),
+            dtend: Some("2026-02-01T05:30:45.500Z".into()),
+            recurrence_semantics: Some("zoned".into()),
+            ..precise
+        };
+        assert_eq!(
+            adjusted_times(&zoned, "America/New_York", 45, false),
+            Some((
+                "2026-02-01T00:15:15.250".into(),
+                "2026-02-01T01:15:45.500".into()
             ))
         );
     }

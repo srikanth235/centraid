@@ -85,6 +85,23 @@ mod tests {
         }
     }
 
+    #[test]
+    fn the_calendar_follow_input_is_the_vault_commands_schema() {
+        let registry = centraid_vault::commands::Registry::with_system_commands()
+            .expect("the registry builds");
+        let command = registry
+            .get("follow.calendar")
+            .expect("a calendar follower");
+        assert_eq!(
+            &manifest()
+                .action("follow-calendar")
+                .expect("declared")
+                .input,
+            command.schema(),
+            "the phone's calendar batch must pass both action and command validation"
+        );
+    }
+
     /// **AGENDA CONFIRMS NOTHING IN v0, INCLUDING `cancel-event`** (census §A0,
     /// §A seams 7). The port reproduces that faithfully and the question goes
     /// to the owner as a finding rather than being answered in code

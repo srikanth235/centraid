@@ -6,8 +6,21 @@ sdk="${ANDROID_HOME:?}"
 artifacts="${CENTRAID_VISUAL_ARTIFACTS:-$root/target/android-visual}"
 mkdir -p "$artifacts"
 export PATH="$sdk/platform-tools:$sdk/emulator:$PATH"
+# New command-line tools and the emulator can choose different default AVD homes.
+# Give both the same explicit directory outside the uploaded visual artifacts.
+export ANDROID_USER_HOME="${RUNNER_TEMP:-$root/target}/centraid-visual-android"
+export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+unset ANDROID_PREFS_ROOT
+mkdir -p "$ANDROID_AVD_HOME"
 test -r /dev/kvm
-printf 'no\n' | avdmanager create avd --force --name CentraidVisual --package 'system-images;android-35;google_apis;x86_64' --device pixel_7
+printf 'no\n' | avdmanager create avd --force --name CentraidVisual --path "$ANDROID_AVD_HOME/CentraidVisual.avd" --package 'system-images;android-35;google_apis;x86_64' --device pixel_7
+emulator -list-avds > "$artifacts/avds.log"
+if ! grep -Fxq CentraidVisual "$artifacts/avds.log"; then
+  echo "The emulator cannot see the AVD in $ANDROID_AVD_HOME" >&2
+  cat "$artifacts/avds.log"
+  exit 1
+fi
 emulator -avd CentraidVisual -port 5554 -no-window -no-audio -no-boot-anim \
   -no-snapshot -gpu swiftshader_indirect -accel on -camera-back none -camera-front none \
   > "$artifacts/emulator.log" 2>&1 &
