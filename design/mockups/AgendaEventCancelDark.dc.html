@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agenda event cancel (dark)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #5F5B55; font-family: Geist, system-ui, sans-serif; color: #F2EFEA;">
+<div style="position: absolute; left: 0; right: 0; top: 40px; bottom: 0; background: #0E0D0C; border-radius: 28px 28px 0 0; padding: 16px 16px 0; box-sizing: border-box; overflow: hidden;"><div style="display: flex; align-items: center; justify-content: space-between; height: 44px;"><button aria-label="Cancel" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #3A3733; background: #1F1E1C; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button><span style="font-size: 17px; font-weight: 600;">Cancel a repeating event</span><span style="width: 44px;"></span></div><p style="margin: 14px 4px 0; font-size: 15px; line-height: 1.42; color: #A39E95;">Pick which occurrences to cancel.</p><div style="margin: 16px 0 0; background: #1F1E1C; border-radius: 16px;"><div style="display: flex; align-items: center; gap: 12px; padding: 0 16px; height: 54px; border-bottom: 1px solid #2C2A27;"><span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid #5C5852; box-sizing: border-box;"></span><span style="font-size: 16px;">This occurrence</span></div><div style="display: flex; align-items: center; gap: 12px; padding: 0 16px; height: 54px; border-bottom: 1px solid #2C2A27;"><span style="width: 22px; height: 22px; border-radius: 11px; background: #3077CD; display: flex; align-items: center; justify-content: center; color: #FFFFFF;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span><span style="font-size: 16px;">This and the ones after</span></div><div style="display: flex; align-items: center; gap: 12px; padding: 0 16px; height: 54px;"><span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid #5C5852; box-sizing: border-box;"></span><span style="font-size: 16px;">The whole series</span></div></div><div style="position: absolute; left: 16px; right: 16px; bottom: 30px; display: flex; flex-direction: column; gap: 6px;"><button style="width: 100%; height: 52px; border-radius: 26px; border: none; background: #CD483D; color: #FFFFFF; font-size: 17px; font-weight: 600;">Cancel event</button><button style="width: 100%; height: 44px; border: none; background: none; color: #569EF7; font-size: 17px; font-weight: 600;">Keep it</button></div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

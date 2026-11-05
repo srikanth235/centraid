@@ -53,5 +53,10 @@ export default defineConfig({
     // reformat is a new set version, not a style fix.
     "experiments/toolchat/native/data/v7/**",
     "scripts/docs-site/src/content/**",
+    // The native redesign canvas (#1173): the design canvas writes these
+    // screens and canvas.json itself on every save, so they are its output,
+    // not hand-formatted source. Change them in the canvas and copy them back.
+    "design/mockups/*.dc.html",
+    "design/mockups/canvas.json",
   ],
 });

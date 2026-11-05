@@ -1,0 +1,2037 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "AgendaCatchUp.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Reschedule (catch-up)",
+      "w": 390,
+      "x": 1410,
+      "y": 15080
+    },
+    "AgendaCatchUpDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Reschedule (catch-up) · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 15080
+    },
+    "AgendaEvent.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Event details",
+      "w": 390,
+      "x": 0,
+      "y": 15080
+    },
+    "AgendaEventCancel.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Cancel a repeating event",
+      "w": 390,
+      "x": 470,
+      "y": 15080
+    },
+    "AgendaEventCancelDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Cancel a repeating event · dark",
+      "w": 390,
+      "x": 470,
+      "y": 15080
+    },
+    "AgendaEventDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Event details · dark",
+      "w": 390,
+      "x": 0,
+      "y": 15080
+    },
+    "AgendaProject.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Project",
+      "w": 390,
+      "x": 940,
+      "y": 15080
+    },
+    "AgendaProjectDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Project · dark",
+      "w": 390,
+      "x": 940,
+      "y": 15080
+    },
+    "AndroidChat.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "7 · Chat on Android",
+      "w": 412,
+      "x": 2820,
+      "y": 22040
+    },
+    "AndroidChatDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "7 · Chat on Android · dark",
+      "w": 412,
+      "x": 2820,
+      "y": 22040
+    },
+    "AndroidDetails.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "3 · Details sheet on Android",
+      "w": 412,
+      "x": 940,
+      "y": 20880
+    },
+    "AndroidDetailsDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "3 · Details sheet on Android · dark",
+      "w": 412,
+      "x": 940,
+      "y": 20880
+    },
+    "AndroidDocs.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "3 · Docs on Android",
+      "w": 412,
+      "x": 940,
+      "y": 22040
+    },
+    "AndroidDocsDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "3 · Docs on Android · dark",
+      "w": 412,
+      "x": 940,
+      "y": 22040
+    },
+    "AndroidHealth.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "4 · Health on Android",
+      "w": 412,
+      "x": 1410,
+      "y": 20880
+    },
+    "AndroidHealthDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "4 · Health on Android · dark",
+      "w": 412,
+      "x": 1410,
+      "y": 20880
+    },
+    "AndroidHome.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "1 · Home on Android",
+      "w": 412,
+      "x": 0,
+      "y": 20880
+    },
+    "AndroidHomeDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "1 · Home on Android · dark",
+      "w": 412,
+      "x": 0,
+      "y": 20880
+    },
+    "AndroidLocker.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "1 · Locker on Android",
+      "w": 412,
+      "x": 0,
+      "y": 22040
+    },
+    "AndroidLockerDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "1 · Locker on Android · dark",
+      "w": 412,
+      "x": 0,
+      "y": 22040
+    },
+    "AndroidMoney.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "4 · Money on Android",
+      "w": 412,
+      "x": 1410,
+      "y": 22040
+    },
+    "AndroidMoneyDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "4 · Money on Android · dark",
+      "w": 412,
+      "x": 1410,
+      "y": 22040
+    },
+    "AndroidNotes.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "5 · Notes on Android",
+      "w": 412,
+      "x": 1880,
+      "y": 22040
+    },
+    "AndroidNotesDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "5 · Notes on Android · dark",
+      "w": 412,
+      "x": 1880,
+      "y": 22040
+    },
+    "AndroidPeople.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "2 · People on Android",
+      "w": 412,
+      "x": 470,
+      "y": 22040
+    },
+    "AndroidPeopleDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "2 · People on Android · dark",
+      "w": 412,
+      "x": 470,
+      "y": 22040
+    },
+    "AndroidPhotos.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "6 · Photos on Android",
+      "w": 412,
+      "x": 2350,
+      "y": 22040
+    },
+    "AndroidPhotosDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "6 · Photos on Android · dark",
+      "w": 412,
+      "x": 2350,
+      "y": 22040
+    },
+    "AndroidRecoveryKey.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "8 · Recovery key on Android",
+      "w": 412,
+      "x": 3290,
+      "y": 22040
+    },
+    "AndroidRecoveryKeyDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "8 · Recovery key on Android · dark",
+      "w": 412,
+      "x": 3290,
+      "y": 22040
+    },
+    "AndroidReminders.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "2 · Reminders on Android",
+      "w": 412,
+      "x": 470,
+      "y": 20880
+    },
+    "AndroidRemindersDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "2 · Reminders on Android · dark",
+      "w": 412,
+      "x": 470,
+      "y": 20880
+    },
+    "Backup.dc.html": {
+      "h": 844,
+      "page": "archive",
+      "title": "Backup, first draft (settings did not match the app)",
+      "w": 390,
+      "x": 5120,
+      "y": 0
+    },
+    "BackupFailed.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Backup needs attention",
+      "w": 390,
+      "x": 1410,
+      "y": 18560
+    },
+    "BackupFailedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Backup needs attention · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 18560
+    },
+    "BackupRunning.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Backing up",
+      "w": 390,
+      "x": 1410,
+      "y": 2320
+    },
+    "BackupRunningDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Backing up · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 2320
+    },
+    "BackupSettings.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Backup",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "BackupSettingsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Backup · dark",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "BackupSettingsEnd.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Backup, further down",
+      "w": 390,
+      "x": 0,
+      "y": 2320
+    },
+    "BackupSettingsEndDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Backup, further down · dark",
+      "w": 390,
+      "x": 0,
+      "y": 2320
+    },
+    "Calendar.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Calendar (Day view)",
+      "w": 390,
+      "x": 0,
+      "y": 3480
+    },
+    "CalendarDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Calendar (Day view) · dark",
+      "w": 390,
+      "x": 0,
+      "y": 3480
+    },
+    "Chat.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Chat",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "ChatDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Chat · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "ChatList.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Chats drawer",
+      "w": 390,
+      "x": 1880,
+      "y": 15080
+    },
+    "ChatListDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Chats drawer · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 15080
+    },
+    "CodeMap.dc.html": {
+      "h": 1300,
+      "page": "rules",
+      "title": "Code map",
+      "w": 1200,
+      "x": 2560,
+      "y": 0
+    },
+    "CradlePalettes.dc.html": {
+      "h": 980,
+      "page": "archive",
+      "title": "Cradle palettes (replaced by the Wheel)",
+      "w": 1200,
+      "x": 2560,
+      "y": 0
+    },
+    "Decisions.dc.html": {
+      "h": 1780,
+      "page": "rules",
+      "title": "Decisions, words and behaviour",
+      "w": 1200,
+      "x": 1280,
+      "y": 0
+    },
+    "DesignRules.dc.html": {
+      "h": 1320,
+      "page": "rules",
+      "title": "One system",
+      "w": 1200,
+      "x": 0,
+      "y": 0
+    },
+    "Details.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Details sheet",
+      "w": 390,
+      "x": 1880,
+      "y": 3480
+    },
+    "DetailsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Details sheet · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 3480
+    },
+    "DocEditor.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Edit document",
+      "w": 390,
+      "x": 1410,
+      "y": 13920
+    },
+    "DocEditorDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Edit document · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 13920
+    },
+    "DocVersions.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Document versions",
+      "w": 390,
+      "x": 2820,
+      "y": 15080
+    },
+    "DocVersionsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Document versions · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 15080
+    },
+    "Docs.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Docs home",
+      "w": 390,
+      "x": 0,
+      "y": 6960
+    },
+    "DocsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Docs home · dark",
+      "w": 390,
+      "x": 0,
+      "y": 6960
+    },
+    "DocsFolder.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · A document",
+      "w": 390,
+      "x": 470,
+      "y": 6960
+    },
+    "DocsFolderDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · A document · dark",
+      "w": 390,
+      "x": 470,
+      "y": 6960
+    },
+    "EmptyReminders.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Empty Reminders",
+      "w": 390,
+      "x": 0,
+      "y": 18560
+    },
+    "EmptyRemindersDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Empty Reminders · dark",
+      "w": 390,
+      "x": 0,
+      "y": 18560
+    },
+    "FilterMenu.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Filter and sort menu",
+      "w": 390,
+      "x": 470,
+      "y": 17400
+    },
+    "FilterMenuDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Filter and sort menu · dark",
+      "w": 390,
+      "x": 470,
+      "y": 17400
+    },
+    "FirstHome.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Home on first run",
+      "w": 390,
+      "x": 470,
+      "y": 18560
+    },
+    "FirstHomeDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Home on first run · dark",
+      "w": 390,
+      "x": 470,
+      "y": 18560
+    },
+    "FirstImports.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Home after the first imports",
+      "w": 390,
+      "x": 1880,
+      "y": 1160
+    },
+    "FirstImportsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Home after the first imports · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 1160
+    },
+    "Health.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Health summary",
+      "w": 390,
+      "x": 0,
+      "y": 8120
+    },
+    "HealthConnect.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Connect Apple Health",
+      "w": 390,
+      "x": 940,
+      "y": 8120
+    },
+    "HealthConnectDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Connect Apple Health · dark",
+      "w": 390,
+      "x": 940,
+      "y": 8120
+    },
+    "HealthDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Health summary · dark",
+      "w": 390,
+      "x": 0,
+      "y": 8120
+    },
+    "HealthMetric.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Steps detail",
+      "w": 390,
+      "x": 470,
+      "y": 8120
+    },
+    "HealthMetricDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Steps detail · dark",
+      "w": 390,
+      "x": 470,
+      "y": 8120
+    },
+    "HealthWorkout.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · One workout",
+      "w": 390,
+      "x": 0,
+      "y": 16240
+    },
+    "HealthWorkoutDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · One workout · dark",
+      "w": 390,
+      "x": 0,
+      "y": 16240
+    },
+    "HomeWidgets.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Home as widgets",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "HomeWidgetsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Home as widgets · dark",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "IconConcepts.dc.html": {
+      "h": 980,
+      "page": "archive",
+      "title": "Icon round two (not chosen)",
+      "w": 1200,
+      "x": 0,
+      "y": 0
+    },
+    "IconMarks.dc.html": {
+      "h": 980,
+      "page": "archive",
+      "title": "Icon round three (Cradle chosen from here)",
+      "w": 1200,
+      "x": 1280,
+      "y": 0
+    },
+    "LargeText.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Largest text size",
+      "w": 390,
+      "x": 0,
+      "y": 19720
+    },
+    "LargeTextDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Largest text size · dark",
+      "w": 390,
+      "x": 0,
+      "y": 19720
+    },
+    "List.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · A list, adding inline",
+      "w": 390,
+      "x": 1410,
+      "y": 3480
+    },
+    "ListDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · A list, adding inline · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 3480
+    },
+    "LockScreen.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Locker locked",
+      "w": 390,
+      "x": 1880,
+      "y": 17400
+    },
+    "LockScreenDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Locker locked · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 17400
+    },
+    "Locker.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Locker home",
+      "w": 390,
+      "x": 0,
+      "y": 4640
+    },
+    "LockerDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Locker home · dark",
+      "w": 390,
+      "x": 0,
+      "y": 4640
+    },
+    "LockerEditor.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Edit item",
+      "w": 390,
+      "x": 940,
+      "y": 13920
+    },
+    "LockerEditorDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Edit item · dark",
+      "w": 390,
+      "x": 940,
+      "y": 13920
+    },
+    "LockerExport.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Export everything",
+      "w": 390,
+      "x": 1880,
+      "y": 16240
+    },
+    "LockerExportDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Export everything · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 16240
+    },
+    "LockerItem.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · An item",
+      "w": 390,
+      "x": 470,
+      "y": 4640
+    },
+    "LockerItemDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · An item · dark",
+      "w": 390,
+      "x": 470,
+      "y": 4640
+    },
+    "Main.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Reminders home",
+      "w": 390,
+      "x": 470,
+      "y": 3480
+    },
+    "MainDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Reminders home · dark",
+      "w": 390,
+      "x": 470,
+      "y": 3480
+    },
+    "Money.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Activity",
+      "w": 390,
+      "x": 0,
+      "y": 9280
+    },
+    "MoneyAccounts.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Accounts",
+      "w": 390,
+      "x": 0,
+      "y": 10440
+    },
+    "MoneyAccountsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Accounts · dark",
+      "w": 390,
+      "x": 0,
+      "y": 10440
+    },
+    "MoneyCategories.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Categories",
+      "w": 390,
+      "x": 470,
+      "y": 10440
+    },
+    "MoneyCategoriesDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Categories · dark",
+      "w": 390,
+      "x": 470,
+      "y": 10440
+    },
+    "MoneyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Activity · dark",
+      "w": 390,
+      "x": 0,
+      "y": 9280
+    },
+    "MoneyImport.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Import statement",
+      "w": 390,
+      "x": 2350,
+      "y": 10440
+    },
+    "MoneyImportDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Import statement · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 10440
+    },
+    "MoneyRecurring.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Recurring",
+      "w": 390,
+      "x": 1410,
+      "y": 10440
+    },
+    "MoneyRecurringDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Recurring · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 10440
+    },
+    "MoneyRules.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Rules",
+      "w": 390,
+      "x": 940,
+      "y": 10440
+    },
+    "MoneyRulesDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Rules · dark",
+      "w": 390,
+      "x": 940,
+      "y": 10440
+    },
+    "MoneySearch.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Search",
+      "w": 390,
+      "x": 2820,
+      "y": 10440
+    },
+    "MoneySearchDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Search · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 10440
+    },
+    "MoneySpending.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Spending",
+      "w": 390,
+      "x": 470,
+      "y": 9280
+    },
+    "MoneySpendingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Spending · dark",
+      "w": 390,
+      "x": 470,
+      "y": 9280
+    },
+    "MoneyTarget.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Target",
+      "w": 390,
+      "x": 1880,
+      "y": 10440
+    },
+    "MoneyTargetDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Target · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 10440
+    },
+    "MoneyTransaction.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Set a category",
+      "w": 390,
+      "x": 2350,
+      "y": 13920
+    },
+    "MoneyTransactionDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Set a category · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 13920
+    },
+    "MoreMenu.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · More",
+      "w": 390,
+      "x": 940,
+      "y": 17400
+    },
+    "MoreMenuDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · More · dark",
+      "w": 390,
+      "x": 940,
+      "y": 17400
+    },
+    "NoteEditor.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · A note",
+      "w": 390,
+      "x": 470,
+      "y": 11600
+    },
+    "NoteEditorDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · A note · dark",
+      "w": 390,
+      "x": 470,
+      "y": 11600
+    },
+    "NoteHistory.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Note history",
+      "w": 390,
+      "x": 2350,
+      "y": 15080
+    },
+    "NoteHistoryDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Note history · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 15080
+    },
+    "NotesHome.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Notes home",
+      "w": 390,
+      "x": 0,
+      "y": 11600
+    },
+    "NotesHomeDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Notes home · dark",
+      "w": 390,
+      "x": 0,
+      "y": 11600
+    },
+    "PairCheck.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Check the safety number",
+      "w": 390,
+      "x": 940,
+      "y": 2320
+    },
+    "PairCheckDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Check the safety number · dark",
+      "w": 390,
+      "x": 940,
+      "y": 2320
+    },
+    "PairDevice.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Pair with your backup device",
+      "w": 390,
+      "x": 470,
+      "y": 2320
+    },
+    "PairDeviceDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Pair with your backup device · dark",
+      "w": 390,
+      "x": 470,
+      "y": 2320
+    },
+    "People.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · People",
+      "w": 390,
+      "x": 0,
+      "y": 5800
+    },
+    "PeopleDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · People · dark",
+      "w": 390,
+      "x": 0,
+      "y": 5800
+    },
+    "PermissionPhotos.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Asking for photos",
+      "w": 390,
+      "x": 940,
+      "y": 18560
+    },
+    "PermissionPhotosDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Asking for photos · dark",
+      "w": 390,
+      "x": 940,
+      "y": 18560
+    },
+    "Person.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · A person",
+      "w": 390,
+      "x": 470,
+      "y": 5800
+    },
+    "PersonDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · A person · dark",
+      "w": 390,
+      "x": 470,
+      "y": 5800
+    },
+    "PersonEditor.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Edit person",
+      "w": 390,
+      "x": 470,
+      "y": 13920
+    },
+    "PersonEditorDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Edit person · dark",
+      "w": 390,
+      "x": 470,
+      "y": 13920
+    },
+    "PhotoEditor.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Crop and rotate",
+      "w": 390,
+      "x": 1880,
+      "y": 13920
+    },
+    "PhotoEditorDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Crop and rotate · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 13920
+    },
+    "PhotoViewer.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · A photo",
+      "w": 390,
+      "x": 470,
+      "y": 12760
+    },
+    "PhotoViewerDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · A photo · dark",
+      "w": 390,
+      "x": 470,
+      "y": 12760
+    },
+    "PhotosLibrary.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Library",
+      "w": 390,
+      "x": 0,
+      "y": 12760
+    },
+    "PhotosLibraryDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Library · dark",
+      "w": 390,
+      "x": 0,
+      "y": 12760
+    },
+    "PhotosPicker.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Add to an album",
+      "w": 390,
+      "x": 940,
+      "y": 16240
+    },
+    "PhotosPickerDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Add to an album · dark",
+      "w": 390,
+      "x": 940,
+      "y": 16240
+    },
+    "PhotosPlaces.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Places",
+      "w": 390,
+      "x": 470,
+      "y": 16240
+    },
+    "PhotosPlacesDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Places · dark",
+      "w": 390,
+      "x": 470,
+      "y": 16240
+    },
+    "PhotosShelf.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · An album",
+      "w": 390,
+      "x": 1410,
+      "y": 16240
+    },
+    "PhotosShelfDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · An album · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 16240
+    },
+    "QuartersIcon.dc.html": {
+      "h": 1060,
+      "page": "icon",
+      "title": "Centraid icon · four quarters",
+      "w": 1200,
+      "x": 0,
+      "y": 0
+    },
+    "RecoveryKey.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Your recovery key (key only on this phone)",
+      "w": 390,
+      "x": 0,
+      "y": 1160
+    },
+    "RecoveryKeyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Your recovery key (key only on this phone) · dark",
+      "w": 390,
+      "x": 0,
+      "y": 1160
+    },
+    "RestoreDone.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Restore done, one vault stayed",
+      "w": 390,
+      "x": 1410,
+      "y": 1160
+    },
+    "RestoreDoneDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Restore done, one vault stayed · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 1160
+    },
+    "RestoreHeld.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Restore: key came back with the account",
+      "w": 390,
+      "x": 940,
+      "y": 1160
+    },
+    "RestoreHeldDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Restore: key came back with the account · dark",
+      "w": 390,
+      "x": 940,
+      "y": 1160
+    },
+    "RestoreWords.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Restore: typing the 24 words",
+      "w": 390,
+      "x": 470,
+      "y": 1160
+    },
+    "RestoreWordsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Restore: typing the 24 words · dark",
+      "w": 390,
+      "x": 470,
+      "y": 1160
+    },
+    "Search.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Search",
+      "w": 390,
+      "x": 0,
+      "y": 17400
+    },
+    "SearchDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Search · dark",
+      "w": 390,
+      "x": 0,
+      "y": 17400
+    },
+    "Settings.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Settings",
+      "w": 390,
+      "x": 2350,
+      "y": 17400
+    },
+    "SettingsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Settings · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 17400
+    },
+    "SolidBand.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Reduce Transparency",
+      "w": 390,
+      "x": 470,
+      "y": 19720
+    },
+    "SolidBandDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Reduce Transparency · dark",
+      "w": 390,
+      "x": 470,
+      "y": 19720
+    },
+    "StatusLine.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Status line, not a toast",
+      "w": 390,
+      "x": 1880,
+      "y": 18560
+    },
+    "StatusLineDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Status line, not a toast · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 18560
+    },
+    "Swipe.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Swipe, flag, notification",
+      "w": 390,
+      "x": 2350,
+      "y": 3480
+    },
+    "SwipeDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Swipe, flag, notification · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 3480
+    },
+    "TaskEditor.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · New task",
+      "w": 390,
+      "x": 0,
+      "y": 13920
+    },
+    "TaskEditorDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · New task · dark",
+      "w": 390,
+      "x": 0,
+      "y": 13920
+    },
+    "Today.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Today",
+      "w": 390,
+      "x": 940,
+      "y": 3480
+    },
+    "TodayDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Today · dark",
+      "w": 390,
+      "x": 940,
+      "y": 3480
+    },
+    "Trash.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Trash",
+      "w": 390,
+      "x": 1410,
+      "y": 17400
+    },
+    "TrashDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Trash · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 17400
+    },
+    "Welcome.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Welcome (onboarding)",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "WelcomeDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Welcome (onboarding) · dark",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "WheelIcon.dc.html": {
+      "h": 1100,
+      "page": "archive",
+      "title": "The Wheel (replaced by four quarters)",
+      "w": 1200,
+      "x": 3840,
+      "y": 0
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-11-04T20:55:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "page": "light",
+    "view": "canvas"
+  },
+  "noteOrder": [
+    "light0",
+    "light1",
+    "light2",
+    "light3",
+    "light4",
+    "light5",
+    "light6",
+    "light7",
+    "light8",
+    "light9",
+    "light10",
+    "light11",
+    "light12",
+    "light13",
+    "light14",
+    "light15",
+    "light16",
+    "light17",
+    "light18",
+    "light19",
+    "dark0",
+    "dark1",
+    "dark2",
+    "dark3",
+    "dark4",
+    "dark5",
+    "dark6",
+    "dark7",
+    "dark8",
+    "dark9",
+    "dark10",
+    "dark11",
+    "dark12",
+    "dark13",
+    "dark14",
+    "dark15",
+    "dark16",
+    "dark17",
+    "dark18",
+    "dark19"
+  ],
+  "notes": {
+    "dark0": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Welcome, Home, Backup and Chat",
+      "w": 240,
+      "x": 0,
+      "y": -200
+    },
+    "dark1": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "First run: recovery key, restore, first imports",
+      "w": 240,
+      "x": 0,
+      "y": 960
+    },
+    "dark10": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Notes, after Apple Notes",
+      "w": 240,
+      "x": 0,
+      "y": 11400
+    },
+    "dark11": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Photos, after Apple Photos",
+      "w": 240,
+      "x": 0,
+      "y": 12560
+    },
+    "dark12": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Add and edit",
+      "w": 240,
+      "x": 0,
+      "y": 13720
+    },
+    "dark13": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "More screens: event, project, catch-up, chat list, versions",
+      "w": 240,
+      "x": 0,
+      "y": 14880
+    },
+    "dark14": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "More screens: a workout, places, picker, album, Locker export",
+      "w": 240,
+      "x": 0,
+      "y": 16040
+    },
+    "dark15": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Everywhere: search, filter, More, Trash, lock, settings",
+      "w": 240,
+      "x": 0,
+      "y": 17200
+    },
+    "dark16": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "States: empty, first run, permission, failure, status line",
+      "w": 240,
+      "x": 0,
+      "y": 18360
+    },
+    "dark17": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Accessibility: large text, reduce transparency",
+      "w": 240,
+      "x": 0,
+      "y": 19520
+    },
+    "dark18": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Android: Material 3 Expressive",
+      "w": 240,
+      "x": 0,
+      "y": 20680
+    },
+    "dark19": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Android: Locker, People, Docs, Money, Notes, Photos, Chat, recovery key",
+      "w": 240,
+      "x": 0,
+      "y": 21840
+    },
+    "dark2": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Backup: the rest of the page, pairing, backing up",
+      "w": 240,
+      "x": 0,
+      "y": 2120
+    },
+    "dark3": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Agenda: Calendar + Reminders, one app with two homes",
+      "w": 240,
+      "x": 0,
+      "y": 3280
+    },
+    "dark4": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Locker, after Apple Passwords",
+      "w": 240,
+      "x": 0,
+      "y": 4440
+    },
+    "dark5": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "People, after Apple Contacts",
+      "w": 240,
+      "x": 0,
+      "y": 5600
+    },
+    "dark6": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Docs, after Apple Files",
+      "w": 240,
+      "x": 0,
+      "y": 6760
+    },
+    "dark7": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Health, after Apple Health",
+      "w": 240,
+      "x": 0,
+      "y": 7920
+    },
+    "dark8": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Money, after Wallet and Copilot",
+      "w": 240,
+      "x": 0,
+      "y": 9080
+    },
+    "dark9": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Money, more: accounts, categories, rules, recurring, target, import, search",
+      "w": 240,
+      "x": 0,
+      "y": 10240
+    },
+    "light0": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Welcome, Home, Backup and Chat",
+      "w": 240,
+      "x": 0,
+      "y": -200
+    },
+    "light1": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "First run: recovery key, restore, first imports",
+      "w": 240,
+      "x": 0,
+      "y": 960
+    },
+    "light10": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Notes, after Apple Notes",
+      "w": 240,
+      "x": 0,
+      "y": 11400
+    },
+    "light11": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Photos, after Apple Photos",
+      "w": 240,
+      "x": 0,
+      "y": 12560
+    },
+    "light12": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Add and edit",
+      "w": 240,
+      "x": 0,
+      "y": 13720
+    },
+    "light13": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "More screens: event, project, catch-up, chat list, versions",
+      "w": 240,
+      "x": 0,
+      "y": 14880
+    },
+    "light14": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "More screens: a workout, places, picker, album, Locker export",
+      "w": 240,
+      "x": 0,
+      "y": 16040
+    },
+    "light15": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Everywhere: search, filter, More, Trash, lock, settings",
+      "w": 240,
+      "x": 0,
+      "y": 17200
+    },
+    "light16": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "States: empty, first run, permission, failure, status line",
+      "w": 240,
+      "x": 0,
+      "y": 18360
+    },
+    "light17": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Accessibility: large text, reduce transparency",
+      "w": 240,
+      "x": 0,
+      "y": 19520
+    },
+    "light18": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Android: Material 3 Expressive",
+      "w": 240,
+      "x": 0,
+      "y": 20680
+    },
+    "light19": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Android: Locker, People, Docs, Money, Notes, Photos, Chat, recovery key",
+      "w": 240,
+      "x": 0,
+      "y": 21840
+    },
+    "light2": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Backup: the rest of the page, pairing, backing up",
+      "w": 240,
+      "x": 0,
+      "y": 2120
+    },
+    "light3": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Agenda: Calendar + Reminders, one app with two homes",
+      "w": 240,
+      "x": 0,
+      "y": 3280
+    },
+    "light4": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Locker, after Apple Passwords",
+      "w": 240,
+      "x": 0,
+      "y": 4440
+    },
+    "light5": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "People, after Apple Contacts",
+      "w": 240,
+      "x": 0,
+      "y": 5600
+    },
+    "light6": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Docs, after Apple Files",
+      "w": 240,
+      "x": 0,
+      "y": 6760
+    },
+    "light7": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Health, after Apple Health",
+      "w": 240,
+      "x": 0,
+      "y": 7920
+    },
+    "light8": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Money, after Wallet and Copilot",
+      "w": 240,
+      "x": 0,
+      "y": 9080
+    },
+    "light9": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Money, more: accounts, categories, rules, recurring, target, import, search",
+      "w": 240,
+      "x": 0,
+      "y": 10240
+    }
+  },
+  "order": [
+    "DesignRules.dc.html",
+    "Decisions.dc.html",
+    "CodeMap.dc.html",
+    "IconConcepts.dc.html",
+    "IconMarks.dc.html",
+    "CradlePalettes.dc.html",
+    "WheelIcon.dc.html",
+    "QuartersIcon.dc.html",
+    "Backup.dc.html",
+    "Welcome.dc.html",
+    "HomeWidgets.dc.html",
+    "BackupSettings.dc.html",
+    "Chat.dc.html",
+    "RecoveryKey.dc.html",
+    "RestoreWords.dc.html",
+    "RestoreHeld.dc.html",
+    "RestoreDone.dc.html",
+    "FirstImports.dc.html",
+    "BackupSettingsEnd.dc.html",
+    "PairDevice.dc.html",
+    "PairCheck.dc.html",
+    "BackupRunning.dc.html",
+    "Calendar.dc.html",
+    "Main.dc.html",
+    "Today.dc.html",
+    "List.dc.html",
+    "Details.dc.html",
+    "Swipe.dc.html",
+    "Locker.dc.html",
+    "LockerItem.dc.html",
+    "People.dc.html",
+    "Person.dc.html",
+    "Docs.dc.html",
+    "DocsFolder.dc.html",
+    "Health.dc.html",
+    "HealthMetric.dc.html",
+    "HealthConnect.dc.html",
+    "Money.dc.html",
+    "MoneySpending.dc.html",
+    "MoneyAccounts.dc.html",
+    "MoneyCategories.dc.html",
+    "MoneyRules.dc.html",
+    "MoneyRecurring.dc.html",
+    "MoneyTarget.dc.html",
+    "MoneyImport.dc.html",
+    "MoneySearch.dc.html",
+    "NotesHome.dc.html",
+    "NoteEditor.dc.html",
+    "PhotosLibrary.dc.html",
+    "PhotoViewer.dc.html",
+    "TaskEditor.dc.html",
+    "PersonEditor.dc.html",
+    "LockerEditor.dc.html",
+    "DocEditor.dc.html",
+    "PhotoEditor.dc.html",
+    "MoneyTransaction.dc.html",
+    "AgendaEvent.dc.html",
+    "AgendaEventCancel.dc.html",
+    "AgendaProject.dc.html",
+    "AgendaCatchUp.dc.html",
+    "ChatList.dc.html",
+    "NoteHistory.dc.html",
+    "DocVersions.dc.html",
+    "HealthWorkout.dc.html",
+    "PhotosPlaces.dc.html",
+    "PhotosPicker.dc.html",
+    "PhotosShelf.dc.html",
+    "LockerExport.dc.html",
+    "Search.dc.html",
+    "FilterMenu.dc.html",
+    "MoreMenu.dc.html",
+    "Trash.dc.html",
+    "LockScreen.dc.html",
+    "Settings.dc.html",
+    "EmptyReminders.dc.html",
+    "FirstHome.dc.html",
+    "PermissionPhotos.dc.html",
+    "BackupFailed.dc.html",
+    "StatusLine.dc.html",
+    "LargeText.dc.html",
+    "SolidBand.dc.html",
+    "AndroidHome.dc.html",
+    "AndroidReminders.dc.html",
+    "AndroidDetails.dc.html",
+    "AndroidHealth.dc.html",
+    "AndroidLocker.dc.html",
+    "AndroidPeople.dc.html",
+    "AndroidDocs.dc.html",
+    "AndroidMoney.dc.html",
+    "AndroidNotes.dc.html",
+    "AndroidPhotos.dc.html",
+    "AndroidChat.dc.html",
+    "AndroidRecoveryKey.dc.html",
+    "WelcomeDark.dc.html",
+    "HomeWidgetsDark.dc.html",
+    "BackupSettingsDark.dc.html",
+    "ChatDark.dc.html",
+    "RecoveryKeyDark.dc.html",
+    "RestoreWordsDark.dc.html",
+    "RestoreHeldDark.dc.html",
+    "RestoreDoneDark.dc.html",
+    "FirstImportsDark.dc.html",
+    "BackupSettingsEndDark.dc.html",
+    "PairDeviceDark.dc.html",
+    "PairCheckDark.dc.html",
+    "BackupRunningDark.dc.html",
+    "CalendarDark.dc.html",
+    "MainDark.dc.html",
+    "TodayDark.dc.html",
+    "ListDark.dc.html",
+    "DetailsDark.dc.html",
+    "SwipeDark.dc.html",
+    "LockerDark.dc.html",
+    "LockerItemDark.dc.html",
+    "PeopleDark.dc.html",
+    "PersonDark.dc.html",
+    "DocsDark.dc.html",
+    "DocsFolderDark.dc.html",
+    "HealthDark.dc.html",
+    "HealthMetricDark.dc.html",
+    "HealthConnectDark.dc.html",
+    "MoneyDark.dc.html",
+    "MoneySpendingDark.dc.html",
+    "MoneyAccountsDark.dc.html",
+    "MoneyCategoriesDark.dc.html",
+    "MoneyRulesDark.dc.html",
+    "MoneyRecurringDark.dc.html",
+    "MoneyTargetDark.dc.html",
+    "MoneyImportDark.dc.html",
+    "MoneySearchDark.dc.html",
+    "NotesHomeDark.dc.html",
+    "NoteEditorDark.dc.html",
+    "PhotosLibraryDark.dc.html",
+    "PhotoViewerDark.dc.html",
+    "TaskEditorDark.dc.html",
+    "PersonEditorDark.dc.html",
+    "LockerEditorDark.dc.html",
+    "DocEditorDark.dc.html",
+    "PhotoEditorDark.dc.html",
+    "MoneyTransactionDark.dc.html",
+    "AgendaEventDark.dc.html",
+    "AgendaEventCancelDark.dc.html",
+    "AgendaProjectDark.dc.html",
+    "AgendaCatchUpDark.dc.html",
+    "ChatListDark.dc.html",
+    "NoteHistoryDark.dc.html",
+    "DocVersionsDark.dc.html",
+    "HealthWorkoutDark.dc.html",
+    "PhotosPlacesDark.dc.html",
+    "PhotosPickerDark.dc.html",
+    "PhotosShelfDark.dc.html",
+    "LockerExportDark.dc.html",
+    "SearchDark.dc.html",
+    "FilterMenuDark.dc.html",
+    "MoreMenuDark.dc.html",
+    "TrashDark.dc.html",
+    "LockScreenDark.dc.html",
+    "SettingsDark.dc.html",
+    "EmptyRemindersDark.dc.html",
+    "FirstHomeDark.dc.html",
+    "PermissionPhotosDark.dc.html",
+    "BackupFailedDark.dc.html",
+    "StatusLineDark.dc.html",
+    "LargeTextDark.dc.html",
+    "SolidBandDark.dc.html",
+    "AndroidHomeDark.dc.html",
+    "AndroidRemindersDark.dc.html",
+    "AndroidDetailsDark.dc.html",
+    "AndroidHealthDark.dc.html",
+    "AndroidLockerDark.dc.html",
+    "AndroidPeopleDark.dc.html",
+    "AndroidDocsDark.dc.html",
+    "AndroidMoneyDark.dc.html",
+    "AndroidNotesDark.dc.html",
+    "AndroidPhotosDark.dc.html",
+    "AndroidChatDark.dc.html",
+    "AndroidRecoveryKeyDark.dc.html"
+  ],
+  "pages": [
+    {
+      "id": "rules",
+      "name": "Design rules"
+    },
+    {
+      "id": "icon",
+      "name": "App icon"
+    },
+    {
+      "id": "light",
+      "name": "Light mode"
+    },
+    {
+      "id": "dark",
+      "name": "Dark mode"
+    },
+    {
+      "id": "archive",
+      "name": "Archive"
+    }
+  ],
+  "title": "Centraid Native Redesign"
+}

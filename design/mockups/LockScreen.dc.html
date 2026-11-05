@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Locker locked</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #F4F2EE; font-family: Geist, system-ui, sans-serif; color: #1C1B19;">
+  <h1 style="margin: 64px 20px 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">Locker</h1>
+  <div style="padding: 40px 20px 0;">
+    <span style="width: 64px; height: 64px; border-radius: 32px; background: #EBEDF0; display: flex; align-items: center; justify-content: center;"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#454E58" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 018 0v4"></path></svg></span>
+    <h2 style="margin: 18px 0 8px; font-size: 20px; font-weight: 700;">Locker is locked</h2>
+    <p style="margin: 0; font-size: 16px; color: #4A4741; line-height: 1.4;">Items stay hidden until you unlock with your face.</p>
+    <p style="margin: 10px 0 0; font-size: 13px; color: #6F6B64; line-height: 1.4;">Locked after five minutes idle.</p>
+    <button style="margin-top: 28px; width: 100%; height: 52px; border-radius: 26px; border: none; background: #454E58; color: #FFFFFF; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2M9 9v1.5M15 9v1.5M12 9v4h-1M9.5 16a4 4 0 005 0"></path></svg>
+      Unlock with your face
+    </button>
+  </div>
+
+  <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; display: flex; align-items: center; gap: 8px;">
+    <button aria-label="Home" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; border: 1px solid rgba(255,255,255,0.7); background: rgba(255,255,255,0.72); box-shadow: 0 6px 20px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"></path></svg>
+    </button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
