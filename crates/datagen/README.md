@@ -24,7 +24,7 @@ Milestones M1 to M4 are built: stages 0 to 7 (the intents, the messages, the ren
 | `verify` | 5 | Runtime grounding (the session solved afresh against the real messages) and the read-back pass. |
 | `source` | out | `DatagenSource`: the sessions as an `assist-eval` `EvalSource`, from a run (`open`) or from a data version (`open_version`). |
 | `trace` | 6 | The v4 think of a reference call, and the round trip through the runtime's compiler. |
-| `render` | 6 | A session rendered as the phone renders it, the HF tokenizer, the loss weights of every token. |
+| `render` | 6 | A session rendered as the phone renders it, the model's tokenizer (`bpe.rs`), the loss weights of every token. |
 | `mix` | 7 | Duplicates out, minimal pairs together, the grid's shares, the multi-turn floor, the per-cell report. |
 | `version` | 6 + 7 | Render all, mix, write `train|val|test|noise.jsonl.zst` and the manifest of a data version. |
 
@@ -152,7 +152,7 @@ A session whose turn fails a step is kept as the shorter session before it (tag 
 
 A token is trained when it lies wholly inside a span and a decision token when it also overlaps a decision range (`render::decisions`; the precedent is `train/fmt.py`'s decision spans, with the labels the issue lists instead of every label). Offsets are bytes (a character the byte-level tokenizer splits into several tokens gives each the character's range), and a special string of the format (`<|im_start|>`, `<think>`) is one token.
 
-**The tokenizer** is the Hugging Face `tokenizers` crate reading the model's `tokenizer.json` (`--tokenizer`; its BLAKE3 goes in the manifest). `render::byte_level_tokenizer` is a byte-level one with no merges that the tests use, so no test needs the network or the model file (`DATAGEN_TOKENIZER=<path>` also runs the one test that reads the real file).
+**The tokenizer** is `bpe.rs`, a byte-level BPE of our own that reads the model's `tokenizer.json` (`--tokenizer`; its BLAKE3 goes in the manifest): the added tokens are cut out first (leftmost, longest), the rest is NFC-normalised, split by the file's `Split` regex (`fancy-regex`, for the lookahead) and merged by rank over the GPT-2 byte map. A file of another shape (another normalizer or model, a dropout, a merge prefix) is refused. It replaced the Hugging Face `tokenizers` crate, which pulled in `paste` (RUSTSEC-2024-0436; `deny.toml` has no ignores); on Qwen3.5-0.8B's file the two gave identical ids on 3.5 million texts (the rendered records of a build, the repo's own files, and a fuzz of unicode, emoji, CJK, digit runs, whitespace, contractions, typos and every special token), and only the offsets of text that NFC rewrites differ (the crate's are truncated there; ours cover the characters that composed). `render::byte_level_tokenizer` is a byte-level one with no merges that the tests use, so no test needs the network or the model file (`DATAGEN_TOKENIZER=<path>` also runs the two tests that read the real file).
 
 ### Mix
 

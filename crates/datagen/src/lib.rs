@@ -14,7 +14,7 @@
 //! prompt-hash cache), [`typos`] (the seeded typo pass), [`verify`] (runtime grounding and the
 //! read-back pass) and [`messages`] (stages 4 and 5 end to end).
 //!
-//! M4 adds [`trace`] (the v4 think of a reference call, round-tripped through the runtime's compiler),
+//! M4 adds [`bpe`] (the chat model's byte-level BPE, read from its `tokenizer.json`), [`trace`] (the v4 think of a reference call, round-tripped through the runtime's compiler),
 //! [`render`] (a session as the phone renders it, tokenized, with the loss weight of every token), [`mix`]
 //! (the sessions of a data version, chosen to the grid's shares) and [`version`] (the files and the manifest of
 //! a data version, and the record contract M6 reads).
@@ -22,6 +22,7 @@
 #![forbid(unsafe_code)]
 
 pub mod ambiguity;
+pub mod bpe;
 pub mod brief;
 pub mod catalog;
 pub mod facts;
