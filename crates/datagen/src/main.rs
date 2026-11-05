@@ -168,6 +168,36 @@ enum Command {
         #[arg(long, default_value_t = 240)]
         keep: usize,
     },
+    /// Cut RFT records and DPO pairs from a model's rollouts (`assist-eval rollout`) and render them with the data
+    /// version's renderer, so each carries `render {input_ids, weights, text}` as a data-version record does. Writes
+    /// `rft.jsonl`, `dpo.jsonl` and `stats.json` under `--out`.
+    RolloutRecords {
+        /// The data version the rollouts were sampled over (`datagen render --out`): its sessions and its worlds.
+        #[arg(long = "in")]
+        input: PathBuf,
+        /// The splits of that version the rollouts cover.
+        #[arg(long, value_delimiter = ',', default_value = "train")]
+        split: Vec<String>,
+        /// `PREFIX.rollouts.jsonl` files (shards merge).
+        #[arg(long, num_args = 1.., required = true)]
+        rollouts: Vec<PathBuf>,
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        tokenizer: PathBuf,
+        /// A rollout report or an `assist-eval` report: what the model still fails, which weights the RFT records.
+        #[arg(long)]
+        needs: Option<PathBuf>,
+        #[arg(long, default_value_t = 5)]
+        min_samples: usize,
+        #[arg(long, default_value_t = 4)]
+        max_copies: usize,
+        #[arg(long, default_value_t = 2)]
+        pairs_per_turn: usize,
+        /// The weight of a deciding token.
+        #[arg(long, default_value_t = DECISION_WEIGHT)]
+        decision_weight: f32,
+    },
     /// Print how ambiguous each world is under its settings.
     Ambiguity {
         #[arg(long)]
@@ -516,6 +546,61 @@ fn main() -> Result<()> {
                 "{}",
                 centraid_datagen::render::visualise(&tokenizer, &ids, &weights, keep)?
             );
+        }
+        Command::RolloutRecords {
+            input,
+            split,
+            rollouts,
+            out,
+            tokenizer,
+            needs,
+            min_samples,
+            max_copies,
+            pairs_per_turn,
+            decision_weight,
+        } => {
+            use centraid_assist_eval::rollout::records::{self, Cutting, Needs, Weighing};
+            use centraid_assist_eval::source::EvalSource;
+            use centraid_assist_eval::tally::{WithoutInProgress, WithoutTally};
+            let names: Vec<&str> = split.iter().map(String::as_str).collect();
+            let source = WithoutInProgress::new(WithoutTally::new(
+                centraid_datagen::source::DatagenSource::open_version(&input, &names)?,
+            ));
+            let sessions = source.sessions()?;
+            let rollouts = centraid_assist_eval::rollout::read_rollouts(&rollouts)?;
+            let needs = match &needs {
+                Some(path) => Needs::read(path, min_samples)?,
+                None => Needs::default(),
+            };
+            let tokenizer = centraid_datagen::render::Tokenizer::open(&tokenizer)?;
+            let catalog = Catalog::build()?;
+            let worlds = centraid_datagen::rollout::read_worlds(
+                &input,
+                sessions.iter().map(|s| s.world.as_str()),
+            )?;
+            let scratch = tempfile::tempdir()?;
+            let renderer = centraid_datagen::rollout::Renderer::new(
+                &catalog,
+                &worlds,
+                &tokenizer,
+                decision_weight,
+                scratch.path(),
+            );
+            let stats = records::cut(
+                &sessions,
+                &rollouts,
+                &Cutting {
+                    needs: &needs,
+                    weighing: Weighing {
+                        max_copies,
+                        ..Weighing::default()
+                    },
+                    pairs_per_turn,
+                },
+                Some(&renderer),
+                &out,
+            )?;
+            println!("{}", serde_json::to_string_pretty(&stats)?);
         }
         Command::Ambiguity { seed, counts, json } => {
             let rows: Vec<(World, Ambiguity)> = specs(seed, counts.as_deref())?

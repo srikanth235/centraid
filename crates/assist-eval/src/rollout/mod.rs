@@ -63,6 +63,30 @@ impl Rollout {
     }
 }
 
+/// Read rollouts back from `*.rollouts.jsonl` files (one rollout a line; shards merge).
+///
+/// # Errors
+/// [`EvalError::Read`] for a file that cannot be read, [`EvalError::Json`] for a line that is not a rollout.
+pub fn read_rollouts(files: &[std::path::PathBuf]) -> Result<Vec<Rollout>, EvalError> {
+    let mut out = Vec::new();
+    for path in files {
+        let name = path.display().to_string();
+        let text = std::fs::read_to_string(path).map_err(|e| EvalError::Read {
+            path: name.clone(),
+            message: e.to_string(),
+        })?;
+        for line in text.lines().filter(|line| !line.trim().is_empty()) {
+            out.push(
+                serde_json::from_str::<Rollout>(line).map_err(|e| EvalError::Json {
+                    what: name.clone(),
+                    message: e.to_string(),
+                })?,
+            );
+        }
+    }
+    Ok(out)
+}
+
 /// Run `session` `k` times through the runner's stepper. Each sample is a fresh copy of the world's vault.
 ///
 /// # Errors
