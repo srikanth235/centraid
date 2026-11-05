@@ -14,14 +14,13 @@
 
 ## Kernel parameters
 
-Kaggle script kernels take no arguments, so they live in `params.json` in the input dataset (`make_kit.sh OUT KAGGLE_OWNER ARM DATA_FOLDER [KEY=VALUE ...]`). The token is not a parameter: it is the Kaggle secret **`HF_TOKEN`**, attached to the kernel (Add-ons, Secrets); the kernel never prints or writes it.
+Kaggle script kernels take no arguments, so they live in `params.json` in the input dataset (`make_kit.sh OUT KAGGLE_OWNER ARM DATA_VERSION [KEY=VALUE ...]`). The token is not a parameter: it is the Kaggle secret **`HF_TOKEN`**, attached to the kernel (Add-ons, Secrets); the kernel never prints or writes it.
 
 | key | default | meaning |
 | --- | --- | --- |
 | `arm` | required | `A`, `B` or `C` |
-| `data_folder` | required | the data version's folder in the private HF dataset, e.g. `datagen/v1` |
+| `data_version` | required | the data version's tag in the private HF dataset, e.g. `v0.2`. Each tag holds one version at its root (the dataset's `README.md`); `main` is never read |
 | `hf_repo` | `srikanth235/centraid-native-data` | the dataset |
-| `hf_revision` | `null` (main) | pin a commit of the dataset |
 | `epochs`, `bs`, `max_len` | 2, 16, 8192 | trainer flags |
 | `lr` | `null` | the arm's default (2e-5 full, 2e-4 LoRA) |
 | `hours` | 9.0 | the trainer's wall-clock budget (Kaggle stops a kernel at 12 h) |
@@ -33,7 +32,7 @@ Kaggle script kernels take no arguments, so they live in `params.json` in the in
 ## Steps
 
 1. `pip install` (transformers 5.17.0, the version `bundle.py` stages, peft, zstandard, huggingface_hub; the fused linear-attention kernels best effort).
-2. Pull `train.jsonl.zst`, `val.jsonl.zst`, `manifest.json` and the version's `worlds/` from the HF dataset. **Test and noise are never fetched**: test is read at milestones only.
+2. Pull `data/train.jsonl.zst`, `data/val.jsonl.zst`, `manifest.json` and `worlds/` from the HF dataset at the version's tag. **Test and noise are never fetched**: test is read at milestones only.
 3. `train.py --arm X --save-every 200 --resume` (`torchrun` with more than one GPU). A stopped run is resumed by running the kernel again with its output attached.
 4. `to_gguf.py`: llama.cpp at the commit the phone's engine vendors, `--no-mtp`, Q4_0, output tensor Q8_0.
 5. Build `assist-eval --features cuda` and score val under the default tools (the eight tools), sharded one process per GPU. With `s2_baseline`, score S2 under `--tools s2`.
@@ -45,7 +44,7 @@ Output in `/kaggle/working`: `arm-*.val.json`, `report-*.json`, `summary-*.txt`,
 
 ```bash
 # per arm, on a machine with ~/.kaggle/kaggle.json, after committing:
-experiments/toolchat/native/train/kaggle/make_kit.sh /tmp/m6-A KAGGLE_OWNER A datagen/v1
+experiments/toolchat/native/train/kaggle/make_kit.sh /tmp/m6-A KAGGLE_OWNER A v0.2
 kaggle datasets create -p /tmp/m6-A                     # private; later arms: `datasets version`
 mkdir -p /tmp/m6-kernel && sed 's/KAGGLE_OWNER/your-name/' experiments/toolchat/native/train/kaggle/kernel-metadata.json > /tmp/m6-kernel/kernel-metadata.json
 cp experiments/toolchat/native/train/kaggle/kernel.py /tmp/m6-kernel/
@@ -63,6 +62,6 @@ Per arm: session pass, turn pass (all and clean), per-argument accuracy (rows, d
 ## Unverified
 
 - Every step of `kernel.py`: the pip installs, the HF pull, the trainer on a T4 or P100 (no bf16 there, so the trainer runs fp32), memory at 8192 tokens with the PyTorch fallback of the linear-attention kernels, `to_gguf.py` on Kaggle (a blobless llama.cpp clone and a CPU cmake build), the CUDA build of `assist-eval`, the scoring.
-- That the data version carries a `worlds/` folder next to `val.jsonl.zst` (the kernel stops with a message if not; M4 has not fixed where the worlds live), and that `assist-eval` reads the val sessions with the `render` field removed (the kernel strips it).
+- That `assist-eval` reads the val sessions with the `render` field removed (the kernel strips it).
 - The app ids `money` and `health` as keys of `by_app` (matched case-insensitively).
 - That the `render.text` of M4's records tokenizes to their `input_ids` (the trainer warns, on the first records, when it does not).

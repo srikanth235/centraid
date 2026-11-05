@@ -1,11 +1,17 @@
 //! A DATA VERSION: render (stage 6) and mix (stage 7) over a messages run, and the files they write.
 //!
 //! ```text
-//! <out>/train.jsonl.zst  val.jsonl.zst  test.jsonl.zst  noise.jsonl.zst   one zstd frame each, one record a line
-//! <out>/worlds/<id>.json                                                  the worlds the sessions name (presence-only)
-//! <out>/manifest.json                                                     the data version: hashes, seeds, shares, files
-//! <out>/report.txt  render_dropped.jsonl                                  what rendering and mixing did and could not do
+//! <out>/manifest.json                     the data version: hashes, seeds, shares, files
+//! <out>/data/{train,val,test,noise}.jsonl.zst   one zstd frame each, one record a line
+//! <out>/worlds/<id>.json                  the worlds the sessions name (presence-only)
+//! <out>/build/render.txt                  what rendering and mixing did and could not do
+//! <out>/build/render-dropped.jsonl        each lost turn and why
+//! <out>/build/messages.json, messages.txt the manifest and report of the messages run it came from
+//! <out>/build/llm-cache.jsonl.zst         that run's LLM cache, packed ([`pack_cache`]; `datagen unpack-cache`)
 //! ```
+//!
+//! Everything above is the published data version; a dataset repository holds exactly this tree at its root, one version
+//! per tag. `datagen build` also keeps its stages under `<out>/stages/`, which are working files and not published.
 //!
 //! # The record contract (what M6 reads)
 //!
@@ -36,6 +42,19 @@ use crate::llm::parallel;
 use crate::mix::{self, Selection};
 use crate::render::{self, Counts, Features, Tokenizer};
 use crate::source::{SESSIONS, WORLDS};
+
+/// The folder of a data version that holds the split files.
+pub const DATA: &str = "data";
+/// The folder of a data version that holds how it was made.
+pub const BUILD: &str = "build";
+/// The packed LLM cache under [`BUILD`].
+pub const PACKED_CACHE: &str = "llm-cache.jsonl.zst";
+
+/// The file of `split` (`train`, `val`, `test`, `noise`) in the data version at `dir`.
+#[must_use]
+pub fn split_path(dir: &Path, split: &str) -> PathBuf {
+    dir.join(DATA).join(format!("{split}.jsonl.zst"))
+}
 
 /// What rendering needs besides the input.
 pub struct RenderConfig {
@@ -256,6 +275,22 @@ pub struct Provenance {
 ///
 /// If a cache file cannot be read.
 pub fn cache_hash(dir: &Path) -> Result<(String, usize)> {
+    let names = cache_files(dir)?;
+    let mut hasher = blake3::Hasher::new();
+    for path in &names {
+        hasher.update(
+            path.strip_prefix(dir)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .as_bytes(),
+        );
+        hasher.update(&std::fs::read(path)?);
+    }
+    Ok((hasher.finalize().to_hex().to_string(), names.len()))
+}
+
+/// The cache files under `dir` (`<shard>/<hash>.json`), sorted by their path relative to `dir`.
+fn cache_files(dir: &Path) -> Result<Vec<PathBuf>> {
     let mut names: Vec<PathBuf> = Vec::new();
     if dir.is_dir() {
         for shard in std::fs::read_dir(dir)? {
@@ -268,17 +303,60 @@ pub fn cache_hash(dir: &Path) -> Result<(String, usize)> {
         }
     }
     names.sort();
-    let mut hasher = blake3::Hasher::new();
+    Ok(names)
+}
+
+/// Pack the LLM cache under `dir` into one zstd frame at `to`: a line `{"file": "<shard>/<hash>.json", "text": "..."}`
+/// per cache file, in path order, so a published version carries its cache as one file. The number of entries.
+///
+/// # Errors
+///
+/// If a cache file cannot be read or `to` cannot be written.
+pub fn pack_cache(dir: &Path, to: &Path) -> Result<usize> {
+    let names = cache_files(dir)?;
+    let file = std::fs::File::create(to).with_context(|| to.display().to_string())?;
+    let mut encoder = zstd::stream::Encoder::new(std::io::BufWriter::new(file), 19)?;
     for path in &names {
-        hasher.update(
-            path.strip_prefix(dir)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .as_bytes(),
-        );
-        hasher.update(&std::fs::read(path)?);
+        let rel = path
+            .strip_prefix(dir)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let line = json!({"file": rel, "text": std::fs::read_to_string(path)?});
+        encoder.write_all(serde_json::to_string(&line)?.as_bytes())?;
+        encoder.write_all(b"\n")?;
     }
-    Ok((hasher.finalize().to_hex().to_string(), names.len()))
+    encoder.finish()?.flush()?;
+    Ok(names.len())
+}
+
+/// Unpack a cache packed by [`pack_cache`] into `dir` (a messages run's `llm-cache/`), byte for byte, so `datagen
+/// messages --offline` over the same intents rebuilds with no model calls. The number of entries.
+///
+/// # Errors
+///
+/// If `from` cannot be read, a line is not a packed entry, or names a path outside `dir`.
+pub fn unpack_cache(from: &Path, dir: &Path) -> Result<usize> {
+    let bytes = zstd::stream::decode_all(
+        std::fs::File::open(from).with_context(|| from.display().to_string())?,
+    )?;
+    let mut n = 0;
+    for line in String::from_utf8(bytes)?.lines().filter(|l| !l.is_empty()) {
+        let entry: Value = serde_json::from_str(line)?;
+        let (Some(rel), Some(text)) = (entry["file"].as_str(), entry["text"].as_str()) else {
+            anyhow::bail!("not a packed cache entry: {line:.80}");
+        };
+        let safe = rel.split('/').count() == 2
+            && rel
+                .split('/')
+                .all(|part| !part.is_empty() && part != ".." && part != ".");
+        anyhow::ensure!(safe, "a packed cache entry outside the cache: {rel}");
+        let path = dir.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap_or(dir))?;
+        std::fs::write(&path, text)?;
+        n += 1;
+    }
+    Ok(n)
 }
 
 /// The commit of the runtime this version was made with: `git rev-parse HEAD` where the command runs, `unknown` outside
@@ -334,13 +412,14 @@ pub fn write_version(
         decision_weight,
         mix: cfg,
     } = *version;
-    std::fs::create_dir_all(out)?;
+    std::fs::create_dir_all(out.join(DATA))?;
+    std::fs::create_dir_all(out.join(BUILD))?;
     let mut files = serde_json::Map::new();
     let mut worlds: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for split in ["train", "val", "test", "noise"] {
         let mut indices = selection.chosen.get(split).cloned().unwrap_or_default();
         indices.sort_unstable();
-        let path = out.join(format!("{split}.jsonl.zst"));
+        let path = split_path(out, split);
         let file = std::fs::File::create(&path)?;
         let mut encoder = zstd::stream::Encoder::new(std::io::BufWriter::new(file), 6)?;
         for i in &indices {
@@ -350,7 +429,7 @@ pub fn write_version(
         encoder.finish()?.flush()?;
         let bytes = std::fs::read(&path)?;
         files.insert(
-            format!("{split}.jsonl.zst"),
+            format!("{DATA}/{split}.jsonl.zst"),
             json!({
                 "sessions": indices.len(),
                 "bytes": bytes.len(),
@@ -367,6 +446,18 @@ pub fn write_version(
         )?;
     }
     let (cache, entries) = cache_hash(&input.join("llm-cache"))?;
+    let packed = pack_cache(
+        &input.join("llm-cache"),
+        &out.join(BUILD).join(PACKED_CACHE),
+    )?;
+    for (from, to) in [
+        ("manifest.json", "messages.json"),
+        ("report.txt", "messages.txt"),
+    ] {
+        if input.join(from).exists() {
+            std::fs::copy(input.join(from), out.join(BUILD).join(to))?;
+        }
+    }
     let splits: Vec<Value> = selection
         .reports
         .iter()
@@ -396,7 +487,7 @@ pub fn write_version(
         "runtime_commit": provenance.runtime_commit,
         "seeds": provenance.seeds,
         "tokenizer": {"file": provenance.tokenizer_path, "blake3": rendered.tokenizer_hash},
-        "llm_cache": {"blake3": cache, "entries": entries},
+        "llm_cache": {"blake3": cache, "entries": entries, "packed": format!("{BUILD}/{PACKED_CACHE}"), "packed_entries": packed},
         "weights": {
             "decision": decision_weight,
             "assistant": 1.0,
@@ -433,7 +524,7 @@ pub fn write_version(
         dropped.push_str(&serde_json::to_string(row)?);
         dropped.push('\n');
     }
-    std::fs::write(out.join("render_dropped.jsonl"), dropped)?;
+    std::fs::write(out.join(BUILD).join("render-dropped.jsonl"), dropped)?;
     Ok(manifest)
 }
 
@@ -521,7 +612,7 @@ pub fn render_and_mix(
         render_report(&rendered, rcfg.decision_weight),
         mix::text(&selection)
     );
-    std::fs::write(out.join("report.txt"), &text)?;
+    std::fs::write(out.join(BUILD).join("render.txt"), &text)?;
     drop(rendered);
     let _ = std::fs::remove_file(&spool_path);
     Ok(text)

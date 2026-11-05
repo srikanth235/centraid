@@ -6,7 +6,7 @@ Issue [#1044](https://github.com/srikanth235/centraid/issues/1044). One model, Q
 
 ## The data
 
-A data version is made by one command, `cargo run -p centraid-datagen -- build --version vN` (`crates/datagen/README.md`): `train.jsonl.zst`, `val.jsonl.zst`, `test.jsonl.zst`, `noise.jsonl.zst` and a manifest, each record an assist-eval session plus its rendered token ids and loss weights. Nothing else makes one.
+A data version is made by one command, `cargo run -p centraid-datagen -- build --version vN` (`crates/datagen/README.md`): `data/{train,val,test,noise}.jsonl.zst`, `worlds/`, `build/` and a manifest, published as one tag (`v0.2`, ...) of the private Hugging Face dataset `srikanth235/centraid-native-data`, each record an assist-eval session plus its rendered token ids and loss weights. Nothing else makes one.
 
 **data-v7**, the version S2 was trained and judged on, is no longer rebuilt and stays fetchable from the private Hugging Face dataset `srikanth235/centraid-native-data`: `python3 artefacts.py fetch` puts its frozen val and test sets and their worlds under `data/v7/` (`data/README.md`, `data/v7/FROZEN.md`), where `crates/assist-eval` reads the val set by default. `artefacts.json` pins it.
 
@@ -109,4 +109,4 @@ A promoted model is a revision of a private Hub **model** repository whose card 
 2. `HF_TOKEN=... python3 artefacts.py publish-model CKPT_DIR --repo OWNER/NAME --tag NAME [--card FILE]` sends it, private, in one commit, and never moves a tag.
 3. `python3 artefacts.py publish-gguf ...` does the same for the GGUF, to a public repository.
 
-**The lifecycle rule.** A data version is kept while a kept model trained on it is, or while its val and test are the ruler in use. A new version is a new tag: nothing already published is rewritten. Datagen versions are published to the private dataset by the owner (the Kaggle kernel pulls `datagen/vN/`); `artefacts.py` neither assembles nor uploads data versions.
+**The lifecycle rule.** A data version is kept while a kept model trained on it is, or while its val and test are the ruler in use. A new version is a new tag: nothing already published is rewritten. Datagen versions are published to the private dataset by the owner: the version's tree at the root of `main` and a tag `v0.N` on that commit (the Kaggle kernel pulls the tag); `artefacts.py` neither assembles nor uploads data versions. data-v7 is reached by its own tag only.

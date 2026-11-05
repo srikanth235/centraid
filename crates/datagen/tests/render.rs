@@ -89,7 +89,8 @@ fn version_dir() -> &'static (tempfile::TempDir, Value) {
 }
 
 fn records(dir: &Path, split: &str) -> Vec<Value> {
-    let file = std::fs::File::open(dir.join(format!("{split}.jsonl.zst"))).expect("file");
+    let file =
+        std::fs::File::open(centraid_datagen::version::split_path(dir, split)).expect("file");
     let text = String::from_utf8(zstd::stream::decode_all(file).expect("zstd")).expect("utf8");
     text.lines()
         .map(|line| serde_json::from_str(line).expect("a record"))
@@ -365,7 +366,8 @@ fn the_manifest_names_the_data_version() {
         assert!(split["multi_turn_share"].is_number());
         assert!(split["three_plus_share"].is_number());
     }
-    let report = std::fs::read_to_string(dir.path().join("report.txt")).expect("report");
+    let report =
+        std::fs::read_to_string(dir.path().join("build").join("render.txt")).expect("report");
     assert!(report.contains("cells (turns)") && report.contains("target realised supply"));
 }
 
@@ -416,5 +418,75 @@ fn the_real_tokenizer_gives_the_ids_the_huggingface_one_gave_when_the_file_is_th
     assert_eq!(
         ids("<think>\nfind  tasks  due"),
         [248_068, 198, 3772, 220, 8806, 220, 4016]
+    );
+}
+
+#[test]
+fn the_packed_llm_cache_unpacks_byte_for_byte_and_refuses_paths_outside_the_cache() {
+    let from = tempfile::tempdir().expect("tempdir");
+    let files = [
+        ("ab/ab01.json", "{\"response\": \"x\"}\n"),
+        ("cd/cd02.json", "{\"response\": \"ü\"}"),
+    ];
+    for (rel, text) in files {
+        let path = from.path().join(rel);
+        std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+        std::fs::write(path, text).expect("write");
+    }
+    let packed = from.path().join("packed.jsonl.zst");
+    assert_eq!(
+        centraid_datagen::version::pack_cache(from.path(), &packed).expect("pack"),
+        2
+    );
+    let to = tempfile::tempdir().expect("tempdir");
+    assert_eq!(
+        centraid_datagen::version::unpack_cache(&packed, to.path()).expect("unpack"),
+        2
+    );
+    for (rel, text) in files {
+        assert_eq!(
+            std::fs::read_to_string(to.path().join(rel)).expect("read"),
+            text,
+            "{rel}"
+        );
+    }
+    assert_eq!(
+        centraid_datagen::version::cache_hash(from.path()).expect("hash"),
+        centraid_datagen::version::cache_hash(to.path()).expect("hash"),
+    );
+
+    let evil = from.path().join("evil.jsonl.zst");
+    let line = serde_json::json!({"file": "../x.json", "text": "no"}).to_string();
+    std::fs::write(
+        &evil,
+        zstd::stream::encode_all(line.as_bytes(), 3).expect("zstd"),
+    )
+    .expect("write");
+    assert!(centraid_datagen::version::unpack_cache(&evil, to.path()).is_err());
+    assert!(!to.path().join("../x.json").exists());
+}
+
+#[test]
+fn a_version_is_its_publishable_tree() {
+    let (dir, manifest) = version_dir();
+    for path in [
+        "manifest.json",
+        "build/render.txt",
+        "build/render-dropped.jsonl",
+        "build/llm-cache.jsonl.zst",
+    ] {
+        assert!(dir.path().join(path).is_file(), "{path}");
+    }
+    for split in ["train", "val", "test", "noise"] {
+        assert!(
+            manifest["files"][format!("data/{split}.jsonl.zst")].is_object(),
+            "{split}"
+        );
+    }
+    assert!(dir.path().join("worlds").is_dir());
+    assert_eq!(manifest["llm_cache"]["packed"], "build/llm-cache.jsonl.zst");
+    assert_eq!(
+        manifest["llm_cache"]["packed_entries"],
+        manifest["llm_cache"]["entries"]
     );
 }

@@ -69,7 +69,8 @@ fn version_dir() -> &'static tempfile::TempDir {
 }
 
 fn records_of(dir: &Path, split: &str) -> Vec<Value> {
-    let file = std::fs::File::open(dir.join(format!("{split}.jsonl.zst"))).expect("file");
+    let file =
+        std::fs::File::open(centraid_datagen::version::split_path(dir, split)).expect("file");
     let text = String::from_utf8(zstd::stream::decode_all(file).expect("zstd")).expect("utf8");
     text.lines()
         .map(|line| serde_json::from_str(line).expect("a record"))

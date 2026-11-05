@@ -28,7 +28,7 @@ Milestones M1 to M4 are built: stages 0 to 7 (the intents, the messages, the ren
 | `mix` | 7 | Duplicates out, minimal pairs together, the grid's shares, the multi-turn floor, the per-cell report. |
 | `bpe` | 6 | The model's byte-level BPE, read from its `tokenizer.json`. |
 | `rollout` | 11 | M7's rollout records rendered by the M4 renderer (`datagen rollout-records`). |
-| `version` | 6 + 7 | Render all, mix, write `train | val | test | noise.jsonl.zst` and the manifest of a data version. |
+| `version` | 6 + 7 | Render all, mix, write a data version (`manifest.json`, `data/`, `worlds/`, `build/`); pack and unpack its LLM cache. |
 
 New stages add modules beside these and read `Catalog`; none reads a schema from anywhere else.
 
@@ -119,17 +119,31 @@ A turn that fails a step is dropped with a reason, and the turns after it are cu
 
 ## Render and mix (stages 6 and 7)
 
-`datagen render --in <messages out> --out <dir> --tokenizer <tokenizer.json>` renders every session of a messages run and mixes the result into a data version. `datagen build --version vN --out <dir> --tokenizer <tokenizer.json>` runs intents, messages (from the cache; `--offline` makes no call), render and mix, the stages under `<dir>/stages/` and the version in `<dir>/`. `datagen show --in <dir> --tokenizer <tokenizer.json> [--split train] [--session ID]` prints one record decoded with its mask drawn on it.
+`datagen render --in <messages out> --out <dir> --tokenizer <tokenizer.json>` renders every session of a messages run and mixes the result into a data version. `datagen build --version vN --out <dir> --tokenizer <tokenizer.json>` runs intents, messages (from the cache; `--offline` makes no call), render and mix, the stages under `<dir>/stages/` (working files, not published) and the version in `<dir>/`. `datagen show --in <dir> --tokenizer <tokenizer.json> [--split train] [--session ID]` prints one record decoded with its mask drawn on it.
 
 ### The record contract (what M6 reads)
 
-`<dir>/{train,val,test,noise}.jsonl.zst` are single zstd frames, one record a line. A record is the session of `assist_eval::gold::Session` (`id`, `world`, `today`, `me`, `tags`, `turns[{user, gold, ref, tags}]`, so `assist-eval` loads it unchanged: `DatagenSource::open_version(<dir>, &["train", ...])`), plus `meta` (`app`, `apps`, `cells`, `span`, for the per-app and per-cell slices) and
+A data version is this tree, and the dataset repository (`srikanth235/centraid-native-data`, private) holds exactly it at the root of one tag per version (`v0.2`, ...). `main` carries the latest; readers pin a tag. Publishing is a copy of `<dir>/` without `stages/`, then the tag.
+
+```text
+manifest.json                 the version: hashes, seeds, targets, per-split counts, files
+data/{train,val,test,noise}.jsonl.zst
+worlds/<id>.json              the worlds the sessions name (presence-only)
+build/render.txt              the render and mix report
+build/render-dropped.jsonl    each turn the renderer lost, and why
+build/messages.json, .txt     the manifest and report of the messages run the version came from
+build/llm-cache.jsonl.zst     that run's LLM cache, packed
+```
+
+`datagen unpack-cache --in <dir>/build/llm-cache.jsonl.zst --out <messages out>/llm-cache` restores the cache byte for byte, so `datagen messages --offline` (or `build --offline --out <dir>` after unpacking into `<dir>/stages/messages/llm-cache`) rebuilds the version with no model calls.
+
+`<dir>/data/{train,val,test,noise}.jsonl.zst` are single zstd frames, one record a line. A record is the session of `assist_eval::gold::Session` (`id`, `world`, `today`, `me`, `tags`, `turns[{user, gold, ref, tags}]`, so `assist-eval` loads it unchanged: `DatagenSource::open_version(<dir>, &["train", ...])`), plus `meta` (`app`, `apps`, `cells`, `span`, for the per-app and per-cell slices) and
 
 ```json
 "render": {"input_ids": [u32, ...], "weights": [f32, ...], "text": "<the rendered transcript>"}
 ```
 
-`input_ids` and `weights` have one entry per token. **The trainer reads only `render.input_ids` and `render.weights`.** The typed `scenario` stays behind. `<dir>/worlds/` holds the worlds the sessions name, so a version loads in the eval on its own; `manifest.json` is the data version, `report.txt` the render and mix reports, `render_dropped.jsonl` the turns the renderer lost.
+`input_ids` and `weights` have one entry per token. **The trainer reads only `render.input_ids` and `render.weights`.** The typed `scenario` stays behind. `<dir>/worlds/` holds the worlds the sessions name, so a version loads in the eval on its own.
 
 The turns' `ref` are the reference calls the think states. One thing differs from the messages run: a period the planner wrote relative to today (`{"unit":"week","rel":-8}`) is written as the days it covers (`{"from":{"date":"2026-08-17"},"to":{"date":"2026-08-23"}}`) when the member's own message says the days ("aug 17 to aug 23", so the `dates:` line holds them). The days are the same, so the gold is, and the call is one a model can write from what it reads instead of a count of weeks it would have to work out.
 
@@ -212,6 +226,7 @@ cargo run --release -p centraid-datagen -- messages --in out/ --out msgs/ [--con
 cargo run --release -p centraid-datagen -- render --in msgs/ --out v1/ --tokenizer tokenizer.json [--version v1] [--targets 18000,1000,1000] [--decision-weight 2] [--turn-shares .4,.3,.3] [--across .3] [--render-concurrency 6]
 cargo run --release -p centraid-datagen -- build --version v1 --out v1/ --tokenizer tokenizer.json [--seed 1] [--counts 48,6,6] [--sessions 27000,1500,1500] [--offline] [--reuse] [render's flags]
 cargo run --release -p centraid-datagen -- rollout-records --in v1/ --rollouts runs/r1.rollouts.jsonl --tokenizer tokenizer.json --out runs/r1-records [--split train] [--needs runs/r1.rollout.json]
+cargo run --release -p centraid-datagen -- unpack-cache --in v1/build/llm-cache.jsonl.zst --out msgs/llm-cache
 cargo run --release -p centraid-datagen -- show --in v1/ --tokenizer tokenizer.json [--split train] [--session ID]
 ```
 
