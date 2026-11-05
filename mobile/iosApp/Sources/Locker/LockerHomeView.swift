@@ -159,7 +159,7 @@ struct LockerHomeView: View {
                         HStack {
                             CentraidIconView(iconKey: category.iconKey, tint: Theme.color("lockerText", scheme), size: 26)
                             Spacer()
-                            Text(category.countLabel).centraidType("section").foregroundStyle(Theme.color("text", scheme))
+                            Text(category.countLabel).centraidType("title").foregroundStyle(Theme.color("text", scheme))
                         }
                         Text(category.label).centraidType("body").foregroundStyle(Theme.color("text", scheme))
                     }.frame(maxWidth: .infinity, minHeight: 80, alignment: .leading).padding(12)

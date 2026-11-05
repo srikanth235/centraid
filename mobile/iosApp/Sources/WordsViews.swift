@@ -599,6 +599,7 @@ struct WordsControls: View {
     let prefix: String
     let onPrimary: () -> Void
     let onSecondary: () -> Void
+    var secondaryInk: String = "link"
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -612,7 +613,7 @@ struct WordsControls: View {
                         .accessibilityIdentifier("\(prefix)-primary")
                 }
                 if !secondary.isEmpty {
-                    KitLink(label: secondary, identifier: "\(prefix)-secondary", action: onSecondary)
+                    KitLink(label: secondary, identifier: "\(prefix)-secondary", ink: secondaryInk, action: onSecondary)
                         .frame(maxWidth: .infinity)
                 }
             }

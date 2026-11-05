@@ -24,7 +24,7 @@ struct AgendaAttachmentCard: View {
             StatusLineView(status: value.status, identifier: "agenda-attachment-retry") { send(.with { $0.retry = .init() }) }
         }
         .padding(.vertical, 8)
-        .background(Theme.color("bgRaised", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+        .background(Theme.color("bgElev", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.vertical, 8)
     }

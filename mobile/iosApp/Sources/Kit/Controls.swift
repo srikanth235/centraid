@@ -81,6 +81,7 @@ struct KitLink: View {
     let label: String
     var dense: Bool = false
     var identifier: String = ""
+    var ink: String = "link"
     let action: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -90,7 +91,7 @@ struct KitLink: View {
         Button(action: action) {
             Text(label)
                 .centraidType(dense ? "annotLabelOn" : "smallStrong")
-                .foregroundStyle(Theme.color(enabled ? "link" : "textDisabled", scheme))
+                .foregroundStyle(Theme.color(enabled ? ink : "textDisabled", scheme))
                 .frame(minHeight: CentraidGeometry.targetMinCoarse)
                 .contentShape(Rectangle())
         }

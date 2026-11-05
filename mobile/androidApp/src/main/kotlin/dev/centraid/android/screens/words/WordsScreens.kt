@@ -670,6 +670,7 @@ internal fun WordsControls(
     prefix: String,
     onPrimary: () -> Unit,
     onSecondary: () -> Unit,
+    secondaryInk: String = "link",
 ) {
     // NOTHING DRAWN WHEN THERE IS NOTHING TO DRAW: an empty column would still
     // spend its top padding and a gap in whatever holds it.
@@ -693,7 +694,7 @@ internal fun WordsControls(
                     .semantics { role = Role.Button },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(secondary, style = centraidType("smallStrong"), color = centraidColor("link"))
+                Text(secondary, style = centraidType("smallStrong"), color = centraidColor(secondaryInk))
             }
         }
     }

@@ -699,7 +699,7 @@ private fun TileCard(tile: HomeTile, modifier: Modifier, loading: String, onOpen
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 AppMark(appId = tile.source_app, size = 24.dp)
                 Text(tile.compact_value, style = centraidType("smallStrong"), color = centraidColor("text"), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                Text(tile.compact_label, style = centraidType("meta"), color = centraidColor("textSoft"), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text(tile.compact_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
         } else {
             Row(

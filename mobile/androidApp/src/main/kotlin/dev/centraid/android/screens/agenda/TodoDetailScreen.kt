@@ -150,7 +150,7 @@ private fun TodoDetailBody(
             onEdit = { onEvent(TodoDetailEvent(notes = TodoDetailEvent.NotesChanged(notes = it))) },
             testTag = "tasks-detail-notes",
         )
-        Column(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).background(centraidColor("bgRaised"), RoundedCornerShape(KitGeometry.RADIUS)).padding(vertical = 8.dp)) {
+        Column(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).background(centraidColor("bgElev"), RoundedCornerShape(KitGeometry.RADIUS)).padding(vertical = 8.dp)) {
         data.fields.forEach { field ->
             if (field.enabled) {
                 ChoiceFieldRow(

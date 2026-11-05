@@ -215,7 +215,7 @@ internal fun MoneyCategoryRow(line: MoneyCategoryLine, accessibility: String, te
             }
             if (line.has_plan) {
                 Box(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER).padding(top = 8.dp).height(5.dp).clip(moneyRadius("sm")).background(centraidColor("bgSunken"))) {
-                    Box(Modifier.fillMaxWidth(line.progress_bp.toFloat() / 10_000f).height(5.dp).background(centraidColor(if (line.over) "errorFill" else line.color_key)))
+                    Box(Modifier.fillMaxWidth(line.progress_bp.toFloat() / 10_000f).height(5.dp).background(centraidColor(if (line.over) "dangerFill" else line.color_key)))
                 }
             }
         }

@@ -25,7 +25,17 @@ emulator -avd CentraidVisual -port 5554 -no-window -no-audio -no-boot-anim \
   -no-snapshot -gpu swiftshader_indirect -accel on -camera-back none -camera-front none \
   > "$artifacts/emulator.log" 2>&1 &
 emulator_pid=$!
-trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
+logcat_pid=
+cleanup() {
+  if [ -n "$logcat_pid" ]; then
+    kill "$logcat_pid" 2>/dev/null || true
+    wait "$logcat_pid" 2>/dev/null || true
+  fi
+  kill "$emulator_pid" 2>/dev/null || true
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 export ANDROID_SERIAL=emulator-5554
 # Infrastructure readiness, not a product performance assertion.
 booted=0
@@ -38,15 +48,18 @@ for attempt in $(seq 1 180); do
   sleep 2
 done
 [ "$booted" = 1 ] || { echo 'Android emulator did not boot' >&2; exit 1; }
+# Stream before the app can start, so a crash remains inspectable even if CI
+# cancels the capture matrix before it returns to this script.
+adb logcat -c
+adb logcat -v threadtime > "$artifacts/logcat.log" 2>&1 &
+logcat_pid=$!
 adb shell input keyevent 82
 adb shell settings put global window_animation_scale 0
 adb shell settings put global transition_animation_scale 0
 adb shell settings put global animator_duration_scale 0
 adb install -r "$root/mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk"
-adb logcat -c
 set +e
 bash "$root/mobile/scripts/visual-capture.sh" android "$ANDROID_SERIAL" "$artifacts"
 result=$?
 set -e
-adb logcat -d > "$artifacts/logcat.log"
 exit "$result"

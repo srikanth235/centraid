@@ -146,7 +146,7 @@ struct TodoDetailView: View {
                     }
                 }
                 .padding(.vertical, 8)
-                .background(Theme.color("bgRaised", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+                .background(Theme.color("bgElev", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .padding(.vertical, 8)
                 AgendaAttachmentCard(value: detail.attachments, send: { change in send(event { $0.attachment = change }) }, open: open)

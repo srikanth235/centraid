@@ -152,7 +152,7 @@ internal fun MoneyBar(fillBp: Int, tickBp: Int, over: Boolean, spokenWords: Stri
             Modifier
                 .fillMaxWidth(fillBp.coerceIn(0, BP) / BP.toFloat())
                 .height(6.dp)
-                .background(centraidColor(if (over) "errorFill" else "moneyFill")),
+                .background(centraidColor(if (over) "dangerFill" else "moneyFill")),
         )
         if (tickBp > 0) {
             Row(Modifier.fillMaxWidth().height(6.dp)) {

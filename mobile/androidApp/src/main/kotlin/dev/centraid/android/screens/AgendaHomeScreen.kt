@@ -837,7 +837,7 @@ private fun AgendaGrid(
                             if (kotlin.math.abs(drag) > 80f) onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = if (drag < 0f) grid.next_days else grid.previous_days)))
                         })
                     }) {
-                        if (panel.title.isNotEmpty()) Text(panel.title, style = centraidType("section"), modifier = Modifier.semantics { heading() })
+                        if (panel.title.isNotEmpty()) Text(panel.title, style = centraidType("title"), modifier = Modifier.semantics { heading() })
                         panel.days.chunked(7).forEach { week ->
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                                 week.forEach { day ->
@@ -851,7 +851,7 @@ private fun AgendaGrid(
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                     ) {
                                         val ink = centraidColor(if (day.selected) "onAccent" else if (day.in_month) "text" else "textFaint")
-                                        Text(day.weekday, style = centraidType("meta"), color = ink)
+                                        Text(day.weekday, style = centraidType("annotLabel"), color = ink)
                                         Text(day.label, style = centraidType("bodyStrong"), color = ink)
                                         Box(Modifier.size(4.dp).clip(CircleShape).background(if (day.has_items) centraidColor("agendaText") else androidx.compose.ui.graphics.Color.Transparent))
                                     }
@@ -872,7 +872,7 @@ private fun AgendaGrid(
                 grid.hour_days.forEach { day -> item(key = day.day) { AgendaHourColumn(day, chrome, actions, onEvent, onOpen) } }
             }
             if (grid.hour_days.isEmpty() && grid.view_key != "year") data.days.forEach { day ->
-                item(key = "selected-${day.day}") { Column { Text(day.heading, style = centraidType("section")); day.items.forEach { AgendaGridItem(it, actions, onEvent, onOpen) } } }
+                item(key = "selected-${day.day}") { Column { Text(day.heading, style = centraidType("title")); day.items.forEach { AgendaGridItem(it, actions, onEvent, onOpen) } } }
             }
             if (data.import_source == centraid.core.v1.ImportSource.IMPORT_SOURCE_CALENDAR) {
                 item(key = "calendar-import") { OutlineButton(label = data.import_label, testTag = "kit-empty-import") { onEvent(AgendaHomeEvent(import_requested = AgendaHomeEvent.ImportRequested())) } }
@@ -886,11 +886,11 @@ private fun AgendaGrid(
 @Composable
 private fun AgendaHourColumn(day: AgendaHourDay, chrome: AgendaChrome, actions: AgendaTaskActions, onEvent: (AgendaHomeEvent) -> Unit, onOpen: (Route) -> Unit) {
     Column {
-        Text(day.heading, style = centraidType("section"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))
+        Text(day.heading, style = centraidType("title"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))
         day.all_day.forEach { AgendaGridItem(it, actions, onEvent, onOpen) }
         day.hours.forEach { slot ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(slot.label, style = centraidType("meta"), color = centraidColor("textSoft"), modifier = Modifier.width(48.dp))
+                Text(slot.label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.width(48.dp))
                 Column(Modifier.weight(1f).heightIn(min = 64.dp)
                     .combinedClickable(onClick = {}, onLongClick = { slot.create_route?.let(onOpen) }, onLongClickLabel = chrome.new_event)
                     .testTag("agenda-slot-${slot.key}")) {

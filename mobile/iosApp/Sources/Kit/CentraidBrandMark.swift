@@ -14,3 +14,19 @@ struct CentraidBrandMark: View {
             .accessibilityHidden(true)
     }
 }
+
+/// The Welcome app-icon tile uses the same 120-unit construction as the
+/// generated icon; the bare asset occupies its 76-unit inner viewport.
+struct CentraidBrandTile: View {
+    let size: CGFloat
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: size * 27 / 120)
+        CentraidBrandMark(size: size * 76 / 120)
+            .frame(width: size, height: size)
+            .background(Theme.color(scheme == .dark ? "brandDark_tile" : "brandLight_tile", scheme), in: shape)
+            .overlay(shape.strokeBorder(Theme.color("brandEdge", scheme), lineWidth: size * 1.5 / 120))
+            .accessibilityHidden(true)
+    }
+}

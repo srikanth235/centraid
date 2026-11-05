@@ -13,7 +13,7 @@ struct LockerCodeCard: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(row.label).centraidType("section").foregroundStyle(Theme.color("text", scheme))
+            Text(row.label).centraidType("title").foregroundStyle(Theme.color("text", scheme))
             codeLayout {
                 Text(row.revealed ? row.value : row.mask)
                     .centraidType("title").monospacedDigit().textSelection(.disabled)

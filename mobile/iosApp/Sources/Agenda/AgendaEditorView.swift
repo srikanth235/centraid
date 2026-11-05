@@ -420,7 +420,7 @@ private struct AgendaExtraField: View {
     @Environment(\.colorScheme) private var scheme
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(field.label).centraidType("meta").foregroundStyle(Theme.color("textSoft", scheme))
+            Text(field.label).centraidType("annotLabel").foregroundStyle(Theme.color("textSoft", scheme))
             if field.editText {
                 MachineTextField(placeholder: field.addPlaceholder, value: field.textValue, onEdit: changed)
                     .centraidType("body")

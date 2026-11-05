@@ -35,7 +35,7 @@ internal fun LockerCategories(categories: List<LockerCategory>, onPick: (LockerC
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         CentraidIcon(category.icon_key, tint = centraidColor("lockerText"), size = 26.dp)
                         Spacer(Modifier.weight(1f))
-                        Text(category.count_label, style = centraidType("section"), color = centraidColor("text"))
+                        Text(category.count_label, style = centraidType("title"), color = centraidColor("text"))
                     }
                     Text(category.label, style = centraidType("body"), color = centraidColor("text"))
                 }
@@ -49,7 +49,7 @@ internal fun LockerCategories(categories: List<LockerCategory>, onPick: (LockerC
 internal fun LockerCodeCard(row: LockerFieldRow, onVerb: (String) -> Unit) {
     Column(Modifier.fillMaxWidth().padding(KitGeometry.GUTTER).clip(RoundedCornerShape(KitGeometry.RADIUS))
         .background(centraidColor("bgElev")).padding(16.dp).testTag("locker-verification-code"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(row.label, style = centraidType("section"), color = centraidColor("text"))
+        Text(row.label, style = centraidType("title"), color = centraidColor("text"))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
             Text(if (row.revealed) row.value_ else row.mask, style = centraidType("title").copy(fontFamily = FontFamily.Monospace), color = centraidColor("lockerText"), modifier = Modifier.testTag("locker-value-${row.key}"))
             row.countdown?.let { LockerCountdownRing(it) }

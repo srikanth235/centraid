@@ -407,7 +407,7 @@ private struct TileCard: View {
                             .centraidType("smallStrong")
                             .foregroundStyle(Theme.color("text", scheme))
                         Text(tile.compactLabel)
-                            .centraidType("meta")
+                            .centraidType("annotLabel")
                             .foregroundStyle(Theme.color("textSoft", scheme))
                     }
                     .multilineTextAlignment(.center)

@@ -22,7 +22,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.HomeFirstLaunch
-import dev.centraid.android.kit.CentraidBrandMark
+import dev.centraid.android.kit.CentraidBrandTile
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
@@ -43,7 +43,7 @@ internal fun FirstLaunchScreen(gate: HomeFirstLaunch, onMake: () -> Unit, onRest
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
-            CentraidBrandMark(size = 104.dp)
+            CentraidBrandTile(size = 104.dp)
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(gate.title, style = centraidType("display"), color = centraidColor("text"), textAlign = TextAlign.Center,
                     modifier = Modifier.semantics { heading() })
@@ -69,6 +69,7 @@ internal fun FirstLaunchScreen(gate: HomeFirstLaunch, onMake: () -> Unit, onRest
             WordsControls(
                 primary = gate.make_label, primaryEnabled = true, secondary = gate.restore_label,
                 prefix = "first-launch", onPrimary = onMake, onSecondary = onRestore,
+                secondaryInk = "accentText",
             )
         }
     }

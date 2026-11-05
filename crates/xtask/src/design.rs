@@ -9,6 +9,7 @@ mod brand;
 mod catalog;
 mod fonts;
 mod mockups;
+mod native_roles;
 mod site;
 mod words;
 
@@ -105,6 +106,7 @@ pub fn generate(root: &Path, check: bool) -> Result<usize> {
     let tokens: Tokens = toml::from_str(&fs::read_to_string(root.join("design/tokens.toml"))?)
         .context("design/tokens.toml")?;
     tokens.validate()?;
+    native_roles::validate(root, &tokens)?;
     let mut out = Artifacts::default();
     let themes = [tokens.colors(false), tokens.colors(true)];
     for theme in &themes {

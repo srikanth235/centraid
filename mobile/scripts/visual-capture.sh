@@ -20,6 +20,7 @@ outcomes="$artifacts/outcomes.tsv"
 result=0
 profile=light-default
 driver_ready=0
+last_capture_passed=0
 trap 'node "$root/mobile/scripts/visual-report.mjs" "$platform" "$artifacts"' EXIT
 
 configure() {
@@ -49,7 +50,7 @@ capture() {
   local driver_option=--reinstall-driver
   if [ "$driver_ready" = 1 ]; then driver_option=--no-reinstall-driver; fi
   if ! maestro test "$driver_option" --device "$device" --format junit --output "$output/results.xml" \
-    --debug-output "$output/debug" --test-output-dir "$output/screenshots" \
+    --flatten-debug-output --debug-output "$output/debug" --test-output-dir "$output/screenshots" \
     -e "APP_ID=$app_id" -e "WIDGET=$widget" -e "CONTENT=$content" \
     "$root/mobile/maestro/visual/$flow.yaml" > "$output/maestro.log" 2>&1; then
     passed=0
@@ -65,6 +66,7 @@ capture() {
     fi
   fi
   printf '%s\t%s\t%s\n' "$profile" "$name" "$passed" >> "$outcomes"
+  last_capture_passed="$passed"
   if [ "$passed" = 1 ]; then
     driver_ready=1
     printf 'Visual capture %s / %s: PASS\n' "$profile" "$name"
@@ -98,9 +100,17 @@ else
 fi
 printf 'Public demo vault ready for %s\n' "$platform"
 
+# Every seeded case depends on the real Home opening. Keep this first Home
+# capture in the matrix count, and stop with its evidence if bootstrap fails.
+capture home home
+if [ "$last_capture_passed" != 1 ]; then
+  echo 'Seeded Home bootstrap failed; stopping dependent captures.' >&2
+  exit 1
+fi
+
 for variant in light-default dark-default light-largest dark-largest; do
   configure "$variant"
-  capture home home
+  if [ "$variant" != light-default ]; then capture home home; fi
   capture calendar widget agenda 'agenda-calendar-day-.*'
   capture reminders widget reminders 'agenda-task-row-.*'
   capture reminder-draft reminder-draft

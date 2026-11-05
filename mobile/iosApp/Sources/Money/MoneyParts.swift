@@ -337,7 +337,7 @@ struct MoneyBar: View {
             ZStack(alignment: .leading) {
                 Rectangle().fill(Theme.color("bgSunken", scheme))
                 Rectangle()
-                    .fill(Theme.color(over ? "errorFill" : "moneyFill", scheme))
+                    .fill(Theme.color(over ? "dangerFill" : "moneyFill", scheme))
                     .frame(width: width * fraction(fillBp))
                 if tickBp > 0 {
                     Rectangle()
@@ -812,7 +812,7 @@ struct MoneyCategoryRow: View {
                 if line.hasPlan_p {
                     GeometryReader { box in
                         Capsule().fill(Theme.color("bgSunken", scheme))
-                        Capsule().fill(Theme.color(line.over ? "errorFill" : line.colorKey, scheme))
+                        Capsule().fill(Theme.color(line.over ? "dangerFill" : line.colorKey, scheme))
                             .frame(width: box.size.width * CGFloat(line.progressBp) / 10_000)
                     }.frame(height: 5).accessibilityHidden(true)
                 }

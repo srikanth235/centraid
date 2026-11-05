@@ -841,14 +841,14 @@ private struct AgendaGridView: View {
             LazyVStack(alignment: .leading, spacing: 12) {
                 ForEach(Array(grid.panels.enumerated()), id: \.offset) { _, panel in
                     VStack(alignment: .leading, spacing: 8) {
-                        if !panel.title.isEmpty { Text(panel.title).centraidType("section").accessibilityAddTraits(.isHeader) }
+                        if !panel.title.isEmpty { Text(panel.title).centraidType("title").accessibilityAddTraits(.isHeader) }
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 4) {
                             ForEach(panel.days, id: \.day) { day in
                                 Button {
                                     send(AgendaEvents.make { $0.calendarDay = .with { $0.day = day.day } })
                                 } label: {
                                     VStack(spacing: 2) {
-                                        Text(day.weekday).centraidType("meta")
+                                        Text(day.weekday).centraidType("annotLabel")
                                         Text(day.label).centraidType("bodyStrong")
                                         Circle().fill(day.hasItems_p ? Theme.color("agendaText", scheme) : .clear).frame(width: 4, height: 4)
                                     }
@@ -902,11 +902,11 @@ private struct AgendaGridView: View {
 
     private func hourDay(_ day: Centraid_Core_V1_AgendaHourDay) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(day.heading).centraidType("section").padding(.horizontal, CentraidGeometry.pageMargin)
+            Text(day.heading).centraidType("title").padding(.horizontal, CentraidGeometry.pageMargin)
             ForEach(Array(day.allDay.enumerated()), id: \.offset) { _, item in gridItem(item) }
             ForEach(day.hours, id: \.key) { slot in
                 HStack(alignment: .top, spacing: 8) {
-                    Text(slot.label).centraidType("meta").frame(width: 48, alignment: .trailing)
+                    Text(slot.label).centraidType("annotLabel").frame(width: 48, alignment: .trailing)
                     VStack(alignment: .leading, spacing: 0) {
                         Divider()
                         ForEach(Array(slot.items.enumerated()), id: \.offset) { _, item in gridItem(item) }

@@ -15,7 +15,7 @@ import dev.centraid.android.theme.centraidColor
 
 @Composable
 internal fun AgendaAttachmentCard(value: AgendaAttachments, onEvent: (AgendaAttachmentEvent) -> Unit, onOpen: (Route) -> Unit) {
-    Column(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).background(centraidColor("bgRaised"), RoundedCornerShape(KitGeometry.RADIUS)).padding(vertical = 8.dp)) {
+    Column(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).background(centraidColor("bgElev"), RoundedCornerShape(KitGeometry.RADIUS)).padding(vertical = 8.dp)) {
         SectionHeader(SectionHead(title = value.heading))
         value.rows.forEach { row ->
             Row(verticalAlignment = Alignment.CenterVertically) {

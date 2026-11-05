@@ -10,7 +10,7 @@ struct FirstLaunchView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                CentraidBrandMark(size: 104)
+                CentraidBrandTile(size: 104)
                     .padding(.top, 36)
                 VStack(spacing: 8) {
                     Text(gate.title)
@@ -52,7 +52,8 @@ struct FirstLaunchView: View {
                     secondary: gate.restoreLabel,
                     prefix: "first-launch",
                     onPrimary: { store.sendHome(.make(.init())) },
-                    onSecondary: { store.sendHome(.restore(.init())) }
+                    onSecondary: { store.sendHome(.restore(.init())) },
+                    secondaryInk: "accentText"
                 )
                 .padding(.top, 12)
             }
