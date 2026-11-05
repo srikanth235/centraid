@@ -1,5 +1,5 @@
 //! REGRESSIONS from the eval's runtime issues
-//! (`experiments/toolchat/native/eval/runtime_issues.md`): one test per fix,
+//! (the runtime issues the Python eval found, #1044): one test per fix,
 //! named by the issue number there.
 
 mod common;

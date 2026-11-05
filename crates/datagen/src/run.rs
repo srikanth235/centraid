@@ -69,6 +69,8 @@ pub struct Generated {
     pub worlds: Vec<WorldInfo>,
     pub kept: Vec<Kept>,
     pub cells: BTreeMap<Cell, CellStat>,
+    /// Names the sampler had to number ("Recipes 2") because a kind's pool was spent.
+    pub name_fallbacks: usize,
 }
 
 /// Run stages 2 and 3 over the worlds of `config`.
@@ -208,6 +210,7 @@ pub fn generate_with(
                 }
             }
         }
+        out.name_fallbacks += sampler.name_fallbacks();
         out.docs.insert(world.id(), world.doc.clone());
         out.worlds.push(WorldInfo {
             id: world.id(),
@@ -460,6 +463,11 @@ pub fn report(catalog: &Catalog, grid: &Grid, generated: &Generated) -> String {
         .filter(|(_, s)| s.kept == 0)
         .map(|(c, _)| c)
         .collect();
+    let _ = writeln!(
+        out,
+        "\nnames numbered because a kind's name pool was spent: {}",
+        generated.name_fallbacks
+    );
     let _ = writeln!(
         out,
         "\nlive cells with no solvable intent: {}",

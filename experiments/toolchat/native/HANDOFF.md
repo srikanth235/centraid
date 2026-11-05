@@ -1,24 +1,21 @@
-# Handoff: the native tool task after phase 0 of iteration 4 (#1044)
+# Handoff: the native tool task after the Python data tooling was retired (#1044, #1171)
 
-This is the state on 2026-10-06, written for the next coding agent.
+The state on 2026-11-05, written for the next coding agent.
 
-- Evidence and numbers: [#1044](https://github.com/srikanth235/centraid/issues/1044).
-- How the task works (sets, the loop, layout): [`README.md`](README.md).
-- The runtime contract: [`SPEC.md`](SPEC.md).
+- Evidence and numbers: [#1044](https://github.com/srikanth235/centraid/issues/1044) (S2), [#1171](https://github.com/srikanth235/centraid/issues/1171) (datagen M3 to M7, and the retirement).
+- How the task works (data, layout, the loop): [`README.md`](README.md).
+- The runtime contract: [`SPEC.md`](SPEC.md). The slot trace: [`CONTRACT_V3.md`](CONTRACT_V3.md).
 
-## Hand-offs after the Tally removal ([#1099](https://github.com/srikanth235/centraid/issues/1099), [#1115](https://github.com/srikanth235/centraid/issues/1115))
+## What changed in #1171
 
-The runtime has no `debt`, `group`, `settle_up`, `settle_debt` or `balance`, and it has a read-only `transaction` kind. The 35 public train worlds, their authored sessions, the generators, the scorer, SPEC, CONTRACT_V3 and the authoring brief are regenerated without Tally, and `nativetools seed` refuses a world that still names a section it does not read. Everything that holds Tally and is not in the tree is in data-v7 on the Hub, so only the owner can finish it. Run these in order, from this directory, with `HF_TOKEN` and `NATIVETOOLS=../../../target/debug/nativetools`:
+The Python data tooling is gone: `authored/` (worlds, the ~450 session recipes, the generators, `build.py`, `gate.py`, `dist.py`, `coverage.py`, `park_oracle.py`), `render.py`, `runtime_think.py`, and `eval/` (`run.py`, `score.py`, `build_sets.py`, `regen.py`, `rollout.py`, the replay and the rest), with the `native-python` CI job. It is in git history, at the commit before the one that retired it.
 
-1. `python3 artefacts.py fetch` brings data-v7 (the held-out sources, sets and worlds; the public worlds are rebuilt from the builders in the tree).
-2. The held-out world builders (`authored/worlds/{T03,T12,T23}_build.py`, `eval/worlds/{E,F,G}_build.py`, `eval/worlds/build_worlds.py`, which builds A to D): `python3 authored/untally.py builders FILE ...`, then read the lines it lists as left for the author (prose, shape checks), run each builder and `python3 artefacts.py format` its output.
-3. The held-out sessions (`authored/sessions/{T03,T12,T23}*.py`, the 18 val-world files, and the A to D sources their author keeps): `python3 authored/untally.py sessions --worlds-dir DIR FILE ...`, where `DIR` holds the world JSON as data-v7 has it (`worlds/` of the fetched version). It drops every session that names a removed row, kind, verb or op.
-4. `python3 eval/regen.py refreeze` for val and test on the current runtime, then the steps in README "Data versions" (1 to 3): the sets lose the sessions that were about debts and groups, and `eval/FROZEN.md` records the new hashes. `FIXES` in `eval/regen.py` no longer carries a hand correction that names a debt or a group.
-5. `python3 artefacts.py verify-heldout`: it fails on `collide.TARGETS` until they are measured again on the rebuilt eval worlds A to D (`collide.measured_targets`), because the containers they count no longer include groups.
-6. The train build: `authored/build.py` per world, `authored/gen/drills.py gen`, `authored/assemble.py`, the rollout screen set (`eval/sets/roll-screen.jsonl`, whose worlds hold Tally too), and `data/README.md` with the new counts and hashes. `authored/golden_v3.json` is left as it was: 117 of its 871 shapes name a debt or a group, and `crates/nativetools/tests/think.rs` and `authored/test_trace.py` compile every one of them. It is generated from the r1 train corpus, not from what the tree builds today: the build of the 35 public worlds (`trace3_check.py golden` over it) gives 1,136 shapes of which 215 of the old ones are absent, 144 of those without a word of Tally (the shapes of the older think form, `set: kind = ...` inside `args`). Decision for the owner: (A) regenerate it from the data-v8 corpus with `trace3_check.py golden` then `golden4`, which drops those 144 shapes and the compile tests that go with them; (B) keep the 144 as a separate frozen fixture that says what it is, and regenerate the rest. Recommendation: B, because the compiler still accepts the older form and the tests are the only thing that says so.
-7. `python3 artefacts.py rehash`, then `NATIVETOOLS=... python3 artefacts.py version --out DIR --train NAME=TRAIN,VAL --parent data-v7 ...`, `python3 artefacts.py publish DIR --tag data-v8`, `python3 artefacts.py pin COMMIT`; commit `artefacts.json`.
-
-No model has been trained or scored on the `transaction` kind, and the shipped model is the one trained on the card with `debt` and `group`: a retrain on data-v8 is the first measurement of the new card.
+- **The data**: `cargo run -p centraid-datagen -- build --version vN` is the only way to make a data version (`crates/datagen/README.md`). The records carry their rendered token ids and loss weights.
+- **The eval**: `crates/assist-eval` scores a set and cuts rollouts, RFT records and DPO pairs (`crates/assist-eval/README.md`). It reads data-v7's val set and worlds from `data/v7/`, which `artefacts.py fetch` fills.
+- **The trainer**: `train/train.py` reads datagen's records only. The legacy format (`messages`, the v3.1 slot trace, decision, hard and copy tokens) is no longer read, so **a data-v7 training file cannot be trained on any more**; it is kept for reference. DPO reads `{id, chosen, rejected}` pairs of datagen records, which is what `assist-eval rollout-records` writes.
+- **The GCP VM** (`train/vm/`) only trains. Its scoring half (the python eval driver on a VM) went with the eval; score a checkpoint with `train/to_gguf.py` and `assist-eval`, or on Kaggle (`train/kaggle/`).
+- **Gone with it, not replaced**: the proof that a parked write shows what a run shows over the authored sessions (`park_oracle.py`, R-1088-6; `crates/nativetools/tests/park.rs` still holds every `(verb, kind)` of the table to a real vault), the held-out checks of `artefacts.py verify-heldout`, the Tally migration helper (`untally.py`), and the plan for a v8 test set (test world-disjoint from val).
+- `crates/nativetools/tests/golden_v3.json` (871 call shapes, 117 of them naming a debt or a group) stays as the compiler's regression set. `nativetools think` still serves the `render`, `render_many` and `call_text` ops the Python renderer used; nothing calls them now.
 
 ## Where it stands
 
@@ -33,72 +30,32 @@ No model has been trained or scored on the `transaction` kind, and the shipped m
   - It adds ruling 1, N1 to N6, N9, R1 to R5 and N1b (D-1044-16).
   - The S2 replay on nt15 loses 11 sessions, and all of them are renumbering artefacts. nt15's new vault lines shift `#n` handles, which the recorded model text still points at. It gains 14 turns for real.
   - **No model has been scored live on nt15.** nt15 also adds `body+` to the system prompt's `act` line, which S2 never trained on. The live score is the first thing to measure (step 1).
-- **Val v7.4** (`eval/sets/val.jsonl`, sha256 `5d3d9035…`) is the nt15 refreeze. 128 accepts were added and none removed; lineage and hashes are in `eval/FROZEN.md`.
-  - `build_sets.py check` accepts the hashes. It still lists 9 structural failures that belong to the deferred test redesign (test is held out of val's worlds whole, e2 origins). Those were in the tree before this phase.
+- **Val v7.4** (`data/v7/val.jsonl`, sha256 `5d3d9035…`) is the nt15 refreeze. 128 accepts were added and none removed; lineage and hashes are in `data/v7/FROZEN.md`.
   - **Test is not refrozen or scored on the phase-7 runtime** (owner deferred).
-- **Noise protects every word the runtime reads in a message** (`authored/noise.py`, 2026-10-08). That includes the nt14 and nt15 words `work`, `works`, `free`, `busy`, `available` and `throughout`, and the cue words `least`, `amount`, `effort` and `work` of `eval/regen.py`'s `SUPERLATIVE`. The two `Lexicon` tests of `authored/test_noise.py` pass, and `run_cpu_tests.py` tolerates no red test.
-  - The next train build's noise pass leaves those words alone, so its augmented sessions can differ from the ones S2 trained on. Val and test gold and the current model are unchanged.
 - 82 % is a val number: every fix, ruling and soup choice was derived on val. Expect test lower until it is scored.
 - **The branch is on main** (`f5487678`, #1080) **plus #1078's on-device chat** (the `ios-app-simulator-aaef2f` branch), merged 2026-10-07. Main wins every overlap; the record is on #1044.
   - `crates/nativetools` is ported to main's APIs. Harness worlds seal Locker cells under a fixed `HARNESS_LOCKER_KEY` (`crates/nativetools/src/vaultio.rs`) and name the generation through `Vault::locker_generation`, because the phone derives `K` from the 24 words.
-  - Decoding is free and the grammar path is gone (D-1044-18, 2026-10-07): no `hard`/`soft` modes, no Lark exports, no llguidance, no llama.cpp arm. `free` is the only arm `bundle.py` and `kernel.py` accept, and `NATIVE_DECODING`, `NATIVE_LARK`, `NATIVE_SOFT_THRESHOLD` and `NATIVE_HANDLES` are refused. Free decoding was shown token-identical before and after the cut on the base model (CPU), and val v7.4 refreezes byte-identical on the cut runtime.
+  - Decoding is free and the grammar path is gone (D-1044-18, 2026-10-07): no `hard`/`soft` modes, no Lark exports, no llguidance, no llama.cpp arm. `free` was the only arm of the Python rig, and `NATIVE_DECODING`, `NATIVE_LARK`, `NATIVE_SOFT_THRESHOLD` and `NATIVE_HANDLES` are refused. Free decoding was shown token-identical before and after the cut on the base model (CPU), and val v7.4 refreezes byte-identical on the cut runtime.
   - Everything S2 does not depend on is gone from the branch (2026-10-07, D-1044-17): the canonical-English harness (`crates/evalsuite`, `crates/evalworld`, `crates/candidates`, `experiments/canon-model`, the `joined-*.jsonl` corpora and its manifest, registry and command declarations), the earlier toolchat rounds `v2` to `v8` and their scripts, and the `afm-spike`, `frontier-probe`, `qwen-mobile` and `qwen-sanity` experiments. They remain in history (`69d89575f` and earlier); #1044 lists them.
   - Val v7.4 refreezes byte-identical on the merged runtime.
   - #1078's product assistant (`crates/assist`, `crates/assist-llama`, `crates/core/src/assist`) is a separate, read-only tool registry of 18 `<app>.<verb>` reads over llama.cpp. Wiring this task's model and its 8 tools into it is integration work that has not started.
 
-## What phase 0 built (all CPU, all tested)
+## Next steps
 
-| piece | where | what it is for |
-| --- | --- | --- |
-| Hard-core audit | #1044; owner rulings in D-1044-16 | the 63 sessions every model fails: model-hard 44, runtime 12, conventions 5, gold 2 |
-| Skill sessions | `authored/sessions/<W>_k1.py`, 21 train worlds, ids `<W>-K###`, tag `i3skill S<n>` | 355 verified sessions for the seven model-hard skills (referent, units/windows, read vs write, no invention, decline after a miss, vocabulary, look then pick). They are in the normal train build from now on. |
-| Fresh prompts + screen set | `eval/sets/roll-screen.jsonl` (2,869 sessions: 2,514 fresh rewordings of train-world messages, new to training, plus the 355 skill sessions) | prompts S2 has never seen, for rejection sampling |
-| Rollout driver | `eval/rollout.py`, `eval/test_rollout.py`; README "Rollouts" | `sets` (screen set; sample set of k copies `<id>-s<k>` of failures and of a seeded fraction of passes) and `export` (RFT records in train.jsonl format, DPO pairs `{id, chosen, rejected}` placed on the first failing turn) |
-| Bundle options | `train/bundle.py`, `train/vm/bundles.sh`: `BUNDLE_WORLDS`, `BUNDLE_EVAL_ENV` | rollout sets were built on the collision worlds (`regen/worlds`, in GCS), so the bundle must ship them. Sampling (`NATIVE_SAMPLE=1`) goes only in the sample bundle. |
-| Continuation + DPO | `train.py --dpo PAIRS [--dpo-beta 0.1 --dpo-sft 0.2]`, `bundle.py --continue-from gs://CKPT` (1 epoch, lr 4e-6, min-lr 0.05, warmup 0.02, EMA 0.999), `train/test_dpo.py` | DPO with the reference log-probs computed once before training (no second model on the GPU). **The DPO path has not run on a GPU yet**: its memory probe is CUDA-only. |
-| Retry on a runtime signal | `eval/run.py`, `eval/run_batched.py`: `NATIVE_RETRY=1` (`NATIVE_RETRY_MAX`) | resample once on an error, refusal or empty reply, excluding the failed call; off by default |
-| Scoring options | `train/vm/score_ckpt.sh --fast-kernels`, `--dtype` | opt-in; defaults unchanged |
-| Gold conventions | `eval/regen.py`: `decline-any-reason` (N7), `superlative` widened (G1), `after-series-ask` (G2); SPEC §14.1 C1 to C6 |  |
-
-## Next steps, in order (each paid step needs the owner's go; costs are estimates)
-
-1. **Score S2 live on val v7.4 / nt15** (~$1, ~15 min).
-   - The bundle is built locally at `/dev/shm/stage15/bundles-nt15/val`, but that path does not survive a new container. To rebuild it: `BUNDLE_NATIVETOOLS=<nt15 binary> BUNDLE_STAGE=/dev/shm/stage15 BUNDLES_DIR=/dev/shm/stage15/bundles-nt15 ./bundles.sh --sets val`. Build the binary with `cargo build --release -p centraid-nativetools`.
-   - Score it: `BUNDLES_DIR=/dev/shm/stage15/bundles-nt15 BUNDLE_STAGE=/dev/shm/stage15 JOB=p7-i2e4 BUCKET=centraid-train-clawgnition STREAM=0 ./score_ckpt.sh gs://centraid-train-clawgnition/soups/soup2 --name soup2-nt15-v74 --sets val --bundles-prefix bundles-nt15 --watch`.
-   - Compare it paired against S2's nt12 run rescored on v7.4 (541). If nt15's prompt change costs more than it fixes, stop and bring it to the owner.
-2. **Screen** (~$2): S2 greedy over `roll-screen`. The bundle needs `BUNDLE_WORLDS=<regen/worlds>`; use `--new-vm` and a fresh `--name`. The exact commands are in README "Rollouts".
-3. **Sample** (~$5–9): `rollout.py sets --sample --screen-report …` (k 6, frac 0.3), with a bundle built with `BUNDLE_EVAL_ENV='{"NATIVE_SAMPLE": "1"}'`.
-4. **Export** (CPU): `rollout.py export … --worlds <regen/worlds>`, using the same nt15 binary that scored. Report the RFT record and pair counts before training.
-5. **RFT continuation** of S2 (~$3–5): `bundle.py --continue-from gs://…/soups/soup2` on the verified rollouts plus the skill sessions plus a replay slice of the i2 train data, about 6–8k sessions or ~15M tokens. Score both the final checkpoint and its `-ema` twin. Then soup the result with S2 if that helps (`train/soup.py`, CPU, ~$1 to score).
-6. **DPO** (~$2–3) on the best model so far, with the exported pairs. Check GPU memory on the first steps.
-7. **Retry** (~$1): score the best model once with `NATIVE_RETRY=1` in the eval env.
-8. **Freeze test and score it** before any milestone claim.
-9. Later levers, if ~88 % stalls:
-   - a second run on another data mix, as a new soup member;
-   - fast kernels in training, which makes two runs per release affordable;
-   - then 1.7B.
-
-Expected from steps 5–7: about 86–88 % on val (RFT +2–4 points, DPO +1–3, retry +0.5–1). Every claim needs a paired comparison.
+Per #1171, in order: M6 (the three SFT arms on Kaggle, scored with `assist-eval` against the S2 baseline; the Kaggle eval kit first, which has never been run), then M7 (rollouts and a second RFT/DPO round). Each paid step needs the owner's go. S2's GGUF is public: `srikanth235/centraid-native-gguf@s2-q4_0`.
 
 ## Open owner questions (none applied)
 
 1. A bare perfect tense ("how many times has tobi had football training") as a window to today. Today it is "trace unsourced", so it stays under-trained. Recommend yes: a gold and runtime change for nt16.
 2. Series-ask options in date order, upcoming first (B-E093). Recommend yes, display only.
-3. `regen.is_messaging` does not read "remind her about it" or "remind jordan about the rent". Gold is already right; only the train rewrite misses them.
-4. Optional: warn when a task is created with a past due date (an N5 side effect in test-B-075).
-5. D-E043 t3 ("how many do i have a cadence for" after a count) counts everyone, not the set just counted. Narrowing it would be a val reword; recommend leaving it.
-6. Kept as built unless the owner says otherwise:
+3. Optional: warn when a task is created with a past due date (an N5 side effect in test-B-075).
+4. Kept as built unless the owner says otherwise:
    - R3d's menu-fairness rule is narrowed to words of 4+ letters for containers and 5+ letters for whole words. The broad version changed 1,214 of 5,523 train vault lines.
    - R1s is on in every mode.
 
 ## Where everything is
 
-**In the repo** (this commit):
-
-- runtime: `crates/nativetools`;
-- data tools: `authored/`;
-- eval: `eval/`, including `replay.py`, `regen.py refreeze` and `rollout.py`;
-- trainer: `train/`, including `train.py --ema --dpo`, `soup.py`, `bundle.py` and `vm/`.
+**In the repo**: the runtime (`crates/assist/src/native`, `crates/nativetools`), the data builder (`crates/datagen`), the eval (`crates/assist-eval`), and the trainer (`train/`).
 
 **In GCS** (`gs://centraid-train-clawgnition`, project `centraid`):
 
@@ -106,30 +63,20 @@ Expected from steps 5–7: about 86–88 % on val (RFT +2–4 points, DPO +1–3
 | --- | --- |
 | `soups/soup2/` (`soup1/`, `soup3/`) | S2 and its siblings, plain checkpoints |
 | `p7-r3/avg/ckpt-avg/`, `p7-i2e4/avg/ckpt-avg/`, `p7-r2/out/ckpt-100/` | S2's three members |
-| `p7-i2e4/job/bundle.dat` | the i2 bundle: code, runtime, and the train data as trained (the replay slice for step 5) |
-| `score/<name>/` | every scoring run |
-| `i3-backup/phase7/` | the scratch tree of iterations 1–3, including `regen/worlds` (the collision worlds the rollout sets need). **Val runs and gold are inside: never give them to a data author.** |
+| `p7-i2e4/job/bundle.dat` | the i2 bundle: code, runtime, and the train data as trained (legacy format) |
+| `score/<name>/` | every scoring run of the Python rig |
+| `i3-backup/phase7/` | the scratch tree of iterations 1 to 3. **Val runs and gold are inside: never give them to a data author.** |
 
-**Only in the session scratch** (`$S/phase7/p0/`, about 38 MB), not yet backed up:
-
-- the fresh-prompt sources (`fresh_new/`, 2,856 sessions);
-- their nt15 gold (`built/`, `built-k1/`);
-- the audit reports (`audit/`, which quote val);
-- the briefs. The screen set in the repo carries what steps 2–4 need. Back these up to `gs://…/p0-backup/` on the owner's go, or they are lost with the container.
-
-**Infrastructure.** Scoring and training run on GCP Spot via `train/vm/`; see `README.md` there.
+**Infrastructure.** Training runs on GCP Spot via `train/vm/` (see its README) or on Kaggle (`train/kaggle/`).
 
 - Log in with the service account: `cd train/vm; unset CLOUDSDK_AUTH_ACCESS_TOKEN; source ./common.sh; sa_login`.
 - The VM `ct-train-p7-i2e4` (us-central1-a) is TERMINATED with its disk kept.
-- After scoring, stop it explicitly: `gcloud compute instances remove-metadata ct-train-p7-i2e4 --zone us-central1-a --keys=mode,manifest --project centraid`, then `gcloud compute instances stop ct-train-p7-i2e4 --zone us-central1-a --project centraid --discard-local-ssd=true --quiet`.
 - Modal is not reachable from the cloud sandbox: its API is gRPC, which the proxy does not carry.
 
-## Known failing checks (not this phase's; fix or rule)
+## Known gaps
 
-- `eval/test_loop.py` and `eval/test_retry.py` need seeded vaults: run them with `EVAL_VAULTS` pointing at `seed_worlds.py --vaults` output.
-- `eval/build_sets.py check`: the 9 structural test-redesign failures above.
-- `data/README.md` says AMB drills are never kept. That predates the composed ask and should be re-checked against a train build.
-- Run the trainer tests from inside `train/` (`python -m unittest test_batching`). From the parent folder, `import train` resolves to the package and three `test_batching` tests error.
+- `assist-eval` was never run against a real model; the Kaggle kits (`crates/assist-eval/kaggle/`, `train/kaggle/`) were never run.
+- The GPU path of the trainer (`train/train.py` on CUDA, the DPO memory probe) has run on CPU tests only. Run the trainer tests from inside `train/` (`python -m unittest test_datagen`), or all of them with `python3 run_tests.py`.
 
 ## Rules the owner set (keep them)
 
@@ -139,7 +86,7 @@ Expected from steps 5–7: about 86–88 % on val (RFT +2–4 points, DPO +1–3
   - Never use `--no-verify` without asking.
   - Run `cargo xtask gate --profile local` before a commit.
 - Ask before any training launch, GPU scoring run, VM start or bucket upload. Stop VMs when done.
-- Subagents are Sonnet only. **Authors of training data never open val/test gold, run outputs or the audit reports** (`eval/sets/val.jsonl`, `eval/sets/test.jsonl`, `score/`, `i3-backup/`, `p0/audit/`). Runtime agents don't either, and none of them use git.
+- Subagents are Sonnet only. **Authors of training data never open val/test gold, run outputs or the audit reports** (`data/v7/val.jsonl`, `data/v7/test.jsonl`, `score/`, `i3-backup/`, `p0/audit/`). Runtime agents don't either, and none of them use git.
 - Test is scored only at milestones; every fix is derived on val.
 - Never save credentials; use environment variables only. A credential posted in chat is to be rotated, not used.
 - Back every claim with a paired comparison: sessions won and lost, z = (w − l)/√(w + l). |z| < 2 is noise.

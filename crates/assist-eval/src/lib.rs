@@ -4,7 +4,7 @@
 //! model's message for the prompt `centraid_assist::native_turn::log::Log` renders (the phone's
 //! `decode_step`, over any `Model`), the runtime (`centraid_assist::native::Session`) executes it over a private
 //! copy of the world's vault, and the turn is judged by its EFFECT, never by call text (SPEC §10). This is
-//! `experiments/toolchat/native/eval/{run,score,metrics,slices}.py` in Rust, plus what #1166 asks of stage 10:
+//! the retired Python rig (`eval/{run,score,metrics,slices}.py`, #1171) in Rust, plus what #1166 asks of stage 10:
 //! tool accuracy, accuracy per argument (rows, date, filters, amount) and fail rate by constraint count.
 //!
 //! | module | is |
@@ -17,6 +17,7 @@
 //! | [`args`] | constraint count and per-argument agreement (new in Rust) |
 //! | [`run`] | the replay loop |
 //! | [`report`] | the JSON report and the text summary |
+//! | [`rollout`] | k sampled decodes per session, rollout reports and their comparison, RFT records and DPO pairs (#1171, M7) |
 
 #![forbid(unsafe_code)]
 
@@ -25,6 +26,7 @@ pub mod effect;
 pub mod gold;
 pub mod judge;
 pub mod report;
+pub mod rollout;
 pub mod run;
 pub mod source;
 pub mod tally;

@@ -2,25 +2,24 @@
 # run_job.sh: the training VM's startup-script AND shutdown-script (launch.sh passes this one file for both). Idempotent: it
 # runs on EVERY boot and does only what is not finished yet. All state is in gs://$BUCKET/$JOB/ and on the boot disk (/opt/centraid).
 #
-#   gs://$BUCKET/$JOB/job/      the staged job: bundle.dat (or bundle.tar.gz), job.json, kernel.py  (bundle.py's data/ + kernel/)
+#   gs://$BUCKET/$JOB/job/      the staged job: bundle.dat (or bundle.tar.gz), job.json  (bundle.py's data/)
 #   gs://$BUCKET/$JOB/out/      mirror of train.py --out: ckpt-025/050/075/100, FINAL, marks.json, best.json, train_meta.json, the newest resume-step-NNNNNN/,
 #                               and train.py's own DONE (training finished)
-#   gs://$BUCKET/$JOB/logs/     supervisor, trainer and scoring logs (one file per boot), pip-freeze.txt
-#   gs://$BUCKET/$JOB/results/  the kernel's scoring outputs: eval/<arm>/report.md|json, summary.json, run.log
-#   gs://$BUCKET/$JOB/DONE      written LAST, when training and scoring are finished (JSON); watch.sh stops on it. FAILED: gave up.
+#   gs://$BUCKET/$JOB/logs/     supervisor and trainer logs (one file per boot), pip-freeze.txt
+#   gs://$BUCKET/$JOB/DONE      written LAST, when training is finished (JSON); watch.sh stops on it. FAILED: gave up.
+#
+# This VM trains and nothing else. Export (train/to_gguf.py) and scoring (crates/assist-eval) run elsewhere, on the checkpoint fetched from out/.
 #
 # Boot flow: GPU up -> pull job -> venv with the pinned deps -> unpack -> pull out/ (only on a fresh disk) -> train under nohup with
 # `--save-every N --resume` (same command every boot; the trainer continues from the newest complete resume checkpoint) while syncing
-# --out to the bucket every SYNC_INTERVAL s -> on DONE: score with kernel.py (eval-only mode on the final checkpoint) -> upload ->
-# write DONE -> power off. A stage whose marker exists is skipped.
+# --out to the bucket every SYNC_INTERVAL s -> on DONE: upload -> write DONE -> power off. A stage whose marker exists is skipped.
 #
 # Shutdown/preemption: as the shutdown-script this file detects the shutdown (systemd 'stopping' or instance/preempted), SIGTERMs the
 # trainer (which writes a resume checkpoint at its next step boundary if its --term-grace allows, then exits 0 with out/PREEMPTED)
 # and does one quick best-effort sync (the ~30 s notice is far too short to upload a multi-GB resume checkpoint: the periodic sync is
 # what protects the run if the disk is lost).
 #
-# Metadata (set by launch.sh): job, bucket, save_every, sync_interval, epochs, train_hours, max_restarts, [python], [fla_spec], [mode=probe|score, manifest=gs://... (score)],
-# [score_mark=best|<mark>: overrides gs://$BUCKET/$JOB/score_mark, which picks the checkpoint the job scores after training (see score_mark() below)].
+# Metadata (set by launch.sh): job, bucket, save_every, sync_interval, epochs, train_hours, max_restarts, [python], [fla_spec], [mode=probe].
 set -uo pipefail
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1 DEBIAN_FRONTEND=noninteractive
 
@@ -48,8 +47,6 @@ CODE=$BASE/code
 OUT=$BASE/out
 JOBDIR=$BASE/job
 LOGDIR=$BASE/logs
-SCORE_W=$BASE/score
-SD=$BASE/score-input
 export HF_HOME=$BASE/hf
 mkdir -p "$STATE" "$LOGDIR" "$OUT" "$JOBDIR" "$HF_HOME"
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
@@ -59,8 +56,8 @@ TRAINLOG=$LOGDIR/train-$STAMP.log
 say() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$SUPLOG"; }
 retry() { local n=$1 i; shift; for i in $(seq 1 "$n"); do "$@" && return 0; sleep $((i * 5)); done; return 1; }
 
-# Live stream: GCE keeps serial port 1 (the startup-script output already lands there) and `follow.sh` / `watch.sh` / `score_ckpt.sh --watch`
-# read it every few seconds, so trainer and kernel logs reach the operator while they are written, not at the next bucket sync.
+# Live stream: GCE keeps serial port 1 (the startup-script output already lands there) and `follow.sh` / `watch.sh` 
+# read it every few seconds, so the trainer log reaches the operator while they are written, not at the next bucket sync.
 # console_follow FILE TAG mirrors FILE line by line to the console as "[TAG] line" (progress bars' \r become newlines, lines cut at 300
 # chars); idempotent per file, dies with this script. console_unfollow FILE lets the last lines out first, then stops the mirror.
 # A slow console only delays the mirror (it is a pipe from tail), never the job. CONSOLE=/dev/null (or unwritable) turns it off.
@@ -169,7 +166,6 @@ graceful_stop() {
 # ---- shutdown-script mode ------------------------------------------------------------------------------------
 if shutting_down; then
   say "shutdown hook (preempted=$(md instance/preempted))"
-  [ "$MODE" = score ] && exit 0   # a scoring VM has no trainer and no out/ to sync
   [ -f "$STATE/final.done" ] || graceful_stop
   exit 0
 fi
@@ -257,8 +253,8 @@ PY
   ) || return 1
   read -r tr lora <<<"$info"
   # The Modal image's pins (modal_run.py): torch 2.8.0 (PyPI's default wheel is CUDA 12.8) + these, installed in one command;
-  # transformers comes from the staged job.json (kernel.py installs the same pin); peft only for --lora (kernel.py).
-  pins=(torch==2.8.0 numpy huggingface_hub sentencepiece protobuf packaging wheel setuptools "transformers==$tr" "$FLA_SPEC")
+  # transformers comes from the staged job.json; peft only for --lora.
+  pins=(torch==2.8.0 numpy zstandard huggingface_hub sentencepiece protobuf packaging wheel setuptools "transformers==$tr" "$FLA_SPEC")
   [ "$lora" = 1 ] && pins+=(peft)
   key=$(printf '%s ' "${pins[@]}" | md5sum | cut -c1-12)
   if [ -f "$STATE/deps-$key.ok" ] && [ -x "$VENV/bin/python" ]; then return 0; fi
@@ -296,9 +292,6 @@ extract_code() {
   rm -rf "$CODE"
   mkdir -p "$CODE"
   tar -xzf "$b" -C "$CODE" || return 1
-  # nativetools was linked against the builder's glibc: run it through the shipped loader, as kernel.py does
-  printf '#!/bin/sh\nexec "%s/lib/ld-linux-x86-64.so.2" --library-path "%s/lib" "%s/bin/nativetools.bin" "$@"\n' "$CODE" "$CODE" "$CODE" >"$CODE/bin/nativetools"
-  chmod 755 "$CODE"/lib/* "$CODE/bin/nativetools" "$CODE/bin/nativetools.bin"
   touch "$STATE/code.ok"
 }
 
@@ -330,13 +323,13 @@ pull_init() {
   touch "$STATE/init.pulled"
 }
 
-# the kernel's train command (kernel.py step 3), plus this script's resume flags. $1 = train | probe. One argument per line.
+# the trainer command of the job, plus this script's resume flags. $1 = train | probe. One argument per line.
 build_train_args() {
   "$VENV/bin/python" - "$JOBDIR/job.json" "$1" "$OUT" "$TRAIN_HOURS" "$SAVE_EVERY" "$EPOCHS" "${PROBE_STEPS:-24}" "$INIT_DIR" <<'PY'
 import json, sys
 job = json.load(open(sys.argv[1]))
 mode, out, hours, save_every, epochs, probe_steps, init_dir = sys.argv[2:9]
-a = ["--model", init_dir if job.get("init") else job["model"], "--train", job["train"], "--tools", "export/tools-sig.json", "--out", out, "--hours", hours]
+a = ["--model", init_dir if job.get("init") else job["model"], "--train", job["train"], "--out", out, "--hours", hours]
 if job.get("val"):
     a += ["--val", job["val"]]
 if job.get("test"):
@@ -369,7 +362,7 @@ start_trainer() { # $1 = log file, $2 = extra env (NAME=value), rest = args
   console_follow "$log" train
   (
     cd "$CODE" || exit 1
-    exec nohup env NATIVETOOLS="$CODE/bin/nativetools" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false HF_HOME="$HF_HOME" ${extra:+"$extra"} \
+    exec nohup env PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false HF_HOME="$HF_HOME" ${extra:+"$extra"} \
       "$VENV/bin/python" train/train.py "$@"
   ) >>"$log" 2>&1 9>&- &
   TRAINER_PID=$!
@@ -421,153 +414,15 @@ run_training() {
   done
 }
 
-# The checkpoint the job scores after training. Default: the one out/FINAL names (ckpt-100, or ckpt-final when the budget cut the run).
-# The job's object gs://$BUCKET/$JOB/score_mark (launch.sh --score-mark writes it; instance metadata `score_mark` or env SCORE_MARK override
-# it) overrides it: `best` is the mark out/best.json names (train.py writes it at every mark: the lowest val decision loss, ties to the later
-# mark), anything else is a mark's own name (ckpt-050). A `best` with no usable best.json (a run without --val, no mark reached) falls back
-# to FINAL with a WARN line. The owner decides at launch, or any time before scoring starts (it is read when scoring begins, so it holds
-# across preemptions, restarts and --recreate); ckpt-100 stays the default.
-requested_mark() {
-  local v=${SCORE_MARK:-$(attr score_mark)}
-  [ -n "$v" ] || v=$(gcs cat "$GS/score_mark" 2>/dev/null | tr -d '[:space:]')
-  echo "${v:-final}"
-}
-final_mark() { tr -d '[:space:]' <"$OUT/FINAL" 2>/dev/null; }
-best_mark() {  # the mark best.json names, when that checkpoint is on this disk
-  local m
-  m=$("$VENV/bin/python" -c 'import json, sys; print(json.load(open(sys.argv[1]))["mark"])' "$OUT/best.json" 2>/dev/null) || return 1
-  [ -n "$m" ] && [ -f "$OUT/$m/config.json" ] && echo "$m"
-}
-score_mark() {  # prints the checkpoint dir name (in $OUT) that scoring takes
-  local m want
-  want=$(requested_mark)
-  case $want in
-    final) final_mark ;;
-    best) if m=$(best_mark); then echo "$m"; else say "WARN: score_mark=best, but $OUT/best.json names no checkpoint on this disk: scoring $(final_mark) instead" >&2; final_mark; fi ;;
-    *) echo "$want" ;;
-  esac
-}
-
-# Scoring = kernel.py's eval stage. kernel.py is used as shipped: a copy of job.json with `train` null and the final checkpoint
-# presented the way it already accepts an eval-only checkpoint (ckpt_prefix + ckpt_files, symlinked into the input dir).
-run_scoring() {
-  [ -f "$STATE/score.done" ] && { say "scoring already finished"; return 0; }
-  local final ckdir b="" f rc
-  final=$(score_mark)
-  ckdir=$OUT/$final
-  [ -n "$final" ] && [ -d "$ckdir" ] || fail_job "training is DONE but the checkpoint to score '$final' (score_mark $(requested_mark)) is missing in $OUT"
-  [ -f "$JOBDIR/kernel.py" ] || fail_job "$GS/job/kernel.py is missing (upload bundle.py's kernel/kernel.py)"
-  for f in bundle.dat bundle.tar.gz; do [ -f "$JOBDIR/$f" ] && b=$f && break; done
-  rm -rf "$SD" "$SCORE_W"
-  mkdir -p "$SD" "$SCORE_W"
-  ln -s "$JOBDIR/$b" "$SD/$b"
-  "$VENV/bin/python" - "$JOBDIR/job.json" "$SD" "$ckdir" <<'PY' || fail_job "could not prepare the scoring input"
-import json, os, sys
-src, sd, ck = sys.argv[1:4]
-j = json.load(open(src))
-files = sorted(f for f in os.listdir(ck) if os.path.isfile(os.path.join(ck, f)))
-for f in files:
-    os.symlink(os.path.realpath(os.path.join(ck, f)), os.path.join(sd, "ckpt." + f))
-j.update(train=None, val=None, fast_kernels=False, ckpt_prefix="ckpt.", ckpt_files=files)
-json.dump(j, open(os.path.join(sd, "job.json"), "w"), indent=1)
-PY
-  console_follow "$LOGDIR/score-$STAMP.log" score
-  say "scoring $final with kernel.py (arms: $("$VENV/bin/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["arms"])' "$JOBDIR/job.json"))"
-  (cd "$SD" && env KERNEL_WORK="$SCORE_W" KERNEL_INPUT="$SD" HF_HOME="$HF_HOME" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false \
-    "$VENV/bin/python" "$JOBDIR/kernel.py") >"$LOGDIR/score-$STAMP.log" 2>&1
-  rc=$?
-  console_unfollow "$LOGDIR/score-$STAMP.log"
-  say "kernel.py exit $rc"
-  echo "$rc" >"$STATE/score.rc"
-  printf '{"mark": "%s", "requested": "%s"}\n' "$final" "$(requested_mark)" >"$SCORE_W/scored_mark.json"   # which mark these results are of
-  rm -rf "$SCORE_W/ckpt-in" "$SCORE_W/code" "$SCORE_W/vaults"   # symlinks to the weights would be followed by the upload
-  sync_logs
-  retry 3 gcs rsync -r "$SCORE_W" "$GS/results" >>"$SUPLOG" 2>&1 || say "WARN: results upload failed; they stay in $SCORE_W on the disk"
-  touch "$STATE/score.done"
-}
-
-# ---- extra eval sets (scoring only, no training) ----------------------------------------------------------------
-# gs://$BUCKET/$JOB/extra/<name>/{bundle.dat,job.json[,kernel.py]} (a scoring bundle from bundles.sh, see README "Scoring more
-# eval sets") is scored on the job's checkpoint (FINAL, or the `score_mark` one), plus every checkpoint named in metadata `extra_ckpts` / env
-# EXTRA_CKPTS (space or comma list, e.g. "ckpt-050 best"). One set at a time; a finished (set, checkpoint) has $STATE/score-<name>[-<ckpt>].done and is skipped
-# on later boots, an unfinished one is rerun. Results: $GS/results-<name>[-<ckpt>]/. A failed set never fails the job.
-EXTRA_CKPTS=${EXTRA_CKPTS:-$(attr extra_ckpts)}
-
-extra_names() { gcs ls "$GS/extra/" 2>/dev/null | sed -n 's#.*/extra/\([^/]\+\)/*$#\1#p' | sort; }
-extra_ckpts() { echo final $(echo "$EXTRA_CKPTS" | tr ',' ' '); }   # "final" = the checkpoint the job scores: out/FINAL, or score_mark
-extra_tag() { [ "$2" = final ] && echo "$1" || echo "$1-$2"; }        # score-<tag>.done, results-<tag>
-
-extra_pending() {  # one "name ckpt" line per (set, checkpoint) not finished yet
-  local n c
-  for n in $(extra_names); do
-    for c in $(extra_ckpts); do [ -f "$STATE/score-$(extra_tag "$n" "$c").done" ] || echo "$n $c"; done
-  done
-}
-
-# score_extra NAME CKPT: kernel.py's eval stage on one checkpoint with the extra bundle (the same input preparation as run_scoring)
-score_extra() {
-  local name=$1 ck=$2 tag x w sd ckdir rc b=""
-  tag=$(extra_tag "$name" "$ck")
-  [ -f "$STATE/score-$tag.done" ] && { say "extra set $tag already scored"; return 0; }
-  case $ck in final) ck=$(score_mark) ;; best) ck=$(best_mark || final_mark) ;; esac   # "final" = the mark the job scores (score_mark)
-  ckdir=$OUT/$ck
-  if [ ! -d "$ckdir" ] && [ -n "$ck" ]; then retry 3 gcs rsync -r "$GS/out/$ck" "$ckdir" >>"$SUPLOG" 2>&1; fi   # fresh disk: just that checkpoint
-  [ -n "$ck" ] && [ -f "$ckdir/config.json" ] || { say "WARN: extra set $tag: checkpoint '$ck' missing in $OUT and $GS/out"; return 1; }
-  x=$BASE/extra/$name
-  w=$BASE/score-$tag
-  sd=$BASE/score-input-$tag
-  rm -rf "$x" "$w" "$sd"
-  mkdir -p "$x" "$w" "$sd"
-  retry 3 gcs rsync -r "$GS/extra/$name" "$x" >>"$SUPLOG" 2>&1 || { say "WARN: cannot pull $GS/extra/$name/"; return 1; }
-  [ -f "$x/kernel.py" ] || cp "$JOBDIR/kernel.py" "$x/kernel.py"
-  for f in bundle.dat bundle.tar.gz; do [ -f "$x/$f" ] && b=$f && break; done
-  [ -n "$b" ] && [ -f "$x/job.json" ] || { say "WARN: extra set $name has no bundle.dat/job.json"; return 1; }
-  ln -s "$x/$b" "$sd/$b"
-  "$VENV/bin/python" - "$x/job.json" "$sd" "$ckdir" <<'PY' || { say "WARN: could not prepare the scoring input for $tag"; return 1; }
-import json, os, sys
-src, sd, ck = sys.argv[1:4]
-j = json.load(open(src))
-files = sorted(f for f in os.listdir(ck) if os.path.isfile(os.path.join(ck, f)))
-for f in files:
-    os.symlink(os.path.realpath(os.path.join(ck, f)), os.path.join(sd, "ckpt." + f))
-j.update(train=None, val=None, fast_kernels=False, ckpt_prefix="ckpt.", ckpt_files=files)
-json.dump(j, open(os.path.join(sd, "job.json"), "w"), indent=1)
-PY
-  console_follow "$LOGDIR/score-$tag-$STAMP.log" "score:$tag"
-  say "scoring extra set $tag ($ck) with kernel.py"
-  (cd "$sd" && env KERNEL_WORK="$w" KERNEL_INPUT="$sd" HF_HOME="$HF_HOME" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false \
-    "$VENV/bin/python" "$x/kernel.py") >"$LOGDIR/score-$tag-$STAMP.log" 2>&1
-  rc=$?
-  console_unfollow "$LOGDIR/score-$tag-$STAMP.log"
-  say "kernel.py ($tag) exit $rc"
-  echo "$rc" >"$STATE/score-$tag.rc"
-  printf '{"mark": "%s", "set": "%s"}\n' "$ck" "$name" >"$w/scored_mark.json"   # which mark these results are of
-  rm -rf "$w/ckpt-in" "$w/code" "$w/vaults"   # symlinks to the weights would be followed by the upload
-  sync_logs
-  retry 3 gcs rsync -r "$w" "$GS/results-$tag" >>"$SUPLOG" 2>&1 || { say "WARN: results upload for $tag failed; they stay in $w"; return 1; }
-  # done only when the kernel exited 0 and produced a report; otherwise the next boot reruns it
-  if [ "$rc" = 0 ] && [ -n "$(find "$w" -name report.json 2>/dev/null | head -1)" ]; then touch "$STATE/score-$tag.done"; else say "WARN: $tag not marked done (rc=$rc)"; fi
-  rm -rf "$w" "$sd" "$x"
-}
-
-run_extra_scoring() {
-  local n c
-  while read -r n c; do
-    [ -n "$n" ] && { score_extra "$n" "$c" || true; }
-  done < <(extra_pending)
-}
-
 finalize() {
-  local rc
-  rc=$(cat "$STATE/score.rc" 2>/dev/null || echo "null")
-  "$VENV/bin/python" - "$JOB" "$rc" "$OUT/DONE" >"$STATE/DONE.json" <<'PY'
+  "$VENV/bin/python" - "$JOB" "$OUT/DONE" >"$STATE/DONE.json" <<'PY'
 import json, sys, time
-job, rc, done = sys.argv[1:4]
+job, done = sys.argv[1:3]
 try:
     train = json.load(open(done))
 except Exception:
     train = None
-print(json.dumps({"job": job, "finished": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "score_exit": int(rc) if rc.lstrip("-").isdigit() else None, "train": train}))
+print(json.dumps({"job": job, "finished": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "train": train}))
 PY
   sync_up final
   retry 5 gcs cp "$STATE/DONE.json" "$GS/DONE" >>"$SUPLOG" 2>&1 || fail_job "could not write $GS/DONE"
@@ -603,7 +458,7 @@ run_probe() {
     rm -rf "$PR/out-$n"
     (
       cd "$CODE" || exit 1
-      timeout "$(cfg probe_timeout_s 1800)" env NATIVETOOLS="$CODE/bin/nativetools" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false HF_HOME="$HF_HOME" ${extra:+"$extra"} \
+      timeout "$(cfg probe_timeout_s 1800)" env PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false HF_HOME="$HF_HOME" ${extra:+"$extra"} \
         "$VENV/bin/python" train/train.py "${targs[@]}"
     ) >"$PR/attempt-$n.log" 2>&1
     rc=$?
@@ -630,530 +485,14 @@ finish_idle() {
   exit 0
 }
 
-# ---- MODE=score: score one checkpoint on several eval sets (score_ckpt.sh) ------------------------------------------------
-# Several sets are scored by ONE kernel.py launch over their union (score_combined); `score_separate=1` metadata / SCORE_SEPARATE=1 env
-# restores one launch per set (score_one). Metadata `manifest` = gs://$BUCKET/score/<NAME>/manifest.json: {"name", "checkpoint" (gs:// dir), "sets" [..], "bundles" (gs:// prefix
-# holding <set>/{bundle.dat,job.json,kernel.py}: scoring bundles from bundles.sh), "created"}. Flow: checkpoint pulled once to the
-# disk, deps once, then each set with kernel.py's eval stage (private KERNEL_WORK per set, state marker $STATE/sc-<NAME>-<set>.done
-# so a reboot resumes), results to gs://$BUCKET/score/<NAME>/<set>/, then summary.json + DONE, power off in 15 min.
-score_sync_logs() { gcs rsync -r "$LOGDIR" "$SGS/logs" >>"$SUPLOG" 2>&1 || say "WARN: log sync failed"; }
-
-score_fail() {
-  local reason=${1//\"/\'}
-  say "FAILED: $reason"
-  printf '{"name":"%s","time":"%s","reason":"%s"}\n' "$SNAME" "$(date -u +%FT%TZ)" "${reason//$'\n'/ }" >"$STATE/sc-$SNAME.FAILED.json"
-  score_sync_logs
-  gcs cp "$STATE/sc-$SNAME.FAILED.json" "$SGS/FAILED" >>"$SUPLOG" 2>&1
-  finish_idle "scoring failed: $reason"
-}
-
-# `score_ckpt.sh --fast-kernels` (metadata score_fast_kernels=1 / env SCORE_FAST_KERNELS=1) sets job.json fast_kernels for the scoring run:
-# kernel.py pip-installs flash-linear-attention and causal-conv1d and keeps each only if a fixed-passage probe loss matches the PyTorch
-# fallback's within 1e-3. `--dtype` (metadata score_dtype / env SCORE_DTYPE) sets eval_env NATIVE_DTYPE of the eval arms. Neither set: the
-# job.json as bundled (fast_kernels false, the bundle's own dtype, float32 by default).
-# A bundle's kernel.py from before the option cannot probe a job without a train/val file (it would crash): refuse it by name.
-score_kernels_supported() {  # FILE: 0 = fine
-  [ "${SCORE_FAST_KERNELS:-0}" = 1 ] || return 0
-  grep -q PROBE_TEXT "$1" 2>/dev/null && return 0
-  say "WARN: $1 predates scoring with fast kernels (no PROBE_TEXT): rebuild the bundles (bundles.sh) or drop --fast-kernels"
-  return 1
-}
-
-# score_record_kernels WORKDIR: the fast-kernel verdicts of kernel.py's summary.json ({pkg: kept}) into $STATE/sc-<NAME>.kernels.json, for summary.json
-score_record_kernels() {
-  [ "${SCORE_FAST_KERNELS:-0}" = 1 ] && [ -f "$1/summary.json" ] || return 0
-  "$VENV/bin/python" - "$1/summary.json" >"$STATE/sc-$SNAME.kernels.json" 2>>"$SUPLOG" <<'PY' || rm -f "$STATE/sc-$SNAME.kernels.json"
-import json, sys
-print(json.dumps(json.load(open(sys.argv[1])).get("fast_kernels")))
-PY
-}
-
-# score_one SET: 0 = done (marker written), 1 = failed (rerun on the next boot)
-score_one() {
-  local set=$1 x w sd rc t0 secs b="" f
-  [ -f "$STATE/sc-$SNAME-$set.done" ] && { say "set $set already scored"; return 0; }
-  x=$BASE/bundles/$set
-  w=$BASE/score-w-$set
-  sd=$BASE/score-in-$set
-  rm -rf "$x" "$w" "$sd"
-  mkdir -p "$x" "$w" "$sd"
-  retry 3 gcs rsync -r "$SBUNDLES/$set" "$x" >>"$SUPLOG" 2>&1 || { say "WARN: cannot pull $SBUNDLES/$set/"; return 1; }
-  for f in bundle.dat bundle.tar.gz; do [ -f "$x/$f" ] && b=$f && break; done
-  [ -n "$b" ] && [ -f "$x/job.json" ] && [ -f "$x/kernel.py" ] || { say "WARN: bundle $set lacks bundle.dat/job.json/kernel.py"; return 1; }
-  ln -s "$x/$b" "$sd/$b"
-  "$VENV/bin/python" - "$x/job.json" "$sd" "$SCKPT" <<'PY' || { say "WARN: could not prepare the scoring input for $set"; return 1; }
-import json, os, sys
-src, sd, ck = sys.argv[1:4]
-j = json.load(open(src))
-files = sorted(f for f in os.listdir(ck) if os.path.isfile(os.path.join(ck, f)))
-for f in files:
-    os.symlink(os.path.realpath(os.path.join(ck, f)), os.path.join(sd, "ckpt." + f))
-j.update(train=None, val=None, fast_kernels=os.environ.get("SCORE_FAST_KERNELS") == "1", ckpt_prefix="ckpt.", ckpt_files=files)
-if os.environ.get("SCORE_DTYPE"):  # score_ckpt.sh --dtype: the eval model's dtype (hf_backend.py reads NATIVE_DTYPE)
-    j["eval_env"] = dict(j.get("eval_env") or {}, NATIVE_DTYPE=os.environ["SCORE_DTYPE"])
-json.dump(j, open(os.path.join(sd, "job.json"), "w"), indent=1)
-PY
-  score_kernels_supported "$x/kernel.py" || return 1
-  console_follow "$LOGDIR/score-$set-$STAMP.log" "score:$set"
-  say "scoring set $set of checkpoint $SNAME with kernel.py"
-  t0=$(date +%s)
-  (cd "$sd" && env KERNEL_WORK="$w" KERNEL_INPUT="$sd" HF_HOME="$HF_HOME" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false \
-    "$VENV/bin/python" "$x/kernel.py") >"$LOGDIR/score-$set-$STAMP.log" 2>&1
-  rc=$?
-  console_unfollow "$LOGDIR/score-$set-$STAMP.log"
-  secs=$(($(date +%s) - t0))
-  say "kernel.py ($set) exit $rc after ${secs}s"
-  rm -rf "$w/ckpt-in" "$w/code" "$w/vaults"   # symlinks to the weights would be followed by the upload
-  cp "$LOGDIR/score-$set-$STAMP.log" "$w/kernel.log" 2>/dev/null
-  score_record_kernels "$w"
-  score_sync_logs
-  retry 3 gcs rsync -r "$w" "$SGS/$set" >>"$SUPLOG" 2>&1 || { say "WARN: results upload for $set failed; they stay in $w"; return 1; }
-  f=$(find "$w" -name report.json 2>/dev/null | head -1)
-  if [ "$rc" = 0 ] && [ -n "$f" ]; then
-    cp "$f" "$STATE/sc-$SNAME-$set.report.json"
-    printf '{"seconds": %s, "rc": %s}\n' "$secs" "$rc" >"$STATE/sc-$SNAME-$set.done"
-  else
-    say "WARN: set $set not marked done (rc=$rc)"
-    return 1
-  fi
-  rm -rf "$w" "$sd" "$x"
-}
-
-write_score_summary() {  # combined summary.json from the per-set markers and reports
-  JOBDIR=$JOBDIR "$VENV/bin/python" - "$SNAME" "$SCKPT_SRC" "$STATE" "$@" <<'PY'
-import json, os, sys, time
-name, ck, st, sets = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4:]
-out = {"name": name, "checkpoint": ck, "finished": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "sets": {}}
-def rate(k, n):
-    return round(k / n, 4) if k is not None and n else None
-for s in sets:
-    e = {"done": False}
-    try:
-        d = json.load(open(os.path.join(st, "sc-%s-%s.done" % (name, s))))
-        r = json.load(open(os.path.join(st, "sc-%s-%s.report.json" % (name, s))))
-        # the three numbers of a scoring run: session pass, clean turn pass (the steering metric), turn pass; a report from an
-        # older scorer has no clean-turn keys (None)
-        e = {"done": True, "sessions": r.get("sessions"), "session_pass": r.get("session_pass"),
-             "session_pass_rate": rate(r.get("session_pass"), r.get("sessions")),
-             "turns_clean": r.get("turns_clean"), "turn_pass_clean": r.get("turn_pass_clean"),
-             "turn_pass_clean_rate": rate(r.get("turn_pass_clean"), r.get("turns_clean")),
-             "turns": r.get("turns"), "turn_pass": r.get("turn_pass"),
-             "turn_pass_rate": rate(r.get("turn_pass"), r.get("turns")), "seconds": d.get("seconds")}
-    except Exception:
-        pass
-    out["sets"][s] = e
-def rd(f):
-    try:
-        return open(os.path.join(st, f)).read().strip()
-    except Exception:
-        return None
-# the settings that make a score comparable: the eval model's dtype (the job's own when --dtype was not given; float32 is hf_backend.py's
-# default) and the fast kernels (requested, and which ones the exactness probe kept: {pkg: bool}, null before the probe ran)
-dtype = os.environ.get("SCORE_DTYPE")
-if not dtype:
-    try:
-        dtype = (json.load(open(os.path.join(os.environ["JOBDIR"], "job.json"))).get("eval_env") or {}).get("NATIVE_DTYPE")
-    except Exception:
-        dtype = None
-out["dtype"] = dtype or "float32"
-asked = os.environ.get("SCORE_FAST_KERNELS") == "1"
-try:
-    kept = json.loads(rd("sc-%s.kernels.json" % name)) if asked else None
-except Exception:
-    kept = None
-out["fast_kernels"] = {"requested": asked, "kept": kept}
-out["mode"] = rd("sc-%s.mode" % name) or "separate"
-ls = rd("sc-%s.launch.secs" % name) if out["mode"] == "combined" else None
-out["launch_seconds"] = int(ls) if ls else None  # the single kernel run of a combined score (summed over the boots of a resumed run)
-# total = the kernel launch(es) + per-set work; in combined mode a set's own `seconds` is only its split + score step
-out["total_seconds"] = (out["launch_seconds"] or 0) + sum(e.get("seconds") or 0 for e in out["sets"].values())
-print(json.dumps(out, indent=1))
-PY
-}
-
-# ---- combined scoring: ONE kernel.py launch over the union of the requested sets (default for >1 set) -----------------------
-# One model load and one worker pool instead of one per set. `score_combine` (below) does the pure data work: build the union input
-# from the per-set bundles, release a killed run's unfinished claims, collect the run records, split them back per set.
-# Metadata `score_separate=1` (or env SCORE_SEPARATE=1) restores one launch per set; a combined BUILD failure (before the kernel
-# starts) falls back to it automatically.
-score_combine() {
-  "$VENV/bin/python" - "$@" <<'PY'
-import glob, hashlib, json, os, re, shutil, subprocess, sys, tarfile
-
-OK_DIFF = {"train/train.py"}  # the trainer is not part of the eval: bundles may carry different versions of it
-
-
-def fail(msg):
-    print("score_combine: " + msg, file=sys.stderr)
-    sys.exit(1)
-
-
-def md5(p):
-    return hashlib.md5(open(p, "rb").read()).hexdigest()
-
-
-def lines(path):
-    """The non-empty raw lines of a jsonl file, newline-terminated."""
-    out = []
-    for raw in open(path, "rb").read().split(b"\n"):
-        if raw.strip():
-            out.append(raw + b"\n")
-    return out
-
-
-def rid(raw):
-    try:
-        return json.loads(raw)["id"]
-    except Exception:
-        return None
-
-
-def records(paths):
-    """{id: raw line} from run files; torn or id-less lines are skipped (a killed run leaves at most one)."""
-    got = {}
-    for p in paths:
-        if os.path.exists(p):
-            for raw in lines(p):
-                i = rid(raw)
-                if i is not None:
-                    got[i] = raw
-    return got
-
-
-def run_files(free):
-    return sorted(glob.glob(os.path.join(free, "run-*.jsonl")))
-
-
-def seed_union(cmds_per_set):
-    """One eval_setup: every seed_worlds.py command merged into one (worlds unioned once, first-seen order), other commands deduped."""
-    worlds, seed_cmd, rest = [], None, []
-    for cmds in cmds_per_set:
-        for c in cmds or []:
-            idx = [k for k, a in enumerate(c) if a.endswith("seed_worlds.py")]
-            if not idx:
-                if c not in rest:
-                    rest.append(c)
-                continue
-            head, args = c[:idx[0] + 1], c[idx[0] + 1:]
-            if any(a.startswith("-") for a in args):
-                fail("eval_setup seed_worlds.py takes flags (%s): cannot union" % args)
-            if seed_cmd is not None and head != seed_cmd:
-                fail("eval_setup seed commands differ in their prefix")
-            seed_cmd = head
-            for w in args:
-                if w not in worlds:
-                    worlds.append(w)
-    return ([seed_cmd + worlds] if seed_cmd else []) + rest
-
-
-def build(cdir, sd, ckpt, bases, sets):
-    jobs, kernels = {}, {}
-    shutil.rmtree(cdir, ignore_errors=True)
-    shutil.rmtree(sd, ignore_errors=True)
-    os.makedirs(cdir)
-    os.makedirs(sd)
-    seen = {}
-    for s in sets:
-        x = os.path.join(bases, s)
-        jobs[s] = json.load(open(os.path.join(x, "job.json")))
-        kernels[s] = md5(os.path.join(x, "kernel.py"))
-        b = [os.path.join(x, n) for n in ("bundle.dat", "bundle.tar.gz") if os.path.isfile(os.path.join(x, n))]
-        if not b:
-            fail("bundle %s has no bundle.dat" % s)
-        tmp = os.path.join(sd, "x-" + s)
-        with tarfile.open(b[0], "r:gz") as tf:
-            tf.extractall(tmp)
-        for root, _, fs in os.walk(tmp):
-            for f in fs:
-                p = os.path.join(root, f)
-                rel = os.path.relpath(p, tmp)
-                dst = os.path.join(cdir, rel)
-                if os.path.lexists(dst):
-                    if rel in OK_DIFF or md5(dst) == md5(p):
-                        continue
-                    fail("file %s differs between bundles (%s vs earlier)" % (rel, s))
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
-                shutil.move(p, dst)
-        shutil.rmtree(tmp)
-    # one eval configuration
-    first = sets[0]
-    base = {k: v for k, v in jobs[first].items() if k not in ("eval_set", "eval_setup")}
-    for s in sets[1:]:
-        other = {k: v for k, v in jobs[s].items() if k not in ("eval_set", "eval_setup")}
-        if other != base:
-            diff = sorted(k for k in set(base) | set(other) if base.get(k) != other.get(k))
-            fail("eval settings differ between %s and %s: %s" % (first, s, ", ".join(diff)))
-        if kernels[s] != kernels[first]:
-            fail("kernel.py differs between %s and %s" % (first, s))
-    if base.get("eval_batched"):
-        fail("eval_batched is set: the combined resume relies on the chunked path")
-    if base.get("arms") != ["free"]:
-        fail("arms %r (only ['free'] is combined)" % (base.get("arms"),))
-    # the combined set: per-set files concatenated in manifest order, ids unique across (and within) sets
-    order, owner, parts = [], {}, {}
-    for s in sets:
-        p = os.path.join(cdir, jobs[s]["eval_set"])
-        if not os.path.isfile(p):
-            fail("set file %s missing from bundle %s" % (jobs[s]["eval_set"], s))
-        parts[s] = lines(p)
-        for raw in parts[s]:
-            i = rid(raw)
-            if i is None:
-                fail("set %s has a line without an id" % s)
-            if i in owner:
-                fail("session id %r appears in sets %s and %s" % (i, owner[i], s))
-            owner[i] = s
-            order.append(i)
-    comb = "eval/sets/_combined.jsonl"
-    with open(os.path.join(cdir, comb), "wb") as fh:
-        for s in sets:
-            fh.writelines(parts[s])
-    job = dict(jobs[first])
-    job.update(eval_set=comb, eval_setup=seed_union([jobs[s].get("eval_setup") for s in sets]),
-               train=None, val=None, fast_kernels=os.environ.get("SCORE_FAST_KERNELS") == "1")
-    if os.environ.get("SCORE_DTYPE"):  # score_ckpt.sh --dtype: the eval model's dtype (hf_backend.py reads NATIVE_DTYPE)
-        job["eval_env"] = dict(job.get("eval_env") or {}, NATIVE_DTYPE=os.environ["SCORE_DTYPE"])
-    files = sorted(f for f in os.listdir(ckpt) if os.path.isfile(os.path.join(ckpt, f)))
-    for f in files:
-        os.symlink(os.path.realpath(os.path.join(ckpt, f)), os.path.join(sd, "ckpt." + f))
-    job.update(ckpt_prefix="ckpt.", ckpt_files=files)
-    json.dump(job, open(os.path.join(sd, "job.json"), "w"), indent=1)
-    with tarfile.open(os.path.join(sd, "bundle.dat"), "w:gz") as tf:
-        for n in sorted(os.listdir(cdir)):
-            tf.add(os.path.join(cdir, n), arcname=n)
-    json.dump({"sets": sets, "sets_files": {s: jobs[s]["eval_set"] for s in sets}, "owner": owner, "order": order,
-               "arm": base["arms"][0], "kernel": os.path.join(bases, first, "kernel.py")},
-              open(os.path.join(sd, "combined.json"), "w"))
-    print("combined %d sessions from %s; seed: %s" % (len(order), ",".join(sets), json.dumps(job["eval_setup"])))
-
-
-def resume(work, meta):
-    """Before (re)starting the kernel in a work dir that already ran: move finished records out of the run files (the driver truncates
-    its --out on start), drop claims of sessions that were cut off, print 'complete' when every session is finished."""
-    m = json.load(open(meta))
-    free = os.path.join(work, "eval", m["arm"])
-    keep = os.path.join(work, "eval-keep", "kept.jsonl")
-    got = records([keep] + run_files(free))
-    os.makedirs(os.path.dirname(keep), exist_ok=True)
-    with open(keep + ".tmp", "wb") as fh:
-        for i in m["order"]:
-            if i in got:
-                fh.write(got[i])
-    os.replace(keep + ".tmp", keep)
-    for f in run_files(free) + glob.glob(os.path.join(free, "run-*.jsonl.stats.json")) + glob.glob(os.path.join(free, "run.jsonl")):
-        os.remove(f)
-    dropped = 0
-    for c in glob.glob(os.path.join(free, "claims", "*")):
-        if os.path.basename(c) not in got:
-            os.remove(c)
-            dropped += 1
-    left = sum(1 for i in m["order"] if i not in got)
-    print("complete" if left == 0 else "partial")
-    print("resume: %d of %d sessions finished, %d claims released" % (len(got), len(m["order"]), dropped), file=sys.stderr)
-
-
-def collect(work, meta):
-    m = json.load(open(meta))
-    got = records([os.path.join(work, "eval-keep", "kept.jsonl")] + run_files(os.path.join(work, "eval", m["arm"])))
-    missing = [i for i in m["order"] if i not in got]
-    with open(os.path.join(work, "collected.jsonl"), "wb") as fh:
-        for i in m["order"]:
-            if i in got:
-                fh.write(got[i])
-    print("collected %d of %d sessions, %d missing" % (len(got), len(m["order"]), len(missing)), file=sys.stderr)
-    sys.exit(1 if missing else 0)
-
-
-def split(records_file, meta, cdir, outdir_fmt, arm):
-    """Per-set run.jsonl (raw lines, in the set file's order) at outdir_fmt % set / eval/<arm>/run.jsonl."""
-    m = json.load(open(meta))
-    got = records([records_file])
-    for s in m["sets"]:
-        ids = [rid(r) for r in lines(os.path.join(cdir, m["sets_files"][s]))]
-        d = os.path.join(outdir_fmt % s, "eval", arm)
-        shutil.rmtree(outdir_fmt % s, ignore_errors=True)
-        os.makedirs(d)
-        with open(os.path.join(d, "run.jsonl"), "wb") as fh:
-            for i in ids:
-                if i in got:
-                    fh.write(got[i])
-        print("%s: %d of %d sessions" % (s, sum(1 for i in ids if i in got), len(ids)))
-
-
-cmd, a = sys.argv[1], sys.argv[2:]
-if cmd == "build":
-    build(a[0], a[1], a[2], a[3], a[4:])
-elif cmd == "resume":
-    resume(*a)
-elif cmd == "collect":
-    collect(*a)
-elif cmd == "split":
-    split(*a)
-elif cmd == "json":  # json FILE KEY: print one key
-    print(json.load(open(a[0]))[a[1]])
-elif cmd == "gold":  # gold FILE SET: the set's own gold file, relative to the code dir
-    print(json.load(open(a[0]))["sets_files"][a[1]])
-PY
-}
-
-# score_combined SET...: 0 = every set scored, 1 = failed (rerun on the next boot), 2 = combined build failed before the kernel
-# started (caller falls back to one launch per set)
-score_combined() {
-  local sets=$* s x cw cdir sd rc t0 secs free arm kern st prev res p
-  cw=$BASE/score-w-combined; cdir=$BASE/score-code-combined; sd=$BASE/score-in-combined
-  st=$STATE/sc-$SNAME.combined.started
-  p=0
-  for s in $sets; do [ -f "$STATE/sc-$SNAME-$s.done" ] || p=1; done
-  [ "$p" = 0 ] && { echo combined >"$STATE/sc-$SNAME.mode"; say "all sets already scored"; return 0; }
-  # (1) build the union input; a failure before the kernel has run is a fallback, after it a plain failure
-  for s in $sets; do
-    x=$BASE/bundles/$s
-    rm -rf "$x"; mkdir -p "$x"
-    retry 3 gcs rsync -r "$SBUNDLES/$s" "$x" >>"$SUPLOG" 2>&1 || { say "WARN: cannot pull $SBUNDLES/$s/"; [ -f "$st" ] && return 1; return 2; }
-  done
-  res=$(score_combine build "$cdir" "$sd" "$SCKPT" "$BASE/bundles" $sets 2>>"$SUPLOG") || { say "WARN: combined build failed: $(tail -1 "$SUPLOG")"; [ -f "$st" ] && return 1; return 2; }
-  say "$res"
-  arm=$(score_combine json "$sd/combined.json" arm)
-  kern=$(score_combine json "$sd/combined.json" kernel)
-  score_kernels_supported "$kern" || return 1
-  free=$cw/eval/$arm
-  # (2) the one kernel launch: fresh, or a resume of a killed one (finished records kept aside, unfinished claims released)
-  if [ -f "$st" ] && [ "$(cat "$st")" = "$sets" ] && [ -d "$cw" ]; then
-    say "resuming the combined run in $cw"
-    res=$(score_combine resume "$cw" "$sd/combined.json" 2>>"$SUPLOG") || res=partial
-  else
-    rm -rf "$cw" "$STATE/sc-$SNAME.launch.done" "$STATE/sc-$SNAME.launch.secs"
-    mkdir -p "$cw"
-    echo "$sets" >"$st"
-    res=partial
-  fi
-  echo combined >"$STATE/sc-$SNAME.mode"
-  if [ "$res" = complete ]; then
-    say "every session of the combined run is finished: no kernel launch"
-  else
-    rm -f "$STATE/sc-$SNAME.launch.done"
-    console_follow "$LOGDIR/score-combined-$STAMP.log" score
-    say "scoring sets [$sets] of checkpoint $SNAME with ONE kernel.py launch"
-    t0=$(date +%s)
-    (cd "$sd" && env KERNEL_WORK="$cw" KERNEL_INPUT="$sd" HF_HOME="$HF_HOME" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false \
-      "$VENV/bin/python" "$kern") >"$LOGDIR/score-combined-$STAMP.log" 2>&1
-    rc=$?
-    console_unfollow "$LOGDIR/score-combined-$STAMP.log"
-    secs=$(($(date +%s) - t0))
-    say "kernel.py (combined) exit $rc after ${secs}s"
-    prev=$(cat "$STATE/sc-$SNAME.launch.secs" 2>/dev/null || echo 0)
-    echo $((prev + secs)) >"$STATE/sc-$SNAME.launch.secs"   # summed over the boots of a resumed run
-    cat "$LOGDIR/score-combined-$STAMP.log" >>"$cw/kernel.log" 2>/dev/null
-    score_record_kernels "$cw"
-  fi
-  rm -rf "$cw/ckpt-in" "$cw/code" "$cw/vaults" "$cw"/tmp-*   # symlinks to the weights would be followed by the upload; all rebuilt by a rerun
-  score_sync_logs
-  # (3) the combined work dir goes up as-is (minus the claims, which only a resume needs)
-  rm -rf "$BASE/score-up-combined"; cp -a "$cw" "$BASE/score-up-combined" && rm -rf "$BASE/score-up-combined/eval/$arm/claims"
-  retry 3 gcs rsync -r "$BASE/score-up-combined" "$SGS/combined" >>"$SUPLOG" 2>&1 || say "WARN: upload of the combined run failed; it stays in $cw"
-  rm -rf "$BASE/score-up-combined"
-  if ! score_combine collect "$cw" "$sd/combined.json" 2>>"$SUPLOG"; then
-    say "WARN: combined run incomplete: $(grep '^collected' "$SUPLOG" | tail -1); rerun by starting the VM again"
-    return 1
-  fi
-  [ -f "$STATE/sc-$SNAME.launch.done" ] || printf '{"seconds": %s}\n' "$(cat "$STATE/sc-$SNAME.launch.secs" 2>/dev/null || echo 0)" >"$STATE/sc-$SNAME.launch.done"
-  # (4) split the records per set and score each against its own gold (the set file itself), in the extracted bundle code
-  score_combine split "$cw/collected.jsonl" "$sd/combined.json" "$cdir" "$BASE/score-w-%s" "$arm" >>"$SUPLOG" 2>&1 || return 1
-  rc=0
-  for s in $sets; do
-    x=$BASE/score-w-$s
-    [ -f "$STATE/sc-$SNAME-$s.done" ] && { say "set $s already scored"; rm -rf "$x"; continue; }
-    t0=$(date +%s)
-    (cd "$cdir" && "$VENV/bin/python" eval/score.py "$x/eval/$arm/run.jsonl" \
-      --gold "$(score_combine gold "$sd/combined.json" "$s")" \
-      --out "$x/eval/$arm/report.md" --json "$x/eval/$arm/report.json") >"$LOGDIR/score-$s-$STAMP.log" 2>&1
-    secs=$(($(date +%s) - t0))
-    if [ ! -f "$x/eval/$arm/report.json" ]; then say "WARN: scoring $s failed (see $LOGDIR/score-$s-$STAMP.log)"; rc=1; continue; fi
-    cp "$LOGDIR/score-$s-$STAMP.log" "$x/score.log"
-    cp "$cw/kernel.log" "$x/kernel.log" 2>/dev/null
-    retry 3 gcs rsync -r "$x" "$SGS/$s" >>"$SUPLOG" 2>&1 || { say "WARN: results upload for $s failed; they stay in $x"; rc=1; continue; }
-    cp "$x/eval/$arm/report.json" "$STATE/sc-$SNAME-$s.report.json"
-    printf '{"seconds": %s, "rc": 0, "combined": true}\n' "$secs" >"$STATE/sc-$SNAME-$s.done"
-    rm -rf "$x"
-  done
-  score_sync_logs
-  [ "$rc" = 0 ] || return 1
-  rm -rf "$cw" "$cdir" "$sd" "$BASE/bundles"
-  return 0
-}
-
-run_score() {
-  local man sets s bad=0 info sep nsets
-  man=$(attr manifest)
-  [ -n "$man" ] || { say "FAILED: MODE=score without metadata 'manifest'"; finish_idle "no manifest"; }
-  SGS=${man%/manifest.json}
-  retry 5 gcs cp "$man" "$STATE/manifest.json" >>"$SUPLOG" 2>&1 || { SNAME=unknown; score_fail "cannot read $man"; }
-  info=$(python3 - "$STATE/manifest.json" <<'PY'
-import json, sys
-m = json.load(open(sys.argv[1]))
-print(m["name"], m["checkpoint"].rstrip("/"), m["bundles"].rstrip("/"), " ".join(m["sets"]))
-PY
-  ) || { SNAME=unknown; score_fail "bad manifest $man"; }
-  read -r SNAME SCKPT_SRC SBUNDLES sets <<<"$info"
-  say "score mode: name=$SNAME checkpoint=$SCKPT_SRC sets=$sets"
-  SCORE_FAST_KERNELS=${SCORE_FAST_KERNELS:-$(attr score_fast_kernels)}
-  SCORE_DTYPE=${SCORE_DTYPE:-$(attr score_dtype)}
-  case ${SCORE_DTYPE:-} in "" | float32 | bfloat16 | float16) ;; *) score_fail "score_dtype '$SCORE_DTYPE': float32, bfloat16 or float16" ;; esac
-  export SCORE_FAST_KERNELS SCORE_DTYPE   # read by the job.json preparation below; unset = the bundle's own settings
-  [ -z "${SCORE_FAST_KERNELS:-}${SCORE_DTYPE:-}" ] || say "scoring options: fast_kernels=${SCORE_FAST_KERNELS:-0} dtype=${SCORE_DTYPE:-bundle default}"
-  if [ -f "$STATE/sc-$SNAME.all.done" ] && gcs_has "$SGS/DONE"; then finish_idle "$SNAME already scored"; fi
-  wait_gpu || score_fail "no NVIDIA driver/GPU on this VM"
-  SCKPT=$BASE/score-ckpt/$SNAME
-  if [ ! -f "$STATE/sc-$SNAME.ckpt.ok" ] || [ ! -f "$SCKPT/config.json" ]; then
-    say "pulling checkpoint $SCKPT_SRC"
-    rm -rf "$SCKPT"; mkdir -p "$SCKPT"
-    retry 3 gcs rsync -r "$SCKPT_SRC" "$SCKPT" >>"$SUPLOG" 2>&1 && [ -f "$SCKPT/config.json" ] || score_fail "cannot pull a checkpoint (config.json) from $SCKPT_SRC"
-    touch "$STATE/sc-$SNAME.ckpt.ok"
-  fi
-  # ensure_deps reads $JOBDIR/job.json (pins): a private dir, so a reused training VM's staged job is left alone
-  JOBDIR=$BASE/score-job
-  mkdir -p "$JOBDIR"
-  s=${sets%% *}
-  retry 3 gcs cp "$SBUNDLES/$s/job.json" "$JOBDIR/job.json" >>"$SUPLOG" 2>&1 || score_fail "cannot pull $SBUNDLES/$s/job.json"
-  ensure_deps || score_fail "dependency install failed (see $LOGDIR/supervisor-$STAMP.log)"
-  sep=${SCORE_SEPARATE:-$(attr score_separate)}
-  nsets=$(wc -w <<<"$sets")
-  echo separate >"$STATE/sc-$SNAME.mode"
-  if [ "${sep:-0}" != 1 ] && [ "$nsets" -gt 1 ]; then
-    score_combined $sets
-    case $? in
-      0) sep=done ;;
-      1) sep=done; bad=1 ;;
-      *) say "WARN: combined scoring could not start: falling back to one kernel launch per set"; sep=1 ;;
-    esac
-  else
-    sep=1
-  fi
-  if [ "$sep" = 1 ]; then for s in $sets; do score_one "$s" || bad=1; done; fi
-  write_score_summary $sets >"$STATE/sc-$SNAME.summary.json"
-  gcs cp "$STATE/sc-$SNAME.summary.json" "$SGS/summary.json" >>"$SUPLOG" 2>&1
-  score_sync_logs
-  [ "$bad" = 0 ] || score_fail "set(s) failed: rerun by starting the VM again (finished sets are skipped); see $SGS/logs/"
-  touch "$STATE/sc-$SNAME.all.done"
-  gcs rm "$SGS/FAILED" >>"$SUPLOG" 2>&1   # left by an earlier partial run
-  echo done | gcs cp - "$SGS/DONE" >>"$SUPLOG" 2>&1
-  finish_idle "scoring of $SNAME finished"
-}
-
 # ---- main -------------------------------------------------------------------------------------------------------
 say "boot: job=$JOB mode=$MODE bucket=$BUCKET host=$(hostname) $(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | head -1)"
 df -h / >>"$SUPLOG" 2>&1
 
-if [ "$MODE" = score ]; then
-  trap 'exit 143' TERM INT
-  run_score
-  exit 0
-fi
-
 if [ "$MODE" = probe ]; then
   wait_gpu || fail_job "no GPU driver"
   pull_job || fail_job "cannot pull $GS/job/"
-  job_trains || fail_job "job.json has no train file (an eval-only job: nothing to probe)"
+  job_trains || fail_job "job.json has no train file: nothing to probe"
   ensure_deps || fail_job "dependency install failed (see $LOGDIR/supervisor-$STAMP.log)"
   extract_code || fail_job "cannot unpack the bundle"
   run_probe
@@ -1161,26 +500,17 @@ if [ "$MODE" = probe ]; then
 fi
 
 if [ -f "$STATE/final.done" ] || gcs_has "$GS/DONE"; then
-  # finished job: skip training and val; only extra eval bundles that are present and not scored yet run
-  [ -n "$(extra_pending)" ] || finish_idle "job already finished (DONE), no extra eval sets to score"
-  wait_gpu || fail_job "no NVIDIA driver/GPU on this VM"
-  pull_job || fail_job "cannot pull $GS/job/"
-  ensure_deps || fail_job "dependency install failed (see logs/supervisor-*.log)"
-  run_extra_scoring
-  sync_logs
-  finish_idle "extra eval sets scored"
+  finish_idle "job already finished (DONE)"
 fi
 gcs_has "$GS/FAILED" && gcs rm "$GS/FAILED" >>"$SUPLOG" 2>&1   # a restart is a retry
 
 wait_gpu || fail_job "no NVIDIA driver/GPU on this VM"
 pull_job || fail_job "cannot pull $GS/job/ (did launch.sh upload the staged job?)"
-job_trains || fail_job "job.json has no train file (an eval-only job, e.g. bundle.py build --base/--ckpt-dir): this tooling trains"
+job_trains || fail_job "job.json has no train file: this tooling trains"
 ensure_deps || fail_job "dependency install failed (see logs/supervisor-*.log)"
 extract_code || fail_job "cannot unpack the job bundle"
 pull_out || fail_job "cannot restore $GS/out/"
 pull_init || fail_job "cannot pull the init checkpoint named in job.json"
 run_training
 sync_up final
-run_scoring
-run_extra_scoring
 finalize

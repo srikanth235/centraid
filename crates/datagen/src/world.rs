@@ -103,6 +103,48 @@ impl World {
         self.spec.id()
     }
 
+    /// A world read back from its presence-only document (`worlds/<id>.json` of a run): enough of
+    /// a [`World`] for the planner to replay sessions on. The document names its id (`seed`), the
+    /// member and the day; the archetype and settings only shaped generation and are not kept.
+    ///
+    /// # Errors
+    ///
+    /// If the document has no usable `seed` id, `me` or `today`.
+    pub fn from_doc(doc: &Value) -> Result<Self> {
+        let id = doc["seed"]
+            .as_str()
+            .context("a world document has no `seed`")?;
+        let (split, index) = id
+            .rsplit_once('-')
+            .and_then(|(s, n)| {
+                Some((
+                    Split::ALL.into_iter().find(|x| x.name() == s)?,
+                    n.parse().ok()?,
+                ))
+            })
+            .with_context(|| format!("`{id}` is not a world id"))?;
+        let me = doc["me"].as_str().context("a world document has no `me`")?;
+        let today = doc["today"]
+            .as_str()
+            .context("a world document has no `today`")?;
+        let spec = WorldSpec {
+            split,
+            index,
+            seed: 0,
+        };
+        Ok(Self {
+            spec,
+            persona: crate::persona::Persona {
+                me: me.to_owned(),
+                archetype: crate::persona::Archetype::Professional,
+                currency: doc["currency"].as_str().unwrap_or("USD").to_owned(),
+            },
+            settings: Settings::for_world(index, &mut Rng::new(0)),
+            today: today.to_owned(),
+            doc: doc.clone(),
+        })
+    }
+
     /// Rows per seed-document section.
     #[must_use]
     pub fn section_counts(&self) -> Vec<(String, usize)> {

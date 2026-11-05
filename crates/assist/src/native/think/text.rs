@@ -1,5 +1,5 @@
 //! The text helpers of the think rewrite: the words of a message and of a row's name, whether two of them read as the same word,
-//! and whether a message talks about time. They are what `pick_reason` reads (`think.rs`); they were `authored/trace.py`'s
+//! and whether a message talks about time. They are what `pick_reason` reads (`think.rs`); they were the retired `authored/trace.py`'s
 //! `fold`, `toks`, `same`, `stem` and `date_clusters`, and the Python they replaced stays the oracle (`compile_oracle.py`).
 
 use std::collections::HashMap;

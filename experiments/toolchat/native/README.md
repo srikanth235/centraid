@@ -2,9 +2,13 @@
 
 Issue [#1044](https://github.com/srikanth235/centraid/issues/1044). One model, Qwen3.5-0.8B, fine-tuned to drive the vault through eight tools (`SPEC.md`) with the slot trace (`CONTRACT_V3.md`), scored on held-out households. The target is 85% session pass on test; a session passes when every turn's effect matches its gold.
 
-## The two sets
+**Python is the GPU trainer and nothing else.** The data (messages, render, mix), the eval and the rollouts are Rust: `crates/datagen`, `crates/assist-eval`. The Python data tooling that preceded them (`authored/`, `render.py`, `eval/`) was retired in #1171; it is in git history, at the commit before that one.
 
-Every checkpoint is scored by one script on two frozen sets (`eval/FROZEN.md`):
+## The data
+
+A data version is made by one command, `cargo run -p centraid-datagen -- build --version vN` (`crates/datagen/README.md`): `train.jsonl.zst`, `val.jsonl.zst`, `test.jsonl.zst`, `noise.jsonl.zst` and a manifest, each record an assist-eval session plus its rendered token ids and loss weights. Nothing else makes one.
+
+**data-v7**, the version S2 was trained and judged on, is no longer rebuilt and stays fetchable from the private Hugging Face dataset `srikanth235/centraid-native-data`: `python3 artefacts.py fetch` puts its frozen val and test sets and their worlds under `data/v7/` (`data/README.md`, `data/v7/FROZEN.md`), where `crates/assist-eval` reads the val set by default. `artefacts.json` pins it.
 
 | set | sessions | what it tells |
 | --- | --- | --- |
@@ -17,123 +21,92 @@ A report gives sessions, clean turns (turns not downstream of a session's first 
 
 | path | what |
 | --- | --- |
-| `authored/` | training-data sources: `worlds/` (households), `sessions/` (recipe-authored sessions with reference calls; the val worlds' T03, T12 and T23 are held out, "Data versions" below), `build.py` (replays each session through the runtime and writes training records, train == inference), `park_oracle.py` (replays the reference calls of train-world sessions twice, once as a run and once with `nativetools session --writes park --auto-confirm` or `--writes shadow`, and holds the parked observation, the effect and the confirmed after-write text to the run's, step for step: the proof under R-1088-6; `python3 -I authored/park_oracle.py --vaults DIR --bin nativetools [--a-bin BASE] W ...`), `split.py` (train worlds / val worlds), `gate.py` (hygiene), `dist.py` (train, val, test one distribution?), `coverage.py` (shape), `trace.py` + `trace3_check.py` (the slot trace and its round trip), `untally.py` (the one-shot migration that takes the rows of a removed kind out of world builders and session sources, #1115; `HANDOFF.md` lists where it still has to run), `BRIEF.md` (how to author), `evalkit/` (how the held-out A to D sessions were authored and checked) |
-| `eval/` | `sets/` (the frozen sets and `split.json`), `FROZEN.md`, `build_sets.py` (check, reference check, re-freeze), `rollout.py` (the rollout driver: screen and sample sets, RFT records and DPO pairs from scored runs; `test_rollout.py`), `worlds/` (A to G, held out: from the data version), `run.py` (single-session driver: `--model ref` verifies gold, `--model replay` re-sends a recorded run, `--model gguf --gguf FILE` scores a GGUF through `assist-step`, the phone's own decode step on CPU, "The phone's model" below), `run_batched.py` (the batched greedy driver used on the GPU), `score.py`, `slices.py` (failed turns by class), `replay.py` (a recorded run through the current runtime, on CPU), `seed_worlds.py`, `lib.py`, `gold.py` |
-| `train/` | `fmt.py` (prompt and trace rendering), `train.py` (SFT; `--ema D` saves a weight EMA beside every mark as `ckpt-NNN-ema`; `--dpo PAIRS` runs DPO against the frozen initial model), `soup.py` (uniform weight average of checkpoints), `decode.py` (free decoding over tokens: the think guard, the call rendered from the think, one call per message; SPEC §9; the same step over text, for any engine, is `crates/assist/src/native/step.rs`), `hf_backend.py`, `to_gguf.py` (a checkpoint to the Q4_0 GGUF the phone loads, with llama.cpp at the commit the engine vendors), `batching.py`, `bundle.py` (stages a job: code, runtime binary, data, `job.json`; `--continue-from gs://CKPT` is the continuation preset: init from it, 1 epoch, lr 4e-6, min-lr 0.05, warmup 0.02, ema 0.999), `kernel.py` (runs the job on the VM), `smoke.py` (CPU end to end), `vm/` (GCP Spot: `launch.sh`, `watch.sh`, `bundles.sh`, `score_ckpt.sh`, `README.md`) |
-| `data/` | the r1 training build as trained, materialised from the data version: `train.jsonl.gz`, `train-val.jsonl.gz`, and `README.md` (counts, hashes, the build command) |
-| `render.py` | the Python face of the one renderer, `crates/assist/src/native/transcript.rs` (#1088): `render`, `render_prompt_for_generation`, `call_text` and `user_content` are thin wrappers that ask the runtime through `runtime_think` (`nativetools think`, ops `render`, `prompt`, `call_text`, `user_content`); what stays here is the HF tokenizer and `tokens_with_loss`. The tokenizer id and the chat markers are `identity.json` of the export, not literals (read from `export/` beside it in a job tree, else from `contracts/assist/export/`). `train/render_golden.py` writes the goldens the Rust renderer is tested against (`crates/assist/tests/transcript_golden.rs`), from the last Python renderer in git history |
+| `train/` | `train.py` (SFT and DPO on datagen records, `render.input_ids` and `render.weights` as they are; `--arm A\|B\|C`; `--ema D` saves a weight EMA beside every mark as `ckpt-NNN-ema`; `--dpo PAIRS` runs DPO against the frozen initial model), `datagen.py` (the record reader), `arms.py` (the three M6 arms), `soup.py` (uniform weight average of checkpoints), `to_gguf.py` (a checkpoint to the Q4_0 GGUF the phone loads, with llama.cpp at the commit the engine vendors), `bundle.py` (stages a training job: the trainer, the data, `job.json`; `--continue-from gs://CKPT` is the continuation preset), `vm/` (the GCP Spot GPU VM that trains a staged job and nothing else: `vm/README.md`), `kaggle/` (the Kaggle kernel of M6: train an arm, export the GGUF, score val with `assist-eval`), and the `test_*.py` of all of it |
+| `data/` | fetched data-v7 artefacts (`data/v7/`, gitignored) and `README.md` |
+| `artefacts.py`, `artefacts.json` | the pin of data-v7 and its fetch and check; the model card and the publishing of a model and of its GGUF |
+| `requirements-ci.in`, `requirements-ci.txt` | the hashed pins of the trainer's CPU tests |
+| `SPEC.md`, `CONTRACT_V3.md`, `HANDOFF.md` | the tool spec, the slot-trace contract, and where the work stands |
 
-The runtime is `centraid_assist::native` (`crates/assist/src/native/`, #1088); `crates/nativetools` keeps the `nativetools` binary the Python tools drive (`NATIVETOOLS` names it), the world seeder and the export. Its export (`nativetools export DIR`: tool schemas, kind card, tables, rendered prompts, `identity.json`) is committed under `contracts/assist/export/` and checked against a fresh export by `crates/nativetools/tests/export_fixture.rs`; `bundle.py` still ships a fresh export in the job tree.
+The runtime is `centraid_assist::native` (`crates/assist/src/native/`, #1088); `crates/nativetools` keeps the `nativetools` binary, the world seeder and the export. Its export (`nativetools export DIR`: tool schemas, kind card, tables, rendered prompts, `identity.json`) is committed under `contracts/assist/export/` and checked against a fresh export by `crates/nativetools/tests/export_fixture.rs`.
 
 ## Tests
 
-The Python tests (`test_*.py` at the top level and in `authored/`, `authored/gen/`, `eval/` and `train/`: 29 modules, no model weights and no GPU) run on every pull request as the `native-python` job of `.github/workflows/gate.yml`, outside `cargo xtask gate`. The job builds `nativetools`, installs `requirements-ci.txt` by hash, caches the Qwen3.5-0.8B tokenizer and config offline, rebuilds the public worlds (`artefacts.py fetch --public-only`) and runs `python3 run_cpu_tests.py`, whose docstring lists the environment it needs. The suite reads no held-out file and needs no Hub token: a test that needs a seeded household seeds a public train world into a temporary directory (`eval/pubworld.py`), the unit tests of the scorer and the gold conventions run on a made-up one (`eval/fixture_world.py`), and no test writes a tracked file. The script runs the modules four at a time (`--jobs N`), slowest first, each module's output printed whole, and fails on any skipped or red test. `train/smoke.py` and everything under `train/vm/` need the model's weights or a GPU and run in no CI job. The Rust tests that read this tree (`crates/nativetools/tests/think.rs` reads `authored/golden_v3.json`) run in the `gate` job, and gitleaks scans the whole tree there with the synthetic worlds allowlisted by path in `.gitleaks.toml` (D-1044-19).
+The Python tests (`test_*.py` in this directory and in `train/`: no GPU, no model weights, no network) cover the trainer's input and loss, the arms, resume, EMA, precision, DPO, soup, the GGUF export, the Kaggle report scripts, the job bundle and `artefacts.py`. They need torch (CPU), transformers, peft, safetensors and zstandard, pinned by hash in `requirements-ci.txt`. Run them with `python3 run_tests.py` (it runs each module in an interpreter of its own and fails on a skipped test or a module that ran none); after `pip install --require-hashes --only-binary=:all: --no-deps -r requirements-ci.txt`.
+
+They are **not** part of the pull-request gate (`gate.yml` has no Python job). `.github/workflows/trainer.yml` runs them on `main` when a file of this directory changes, and on demand. Rust changes are gated by `cargo xtask gate`.
 
 ## The loop
 
-1. Author or regenerate sessions; `authored/build.py` per train world; `authored/gate.py` and `authored/dist.py` on the gold.
-2. `train/bundle.py build JOB --train data/train.jsonl.gz --val data/train-val.jsonl.gz --data-version data-vN` (`--data-version` is metadata only: it lands in `train_meta.json` and the model card); `train/vm/launch.sh`; `train/vm/watch.sh`. The trainer's loss, order and marks defaults (decision weight 2, no loss on verbatim copies of the user's message, minimal pairs in one step, marks at 25 / 50 / 75 / 100 %) are in the `train/train.py` docstring; `--decision-weight 1 --copy-weight 1 --no-pair-batches` is the legacy loss and order.
-3. `train/vm/bundles.sh` once per runtime build; `train/vm/score_ckpt.sh gs://.../out/ckpt-100 --sets val` (ckpt-100 is the default mark; `train/vm/score_ckpt.sh gs://.../out --mark best` scores the mark with the lowest val decision loss, which the trainer names in `out/best.json`).
-4. Diagnose on val: `eval/slices.py`, `eval/replay.py` for runtime changes (no model needed).
-5. Test at a milestone only.
+1. Build a data version: `cargo run -p centraid-datagen -- build --version vN`.
+2. Train on Kaggle (`train/kaggle/`) or the GCP VM (`train/bundle.py build JOB --train train.jsonl.zst --val val.jsonl.zst --arm A --data-version data-vN`; `train/vm/launch.sh`; `train/vm/watch.sh`). The trainer's order and marks defaults (minimal pairs in one step, marks at 25 / 50 / 75 / 100 %) are in the `train/train.py` docstring.
+3. Export (`train/to_gguf.py`), then score with `assist-eval` (below). Diagnose on val.
+4. Rollouts and a second round: `crates/assist-eval/README.md` ("Rollouts"). Test at a milestone only.
+
+## M6: SFT arms on datagen records (not run on a GPU yet)
+
+[#1171](https://github.com/srikanth235/centraid/issues/1171), M6. Code and CPU tests only: **no arm has been trained, exported or scored, and nothing has been pushed to Kaggle.** The tests build a tiny random Qwen3.5 on the CPU; every GPU, Kaggle and llama.cpp step below is unverified.
+
+**Input.** `train.py` reads the records `crates/datagen` writes (`train.jsonl.zst`, `val.jsonl.zst`; `datagen.py`). Each line is an assist-eval session plus `render: {input_ids, weights, text}`; the trainer trains on `input_ids` and `weights` as they are: no re-rendering, no chat template in Python. A weight of 0 is no loss, 1 is an assistant think or tool call, more than 1 is a deciding token. A record over `--max-len` is dropped and counted in the log (never cut); a record that breaks the contract (lengths differ, a negative or non-finite weight, no token with loss) stops the run. The loss of a step is `sum(weight * CE(next token)) / sum(weight)` over the step's `--bs` records, so the gradient scale is that of a mean. `--decision-weight`, `--copy-weight` and the decision labels do not apply to this format; the "decision" figures in the marks are the CE on tokens weighted above 1. The legacy formats still work (they are retired with the Python data tooling). No DPO on this format.
+
+**Arms** (`train/arms.py`, `train.py --arm A|B|C`): same data, same weights, three starting points.
+
+| arm | base | method | default lr |
+| --- | --- | --- | --- |
+| A | `Qwen/Qwen3.5-0.8B` | full SFT | 2e-5 |
+| B | `RikiyaT/Qwen3.5-0.8B-weight-space-programming` | full SFT | 2e-5 |
+| C | the same base as B | LoRA rank 64 (alpha 128) on every linear layer of the language model **except `layers.{15,19}.mlp.down_proj`**, the two edited tensors; adapters merged at export | 2e-4 |
+
+The tokenizer is Qwen/Qwen3.5-0.8B for every arm. In C the base is frozen and the two tensors get no adapter, so the edit survives by construction; `arms.snapshot` / `arms.verify` also check at every export, after the merge, that both tensors equal the base bit for bit (`train/test_datagen.py` asserts it on the saved safetensors). The LoRA rank and learning rates are my choices, not tuned.
+
+**Export.** `to_gguf.py` as it is: `--no-mtp`, Q4_0, the output tensor at Q8_0.
+
+**Kaggle kit** (`train/kaggle/`, see its README): `kernel.py` pulls the data version from the private HF dataset `srikanth235/centraid-native-data` with the Kaggle secret `HF_TOKEN`, trains one arm, exports the GGUF and scores val with `assist-eval` (default tools; S2 under `--tools s2` behind `s2_baseline`). `arm_report.py` writes the per-arm val report and `compare_arms.py` prints the table and the chosen-arm rule.
+
+```
+python3 train/kaggle/compare_arms.py arm-A.val.json arm-B.val.json arm-C.val.json [arm-S2.val.json]
+```
 
 ## The phone's model: a GGUF
 
-The phone runs the model as a GGUF (Q4_0) in llama.cpp, so the number that matters is the GGUF's, decoded by the phone's own step. Four commands, from the repository root, take a promoted checkpoint there:
+The phone runs the model as a GGUF (Q4_0) in llama.cpp, so the number that matters is the GGUF's, decoded by the phone's own step. Three commands, from the repository root, take a promoted checkpoint there:
 
 ```
 # 1. checkpoint -> Q4_0 GGUF + sidecar. llama.cpp is cloned and llama-quantize built on first use, at the commit llama-cpp-sys-2 0.1.158
 #    vendors (train/to_gguf.py: LLAMA_CPP_COMMIT, found by matching all 1865 vendored files against upstream); the same input gives the same bytes.
 python3 experiments/toolchat/native/train/to_gguf.py CKPT --out OUT --name native-s2 \
     --source-repo OWNER/NAME --source-tag S2 --source-revision SHA     # the private repository the checkpoint was promoted to
-# 2. the phone's decode step as a process: JSON line in, JSON line out (crates/assist-llama/src/wire.rs). target-cpu=native: without it
-#    llama-cpp-sys-2 builds ggml for baseline x86-64 (no AVX2): 26 against ~140 prompt tokens/s measured on the 4-core box. Only this CPU run is affected; the phone's engine is another build.
-RUSTFLAGS='-C target-cpu=native' cargo build --release -p centraid-assist-llama --features engine --bin assist-step
-# 3. score a set with it: --jobs N starts N assist-step processes (~0.6 GB each; threads default to the cores divided by N)
-cd experiments/toolchat/native/eval && python3 run.py --set sets/val.jsonl --model gguf --gguf OUT/native-s2-Q4_0.gguf \
-    --out runs/val-s2-q4.jsonl --jobs 2 && python3 score.py runs/val-s2-q4.jsonl --gold sets/val.jsonl
-# 4. publish: a PUBLIC model repository (artefacts.py publish-gguf; HF_TOKEN from the environment; --dry-run prints the plan and the card)
+# 2. score it with the Rust eval runner: the phone's own decode step over the same runtime, in process (crates/assist-eval/README.md).
+#    target-cpu=native: without it llama-cpp-sys-2 builds ggml for baseline x86-64 (no AVX2). Only this CPU run is affected.
+RUSTFLAGS='-C target-cpu=native' cargo build --release -p centraid-assist-eval --features engine --bin assist-eval
+target/release/assist-eval --model OUT/native-s2-Q4_0.gguf --out runs/val-s2-q4      # --set defaults to data/v7/val.jsonl (fetched, below)
+# 3. publish: a PUBLIC model repository (artefacts.py publish-gguf; HF_TOKEN from the environment; --dry-run prints the plan and the card)
 cd .. && python3 artefacts.py publish-gguf OUT/native-s2-Q4_0.gguf --repo OWNER/NAME --tag S2-q4 --dry-run
 ```
 
-`--model gguf` renders the prompt exactly as `--model hf` does and sends it to `assist-step`, which calls `decode_step` as `native_turn` does (greedy, think limit 200, 512 tokens, trace v4, a context of 8192); the call is the one the Rust compiler writes from the think, so no `compile` op is involved. The run record's `model` is `gguf:<file>@<sha256 prefix>` and `<out>.stats.json` carries `gguf`: steps, wall time and token counts. It scores greedy only (`resample` is None). The converter is told `--no-mtp` (the base model's multi-token-prediction block is not in a checkpoint, but its config still declares it) and the quantizer `--output-tensor-type q8_0` (the tied embedding is Q8_0 in the file the phone has been running, ggml-org's `Qwen3.5-0.8B-Q4_0.gguf`; this commit's default would be Q6_K); on the public base model the pipeline gives that file's 320 tensors with the same types and shapes, and identical bytes in all of them but twelve (eleven `ssm_a` tensors that differ by at most 5e-7, and one `Q4_0` tensor whose bytes differ and whose dequantized values do not).
-
-The Rust eval runner (`crates/assist-eval`, #1166) scores the same GGUF over the same set through the same step, and adds tool accuracy, accuracy per argument and fail rate by constraint count: `target/release/assist-eval --model OUT/native-s2-Q4_0.gguf --set eval/sets/val.jsonl --out runs/val-s2-q4` (build: `cargo build --release -p centraid-assist-eval --features engine --bin assist-eval`; see `crates/assist-eval/README.md`).
+The converter is told `--no-mtp` (the base model's multi-token-prediction block is not in a checkpoint, but its config still declares it) and the quantizer `--output-tensor-type q8_0` (the tied embedding is Q8_0 in the file the phone loads). `assist-eval` decodes greedy through `decode_step` as `native_turn` does (think limit 200, 512 tokens, trace v4, a context of 8192) and adds tool accuracy, accuracy per argument and fail rate by constraint count; see `crates/assist-eval/README.md`. The Python rig that scored a GGUF through the `assist-step` process (`eval/run.py --model gguf`) is retired.
 
 ## Rollouts: the model's own sessions as training data
 
-`eval/rollout.py` is the CPU side of rejection-sampling fine-tuning and DPO: the GPU runs are `score_ckpt.sh` runs, so a set file is all they need. The set files are `eval/sets/roll-screen.jsonl` and `roll-sample.jsonl` (not frozen sets: `build_sets.py check` and `FROZEN.md` do not read them). The sets are gold of the build's `--gold-from-ref` output (only the sessions that verified); the worlds they were built on (the collision worlds, `build.py --worlds-dir`) go into the scoring bundle through `BUNDLE_WORLDS`, and the sample bundle runs with `NATIVE_SAMPLE=1` through `BUNDLE_EVAL_ENV`. The screen set and its worlds (with their keys) are part of the data version (`screen/`, "Data versions" below): `fetch` brings the set back, and the worlds are read from the version's `screen/worlds/`. `python3 authored/gen/collide.py --out DIR --keys` builds collision worlds and their keys from public sources only (`NATIVETOOLS`; the density targets are the kept numbers `TARGETS`); the worlds of the data-v7 screen set were built from an earlier state of `authored/sessions/` (the twins are the names the sessions reference) and seeded by an earlier runtime, so the command gives different twin rows and ids (11 of the 35 worlds come out byte for byte when the `_p*` and `_k*` session files are left out), and the version keeps the originals. `export` replays each kept rollout through the runtime that scored it, so run it with that binary. The method (what a pair is, what a record keeps) is in the module docstring.
+`assist-eval rollout`, `rollout-report`, `rollout-compare` and `rollout-records` (`crates/assist-eval/src/rollout/`, M7 of #1171) are the rejection-sampling fine-tuning and DPO side: sample decodes of a model over a set, report pass rates per grid cell, and cut RFT records and DPO pairs. The Python rollout driver (`eval/rollout.py`) is retired. `crates/assist-eval/README.md` has the commands and the record shapes; the trainer reads the records as it reads any datagen record (`train.py --dpo` for the pairs).
+
+Evidence: [#1044](https://github.com/srikanth235/centraid/issues/1044), [#1171](https://github.com/srikanth235/centraid/issues/1171). Where the work stands and what comes next: `HANDOFF.md`.
+
+## Data-v7 and the pin
+
+`artefacts.json` pins `data-v7`: one tag of the private Hugging Face dataset repository, and the commit it points at. Its files (the frozen sets, the worlds they run in, the training build as trained) are materialised under `data/v7/` with their sha256 verified; the public CI reads none of them.
 
 ```
-# 1. screen set: every session once, greedy (B = the build outputs, W = their worlds dir, NT = the runtime binary the bundle ships)
-python3 eval/rollout.py sets --built $B/built $B/built-k1 --tokens
-BUNDLE_NATIVETOOLS=$NT BUNDLE_WORLDS=$W train/vm/bundles.sh --sets roll-screen
-# 2. score the screen set (the owner launches; --new-vm leaves no metadata to remove from the training VM); fetch score/<NAME>/roll-screen/{run.jsonl,report.json}
-JOB=<job> BUCKET=<bucket> train/vm/score_ckpt.sh $CKPT --name roll-screen --sets roll-screen --bundles-prefix bundles-roll --new-vm
-# 3. sample set: k copies (ids <id>-s<k>) of every failed session and a seeded 0.3 of the passing ones
-python3 eval/rollout.py sets --sample --screen-report screen/report.json [-k 6] [--frac 0.3] [--seed 1044]
-BUNDLE_NATIVETOOLS=$NT BUNDLE_WORLDS=$W BUNDLE_EVAL_ENV='{"NATIVE_SAMPLE": "1"}' train/vm/bundles.sh --sets roll-sample
-# 4. score the sample set (same checkpoint, a new --name; temperature 0.6, top-p 0.95)
-JOB=<job> BUCKET=<bucket> train/vm/score_ckpt.sh $CKPT --name roll-sample --sets roll-sample --bundles-prefix bundles-roll --new-vm
-# 5. export: rft.jsonl.gz (up to -m 2 passing rollouts per session), dpo.jsonl.gz (up to -p 2 pairs), summary.json
-NATIVETOOLS=$NT python3 eval/rollout.py export --screen-run screen/run.jsonl --screen-report screen/report.json \
-    --sample-run sample/run.jsonl --sample-report sample/report.json --worlds $W --out OUT [-m 2] [-p 2]
-```
-
-Evidence: [#1044](https://github.com/srikanth235/centraid/issues/1044). Where the work stands and what comes next: `HANDOFF.md`.
-
-## Data versions
-
-The task's data is versioned (R-1088-16). A **data version** is one tag (`data-vN`) on the private Hugging Face dataset repository `srikanth235/centraid-native-data`, and it holds everything one from-scratch run trained and was judged on:
-
-```
-version.json                                       version, parent, made, git commit; the runtime (label, commit, binary and export hashes);
-                                                   vault_ddl_sha256 (contracts/migrations/*.sql); registry_sha256 (contracts/assist/export/metadata.json:
-                                                   the commands the runtime maps its verbs to); the seeds; the refreeze report; a note per training build;
-                                                   the sha256 and size of every file
-train/<name>/train.jsonl.gz, train-val.jsonl.gz    each training build exactly as trained, with the trainer's own validation slice
-eval/val.jsonl, test.jsonl, split.json             val and test as its refreeze report records them: refrozen against its vault and runtime, or kept as frozen (data-v7's test v6)
-screen/roll-screen.jsonl, screen/worlds/*          the RFT screen set and the worlds it ran in (with their keys)
-worlds/<id>.json                                   every world as built now, train and held-out (no keys)
-sources/<tree path>                                the held-out sources: the world builders (eval/worlds/*_build.py, build_worlds.py, authored/worlds/T03, T12, T23) and the
-                                                   authored sessions of the val worlds (authored/sessions/T03*.py, T12*.py, T23*.py)
-```
-
-A promoted model is a revision of a private Hub **model** repository whose card names its data tag, its git commit and its config. The tree keeps sources and `artefacts.json`, which pins the version in use (`data`: repository, tag, and the commit the tag points at) and lists every file the tree materialises: its tree path, its path in the version, its sha256 and size, and how it comes back. **The public CI reads no held-out file and needs no Hub token.** Not kept: `trainfit`, the stale keys files and `eval/sessions/`.
-
-| class | files | how it comes back |
-| --- | --- | --- |
-| source (stays in the tree) | `authored/sessions/` (the authored sessions of the 35 train worlds), the 35 train-world builders | not applicable |
-| public (rebuilt) | the 35 train world JSON files (`authored/worlds/T*.json`) | the manifest's `rebuild` command: the world's builder, then `artefacts.py format` (the repository's JSON layout). `fetch --public-only` runs them: no version, no token (`artefacts.py verify-rebuild --public-only` proves they are byte for byte the pinned files) |
-| held out | `eval/sets/{val,test}.jsonl` and `split.json`, `data/train-val.jsonl.gz` (it holds val sessions), the world JSON of A to G, T03, T12 and T23, the 7 builders of those worlds, the 18 authored session files of the val worlds (`authored/sessions/{T03,T12,T23}*.py`: split.json sends those worlds whole to val), and the keys files of A to D, T03, T12 and T23 | from the version (`fetch`); the keys files are seeded from their world JSON (`NATIVETOOLS`). The checks that mean something only with these files run in `artefacts.py verify-heldout`, which fails when they are absent |
-| from the version, not held out | `data/train.jsonl.gz` (r1) and `eval/sets/roll-screen.jsonl` | from the version (`fetch`) |
-
-```
-python3 artefacts.py fetch --public-only         # CI and any public checkout: the public worlds, rebuilt
-python3 artefacts.py fetch [--dry-run]           # everything, from ARTEFACTS_SOURCE=<a directory laid out as a version> or the pinned Hub commit (HF_TOKEN)
-python3 artefacts.py check [--public-only]       # every manifest file is in place and equal to the manifest
-python3 artefacts.py verify-rebuild [--public-only]   # rebuild the regenerable files in a scratch copy, compare bytes
+python3 artefacts.py fetch [--dry-run]           # from ARTEFACTS_SOURCE=<a directory laid out as the version> or the pinned Hub commit (HF_TOKEN, once)
+python3 artefacts.py check                       # every manifest file is in place and equal to the manifest
 python3 artefacts.py verify-version              # read every version file at the pin, compare it with the manifest
-python3 artefacts.py verify-heldout              # build_sets.py check, split.py --check: where the held-out files are
 ```
 
-`ARTEFACTS_SOURCE` is the provider-neutral path (R-1088-14): any directory laid out as a version (a copy of the Hub repository, a bucket synced to disk) serves `fetch` with no network and no token, and `version.json` there must be the version the manifest pins. A file that is present but differs is never overwritten without `--force`, and a download or rebuild whose bytes differ fails and leaves nothing at the path.
+`ARTEFACTS_SOURCE` is the provider-neutral path (R-1088-14): any directory laid out as a version (a copy of the Hub repository, a bucket synced to disk) serves `fetch` with no network and no token. A file that is present but differs is never overwritten without `--force`, and a download whose bytes differ fails and leaves nothing at the path.
 
-**The lifecycle of a version.** Each step is one command; only the owner or the root agent, with the token, runs the upload.
+A promoted model is a revision of a private Hub **model** repository whose card names its data tag, its git commit and its config:
 
-1. **Build** the training data (`authored/build.py` per world, `authored/assemble.py`; `data/README.md`) and **refreeze** val and test on the runtime the version names (`eval/build_sets.py refreeze`, `eval/FROZEN.md`). Record what the refreeze did as a JSON file (the runtime label and commit, whether each set changed).
-2. **Assemble** the version: `NATIVETOOLS=<the runtime> python3 artefacts.py version --out DIR --train NAME=TRAIN.jsonl.gz,VAL.jsonl.gz [--train ...] --screen-worlds DIR --refreeze-report FILE --parent data-vM --seeds FILE --note NAME=TEXT` (run `artefacts.py rehash` first when a file of the tree changed). It takes the tree's files as the manifest pins them, so it refuses a tree that differs, and writes `version.json`.
-3. **Publish**: `HF_TOKEN=... python3 artefacts.py publish DIR --tag data-vN` sends the tree to the dataset repository's main branch in one commit (deleting the paths that are not in DIR, never the LFS rules), creates the repository private when it is missing, refuses one that is public and never moves a tag. Then `python3 artefacts.py pin COMMIT` records the commit the tag points at in `artefacts.json`; commit that.
-4. **Train** with `train/bundle.py build ... --data-version data-vN`.
-5. **Card**: `python3 artefacts.py model-card --model CKPT_DIR --data-version data-vN --name NAME --score "LINE" ... --out CKPT_DIR/README.md` writes the Hub card from the checkpoint's `train_meta.json` and `config.json`.
-6. **Promote**: `HF_TOKEN=... python3 artefacts.py publish-model CKPT_DIR --repo OWNER/NAME --tag NAME [--card FILE]` does for a model what `publish` does for a version (`--card` sends a card written beside the checkpoint as its `README.md`).
+1. `python3 artefacts.py model-card --model CKPT_DIR --data-version data-vN --name NAME --score "LINE" ... --out CKPT_DIR/README.md` writes the card from the checkpoint's `train_meta.json` and `config.json`.
+2. `HF_TOKEN=... python3 artefacts.py publish-model CKPT_DIR --repo OWNER/NAME --tag NAME [--card FILE]` sends it, private, in one commit, and never moves a tag.
+3. `python3 artefacts.py publish-gguf ...` does the same for the GGUF, to a public repository.
 
-**The lifecycle rule.** A data version is kept while a kept model trained on it is, or while its val and test are the ruler in use; a version neither of those names can be deleted from the Hub. A new version is a new tag: nothing already published is rewritten.
-
-**Taking the data out of the tree** is the owner's step, once, from the repository root, after steps 2 and 3 and a commit of the pinned `artefacts.json`:
-
-```
-HF_TOKEN=... NATIVETOOLS=target/debug/nativetools experiments/toolchat/native/move_out.sh      # or ARTEFACTS_SOURCE=<the version's directory> in place of the token
-```
-
-`move_out.sh` checks that the manifest pins a commit, moves every manifest file aside, fetches them back (rebuilds, and reads the version) and checks them, runs `verify-heldout`, and only then takes them out of the index, writes the `.gitignore` block (`artefacts.py gitignore`), applies `move_out.gate.patch` (the `native-python` job materialises the public worlds with `fetch --public-only`, with no secret) and removes itself and the patch. It commits nothing.
+**The lifecycle rule.** A data version is kept while a kept model trained on it is, or while its val and test are the ruler in use. A new version is a new tag: nothing already published is rewritten. Datagen versions are published to the private dataset by the owner (the Kaggle kernel pulls `datagen/vN/`); `artefacts.py` neither assembles nor uploads data versions.

@@ -30,6 +30,9 @@ serde.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
+fancy-regex.workspace = true
+unicode-normalization.workspace = true
+zstd.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

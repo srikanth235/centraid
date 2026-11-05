@@ -1,7 +1,7 @@
 //! THE CONVERSATION THE MODEL READS: the system turn, every user turn with its block, every
 //! message the model wrote (thinking kept) and every observation, in the order they happened.
 //!
-//! This is `eval/lib.py`'s `Transcript` plus `train/hf_backend.py`'s `prompt_from_history`, in Rust:
+//! This is the retired `eval/lib.py`'s `Transcript` plus `train/hf_backend.py`'s `prompt_from_history`, in Rust:
 //! the runtime hands the loop its system turn (`Session::prompt`) and, per user message, a block and
 //! the observations it compacted; the loop appends what the model wrote and what the runtime
 //! answered, and renders the lot with [`crate::native::transcript`], the one renderer the training
@@ -149,6 +149,43 @@ impl Log {
     }
 }
 
+impl Log {
+    /// The whole conversation as the one text a session is trained on: the system turn, then every entry as the renderer
+    /// writes it, with the trained span of each assistant message (`Rendered::spans`: from just after `<think>\n` through
+    /// `<|im_end|>`, in code points of the whole text, the system turn counted). `prompt` is this text plus the generation
+    /// header; it is what the phone feeds the model at the step after the last entry.
+    ///
+    /// # Errors
+    /// A message the renderer cannot write byte for byte (an assistant entry that is not exactly one think and one
+    /// well-formed call), which has no span to train on.
+    pub fn transcript(&self) -> Result<transcript::Rendered, String> {
+        let mut messages: Vec<Message> = Vec::new();
+        for entry in &self.entries {
+            match entry {
+                Entry::User { text, block } => messages.push(Message::user(
+                    &transcript::user_content(text, block.as_deref()),
+                )),
+                Entry::Tool { text, .. } => messages.push(Message::tool(text)),
+                Entry::Assistant(said) => {
+                    messages.push(assistant_record(said).ok_or_else(|| {
+                        "an assistant entry is not one think and one call".to_owned()
+                    })?)
+                }
+            }
+        }
+        let rendered = render(&messages).map_err(|e| e.to_string())?;
+        let lead = self.system.chars().count();
+        Ok(transcript::Rendered {
+            text: format!("{}{}", self.system, rendered.text),
+            spans: rendered
+                .spans
+                .into_iter()
+                .map(|(start, end)| (start + lead, end + lead))
+                .collect(),
+        })
+    }
+}
+
 /// A raw assistant message as a record the renderer writes back byte for byte: one think, then
 /// exactly one well-formed call. `None` for anything else (`hf_backend.assistant_record`).
 #[must_use]
@@ -271,6 +308,30 @@ mod tests {
         assert!(second.ends_with("<|im_start|>assistant\n<think>\n"));
         // thinking is kept in the history
         assert!(second.contains("intent: read"));
+    }
+
+    #[test]
+    fn the_transcript_is_the_prompt_without_the_open_think_and_spans_the_assistant_messages() {
+        let mut log = Log::new(SYSTEM.to_owned());
+        log.user("what is due", Some("vault: x"));
+        log.assistant(&said("intent: read", "find", &[("kind", "task")]));
+        log.tool(Some(0), "@1 · 2 tasks");
+        let whole = log.transcript().unwrap();
+        let prompt = log.prompt().unwrap();
+        assert_eq!(
+            format!("{}{}", whole.text, assistant_open()),
+            prompt,
+            "the transcript is what the next step is prompted with"
+        );
+        assert_eq!(whole.spans.len(), 1);
+        let (start, end) = whole.byte_spans()[0];
+        let trained = &whole.text[start..end];
+        assert!(trained.starts_with("intent: read"));
+        assert!(trained.ends_with(MODEL.im_end));
+        assert!(whole.text[..start].ends_with("<think>\n"));
+        // an unreadable message has no span to train on
+        log.assistant("<think>\nhm</think>\n\nI do not know.");
+        assert!(log.transcript().is_err());
     }
 
     #[test]

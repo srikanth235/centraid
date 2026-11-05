@@ -1,88 +1,55 @@
-"""SFT trainer for Qwen3.5-0.8B, one sequence per session (SPEC §11.3, §11.7, §11.8).
+"""SFT and DPO trainer for Qwen3.5-0.8B, on the records `crates/datagen` writes (M6 of #1171; datagen.py, arms.py).
 
-    python train.py --train train.jsonl.gz --val val.jsonl.gz --out ckpt/ [--hours 8]
+    python train.py --arm A --train train.jsonl.zst --val val.jsonl.zst --out ckpt/ [--hours 8]
     torchrun --nproc_per_node 2 train.py ...        # data parallel
 
-- Text from the shared renderer (../render.py, thinking kept in history); loss on every
-  assistant message's think + call through `<|im_end|>`, none on system, user or tool tokens
-  (fmt.py). The mask is asserted on a sample (and against the data's `loss_tokens`) first.
-- Full fine-tune of every transformer layer, fp32 master weights and optimizer state; compute in bf16 autocast + TF32 by default on a GPU (--autocast none --no-tf32 = the legacy pure-fp32 path; fp32 lm_head and loss either way). The tied embedding / lm_head (248k x 1024,
-  a third of the model) is frozen by default (--embed freeze): full fp32 AdamW over all 0.75 B
-  parameters is 12 GB before activations on a 15 GB T4; freezing it leaves ~9 GB. The call
-  format uses tokens Qwen already has, so no new embeddings are needed. --embed train trains it.
-- Logits are computed only at label positions (`logits_to_keep` as indices): full-sequence fp32
-  logits over a 248k vocabulary would be ~8 GB for an 8k-token session.
-- Sessions run 2.5–8k tokens: micro-batch 1 sequence (no padding), --bs sessions per optimizer
-  step (gradient accumulation), gradient checkpointing. Before training, a memory probe runs the
-  longest session forward + backward with the optimizer state held; on OOM it retries at 6144
-  and 4096 tokens and drops longer sessions (logged), instead of dying hours in.
-- One epoch; warmup then linear decay; grad clip 1.0.
-- Checkpoints at 25 / 50 / 75 / 100 % of steps (--checkpoints; bf16 safetensors + tokenizer), val loss and label-token
-  accuracy on the val file at each; tokens/s logged. Every mark is also written to out/marks.json (per mark: the val and the
-  train-sample loss and accuracy on all label tokens, and on decision, hard, copy and other tokens), and out/best.json names the mark
-  with the lowest val DECISION loss (ties: the later mark; none without --val). out/FINAL still names the last mark (ckpt-100): the
-  scorer takes the best one only when asked (train/vm: `score_ckpt.sh OUT --mark best`; for the scoring a job does after training,
-  `launch.sh --score-mark best`). A hard wall-clock budget (--hours, default 8) stops training, saves, and marks the run TRUNCATED.
-- Decision tokens (fmt.py: argument values of the call, think slot values, found structurally): the
-  few label tokens that decide pass or fail. --decision-weight W (default 2.0; 1.0 = the plain mean CE)
-  multiplies their CE by W; the batch is normalised by its weight mass
-  (sum of the weights), so the step's gradient scale stays that of a mean. At every eval (step 0 and
-  each checkpoint) a fixed sample of --train-eval-n train records and the val file are scored for
-  loss and accuracy on all label tokens AND on decision tokens only AND on the narrow HARD tier (fmt.py
-  `HardConfig`: row refs and @k handles, row selectors, date expressions, verb / op, the think
-  slots stating them (the closed words of `intent`, `scope`, `refer`, `when`; the row numbers of `refer` and `pick`; the index of a `dates[i]`);
-  a subset of the decision tokens, weighted by the same W,
-  never by a second weight, and reported separately).
-  --test PATH adds the same for the test file at the last eval only (the file is not opened before). --dry-run N stops after the
-  tokenizer and mask assertions and one forward pass over N records.
-- Copy tokens (fmt.py `CopyConfig`, `copy_char_spans`): in the think, the quoted phrase of `intent`, the value of each `set` entry and
-  the value of `text` and `question` are copies of the user's message when they appear in it (case-insensitive, whitespace-folded, whole
-  words; the person's words, not the vault / focus / dates block). The model can read them, so their gradient only teaches the instance:
-  those tokens carry --copy-weight (default 0.0 = no loss; 1.0 = as any other token) instead of the decision weight, the batch weight
-  mass counts them at it, and they are never decision or hard tokens (a value that is not in the message keeps its loss). They stay label
-  tokens in every report and are reported apart ("copy"), outside the decision and hard counts. --copy-labels '' marks none.
-- Minimal pairs: a training record may carry a pair id (the field `pair`, or a tag `pair:<id>`). The epoch order shuffles the pairs as
-  units and keeps the records of a pair adjacent and inside one optimizer step of --bs sequences (a record with no id is a unit of its own;
-  the last partial step is dropped as before). A step that whole units cannot fill trades a single record for a pair; only if that cannot
-  help is a pair split, which the log counts ("steps hold a split pair": 0 unless --bs is odd or smaller than a group). --no-pair-batches
-  restores the plain shuffle; data without pair ids is ordered exactly as before.
-- Legacy: `--decision-weight 1 --copy-weight 1 --no-pair-batches` (with `--no-tf32 --autocast none --no-fused-adam` for the precision) is the
-  trainer before these defaults: the same loss, the same order, the same weights after every step, bit for bit (the reports still carve
-  the copy tokens out of the decision tokens; `--copy-labels ''` restores that split too). A resume checkpoint made before the flags
-  existed continues only under them; the fingerprint also holds the copy weight and the pair batching.
-- Preemption-safe resume (off unless asked; the defaults change nothing). --save-every N writes, every N steps,
-  a RESUME checkpoint `out/resume-step-NNNNNN/` (trainable weights in the training dtype, AdamW state, LR
-  scheduler, step / epoch / position in the shuffled order, RNG states, running meters, the eval history):
-  written to a temp dir, fsynced, renamed, and only the latest two are kept. --resume [PATH] continues from
-  the newest complete one (in --out, or PATH) at the next step, or starts fresh when there is none, so the same
-  command line is safe to re-run after a preemption. A temp or incomplete checkpoint is never loaded. SIGTERM
-  (given --save-every or --resume) writes a resume checkpoint at the next step boundary, if --term-grace allows,
-  and exits 0 with out/PREEMPTED; a finished run writes out/DONE. The data order is a function of (--seed, epoch, the pair ids, --bs),
-  so a resumed run sees exactly the batches an uninterrupted one would. --epochs N (default 1) repeats the file
-  with a fresh shuffle per epoch. Exports at 25 / 50 / 75 / 100 % are unchanged.
+THE DATA. A record carries `render.input_ids` and per-token `render.weights`, rendered by the Rust runtime (datagen.py); the trainer does not
+render, tokenise or decide what is trained. The loss of a step is sum(weight * CE) / sum(weight) over its records: weight 0 is no loss
+(system / catalog, user text, tool results), 1 an assistant think or call, above 1 a deciding token. "Decision tokens" in the reports are
+the label tokens weighted above 1. The python that made records before (render.py, fmt.py, authored/) is retired.
+
+THE ARMS (arms.py). `--arm A|B|C` sets the base, the method and the default lr: A stock Qwen3.5-0.8B, full SFT; B the edited model, full SFT;
+C the edited model, LoRA whose adapters skip layers 15 and 19 mlp.down_proj (checked bit-identical at every export). Not run on a GPU yet.
+
+THE RUN.
+- Full fine-tune of every transformer layer, fp32 master weights and optimizer state; compute in bf16 autocast + TF32 by default on a GPU
+  (--autocast none --no-tf32 = pure fp32; fp32 lm_head and loss either way). The tied embedding (a third of the model) is frozen by
+  default (--embed freeze): full fp32 AdamW over all 0.75 B parameters is 12 GB before activations on a 15 GB T4. --embed train trains it.
+- Logits are computed only at label positions (`logits_to_keep` as indices): full-sequence fp32 logits over a 248k vocabulary would be ~8 GB
+  for an 8k-token session.
+- Sessions run 2.5-8k tokens: micro-batch 1 sequence (no padding), --bs sessions per optimizer step (gradient accumulation). Before
+  training a memory probe runs the longest session forward + backward with the optimizer state held; on OOM it switches gradient
+  checkpointing on, then retries at 6144 and 4096 tokens and drops longer sessions (logged), instead of dying hours in.
+- Warmup then linear decay; grad clip 1.0; --epochs N repeats the file with a fresh shuffle per epoch.
+- Checkpoints at 25 / 50 / 75 / 100 % of steps (--checkpoints; bf16 safetensors + tokenizer), val loss and label-token accuracy at each;
+  tokens/s logged. Every mark is written to out/marks.json (per mark: the val and the train-sample loss and accuracy on all label tokens,
+  on decision tokens and on the rest), and out/best.json names the mark with the lowest val DECISION loss (ties: the later mark; none
+  without --val). out/FINAL names the last mark. A hard wall-clock budget (--hours, default 8) stops training, saves, and marks the run
+  TRUNCATED. --test PATH adds the same for the test file at the last eval only (the file is not opened before). --dry-run N stops after one
+  forward pass over N records.
+- Minimal pairs: a record may carry a pair id (the field `pair`, or a tag `pair:<id>`). The epoch order shuffles the pairs as units and keeps
+  the records of a pair adjacent and inside one optimizer step of --bs sequences (a record with no id is a unit of its own; the last partial
+  step is dropped). --no-pair-batches restores the plain shuffle.
+- Preemption-safe resume (off unless asked). --save-every N writes, every N steps, a RESUME checkpoint `out/resume-step-NNNNNN/` (trainable
+  weights, AdamW state, LR scheduler, step / epoch / position in the shuffled order, RNG states, running meters, the eval history): written
+  to a temp dir, fsynced, renamed, and only the latest two are kept. --resume [PATH] continues from the newest complete one (in --out, or
+  PATH) at the next step, or starts fresh when there is none, so the same command line is safe to re-run after a preemption. SIGTERM (given
+  --save-every or --resume) writes a resume checkpoint at the next step boundary, if --term-grace allows, and exits 0 with out/PREEMPTED; a
+  finished run writes out/DONE. The data order is a function of (--seed, epoch, the pair ids, --bs), so a resumed run sees exactly the
+  batches an uninterrupted one would.
 - Weight EMA (off unless asked: --ema D, a decay such as 0.999). After every optimizer step an fp32 shadow of the trainable weights moves
-  toward them (shadow += (1 - d) * (weights - shadow), d = min(D, (1 + step) / (10 + step)) so the first steps do not pin it to the init).
-  At every mark the shadow is also evaluated on val (VAL-EMA, meta `ema_val`) and saved beside the mark as `ckpt-NNN-ema` (the same files,
-  so the scorer takes it like any checkpoint); marks.json, best.json and FINAL never name it. Its mean age is D / (1 - D) steps: 0.999
-  averages about the last 1,000 steps, close to the plain average of the 75 % and 100 % marks of a 4-epoch run (#1044: that average
-  gained +13 sessions over ckpt-100). The training itself is unchanged, bit for bit; a resume checkpoint carries the shadow.
-- DPO (off unless asked: --dpo PAIRS.jsonl[.gz], opt-in; no --dpo = the SFT trainer above, bit for bit). One JSON object per line,
-  {"id": str, "chosen": R, "rejected": R}, each R a record in the format of a line of data/train.jsonl.gz (the same session; the messages
-  may differ in any assistant / tool message after the point where they diverge). The loss of a pair is
-  -logsigmoid(beta * ((logp_pi(c) - logp_ref(c)) - (logp_pi(r) - logp_ref(r)))) + --dpo-sft * SFT(c), where logp is the SUM of the log-probs of
-  the record's label tokens (the SFT loss mask: assistant think + call; shared-prefix tokens cancel in the difference) and SFT(c) is the
-  decision-weighted mean CE of the chosen record, exactly its SFT loss (--decision-weight / --copy-weight apply). --dpo-beta (default 0.1).
-  --dpo-sft (default 0.2): the RPO / TRL `rpo_alpha` convention, a light likelihood anchor that keeps the chosen record from drifting
-  down while the margin grows (its gradient is ~1/N of the summed DPO one, so it never outvotes the preference signal; 1.0 = RPO's value,
-  0 = plain DPO). The reference is the frozen initial model, held as a table: its two log-probs per pair are computed in ONE no-grad pass
-  before training (after the init weights load, before any resume state), through the same forward path as the policy, so the first step's
-  margin is exactly 0, no second 0.8B model sits on the device, and every epoch reuses the table (a resume recomputes it from the
-  same init weights). One pair = two forward passes (chosen, rejected) held for one backward; --bs pairs per optimizer step. The epochs
-  walk the pairs (plain shuffle, a pure function of seed and epoch); marks, EMA, resume, val eval and the SFT metrics are those of the SFT
-  run. --train is optional with --dpo and never trained on: when given, it is the sample the TRAIN metrics score (original-data drift);
-  when omitted the TRAIN metrics score the chosen records. The step line's `loss` is the chosen record's NLL per label token; every
-  --log-every steps a `DPO step` line gives the window means of the DPO loss, the implicit reward margin
-  beta * ((logp_pi - logp_ref)(c) - (logp_pi - logp_ref)(r)) and the accuracy (pairs with margin > 0), also kept in meta `dpo`.
+  toward them (shadow += (1 - d) * (weights - shadow), d = min(D, (1 + step) / (10 + step))). At every mark the shadow is also evaluated on
+  val (VAL-EMA, meta `ema_val`) and saved beside the mark as `ckpt-NNN-ema`; marks.json, best.json and FINAL never name it. A resume
+  checkpoint carries the shadow.
+- DPO (off unless asked: --dpo PAIRS.jsonl[.zst]; no --dpo = the SFT trainer above). One JSON object per line, {"id": str, "chosen": R,
+  "rejected": R}, each R a datagen record cut after the turn the pair is about (`assist-eval rollout-records` writes them, with the render).
+  The loss of a pair is -logsigmoid(beta * ((logp_pi(c) - logp_ref(c)) - (logp_pi(r) - logp_ref(r)))) + --dpo-sft * SFT(c), where logp is the
+  SUM of the log-probs of the record's label tokens (shared-prefix tokens cancel in the difference) and SFT(c) is the weighted mean CE of the
+  chosen record. --dpo-beta (default 0.1). --dpo-sft (default 0.2): the RPO / TRL `rpo_alpha` convention, a light likelihood anchor
+  (0 = plain DPO). The reference is the frozen initial model, held as a table: its two log-probs per pair are computed in ONE no-grad pass
+  before training, through the same forward path as the policy, so the first step's margin is exactly 0 and no second 0.8B model sits on
+  the device. One pair = two forward passes held for one backward; --bs pairs per optimizer step. --train is optional with --dpo and never
+  trained on: when given, it is the sample the TRAIN metrics score (drift on the original data); when omitted they score the chosen records.
 """
 from __future__ import annotations
 
@@ -104,7 +71,10 @@ from pathlib import Path
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import fmt  # noqa: E402
+import arms  # noqa: E402
+import datagen  # noqa: E402
+
+IGNORE = datagen.IGNORE
 
 
 def log(*a):
@@ -116,38 +86,18 @@ RANK = int(os.environ.get("RANK", 0))
 WORLD = int(os.environ.get("WORLD_SIZE", 1))
 
 
-DECISION_WEIGHT = 2.0              # --decision-weight: a decision token counts twice (1.0 = the plain mean CE)
-COPY_WEIGHT = 0.0                  # --copy-weight: a token inside a verbatim copy of the user's message carries no loss (1.0 = as any other)
 CHECKPOINTS = "0.25,0.5,0.75,1.0"  # --checkpoints: the marks, as fractions of the steps
 EMA = 0.0                          # --ema: the decay of the weight EMA; 0 = none
 DPO_BETA = 0.1                     # --dpo-beta: the KL strength of the DPO loss
 DPO_SFT = 0.2                      # --dpo-sft: weight of the SFT term on the chosen record (0 = plain DPO)
 EMA_SUFFIX = "-ema"                # the EMA weights of mark ckpt-NNN are saved as ckpt-NNN-ema
-LEGACY_LOSS = "--decision-weight 1 --copy-weight 1 --no-pair-batches"  # the loss and the order before these defaults, bit for bit
-
-DATE_INDEX = re.compile(r"dates\[(\d{1,2})\]")
-
-
-def mark_date_indexes(enc: dict, cfg) -> dict:
-    """Mark the digits of every trained `dates[i]` of a think as hard-tier decision tokens (in place; `enc` is returned).
-    The index names which entry of the prompt's dates line the date is: the model's whole decision for a date, so it
-    carries the hard weight (`fmt.PART_HARD`, with `PART_THINK` where no decision span covers it). No-op without a hard tier."""
-    if cfg.hard is None or cfg.hard.empty:
-        return enc
-    text, labels, offs, dec = enc["text"], enc["labels"], enc["offsets"], enc["decision"]
-    for m in DATE_INDEX.finditer(text):
-        for i, (a, b) in enumerate(offs):
-            if b > a and a < m.end(1) and b > m.start(1) and labels[i] != fmt.IGNORE:
-                dec[i] = ((dec[i] & fmt.PART_MASK) or fmt.PART_THINK) | fmt.PART_HARD  # hard is never a copy token
-    return enc
-
 
 class Example(tuple):
-    """One training record as the trainer holds it: the triple (input_ids, labels, decision), which is all that every reader unpacks,
-    plus `.pair`, the id of its minimal pair ('' = none, see `pair_of`). A plain tuple of three wherever a tuple is expected."""
+    """One training record as the trainer holds it: the triple (input_ids, labels, weights), which is all that every reader unpacks, plus
+    `.pair`, the id of its minimal pair ('' = none, see datagen.pair_of). A plain tuple of three wherever a tuple is expected."""
 
-    def __new__(cls, ids, labels, dec, pair=""):
-        self = super().__new__(cls, (ids, labels, dec))
+    def __new__(cls, ids, labels, weights, pair=""):
+        self = super().__new__(cls, (ids, labels, weights))
         self.pair = pair
         return self
 
@@ -155,115 +105,30 @@ class Example(tuple):
         return (*self, self.pair)
 
 
-def pair_of(ex: dict) -> str:
-    """The minimal-pair id of a training record: its `pair` field (a string), else the first tag `pair:<id>` of `tags`; '' = none. The
-    two records of a pair carry the same id."""
-    p = ex.get("pair")
-    if isinstance(p, (str, int)) and not isinstance(p, bool) and str(p).strip():
-        return str(p).strip()
-    tags = ex.get("tags") or ()
-    for t in tags.split() if isinstance(tags, str) else tags:
-        if isinstance(t, str) and t.startswith("pair:") and t[5:].strip():
-            return t[5:].strip()
-    return ""
+pair_of = datagen.pair_of
 
 
-def load(tok, path, max_len, limit, default_tools, check_n, tag, cfg):
-    """Examples as (input_ids, labels, decision) triples; `decision` is 0 or a fmt.PART_* per token."""
-    data, dropped, bad, bare = [], 0, 0, 0
-    for i, ex in enumerate(fmt.read_examples(path)):
-        if limit and len(data) >= limit:
-            break
-        try:
-            enc = mark_date_indexes(fmt.encode(tok, ex, default_tools, cfg), cfg)
-            if i < check_n:
-                fmt.check_spans(ex, enc)
-                fmt.check_decisions(enc, cfg)
-        except ValueError as e:
-            bad += 1
-            if bad <= 3:
-                log("SKIP %s #%d: %s" % (tag, i, e))
-            continue
-        if len(enc["input_ids"]) > max_len:
-            dropped += 1
-            continue
-        if not any(d & fmt.PART_MASK for d in enc["decision"]):
-            bare += 1
-        data.append(Example(enc["input_ids"], enc["labels"], enc["decision"], pair_of(ex)))
-    n_lab = sum(sum(1 for y in l if y != fmt.IGNORE) for _, l, _ in data)
-    n_dec = sum(sum(1 for d in dc if d & fmt.PART_MASK) for _, _, dc in data)
-    n_hard = sum(sum(1 for d in dc if d & fmt.PART_HARD) for _, _, dc in data)
-    n_copy = sum(sum(1 for d in dc if d & fmt.PART_COPY) for _, _, dc in data)
-    no_hard = sum(1 for _, _, dc in data if not any(d & fmt.PART_HARD for d in dc))
-    log("%s: %d examples, %d over max-len %d dropped, %d unrenderable skipped, %d label tokens (%d decision, %.1f%%; "
-        "%d hard, %.1f%%; %d records without a hard token; %d copy, %.1f%%), %d tokens, %d with a pair id"
-        % (tag, len(data), dropped, max_len, bad, n_lab, n_dec, 100 * n_dec / max(n_lab, 1), n_hard,
-           100 * n_hard / max(n_lab, 1), no_hard, n_copy, 100 * n_copy / max(n_lab, 1), sum(len(x) for x, _, _ in data),
-           sum(1 for d in data if d.pair)))
-    if bare:  # a silent no-op weight is worse than a stop: the labels do not match the think format
-        raise SystemExit("%s: %d of %d records have no decision token; check --decision-labels against the "
-                         "think format (fmt.py DecisionConfig)" % (tag, bare, len(data)))
-    if data and cfg.hard is not None and not cfg.hard.empty and not n_hard:
-        raise SystemExit("%s: a hard tier is configured but no record has a hard token; check --hard-labels and "
-                         "--hard-params against the format (fmt.py HardConfig)" % tag)
+def load_records(a, tok, path, limit, check_n, tag):
+    """Examples from a datagen file (`.jsonl.zst`, see datagen.py): `render.input_ids` with `render.weights` as they are. A record over
+    `a.max_len` tokens is dropped and counted; a record that breaks the contract stops the run."""
+    recs, st = datagen.load(path, a.max_len, limit)
+    data = [Example(r["input_ids"], r["labels"], r["weights"], r["pair"]) for r in recs]
+    n_dec = sum(1 for _, _, w in data for x in w[1:] if x > 1.0)
+    log("%s: %d examples (%d read, %d over max-len %d dropped), %d label tokens (%d weighted above 1, %.1f%%), weight mass %.1f, "
+        "%d tokens, %d with a pair id" % (tag, st["kept"], st["read"], st["dropped_too_long"], a.max_len, st["label_tokens"], n_dec,
+                                          100 * n_dec / max(st["label_tokens"], 1), st["weight_mass"], st["tokens"],
+                                          sum(1 for d in data if d.pair)))
+    if not data:
+        raise SystemExit("%s: no record of %s fits --max-len %d" % (tag, path, a.max_len))
+    if check_n and tok is not None:
+        bad = datagen.check_text(tok, path, min(check_n, 8))
+        if bad:
+            log("WARNING %s: render.text of %d of the first %d records does not tokenise to render.input_ids; the ids are trained on as "
+                "they are. Is the tokenizer %s?" % (tag, bad, min(check_n, 8), arms.TOKENIZER))
     return data
 
 
-def assert_mask_sample(tok, path, default_tools, cfg, n=8, examples=None):
-    """SPEC §11.3: show and assert, on a sample, that the trained tokens are exactly the assistant
-    messages' think + call tokens (through `<|im_end|>`), and nothing of system, user or tool. `examples` (an iterable of
-    records) stands in for the file `path`."""
-    for i, ex in enumerate(fmt.read_examples(path) if examples is None else examples):
-        if i >= n:
-            break
-        enc = fmt.encode(tok, ex, default_tools, cfg)
-        fmt.check_spans(ex, enc)
-        fmt.check_decisions(enc, cfg)
-        ids, labels = enc["input_ids"], enc["labels"]
-        # a repair's rejected call (`loss: False`) is in the text but not trained on
-        asst = [m for m in enc["records"] if m["role"] == "assistant" and m.get("loss", True)]
-        # token runs of trained labels, one per assistant message, each decoding to think + call
-        runs, cur = [], []
-        for t, y in zip(ids, labels):
-            if y != fmt.IGNORE:
-                cur.append(t)
-            elif cur:
-                runs.append(cur)
-                cur = []
-        if cur:
-            runs.append(cur)
-        assert len(runs) == len(asst), (len(runs), len(asst))
-        for run, m in zip(runs, asst):
-            piece = tok.decode(run)
-            assert piece.startswith((m.get("think") or "").strip()), (piece[:80], m.get("think", "")[:80])
-            assert piece.endswith("</tool_call><|im_end|>"), piece[-60:]
-            assert "<function=%s>" % m["tool"] in piece and piece.count("<tool_call>") == 1, piece
-            for bad in ("<|im_start|>", "<tool_response>", "<tools>"):
-                assert bad not in piece, (bad, piece[:120])
-        masked = tok.decode([t for t, y in zip(ids, labels) if y == fmt.IGNORE])
-        assert "<|im_start|>system" in masked and "<|im_start|>user" in masked
-        # every assistant header stays masked, trained or not
-        assert masked.count("<|im_start|>assistant\n<think>\n") == sum(m["role"] == "assistant" for m in enc["records"])
-        if i == 0:
-            log("MASK sample: %d tokens, %d trained (%d decision, %d copy) over %d assistant messages; first trained run, "
-                "decision tokens in [[ ]], copy tokens in {{ }}:\n%s"
-                % (len(ids), sum(1 for y in labels if y != fmt.IGNORE), sum(1 for d in enc["decision"] if d & fmt.PART_MASK),
-                   sum(1 for d in enc["decision"] if d & fmt.PART_COPY),
-                   len(asst), show_decisions(tok, ids, labels, enc["decision"], runs[0])[:900]))
-    log("MASK assertion passed on %d examples" % min(n, i + 1))
-
-
-def show_decisions(tok, ids, labels, decision, run):
-    """The first trained run decoded token by token, decision tokens wrapped in [[ ]], copy tokens in {{ }}."""
-    out, n = [], len(run)
-    k = next(i for i, y in enumerate(labels) if y != fmt.IGNORE)
-    for i in range(k, k + n):
-        piece = tok.decode([ids[i]])
-        out.append("[[%s]]" % piece if decision[i] & fmt.PART_MASK else "{{%s}}" % piece if decision[i] & fmt.PART_COPY else piece)
-    return "".join(out)
-
-
-def probe_memory(model, data, dev, n_train, weight=1.0, lengths=(None, 6144, 4096), enable_ckpt=None, copy_weight=1.0, pair_step=None):
+def probe_memory(model, data, dev, n_train, lengths=(None, 6144, 4096), enable_ckpt=None, pair_step=None):
     """Fail fast instead of hours in: one forward + backward on the longest example (no update),
     with AdamW's two fp32 states (allocated lazily at the first step) held as ballast.
     On CUDA OOM, first (if `enable_ckpt` is given: gradient checkpointing is off by default) switch
@@ -287,8 +152,8 @@ def probe_memory(model, data, dev, n_train, weight=1.0, lengths=(None, 6144, 409
                 if pair_step:
                     pair_step(big).backward()
                 else:
-                    loss, n, _, _ = forward_loss(model, ids, labels, dev, dec, weight, copy_weight)
-                    (loss / n).backward()
+                    loss, _, _, _ = forward_loss(model, ids, labels, dev, dec)
+                    (loss / max(weight_mass(dec), 1e-9)).backward()
                 model.zero_grad(set_to_none=True)
                 log("MEMORY probe: %d tokens forward+backward with optimizer state, peak %.1f GiB of %.1f GiB"
                     % (len(ids), torch.cuda.max_memory_allocated(dev) / 2**30,
@@ -317,17 +182,18 @@ def resolve_autocast(mode):
     return mode
 
 
-def amp_smoke(model, data, dev, weight, explicit, copy_weight=1.0):
+def amp_smoke(model, data, dev, explicit):
     """One forward + backward of the shortest example under autocast, compared with the fp32 forward. The
     Triton (fla) kernels or the conv path can hit a dtype mismatch under autocast that only a real GPU shows:
     with the default (auto) that turns autocast off and trains in fp32 with a loud log; an explicit
     --autocast bf16 re-raises. A relative loss gap over 5% is logged as a warning."""
     ids, labels, dec = min(data, key=lambda d: len(d[0]))
     try:
-        loss, n, _, _ = forward_loss(model, ids, labels, dev, dec, weight, copy_weight)
+        loss, _, _, _ = forward_loss(model, ids, labels, dev, dec)
+        n = max(weight_mass(dec), 1e-9)
         (loss / n).backward()
         model.zero_grad(set_to_none=True)
-        got = float(loss) / n
+        got = float(loss.detach()) / n
     except (RuntimeError, TypeError, ValueError) as e:
         model.zero_grad(set_to_none=True)
         if explicit:
@@ -338,7 +204,7 @@ def amp_smoke(model, data, dev, weight, explicit, copy_weight=1.0):
     amp, AMP["dtype"] = AMP["dtype"], None
     try:
         with torch.no_grad():
-            ref = float(forward_loss(model, ids, labels, dev, dec, weight, copy_weight)[0]) / n
+            ref = float(forward_loss(model, ids, labels, dev, dec)[0]) / n
     finally:
         AMP["dtype"] = amp
     log("AUTOCAST check: loss/token %.4f under bf16 vs %.4f fp32 (%.2f%% apart)" % (got, ref, 100 * abs(got - ref) / max(abs(ref), 1e-9)))
@@ -347,7 +213,7 @@ def amp_smoke(model, data, dev, weight, explicit, copy_weight=1.0):
     return True
 
 
-# Autocast state, set by main() (None = the legacy pure-fp32 forward, what every direct caller sees).
+# Autocast state, set by main() (None = the pure-fp32 forward, what every direct caller sees).
 AMP = {"dtype": None}
 
 
@@ -359,7 +225,7 @@ def label_logits(model, ids, labels, dev):
     keep fp32 precision: a bf16 logit near 20 is only good to ~0.1, which would blur the loss."""
     x = torch.tensor([ids], device=dev)
     y = torch.tensor(labels[1:], device=dev)
-    pos = torch.nonzero(y != fmt.IGNORE).squeeze(1)
+    pos = torch.nonzero(y != IGNORE).squeeze(1)
     if AMP["dtype"] is None:
         out = model(input_ids=x, logits_to_keep=pos, use_cache=False)
         return out.logits[0].float(), y[pos], pos
@@ -374,159 +240,77 @@ def label_logits(model, ids, labels, dev):
     return base.get_output_embeddings()(h[0, pos].float()), y[pos], pos
 
 
-def token_weights(dec, pos, weight, dev, copy_weight=1.0):
-    """Weight of each label position: `weight` on decision tokens, `copy_weight` on copy tokens (fmt.PART_COPY: a verbatim copy of the
-    user's message, carried alone, never a decision or hard token), 1 elsewhere (dec aligned with labels). -> (weights, decision mask)."""
-    v = torch.tensor(dec[1:], device=dev)[pos]
-    d = (v & fmt.PART_MASK) > 0
-    w = 1.0 + (weight - 1.0) * d.float()
-    if copy_weight != 1.0:  # a token that is a decision or hard token is never reweighted as a copy
-        w = torch.where(((v & fmt.PART_COPY) > 0) & ~d, torch.full_like(w, copy_weight), w)
-    return w, d
+def token_weights(dec, pos, dev):
+    """Weight of each label position (`dec`, the record's weights aligned with its ids, first token included) and the decision mask
+    (weight above 1)."""
+    w = torch.tensor(dec[1:], dtype=torch.float32, device=dev)[pos]
+    return w, w > 1.0
 
 
-def forward_loss(model, ids, labels, dev, dec=None, weight=1.0, copy_weight=1.0):
-    """CE over label positions, logits only there. Returns (loss, n, n_correct, plain_sum).
-
-    `loss` is what backward sees: the plain sum at weight 1.0 and copy weight 1.0 (the exact old code path, so the loss
-    is bit-identical), else the sum of weight * CE (decision tokens `weight`, copy tokens `copy_weight`, all others 1);
-    `plain_sum` is the unweighted sum for logging."""
-    return loss_from_logits(*label_logits(model, ids, labels, dev), dec, weight, dev, copy_weight)
+def forward_loss(model, ids, labels, dev, dec):
+    """The weighted CE sum over the label positions, logits only there. Returns (loss, n, n_correct, plain_sum): `loss` is what backward sees
+    (divide it by `weight_mass`); `plain_sum` is the unweighted CE sum for logging."""
+    return loss_from_logits(*label_logits(model, ids, labels, dev), dec, dev)
 
 
-def loss_from_logits(logits, tgt, pos, dec, weight, dev, copy_weight=1.0):
+def loss_from_logits(logits, tgt, pos, dec, dev):
     correct = (logits.argmax(-1) == tgt).sum()
-    if dec is None or (weight == 1.0 and copy_weight == 1.0):
-        loss = torch.nn.functional.cross_entropy(logits, tgt, reduction="sum")
-        return loss, pos.numel(), correct, loss.detach()
     ce = torch.nn.functional.cross_entropy(logits, tgt, reduction="none")
-    w, _ = token_weights(dec, pos, weight, dev, copy_weight)
-    return (ce * w).sum(), pos.numel(), correct, ce.detach().sum()
+    return (ce * token_weights(dec, pos, dev)[0]).sum(), pos.numel(), correct, ce.detach().sum()
 
 
-def weight_mass(labels, dec, weight, copy_weight=1.0):
-    """(label tokens, decision tokens, weight mass) of one example, first token excluded as in the loss. The mass is what the token weights
-    sum to: decision tokens count `weight`, copy tokens `copy_weight`, every other label token 1."""
-    n = sum(1 for y in labels[1:] if y != fmt.IGNORE)
-    nd = sum(1 for d in dec[1:] if d & fmt.PART_MASK)
-    nc = sum(1 for d in dec[1:] if d & fmt.PART_COPY and not d & fmt.PART_MASK)
-    return n, nd, n + (weight - 1.0) * nd + (copy_weight - 1.0) * nc
-
-
-def hard_mask(dec, pos, dev):
-    """Bool mask over the label positions `pos`: the hard-tier tokens (fmt.PART_HARD bit of `dec`)."""
-    return (torch.tensor(dec[1:], device=dev)[pos] & fmt.PART_HARD) > 0
-
-
-def copy_mask(dec, pos, dev):
-    """Bool mask over the label positions `pos`: the copy tokens (fmt.PART_COPY, never a decision token)."""
-    v = torch.tensor(dec[1:], device=dev)[pos]
-    return ((v & fmt.PART_COPY) > 0) & ((v & fmt.PART_MASK) == 0)
+def weight_mass(dec):
+    """What the weights of a record sum to, first token excluded as in the loss: the divisor of its weighted CE sum."""
+    return float(sum(dec[1:]))
 
 
 def evaluate(model, data, dev):
-    """Loss and accuracy on all label tokens, on decision tokens only, on hard tokens only and on copy tokens only (eval mode,
-    no grad). Returns a dict: n/loss/acc, dn/dloss/dacc (decision), oloss (every label token that is neither decision nor copy),
-    hn/hloss/hacc (the hard tier, a subset of the decision tokens), cn/closs/cacc (the copy tokens: verbatim copies of the user's
-    message, apart from the decision tokens)."""
+    """Loss and accuracy on all label tokens, on decision tokens only (weight above 1) and on the rest (eval mode, no grad). Returns a dict:
+    n/loss/acc, dn/dloss/dacc (decision), oloss (every label token that is not a decision token)."""
     model.eval()
-    tot = torch.zeros(12, dtype=torch.float64, device=dev)  # loss n correct | dloss dn dcorrect | hloss hn hcorrect | closs cn ccorrect
+    tot = torch.zeros(6, dtype=torch.float64, device=dev)  # loss n correct | dloss dn dcorrect
     with torch.no_grad():
         for ids, labels, dec in data[RANK::WORLD]:
             logits, tgt, pos = label_logits(model, ids, labels, dev)
             ce = torch.nn.functional.cross_entropy(logits, tgt, reduction="none").double()
             hit = (logits.argmax(-1) == tgt).double()
-            d = (torch.tensor(dec[1:], device=dev)[pos] & fmt.PART_MASK) > 0
-            h = hard_mask(dec, pos, dev)
-            k = copy_mask(dec, pos, dev)
+            d = token_weights(dec, pos, dev)[1]
             tot += torch.stack([ce.sum(), torch.tensor(float(pos.numel()), dtype=torch.float64, device=dev), hit.sum(),
-                                ce[d].sum(), d.sum().double(), hit[d].sum(),
-                                ce[h].sum(), h.sum().double(), hit[h].sum(),
-                                ce[k].sum(), k.sum().double(), hit[k].sum()])
+                                ce[d].sum(), d.sum().double(), hit[d].sum()])
     if WORLD > 1:
         torch.distributed.all_reduce(tot)
     model.train()
-    loss, n, c, dl, dn, dc, hl, hn, hc, cl, cn, cc = tot.tolist()
+    loss, n, c, dl, dn, dc = tot.tolist()
     return {"n": int(n), "loss": loss / max(n, 1), "acc": c / max(n, 1),
             "dn": int(dn), "dloss": dl / max(dn, 1), "dacc": dc / max(dn, 1),
-            "oloss": (loss - dl - cl) / max(n - dn - cn, 1),
-            "hn": int(hn), "hloss": hl / max(hn, 1), "hacc": hc / max(hn, 1),
-            "cn": int(cn), "closs": cl / max(cn, 1), "cacc": cc / max(cn, 1)}
+            "oloss": (loss - dl) / max(n - dn, 1)}
 
 
 def report(tag, step, r):
-    log("%s step %d loss %.4f acc %.4f over %d tokens | decision loss %.4f acc %.4f over %d tokens (%.1f%%) | "
-        "other loss %.4f | hard loss %.4f acc %.4f over %d tokens (%.1f%%) | copy loss %.4f acc %.4f over %d tokens (%.1f%%)"
-        % (tag, step, r["loss"], r["acc"], r["n"], r["dloss"], r["dacc"], r["dn"], 100 * r["dn"] / max(r["n"], 1),
-           r["oloss"], r["hloss"], r["hacc"], r["hn"], 100 * r["hn"] / max(r["n"], 1),
-           r["closs"], r["cacc"], r["cn"], 100 * r["cn"] / max(r["n"], 1)))
+    log("%s step %d loss %.4f acc %.4f over %d tokens | decision loss %.4f acc %.4f over %d tokens (%.1f%%) | other loss %.4f"
+        % (tag, step, r["loss"], r["acc"], r["n"], r["dloss"], r["dacc"], r["dn"], 100 * r["dn"] / max(r["n"], 1), r["oloss"]))
 
 
-RECOMMENDED_W = DECISION_WEIGHT  # the owner's weight for the decision tokens (hard tokens ride on it): the --decision-weight default
-
-
-def dry_run(model, data, dev, weight, launch_flags="", copy_weight=1.0):
-    """No training: one forward pass over `data`, and what the decision tokens are at `weight` and the copy tokens at `copy_weight`:
-    their share of the label tokens, of the weight mass, and of the weighted loss (the model's own
-    per-token CE, here the untrained or given model); the same shares for the hard tier (a subset of
-    the decision tokens, weighted by the same W). Ends with the recommended launch flags (the defaults)."""
+def dry_run(model, data, dev):
+    """--dry-run: one forward pass, and the weighted loss of each record checked against the weights it carries."""
     model.eval()
-    n = nd = nh = nc = no_hard = no_copy = 0
-    ce_all = ce_dec = ce_hard = ce_copy = 0.0
+    n = mass = 0
+    ce_sum = wce = 0.0
     with torch.no_grad():
-        for ids, labels, dec in data:
+        for ids, labels, w in data:
             logits, tgt, pos = label_logits(model, ids, labels, dev)
             ce = torch.nn.functional.cross_entropy(logits, tgt, reduction="none").double()
-            d = (torch.tensor(dec[1:], device=dev)[pos] & fmt.PART_MASK) > 0
-            h = hard_mask(dec, pos, dev)
-            k = copy_mask(dec, pos, dev)
-            assert not bool((h & ~d).any()), "a hard token that is not a decision token"
-            assert not bool((k & (d | h)).any()), "a copy token that is a decision or hard token"
-            # the training loss on this record must equal the weighted sum of these CEs
-            loss, _, _, plain = loss_from_logits(logits, tgt, pos, dec, weight, dev, copy_weight)
-            want = (ce * (1.0 + (weight - 1.0) * d.double() + (copy_weight - 1.0) * k.double())).sum().item()
-            assert abs(loss.item() - want) <= 1e-4 * max(1.0, abs(want)), (loss.item(), want)
-            assert abs(plain.item() - ce.sum().item()) <= 1e-4 * max(1.0, plain.item()), (plain.item(), ce.sum().item())
-            assert weight_mass(labels, dec, 1.0)[:2] == (pos.numel(), int(d.sum()))
-            mass = weight_mass(labels, dec, weight, copy_weight)[2]
-            assert abs(mass - float(token_weights(dec, pos, weight, dev, copy_weight)[0].sum())) <= 1e-4 * max(1.0, mass), mass
+            loss = loss_from_logits(logits, tgt, pos, w, dev)[0].item()
+            assert abs(loss - float((ce * token_weights(w, pos, dev)[0].double()).sum())) <= 1e-4 * max(1.0, abs(loss))
             n += pos.numel()
-            nd += int(d.sum())
-            nh += int(h.sum())
-            nc += int(k.sum())
-            no_hard += int(not bool(h.any()))
-            no_copy += int(not bool(k.any()))
-            ce_all += ce.sum().item()
-            ce_dec += ce[d].sum().item()
-            ce_hard += ce[h].sum().item()
-            ce_copy += ce[k].sum().item()
-    log("DRY-RUN forward pass ok on %d records: loss all %.4f, decision %.4f, hard %.4f, copy %.4f, other %.4f "
-        "(untrained or given model)" % (len(data), ce_all / n, ce_dec / max(nd, 1), ce_hard / max(nh, 1), ce_copy / max(nc, 1),
-                                        (ce_all - ce_dec - ce_copy) / max(n - nd - nc, 1)))
-    log("DRY-RUN hard tokens: %d of %d label tokens (%.1f%%), %.1f%% of the decision tokens; %d of %d records have none"
-        % (nh, n, 100 * nh / n, 100 * nh / max(nd, 1), no_hard, len(data)))
-    cmass = (n - nd - nc) + weight * nd + copy_weight * nc
-    log("DRY-RUN copy tokens: %d of %d label tokens (%.1f%%), outside the decision tokens; %d of %d records have none; at --copy-weight %g "
-        "they are %.1f%% of the weight mass" % (nc, n, 100 * nc / n, no_copy, len(data), copy_weight, 100 * copy_weight * nc / cmass))
-    for w in sorted({1.0, 3.0, 5.0, 8.0, weight, RECOMMENDED_W}):
-        mass = (n - nd - nc) + w * nd + copy_weight * nc
-        lmass = (ce_all - ce_dec - ce_copy) + w * ce_dec + copy_weight * ce_copy
-        log("DRY-RUN W=%-4g decision tokens %.1f%% of label tokens, %.1f%% of weight mass, %.1f%% of weighted loss; "
-            "hard tokens %.1f%% of label tokens, %.1f%% of weight mass, %.1f%% of weighted loss%s%s"
-            % (w, 100 * nd / n, 100 * w * nd / mass, 100 * w * ce_dec / lmass, 100 * nh / n, 100 * w * nh / mass,
-               100 * w * ce_hard / lmass, "  <- chosen" if w == weight else "",
-               "  <- recommended" if w == RECOMMENDED_W else ""))
-    log("DRY-RUN recommended launch: python train.py --train TRAIN --val VAL --out OUT --decision-weight %g --copy-weight %g%s"
-        % (RECOMMENDED_W, COPY_WEIGHT, launch_flags))
+            mass += weight_mass(w)
+            ce_sum += ce.sum().item()
+            wce += loss
+    log("DRY-RUN: %d records, %d label tokens, weight mass %.1f, plain CE %.4f, weighted loss (sum w*CE / sum w) %.4f"
+        % (len(data), n, mass, ce_sum / max(n, 1), wce / max(mass, 1e-9)))
 
 
-
-def launch_flags(a) -> str:
-    """The decision / hard flags this run was given (others stay at their defaults), for the dry-run's launch line."""
-    keys = ("decision_labels", "decision_ref_labels", "decision_params", "decision_skip_params",
-            "hard_labels", "hard_ref_labels", "hard_params", "hard_ref_params", "hard_param_names",
-            "hard_ref_sigil", "copy_labels")
-    return "".join(" --%s %s" % (k.replace("_", "-"), getattr(a, k) or "''") for k in keys if getattr(a, k) is not None)
+PROTECT = {"snapshot": None}  # arm C: the edited tensors as loaded, checked at every export (arms.verify)
 
 
 def save(model, tok, out, tag, meta):
@@ -538,6 +322,8 @@ def save(model, tok, out, tag, meta):
     if peft_model is not None:  # merge in place, save plain weights, then unmerge and keep training
         peft_model.merge_adapter()
         model = peft_model.get_base_model()
+        if PROTECT["snapshot"] is not None:  # arm C: the edited tensors must still be the base's, bit for bit, after the merge
+            arms.verify(PROTECT["snapshot"], model)
         sd = {k.replace(".base_layer.", "."): v.detach().to(torch.bfloat16)
               for k, v in model.state_dict().items() if "lora_" not in k}
     else:
@@ -599,23 +385,25 @@ class DpoPair:
         self.id, self.chosen, self.rejected = pid, chosen, rejected
 
 
-def load_pairs(tok, path, max_len, limit, default_tools, check_n, cfg):
-    """DpoPairs from a pair file: {"id", "chosen", "rejected"} per line, both records in the train.jsonl.gz format. A pair either record of
-    which is malformed, unrenderable, over `max_len` or has no label token is skipped (logged, counted); none left is a stop."""
+def load_pairs(path, max_len, limit):
+    """DpoPairs from a pair file: {"id", "chosen", "rejected"} per line, both sides datagen records (datagen.py). A pair either side of
+    which is malformed, over `max_len` or has no label token is skipped (logged, counted); none left is a stop."""
     data, bad, long_, empty = [], 0, 0, 0
-    for i, ob in enumerate(fmt.read_examples(path)):
+    for i, ob in enumerate(datagen.read_jsonl(path)):
         if limit and len(data) >= limit:
             break
         try:
             if not isinstance(ob, dict) or not isinstance(ob.get("chosen"), dict) or not isinstance(ob.get("rejected"), dict):
                 raise ValueError('a pair is {"id", "chosen": record, "rejected": record}')
-            encs = []
-            for side in ("chosen", "rejected"):
-                enc = mark_date_indexes(fmt.encode(tok, ob[side], default_tools, cfg), cfg)
-                if i < check_n:
-                    fmt.check_spans(ob[side], enc)
-                    fmt.check_decisions(enc, cfg)
-                encs.append(enc)
+            encs = [datagen.encode(ob[side]) for side in ("chosen", "rejected")]
+        except datagen.RecordError as e:
+            if "no token carries loss" in str(e):
+                empty += 1
+            else:
+                bad += 1
+                if bad <= 3:
+                    log("SKIP pairs #%d: %s" % (i, e))
+            continue
         except (ValueError, KeyError, TypeError) as e:
             bad += 1
             if bad <= 3:
@@ -624,12 +412,9 @@ def load_pairs(tok, path, max_len, limit, default_tools, check_n, cfg):
         if any(len(e["input_ids"]) > max_len for e in encs):
             long_ += 1
             continue
-        if any(all(y == fmt.IGNORE for y in e["labels"][1:]) for e in encs):
-            empty += 1
-            continue
-        c, r = (Example(e["input_ids"], e["labels"], e["decision"]) for e in encs)
+        c, r = (Example(e["input_ids"], e["labels"], e["weights"]) for e in encs)
         data.append(DpoPair(str(ob.get("id", i)), c, r))
-    log("pairs: %d pairs, %d over max-len %d dropped, %d unrenderable or malformed skipped, %d without a label token skipped; %d + %d tokens"
+    log("pairs: %d pairs, %d over max-len %d dropped, %d malformed skipped, %d without a label token skipped; %d + %d tokens"
         % (len(data), long_, max_len, bad, empty, sum(len(p.chosen[0]) for p in data), sum(len(p.rejected[0]) for p in data)))
     if not data:
         raise SystemExit("pairs: no usable pair in %s" % path)
@@ -641,15 +426,15 @@ def dpo_records(pairs):
     return [r for p in pairs for r in (p.chosen, p.rejected)]
 
 
-def forward_logp(model, ex, dev, weight=1.0, copy_weight=1.0):
+def forward_logp(model, ex, dev):
     """One record's (logp, sft, plain, n): `logp` the SUM of the log-probs of its label tokens (what DPO compares), `sft` its SFT loss
-    (the decision- / copy-weighted CE sum over the weight mass of the record, so its per-record mean), `plain` the unweighted CE sum
+    (the weighted CE sum over the weight mass of the record, so its per-record mean), `plain` the unweighted CE sum
     (detached) and `n` the label tokens. One forward; the label-position logits are shared by all three."""
     ids, labels, dec = ex
     logits, tgt, pos = label_logits(model, ids, labels, dev)
     ce = torch.nn.functional.cross_entropy(logits, tgt, reduction="none")
-    loss = loss_from_logits(logits, tgt, pos, dec, weight, dev, copy_weight)[0]
-    mass = weight_mass(labels, dec, weight, copy_weight)[2]
+    loss = loss_from_logits(logits, tgt, pos, dec, dev)[0]
+    mass = weight_mass(dec)
     return -ce.sum(), loss / max(mass, 1e-9), ce.detach().sum(), pos.numel()
 
 
@@ -662,7 +447,7 @@ def dpo_loss(pc, pr, rc, rr, beta):
 
 
 @torch.no_grad()
-def dpo_reference(model, pairs, dev, weight=1.0, copy_weight=1.0):
+def dpo_reference(model, pairs, dev):
     """The frozen reference's summed label log-probs of every pair, [n, 2] float64 on `dev` (chosen, rejected): the model as it is now
     (the initial weights), eval mode, no grad, the policy's own forward path. Each rank scores its share of the pairs and the table is
     summed across ranks."""
@@ -670,19 +455,19 @@ def dpo_reference(model, pairs, dev, weight=1.0, copy_weight=1.0):
     ref = torch.zeros(len(pairs), 2, dtype=torch.float64, device=dev)
     for i in range(RANK, len(pairs), WORLD):
         for j, ex in enumerate((pairs[i].chosen, pairs[i].rejected)):
-            ref[i, j] = forward_logp(model, ex, dev, weight, copy_weight)[0].double()
+            ref[i, j] = forward_logp(model, ex, dev)[0].double()
     if WORLD > 1:
         torch.distributed.all_reduce(ref)
     model.train()
     return ref
 
 
-def dpo_pair_loss(model, pair, ref_row, beta, sft, dev, weight=1.0, copy_weight=1.0):
+def dpo_pair_loss(model, pair, ref_row, beta, sft, dev):
     """One pair, two forwards (both graphs held for the one backward). Returns (loss, dpo, margin, plain NLL sum of the chosen record): loss =
     dpo + sft * SFT(chosen) is what backward sees; `dpo` and `margin` (the implicit reward margin) are detached.
     `ref_row` = the reference's (chosen, rejected) summed log-probs."""
-    pc, sc, plain, n = forward_logp(model, pair.chosen, dev, weight, copy_weight)
-    pr = forward_logp(model, pair.rejected, dev, weight, copy_weight)[0]
+    pc, sc, plain, n = forward_logp(model, pair.chosen, dev)
+    pr = forward_logp(model, pair.rejected, dev)[0]
     dpo, margin = dpo_loss(pc.double(), pr.double(), ref_row[0], ref_row[1], beta)
     loss = dpo + sft * sc.double() if sft else dpo
     return loss, dpo.detach(), margin.detach(), plain
@@ -691,12 +476,8 @@ def dpo_pair_loss(model, pair, ref_row, beta, sft, dev, weight=1.0, copy_weight=
 # ---- resume checkpoints -------------------------------------------------------------------------
 RESUME_PREFIX = "resume-step-"
 RESUME_KEEP = 2
-FP_ARGS = ("bs", "lr", "warmup", "min_lr", "max_len", "seed", "embed", "lora", "decision_weight", "copy_weight", "pair_batches",
-           "n", "epochs", "tf32", "autocast", "ema", "dpo", "dpo_beta", "dpo_sft")  # the precision, the loss weights and the order change the numbers: a resume must not switch them mid-run
-# what a checkpoint written before these flags existed ran with: pure fp32, TF32 off, copy tokens weighing 1, the plain shuffle
-FP_LEGACY = {"tf32": False, "autocast": "none", "copy_weight": 1.0, "pair_batches": False, "ema": 0.0,
-             "dpo": None, "dpo_beta": DPO_BETA, "dpo_sft": DPO_SFT}
-
+FP_ARGS = ("bs", "lr", "warmup", "min_lr", "max_len", "seed", "embed", "lora", "pair_batches",
+           "n", "epochs", "tf32", "autocast", "ema", "dpo", "dpo_beta", "dpo_sft", "arm")  # the precision, the loss weights and the order change the numbers: a resume must not switch them mid-run
 
 def _fsync_path(p):
     fd = os.open(str(p), os.O_RDONLY)
@@ -977,56 +758,30 @@ def data_version(text: str) -> str:
 def parser() -> argparse.ArgumentParser:
     """The command line (a function of its own so that the defaults can be read, and tested, without running a training)."""
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default=fmt.render.TOKENIZER)
+    ap.add_argument("--model", default=arms.TOKENIZER)
+    ap.add_argument("--arm", choices=sorted(arms.ARMS), help="M6 arm (arms.py): A stock full SFT, B edited full SFT, C edited LoRA that skips "
+                    "the edited tensors; sets --model, --lora and the default --lr")
+    ap.add_argument("--tokenizer", help="tokenizer to load (default --model; with --arm, %s)" % arms.TOKENIZER)
     ap.add_argument("--train", help="train file (required unless --dpo; with --dpo it is never trained on: it is the sample the TRAIN "
                     "metrics score)")
     ap.add_argument("--val")
-    ap.add_argument("--tools", help="tools.json when examples carry none (nativetools export)")
     ap.add_argument("--out", help="checkpoint folder (required unless --dry-run)")
     ap.add_argument("--bs", type=int, default=16, help="examples per optimizer step (global)")
-    ap.add_argument("--lr", type=float, default=2e-5)
+    ap.add_argument("--lr", type=float, default=None, help="default 2e-5 (the arm's with --arm)")
     ap.add_argument("--warmup", type=float, default=0.03, help="fraction of steps")
     ap.add_argument("--min-lr", type=float, default=0.1, help="final lr as a fraction of --lr")
     ap.add_argument("--max-len", type=int, default=8192, help="longest session kept, in tokens")
     ap.add_argument("--hours", type=float, default=8.0, help="hard wall-clock budget for training")
-    ap.add_argument("--decision-weight", type=float, default=DECISION_WEIGHT, metavar="W",
-                    help="CE weight on decision tokens (fmt.py), default %g; 1.0 = plain mean CE (with --copy-weight 1 and "
-                    "--no-pair-batches, the legacy trainer, bit for bit). The batch is normalised by its weight mass"
-                    % DECISION_WEIGHT)
-    ap.add_argument("--copy-weight", type=float, default=COPY_WEIGHT, metavar="C",
-                    help="CE weight on the copy tokens (fmt.py CopyConfig: think values that are verbatim copies of the user's "
-                    "message: the quoted phrase of intent, the values of set, text and question), default %g = no loss; "
-                    "1.0 = as any other token. They are never decision or hard tokens and are reported apart" % COPY_WEIGHT)
-    ap.add_argument("--copy-labels", help="think slots whose value may be a copy of the user's message, comma list (default "
-                    "fmt.COPY_LABELS = intent,set,text,question; empty = no copy tokens at all)")
     ap.add_argument("--pair-batches", action=argparse.BooleanOptionalAction, default=True,
                     help="shuffle minimal pairs (records sharing a `pair` field or a `pair:<id>` tag) as units and keep both "
                     "records of a pair adjacent and in the same optimizer step (default on; --no-pair-batches = the plain "
-                    "shuffle, the legacy order). Data without pair ids is ordered the same either way")
-    ap.add_argument("--decision-labels", help="think slot labels whose values are decisions, comma list "
-                    "(default: fmt.DEFAULT_LABELS, the slot labels of the trace)")
-    ap.add_argument("--decision-ref-labels", help="labels of those whose value counts only by its row refs "
-                    "(default none)")
-    ap.add_argument("--decision-params", help="call parameters whose values are decisions (default * = all)")
-    ap.add_argument("--decision-skip-params", help="call parameters never decisions (default question)")
-    ap.add_argument("--hard-labels", help="think slot labels whose whole value is a hard token (default "
-                    "fmt.HARD_LABELS; empty = none)")
-    ap.add_argument("--hard-ref-labels", help="labels whose hard tokens are only their row refs (default "
-                    "fmt.HARD_REF_LABELS = refer; empty = none)")
-    ap.add_argument("--hard-params", help="call parameters whose values (and names) are hard tokens (default "
-                    "fmt.HARD_PARAMS; empty = none)")
-    ap.add_argument("--hard-ref-params", help="call parameters whose hard tokens are only their row refs and date "
-                    "leaves (default fmt.HARD_REF_PARAMS = args; empty = none)")
-    ap.add_argument("--hard-param-names", type=int, choices=(0, 1), help="1 = the names of the hard parameters a "
-                    "call sets are hard tokens too (default 0)")
-    ap.add_argument("--hard-ref-sigil", type=int, choices=(0, 1), help="1 = the # / @ of a ref in a ref label is "
-                    "hard too (default 0: only the row number)")
+                    "shuffle). Data without pair ids is ordered the same either way")
     ap.add_argument("--train-eval-n", type=int, default=300, help="train records (a fixed sample) scored in "
-                    "eval mode at each eval, for the train side of the decision-token report")
+                    "eval mode at each eval, for the train side of the report")
     ap.add_argument("--test", help="test file: scored (all and decision tokens) at the last eval only; "
                     "not opened otherwise")
-    ap.add_argument("--dry-run", type=int, default=0, metavar="N", help="tokenizer, mask assertions and one "
-                    "forward pass over N train records, no training; prints the decision-token shares")
+    ap.add_argument("--dry-run", type=int, default=0, metavar="N", help="one forward pass over N train "
+                    "records, no training; checks the weighted loss against the records' weights")
     ap.add_argument("--embed", choices=["freeze", "train"], default="freeze")
     ap.add_argument("--val-n", type=int, default=400, help="val examples scored at each checkpoint")
     ap.add_argument("--n", type=int, default=0, help="use only the first N train examples")
@@ -1044,10 +799,10 @@ def parser() -> argparse.ArgumentParser:
                     "command lines still work")
     ap.set_defaults(grad_ckpt=False)
     ap.add_argument("--tf32", action=argparse.BooleanOptionalAction, default=True, help="TF32 matmuls "
-                    "(default on; --no-tf32 = full-precision fp32 matmuls, the legacy behaviour)")
+                    "(default on; --no-tf32 = full-precision fp32 matmuls)")
     ap.add_argument("--autocast", choices=("auto", "bf16", "none"), default="auto", help="bf16 autocast of the "
                     "forward/backward over fp32 master weights, fp32 optimizer state and fp32 lm_head + loss. auto "
-                    "(default) = bf16 on a CUDA GPU with bf16, none on CPU; none = the legacy pure-fp32 path")
+                    "(default) = bf16 on a CUDA GPU with bf16, none on CPU; none = the pure-fp32 path")
     ap.add_argument("--fused-adam", action=argparse.BooleanOptionalAction, default=True, help="fused AdamW on "
                     "CUDA (default on; falls back to the plain one where unavailable; --no-fused-adam = plain)")
     ap.add_argument("--epochs", type=int, default=1, help="passes over the train file, a fresh shuffle each "
@@ -1061,8 +816,8 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--ema", type=float, default=EMA, metavar="D", help="keep an EMA of the trainable weights with decay D (e.g. "
                     "0.999, a mean age of D/(1-D) steps), evaluated on val and saved beside every mark as ckpt-NNN%s; 0 (default) "
                     "= none" % EMA_SUFFIX)
-    ap.add_argument("--dpo", metavar="PAIRS", help="DPO instead of SFT: a (gzipped) JSONL of {id, chosen, rejected} records "
-                    "(each in the train file's format); the reference is the frozen initial model (see the module docstring)")
+    ap.add_argument("--dpo", metavar="PAIRS", help="DPO instead of SFT: a JSONL (.zst, .gz or plain) of {id, chosen, rejected} records "
+                    "(each a datagen record, see datagen.py); the reference is the frozen initial model (see the module docstring)")
     ap.add_argument("--dpo-beta", type=float, default=DPO_BETA, metavar="B", help="DPO beta (default %g)" % DPO_BETA)
     ap.add_argument("--dpo-sft", type=float, default=DPO_SFT, metavar="S", help="with --dpo: weight of the SFT loss (mean CE) of "
                     "the chosen record added to the DPO loss (default %g; 0 = plain DPO, 1 = RPO)" % DPO_SFT)
@@ -1080,6 +835,9 @@ def main():
         ap.error("--save-every must be >= 0 and --epochs >= 1")
     if not a.train and not a.dpo:
         ap.error("--train is required (except with --dpo)")
+    arm = arms.apply_arm(a)  # --arm: the base, the method and the default lr (an explicit --lr wins)
+    if a.lr is None:
+        a.lr = 2e-5
     if a.dpo and not a.dpo_beta > 0:
         ap.error("--dpo-beta must be positive")
     if a.dpo and a.dpo_sft < 0:
@@ -1101,28 +859,15 @@ def main():
     torch.manual_seed(a.seed)
 
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    tok = AutoTokenizer.from_pretrained(a.model)
-    default_tools = json.loads(Path(a.tools).read_text()) if a.tools else None
-    W, CW = a.decision_weight, a.copy_weight
-    assert W > 0, "--decision-weight must be positive"
-    assert CW >= 0, "--copy-weight must not be negative"
-    hard = fmt.HardConfig.parse(a.hard_labels, a.hard_ref_labels, a.hard_params, a.hard_ref_params,
-                              param_names=a.hard_param_names, ref_sigil=a.hard_ref_sigil)
-    cfg = fmt.DecisionConfig.parse(a.decision_labels, a.decision_ref_labels, a.decision_params,
-                                   a.decision_skip_params, hard=hard, copy=fmt.CopyConfig.parse(a.copy_labels))
-    log("decision config: W %g copy weight %g pair batches %s %s copy %s" % (W, CW, a.pair_batches, cfg, cfg.copy))
+    tok = AutoTokenizer.from_pretrained(a.tokenizer)
     dpo = bool(a.dpo)
-    if a.train:
-        assert_mask_sample(tok, a.train, default_tools, cfg)
-    data = load(tok, a.train, a.max_len, a.dry_run or a.n, default_tools, 64, "train", cfg) if a.train else []
+    data = load_records(a, tok, a.train, a.dry_run or a.n, 64, "train") if a.train else []
     if dpo:  # `data` stays the SFT file (the TRAIN metrics' sample); `units` is what the epochs walk
-        units = load_pairs(tok, a.dpo, a.max_len, a.dry_run or a.n, default_tools, 64, cfg)
-        assert_mask_sample(tok, None, default_tools, cfg, examples=(ob["chosen"] for ob in fmt.read_examples(a.dpo)
-                                                                if isinstance(ob, dict) and isinstance(ob.get("chosen"), dict)))
+        units = load_pairs(a.dpo, a.max_len, a.dry_run or a.n)
         log("DPO: beta %g sft %g, reference = the frozen initial model (one no-grad pass before training)" % (a.dpo_beta, a.dpo_sft))
     else:
         units = data
-    vdata = [] if a.dry_run else load(tok, a.val, a.max_len, a.val_n, default_tools, 16, "val", cfg) if a.val else []
+    vdata = [] if a.dry_run else load_records(a, tok, a.val, a.val_n, 16, "val") if a.val else []
 
     model = AutoModelForCausalLM.from_pretrained(a.model, dtype=torch.float32).to(dev)
     model.config.use_cache = False
@@ -1137,7 +882,7 @@ def main():
         recs = dpo_records(units) if dpo else data
         n_pairs, n_pair_recs, n_orphans = pair_stats([d.pair for d in recs])
         log("PAIRS: %d pairs (%d of %d records), %d records whose partner is not among them" % (n_pairs, n_pair_recs, len(recs), n_orphans))
-        dry_run(model, recs, dev, W, launch_flags(a), CW)
+        dry_run(model, recs, dev)
         log("DRY-RUN done: no training step was taken")
         if WORLD > 1:
             torch.distributed.destroy_process_group()
@@ -1152,8 +897,13 @@ def main():
         # the base stays frozen in fp32; checkpoints merge the adapters back (save), so the
         # eval arms load a plain model exactly as they do after a full fine-tune
         from peft import LoraConfig, get_peft_model
-        model = get_peft_model(model, LoraConfig(r=a.lora, lora_alpha=2 * a.lora, lora_dropout=0.0,
-                                                 target_modules="all-linear", exclude_modules=r".*visual.*"))
+        if arm is not None and arm.skip_layers:  # arm C: no adapter on the edited tensors, which are checked at every export
+            PROTECT["snapshot"] = arms.snapshot(model, arm.skip_layers)
+            model = get_peft_model(model, arms.lora_config(model, a.lora, arm.skip_layers))
+            assert not set(arms.adapted_modules(model)) & {n.rsplit(".weight", 1)[0] for n in PROTECT["snapshot"]}
+        else:
+            model = get_peft_model(model, LoraConfig(r=a.lora, lora_alpha=2 * a.lora, lora_dropout=0.0,
+                                                     target_modules="all-linear", exclude_modules=r".*visual.*"))
     params = [p for p in model.parameters() if p.requires_grad]
     named = {n: p for n, p in model.named_parameters() if p.requires_grad}
     ema = Ema(named, a.ema) if a.ema else None  # before the memory probe, so the probe holds the shadow too
@@ -1163,11 +913,11 @@ def main():
         enable_ckpt()
     model.train()
     if AMP["dtype"] is not None and units:
-        if not amp_smoke(model, dpo_records(units) if dpo else data, dev, W, explicit=a.autocast_explicit, copy_weight=CW):
+        if not amp_smoke(model, dpo_records(units) if dpo else data, dev, explicit=a.autocast_explicit):
             a.autocast = "none"  # recorded as what ran
     zero_ref = torch.zeros(2, dtype=torch.float64, device=dev)
-    cap = probe_memory(model, units, dev, sum(p.numel() for p in params), W, enable_ckpt=None if a.grad_ckpt else enable_ckpt,
-                       copy_weight=CW, pair_step=(lambda p: dpo_pair_loss(model, p, zero_ref, a.dpo_beta, a.dpo_sft, dev, W, CW)[0])
+    cap = probe_memory(model, units, dev, sum(p.numel() for p in params), enable_ckpt=None if a.grad_ckpt else enable_ckpt,
+                       pair_step=(lambda p: dpo_pair_loss(model, p, zero_ref, a.dpo_beta, a.dpo_sft, dev)[0])
                        if dpo else None)
     if cap is not None:
         if dpo:
@@ -1188,7 +938,7 @@ def main():
     ref_table = None
     if dpo:  # the frozen reference: the initial weights, scored once, before any resume state or training step touches them
         t_ref = time.time()
-        ref_table = dpo_reference(model, units, dev, W, CW)
+        ref_table = dpo_reference(model, units, dev)
         log("DPO reference: %d pairs scored in %.0fs (mean summed log-prob chosen %.2f rejected %.2f)"
             % (len(units), time.time() - t_ref, ref_table[:, 0].mean().item(), ref_table[:, 1].mean().item()))
     try:
@@ -1223,12 +973,11 @@ def main():
     marks = mark_steps(steps, a.checkpoints)
     log("steps %d bs %d warmup %d lr %g checkpoints %s budget %.2fh" % (steps, a.bs, warm, a.lr, marks, a.hours))
 
-    meta = {"args": vars(a), "steps": steps, "examples": len(units), "decision_config": repr(cfg),
-            "hard_config": repr(cfg.hard), "hard_note": "hn/hloss/hacc in train/val/test: the hard tier, a subset of dn",
-            "copy_config": repr(cfg.copy), "copy_note": "cn/closs/cacc: copy tokens, verbatim copies of the user's message, outside dn"}
+    meta = {"args": vars(a), "steps": steps, "examples": len(units),
+            "weights_note": "dn/dloss/dacc in train/val/test: the label tokens weighted above 1 in the records (the deciding tokens)"}
 
     def eval_all(step):
-        """Train sample and val: loss and accuracy on all label tokens and on decision, hard, copy and other tokens. Returns
+        """Train sample and val: loss and accuracy on all label tokens, on decision tokens and on the rest. Returns
         {"train": ..., "val": ...} for the sides that were scored."""
         out = {}
         for tag, key, ds in (("TRAIN", "train", tsample), ("VAL", "val", vdata)):
@@ -1241,7 +990,7 @@ def main():
 
     def eval_test(step, tag):
         """The test file, read only here, after the last checkpoint is saved (so a bad file cannot cost it)."""
-        tdata = load(tok, a.test, a.max_len, 0, default_tools, 16, "test", cfg)
+        tdata = load_records(a, tok, a.test, 0, 16, "test")
         if cap is not None:
             tdata = [d for d in tdata if len(d[0]) <= cap]
         r = evaluate(model, tdata, dev)
@@ -1256,10 +1005,8 @@ def main():
     win = [0.0, 0, 0, time.time()]  # loss sum, label tokens, all tokens, window start
     out_dir = Path(a.out) if a.out else None
     fp = {"args": {k: getattr(a, k) for k in FP_ARGS}, "steps": steps, "spe": spe, "examples": len(units),
-          "cfg": repr(cfg), "order": hashlib.sha1(json.dumps(order0).encode()).hexdigest(),
+          "order": hashlib.sha1(json.dumps(order0).encode()).hexdigest(),
           "params": hashlib.sha1(json.dumps([(n, list(p.shape)) for n, p in named.items()]).encode()).hexdigest()}
-    if CW != 1.0:  # which tokens are copies changes the numbers only when they weigh something else than 1
-        fp["copy"] = repr(cfg.copy)
     ck = find_resume(a.out if a.resume == "auto" else a.resume) if a.resume else None
     if a.save_every and not ck and list_resume(out_dir):
         raise SystemExit("%s holds resume checkpoints (%s) but this run does not resume: pass --resume to continue "
@@ -1268,13 +1015,12 @@ def main():
         log("RESUME: no complete resume checkpoint in %s; starting fresh" % (a.out if a.resume == "auto" else a.resume))
     if ck:
         st0 = load_resume(ck)
-        ckfp = dict(st0["fingerprint"], args={**FP_LEGACY, **st0["fingerprint"]["args"]})  # old checkpoints: legacy precision
+        ckfp = st0["fingerprint"]
         diff = [k for k in fp if fp[k] != ckfp.get(k)]
         if diff:
             raise SystemExit("RESUME: %s was made by a different run (%s differ: have %s, checkpoint %s); fix the flags "
-                             "or remove it (a checkpoint made before the precision flags existed continues only under --no-tf32 "
-                             "--autocast none; one made before the loss flags existed, only under %s)"
-                             % (ck, ", ".join(diff), {k: fp[k] for k in diff}, {k: ckfp.get(k) for k in diff}, LEGACY_LOSS))
+                             "or remove it"
+                             % (ck, ", ".join(diff), {k: fp[k] for k in diff}, {k: ckfp.get(k) for k in diff}))
         with torch.no_grad():
             for n, p in named.items():
                 p.copy_(st0["params"][n])
@@ -1333,7 +1079,6 @@ def main():
             torch.distributed.barrier()
 
     st = start
-    plain_loss = W == 1.0 and CW == 1.0  # every token weighs 1: the old plain mean CE, normalised by the label tokens
     cur_epoch, order = -1, None
     dwin = torch.zeros(4, dtype=torch.float64, device=dev)  # DPO window sums: loss, margin, wins, pairs (zero and unused without --dpo)
     if ck and dpo and RANK == 0 and "dwin" in m:  # the log window a resume cuts into (rank 0's share: a logging aid, not training state)
@@ -1349,22 +1094,21 @@ def main():
         batch = [units[i] for i in idx]
         step_loss = torch.zeros((), dtype=torch.float64, device=dev)  # summed on the device: one sync per step
         if dpo:  # the chosen record is the batch's "label" side: its NLL is the step line's loss, its tokens the label count
-            n_lab = sum(sum(1 for y in p.chosen[1][1:] if y != fmt.IGNORE) for p in batch)
+            n_lab = sum(sum(1 for y in p.chosen[1][1:] if y != IGNORE) for p in batch)
             tok_step = sum(len(p.chosen[0]) + len(p.rejected[0]) for p in batch)
             for i in idx[RANK::WORLD]:
-                loss, dloss, margin, plain = dpo_pair_loss(model, units[i], ref_table[i], a.dpo_beta, a.dpo_sft, dev, W, CW)
+                loss, dloss, margin, plain = dpo_pair_loss(model, units[i], ref_table[i], a.dpo_beta, a.dpo_sft, dev)
                 (loss / len(batch)).backward()
                 step_loss += plain.double()
                 win[2] += len(units[i].chosen[0]) + len(units[i].rejected[0])
                 dwin += torch.stack([dloss, margin, (margin > 0).double(), torch.ones_like(margin)])
         else:
-            n_lab = sum(sum(1 for y in l[1:] if y != fmt.IGNORE) for _, l, _ in batch)
+            n_lab = sum(sum(1 for y in l[1:] if y != IGNORE) for _, l, _ in batch)
             tok_step = sum(len(x) for x, _, _ in batch)
-            # the weight mass of the batch: n_lab at W = 1 (the old normaliser), else decisions count W each, copies CW each
-            mass = sum(weight_mass(l, dc, W, CW)[2] for _, l, dc in batch)
+            mass = sum(weight_mass(dc) for _, _, dc in batch)  # the weight mass of the batch: the divisor of the weighted CE sum
             for ids, labels, dec in batch[RANK::WORLD]:
-                loss, n, _, plain = forward_loss(model, ids, labels, dev, dec, W, CW)
-                (loss / (n_lab if plain_loss else max(mass, 1e-9))).backward()
+                loss, _, _, plain = forward_loss(model, ids, labels, dev, dec)
+                (loss / max(mass, 1e-9)).backward()
                 step_loss += plain.double()
                 win[2] += len(ids)
         win[0] += step_loss.item()

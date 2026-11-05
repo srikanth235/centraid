@@ -47,10 +47,11 @@ export default defineConfig({
     // files, and `crates/nativetools/tests/export_fixture.rs` asserts them
     // byte for byte against the live export.
     "contracts/assist/export/**",
-    // The frozen eval sets of the native tool task (#1044): every file's sha256
-    // is recorded in eval/FROZEN.md and `eval/build_sets.py check` compares it,
-    // so a reformat is a new set version, not a style fix.
-    "experiments/toolchat/native/eval/sets/**",
+    // The fetched data-v7 of the native tool task (#1044, #1171): the frozen
+    // eval sets, their worlds and the training build. Every file's sha256 is
+    // pinned in artefacts.json and `artefacts.py check` compares it, so a
+    // reformat is a new set version, not a style fix.
+    "experiments/toolchat/native/data/v7/**",
     "scripts/docs-site/src/content/**",
   ],
 });

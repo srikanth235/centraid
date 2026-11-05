@@ -55,16 +55,55 @@ impl DatagenSource {
     ///
     /// If a sessions file or a world cannot be read.
     pub fn open(dir: &Path, split: Option<Split>) -> Result<Self> {
-        let mut records = Vec::new();
-        let mut worlds = BTreeMap::new();
-        for s in Split::ALL
+        let names: Vec<&str> = Split::ALL
             .into_iter()
             .filter(|s| split.is_none_or(|w| w == *s))
-        {
-            let path = dir.join(s.name()).join(SESSIONS);
-            let Ok(text) = std::fs::read_to_string(&path) else {
-                continue;
-            };
+            .map(Split::name)
+            .collect();
+        Self::open_named(dir, &names)
+    }
+
+    /// As [`Self::open`], for the named subdirectories of `dir` (`train`, `val`, `test`, and
+    /// `noise`, the heavy-typo copy of val that `datagen messages` writes).
+    ///
+    /// # Errors
+    ///
+    /// If a sessions file or a world cannot be read.
+    pub fn open_named(dir: &Path, names: &[&str]) -> Result<Self> {
+        let mut texts = Vec::new();
+        for name in names {
+            let path = dir.join(name).join(SESSIONS);
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                texts.push(text);
+            }
+        }
+        Self::from_texts(dir, &texts)
+    }
+
+    /// Open a data version (`datagen render`, `datagen build`): `<dir>/<name>.jsonl.zst` for each of `names` (`train`,
+    /// `val`, `test`, `noise`) and the world documents under `<dir>/worlds/`. The records are read as they are written,
+    /// the `render` object and `meta` beside the session, and the eval ignores what it does not read.
+    ///
+    /// # Errors
+    ///
+    /// If a file cannot be decompressed or a world cannot be read.
+    pub fn open_version(dir: &Path, names: &[&str]) -> Result<Self> {
+        let mut texts = Vec::new();
+        for name in names {
+            let path = dir.join(format!("{name}.jsonl.zst"));
+            if let Ok(file) = std::fs::File::open(&path) {
+                let bytes =
+                    zstd::stream::decode_all(file).with_context(|| path.display().to_string())?;
+                texts.push(String::from_utf8(bytes)?);
+            }
+        }
+        Self::from_texts(dir, &texts)
+    }
+
+    fn from_texts(dir: &Path, texts: &[String]) -> Result<Self> {
+        let mut records = Vec::new();
+        let mut worlds = BTreeMap::new();
+        for text in texts {
             for line in text.lines().filter(|l| !l.trim().is_empty()) {
                 let record: Value = serde_json::from_str(line)?;
                 let id = record["world"].as_str().unwrap_or_default().to_owned();

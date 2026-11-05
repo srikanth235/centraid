@@ -689,12 +689,15 @@ dependencies = [
  "centraid-assist-eval",
  "centraid-nativetools",
  "clap",
+ "fancy-regex",
  "hex",
  "jiff",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror",
+ "unicode-normalization",
+ "zstd",
 ]
 
 [[package]]

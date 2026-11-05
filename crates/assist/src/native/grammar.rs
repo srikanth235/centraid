@@ -1070,7 +1070,7 @@ mod tests {
     fn golden() -> Vec<String> {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../experiments/toolchat/native/authored/golden_v3.json"
+            "/../nativetools/tests/golden_v3.json"
         );
         let rows: Vec<serde_json::Value> =
             serde_json::from_str(&std::fs::read_to_string(path).expect("the golden file"))

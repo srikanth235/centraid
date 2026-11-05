@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! cargo build --release -p centraid-assist-eval --features engine --bin assist-eval
-//! assist-eval --model native-s2-Q4_0.gguf --set experiments/toolchat/native/eval/sets/val.jsonl --out runs/val-s2
+//! assist-eval --model native-s2-Q4_0.gguf --set experiments/toolchat/native/data/v7/val.jsonl --out runs/val-s2
 //! assist-eval --stub --set … --worlds …        # no weights: a model that declines everything
 //! ```
 //!
@@ -10,6 +10,9 @@
 //! prints the summary. `--worlds DIR` may repeat; the default is the two directories the Python eval reads. Several
 //! processes can share a set with `--shard K/N` (each loads the model: ~0.6 GB at Q4_0); merge by scoring each
 //! `.sessions.jsonl` with `--rescore`.
+
+#[path = "assist-eval/rollout_cmd.rs"]
+mod rollout_cmd;
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -49,7 +52,7 @@ fn args() -> Result<Args> {
     let mut out = Args {
         model: std::env::var_os("ASSIST_EVAL_MODEL").map(PathBuf::from),
         stub: false,
-        set: native.join("eval/sets/val.jsonl"),
+        set: native.join("data/v7/val.jsonl"),
         worlds: Vec::new(),
         out: None,
         threads: std::env::var("ASSIST_EVAL_THREADS")
@@ -114,7 +117,7 @@ fn args() -> Result<Args> {
         }
     }
     if out.worlds.is_empty() {
-        out.worlds = vec![native.join("eval/worlds"), native.join("authored/worlds")];
+        out.worlds = vec![native.join("data/v7/worlds")];
     }
     Ok(out)
 }
@@ -124,6 +127,8 @@ fn engine(
     path: &std::path::Path,
     threads: Option<i32>,
     gpu_layers: Option<u32>,
+    top_p: f32,
+    seed: u64,
 ) -> Result<std::sync::Arc<dyn centraid_assist::Model>> {
     use centraid_assist::host::ModelLoader;
     use centraid_assist_llama::{Config, LlamaLoader};
@@ -132,6 +137,8 @@ fn engine(
         context: 8192,
         threads,
         logs: false,
+        top_p,
+        seed,
         ..Config::default()
     };
     if let Some(layers) = gpu_layers {
@@ -143,6 +150,10 @@ fn engine(
 }
 
 fn run() -> Result<()> {
+    let argv: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(command) = argv.first().filter(|c| c.starts_with("rollout")) {
+        return rollout_cmd::run(command, &argv[1..]);
+    }
     let args = args()?;
     // the held-out worlds predate the vault rebuild: Tally and the `in_progress` status are gone from the runtime.
     // The wrappers read them out and the report counts the sessions this leaves out
@@ -183,7 +194,7 @@ fn run() -> Result<()> {
                 .context("give --model GGUF (or ASSIST_EVAL_MODEL), or --stub")?;
             #[cfg(feature = "engine")]
             {
-                loaded = engine(&path, args.threads, args.gpu_layers)?;
+                loaded = engine(&path, args.threads, args.gpu_layers, 1.0, 0)?;
                 let sha = std::process::Command::new("shasum")
                     .args(["-a", "256"])
                     .arg(&path)

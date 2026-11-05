@@ -24,8 +24,7 @@
 //!   the check that fails and its sentence are the vault's own, and a refusal changes nothing.
 //! * The shape of every row a command touches, field for field, as `World::load` would read it
 //!   back. `tests/park.rs` holds every `(verb, kind)` of the table to a real vault in
-//!   [`Writes::Shadow`], and `authored/park_oracle.py` holds the texts to a run's over the
-//!   authored sessions of the train worlds.
+//!   [`Writes::Shadow`], and holds the texts to a run's.
 //! * Ids: a row the runtime names before its command (`Door::mint_id`) keeps that id, a person
 //!   included (the vault honours a seat-minted party id); an id the vault makes inside a command
 //!   (an album's revision) is minted here for the card and replaced by the real one when

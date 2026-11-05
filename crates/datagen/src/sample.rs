@@ -13,6 +13,7 @@ use crate::intent::{
     Change, Cmp, Dep, Filter, Intent, Link, Lit, Measure, Outcome, Period, Reference, Scenario,
     Selector, Span, Target, TurnIntent, Val, VerbArg,
 };
+use crate::pools;
 use crate::rng::Rng;
 use crate::world::World;
 
@@ -23,21 +24,6 @@ const CONSTRAINTS: &[(usize, u32)] = &[(0, 4), (1, 14), (2, 24), (3, 30), (4, 18
 /// Log choices (`Catalog.verbs[log].choices`).
 const LOG_CHOICES: &[&str] = &["call", "message", "visit", "coffee"];
 
-const CREATE_NAMES: &[&str] = &[
-    "Pick up the parcel",
-    "Renew the passport",
-    "Plan the weekend",
-    "Water the plants",
-    "Book the car service",
-    "Call the landlord",
-    "Order a birthday cake",
-    "Fix the bike light",
-    "Backup the laptop",
-    "Return the library books",
-    "Sort the receipts",
-    "Email the school",
-];
-const RENAME_TAILS: &[&str] = &["follow-up", "draft", "final", "old", "new", "revised"];
 const ROLES: &[&str] = &[
     "neighbour",
     "colleague",
@@ -74,6 +60,9 @@ pub struct Sampler<'a> {
     /// Whether a read that finds nothing can be ended with `answer rows=@k` (see
     /// `WorldRun::empty_reads`); when it cannot, no empty read is drawn.
     pub empty_reads: bool,
+    /// How many names so far fell back on a numbered disambiguator ("Recipes 2") because every
+    /// name in the kind's pool was taken.
+    fallbacks: std::sync::atomic::AtomicUsize,
 }
 
 fn nice_down(v: f64) -> f64 {
@@ -108,7 +97,77 @@ impl<'a> Sampler<'a> {
             grid,
             world,
             empty_reads: true,
+            fallbacks: std::sync::atomic::AtomicUsize::new(0),
         }
+    }
+
+    /// How many names fell back on a numbered disambiguator so far.
+    #[must_use]
+    pub fn name_fallbacks(&self) -> usize {
+        self.fallbacks.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Whether a row of `kind`, live or trashed, already answers to `name` (or, for a person, to
+    /// its first name or nickname).
+    fn taken(&self, kind: &str, name: &str) -> bool {
+        let want = fold(name);
+        let first = want.split(' ').next().unwrap_or_default().to_owned();
+        self.facts.rows.iter().filter(|r| r.kind == kind).any(|r| {
+            fold(&r.name) == want
+                || (kind == "person"
+                    && (r
+                        .name
+                        .split_whitespace()
+                        .next()
+                        .is_some_and(|f| fold(f) == first)
+                        || r.text("nickname").is_some_and(|n| fold(n) == first)))
+        })
+    }
+
+    /// A name for a row of `kind` that no row of the kind (live or trashed) has and that is not in
+    /// `avoid`: drawn from the kind's pool (a person is `first last` from the split's pools).
+    /// Only when the pool is spent does it add a number, and that is counted.
+    fn fresh_name(&self, kind: &str, rng: &mut Rng, avoid: &[&str]) -> String {
+        let free =
+            |name: &str| !avoid.iter().any(|a| fold(a) == fold(name)) && !self.taken(kind, name);
+        let pool = pools::new_names(kind);
+        if kind == "person" {
+            let (firsts, lasts) = pools::new_people(self.world.spec.split);
+            for _ in 0..64 {
+                let name = format!("{} {}", rng.pick(firsts), rng.pick(lasts));
+                if free(&name) {
+                    return name;
+                }
+            }
+        } else if let Some(pool) = &pool {
+            for _ in 0..pool.len() {
+                let name = *rng.pick(pool);
+                if free(name) {
+                    return name.to_owned();
+                }
+            }
+            let start = rng.below(pool.len());
+            if let Some(name) = (0..pool.len())
+                .map(|i| pool[(start + i) % pool.len()])
+                .find(|n| free(n))
+            {
+                return name.to_owned();
+            }
+        }
+        self.fallbacks
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let base = match &pool {
+            Some(pool) => (*rng.pick(pool)).to_owned(),
+            None if kind == "person" => {
+                let (firsts, lasts) = pools::new_people(self.world.spec.split);
+                format!("{} {}", rng.pick(firsts), rng.pick(lasts))
+            }
+            None => format!("New {kind}"),
+        };
+        (2..)
+            .map(|n| format!("{base} {n}"))
+            .find(|n| free(n))
+            .unwrap_or(base)
     }
 
     #[must_use]
@@ -959,7 +1018,7 @@ impl<'a> Sampler<'a> {
         let mut changes = Vec::new();
         let rename = |rng: &mut Rng| Change {
             field: "name".into(),
-            value: Val::Text(format!("{} {}", row.name, rng.pick(RENAME_TAILS))),
+            value: Val::Text(self.fresh_name(kind, rng, &[&row.name])),
         };
         match kind {
             "task" => match rng.below(3) {
@@ -1039,7 +1098,8 @@ impl<'a> Sampler<'a> {
     }
 
     fn create(&self, kind: &str, rng: &mut Rng, roll: usize) -> Option<TurnIntent> {
-        let name = format!("{} {}", rng.pick(CREATE_NAMES), rng.range(2, 98));
+        let name = self.fresh_name(kind, rng, &[]);
+        let made_type = pools::new_type(kind, &name);
         let mut fields = vec![Change {
             field: "name".into(),
             value: Val::Text(name),
@@ -1101,12 +1161,12 @@ impl<'a> Sampler<'a> {
             "locker item" => {
                 fields.push(Change {
                     field: "type".into(),
-                    value: Val::Text((*rng.pick(&["login", "wifi", "card"])).into()),
+                    value: Val::Text(made_type.unwrap_or("login").into()),
                 });
             }
             "account" => fields.push(Change {
                 field: "type".into(),
-                value: Val::Text((*rng.pick(&["checking", "savings", "cash"])).into()),
+                value: Val::Text(made_type.unwrap_or("checking").into()),
             }),
             _ => {}
         }
@@ -1858,11 +1918,19 @@ impl<'a> Sampler<'a> {
                         }],
                         _ => vec![Change {
                             field: "name".into(),
-                            value: Val::Text(format!(
-                                "{} {}",
-                                rng.pick(CREATE_NAMES),
-                                rng.range(2, 98)
-                            )),
+                            value: Val::Text({
+                                let made = match &prev.intent {
+                                    Intent::Create { fields, .. } => fields
+                                        .iter()
+                                        .find_map(|c| match &c.value {
+                                            Val::Text(t) if c.field == "name" => Some(t.as_str()),
+                                            _ => None,
+                                        })
+                                        .unwrap_or_default(),
+                                    _ => "",
+                                };
+                                self.fresh_name(&kind, rng, &[made])
+                            }),
                         }],
                     };
                     Some(self.turn(
@@ -1982,4 +2050,134 @@ fn misspell(name: &str, rng: &mut Rng) -> Option<String> {
     }
     let typo: String = out.into_iter().collect();
     (typo != name).then_some(typo)
+}
+
+#[cfg(test)]
+mod name_tests {
+    use super::*;
+    use crate::settings::Split;
+    use crate::world::WorldSpec;
+    use std::collections::BTreeMap;
+
+    fn setup(split: Split) -> (World, Catalog, Grid) {
+        let catalog = Catalog::build().expect("catalog");
+        let grid = Grid::build(&catalog);
+        let world = World::generate(WorldSpec {
+            split,
+            index: 3,
+            seed: 11,
+        });
+        (world, catalog, grid)
+    }
+
+    fn row(kind: &str, key: &str, name: &str, trashed: bool) -> Row {
+        Row {
+            kind: kind.into(),
+            key: key.into(),
+            keyed: true,
+            name: name.into(),
+            date: None,
+            fields: BTreeMap::new(),
+            trashed,
+        }
+    }
+
+    fn numbered(name: &str) -> bool {
+        name.rsplit_once(' ')
+            .is_some_and(|(_, tail)| !tail.is_empty() && tail.chars().all(|c| c.is_ascii_digit()))
+    }
+
+    #[test]
+    fn a_new_name_comes_from_its_kinds_pool_and_clashes_with_no_row() {
+        for split in Split::ALL {
+            let (world, catalog, grid) = setup(split);
+            let facts = Facts::of(&world, &catalog);
+            let sampler = Sampler::new(&world, &facts, &catalog, &grid);
+            let (firsts, lasts) = pools::new_people(split);
+            let mut rng = Rng::new(5);
+            for kind in [
+                "task",
+                "event",
+                "list",
+                "note",
+                "notebook",
+                "album",
+                "folder",
+                "document",
+                "category",
+                "photo",
+                "transaction",
+                "locker item",
+                "account",
+                "person",
+            ] {
+                for _ in 0..200 {
+                    let name = sampler.fresh_name(kind, &mut rng, &[]);
+                    assert!(!numbered(&name), "{kind}: {name}");
+                    assert!(!sampler.taken(kind, &name), "{kind}: {name} is taken");
+                    if kind == "person" {
+                        let (first, last) = name.split_once(' ').expect("first last");
+                        assert!(firsts.contains(&first) && lasts.contains(&last), "{name}");
+                    } else {
+                        let pool = pools::new_names(kind).expect("pool");
+                        assert!(pool.contains(&name.as_str()), "{kind}: {name}");
+                    }
+                }
+            }
+            assert_eq!(sampler.name_fallbacks(), 0);
+        }
+    }
+
+    #[test]
+    fn a_rename_differs_from_the_current_name_and_from_what_is_avoided() {
+        let (world, catalog, grid) = setup(Split::Train);
+        let facts = Facts::of(&world, &catalog);
+        let sampler = Sampler::new(&world, &facts, &catalog, &grid);
+        let mut rng = Rng::new(9);
+        for row in facts.rows.iter().filter(|r| !r.trashed) {
+            if pools::new_names(&row.kind).is_none() && row.kind != "person" {
+                continue;
+            }
+            let renamed = sampler.fresh_name(&row.kind, &mut rng, &[&row.name]);
+            assert_ne!(fold(&renamed), fold(&row.name), "{}", row.name);
+            assert!(!numbered(&renamed), "{renamed}");
+        }
+        let made = sampler.fresh_name("task", &mut rng, &["Water the plants"]);
+        assert_ne!(made, "Water the plants");
+    }
+
+    #[test]
+    fn a_trashed_row_still_holds_its_name_and_a_spent_pool_numbers_the_name_and_counts_it() {
+        let (world, catalog, grid) = setup(Split::Train);
+        let mut facts = Facts::of(&world, &catalog);
+        for (i, name) in pools::NEW_NOTEBOOKS.iter().enumerate() {
+            facts
+                .rows
+                .push(row("notebook", &format!("nb{i}"), name, i % 2 == 0));
+        }
+        let sampler = Sampler::new(&world, &facts, &catalog, &grid);
+        let mut rng = Rng::new(2);
+        let name = sampler.fresh_name("notebook", &mut rng, &[]);
+        assert!(numbered(&name), "{name}");
+        let base = name.rsplit_once(' ').expect("base").0;
+        assert!(pools::NEW_NOTEBOOKS.contains(&base), "{name}");
+        assert_eq!(sampler.name_fallbacks(), 1);
+    }
+
+    #[test]
+    fn a_new_person_never_shares_a_first_name_or_nickname_with_one_the_world_has() {
+        let (world, catalog, grid) = setup(Split::Val);
+        let mut facts = Facts::of(&world, &catalog);
+        let mut taken = row("person", "px", "Alina Gallo", false);
+        taken.fields.insert("nickname".into(), F::T("Bru".into()));
+        facts.rows.push(taken);
+        let sampler = Sampler::new(&world, &facts, &catalog, &grid);
+        let mut rng = Rng::new(3);
+        for _ in 0..300 {
+            let name = sampler.fresh_name("person", &mut rng, &[]);
+            assert!(!name.starts_with("Alina "), "{name}");
+        }
+        assert!(sampler.taken("person", "Alina Hartmann"));
+        assert!(sampler.taken("person", "Bru Hartmann"));
+    }
 }

@@ -1,4 +1,4 @@
-//! A TURN'S EFFECT, from the responses the runtime gave to the model's calls (`eval/lib.py` `turn_effect`,
+//! A TURN'S EFFECT, from the responses the runtime gave to the model's calls (the retired `eval/lib.py` `turn_effect`,
 //! `merge_diffs`, `effect_rows`). Computed from the runtime's own `effect` records, never from call text.
 
 use std::collections::BTreeMap;

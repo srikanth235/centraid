@@ -1,8 +1,8 @@
 //! The stateless compiler (`think.rs`) over the golden file of the trace contract (`CONTRACT_V3.md`): one think and its call for
-//! every distinct call shape of the train data (`authored/golden_v3.json`, 871 shapes, 69 with a `dates:` line).
+//! every distinct call shape of the train data (`golden_v3.json`, 871 shapes, 69 with a `dates:` line).
 //!
-//! The same file is what `authored/test_trace.py` and `train/test_trace3.py` read through the Python client, and
-//! `authored/compile_oracle.py` runs every think of the train data through the compiler and compares two runs.
+//! The file is the last of the Python data builders' output (data-v7), kept as the compiler's regression set; the builders are
+//! retired (#1171) and `crates/datagen` is the only way to make a data version.
 
 use centraid_nativetools::compile::CALL_ORDER;
 use centraid_nativetools::legacy;
@@ -10,11 +10,9 @@ use centraid_nativetools::think::{Call, TraceMode, compile_think, v4_think};
 use serde_json::Value;
 
 fn golden() -> Vec<Value> {
-    let text = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../experiments/toolchat/native/authored/golden_v3.json"
-    ))
-    .expect("authored/golden_v3.json");
+    let text =
+        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden_v3.json"))
+            .expect("golden_v3.json");
     serde_json::from_str(&text).expect("the golden file is JSON")
 }
 

@@ -11,7 +11,7 @@
 //! ```
 //!
 //! `--writes` picks what a write does: `run` (the default: the vault runs it), `park` (a patched copy of
-//! the world takes it and nothing reaches the vault: `authored/park_oracle.py` holds its texts to
+//! the world takes it and nothing reaches the vault: `tests/park.rs` holds its texts to
 //! `run`'s), or `shadow` (the vault runs it AND the patch follows; where they part, a step's
 //! `effect.drift` says so). With `--writes park --auto-confirm` the binary taps the card itself: when a
 //! response ends a turn with a pending write it confirms it and adds the outcome as `effect.confirmed`,
@@ -31,7 +31,7 @@
 //! `{"op":"peek_repeat","text":<raw model message>}` (would this call repeat
 //! the previous one: `{"repeat": bool, "strikes": repeats answered so far}`).
 //!
-//! `think` also serves the transcript renderer of `transcript.rs`, which Python's `render.py` is a client of:
+//! `think` also serves the transcript renderer of `transcript.rs`, which the retired Python renderer was a client of:
 //! `{"op":"render","messages":[<records>]}` answers `{"text":…,"spans":[[start,end],…],"prompt":…}` (spans in code points),
 //! `{"op":"render_many","conversations":[…]}` answers `{"renders":[…]}`, `{"op":"call_text","tool":…,"args":{…}}` and
 //! `{"op":"user_content","text":…,"block":…}` answer `{"text":…}`.

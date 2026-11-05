@@ -23,19 +23,18 @@ from unittest import mock
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import test_resume as tr  # noqa: E402  (a module, not its class: the loader would run ResumeTest here too)
-from test_decision import FULL, THINK, session  # noqa: E402
+from test_datagen import record  # noqa: E402
 
 BS, STEPS, PAIRS = tr.BS, tr.STEPS, tr.STEPS * tr.BS
 
 
 def pair_records(i):
-    """(chosen, rejected) of pair i: one session (same system, same user message), two different assistant answers."""
-    def rec(think1, think2, rows):
-        ex = session(think1, think2)
-        ex["messages"][1]["content"] = "move the dentist %d hours and the %d th gym class" % (i, i * 7)
-        ex["messages"][2]["args"] = dict(ex["messages"][2]["args"], rows=rows)
-        return ex
-    return rec(FULL, THINK, "#%d" % (i % 5 + 1)), rec(THINK, FULL, "#%d" % (i % 5 + 2))
+    """(chosen, rejected) of pair i: one session (the same prefix), two different assistant tails (the last 8 token ids differ)."""
+    chosen = record("p%d" % i, 24 + 3 * (i % 5))
+    rejected = json.loads(json.dumps(chosen))
+    ids = rejected["render"]["input_ids"]
+    ids[-8:] = [(t + 7) % 60 + 2 for t in ids[-8:]]
+    return chosen, rejected
 
 
 class DpoTest(unittest.TestCase):
@@ -152,16 +151,15 @@ class DpoTest(unittest.TestCase):
                 logp, sft, plain, n = train.forward_logp(model, ex, torch.device("cpu"))
                 logits, tgt, pos = train.label_logits(model, ids, labels, torch.device("cpu"))
                 lp = torch.log_softmax(logits, -1).gather(1, tgt[:, None]).sum()
-                self.assertEqual(n, sum(1 for y in labels[1:] if y != train.fmt.IGNORE))  # the SFT mask, first token excluded
+                self.assertEqual(n, sum(1 for y in labels[1:] if y != train.IGNORE))  # the loss mask, first token excluded
                 self.assertAlmostEqual(logp.item(), lp.item(), places=3)
                 self.assertAlmostEqual(logp.item(), -plain.item(), places=3)
-                self.assertAlmostEqual(sft.item(), plain.item() / n, places=4)  # weights 1: the mean CE of the record
+                ce = torch.nn.functional.cross_entropy(logits, tgt, reduction="none")
+                self.assertAlmostEqual(sft.item(), (ce * train.token_weights(dec, pos, torch.device("cpu"))[0]).sum().item() / train.weight_mass(dec),
+                                       places=4)  # the weighted mean CE of the record
 
     def load_pairs(self, path):
-        from transformers import AutoTokenizer
-        tok = AutoTokenizer.from_pretrained(self.model_dir)
-        cfg = self.train.fmt.DecisionConfig.parse(None, None, None, None)
-        return self.train.load_pairs(tok, path, 1024, 0, None, 4, cfg)
+        return self.train.load_pairs(path, 1024, 0)
 
     def test_an_identical_pair_at_the_reference_is_log_2_with_margin_0_end_to_end(self):
         torch, train = self.torch, self.train
@@ -178,8 +176,12 @@ class DpoTest(unittest.TestCase):
         loss, dloss, margin, plain = train.dpo_pair_loss(model, p, ref[1], 0.1, 0.5, dev)
         self.assertAlmostEqual(margin.item(), 0.0, places=6)
         self.assertAlmostEqual(dloss.item(), math.log(2), places=6)
-        self.assertAlmostEqual(loss.item() - dloss.item(), 0.5 * plain.item() / sum(1 for y in p.chosen[1][1:] if y != train.fmt.IGNORE),
-                               places=5)
+        self.assertAlmostEqual(loss.item() - dloss.item(), 0.5 * self.sft_of(p.chosen), places=5)
+
+    def sft_of(self, ex):
+        """The SFT term of a record: its weighted CE sum over its weight mass, at the initial model."""
+        torch = self.torch
+        return self.train.forward_logp(self.init_model(), ex, torch.device("cpu"))[1].item()
 
     # ---- training ----------------------------------------------------------------------------------
 
@@ -306,13 +308,9 @@ class DpoTest(unittest.TestCase):
             self.run_once(out, "--resume")
         self.assertIn("different run", str(cm.exception))
 
-    def test_an_old_checkpoint_fingerprint_reads_as_no_dpo(self):
-        fp = {"bs": 2, "ema": 0.0}  # a fingerprint written before the flags existed
-        self.assertEqual({**self.train.FP_LEGACY, **fp}["dpo"], None)
-        self.assertEqual({**self.train.FP_LEGACY, **fp}["dpo_beta"], self.train.DPO_BETA)
+    def test_the_dpo_flags_are_in_the_fingerprint(self):
         for k in ("dpo", "dpo_beta", "dpo_sft"):
             self.assertIn(k, self.train.FP_ARGS)
-            self.assertIn(k, self.train.FP_LEGACY)
 
     # ---- the pair file ------------------------------------------------------------------------------
 
@@ -328,27 +326,25 @@ class DpoTest(unittest.TestCase):
         with contextlib.redirect_stdout(buf):
             pairs = self.load_pairs(path)
         self.assertEqual([p.id for p in pairs], ["ok"])
-        self.assertIn("3 unrenderable or malformed skipped", buf.getvalue())
+        self.assertIn("3 malformed skipped", buf.getvalue())
         empty = os.path.join(self.tmp, "empty.jsonl")
         Path(empty).write_text(json.dumps({"id": "x", "chosen": {"x": 1}, "rejected": {"x": 1}}) + "\n")
         with self.assertRaises(SystemExit), contextlib.redirect_stdout(io.StringIO()):
             self.load_pairs(empty)
 
     def test_a_pair_over_max_len_is_dropped_whole(self):
-        from transformers import AutoTokenizer
-        tok = AutoTokenizer.from_pretrained(self.model_dir)
-        cfg = self.train.fmt.DecisionConfig.parse(None, None, None, None)
         c, r = pair_records(0)
         long_r = json.loads(json.dumps(r))
-        long_r["messages"][1]["content"] = "move the dentist " + "and the gym class " * 60  # only the rejected record is long
+        long_r["render"]["input_ids"] = long_r["render"]["input_ids"] * 8  # only the rejected record is long
+        long_r["render"]["weights"] = long_r["render"]["weights"] * 8
         path = os.path.join(self.tmp, "long.jsonl")
         with open(path, "w") as f:
             for pid, rej in (("ok", r), ("long-rejected", long_r)):
                 f.write(json.dumps({"id": pid, "chosen": c, "rejected": rej}) + "\n")
         with contextlib.redirect_stdout(io.StringIO()) as buf:
-            both = self.train.load_pairs(tok, path, 4096, 0, None, 4, cfg)
+            both = self.train.load_pairs(path, 4096, 0)
             ok = both[0]
-            got = self.train.load_pairs(tok, path, max(len(ok.chosen[0]), len(ok.rejected[0])) + 10, 0, None, 4, cfg)
+            got = self.train.load_pairs(path, max(len(ok.chosen[0]), len(ok.rejected[0])) + 10, 0)
         self.assertEqual([p.id for p in both], ["ok", "long-rejected"])
         self.assertEqual([p.id for p in got], ["ok"])  # a long rejected record costs the whole pair, not one side of it
         self.assertIn("1 over max-len", buf.getvalue())

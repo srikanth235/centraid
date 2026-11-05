@@ -3,7 +3,7 @@
 //! Two new measures (no `score.py` counterpart), both read off the turn's reference calls:
 //!
 //! * [`constraints`]: the number of selection facets the reference call carries, exactly
-//!   `authored/hardness.py`'s count, so fail rate by constraint count is the census the issue quotes
+//!   the retired `authored/hardness.py`'s count, so fail rate by constraint count is the census the issue quotes
 //!   (13% / 22% / 37% / 67% at 1 / 2 / 3 / 4).
 //! * [`judge_args`]: per argument class (rows, date, filters, amount), did the model's calls state what a reference
 //!   call states? An argument is compared as the runtime reads it (case-folded, whitespace-collapsed text; date
@@ -105,6 +105,43 @@ fn verb_of(tool: &str, args: &Map<String, Value>) -> String {
     }
 }
 
+/// The grid cell of a turn, as `tool/kind/verb`: its last reference call (not a `bad` one), in the eight tools' names,
+/// with the first kind it names and its verb or op. A reference that is only a decline or an ask is `decline`/`ask`.
+/// Datagen's primary cells are (tool, kind, verb or op); this is the same key read off the call.
+#[must_use]
+pub fn cell_of(turn: &Turn) -> String {
+    let Some(call) = turn.reference.iter().rev().find(|c| !c.bad) else {
+        return "none".to_owned();
+    };
+    let (tool, args) = modern(&call.tool, &call.args);
+    let mut cell = tool.clone();
+    // the kind is named by the call that looks (`find`), not the one that answers from its rows (`answer rows=@1`)
+    let kind = turn
+        .reference
+        .iter()
+        .rev()
+        .filter(|c| !c.bad)
+        .find_map(|c| {
+            let (_, a) = modern(&c.tool, &c.args);
+            a.get("kind").map(text).filter(|k| !k.is_empty())
+        });
+    if let Some(kind) = kind {
+        let kind = kind.split(',').next().unwrap_or_default().trim().to_owned();
+        if !kind.is_empty() {
+            cell += &format!("/{kind}");
+        }
+    }
+    let verb = if tool == "compute" {
+        args.get("op").map(text).unwrap_or_default()
+    } else {
+        verb_of(&tool, &args)
+    };
+    if !verb.is_empty() && verb != tool {
+        cell += &format!("/{verb}");
+    }
+    cell
+}
+
 /// Reads look alike: `find`, `answer` and `compute` all state a selector, and the contract has the model look
 /// with one and end with another.
 fn is_read(tool: &str) -> bool {
@@ -131,7 +168,7 @@ pub fn tool_name_ok(turn: &Turn, model_calls: &[Value]) -> bool {
     })
 }
 
-/// The number of constraints a reference call carries (`authored/hardness.py` `constraints`).
+/// The number of constraints a reference call carries (the retired `authored/hardness.py` `constraints`).
 #[must_use]
 pub fn constraints(call: &RefCall) -> usize {
     let a = &call.args;
