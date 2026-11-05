@@ -31,6 +31,7 @@ use centraid_assist::native_turn::log::Log;
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use crate::bpe::Bpe;
 use crate::catalog::Catalog;
 use crate::grid::cell_of;
 use crate::intent::{Intent, Scenario, Span, TurnIntent};
@@ -46,23 +47,23 @@ pub const DECISION_WEIGHT: f32 = 2.0;
 // the tokenizer
 // ---------------------------------------------------------------------------------------------
 
-/// The ids of a text and the byte range of the text each covers.
-pub type Tokens = (Vec<u32>, Vec<(usize, usize)>);
+pub use crate::bpe::Tokens;
 
-/// A Hugging Face tokenizer read from its `tokenizer.json`, and the BLAKE3 of that file (the data version records it).
+/// The chat model's tokenizer read from its `tokenizer.json` ([`Bpe`]), and the BLAKE3 of that file (the data version records
+/// it).
 pub struct Tokenizer {
-    inner: tokenizers::Tokenizer,
+    inner: Bpe,
     pub hash: String,
 }
 
 impl Tokenizer {
     /// # Errors
     ///
-    /// If the file cannot be read or is not a tokenizer.
+    /// If the file cannot be read or is not a tokenizer of the shape [`Bpe`] reads.
     pub fn open(path: &Path) -> Result<Self> {
         let bytes = std::fs::read(path).with_context(|| path.display().to_string())?;
-        let inner = tokenizers::Tokenizer::from_bytes(&bytes)
-            .map_err(|error| anyhow::anyhow!("{}: {error}", path.display()))?;
+        let text = std::str::from_utf8(&bytes).with_context(|| path.display().to_string())?;
+        let inner = Bpe::from_json(text).with_context(|| path.display().to_string())?;
         Ok(Self {
             inner,
             hash: blake3::hash(&bytes).to_hex().to_string(),
@@ -73,12 +74,10 @@ impl Tokenizer {
     ///
     /// # Errors
     ///
-    /// If the text is not a tokenizer.
+    /// If the text is not a tokenizer of the shape [`Bpe`] reads.
     pub fn from_json(text: &str) -> Result<Self> {
-        let inner = tokenizers::Tokenizer::from_bytes(text.as_bytes())
-            .map_err(|error| anyhow::anyhow!("{error}"))?;
         Ok(Self {
-            inner,
+            inner: Bpe::from_json(text)?,
             hash: blake3::hash(text.as_bytes()).to_hex().to_string(),
         })
     }
@@ -90,11 +89,7 @@ impl Tokenizer {
     ///
     /// If the tokenizer fails.
     pub fn encode(&self, text: &str) -> Result<Tokens> {
-        let encoding = self
-            .inner
-            .encode(text, false)
-            .map_err(|error| anyhow::anyhow!("{error}"))?;
-        Ok((encoding.get_ids().to_vec(), encoding.get_offsets().to_vec()))
+        self.inner.encode(text)
     }
 
     /// The text of `ids`, special tokens kept.
@@ -103,9 +98,7 @@ impl Tokenizer {
     ///
     /// If the tokenizer fails.
     pub fn decode(&self, ids: &[u32]) -> Result<String> {
-        self.inner
-            .decode(ids, false)
-            .map_err(|error| anyhow::anyhow!("{error}"))
+        self.inner.decode(ids)
     }
 }
 
@@ -119,11 +112,10 @@ pub fn byte_level_tokenizer() -> Result<Tokenizer> {
     Tokenizer::from_json(&byte_level_tokenizer_json())
 }
 
-/// The `tokenizer.json` of [`byte_level_tokenizer`].
+/// The `tokenizer.json` of [`byte_level_tokenizer`]: Qwen3.5's normalizer and pre-tokenizer, no merges.
 #[must_use]
 pub fn byte_level_tokenizer_json() -> String {
-    use tokenizers::pre_tokenizers::byte_level::ByteLevel;
-    let mut alphabet: Vec<char> = ByteLevel::alphabet().into_iter().collect();
+    let mut alphabet: Vec<char> = crate::bpe::byte_chars().to_vec();
     alphabet.sort_unstable();
     let vocab: serde_json::Map<String, Value> = alphabet
         .iter()
@@ -150,16 +142,22 @@ pub fn byte_level_tokenizer_json() -> String {
                    "rstrip": false, "normalized": false, "special": true})
         })
         .collect();
-    let byte_level = json!({"type": "ByteLevel", "add_prefix_space": false, "trim_offsets": false, "use_regex": true});
+    let byte_level = json!({"type": "ByteLevel", "add_prefix_space": false, "trim_offsets": false, "use_regex": false});
+    let split = json!({"type": "Split", "pattern": {"Regex": QWEN_SPLIT}, "behavior": "Isolated", "invert": false});
     let tokenizer = json!({
         "version": "1.0", "truncation": null, "padding": null, "added_tokens": added,
-        "normalizer": null, "pre_tokenizer": byte_level, "post_processor": null, "decoder": byte_level,
-        "model": {"type": "BPE", "dropout": null, "unk_token": null, "continuing_subword_prefix": null,
-                  "end_of_word_suffix": null, "fuse_unk": false, "byte_fallback": false, "ignore_merges": false,
+        "normalizer": {"type": "NFC"},
+        "pre_tokenizer": {"type": "Sequence", "pretokenizers": [split, byte_level]},
+        "post_processor": null, "decoder": byte_level,
+        "model": {"type": "BPE", "dropout": null, "unk_token": null, "continuing_subword_prefix": "",
+                  "end_of_word_suffix": "", "fuse_unk": false, "byte_fallback": false, "ignore_merges": false,
                   "vocab": vocab, "merges": []},
     });
     tokenizer.to_string()
 }
+
+/// The `Split` regex of Qwen3.5's `tokenizer.json`.
+const QWEN_SPLIT: &str = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?[\p{L}\p{M}]+|\p{N}| ?[^\s\p{L}\p{M}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+";
 
 // ---------------------------------------------------------------------------------------------
 // the deciding tokens

@@ -396,3 +396,25 @@ fn the_real_tokenizer_reads_a_record_as_the_byte_level_one_does_when_the_file_is
     assert_eq!(ids.iter().filter(|id| **id == first[0]).count(), starts);
     assert_eq!(ids.len(), offsets.len());
 }
+
+#[test]
+fn the_real_tokenizer_gives_the_ids_the_huggingface_one_gave_when_the_file_is_there() {
+    // The ids below were read from the `tokenizers` crate on the same file, and our encoder matched it on 3.5 million texts
+    // (#1171); they pin the special tokens, the digit split, the double space and NFC.
+    let Some(path) = std::env::var_os("DATAGEN_TOKENIZER") else {
+        return;
+    };
+    let real = Tokenizer::open(Path::new(&path)).expect("the tokenizer file");
+    let ids = |text: &str| real.encode(text).expect("encode").0;
+    assert_eq!(
+        ids("<|im_start|>user\nHello, world! 123<|im_end|>\n"),
+        [
+            248_045, 846, 198, 9419, 11, 1814, 0, 220, 16, 17, 18, 248_046, 198
+        ]
+    );
+    assert_eq!(ids("e\u{301}  \n\n x'S"), [933, 18050, 830, 12887]);
+    assert_eq!(
+        ids("<think>\nfind  tasks  due"),
+        [248_068, 198, 3772, 220, 8806, 220, 4016]
+    );
+}
