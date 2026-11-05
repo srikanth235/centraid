@@ -1,4 +1,4 @@
-//! THE GOLD A SESSION CARRIES: `eval/gold.py`'s authoring vocabulary, as the frozen sets serialise it.
+//! THE GOLD A SESSION CARRIES: the retired `eval/gold.py`'s authoring vocabulary, as the frozen sets serialise it.
 //!
 //! Gold is an effect written in world keys (`"night_0319"`, `"+1"` for the first row the session created).
 //! A turn lists every acceptable effect; it passes when its effect matches any of them.

@@ -1,6 +1,6 @@
 //! `contracts/assist/export/` is what `nativetools export` writes, committed.
 //!
-//! The Python side (the trainer, the data builders, `render.py`) and the
+//! The trainer (which reads rendered records, not these files) and the
 //! phone's assistant read the model-facing facts from these files: the tool
 //! schemas, the kind card, the phrase and date tables, the error table, the
 //! rendered prompts and the model's identity. A committed copy nobody

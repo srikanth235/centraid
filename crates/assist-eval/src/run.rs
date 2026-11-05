@@ -1,4 +1,4 @@
-//! THE REPLAY LOOP (`eval/run.py` `run_session`, with `--model gguf`'s step): each session on a private copy of its
+//! THE REPLAY LOOP (the retired `eval/run.py` `run_session`, with `--model gguf`'s step): each session on a private copy of its
 //! world's vault, turn by turn, one model message per step until the runtime ends the turn.
 //!
 //! The prompt is the phone's (`native_turn::log::Log`, the renderer the training data is made with) and the message

@@ -1,6 +1,6 @@
 # centraid-assist-eval
 
-The eval runner of the on-device chat model: stage 10 of the training-data pipeline ([#1166](https://github.com/srikanth235/centraid/issues/1166)). It replays a held-out set turn by turn through the phone's own step (`centraid_assist::native::step::decode_step`, the call `assist-step` serves), lets the real runtime execute what the model wrote, and judges each turn by its **effect**, as `experiments/toolchat/native/eval/score.py` does.
+The eval runner of the on-device chat model: stage 10 of the training-data pipeline ([#1166](https://github.com/srikanth235/centraid/issues/1166)). It replays a held-out set turn by turn through the phone's own step (`centraid_assist::native::step::decode_step`, the call `assist-step` serves), lets the real runtime execute what the model wrote, and judges each turn by its **effect**, as the retired `experiments/toolchat/native/eval/score.py` does.
 
 It is its own crate and not a module of `centraid-assist-llama` because the runner needs the world seeder and the vault (`centraid-nativetools`: SQLite, the apps, the search index). `centraid-assist-llama` is linked into the phone's core, and a harness dependency does not belong there. The llama.cpp engine is behind this crate's `engine` feature, so the gate builds, lints and tests everything else without the five-minute cmake build.
 
@@ -10,7 +10,7 @@ It is its own crate and not a module of `centraid-assist-llama` because the runn
 # the set, its worlds and the model are held out / not in the tree; see "Baseline" below for where each comes from
 RUSTFLAGS='-C target-cpu=native' cargo build --release -p centraid-assist-eval --features engine --bin assist-eval
 target/release/assist-eval --model native-s2-Q4_0.gguf \
-    --set experiments/toolchat/native/eval/sets/val.jsonl --out runs/val-s2-q4
+    --set experiments/toolchat/native/data/v7/val.jsonl --out runs/val-s2-q4
 ```
 
 It prints the summary and writes `runs/val-s2-q4.json` (the report) and `runs/val-s2-q4.sessions.jsonl` (every turn's result, one session per line, with the calls the model made and the problems the scorer found).
@@ -20,8 +20,8 @@ It prints the summary and writes `runs/val-s2-q4.json` (the report) and `runs/va
 | `--model GGUF` / `ASSIST_EVAL_MODEL` | the model; greedy, trace v4, think limit 200, 512 tokens, context 8192: the phone's `StepOptions` |
 | `--tools s2\|sig\|compact\|full` | the tools block the system prompt shows, and the shape of call the step reads. **Default `sig`**, the eight tools; `s2` is the prompt the shipping model was trained on (`contracts/assist/export/prompt.s2.txt`). The report's `model` names it |
 | `--stub` | no weights: a model that declines everything. The floor, and a way to check the rig |
-| `--set FILE` | the JSONL set (default `experiments/toolchat/native/eval/sets/val.jsonl`) |
-| `--worlds DIR` | where the sessions' world JSON lives; repeatable, searched in order (default `eval/worlds`, then `authored/worlds`, as `lib.py`) |
+| `--set FILE` | the JSONL set (default `experiments/toolchat/native/data/v7/val.jsonl`) |
+| `--worlds DIR` | where the sessions' world JSON lives; repeatable, searched in order (default `experiments/toolchat/native/data/v7/worlds`) |
 | `--out PREFIX` | write `PREFIX.json` and `PREFIX.sessions.jsonl` |
 | `--threads N` / `ASSIST_EVAL_THREADS` | CPU threads (default: up to four cores, as the phone) |
 | `--limit N`, `--only ID,ID`, `--shard K/N` | a subset; `--shard` lets several processes share a set (each loads ~0.6 GB at Q4_0) |
@@ -48,22 +48,24 @@ Sessions and worlds come through `source::EvalSource` (`sessions()`, `world(name
 
 ### What the new measures mean
 
-- **Constraints** are counted on the turn's reference calls, exactly as `authored/hardness.py` counts them (the census behind the issue's 13% / 22% / 37% / 67%): the row selector, `when`, `linked_to`, `within`, `exclude`, `status`, `text`, each `where` clause, `order`+`limit`, `op`+`field`+`group`; the widest accepted, non-`bad` reference call. `ask`, `decline` and `open` carry 0.
+- **Constraints** are counted on the turn's reference calls, exactly as the retired `authored/hardness.py` counts them (the census behind the issue's 13% / 22% / 37% / 67%): the row selector, `when`, `linked_to`, `within`, `exclude`, `status`, `text`, each `where` clause, `order`+`limit`, `op`+`field`+`group`; the widest accepted, non-`bad` reference call. `ask`, `decline` and `open` carry 0.
 - **S2 and the eight tools.** The runtime renames S2's `search`, `open` and `act` itself (`native::legacy::modernize`, at `Session::step`), so S2's calls run as `find`, `create`, `edit` and `do`. The scorer puts the reference calls and the model's calls through the same table before comparing, so both sides speak the eight tools. A read is `find`, `answer` or `compute` alike; a write is its tool and verb, and a write by `@k` takes its selector from the read before it.
 - **Tool name accuracy** (`tool_name_accuracy`) sits beside the effect-based one: the model's last call names an act some reference call names (reads collapse to one act; a write is its tool and verb, so `do complete` is not `do cancel`).
 - **Tool accuracy** is read off the effect: the turn ended in the act some accepted gold wants (rows, value, write, ask or decline; a write that also answers its row counts as a write; a turn that passes counts whatever it ended in). A wrong set of rows or a wrong amount is not a wrong tool.
 - **Arguments** are the one measure the effect cannot isolate, so they are read off the calls. For each class, a turn counts when a reference call states it; a turn that passes by effect is right on every class it carries (it may have looked first); on a failed turn the model is right when one of its calls has the same tool (and verb) and states the same arguments of that class, which says which argument to blame. Classes: _rows_ = `rows`, `name`, `within`, `linked_to`; _date_ = `when`, and a date written in `args`; _filters_ = `where` clauses that are not amounts, `status`, `exclude`, `text`, `order`, `limit`, `op`, `field`, `group`; _amount_ = a `where` clause or `args` line on a money field of the call's kind. Values compare as the runtime reads them (case-folded, whitespace-collapsed; date expressions as JSON). A reference's `$key` is compared as the `#n` the runtime showed; when the runtime never showed that row the argument is `unscorable` and left out of the rate, not counted as a miss.
 - **App** of a turn: the apps of the kinds its reference calls name and of the rows its gold names. A cross-app turn is in each of its apps.
 
-## Differences from `score.py` / `metrics.py` / `slices.py`
+## Differences from the retired `score.py` / `metrics.py` / `slices.py`
+
+The Python scorer was deleted in #1171 (it is in git history, at the commit before that one). This crate is the only scorer.
 
 Kept: the matching rules (`match_value`, `diff_match`, `value_match`; the same problems, worded alike but formatted by Rust, so `["me"]` where Python prints `['me']`), the effect (`turn_effect`, `merge_diffs`), session strict pass, turn pass over all turns, clean turn pass, the wrong-write rate, pass by gold type and by tag, loop/cap/think-cut counts, the 95% Wilson interval. Intended differences:
 
 - **Not ported:** row precision/recall, the "without §14-convention turns" figures, under-ask/over-ask, `slices.py`'s error classes, `metrics.py`'s before/after table, `NATIVE_RETRY`, and `break_loop` (a no-op for a greedy backend). The failed turns carry the scorer's problem texts, so the classes can be rebuilt from `report.json`.
-- **In-process runtime.** The Python rig drives a `nativetools session` process; this crate links `centraid_assist::native::Session` and the vault door. Same code, no pipe. The prompt is rendered by `native_turn::log::Log`, the renderer the phone and the training data share (the Python `--model gguf` path renders through `render.py`, a client of the same Rust renderer).
+- **In-process runtime.** The Python rig drives a `nativetools session` process; this crate links `centraid_assist::native::Session` and the vault door. Same code, no pipe. The prompt is rendered by `native_turn::log::Log`, the renderer the phone and the training data share.
 - **`casefold`** is Unicode lowercase (Rust has no casefold); only differs for characters like `ß`.
 - **A failing engine** ends the session (`error` in its record, the remaining turns "not run") where the Python driver aborts the run. Gold that names a world key the world lacks aborts both.
-- **Parity is checked on hand-made pairs only.** The first S2 run, scored beside `score.py` on the same set, is where "comparable numbers" is actually tested.
+- **Parity is checked on hand-made pairs only.** `score.py` is gone from the tree, so "comparable numbers" are tested against the figures it reported for S2 (13/22/37/67% fail by constraint count, #1166), not by running both.
 - **`unscorable` arguments:** a `$key` row shown only in the system directory or a user block cannot be resolved (Python's `NameIndex` scans those; this crate does not). If `unscorable` is a large share of `rows` after the baseline run, port `NameIndex`.
 - **Tool accuracy, arguments, constraints and apps** have no Python counterpart.
 - **Writes run** (`Writes::Run`), as in the Python eval, not the phone's `Park` (a write waiting for a tap); the effect is the vault's.
@@ -92,7 +94,7 @@ The model is in `kit.json`, with its sha256 (checked by the kernel). S2 is a pub
 
 ```bash
 # on a machine with Kaggle credentials (~/.kaggle/kaggle.json), after committing and fetching the data
-python3 experiments/toolchat/native/artefacts.py fetch                 # needs HF_TOKEN, once
+python3 experiments/toolchat/native/artefacts.py fetch                 # needs HF_TOKEN, once; puts val and the worlds in data/v7/
 crates/assist-eval/kaggle/make_bundle.sh /tmp/kit KAGGLE_OWNER WSP     # the baseline the owner named; S2 is the other choice
 kaggle datasets create -p /tmp/kit                                     # private
 mkdir -p /tmp/kit-kernel

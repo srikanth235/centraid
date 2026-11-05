@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! cargo build --release -p centraid-assist-eval --features engine --bin assist-eval
-//! assist-eval --model native-s2-Q4_0.gguf --set experiments/toolchat/native/eval/sets/val.jsonl --out runs/val-s2
+//! assist-eval --model native-s2-Q4_0.gguf --set experiments/toolchat/native/data/v7/val.jsonl --out runs/val-s2
 //! assist-eval --stub --set … --worlds …        # no weights: a model that declines everything
 //! ```
 //!
@@ -52,7 +52,7 @@ fn args() -> Result<Args> {
     let mut out = Args {
         model: std::env::var_os("ASSIST_EVAL_MODEL").map(PathBuf::from),
         stub: false,
-        set: native.join("eval/sets/val.jsonl"),
+        set: native.join("data/v7/val.jsonl"),
         worlds: Vec::new(),
         out: None,
         threads: std::env::var("ASSIST_EVAL_THREADS")
@@ -117,7 +117,7 @@ fn args() -> Result<Args> {
         }
     }
     if out.worlds.is_empty() {
-        out.worlds = vec![native.join("eval/worlds"), native.join("authored/worlds")];
+        out.worlds = vec![native.join("data/v7/worlds")];
     }
     Ok(out)
 }

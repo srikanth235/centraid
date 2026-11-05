@@ -1,4 +1,4 @@
-//! THE SCORER: a turn's effect against the effects its gold accepts (`eval/score.py`: `match_value`, `diff_match`,
+//! THE SCORER: a turn's effect against the effects its gold accepts (the retired `eval/score.py`: `match_value`, `diff_match`,
 //! `value_match`, `judge_accept`, `judge_turn`). Same rules, same problem texts, so a failed turn reads alike in
 //! both reports.
 

@@ -2,7 +2,7 @@
 
     HF_HUB_OFFLINE=1 python -m unittest train/test_resume.py
 
-Tiny random Qwen3.5 on the CPU (the approach of test_decision.py), driven through train.main() itself.
+Tiny random Qwen3.5 on the CPU (test_datagen.py's model, tokenizer and records), driven through train.main() itself.
 An interrupted-and-resumed run must leave bit-identical parameters, logged losses and eval history to an
 uninterrupted one (CPU, float32, single process: exact, not a tolerance).
 """
@@ -24,8 +24,7 @@ from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import fmt  # noqa: E402
-from test_decision import FULL, THINK, session  # noqa: E402
+from test_datagen import record, tiny_model, tiny_tokenizer, write_zst  # noqa: E402
 
 STEPS, BS = 6, 2  # 12 examples
 BASE = ["--bs", str(BS), "--lr", "1e-3", "--warmup", "0.2", "--log-every", "2", "--val-n", "4",
@@ -42,24 +41,19 @@ class ResumeTest(unittest.TestCase):
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
         try:
             import torch
-            from test_batching import _build_tiny
             from transformers import AutoModelForCausalLM
             spec = importlib.util.spec_from_file_location("train_script", HERE / "train.py")
             cls.train = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(cls.train)
             cls.tmp = tempfile.mkdtemp(prefix="resume-test-")
             cls.model_dir = os.path.join(cls.tmp, "model")
-            _build_tiny(cls.model_dir)
+            tiny_model().save_pretrained(cls.model_dir)
+            tiny_tokenizer(cls.model_dir)
         except Exception as e:  # noqa: BLE001
             raise unittest.SkipTest("no torch / tiny model / tokenizer: %r" % (e,))
         cls.torch, cls.AutoModel = torch, AutoModelForCausalLM
-        cls.data = os.path.join(cls.tmp, "train.jsonl")
-        with open(cls.data, "w") as f:
-            for i in range(STEPS * BS):
-                ex = session(FULL if i % 2 else THINK, THINK if i % 3 else FULL)
-                ex["messages"][1]["content"] = "move the dentist %d hours and the %d th gym class" % (i, i * 7)
-                ex["messages"][2]["args"] = dict(ex["messages"][2]["args"], rows="#%d" % (i % 5 + 1))
-                f.write(json.dumps(ex) + "\n")
+        cls.data = os.path.join(cls.tmp, "train.jsonl.zst")
+        write_zst(cls.data, [record("r%d" % i, 24 + 3 * (i % 5)) for i in range(STEPS * BS)])
         cls.ref = cls.run_once(os.path.join(cls.tmp, "ref"))  # no new flag: the behaviour of before
 
     @classmethod

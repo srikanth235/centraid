@@ -156,7 +156,7 @@ fn with_ext(prefix: &Path, ext: &str) -> PathBuf {
 fn source(f: &Flags, native: &Path) -> Result<impl EvalSource> {
     let set = f.set.clone().context("give --set SET.jsonl")?;
     let worlds = if f.worlds.is_empty() {
-        vec![native.join("eval/worlds"), native.join("authored/worlds")]
+        vec![native.join("data/v7/worlds")]
     } else {
         f.worlds.clone()
     };

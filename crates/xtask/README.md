@@ -111,7 +111,7 @@ What it does not read is only the append-only record, where a finding could neve
 
 ## Required checks
 
-Branch protection's required checks are **`gate`**, **`engine`**, **`native-python`**, **`dependency-review`** and **`pr-title`**, the jobs in [`gate.yml`](../../.github/workflows/gate.yml). Branch protection is configured outside the repository, the same way the code-owner review requirement is; a required check that never reports blocks every pull request, which is the failure #557 was written about, so renaming any of them is an owner change to branch protection in the same breath.
+Branch protection's required checks are **`gate`**, **`engine`**, **`dependency-review`** and **`pr-title`**, the jobs in [`gate.yml`](../../.github/workflows/gate.yml). Branch protection is configured outside the repository, the same way the code-owner review requirement is; a required check that never reports blocks every pull request, which is the failure #557 was written about, so renaming any of them is an owner change to branch protection in the same breath. (`native-python`, the trainer's CPU suite, was removed from this list when the Python data tooling was retired, #1171; the suite now runs from `.github/workflows/trainer.yml`, not on pull requests.)
 
 ## `cargo xtask artifact-key` (#1020, D-1020-G2)
 

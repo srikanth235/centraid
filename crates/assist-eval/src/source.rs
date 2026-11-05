@@ -1,9 +1,9 @@
 //! WHERE A SET COMES FROM. The eval reads sessions and worlds through [`EvalSource`], so the record the `datagen`
 //! crate will write (#1166, stage 7) is one more implementation, not a change to the runner.
 //!
-//! Today's source is the frozen JSONL set the Python eval scores (`eval/sets/val.jsonl`, `FROZEN.md`) and the world
-//! JSON files its sessions name. Both are held out: `experiments/toolchat/native/artefacts.py fetch` brings them
-//! from the private data version.
+//! Today's source is the frozen JSONL set the retired Python eval scored (`data/v7/val.jsonl`, `data/v7/FROZEN.md`) and the
+//! world JSON files its sessions name (`data/v7/worlds`). Both are held out: `experiments/toolchat/native/artefacts.py
+//! fetch` brings them from the private data version.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -55,7 +55,7 @@ fn read(path: &Path) -> Result<String, EvalError> {
 }
 
 /// A frozen JSONL set (one session per line) and the directories its worlds live in, searched in order
-/// (`lib.py` `world_dir`: `eval/worlds`, then `authored/worlds`).
+/// (by default `data/v7/worlds`).
 #[derive(Debug, Clone)]
 pub struct JsonlSource {
     set: PathBuf,

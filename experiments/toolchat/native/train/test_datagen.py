@@ -135,11 +135,6 @@ class DatagenLoadTest(unittest.TestCase):
             with self.assertRaises(datagen.RecordError, msg=rec["id"]):
                 datagen.encode(rec)
 
-    def test_the_ignore_label_is_the_trainers(self):
-        import fmt
-
-        self.assertEqual(datagen.IGNORE, fmt.IGNORE)
-
 
 class LossArithmeticTest(unittest.TestCase):
     @classmethod
@@ -164,20 +159,18 @@ class LossArithmeticTest(unittest.TestCase):
         self.assertEqual(pos.tolist(), [2, 3, 4, 5, 7, 8])
         self.assertEqual(len(pos), 6)
         tgt = torch.tensor(ex[0][1:])[pos]
-        loss, n, _, plain = train.loss_from_logits(logits, tgt, pos, ex[2], 99.0, torch.device("cpu"), 99.0)  # W, CW ignored
+        loss, n, _, plain = train.loss_from_logits(logits, tgt, pos, ex[2], torch.device("cpu"))
         ce = torch.nn.functional.cross_entropy(logits, tgt, reduction="none")
         want = sum(float(c) * x for c, x in zip(ce, [w[1:][p] for p in pos.tolist()]))
         self.assertAlmostEqual(float(loss), want, places=5)
         self.assertAlmostEqual(float(plain), float(ce.sum()), places=5)
         self.assertEqual(n, 6)
         # the mass: weight 0 tokens are no labels and add nothing; the first token's weight is never a target
-        self.assertEqual(train.weight_mass(ex[1], ex[2], 99.0, 99.0), (6, 2, 9.0))
+        self.assertEqual(train.weight_mass(ex[2]), 9.0)
 
     def test_mass_excludes_the_first_token_and_zero_weights(self):
         ex = self.example(6, [5.0, 0.0, 1.0, 2.0, 0.0, 4.0])
-        n, nd, mass = self.train.weight_mass(ex[1], ex[2], 1.0)
-        self.assertEqual((n, nd), (3, 2))
-        self.assertAlmostEqual(mass, 7.0)
+        self.assertAlmostEqual(self.train.weight_mass(ex[2]), 7.0)
 
     def test_unit_weights_are_the_plain_mean(self):
         torch, train = self.torch, self.train
@@ -185,8 +178,8 @@ class LossArithmeticTest(unittest.TestCase):
         logits = torch.randn(7, 9)
         pos = torch.arange(2, 9)
         tgt = torch.randint(0, 9, (7,))
-        loss, n, _, _ = train.loss_from_logits(logits, tgt, pos, ex[2], 1.0, torch.device("cpu"))
-        mass = train.weight_mass(ex[1], ex[2], 1.0)[2]
+        loss, n, _, _ = train.loss_from_logits(logits, tgt, pos, ex[2], torch.device("cpu"))
+        mass = train.weight_mass(ex[2])
         mean = torch.nn.functional.cross_entropy(logits, tgt)
         self.assertAlmostEqual(float(loss) / mass, float(mean), places=5)
 
@@ -195,8 +188,8 @@ class LossArithmeticTest(unittest.TestCase):
         base = [0.0, 0.0, 1.0, 3.0, 1.0, 2.0, 1.0, 1.0]
         a, b = self.example(8, base), self.example(8, [3 * x for x in base])
         logits, tgt, pos = torch.randn(6, 9), torch.randint(0, 9, (6,)), torch.arange(1, 7)
-        la = float(train.loss_from_logits(logits, tgt, pos, a[2], 1.0, torch.device("cpu"))[0]) / train.weight_mass(a[1], a[2], 1.0)[2]
-        lb = float(train.loss_from_logits(logits, tgt, pos, b[2], 1.0, torch.device("cpu"))[0]) / train.weight_mass(b[1], b[2], 1.0)[2]
+        la = float(train.loss_from_logits(logits, tgt, pos, a[2], torch.device("cpu"))[0]) / train.weight_mass(a[2])
+        lb = float(train.loss_from_logits(logits, tgt, pos, b[2], torch.device("cpu"))[0]) / train.weight_mass(b[2])
         self.assertAlmostEqual(la, lb, places=5)
 
     def test_a_deciding_token_pulls_the_loss_toward_its_own_ce(self):
@@ -206,7 +199,7 @@ class LossArithmeticTest(unittest.TestCase):
         logits[2, 1] = 6.0  # the last position (weight 9) is easy: its CE is small
         tgt, pos = torch.tensor([0, 0, 1]), torch.arange(1, 4)
         ce = torch.nn.functional.cross_entropy(logits, tgt, reduction="none")
-        loss = float(train.loss_from_logits(logits, tgt, pos, ex[2], 1.0, torch.device("cpu"))[0]) / 12.0
+        loss = float(train.loss_from_logits(logits, tgt, pos, ex[2], torch.device("cpu"))[0]) / 12.0
         self.assertAlmostEqual(loss, float((ce * torch.tensor([1.0, 1.0, 9.0])).sum()) / 12.0, places=5)
         self.assertLess(loss, float(ce.mean()))
 
@@ -298,7 +291,7 @@ class ProtectedTensorsTest(unittest.TestCase):
         peft_model.train()
         for _ in range(3):
             loss, _, _, _ = train.forward_loss(peft_model, ex[0], ex[1], torch.device("cpu"), ex[2])
-            (loss / train.weight_mass(ex[1], ex[2], 1.0)[2]).backward()
+            (loss / train.weight_mass(ex[2])).backward()
             opt.step()
             opt.zero_grad()
         # export: merge, verify the edited tensors, write bf16 safetensors
@@ -356,7 +349,7 @@ class EndToEndTest(unittest.TestCase):
 
     def run_main(self, *flags):
         out = tempfile.mkdtemp(prefix="out-", dir=self.tmp)
-        argv = ["train.py", "--train", self.data, "--val", self.data, "--out", out, "--data-format", "datagen", "--bs", "2",
+        argv = ["train.py", "--train", self.data, "--val", self.data, "--out", out, "--bs", "2",
                 "--max-len", "128", "--checkpoints", "1.0", "--log-every", "1", "--no-grad-ckpt", "--val-n", "2",
                 "--train-eval-n", "2", "--seed", "3", *flags]
         buf = io.StringIO()
@@ -377,7 +370,7 @@ class EndToEndTest(unittest.TestCase):
     def test_full_sft_step(self):
         out, text = self.run_main("--model", self.model_dir, "--tokenizer", self.model_dir, "--lr", "1e-3")
         meta = self.check_run(out, text)
-        self.assertEqual(meta["args"]["data_format"], "datagen")
+        self.assertEqual(meta["args"]["arm"], None)
 
     def test_arm_c_step_leaves_the_edited_tensors_alone(self):
         from safetensors.torch import load_file
@@ -397,11 +390,11 @@ class EndToEndTest(unittest.TestCase):
 
     def test_dry_run_reports_the_weighted_loss(self):
         buf = io.StringIO()
-        argv = ["train.py", "--train", self.data, "--model", self.model_dir, "--tokenizer", self.model_dir, "--data-format", "datagen",
+        argv = ["train.py", "--train", self.data, "--model", self.model_dir, "--tokenizer", self.model_dir,
                 "--max-len", "128", "--dry-run", "3"]
         with mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(buf):
             self.train.main()
-        self.assertIn("DRY-RUN datagen: 3 records", buf.getvalue())
+        self.assertIn("DRY-RUN: 3 records", buf.getvalue())
 
 
 if __name__ == "__main__":

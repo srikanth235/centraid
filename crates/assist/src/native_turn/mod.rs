@@ -3,8 +3,7 @@
 //! The model drives [`native::Session`](crate::native::Session), eight flat tools over a vault, one
 //! call per message, up to [`STEP_CAP`] messages per question. Every question about the vault
 //! takes this loop; only a turn with an attachment takes [`Plane::run_attached_turn`] instead
-//! (R-1088-9). The order is the driver loop's (`experiments/toolchat/native/eval/run.py`,
-//! `train/hf_backend.py`), in Rust:
+//! (R-1088-9). The order is the driver loop's of the retired Python rig (`eval/run.py`, `train/hf_backend.py`, #1171), in Rust:
 //!
 //! ```text
 //! user(text) ──► block + compacted observations ──► log
@@ -453,7 +452,7 @@ fn usize_of(value: &Value) -> Option<usize> {
     value.as_u64().and_then(|n| usize::try_from(n).ok())
 }
 
-/// The model's message up to its first call: one call per message (`eval/lib.py first_call`).
+/// The model's message up to its first call: one call per message (the retired `eval/lib.py first_call`).
 fn first_call(text: &str) -> &str {
     let close = crate::native::identity::MODEL.tool_call_close;
     text.find(close)

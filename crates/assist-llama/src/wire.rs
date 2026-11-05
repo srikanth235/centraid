@@ -1,7 +1,7 @@
 //! THE LINES `assist-step` SPEAKS: one JSON request per line in, one JSON reply per line out.
 //!
-//! `assist-step` is the phone's decode step as a process, so a Python eval harness can score exactly what the phone
-//! writes (`experiments/toolchat/native/eval/run.py --model gguf`). The wire is this module and nothing else — no
+//! `assist-step` is the phone's decode step as a process, so an eval harness can score exactly what the phone
+//! writes (the retired Python rig, `eval/run.py --model gguf`, #1171, did; `crates/assist-eval` links the runtime instead). The wire is this module and nothing else — no
 //! llama.cpp — so it is built, linted and tested by the PR gate; the binary adds the model.
 //!
 //! ```text

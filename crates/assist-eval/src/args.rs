@@ -3,7 +3,7 @@
 //! Two new measures (no `score.py` counterpart), both read off the turn's reference calls:
 //!
 //! * [`constraints`]: the number of selection facets the reference call carries, exactly
-//!   `authored/hardness.py`'s count, so fail rate by constraint count is the census the issue quotes
+//!   the retired `authored/hardness.py`'s count, so fail rate by constraint count is the census the issue quotes
 //!   (13% / 22% / 37% / 67% at 1 / 2 / 3 / 4).
 //! * [`judge_args`]: per argument class (rows, date, filters, amount), did the model's calls state what a reference
 //!   call states? An argument is compared as the runtime reads it (case-folded, whitespace-collapsed text; date
@@ -168,7 +168,7 @@ pub fn tool_name_ok(turn: &Turn, model_calls: &[Value]) -> bool {
     })
 }
 
-/// The number of constraints a reference call carries (`authored/hardness.py` `constraints`).
+/// The number of constraints a reference call carries (the retired `authored/hardness.py` `constraints`).
 #[must_use]
 pub fn constraints(call: &RefCall) -> usize {
     let a = &call.args;

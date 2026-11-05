@@ -9,7 +9,6 @@ name: gate
 #                      (crates/xtask/README.md).
 #   engine             the on-device chat's llama.cpp build, too slow for the
 #                      `pr` profile (R-CHAT-10).
-#   native-python      the native tool task's CPU suite (#1044).
 #   ios                Swift 6 app/XCTest, HealthSeeder, and the Rust simulator core.
 #   dependency-review  the PR's dependency diff, read through the API.
 #   pr-title           the squash subject, checked by `.githooks/commit-msg`.
@@ -132,71 +131,6 @@ jobs:
       # The real-model suites are `#[ignore]`d: they need a GGUF file the
       # repository does not carry.
       - run: cargo test -p centraid-assist-llama -p centraid-core-ffi --features centraid-core-ffi/llama
-
-  # `experiments/toolchat/native/run_cpu_tests.py`: every test module of the
-  # native tool task, none skipped. Inputs are pinned by content: hashed pip
-  # requirements, a tokenizer fetched at a commit and checked by SHA-256.
-  native-python:
-    runs-on: ubuntu-latest
-    # The suite takes ~16 minutes at `--jobs 4`.
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup
-        with:
-          bun: "false"
-          rust: "true"
-      - run: cargo build --locked -p centraid-nativetools --bin nativetools
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          # The minor the training image runs (train/vm/run_job.sh).
-          python-version: "3.11"
-      - run: >-
-          python -m pip install --require-hashes --only-binary=:all: --no-deps -r experiments/toolchat/native/requirements-ci.txt
-      # The trainer's tiny-model tests build a random model from Qwen3.5-0.8B's
-      # config and tokenize with its tokenizer: six small files, no weights.
-      - name: Fetch the Qwen3.5-0.8B tokenizer and config
-        env:
-          HF_HOME: ${{ runner.temp }}/hf
-          QWEN_REVISION: 2fc06364715b967f1860aea9cf38778875588b17
-        run: |
-          set -euo pipefail
-          for attempt in 1 2 3; do
-            hf download Qwen/Qwen3.5-0.8B --revision "${QWEN_REVISION}" \
-              config.json tokenizer.json tokenizer_config.json vocab.json merges.txt chat_template.jinja && break
-            [ "$attempt" -lt 3 ] || exit 1
-            echo "::warning::hf download failed (attempt ${attempt}); retrying"
-            sleep 5
-          done
-          repo="${HF_HOME}/hub/models--Qwen--Qwen3.5-0.8B"
-          mkdir -p "${repo}/refs"
-          printf '%s' "${QWEN_REVISION}" > "${repo}/refs/main"
-          cd "${repo}/snapshots/${QWEN_REVISION}"
-          sha256sum -c - <<'SUMS'
-          273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80  chat_template.jinja
-          b90b86f35c8e6925ef74ee04d0e758f0a845c83a42089ad82bbaa948de9b4204  config.json
-          a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d  merges.txt
-          5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42  tokenizer.json
-          49e2b6e395f959f077f1e992b338919c0d4a9732fc6e613995e06557f843500c  tokenizer_config.json
-          ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003  vocab.json
-          SUMS
-      # The 35 public train worlds, rebuilt byte for byte from the tree and
-      # verified by the manifest (R-1088-16); no held-out file, no secret.
-      - name: Materialise the public worlds
-        working-directory: experiments/toolchat/native
-        run: |
-          python artefacts.py fetch --public-only
-          python artefacts.py check --public-only
-      - name: Run the CPU suite
-        env:
-          NATIVETOOLS: ${{ github.workspace }}/target/debug/nativetools
-          HF_HOME: ${{ runner.temp }}/hf
-          HF_HUB_OFFLINE: "1"
-          EVAL_VAULTS: ${{ runner.temp }}/vaults
-          GEN_INTEGRATION: "1"
-          NOISE_INTEGRATION: "1"
-          PYTHONDONTWRITEBYTECODE: "1"
-        run: python experiments/toolchat/native/run_cpu_tests.py --jobs 4
 
   # Its own job so `pull-requests: write` is not handed to the job that
   # compiles third-party crates.

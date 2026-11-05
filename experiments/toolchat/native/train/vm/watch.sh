@@ -141,7 +141,7 @@ while :; do
     *) log "$VM_NAME status $status in $zone" ;;
   esac
   if [ "$status" = RUNNING ] && [ "${STREAM:-1}" = 1 ]; then
-    serial_pump "$VM_NAME" "$zone" "$POLL"      # live [train]/[score]/[vm] lines instead of a silent sleep
+    serial_pump "$VM_NAME" "$zone" "$POLL"      # live [train]/[vm] lines instead of a silent sleep
   else
     sleep "$POLL"
   fi

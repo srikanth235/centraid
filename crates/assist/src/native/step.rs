@@ -15,9 +15,8 @@
 //!    leaves the call to the model;
 //! 3. **one call per message**: the free continuation stops at `</tool_call>`, and the message ends with it.
 //!
-//! This is `experiments/toolchat/native/train/decode.py`'s `_Step` for the same model behaviour: that one forces tokens
-//! inside HF `generate`, this one cuts and continues the text, so the message text is the same wherever the model
-//! writes the same think. Two things an engine behind [`Model`] does not tell, and the step reads from the text:
+//! This is the step the retired Python decoder (`train/decode.py`, #1171) forced inside HF `generate`; this one cuts and
+//! continues the text, so the message text is the same wherever the model writes the same think. Two things an engine behind [`Model`] does not tell, and the step reads from the text:
 //!
 //! - a [`Finish::Stop`] does not say whether the stop string or the end-of-turn token ended the generation. The think's
 //!   is taken as closed; the continuation's as `</tool_call>` when the text it wrote holds a `<tool_call>` that was

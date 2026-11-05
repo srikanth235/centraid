@@ -31,13 +31,10 @@ Fix the first error first: later ones are often its echo.
 
 | Symptom | Fix |
 | --- | --- |
-| `ModuleNotFoundError` for a sibling module under `python3 -I` | `-I` leaves both the script's directory and the current directory off `sys.path`. Insert `HERE` the way `eval/build_sets.py` does (`sys.path.insert(0, str(HERE))`), or run the test with `python -m unittest test_x` from inside its directory, as `run_cpu_tests.py` does |
-| `NATIVETOOLS` unset, or `FileNotFoundError` for `target/debug/nativetools` | `eval/lib.py` defaults to `target/debug/nativetools`. Build it (`cargo build -p centraid-nativetools --bin nativetools`) or export `NATIVETOOLS` as an absolute path |
-| Tokenizer or config not found with `HF_HUB_OFFLINE=1` | Point `HF_HOME` at a cache holding the tokenizer and config of Qwen/Qwen3.5-0.8B (no weights). The suite raises `SkipTest`, which the runner reports as `skipped:` and fails |
-| `build_sets.py check` says `sets/<file> is not the file FROZEN.md records` | The frozen set changed. Restore it; a new freeze goes through `build_sets.py` into another directory, is checked, and is recorded in `FROZEN.md`. Never edit the hash to match |
-| `check` fails because held-out files are missing | Those files are held out of a public checkout; the check says so by failing. Run it where the private data version is fetched |
+| `ModuleNotFoundError` for a sibling module under `python3 -I` | `-I` leaves both the script's directory and the current directory off `sys.path`. Insert `HERE` (`sys.path.insert(0, str(Path(__file__).resolve().parent))`, as `train/train.py` does), or run the test with `python -m unittest test_x` from inside its directory, as `run_tests.py` does |
 | `pip` reports `THESE PACKAGES DO NOT MATCH THE HASHES` or requires pinned versions | Install only from `requirements-ci.txt` with `--require-hashes`. After editing `requirements-ci.in`, recompile the pinned file (its header holds the `uv pip compile` command) instead of installing loose |
-| `run_cpu_tests.py` red on `skipped:` or a module that ran zero tests | A skip is a failure here. Provide what the test looks for (binary, tokenizer cache, public worlds via `python3 artefacts.py fetch --public-only`) rather than catching `SkipTest` |
+| `run_tests.py` red on `skipped:` or a module that ran zero tests | A skip is a failure here. Provide what the test looks for (torch, transformers, peft, zstandard) rather than catching `SkipTest` |
+| `check` or `fetch` fails because the data-v7 files are missing | They are held out of the tree: `python3 experiments/toolchat/native/artefacts.py fetch` brings them from the private Hub dataset (`HF_TOKEN`, or `ARTEFACTS_SOURCE`). The tests do not need them |
 | A test dirtied the tree (`git status` shows a tracked file changed) | Point the output at a `tempfile` directory; the suite's tests must not write tracked files |
 
 ## 4. Errors
@@ -107,7 +104,7 @@ reproduce -> measure (same interpreter, same inputs) -> find the line -> fix -> 
    | Which function is slow | `python3 -m cProfile -o out.prof script.py args`, then `python3 -m pstats out.prof` (`sort cumtime`, `stats 20`) |
    | One loop or call is slow | `time.perf_counter()` before and after; `timeit` for a pure expression |
    | Memory grows | `tracemalloc.start()`, then `tracemalloc.take_snapshot().statistics("lineno")[:10]` |
-   | Many interpreters run slower than one | Oversubscribed threads: `run_cpu_tests.py` gives each interpreter `cores // jobs` of `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`; set them the same way for your own parallel runs |
+   | Many interpreters run slower than one | Oversubscribed threads: `run_tests.py` gives each interpreter `cores // jobs` of `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`; set them the same way for your own parallel runs |
 
 4. **Fix:** stream instead of loading, batch, move hot loops into vectorised library calls, cache pure results keyed by their inputs, parallelise independent processes with a bounded pool.
 5. **Measure again** with the same command and put before and after in the commit message: "eval pass 9 s, was 31 s".

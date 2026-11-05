@@ -1,68 +1,49 @@
 #!/usr/bin/env python3
-"""The data versions of the native tool task, and how the tree gets its files back (#1088, R-1088-14, R-1088-16).
+"""The held-out data-v7 of the native tool task, and the publishing of its models (#1088, R-1088-14, R-1088-16; #1171).
 
     python3 artefacts.py check [-v] [--public-only]        # every manifest file is present and matches its sha256
     python3 artefacts.py fetch [--dry-run] [--public-only] [--force] [--only NAME_OR_PATH_PREFIX ...]
     python3 artefacts.py verify-rebuild [--public-only]    # rebuild every regenerable file in a scratch copy, compare bytes
     python3 artefacts.py verify-version                    # fetch every version file at the pin, compare sha256
-    python3 artefacts.py verify-heldout                    # the checks that need the held-out files; fails when they are absent
-    python3 artefacts.py version --out DIR [--train NAME=PATH[,VALPATH]]... [--screen-worlds DIR] [--refreeze-report FILE]
-                                 [--parent TAG] [--seeds FILE] [--note NAME=TEXT]...      # assemble a data-version tree
-    python3 artefacts.py publish DIR --tag data-vN [--repo OWNER/NAME] [--dry-run]       # the tree to the dataset repo, tagged
-    python3 artefacts.py pin REVISION                      # record the commit of the published version in the manifest
     python3 artefacts.py model-card --model DIR --data-version TAG --name NAME [--score LINE]... --out FILE
     python3 artefacts.py publish-model DIR --repo OWNER/NAME --tag NAME [--card FILE] [--dry-run]   # a promoted model, tagged
     python3 artefacts.py publish-gguf GGUF --repo OWNER/NAME --tag NAME [--sidecar FILE] [--dry-run]   # its GGUF, to a PUBLIC repository
     python3 artefacts.py rehash [--only NAME_OR_PATH_PREFIX ...]   # rewrite sha256 and size of the files in place
     python3 artefacts.py paths [--class rebuild|version|heldout|public]
     python3 artefacts.py gitignore                         # the .gitignore block for the manifest paths
-    python3 artefacts.py format [--check] FILE ...         # the committed layout of the world JSON (see below)
+    python3 artefacts.py format [--check] FILE ...         # the committed layout of a JSON file (what `save` writes)
 
-A DATA VERSION is one tag (`data-vN`) on the private Hugging Face dataset repository, and it holds everything one
-from-scratch run trained and was judged on: the training build exactly as trained with the trainer's own validation slice, val
-and test as refrozen against that version's vault and runtime, the worlds the sessions ran in, the RFT screen set and the worlds
-it ran in, and `version.json`. A promoted model is a revision of a private Hub model repository whose card names its data tag,
-its git commit and its config. The tree keeps sources and `artefacts.json`, which pins the version in use; the held-out files
-(val, test, their worlds, the builders of those worlds and the authored sessions of the val worlds) are not source, and the
-public CI reads none of them and needs no Hub token. The layout of a version:
+DATA-V7 is the version S2 was trained and judged on: one tag (`data-v7`) of the private Hugging Face dataset repository. It is no
+longer rebuilt (the Python data tooling that made it is retired, #1171) and stays fetchable for reference. Its layout:
 
     version.json
-    train/<name>/train.jsonl.gz, train/<name>/train-val.jsonl.gz     each training build, as trained
-    eval/val.jsonl, eval/test.jsonl, eval/split.json
-    screen/roll-screen.jsonl, screen/worlds/*                        the RFT screen set and the worlds it ran in
-    worlds/<id>.json                                                 every world as built now, train and held-out (no keys)
-    sources/<tree path>                                              the held-out sources: the builders of the held-out worlds
-                                                                     and the authored sessions of the val worlds (T03, T12, T23)
+    train/r1/train.jsonl.gz, train/r1/train-val.jsonl.gz     the training build as trained, with the trainer's own validation slice
+    eval/val.jsonl, eval/test.jsonl, eval/split.json         the frozen sets (data/v7/FROZEN.md)
+    screen/roll-screen.jsonl                                 the RFT screen set
+    worlds/<id>.json                                         the worlds the sets run in (A to G, T03, T12, T23)
 
-`artefacts.json` is the manifest: the pin (`data`: repository, version, and the commit the tag points at) and one entry per file
-the tree materialises: its logical name, its path in the tree, its path in the version (null for a keys file: a keys file is
-a by-product of seeding), its sha256 and size, where it comes from, and how it comes back. A file either rebuilds
-(`"rebuild"`: a shell command, run here, that writes it at its path: the public world JSON, from its public builder) or comes
-from the version (everything else). `"heldout": true` marks a file the public CI must not need. The tool writes every file at
-the path the rest of the code already reads and verifies the sha256 of every byte it materialises: a rebuild whose bytes
-differ, or a copy that does, fails and reports the file. A rebuild command runs in a shell from this directory, so the manifest
-is reviewed like any script; one command that writes several files runs once.
+A NEW DATA VERSION is not made here: `cargo run -p centraid-datagen -- build --version vN` is the only way (crates/datagen/README.md).
+This tool neither assembles nor publishes data versions.
+
+`artefacts.json` is the manifest: the pin (`data`: repository, version, and the commit the tag points at) and one entry per file the tree
+materialises: its logical name, its path in the tree (all under `data/v7/`, where `crates/assist-eval` reads the val set and the worlds
+by default), its path in the version, its sha256 and size, where it comes from, and how it comes back. A file either rebuilds
+(`"rebuild"`: a shell command, run here, that writes it at its path) or comes from the version (every file today). `"heldout": true` marks
+a file that is not distributed with the tree. The tool writes every file at the path the rest of the code reads and verifies the sha256
+of every byte it materialises: a copy that differs fails and reports the file.
 
 `fetch` reads the version from a SOURCE: the directory named by ARTEFACTS_SOURCE (a local directory laid out as a version, any
-provider's copy of it, no network and no token), else the Hub at the pinned commit (`huggingface_hub`, pinned by hash in
-requirements-ci.txt, and a token read from the environment variable HF_TOKEN only: it is never written to disk, logged or
-passed on a command line). `fetch --public-only` materialises only what needs neither: the public world JSON, rebuilt from its
-builder. `check`, `format`, the rebuilds and every `--dry-run` need neither the token nor the library.
+provider's copy of it, no network and no token), else the Hub at the pinned commit (`huggingface_hub`, a token read from the environment
+variable HF_TOKEN only: it is never written to disk, logged or passed on a command line). `check` and every `--dry-run` need neither
+the token nor the library.
 
-Rebuilds that need a program besides Python: `nativetools` for the keys files (`seed_worlds.py` runs it: set NATIVETOOLS, or build
-it at target/debug/nativetools). Version files come before rebuilds (a keys file seeds from its world JSON).
-
-`format` is the layout `oxfmt` gives the world JSON the builders write, in Python so that a rebuild needs no JavaScript
-toolchain. The builders write `json.dumps` text; the committed files are that text after the repository formatter (Prettier
-rules, print width 80: an object keeps the break after its `{` if the source had one, an array or object that fits on its
-line stays on it). It is checked byte for byte against every world file by `verify-rebuild`.
+`format_json` is the layout `oxfmt` gives the JSON the manifest is written in (Prettier rules, print width 80: an object keeps the break
+after its `{` if the source had one, an array or object that fits on its line stays on it).
 """
 
 from __future__ import annotations
 
 import argparse
-import datetime
-import gzip
 import hashlib
 import json
 import os
@@ -85,19 +66,8 @@ IGNORE_END = "# artefacts.json: end"
 SHA = re.compile(r"[0-9a-f]{64}")
 COMMIT = re.compile(r"[0-9a-f]{40}")
 TAG = re.compile(r"data-v[0-9]+")
-# What a scratch copy of this directory leaves out: the authored sources and docs are not needed to rebuild.
-COPY_IGNORE = shutil.ignore_patterns("__pycache__", "sessions", "sets", "data", "*.pyc")
-# The files the version records the vault and the runtime by (paths from the repository root).
-MIGRATIONS = "contracts/migrations"
-REGISTRY_FILES = ("contracts/assist/export/metadata.json",)
-RUNTIME_EXPORT = "contracts/assist/export"
-# What the checks of `verify-heldout` run, from this directory: each needs the held-out files.
-HELDOUT_CHECKS = (
-    # the sets in the tree are the pair of v7 (FROZEN.md): drop --v7 when v8 is frozen
-    ("the frozen sets (build_sets.py check --v7)", [sys.executable, "eval/build_sets.py", "check", "--v7"]),
-    ("the val worlds of the split (split.py --check)", [sys.executable, "authored/split.py", "--check"]),
-    ("the fixes of val against the val set and its worlds (heldout_checks.py)", [sys.executable, "eval/heldout_checks.py"]),
-)
+# What a scratch copy of this directory leaves out: the data and docs are not needed to rebuild.
+COPY_IGNORE = shutil.ignore_patterns("__pycache__", "data", "*.pyc")
 # A repository's own bookkeeping file, never deleted by a publish: it decides which files the Hub stores as LFS.
 KEEP_ON_PUBLISH = (".gitattributes",)
 
@@ -429,8 +399,6 @@ def source_problem(source, manifest: dict, token: str | None) -> str | None:
 def run_env(root: Path, scratch: Path) -> dict:
     env = dict(os.environ)
     env["ARTEFACTS_TMP"] = str(scratch)
-    if "NATIVETOOLS" not in env and (REPO / "target" / "debug" / "nativetools").exists():
-        env["NATIVETOOLS"] = str(REPO / "target" / "debug" / "nativetools")
     return env
 
 
@@ -545,7 +513,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------------------------
-# verify-rebuild, verify-version, verify-heldout
+# verify-rebuild, verify-version
 # ---------------------------------------------------------------------------------------------
 
 
@@ -594,31 +562,6 @@ def cmd_verify_version(args: argparse.Namespace) -> int:
     return 1 if bad else 0
 
 
-def cmd_verify_heldout(args: argparse.Namespace) -> int:
-    """The checks that mean something only with the held-out files, run where they are. A checkout without them is not
-    checked at all, so this fails loudly instead of passing."""
-    manifest = load(args.manifest)
-    held = [e for e in entries(manifest) if is_heldout(e)]
-    wrong = [f"{e['path']}: {status(e, args.root)}" for e in held if status(e, args.root) != "ok"]
-    if wrong:
-        for line in wrong[:20]:
-            print(f"FAIL held-out file {line}")
-        print(f"FAIL verify-heldout: {len(wrong)} of {len(held)} held-out file(s) are absent or differ from the manifest: "
-              "nothing was checked. Materialise them where this check runs: python3 artefacts.py fetch "
-              f"({SOURCE_ENV} or {HF_ENV}, and NATIVETOOLS for the keys files)")
-        return 2
-    print(f"held-out files: {len(held)} of {len(held)} match the manifest")
-    env = run_env(args.root, Path(tempfile.gettempdir()))
-    failed = 0
-    for label, cmd in HELDOUT_CHECKS:
-        proc = subprocess.run(cmd, cwd=args.root, env=env, capture_output=True, text=True, check=False)
-        tail = "\n".join((proc.stdout + proc.stderr).strip().splitlines()[-6:])
-        print(f"{'ok  ' if proc.returncode == 0 else 'FAIL'} {label}")
-        if proc.returncode != 0:
-            failed += 1
-            print(tail)
-    print(f"verify-heldout: {len(HELDOUT_CHECKS) - failed} of {len(HELDOUT_CHECKS)} check(s) pass")
-    return 1 if failed else 0
 
 
 # ---------------------------------------------------------------------------------------------
@@ -626,38 +569,12 @@ def cmd_verify_heldout(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------------------------
 
 
-def digest_of(root: Path, rels: list[str]) -> str:
-    """One sha256 over files: for each path in name order, its path and the sha256 of its bytes, one line each."""
-    digest = hashlib.sha256()
-    for rel in sorted(rels):
-        digest.update(f"{rel}\n{sha256_of(root / rel)}\n".encode())
-    return digest.hexdigest()
 
 
-def vault_ddl_sha256(repo_root: Path) -> str:
-    """The vault's DDL, by the migrations that make it: contracts/migrations/*.sql in name order."""
-    rels = [p.relative_to(repo_root).as_posix() for p in (repo_root / MIGRATIONS).glob("*.sql")]
-    if not rels:
-        raise Refusal(f"no migration in {repo_root / MIGRATIONS}")
-    return digest_of(repo_root, rels)
 
 
-def registry_sha256(repo_root: Path) -> str:
-    """The command registry the runtime maps its verbs to, by its committed export (`mapped_commands`, `mapped_columns` and
-    the verbs of the runtime's metadata table): contracts/assist/export/metadata.json."""
-    missing = [rel for rel in REGISTRY_FILES if not (repo_root / rel).is_file()]
-    if missing:
-        raise Refusal(f"no registry export at {', '.join(missing)}")
-    return digest_of(repo_root, list(REGISTRY_FILES))
 
 
-def runtime_export_sha256(repo_root: Path) -> str:
-    """Everything the runtime states to the model (tools, kind card, phrases, errors, prompts, identity): the files of
-    contracts/assist/export in name order."""
-    rels = [p.relative_to(repo_root).as_posix() for p in (repo_root / RUNTIME_EXPORT).iterdir() if p.is_file()]
-    if not rels:
-        raise Refusal(f"no runtime export in {repo_root / RUNTIME_EXPORT}")
-    return digest_of(repo_root, rels)
 
 
 def git_commit(repo_root: Path) -> str | None:
@@ -666,140 +583,14 @@ def git_commit(repo_root: Path) -> str | None:
     return out if proc.returncode == 0 and COMMIT.fullmatch(out) else None
 
 
-def git_dirty(repo_root: Path) -> bool | None:
-    """Whether a tracked file differs from HEAD: a version assembled from a tree that is not a commit says so."""
-    proc = subprocess.run(["git", "-C", str(repo_root), "status", "--porcelain", "--untracked-files=no"], capture_output=True,
-                          text=True, check=False)
-    return bool(proc.stdout.strip()) if proc.returncode == 0 else None
 
 
-def build_summary(path: Path) -> dict:
-    """Records and the sha256 of the uncompressed content of a gzipped jsonl: the identity of a build, as data/README.md says
-    (the compressed bytes depend on the gzip build)."""
-    digest = hashlib.sha256()
-    records = 0
-    try:
-        with gzip.open(path, "rb") as handle:
-            for line in handle:
-                digest.update(line)
-                records += bool(line.strip())
-    except (OSError, EOFError) as why:  # not gzip, or cut short
-        raise Refusal(f"{path} is not a readable gzipped jsonl: {why}") from why
-    return {"records": records, "content_sha256": digest.hexdigest()}
 
 
-def parse_train(spec: str) -> tuple[str, Path, Path | None]:
-    name, eq, paths = spec.partition("=")
-    train, _, val = paths.partition(",")
-    if not eq or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name) or not train:
-        raise Refusal(f"--train {spec!r}: wants NAME=TRAINPATH[,VALPATH]")
-    return name, Path(train), Path(val) if val else None
 
 
-def place(src: Path, dest: Path) -> None:
-    """Copy one file into the version tree; a file placed twice (the manifest's and a --train) must be the same bytes."""
-    if not src.is_file():
-        raise Refusal(f"{src} is not a file")
-    if dest.exists():
-        if sha256_of(dest) != sha256_of(src):
-            raise Refusal(f"two different files for {dest.name} in the version: {src} is not what the tree has there")
-        return
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(src, dest)
 
 
-def cmd_version(args: argparse.Namespace) -> int:
-    manifest = load(args.manifest)
-    root: Path = args.root
-    repo_root: Path = args.repo_root
-    out: Path = args.out
-    bad = problems_in(manifest)
-    mapped = [e for e in entries(manifest) if e.get("version_path")]
-    for e in mapped:
-        st = status(e, root)
-        if st != "ok":
-            bad.append(f"{e['path']}: {st} (the version takes the files of the tree as the manifest pins them)")
-    if bad:
-        for line in bad:
-            print(f"FAIL {line}")
-        print("version: the tree is not what the manifest pins; materialise it first (artefacts.py fetch)")
-        return 1
-    if out.exists() and any(out.iterdir()):
-        raise Refusal(f"{out} is not empty: a version is assembled in a new directory")
-    version = args.tag or manifest["data"]["version"]
-    if not TAG.fullmatch(version):
-        raise Refusal(f"--tag {version!r} is not a data tag (data-vN)")
-    if args.parent is not None and not TAG.fullmatch(args.parent):
-        raise Refusal(f"--parent {args.parent!r} is not a data tag (data-vN)")
-    trains = [parse_train(spec) for spec in args.train]
-    names = [name for name, _, _ in trains]
-    if len(set(names)) != len(names):
-        raise Refusal(f"--train names a build twice: {names}")
-    notes = {}
-    for spec in args.note:
-        name, eq, text = spec.partition("=")
-        if not eq or name not in names:
-            raise Refusal(f"--note {spec!r}: wants NAME=TEXT for one of the --train builds {names}")
-        notes[name] = text
-    refreeze = json.loads(args.refreeze_report.read_text(encoding="utf-8")) if args.refreeze_report else None
-    seeds = json.loads(args.seeds.read_text(encoding="utf-8")) if args.seeds else {}
-    runtime_binary = args.runtime or os.environ.get("NATIVETOOLS") or str(repo_root / "target" / "debug" / "nativetools")
-    if not Path(runtime_binary).is_file():
-        raise Refusal(f"no runtime binary at {runtime_binary}: set NATIVETOOLS or --runtime (its sha256 is part of the version)")
-    label = args.runtime_label or ((refreeze or {}).get("runtime") or {}).get("label")
-    if not label:
-        raise Refusal("the runtime has no label: give --runtime-label, or a --refreeze-report whose runtime names one (nt15)")
-
-    out.mkdir(parents=True, exist_ok=True)
-    for e in mapped:
-        place(root / e["path"], out / e["version_path"])
-    train_meta: dict[str, dict] = {}
-    for name, train, val in trains:
-        entry = {"train": f"train/{name}/train.jsonl.gz", **build_summary(train)}
-        place(train, out / entry["train"])
-        if val is not None:
-            entry["val"] = f"train/{name}/train-val.jsonl.gz"
-            entry["val_records"] = build_summary(val)["records"]
-            place(val, out / entry["val"])
-        if name in notes:
-            entry["notes"] = notes[name]
-        train_meta[name] = entry
-    if args.screen_worlds:
-        if not args.screen_worlds.is_dir():
-            raise Refusal(f"--screen-worlds {args.screen_worlds} is not a directory")
-        for src in sorted(args.screen_worlds.iterdir()):
-            if src.is_file():
-                place(src, out / "screen" / "worlds" / src.name)
-
-    files = {}
-    for path in sorted(p for p in out.rglob("*") if p.is_file()):
-        files[path.relative_to(out).as_posix()] = {"sha256": sha256_of(path), "size": path.stat().st_size}
-    meta = {
-        "schema": 1,
-        "version": version,
-        "parent": args.parent,
-        "made": args.made or datetime.date.today().isoformat(),
-        "git_commit": args.git_commit or git_commit(repo_root),
-        "git_dirty": None if args.git_commit else git_dirty(repo_root),
-        "runtime": {
-            "label": label,
-            **({"commit": refreeze["runtime"]["commit"]} if refreeze and (refreeze.get("runtime") or {}).get("commit") else {}),
-            "binary_sha256": sha256_of(Path(runtime_binary)),
-            "export_sha256": runtime_export_sha256(repo_root),
-        },
-        "vault_ddl_sha256": vault_ddl_sha256(repo_root),
-        "registry_sha256": registry_sha256(repo_root),
-        "registry_files": list(REGISTRY_FILES),
-        "seeds": seeds,
-        "refreeze": refreeze,
-        "train": train_meta,
-        "files": files,
-    }
-    (out / VERSION_JSON).write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    total = sum(f["size"] for f in files.values()) + (out / VERSION_JSON).stat().st_size
-    print(f"version {version}: {len(files) + 1} files, {mb(total)} in {out}")
-    print(f"  {VERSION_JSON} sha256 {sha256_of(out / VERSION_JSON)}")
-    return 0
 
 
 # ---------------------------------------------------------------------------------------------
@@ -849,75 +640,10 @@ def publish_plan(repo: str, repo_type: str, files: dict[str, Path], tag: str, pu
         print(f"  {path.stat().st_size:>12,}  {rel}")
 
 
-def version_dir_problems(directory: Path, tag: str, manifest: dict) -> list[str]:
-    """What is wrong with a version tree before it is published: it is not the tag, a file differs from its own
-    `version.json`, a file is not listed or listed and missing, or a file the manifest maps is not the bytes it pins."""
-    meta_path = directory / VERSION_JSON
-    if not meta_path.is_file():
-        return [f"{directory} has no {VERSION_JSON}: assemble it with `artefacts.py version`"]
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    bad: list[str] = []
-    if meta.get("version") != tag:
-        bad.append(f"{VERSION_JSON} says {meta.get('version')!r}, not {tag}")
-    if manifest["data"]["version"] != tag:
-        bad.append(f"artefacts.json pins {manifest['data']['version']}, not {tag}")
-    on_disk = {rel for rel in tree_files(directory)} - {VERSION_JSON}
-    listed = set(meta.get("files", {}))
-    bad += [f"{rel}: in the tree but not in {VERSION_JSON}" for rel in sorted(on_disk - listed)]
-    bad += [f"{rel}: in {VERSION_JSON} but not in the tree" for rel in sorted(listed - on_disk)]
-    for rel in sorted(on_disk & listed):
-        path = directory / rel
-        want = meta["files"][rel]
-        if path.stat().st_size != want["size"] or sha256_of(path) != want["sha256"]:
-            bad.append(f"{rel}: differs from {VERSION_JSON}")
-    for e in entries(manifest):
-        vp = e.get("version_path")
-        if vp and (not (directory / vp).is_file() or sha256_of(directory / vp) != e["sha256"]):
-            bad.append(f"{vp}: not the bytes artefacts.json pins for {e['path']}")
-    return bad
 
 
-def cmd_publish(args: argparse.Namespace) -> int:
-    manifest = load(args.manifest)
-    bad = problems_in(manifest) + version_dir_problems(args.dir, args.tag, manifest)
-    if not TAG.fullmatch(args.tag):
-        bad.append(f"--tag {args.tag!r} is not a data tag (data-vN)")
-    if bad:
-        for line in bad:
-            print(f"FAIL {line}")
-        return 1
-    repo = args.repo or manifest["data"]["repo"]
-    files = tree_files(args.dir)
-    publish_plan(repo, "dataset", files, args.tag)
-    if args.dry_run:
-        print("dry run: nothing created, nothing sent")
-        return 0
-    token = token_from_env()
-    if not token:
-        print(f"FAIL {HF_ENV} is not set")
-        return 1
-    try:
-        revision = publish_tree(hub_client(token), repo, "dataset", files, args.tag, f"Data version {args.tag} of the native tool task (#1088)")
-    except Refusal as why:
-        print(f"FAIL {why}")
-        return 1
-    except Exception as exc:  # noqa: BLE001
-        print(f"FAIL {type(exc).__name__}: {scrub(str(exc), token)}")
-        return 1
-    print(f"published {len(files)} file(s) to {repo}: tag {args.tag} is commit {revision}")
-    print(f"record it in the manifest and commit artefacts.json: python3 artefacts.py pin {revision}")
-    return 0
 
 
-def cmd_pin(args: argparse.Namespace) -> int:
-    if not COMMIT.fullmatch(args.revision):
-        print(f"FAIL {args.revision!r} is not the 40 hex digits of a commit")
-        return 1
-    manifest = load(args.manifest)
-    manifest["data"]["revision"] = args.revision
-    save(manifest, args.manifest)
-    print(f"artefacts.json pins {manifest['data']['repo']} {manifest['data']['version']} at {args.revision}")
-    return 0
 
 
 def model_files(directory: Path) -> dict[str, Path]:
@@ -1297,26 +1023,6 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--only", nargs="+", metavar="NAME_OR_PATH_PREFIX")
     sub.add_parser("verify-rebuild").add_argument("--public-only", action="store_true")
     sub.add_parser("verify-version")
-    sub.add_parser("verify-heldout")
-    p = sub.add_parser("version", help="assemble a data-version tree from the tree plus explicit inputs")
-    p.add_argument("--out", type=Path, required=True, help="the new directory the version is assembled in")
-    p.add_argument("--tag", help="the version (default: the manifest's pin)")
-    p.add_argument("--train", action="append", default=[], metavar="NAME=TRAIN[,VAL]", help="a training build, as trained (repeatable)")
-    p.add_argument("--note", action="append", default=[], metavar="NAME=TEXT", help="a note on a --train build (repeatable)")
-    p.add_argument("--screen-worlds", type=Path, metavar="DIR", help="the worlds the RFT screen set ran in")
-    p.add_argument("--refreeze-report", type=Path, metavar="FILE", help="the report of the refreeze, a JSON file")
-    p.add_argument("--parent", metavar="TAG", help="the version this one descends from")
-    p.add_argument("--seeds", type=Path, metavar="FILE", help="the generator and noise seeds of the builds, a JSON file")
-    p.add_argument("--runtime", metavar="PATH", help="the runtime binary (default $NATIVETOOLS)")
-    p.add_argument("--runtime-label", help="the runtime's name, nt15 (default: the refreeze report's runtime label)")
-    p.add_argument("--made", metavar="YYYY-MM-DD", help="the date (default today)")
-    p.add_argument("--git-commit", help="the commit (default HEAD of --repo-root)")
-    p = sub.add_parser("publish", help="a version tree to the dataset repository, tagged")
-    p.add_argument("dir", type=Path)
-    p.add_argument("--tag", required=True, metavar="data-vN")
-    p.add_argument("--repo", metavar="OWNER/NAME", help="default: the manifest's")
-    p.add_argument("--dry-run", action="store_true")
-    sub.add_parser("pin", help="record the commit of the published version in the manifest").add_argument("revision")
     p = sub.add_parser("model-card", help="write the Hub model card of a checkpoint")
     p.add_argument("--model", type=Path, required=True, help="the checkpoint directory (config.json, train_meta.json, weights)")
     p.add_argument("--data-version", required=True, metavar="data-vN")
@@ -1352,7 +1058,6 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     handlers = {"check": cmd_check, "fetch": cmd_fetch, "verify-rebuild": cmd_verify_rebuild, "verify-version": cmd_verify_version,
-                "verify-heldout": cmd_verify_heldout, "version": cmd_version, "publish": cmd_publish, "pin": cmd_pin,
                 "model-card": cmd_model_card, "publish-model": cmd_publish_model, "publish-gguf": cmd_publish_gguf, "rehash": cmd_rehash, "paths": cmd_paths,
                 "gitignore": cmd_gitignore, "format": cmd_format}
     try:

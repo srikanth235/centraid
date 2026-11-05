@@ -34,7 +34,7 @@ Kaggle script kernels take no arguments, so they live in `params.json` in the in
 
 1. `pip install` (transformers 5.17.0, the version `bundle.py` stages, peft, zstandard, huggingface_hub; the fused linear-attention kernels best effort).
 2. Pull `train.jsonl.zst`, `val.jsonl.zst`, `manifest.json` and the version's `worlds/` from the HF dataset. **Test and noise are never fetched**: test is read at milestones only.
-3. `train.py --arm X --data-format datagen --save-every 200 --resume` (`torchrun` with more than one GPU). A stopped run is resumed by running the kernel again with its output attached.
+3. `train.py --arm X --save-every 200 --resume` (`torchrun` with more than one GPU). A stopped run is resumed by running the kernel again with its output attached.
 4. `to_gguf.py`: llama.cpp at the commit the phone's engine vendors, `--no-mtp`, Q4_0, output tensor Q8_0.
 5. Build `assist-eval --features cuda` and score val under the default tools (the eight tools), sharded one process per GPU. With `s2_baseline`, score S2 under `--tools s2`.
 6. `arm_report.py` writes `arm-<ARM>.val.json` (and `arm-S2.val.json`).

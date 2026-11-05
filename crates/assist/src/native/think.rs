@@ -198,7 +198,7 @@ struct Refer {
     handles: Vec<String>,
 }
 
-/// The slots of a think, as `authored/trace.py`'s `parse3` / `parse4` read them.
+/// The slots of a think, as the retired `authored/trace.py`'s `parse3` / `parse4` read them.
 #[derive(Debug, Clone, Default)]
 struct Slots {
     v4: bool,

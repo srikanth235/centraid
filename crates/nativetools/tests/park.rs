@@ -10,8 +10,6 @@
 //!   inside a command that a parked step has not run), and writes nothing;
 //! * a chain in one turn that names the row its first write made works while parked.
 //!
-//! The same is held over hundreds of authored sessions by `experiments/toolchat/native/authored/
-//! park_oracle.py`.
 
 mod common;
 

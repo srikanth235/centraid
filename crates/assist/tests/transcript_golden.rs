@@ -1,7 +1,7 @@
 //! The Rust transcript renderer against the output of the last Python renderer (#1088).
 //!
-//! `fixtures/transcript_golden.jsonl.gz` is written by `experiments/toolchat/native/train/render_golden.py` from the
-//! first train records and a few synthetic cases; every case holds the render records, the text `render.py` made of
+//! `fixtures/transcript_golden.jsonl.gz` was written by the Python renderer (`train/render_golden.py`, retired in #1171, with the renderer) from the
+//! first train records and a few synthetic cases; every case holds the render records, the text it made of
 //! them, its loss spans (in code points) and the generation prompt at every assistant message. The Rust text, spans and
 //! prompts must equal them byte for byte.
 

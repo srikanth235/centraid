@@ -17,13 +17,12 @@ owner=${2:?$usage}
 which=${3:?$usage}
 root=$(git rev-parse --show-toplevel)
 native=$root/experiments/toolchat/native
-[[ -f $native/eval/sets/val.jsonl ]] || { echo "no val.jsonl: run artefacts.py fetch first" >&2; exit 1; }
+[[ -f $native/data/v7/val.jsonl ]] || { echo "no val.jsonl: run artefacts.py fetch first" >&2; exit 1; }
 git -C "$root" diff --quiet HEAD || { echo "uncommitted changes: the kernel builds HEAD, so commit first" >&2; exit 1; }
 mkdir -p "$out/worlds"
 git -C "$root" archive --format=tar.gz -o "$out/src.tar.gz" HEAD
-cp "$native/eval/sets/val.jsonl" "$out/val.jsonl"
-cp "$native"/eval/worlds/*.json "$out/worlds/"
-for w in T03 T12 T23; do cp "$native/authored/worlds/$w.json" "$out/worlds/"; done
+cp "$native/data/v7/val.jsonl" "$out/val.jsonl"
+cp "$native"/data/v7/worlds/*.json "$out/worlds/"
 case $which in
   # S2: public GGUF, the prompt it was trained on
   S2) model='{"url": "https://huggingface.co/srikanth235/centraid-native-gguf/resolve/s2-q4_0/centraid-native-s2-Q4_0.gguf", "sha256": "b1be1e45024c8e98f670d456edfdf261c786878dd8260117806e285af8e9f668", "tools": "s2"}' ;;
