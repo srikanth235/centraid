@@ -445,7 +445,8 @@ pub fn read_back(
     let prompt = reader_prompt(catalog, batch, attempt);
     let answer = cache.complete(&prompt)?;
     let sizes: Vec<usize> = batch.iter().map(|(_, _, m)| m.len()).collect();
-    parse_reads(&answer, &sizes)
+    // An answer that cannot be read covers no session: each is asked again, as one it skipped.
+    Ok(parse_reads(&answer, &sizes).unwrap_or_else(|_| vec![None; sizes.len()]))
 }
 
 // ------------------------------------------------------------------ (a) what the block says

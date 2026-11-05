@@ -180,12 +180,17 @@ impl<'a> Cache<'a> {
 ///
 /// If the answer holds no JSON object.
 pub fn json_of(answer: &str) -> Result<serde_json::Value> {
-    let start = answer.find('{').context("no JSON in the answer")?;
-    let end = answer.rfind('}').context("no JSON in the answer")?;
-    if end < start {
-        bail!("no JSON in the answer");
+    // The first `{` that opens a whole value: an answer may say more after it (a second object,
+    // a note), and a stray brace in prose before it must not hide it.
+    let mut rest = answer;
+    while let Some(start) = rest.find('{') {
+        let mut values = serde_json::Deserializer::from_str(&rest[start..]).into_iter();
+        if let Some(Ok(value)) = values.next() {
+            return Ok(value);
+        }
+        rest = &rest[start + 1..];
     }
-    Ok(serde_json::from_str(&answer[start..=end])?)
+    bail!("no JSON in the answer")
 }
 
 /// Run `f` over `items` on `workers` threads, results in input order (`None` only for a worker
@@ -251,6 +256,10 @@ mod tests {
         let v = json_of("```json\n{\"a\": [1]}\n```").expect("json");
         assert_eq!(v["a"][0], 1);
         assert!(json_of("no braces").is_err());
+        let v = json_of("{\"a\": 1}\n{\"b\": 2} and a note }").expect("first value");
+        assert_eq!(v["a"], 1);
+        let v = json_of("a {stray brace, then {\"a\": 2}").expect("after a stray brace");
+        assert_eq!(v["a"], 2);
     }
 
     #[test]
