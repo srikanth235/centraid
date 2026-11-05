@@ -1,23 +1,23 @@
 ---
 name: python
 description: >-
-  Write, review, refactor, debug, or explain Python in Centraid's on-device model authoring, training, and evaluation pipeline. Trigger on Python modules/scripts, unittest, tracebacks, typing, data preparation, or model evaluation. Prioritizes held-out-data hygiene and the actual runner; typing and style are review guidance only because no ruff or mypy gate is configured.
+  Write, review, refactor, debug, or explain Python in Centraid's GPU trainer (experiments/toolchat/native: SFT/DPO on datagen records, the GGUF export, the data-v7 pin and model publishing). Python is the trainer and nothing else: data, render, eval and rollouts are Rust. Trigger on Python modules/scripts, unittest, tracebacks, typing, or training. Prioritizes held-out-data hygiene and the actual runner; typing and style are review guidance only because no ruff or mypy gate is configured.
 ---
 
 # Python in Centraid
 
 ## Workflow and done criteria
 
-Run `python3 experiments/toolchat/native/run_cpu_tests.py --jobs 4` for this pipeline. It needs the environment documented by the runner: `NATIVETOOLS`, `HF_HOME` with `HF_HUB_OFFLINE=1`, `EVAL_VAULTS`, and the integration switches. No test may skip or modify tracked files.
+Run `python3 experiments/toolchat/native/run_tests.py --jobs 2` for this pipeline (the trainer's CPU tests: `train/` and `artefacts.py`; no GPU, no weights, no network, `HF_HUB_OFFLINE=1`). No test may skip or modify tracked files. It is not a pull-request check: `.github/workflows/trainer.yml` runs it on `main` when the trainer changes, so run it yourself before calling a trainer change done.
 
 Python 3.11 is pinned. CI dependencies come from `requirements-ci.txt` with `pip install --require-hashes`; scripts run with `python3 -I`. There is no pytest, ruff, or mypy gate: typing and style rules below are review guidance, not automated checks.
 
-**Done** when the canonical runner exits 0 with no skips or tracked-file changes. GPU and VM jobs under `train/` are outside CI; use their runtime environment when those are in scope.
+**Done** when the canonical runner exits 0 with no skips or tracked-file changes. GPU and VM jobs under `train/` are outside CI; use their runtime environment when those are in scope. The CPU tests do not prove the CUDA path: say so when a change touches it.
 
 ## Centraid constraints
 
-- The Rust runtime is the single implementation of prompt rendering, tool schemas, and transcript behavior. Python `render.py` is a thin wrapper around `nativetools` and the committed export.
-- Keep held-out worlds and frozen evaluation sets out of authoring and training. Change frozen sets only through `eval/build_sets.py`, then verify and record them in `eval/FROZEN.md`.
+- Python is the GPU trainer and nothing else. Data (messages, render, mix), eval and rollouts are Rust (`crates/datagen`, `crates/assist-eval`); the trainer reads datagen's rendered `input_ids` and `weights` as they are (`train/datagen.py`) and never renders, tokenises or decides what is trained. The Python renderer, data builders and eval (`render.py`, `authored/`, `eval/`) were retired in #1171.
+- Keep held-out worlds and frozen evaluation sets out of training. data-v7's sets are fetched, not kept (`artefacts.json`, `data/v7/FROZEN.md`); a new version is made only by `cargo run -p centraid-datagen -- build --version vN`.
 - Keep outputs reproducible: seed and record randomness, sort output-driving collections, avoid wall-clock time, hostnames, and absolute paths, and version data/checkpoints by content hash.
 - Keep dependencies pinned with hashes; install only from the compiled CI requirements.
 
@@ -27,13 +27,10 @@ Fix the first failure first; later messages often follow from it.
 
 | Symptom | Fix |
 | --- | --- |
-| `ModuleNotFoundError` for a sibling module under `python3 -I` | `-I` leaves both the script's directory and the current directory off `sys.path`. Insert `HERE` the way `eval/build_sets.py` does (`sys.path.insert(0, str(HERE))`), or run the test with `python -m unittest test_x` from inside its directory, as `run_cpu_tests.py` does |
-| `NATIVETOOLS` unset, or `FileNotFoundError` for `target/debug/nativetools` | `eval/lib.py` defaults to `target/debug/nativetools`. Build it (`cargo build -p centraid-nativetools --bin nativetools`) or export `NATIVETOOLS` as an absolute path |
-| Tokenizer or config not found with `HF_HUB_OFFLINE=1` | Point `HF_HOME` at a cache holding the tokenizer and config of Qwen/Qwen3.5-0.8B (no weights). The suite raises `SkipTest`, which the runner reports as `skipped:` and fails |
-| `build_sets.py check` says `sets/<file> is not the file FROZEN.md records` | The frozen set changed. Restore it; a new freeze goes through `build_sets.py` into another directory, is checked, and is recorded in `FROZEN.md`. Never edit the hash to match |
-| `check` fails because held-out files are missing | Those files are held out of a public checkout; the check says so by failing. Run it where the private data version is fetched |
+| `ModuleNotFoundError` for a sibling module under `python3 -I` | `-I` leaves both the script's directory and the current directory off `sys.path`. Insert `HERE` (`sys.path.insert(0, str(Path(__file__).resolve().parent))`, as `train/train.py` does), or run the test with `python -m unittest test_x` from inside its directory, as `run_tests.py` does |
 | `pip` reports `THESE PACKAGES DO NOT MATCH THE HASHES` or requires pinned versions | Install only from `requirements-ci.txt` with `--require-hashes`. After editing `requirements-ci.in`, recompile the pinned file (its header holds the `uv pip compile` command) instead of installing loose |
-| `run_cpu_tests.py` red on `skipped:` or a module that ran zero tests | A skip is a failure here. Provide what the test looks for (binary, tokenizer cache, public worlds via `python3 artefacts.py fetch --public-only`) rather than catching `SkipTest` |
+| `run_tests.py` red on `skipped:` or a module that ran zero tests | A skip is a failure here. Provide what the test looks for (torch, transformers, peft, zstandard) rather than catching `SkipTest` |
+| `check` or `fetch` fails because the data-v7 files are missing | They are held out of the tree: `python3 experiments/toolchat/native/artefacts.py fetch` brings them from the private Hub dataset (`HF_TOKEN`, or `ARTEFACTS_SOURCE`). The tests do not need them |
 | A test dirtied the tree (`git status` shows a tracked file changed) | Point the output at a `tempfile` directory; the suite's tests must not write tracked files |
 
 ## ML data hygiene

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bench_train.sh: A/B benchmark of the trainer's precision/speed flags, RUN ON THE GPU VM ITSELF (over ssh), on the layout probe.sh /
-# run_job.sh already staged: $BASE/job/job.json (the real job), $BASE/code (train/train.py, bin/nativetools), $BASE/venv, HF cache.
+# run_job.sh already staged: $BASE/job/job.json (the real job), $BASE/code (train/train.py), $BASE/venv, HF cache.
 # It runs the REAL trainer for BENCH_STEPS steps (default 40) per config, same seed and same data order, everything else = the job's
 # own train_args (bs 16, max_len 8192, --embed, decision flags ...), then prints tokens/s, s/step, peak memory and the loss at
 # steps 10/20/30/40 side by side, one verdict line and the recommended flag set.
@@ -55,7 +55,7 @@ build_args() { # $1 = out dir
 import json, sys
 job = json.load(open(sys.argv[1]))
 out, steps = sys.argv[2:4]
-a = ["--model", job["model"], "--train", job["train"], "--tools", "export/tools-sig.json", "--out", out, "--hours", "1"]
+a = ["--model", job["model"], "--train", job["train"], "--out", out, "--hours", "1"]
 if job.get("val"):
     a += ["--val", job["val"]]
 a += job.get("train_args", [])
@@ -92,7 +92,7 @@ for c in $BENCH_ONLY; do
   (
     cd "$CODE" || exit 1
     # shellcheck disable=SC2086
-    timeout "$((BENCH_MAX_MIN * 60))" env NATIVETOOLS="$CODE/bin/nativetools" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false \
+    timeout "$((BENCH_MAX_MIN * 60))" env PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false \
       HF_HOME="$HF_HOME" "$VENV/bin/python" train/train.py "${base[@]}" $fl
   ) >"$W/$c.log" 2>&1
   rc=$?

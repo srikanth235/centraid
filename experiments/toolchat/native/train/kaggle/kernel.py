@@ -18,8 +18,8 @@ params.json (make_kit.sh writes it; every key has the default shown):
     s2_baseline    false                                 also score S2 (`--tools s2`) on the same val; deferred by the owner, so off
     shards         null                                  assist-eval processes; null = one per GPU
 
-Steps: pip install -> pull train.jsonl.zst / val.jsonl.zst / manifest.json (test and noise are NOT downloaded) -> train.py --arm --data-format
-datagen -> to_gguf.py (--no-mtp, Q4_0, output tensor Q8_0: its own defaults) -> build assist-eval with CUDA -> score val under the default
+Steps: pip install -> pull train.jsonl.zst / val.jsonl.zst / manifest.json (test and noise are NOT downloaded) -> train.py --arm
+-> to_gguf.py (--no-mtp, Q4_0, output tensor Q8_0: its own defaults) -> build assist-eval with CUDA -> score val under the default
 tools (and S2's GGUF under `--tools s2` when asked) -> arm_report.py.
 Output (/kaggle/working): arm-<ARM>.val.json (the report compare_arms.py reads), report-<ARM>.json, summary-<ARM>.txt, the GGUF and its
 sidecar, train.log, marks.json / best.json / train_meta.json, run.log. Checkpoints are deleted at the end (disk), the GGUF stays.
@@ -131,7 +131,7 @@ def val_plain(val_zst):
 def train(p, data, gpus):
     code = os.path.join(SRC, "experiments/toolchat/native/train")
     ckpt = os.path.join(OUT, "ckpt-%s" % p["arm"])
-    args = ["--arm", p["arm"], "--data-format", "datagen", "--train", data["train.jsonl.zst"], "--val", data["val.jsonl.zst"], "--out", ckpt,
+    args = ["--arm", p["arm"], "--train", data["train.jsonl.zst"], "--val", data["val.jsonl.zst"], "--out", ckpt,
             "--epochs", str(p["epochs"]), "--bs", str(p["bs"]), "--max-len", str(p["max_len"]), "--hours", str(p["hours"]),
             "--checkpoints", p["checkpoints"], "--save-every", "200", "--resume"]
     if p["lr"] is not None:

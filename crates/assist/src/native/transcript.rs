@@ -3,14 +3,13 @@
 //! default chat template drops the thinking of the turns before the last user message; the harness keeps it, so
 //! a follow-up sees how the earlier turn was read).
 //!
-//! The Python side (`experiments/toolchat/native/render.py`) is a client of this module through
-//! `nativetools think` (`runtime_think.render`); it carries no renderer of its own. Every special string comes
+//! `crates/datagen` renders training records with this module, and `nativetools think` serves it to any other client. Every special string comes
 //! from [`MODEL`] (`identity.rs`); the layout around them (a role name and a newline after `im_start`, a blank line
 //! between `think_close` and the call) is written here once.
 //!
 //! # THE RECORDS
 //!
-//! A [`Message`] is a record of the shape `render.py` always read:
+//! A [`Message`] is a record of the shape the Python renderer read (retired, #1171):
 //!
 //! ```text
 //! {"role": "system", "content": str, "tools": [<tool dicts>]}

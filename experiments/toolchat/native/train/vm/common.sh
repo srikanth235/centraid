@@ -12,7 +12,6 @@ JOB=${JOB:-}                               # the staged job name (required): bun
 BUCKET=${BUCKET:-${PROJECT}-train}         # gs://$BUCKET/$JOB/ holds job/, out/, logs/, results/, DONE
 STAGE_DIR=${STAGE_DIR:-}                   # bundle.py's $BUNDLE_STAGE/<job>; uploaded to gs://$BUCKET/$JOB/job/ if not there yet
 BUNDLE_STAGE=${BUNDLE_STAGE:-${TMPDIR:-/tmp}/centraid-bundles}   # bundle.py's staging root (the same default there)
-BUNDLES_DIR=${BUNDLES_DIR:-$BUNDLE_STAGE/bundles}                # bundles.sh writes <set>/{bundle.dat,job.json,kernel.py} here; score_ckpt.sh reads them
 SERVICE_ACCOUNT=${SERVICE_ACCOUNT:-}       # optional: VM service account e-mail (default: the project's default compute SA)
 
 # ---- shapes: preference order, machine types (the GPU is part of the machine type) ---------------------
@@ -123,7 +122,7 @@ shape_price() {
 bucket_has() { gcloud storage ls "$1" >/dev/null 2>&1; }   # object or prefix
 
 # ---- live VM logs ------------------------------------------------------------------------------------------------
-# run_job.sh mirrors the trainer and kernel logs to the VM's serial console as "[tag] line" (console_follow), next to its own
+# run_job.sh mirrors the trainer log to the VM's serial console as "[tag] line" (console_follow), next to its own
 # supervisor lines. serial_pump reads that console with --start (only new bytes), drops the OS noise (systemd, dbus, snap, the syslog
 # copy of every startup-script line) and prints the rest. Needs only compute.instances.getSerialPortOutput (instanceAdmin has it);
 # no ssh, no key on disk. SERIAL_START is the byte offset to resume from; reset it to 0 when the VM boots again (a new console).
@@ -162,17 +161,17 @@ ensure_bucket() {
     --uniform-bucket-level-access || die "could not create gs://$BUCKET (name taken? set BUCKET=...)"
 }
 
-# Upload the staged job (bundle.py's <stage>/<job>/{data,kernel}) unless the bucket has it already (FORCE_UPLOAD=1 redoes it).
+# Upload the staged job (bundle.py's <stage>/<job>/data) unless the bucket has it already (FORCE_UPLOAD=1 redoes it).
 upload_job() {
   if [ -z "${FORCE_UPLOAD:-}" ] && bucket_has "$GS/job/job.json"; then
     log "job already in $GS/job/ (FORCE_UPLOAD=1 to replace)"
     return 0
   fi
   [ -n "$STAGE_DIR" ] || die "$GS/job/job.json is not in the bucket and STAGE_DIR is unset: python train/bundle.py build $JOB ... then STAGE_DIR=$BUNDLE_STAGE/$JOB"
-  [ -f "$STAGE_DIR/data/job.json" ] && [ -f "$STAGE_DIR/kernel/kernel.py" ] || die "$STAGE_DIR is not a staged job (need data/job.json and kernel/kernel.py)"
+  [ -f "$STAGE_DIR/data/job.json" ] || die "$STAGE_DIR is not a staged job (need data/job.json)"
   local files=("$STAGE_DIR"/data/*)
-  log "uploading ${files[*]##*/} kernel.py to $GS/job/"
-  gcloud storage cp "${files[@]}" "$STAGE_DIR/kernel/kernel.py" "$GS/job/" --project "$PROJECT" || die "upload failed"
+  log "uploading ${files[*]##*/} to $GS/job/"
+  gcloud storage cp "${files[@]}" "$GS/job/" --project "$PROJECT" || die "upload failed"
 }
 
 # ---- instances -------------------------------------------------------------------------------------------

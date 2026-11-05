@@ -26,12 +26,12 @@ import json
 import math
 from pathlib import Path
 
-IGNORE = -100  # train.py asserts this equals fmt.IGNORE: a position with weight 0 carries this label
+IGNORE = -100  # a position with weight 0 carries this label
 
 
 class TokenWeights(list):
     """The per-token loss weights of one record (floats, aligned with input_ids, index 0 included). A list, but a distinct type: it tells
-    the loss code that the weights are given and not derived from the decision bits of the legacy format."""
+    the loss code that the weights are the record's own."""
 
 
 class RecordError(ValueError):

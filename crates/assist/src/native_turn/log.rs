@@ -1,7 +1,7 @@
 //! THE CONVERSATION THE MODEL READS: the system turn, every user turn with its block, every
 //! message the model wrote (thinking kept) and every observation, in the order they happened.
 //!
-//! This is `eval/lib.py`'s `Transcript` plus `train/hf_backend.py`'s `prompt_from_history`, in Rust:
+//! This is the retired `eval/lib.py`'s `Transcript` plus `train/hf_backend.py`'s `prompt_from_history`, in Rust:
 //! the runtime hands the loop its system turn (`Session::prompt`) and, per user message, a block and
 //! the observations it compacted; the loop appends what the model wrote and what the runtime
 //! answered, and renders the lot with [`crate::native::transcript`], the one renderer the training
