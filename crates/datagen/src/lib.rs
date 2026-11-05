@@ -37,7 +37,7 @@ pub mod messages;
 pub mod mix;
 pub mod persona;
 pub mod plan;
-mod pools;
+pub mod pools;
 pub mod render;
 pub mod rng;
 pub mod rollout;

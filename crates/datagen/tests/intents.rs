@@ -276,3 +276,103 @@ fn the_grid_marks_what_the_runtime_or_the_world_cannot_serve_as_not_live() {
     let cell = centraid_datagen::grid::Cell::new("compute", "transaction", "compare");
     assert_eq!(grid.is_live(&cell), compare_live);
 }
+
+/// A name a create or a rename gives is the pool's, not a chore with a number on a person: it comes
+/// from its kind's pool, carries no trailing number, and no row of the kind (live or trashed)
+/// already has it.
+#[test]
+fn names_a_request_gives_are_per_kind_unique_and_unnumbered() {
+    use centraid_datagen::facts::{Facts, fold};
+    use centraid_datagen::intent::{Intent, Scenario, Target, Val};
+    use centraid_datagen::pools;
+
+    let mut checked = (0, 0);
+    for info in &generated().worlds {
+        let index: usize = info
+            .id
+            .rsplit('-')
+            .next()
+            .expect("index")
+            .parse()
+            .expect("number");
+        let world = world_of(WorldSpec {
+            split: info.split,
+            index,
+            seed: info.seed,
+        });
+        let facts = Facts::of(&world, catalog());
+        let pool_has = |kind: &str, name: &str| -> bool {
+            if kind == "person" {
+                let (first, last) = name.split_once(' ').unwrap_or((name, ""));
+                let right = pools::new_people(info.split);
+                right.0.contains(&first) && right.1.contains(&last)
+            } else {
+                pools::new_names(kind).is_some_and(|p| p.contains(&name))
+            }
+        };
+        for kept in generated().kept.iter().filter(|k| k.world == info.id) {
+            let scenario: Scenario =
+                serde_json::from_value(kept.record["scenario"].clone()).expect("scenario");
+            for turn in &scenario.turns {
+                let (kind, name, current) = match &turn.intent {
+                    Intent::Create { kind, fields } => {
+                        let name = fields.iter().find_map(|c| match &c.value {
+                            Val::Text(t) if c.field == "name" => Some(t.clone()),
+                            _ => None,
+                        });
+                        (kind.clone(), name, None)
+                    }
+                    Intent::Edit { target, changes } => {
+                        let name = changes.iter().find_map(|c| match &c.value {
+                            Val::Text(t) if c.field == "name" => Some(t.clone()),
+                            _ => None,
+                        });
+                        match target {
+                            Target::Name {
+                                kind, name: said, ..
+                            } => {
+                                let current = facts
+                                    .of_kind(kind)
+                                    .find(|r| fold(&r.name) == fold(said))
+                                    .map(|r| r.name.clone());
+                                (kind.clone(), name, current)
+                            }
+                            Target::Turn { kind, .. } => (kind.clone(), name, None),
+                            Target::Select { sel } => (sel.kind.clone(), name, None),
+                        }
+                    }
+                    _ => continue,
+                };
+                let Some(name) = name else { continue };
+                assert!(
+                    pool_has(&kind, &name),
+                    "{}: {kind} {name:?} not from its pool",
+                    scenario.id
+                );
+                assert!(
+                    name.rsplit_once(' ')
+                        .is_none_or(|(_, tail)| !tail.chars().all(|c| c.is_ascii_digit())),
+                    "{}: {name:?} ends in a number",
+                    scenario.id
+                );
+                assert!(
+                    !facts
+                        .rows
+                        .iter()
+                        .any(|r| r.kind == kind && fold(&r.name) == fold(&name)),
+                    "{}: {kind} {name:?} is already a row's name",
+                    scenario.id
+                );
+                if let Some(current) = current {
+                    assert_ne!(fold(&current), fold(&name));
+                }
+                if matches!(turn.intent, Intent::Create { .. }) {
+                    checked.0 += 1
+                } else {
+                    checked.1 += 1
+                }
+            }
+        }
+    }
+    assert!(checked.0 > 0 && checked.1 > 0, "checked {checked:?}");
+}
