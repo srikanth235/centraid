@@ -2,7 +2,7 @@
 
    Same design as the product, not a design of its own. Every colour, face,
    radius, duration and type rung resolves through assets/centraid-tokens.css,
-   which `cargo xtask design` generates from design/site/tokens.css and
+   which `cargo xtask design` generates from design/tokens.toml and
    design/fonts. The landing page at
    scripts/home-site/public/index.html drinks from the same file.
 

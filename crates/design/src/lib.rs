@@ -10,7 +10,7 @@
 //! 2. The identity functions below: a party's hue key from its id, its
 //!    initials, and a figure's tone. The core computes them once and sends the
 //!    shells a key; the shells only look it up. They were ported from
-//!    `packages/design` (#1020), and the golden rows in this file's tests are
+//!    the retired TypeScript design package (#1020), and the golden rows in this file's tests are
 //!    that package's answers over a deliberately hostile corpus (non-ASCII
 //!    names, an empty name, a one-emoji name, every shape of stored
 //!    `avatar_color`), pinned as literals when the TypeScript oracle was

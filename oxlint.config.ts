@@ -89,7 +89,7 @@ const TEST_SEAM_IMPORTS = {
     {
       group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
       message:
-        "Import from the package root barrel (e.g. '@centraid/design/elements'), not its internals — keeps each package's public surface the real contract. See governance: no-deep-imports.",
+        "Import from the package root barrel (e.g. '@centraid/test-kit/vitest'), not its internals — keeps each package's public surface the real contract. See governance: no-deep-imports.",
     },
   ],
 };
@@ -180,7 +180,7 @@ export default defineConfig({
           {
             group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
             message:
-              "Import from the package root barrel (e.g. '@centraid/design/elements'), not its internals \u2014 keeps each package's public surface the real contract. See governance: no-deep-imports.",
+              "Import from the package root barrel (e.g. '@centraid/test-kit/vitest'), not its internals \u2014 keeps each package's public surface the real contract. See governance: no-deep-imports.",
           },
         ],
       },
@@ -273,11 +273,6 @@ export default defineConfig({
     "unicorn/text-encoding-identifier-case": "off",
   },
   overrides: [
-    {
-      // The role table predates the ceiling; split it before adding to it.
-      files: ["packages/design/src/roles.ts"],
-      rules: { "max-lines": "off" },
-    },
     // The vitest preset applies through `overrides`, and an extended preset's
     // overrides outrank the consumer's — so extending it leaves no way to say
     // "not these files". Its single override is therefore spliced in here

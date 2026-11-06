@@ -101,7 +101,7 @@ import dev.centraid.android.screens.words.FirstLaunchScreen
  * **EVERY VALUE HERE IS A TOKEN OR A STATED GEOMETRY.** The card's ground, its
  * one hairline, the tile floor, the mosaic's bleed and every type rung come from
  * the emitted table or from the constants below, which carry v0's own names and
- * reasons — the two shells were drawn from one `packages/design`, and a number
+ * reasons — the two shells are drawn from one `design/tokens.toml`, and a number
  * typed into a view is a number nobody chose.
  */
 @Composable

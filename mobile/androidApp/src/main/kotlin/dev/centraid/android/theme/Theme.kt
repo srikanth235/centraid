@@ -259,7 +259,7 @@ internal fun NativeTheme.color(role: String): Color = Color(
  * MONEY, WITH THE VAULT'S LOCALE AND THE CURRENCY'S OWN EXPONENT.
  *
  * v0's formatter is wrong in two ways at once
- * (`packages/design/src/format.ts:38`, `:49`; census §E8): it divides minor
+ * (the retired TypeScript `format.ts`; census §E8): it divides minor
  * units by 100 UNCONDITIONALLY, so JPY is rendered a hundred times too small
  * and BHD ten times too large, and it calls
  * `new Intl.NumberFormat(undefined, …)` — the HOST's locale — so the same vault

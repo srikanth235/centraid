@@ -330,7 +330,7 @@ pub fn month_heading(locale: Locale, day: &str, today: &str) -> String {
     }
 }
 
-/// A KIND'S MARK, from the icon registry (`packages/design/src/icons.ts`), so a
+/// A KIND'S MARK, from the icon registry (`design/icons.toml`), so a
 /// list of runs, rides and swims is not one glyph repeated. The registry has no
 /// runner, cyclist or mountain: each kind takes the nearest mark it does have,
 /// and a kind with none takes [`WORKOUT_ICON`].
