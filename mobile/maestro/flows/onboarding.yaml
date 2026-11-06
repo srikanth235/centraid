@@ -31,8 +31,6 @@ name: onboarding
 - assertVisible:
     id: "first-launch"
 - tapOn:
-    id: "first-launch-skip"
-- tapOn:
     id: "first-launch-primary"
 
 # THE KEY, SHOWN ONCE where it stays on this phone alone.

@@ -504,7 +504,7 @@ fn the_quick_add_lands_in_the_project_and_in_the_section_pointed_at() {
     let beds = section(&d, &garden, "Beds");
     let i = d.push(agenda::TAB, routes::project(&garden, "Garden"));
     let bar = project_state(d.view(i)).quick_add.clone().unwrap();
-    assert_eq!(bar.lands_label, "Add to Garden");
+    assert_eq!(bar.lands_label, "New Reminder");
     // A PUSHED PAGE HAS NO PLUS: its bar is always drawn.
     assert!(bar.drawn && bar.shown && bar.add_label.is_empty());
 
@@ -799,7 +799,7 @@ fn catch_up_piles_what_came_due_and_names_the_absence() {
     );
     let i = d.push(agenda::TAB, routes::catch_up());
     let state = catch_up(d.view(i));
-    assert_eq!(state.chrome.as_ref().unwrap().title, "Reschedule");
+    assert_eq!(state.chrome.as_ref().unwrap().title, "Catch up");
     let data = catch_up_data(d.view(i));
     assert_eq!(data.head, "14 days away · 2 tasks came due");
     let keys: Vec<&str> = data.piles.iter().map(|p| p.key.as_str()).collect();

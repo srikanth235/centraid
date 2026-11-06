@@ -18,11 +18,14 @@ catalog! {
     plain kit_cancel = ("Cancel", "Cancel");
     plain kit_clear_filters = ("Clear filters", "Clear filters");
     plain kit_close_search = ("Close search", "Close search");
+    plain kit_delete = ("Delete", "Delete");
+    plain kit_details = ("Details", "Details");
     plain kit_dismiss = ("Dismiss", "Dismiss");
     plain kit_done = ("Done", "Done");
     plain kit_filter = ("Filter", "Filter");
     plain kit_filter_on = ("{label}, on", "{label}, on");
     plain kit_filter_sort = ("Filter and sort", "Filter and sort");
+    plain kit_flag = ("Flag", "Flag");
     plain kit_loading_more = ("Loading more", "Loading more");
     plain kit_open = ("Open", "Open");
     plain kit_opening = ("Opening", "Opening");
@@ -31,6 +34,7 @@ catalog! {
     plain kit_retry = ("Try again", "Try again");
     plain kit_save = ("Save", "Save");
     plain kit_search = ("Search", "Search");
+    plain kit_unflag = ("Unflag", "Unflag");
     plain kit_select = ("Select", "Select");
     plain kit_show_more = ("Show more", "Show more");
     plain month_01 = ("January", "January");
@@ -55,6 +59,7 @@ catalog! {
     plain today = ("Today", "Today");
     plain tomorrow = ("Tomorrow", "Tomorrow");
     plain trash_deleted = ("Deleted", "Deleted");
+    counted trash_count = ("Trash · 1", "Trash · {n}");
     plain trash_empty_action = ("Empty trash", "Empty trash");
     plain trash_empty_body = ("Everything in trash leaves this vault for good. This cannot be undone.", "Everything in trash leaves this vault for good. This cannot be undone.");
     plain trash_empty_headline = ("Trash is empty.", "Trash is empty.");

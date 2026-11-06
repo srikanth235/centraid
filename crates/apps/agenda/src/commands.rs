@@ -114,7 +114,7 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// The twenty-four, in the manifest's own order.
+/// The twenty-six, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
     act("propose", "event.propose"),
     act("rsvp", "event.respond"),
@@ -152,6 +152,9 @@ pub const ACTIONS: &[ActionRow] = &[
     // A tag is a `tagged` edge: the shared verbs.
     act("add-task-tag", "tag.add"),
     act("remove-task-tag", "tag.remove"),
+    // THE FLAG (#1173): Agenda's name for the vault's starred flag.
+    act("star-task", "flag.set"),
+    act("unstar-task", "flag.clear"),
     // THE PHONE'S CALENDARS, FOLLOWED (#1127): one record per event, the vault merges.
     act("follow-calendar", "follow.calendar"),
 ];
@@ -185,7 +188,7 @@ mod tests {
 
     #[test]
     fn the_events_own_and_the_tasks_own_are_the_verbs_the_rest_are_shared() {
-        assert_eq!(ACTIONS.len(), 24);
+        assert_eq!(ACTIONS.len(), 26);
         let own = |prefix: &str| -> Vec<&str> {
             ACTIONS
                 .iter()
@@ -222,7 +225,7 @@ mod tests {
             .map(|row| row.action)
             .collect();
         assert_eq!(creates, ["create-project", "create-section"]);
-        assert_eq!(act_scope_tables().len(), 21);
+        assert_eq!(act_scope_tables().len(), 23);
     }
 
     /// EVERY command this app names is in the vault's own catalogue. **A button

@@ -35,6 +35,8 @@ const AGENDA: &[Row] = &[
     ("attach", "detach", Input::Same),
     ("detach", "attach", Input::Same),
     ("add-task", "delete-task", Input::Created),
+    ("star-task", "unstar-task", Input::Same),
+    ("unstar-task", "star-task", Input::Same),
     ("complete-task", "reopen-task", Input::Id),
     ("reopen-task", "complete-task", Input::Id),
     ("cancel-task", "reopen-task", Input::Id),

@@ -48,6 +48,7 @@ import "centraid/core/v1/route.proto";
 import "centraid/core/v1/vault_screens.proto";
 import "centraid/core/v1/shell_home_screens.proto";
 import "centraid/core/v1/shell_search_screens.proto";
+import "centraid/core/v1/shell_settings_screens.proto";
 
 // ---------------------------------------------------------------------------
 // The door
@@ -329,6 +330,7 @@ message ScreenEvent {
     // ---- the shell (1000-1999): Home 1000-1299 ----
     HomeEvent home = 1000;
     HomeSearchEvent home_search = 1001;
+    SettingsEvent settings = 1010;
   }
 }
 
@@ -437,6 +439,7 @@ message ViewState {
     // ---- the shell (1000-1999): Home 1000-1299 ----
     HomeState home = 1000;
     HomeSearchState home_search = 1001;
+    SettingsState settings = 1010;
   }
 }
 

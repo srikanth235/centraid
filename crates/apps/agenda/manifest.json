@@ -168,6 +168,16 @@
         "schema": "tag",
         "table": "remove",
         "verbs": "act"
+      },
+      {
+        "schema": "flag",
+        "table": "set",
+        "verbs": "act"
+      },
+      {
+        "schema": "flag",
+        "table": "clear",
+        "verbs": "act"
       }
     ]
   },
@@ -1522,6 +1532,94 @@
         },
         "required": ["origin", "records"],
         "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "star-task",
+      "verb": "star",
+      "kind": "task",
+      "inverse": "unstar-task",
+      "sealed": [],
+      "command": "flag.set",
+      "phrasings": [
+        "star the plumber task",
+        "flag the taxes",
+        "mark buy milk as flagged"
+      ],
+      "description": "Star a task through flag.set: Agenda calls the starred flag Flag, and a flagged task joins the Flagged list. Idempotent.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": ["starred"]
+          }
+        },
+        "required": ["id", "flag"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "unstar-task",
+      "verb": "unstar",
+      "kind": "task",
+      "inverse": "star-task",
+      "sealed": [],
+      "command": "flag.clear",
+      "phrasings": [
+        "unstar the plumber task",
+        "take the flag off the taxes",
+        "unflag buy milk"
+      ],
+      "description": "Take the flag off a task through flag.clear. Idempotent.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": ["starred"]
+          }
+        },
+        "required": ["id", "flag"],
+        "additionalProperties": false
       },
       "output": {
         "type": "object",

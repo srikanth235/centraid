@@ -18,18 +18,14 @@ name: first-launch
     id: "first-launch"
 - assertNotVisible:
     id: "home-grid"
-# Restore is one tap from the first slip and stays on every slip.
-- assertVisible: "Restore backup"
-# Next throws the top slip; Skip jumps to the last, where the ink button changes
-# its verb and Skip goes away.
-- tapOn:
-    id: "first-launch-primary"
+# ONE WELCOME SCREEN (#1173), not a deck: the title, the three claims and both
+# doors are on the first frame, and there is no Next or Skip.
+- assertVisible: "Welcome to Centraid"
 - assertVisible: "An assistant on this phone"
-- tapOn:
-    id: "first-launch-skip"
-- assertVisible: "Get started"
+- assertVisible: "Restore backup"
 - assertNotVisible:
     id: "first-launch-skip"
+- assertVisible: "Get started"
 # GET STARTED (R-ONBOARD-10). Where the keychain synchronises — the simulator
 # counts — the key is kept without being shown and Home comes up with no sheet
 # in between. Where it stays on this phone alone, the key shows once with Save

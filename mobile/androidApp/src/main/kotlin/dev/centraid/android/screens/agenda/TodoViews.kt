@@ -19,7 +19,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +48,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.Route
 import centraid.core.v1.TodoCheck
+import centraid.core.v1.TodoChrome
 import centraid.core.v1.TodoChoice
 import centraid.core.v1.TodoQuickAdd
 import centraid.core.v1.TodoRow
@@ -84,7 +89,9 @@ internal fun TodoRowView(
     depth: Int = 0,
     idPrefix: String = "tasks-row",
     indent: Dp = 0.dp,
+    menu: TodoRowMenu? = null,
 ) {
+    var menuOpen by remember { mutableStateOf(false) }
     Row(
         Modifier
             .fillMaxWidth()
@@ -98,15 +105,37 @@ internal fun TodoRowView(
         Column(
             Modifier
                 .weight(1f)
-                .combinedClickable(onClick = { row.route?.let(onOpen) }, onLongClick = file, onLongClickLabel = fileVerb.ifEmpty { null })
+                .combinedClickable(
+                    onClick = { row.route?.let(onOpen) },
+                    onLongClick = if (menu != null) ({ menuOpen = true }) else file,
+                    onLongClickLabel = fileVerb.ifEmpty { null },
+                )
                 .padding(vertical = 8.dp)
                 .testTag("$idPrefix-${row.task_id}")
                 .clearAndSetSemantics {
                     contentDescription = row.accessibility_label.ifEmpty { row.title }
                     role = Role.Button
-                    if (file != null) customActions = listOf(CustomAccessibilityAction(fileVerb) { file(); true })
+                    val actions = buildList {
+                        if (file != null) add(CustomAccessibilityAction(fileVerb) { file(); true })
+                        if (menu != null) addAll(menu.accessibilityActions(row, onOpen))
+                    }
+                    if (actions.isNotEmpty()) customActions = actions
                 },
         ) {
+            if (menu != null) {
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    menu.items(row, onOpen, file).forEach { item ->
+                        DropdownMenuItem(
+                            text = { Text(item.label) },
+                            onClick = {
+                                menuOpen = false
+                                item.run()
+                            },
+                            modifier = Modifier.testTag("$idPrefix-${item.tag}-${row.task_id}"),
+                        )
+                    }
+                }
+            }
             Text(
                 row.title,
                 style = centraidType(if (row.subtask) "small" else "body"),
@@ -145,7 +174,19 @@ internal fun TodoRowView(
                 modifier = Modifier.padding(start = 6.dp),
             )
         }
-        if (row.project_hue_key.isNotEmpty()) {
+        if (row.flagged) {
+            CentraidIcon(
+                "Flag",
+                tint = agendaTokenColor("stateAmberText") ?: centraidColor("warning"),
+                size = 14.dp,
+                modifier = Modifier.padding(start = 6.dp).clearAndSetSemantics { },
+            )
+        }
+        // THE LIST'S COLOUR (#1173): one of the eight, a dot after the title.
+        val listColor = agendaListColor(row.list_color_key)
+        if (listColor != null) {
+            Box(Modifier.padding(start = 8.dp).size(6.dp).clip(CircleShape).background(listColor))
+        } else if (row.project_hue_key.isNotEmpty()) {
             Box(
                 Modifier
                     .padding(start = 8.dp)
@@ -158,6 +199,39 @@ internal fun TodoRowView(
     row.children.forEach { child ->
         TodoRowView(child, onCheck, onOpen, onFile = null, depth = depth + 1, idPrefix = idPrefix, indent = indent)
     }
+}
+
+/** One entry of a row's long-press menu. */
+internal class TodoMenuItem(val tag: String, val label: String, val run: () -> Unit)
+
+/**
+ * WHAT A ROW'S LONG PRESS OFFERS (#1173): Details, Flag/Unflag, Move up and
+ * down (the non-drag reorder, only where a move is wired), Delete, and the
+ * filing verb where the row can file. The words are the chrome's.
+ */
+internal class TodoRowMenu(
+    val chrome: TodoChrome,
+    val onFlag: ((String, Boolean) -> Unit)? = null,
+    val onDelete: ((String) -> Unit)? = null,
+    /** (moved id, the id it lands before; empty is the end), or null where rows do not reorder. */
+    val onMove: ((String, String) -> Unit)? = null,
+    /** The ids of the row's group in order, for Move up and down. */
+    val siblings: List<String> = emptyList(),
+) {
+    fun items(row: TodoRow, onOpen: (Route) -> Unit, file: (() -> Unit)?): List<TodoMenuItem> = buildList {
+        add(TodoMenuItem("details", chrome.details_verb) { row.route?.let(onOpen) })
+        onFlag?.let { flag -> add(TodoMenuItem("flag", if (row.flagged) chrome.unflag_verb else chrome.flag_verb) { flag(row.task_id, !row.flagged) }) }
+        val at = siblings.indexOf(row.task_id)
+        if (onMove != null && at > 0) add(TodoMenuItem("up", chrome.move_up_verb) { onMove.invoke(row.task_id, siblings[at - 1]) })
+        if (onMove != null && at >= 0 && at < siblings.size - 1) {
+            add(TodoMenuItem("down", chrome.move_down_verb) { onMove.invoke(row.task_id, siblings.getOrElse(at + 2) { "" }) })
+        }
+        file?.let { add(TodoMenuItem("file", chrome.file_verb) { it() }) }
+        onDelete?.let { delete -> add(TodoMenuItem("delete", chrome.delete_verb) { delete(row.task_id) }) }
+    }
+
+    fun accessibilityActions(row: TodoRow, onOpen: (Route) -> Unit): List<CustomAccessibilityAction> =
+        items(row, onOpen, null).map { item -> CustomAccessibilityAction(item.label) { item.run(); true } }
 }
 
 /**
@@ -207,6 +281,7 @@ internal fun LazyListScope.todoGroups(
     onFile: ((String) -> Unit)? = null,
     fileVerb: String = "",
     idPrefix: String = "tasks-row",
+    menu: TodoRowMenu? = null,
 ) {
     groups.forEach { group ->
         item(key = "group-${group.key}") {
@@ -228,7 +303,10 @@ internal fun LazyListScope.todoGroups(
         }
         group.rows.forEach { row ->
             item(key = "row-${group.key}-${row.task_id}") {
-                TodoRowView(row, onCheck, onOpen, onFile, fileVerb, idPrefix = idPrefix)
+                TodoRowView(
+                    row, onCheck, onOpen, onFile, fileVerb, idPrefix = idPrefix,
+                    menu = menu?.let { TodoRowMenu(it.chrome, it.onFlag, it.onDelete, it.onMove, group.rows.map { r -> r.task_id }) },
+                )
             }
         }
     }

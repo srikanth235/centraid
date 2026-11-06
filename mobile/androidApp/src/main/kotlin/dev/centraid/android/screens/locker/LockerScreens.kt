@@ -2,6 +2,16 @@ package dev.centraid.android.screens.locker
 
 import dev.centraid.android.kit.SecureWindow
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.CompositionLocalProvider
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.kitTextStyle
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.LocalAppAccentId
+import dev.centraid.android.theme.centraidDark
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -137,22 +147,24 @@ internal fun LockerWallView(wall: LockerWall, onUnlock: () -> Unit, onWords: () 
             .semantics { contentDescription = wall.accessibility_label },
     ) {
         item(key = "mark") {
+            // THE LOCK SCREEN (#1173): the lock on a wash of Locker's graphite, the one sentence,
+            // what unlocking does, and the one ink button in Locker's fill.
+            val accent = appAccent("locker")
+            CompositionLocalProvider(LocalAppAccentId provides "locker") {
             Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 24.dp)) {
-                AppMark(appId = "locker", size = 40.dp, modifier = Modifier.clearAndSetSemantics { })
-                Text(
-                    wall.title,
-                    style = centraidType("title"),
-                    color = centraidColor("text"),
-                    modifier = Modifier.padding(top = 16.dp).semantics { heading() },
-                )
+                Box(
+                    Modifier.size(64.dp).clip(CircleShape).background(accent.wash(centraidDark())).clearAndSetSemantics { },
+                    contentAlignment = Alignment.Center,
+                ) { CentraidIcon(iconKey = "Lock", tint = accent.text, size = 28.dp) }
+                KitText(wall.title, KitType.Section, Surface.ink, Modifier.padding(top = 16.dp).semantics { heading() })
                 if (wall.body.isNotEmpty()) {
-                    Text(wall.body, style = centraidType("body"), color = centraidColor("textSoft"), modifier = Modifier.padding(top = 8.dp))
+                    Text(wall.body, style = kitTextStyle(KitType.Row), color = Surface.body, modifier = Modifier.padding(top = 8.dp))
                 }
                 if (wall.notice.isNotEmpty()) {
                     Text(
                         wall.notice,
-                        style = centraidType("annotLabel"),
-                        color = centraidColor(if (failing) "net" else "textSoft"),
+                        style = kitTextStyle(KitType.Meta),
+                        color = if (failing) StateColor.Red.text else Surface.meta,
                         modifier = Modifier.padding(top = 12.dp).testTag("locker-wall-notice"),
                     )
                 }
@@ -171,6 +183,7 @@ internal fun LockerWallView(wall: LockerWall, onUnlock: () -> Unit, onWords: () 
                         }
                     }
                 }
+            }
             }
         }
     }

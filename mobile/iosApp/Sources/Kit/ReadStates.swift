@@ -130,12 +130,12 @@ struct FailureView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(sentence)
-                .centraidType("body")
-                .foregroundStyle(Theme.color("text", scheme))
+                .kitType(.row)
+                .foregroundStyle(Surface.ink)
             if !remedy.isEmpty {
                 Text(remedy)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
             }
             if let onRetry {
                 KitOutlineButton(label: retryLabel, action: onRetry)
@@ -187,26 +187,40 @@ struct EmptyStateView: View {
         self.init(empty, onAction: onAction)
     }
 
+    @Environment(\.appAccent) private var accent
+
+    /// THE EMPTY STATE PATTERN (#1173): a card on the page with the app's glyph on a wash of its
+    /// colour, the one sentence, the reason, and at most one action as the app's pill.
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
+            if let glyph = CentraidCatalog.byID[accent.appId]?.iconKey {
+                CentraidIconView(iconKey: glyph, tint: accent.text, size: 22)
+                    .frame(width: 52, height: 52)
+                    .background(accent.wash(dark: scheme == .dark), in: Circle())
+                    .padding(.bottom, 4)
+                    .accessibilityHidden(true)
+            }
             Text(empty.headline)
-                .centraidType("body")
-                .foregroundStyle(Theme.color("text", scheme))
+                .kitType(.section)
+                .foregroundStyle(Surface.ink)
                 .multilineTextAlignment(.center)
             if !empty.body.isEmpty {
                 Text(empty.body)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.row)
+                    .foregroundStyle(Surface.body)
                     .multilineTextAlignment(.center)
             }
             if !empty.actionLabel.isEmpty, let onAction {
-                KitOutlineButton(label: empty.actionLabel, action: onAction)
+                KitPillButton(label: empty.actionLabel, action: onAction)
                     .accessibilityIdentifier(actionIdentifier)
-                    .padding(.top, 4)
+                    .padding(.top, 6)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 32)
+        .padding(.vertical, 28)
+        .padding(.horizontal, 20)
+        .kitCard()
+        .padding(.vertical, 12)
         .padding(.horizontal, CentraidGeometry.pageMargin)
         // A CONTAINER, OR THE ID LEAKS: on a plain stack SwiftUI hands
         // `kit-empty` down to the import and action buttons, over their own.
@@ -248,7 +262,7 @@ struct SearchAskRow: View {
     var inset: Bool = true
 
     @Environment(\.askChat) private var askChat
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
     var body: some View {
         if let press = handoff ?? (ask.hasRoute ? askChat.map({ door in { door(ask.route) } }) : nil) {
@@ -257,8 +271,9 @@ struct SearchAskRow: View {
                 press()
             } label: {
                 Text(ask.label)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color("link", scheme))
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(accent.text)
                     .padding(.horizontal, inset ? CentraidGeometry.pageMargin : 0)
                     .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
                     .contentShape(Rectangle())
@@ -294,13 +309,13 @@ struct DeniedGate: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(denied.title)
-                .centraidType("title")
-                .foregroundStyle(Theme.color("text", scheme))
+                .kitType(.section)
+                .foregroundStyle(Surface.ink)
                 .accessibilityAddTraits(.isHeader)
             if !denied.body.isEmpty {
                 Text(denied.body)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.row)
+                    .foregroundStyle(Surface.body)
             }
             if !denied.receipt.isEmpty {
                 Text(denied.receipt)
@@ -350,15 +365,16 @@ struct KitOutlineButton: View {
                     CentraidIconView(iconKey: iconKey, tint: Theme.color(ink, scheme), size: 16)
                 }
                 Text(label)
-                    .centraidType("smallStrong")
+                    .kitType(.row)
+                    .fontWeight(.semibold)
                     .foregroundStyle(Theme.color(ink, scheme))
             }
             .padding(.horizontal, 16)
             .frame(maxWidth: stacked ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse)
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                Capsule()
                     .strokeBorder(
-                        Theme.color(enabled ? (tone == "text" ? "lineStrong" : tone) : "textDisabled", scheme),
+                        enabled ? (tone == "text" ? Surface.border : StateColor.red.text) : Surface.fill,
                         lineWidth: CentraidGeometry.hairline
                     )
             )

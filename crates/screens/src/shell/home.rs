@@ -686,16 +686,15 @@ impl Screen for Home {
     }
 }
 
-/// THE FIRST-LAUNCH GATE: what a phone that holds no vault opens onto. The house
-/// is Home's own roster ([`policy::ORDER`]), so an app that gets a tile is in the
-/// house the same day; the doors are `MakePressed` and `RestorePressed`.
+/// THE WELCOME SCREEN (#1173): what a phone that holds no vault opens onto. One
+/// screen, three claims and two doors, `MakePressed` and `RestorePressed`.
 fn first_launch(locale: Locale) -> wire::HomeFirstLaunch {
     let slide = |title: String, body: String| wire::HomeFirstLaunchSlide { title, body };
     wire::HomeFirstLaunch {
+        title: words::first_launch_title(locale),
         body: words::first_launch_body(locale),
         make_label: words::first_launch_make(locale),
         restore_label: words::first_launch_restore(locale),
-        apps: policy::ORDER.iter().map(|app| (*app).to_owned()).collect(),
         slides: vec![
             slide(
                 words::first_launch_house_title(locale),
@@ -710,8 +709,6 @@ fn first_launch(locale: Locale) -> wire::HomeFirstLaunch {
                 words::first_launch_backup_body(locale),
             ),
         ],
-        next_label: words::first_launch_next(locale),
-        skip_label: words::first_launch_skip(locale),
     }
 }
 

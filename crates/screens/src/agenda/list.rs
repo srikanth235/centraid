@@ -11,12 +11,14 @@ use wire::app_query_response::Answer;
 use wire::screen_event::Kind as E;
 use wire::todo_list_event::Kind as L;
 
+use super::home::long_day;
+use super::todo::buckets;
 use super::todo::ops::Ops;
 use super::todo::rows::{self, Context};
 use crate::catalog::load;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, agenda_todo, fill, task as words};
+use crate::strings::{Locale, agenda_reminders as reminders, agenda_todo, fill, task as words};
 
 /// What a to-do page holds of one read: nothing yet, a refusal, a gate or the
 /// answer. A failed read is never an empty list.
@@ -136,7 +138,11 @@ impl List {
     fn board_view(&self) -> load::agenda::BoardView {
         use load::agenda::BoardView as B;
         match self.view {
-            wire::TodoView::All => B::All,
+            // The smart lists are folds over the All board (#1173).
+            wire::TodoView::All
+            | wire::TodoView::Today
+            | wire::TodoView::Scheduled
+            | wire::TodoView::Flagged => B::All,
             wire::TodoView::Logbook => B::Logbook,
             wire::TodoView::Reminders => B::Reminders,
             _ => B::Anytime,
@@ -158,7 +164,10 @@ impl List {
 
     fn wire_view(&self) -> i32 {
         let view = match self.view {
-            wire::TodoView::All => wire::AgendaTaskView::All,
+            wire::TodoView::All
+            | wire::TodoView::Today
+            | wire::TodoView::Scheduled
+            | wire::TodoView::Flagged => wire::AgendaTaskView::All,
             wire::TodoView::Logbook => wire::AgendaTaskView::Logbook,
             wire::TodoView::Reminders => wire::AgendaTaskView::Reminders,
             _ => wire::AgendaTaskView::Anytime,
@@ -169,6 +178,9 @@ impl List {
     fn title(&self, locale: Locale) -> String {
         match self.view {
             wire::TodoView::All => words::view_all(locale),
+            wire::TodoView::Today => reminders::smart_today(locale),
+            wire::TodoView::Scheduled => reminders::smart_scheduled(locale),
+            wire::TodoView::Flagged => reminders::smart_flagged(locale),
             wire::TodoView::Logbook => words::view_logbook(locale),
             wire::TodoView::Reminders => words::view_reminders(locale),
             _ => words::view_anytime(locale),
@@ -178,6 +190,9 @@ impl List {
     fn empty(&self, locale: Locale) -> String {
         match self.view {
             wire::TodoView::All => words::all_empty(locale),
+            wire::TodoView::Today => reminders::today_empty(locale),
+            wire::TodoView::Scheduled => reminders::scheduled_empty(locale),
+            wire::TodoView::Flagged => reminders::flagged_empty(locale),
             wire::TodoView::Logbook => words::logbook_empty(locale),
             wire::TodoView::Reminders => words::reminders_empty(locale),
             _ => words::anytime_empty(locale),
@@ -186,8 +201,26 @@ impl List {
 
     fn data(&self, locale: Locale, board: &wire::AgendaTaskBoard) -> wire::TodoListData {
         let row_ctx = Context::of(&board.today, &board.projects, &board.sections);
-        let groups = rows::groups(locale, &board.groups, &row_ctx);
+        let groups = match self.view {
+            wire::TodoView::Today => buckets::today(locale, board, &row_ctx),
+            wire::TodoView::Scheduled => buckets::scheduled(locale, board, &row_ctx),
+            wire::TodoView::Flagged => buckets::flagged(locale, board, &row_ctx),
+            _ => rows::groups(locale, &board.groups, &row_ctx),
+        };
+        let subtitle = if self.view == wire::TodoView::Today {
+            let mut parts = vec![
+                long_day(locale, &board.today),
+                reminders::today_to_do(locale, buckets::today_count(board) as u64),
+            ];
+            if self.ops.completed > 0 {
+                parts.push(reminders::today_done(locale, u64::from(self.ops.completed)));
+            }
+            parts.join(" · ")
+        } else {
+            String::new()
+        };
         wire::TodoListData {
+            subtitle,
             today: board.today.clone(),
             empty: groups.is_empty().then(|| wire::EmptyState {
                 headline: self.empty(locale),
@@ -217,6 +250,28 @@ impl List {
             Some(L::StatusActed(_)) => {
                 self.ops.undo(ctx);
                 self.reload(ctx);
+            }
+            Some(L::RowFlagged(flagged)) => {
+                if self
+                    .phase
+                    .data()
+                    .and_then(|board| find(board, &flagged.task_id))
+                    .is_some()
+                {
+                    self.ops.flag(ctx, &flagged.task_id, flagged.flagged);
+                    self.reload(ctx);
+                }
+            }
+            Some(L::RowDeleted(deleted)) => {
+                if self
+                    .phase
+                    .data()
+                    .and_then(|board| find(board, &deleted.task_id))
+                    .is_some()
+                {
+                    self.ops.delete(ctx, &deleted.task_id);
+                    self.reload(ctx);
+                }
             }
             Some(L::NextPage(_)) => {
                 if self.limit < rows::MAX_WINDOW {

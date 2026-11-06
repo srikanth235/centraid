@@ -470,6 +470,7 @@ internal class RustRoot(
         val photosLightbox = view.photos_lightbox
         val photosEditor = view.photos_editor
         val homeSearch = view.home_search
+        val settings = view.settings
         val chat = view.chat
 
         when {
@@ -742,6 +743,13 @@ internal class RustRoot(
                 onEvent = { send(ScreenEvent(home_search = it)) },
                 onOpen = open,
                 onCancel = back,
+            )
+            // SETTINGS (#1173): a page pushed from Home.
+            settings != null -> SettingsScreen(
+                state = settings,
+                onEvent = { send(ScreenEvent(settings = it)) },
+                onOpen = open,
+                onBack = back,
             )
             trash != null -> TrashScreen(
                 view = trash,

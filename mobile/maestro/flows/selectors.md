@@ -90,7 +90,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `vault-rename-<vaultId>` | Home | one switcher row's Rename (a swipe on iOS, also in the row's long-press menu; a button on Android), and `vault-rename-field` / `vault-rename-save` in its dialog |
 | `vault-found-button` | Home | the vault switcher's "Make a vault" (R-ONBOARD-11) |
 | `vault-restore-button` | Home | the vault switcher's "Restore my vaults" |
-| `first-launch` | First launch | the deck (and `first-launch-skip`, `first-launch-<id>` for its actions) |
+| `first-launch` | First launch | the welcome screen (`first-launch-title`, `first-launch-claim-<n>`, and `first-launch-primary` / `first-launch-secondary` for its two doors) |
 | `chat` | Chat | the tab's root |
 | `chat-field` | Chat | the composer's text field (ready phase only) |
 | `chat-send` | Chat | Send, which becomes `chat-stop` while a turn runs |
@@ -123,7 +123,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `kit-pushed-back` | any pushed page (iOS) | the kit's back control, named for the parent |
 | `BackButton` | any pushed page (iOS) | the navigation bar's back — UIKit's own id; Maestro's `back` is Android's system key and does nothing on iOS |
 
-Home, its Settings and vault sheets, the Backup screen, the first-launch deck and Chat set tags; the Backup screen's ids are written in both shells and selected by no flow yet. The iOS shell runs on a simulator against the real `HomeMachine` through `HomeBridge`, so the iOS half of each id renders; the Android half is compiled and unobserved, because no machine here has an Android emulator.
+Home, its Settings and vault sheets, the Backup screen, the welcome screen and Chat set tags; the Backup screen's ids are written in both shells and selected by no flow yet. The iOS shell runs on a simulator against the real `HomeMachine` through `HomeBridge`, so the iOS half of each id renders; the Android half is compiled and unobserved, because no machine here has an Android emulator.
 
 **A CONTAINER'S ID LEAKS ONTO ITS CHILDREN ON iOS.** `.accessibilityIdentifier` on a plain `VStack`/`HStack` is handed down to every child that is not an element of its own, over the child's own id — every Home tile read `home-grid`, and the empty state's buttons read `kit-empty`. A container that carries an id and has selectable children marks itself `.accessibilityElement(children: .contain)` first (`TileGrid`, `KitEmpty`). The Docs band's buttons all still read `docs-band`; no flow selects them yet.
 

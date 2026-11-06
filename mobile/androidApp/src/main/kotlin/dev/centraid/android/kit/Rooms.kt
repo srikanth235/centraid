@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
@@ -34,7 +35,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.text.font.FontWeight
+import dev.centraid.design.CentraidScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
@@ -181,22 +185,24 @@ public fun AppPlace(
     contentUnderBand: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    Column(modifier.fillMaxSize().testTag("$app-place")) {
+    CompositionLocalProvider(LocalAppAccentId provides app) {
+    Column(modifier.fillMaxSize().background(Surface.page).testTag("$app-place")) {
+        // THE HEADER (#1173): at most two keys on the right (the tonal filter key, then the
+        // filled accent `+`), then the title at 34 bold with the scope under it.
         Row(
-            Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER, end = 8.dp, top = 8.dp),
+            Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AppMark(appId = app, size = 28.dp, modifier = Modifier.clearAndSetSemantics { })
-            Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                RoomTitle(title)
-                if (meta.isNotEmpty()) {
-                    Text(meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
-                }
-                if (subtitle != null) RoomSubtitleLine(subtitle)
-            }
-            // THE HEADER'S TWO TRAILING ITEMS: the filter menu, then the app's one verb.
             if (filter != null) FilterMenuButton(app, filter)
-            if (trailing != null) IconKey(trailing.iconKey, trailing.label, trailing.testTag, onPress = trailing.onPress)
+            if (trailing != null) HeaderVerb(trailing)
+        }
+        Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER).padding(bottom = 8.dp)) {
+            RoomTitle(title)
+            if (meta.isNotEmpty()) {
+                KitText(meta, KitType.Meta, Surface.meta)
+            }
+            if (subtitle != null) RoomSubtitleLine(subtitle)
         }
         BandStage(
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -205,7 +211,7 @@ public fun AppPlace(
                 Column(Modifier.fillMaxWidth()) {
                     // THE LINES STAND ON THE PAGE'S COLOUR: they are text, and text over a
                     // photograph is not legible. The floating pill is the band's alone.
-                    Column(Modifier.fillMaxWidth().background(centraidColor("bg"))) {
+                    Column(Modifier.fillMaxWidth().background(Surface.page)) {
                         StatusLine(status)
                         statusLine?.invoke()
                         // THE SHELL'S LINE SITS ON THE BAND, never under it.
@@ -236,6 +242,7 @@ public fun AppPlace(
             content = content,
         )
     }
+    }
 }
 
 /**
@@ -261,40 +268,31 @@ public fun PushedPage(
     status: String = "",
     statusLine: (@Composable () -> Unit)? = null,
     backSpoken: String? = null,
+    /** A scope line under the title (Trash's "3 items"): the machine's, empty for none. */
+    meta: String = "",
     content: @Composable () -> Unit,
 ) {
-    Column(modifier.fillMaxSize().testTag("pushed-page")) {
+    Column(modifier.fillMaxSize().background(Surface.page).testTag("pushed-page")) {
         Row(
             Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                Modifier
-                    .heightIn(min = KitGeometry.ROW_MIN)
-                    .clip(RoundedCornerShape(KitGeometry.RADIUS))
-                    .clickable(onClick = onBack)
-                    .padding(horizontal = 8.dp)
-                    .testTag("room-back")
-                    .clearAndSetSemantics {
-                        contentDescription = backSpoken ?: KitWords.backTo(parentTitle)
-                        role = Role.Button
-                    },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CentraidIcon(iconKey = "ChevronLeft", tint = centraidColor("textSoft"), size = 18.dp)
-                Text(
-                    parentTitle,
-                    style = centraidType("annotLabelOn"),
-                    color = centraidColor("textSoft"),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            // THE BACK KEY IS A CHEVRON (#1173): a drill-in page is the only place one appears.
+            // The parent's name is what a screen reader says.
+            IconKey(
+                "ChevronLeft",
+                backSpoken ?: KitWords.backTo(parentTitle),
+                "room-back",
+                onPress = onBack,
+            )
             Spacer(Modifier.weight(1f))
             if (filter != null) FilterMenuButton(app, filter)
-            if (trailing != null) IconKey(trailing.iconKey, trailing.label, trailing.testTag, onPress = trailing.onPress)
+            if (trailing != null) HeaderVerb(trailing)
         }
         RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp))
+        if (meta.isNotEmpty()) {
+            KitText(meta, KitType.Meta, Surface.meta, Modifier.padding(horizontal = KitGeometry.GUTTER).testTag("page-meta"))
+        }
         Box(Modifier.weight(1f).fillMaxWidth()) { content() }
         StatusLine(status)
         statusLine?.invoke()
@@ -414,7 +412,7 @@ public fun SheetRoom(
         onDismissRequest = { if (canLeave) onDismiss() },
         sheetState = sheetState,
         sheetGesturesEnabled = swipeable,
-        containerColor = centraidColor("bg"),
+        containerColor = Surface.sheet,
         properties = ModalBottomSheetProperties(
             securePolicy = if (secure) SecureFlagPolicy.SecureOn else SecureFlagPolicy.Inherit,
             shouldDismissOnBackPress = swipeable,
@@ -468,7 +466,14 @@ public fun InkButton(
     enabled: Boolean = true,
     onPress: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(KitGeometry.RADIUS)
+    // THE ONE FILLED ELEMENT (#1173): a full-width pill in the app's fill under a white label; a
+    // destructive one is the outlined state-red pill at the same width. Disabled is still drawn.
+    val shape = RoundedCornerShape(percent = 50)
+    val accent = appAccent()
+    val red = StateColor.Red.text
+    val fill = Surface.fill
+    val border = Surface.border
+    val meta = Surface.meta
     Box(
         modifier
             .fillMaxWidth()
@@ -476,10 +481,10 @@ public fun InkButton(
             .clip(shape)
             .then(
                 when {
-                    !enabled && destructive -> Modifier.border(KitGeometry.HAIRLINE, centraidColor("textDisabled"), shape)
-                    !enabled -> Modifier.background(centraidColor("bgSunken"))
-                    destructive -> Modifier.border(KitGeometry.HAIRLINE, centraidColor("net"), shape)
-                    else -> Modifier.background(centraidColor("accent"))
+                    !enabled && destructive -> Modifier.border(1.5.dp, border, shape)
+                    !enabled -> Modifier.background(fill)
+                    destructive -> Modifier.border(1.5.dp, red, shape)
+                    else -> Modifier.background(accent.fill)
                 },
             )
             .clickable(enabled = enabled, onClick = onPress)
@@ -492,14 +497,12 @@ public fun InkButton(
     ) {
         Text(
             label,
-            style = centraidType("control"),
-            color = centraidColor(
-                when {
-                    !enabled -> "textDisabled"
-                    destructive -> "net"
-                    else -> "onAccent"
-                },
-            ),
+            style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+            color = when {
+                !enabled -> meta
+                destructive -> red
+                else -> Color.White
+            },
         )
     }
 }
@@ -507,13 +510,12 @@ public fun InkButton(
 /** A room's title: the `title` rung, a heading to a screen reader. */
 @Composable
 internal fun RoomTitle(title: String, modifier: Modifier = Modifier) {
-    Text(
+    KitText(
         title,
-        style = centraidType("title"),
-        color = centraidColor("text"),
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
+        KitType.Title,
+        Surface.ink,
         modifier = modifier.semantics { heading() },
+        maxLines = 2,
     )
 }
 
@@ -521,15 +523,30 @@ internal fun RoomTitle(title: String, modifier: Modifier = Modifier) {
 @Composable
 public fun StatusLine(status: String, modifier: Modifier = Modifier) {
     if (status.isEmpty()) return
-    Text(
-        status,
-        style = centraidType("annotLabel"),
-        color = centraidColor("textSoft"),
-        modifier = modifier
+    Box(
+        modifier
             .fillMaxWidth()
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)
+            .padding(horizontal = KitGeometry.GUTTER)
+            .kitStatusPill()
             .testTag("room-status"),
-    )
+    ) {
+        KitText(status, KitType.Row, Surface.ink)
+    }
+}
+
+/**
+ * THE ONE STATUS LINE'S SHAPE (#1173): a single pill on the card colour with a hairline edge,
+ * docked above the band. It casts no shadow; state is a sentence in the pill, never a toast.
+ */
+@Composable
+public fun Modifier.kitStatusPill(): Modifier {
+    val shape = RoundedCornerShape(CentraidScale.cardRadius.dp)
+    return padding(vertical = 4.dp)
+        .heightIn(min = KitGeometry.ROW_MIN)
+        .clip(shape)
+        .background(Surface.card)
+        .border(KitGeometry.HAIRLINE, Surface.border, shape)
+        .padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp)
 }
 
 /**
@@ -550,18 +567,29 @@ public fun StatusLine(
     Row(
         modifier
             .fillMaxWidth()
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)
+            .padding(horizontal = KitGeometry.GUTTER)
+            .kitStatusPill()
             .testTag("room-status-line"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
+        KitText(
             line.sentence,
-            style = centraidType("annotLabel"),
-            color = centraidColor(if (line.refused) "net" else "textSoft"),
+            KitType.Row,
+            if (line.refused) StateColor.Red.text else Surface.ink,
             modifier = Modifier.weight(1f),
         )
         if (line.action_label.isNotEmpty()) {
-            OutlineButton(line.action_label, testTag = actTag, onPress = onAct)
+            Text(
+                line.action_label,
+                style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                color = appAccent().text,
+                modifier = Modifier
+                    .heightIn(min = KitGeometry.ROW_MIN)
+                    .clickable(onClick = onAct)
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .testTag(actTag)
+                    .semantics { role = Role.Button },
+            )
         }
     }
 }
@@ -586,17 +614,28 @@ public fun ProgressStatusLine(
     testTag: String = "room-progress-line",
 ) {
     if (sentence.isEmpty()) return
-    Column(modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp).testTag(testTag)) {
+    Column(modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER).kitStatusPill().testTag(testTag)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
+            KitText(
                 sentence,
-                style = centraidType("annotLabel"),
-                color = centraidColor(if (refused) "net" else "textSoft"),
+                KitType.Row,
+                if (refused) StateColor.Red.text else Surface.ink,
                 maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            if (actionLabel.isNotEmpty()) OutlineButton(actionLabel, testTag = "$testTag-act", onPress = onAct)
+            if (actionLabel.isNotEmpty()) {
+                Text(
+                    actionLabel,
+                    style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                    color = appAccent().text,
+                    modifier = Modifier
+                        .heightIn(min = KitGeometry.ROW_MIN)
+                        .clickable(onClick = onAct)
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .testTag("$testTag-act")
+                        .semantics { role = Role.Button },
+                )
+            }
             if (closeLabel.isNotEmpty()) IconKey("X", closeLabel, "$testTag-close", bordered = false, onPress = onClose)
         }
         if (permille != null) {
@@ -623,10 +662,15 @@ public fun IconKey(
     enabled: Boolean = true,
     onPress: () -> Unit,
 ) {
+    // A KEY IS A TONAL CIRCLE (#1173): Material 3 Expressive draws elevation as tone, so the key
+    // is the card colour on a hairline, never a shadow.
+    val card = Surface.card
+    val border = Surface.border
+    val ink = if (enabled) Surface.ink else Surface.meta
     Box(
         modifier
             .size(KitGeometry.ROW_MIN)
-            .clip(RoundedCornerShape(KitGeometry.RADIUS))
+            .clip(CircleShape)
             .clickable(enabled = enabled, onClick = onPress)
             .testTag(testTag)
             .clearAndSetSemantics {
@@ -638,18 +682,48 @@ public fun IconKey(
     ) {
         Box(
             Modifier
-                .size(36.dp)
+                .size(38.dp)
                 .then(
                     if (bordered) {
-                        Modifier.border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), RoundedCornerShape(KitGeometry.RADIUS))
+                        Modifier.clip(CircleShape).background(card).border(KitGeometry.HAIRLINE, border, CircleShape)
                     } else {
                         Modifier
                     },
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            CentraidIcon(iconKey = iconKey, tint = centraidColor(if (enabled) "textSoft" else "textDisabled"), size = 18.dp)
+            CentraidIcon(iconKey = iconKey, tint = ink, size = 18.dp)
         }
+    }
+}
+
+/**
+ * THE HEADER'S VERB (#1173): the app's create verb ("Plus") is a filled key in the app's accent,
+ * a white glyph on its fill, the one filled element in the header; any other verb (Photos'
+ * Select) is the plain tonal key.
+ */
+@Composable
+internal fun HeaderVerb(action: RoomAction) {
+    if (action.iconKey == "Plus") {
+        val fill = appAccent().fill
+        Box(
+            Modifier
+                .size(KitGeometry.ROW_MIN)
+                .clip(CircleShape)
+                .clickable(onClick = action.onPress)
+                .testTag(action.testTag)
+                .clearAndSetSemantics {
+                    contentDescription = action.label
+                    role = Role.Button
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(Modifier.size(38.dp).clip(CircleShape).background(fill), contentAlignment = Alignment.Center) {
+                CentraidIcon(iconKey = action.iconKey, tint = Color.White, size = 18.dp)
+            }
+        }
+    } else {
+        IconKey(action.iconKey, action.label, action.testTag, onPress = action.onPress)
     }
 }
 

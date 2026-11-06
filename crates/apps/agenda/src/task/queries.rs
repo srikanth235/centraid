@@ -39,6 +39,7 @@ use centraid_apps_kit::page::{MAX_PAGE_ROWS, PageRequest};
 use centraid_apps_kit::reads::{FanOutBound, PageDoor, Read, read_pages};
 use centraid_apps_kit::row::{Cell, Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
+use centraid_vault::model::Flag;
 use centraid_vault::time::recurrence::{
     CollapseInput, RecurrenceAnchor, collapse_missed, is_all_day_anchor,
 };
@@ -138,6 +139,8 @@ pub struct TaskRow {
     pub attachments: Vec<Attachment>,
     pub references: Vec<Reference>,
     pub tags: Vec<TaskTag>,
+    /// Tagged with the starred flag: Agenda's Flag (#1173).
+    pub flagged: bool,
     pub recurrence: RecurrenceFacts,
     /// Only on a root: the family below it, in the open board's order.
     pub children: Vec<TaskRow>,
@@ -473,6 +476,7 @@ struct Decorations {
     attachments: BTreeMap<String, Vec<Attachment>>,
     references: BTreeMap<String, Vec<Reference>>,
     tags: BTreeMap<String, Vec<TaskTag>>,
+    flagged: BTreeSet<String>,
     chips: Vec<TagChip>,
 }
 
@@ -493,6 +497,7 @@ fn decorate(task: &TaskRow, decorations: &Decorations, now: &str, zone: &FireZon
             .get(&task.task_id)
             .cloned()
             .unwrap_or_default(),
+        flagged: decorations.flagged.contains(&task.task_id),
         recurrence: recurrence_of(task, now, zone),
         ..task.clone()
     }
@@ -519,6 +524,7 @@ fn read_decorations(
         attachments,
         references: BTreeMap::new(),
         tags: BTreeMap::new(),
+        flagged: BTreeSet::new(),
         chips: Vec::new(),
     };
     if !whole || task_ids.is_empty() {
@@ -558,8 +564,11 @@ fn read_decorations(
         let Some(end) = far.get(&to) else { continue };
         let kind = text_of(end, "kind").unwrap_or_default();
         if rel == "tagged" {
-            // A flag (starred, pinned, archived) is not a tag a member typed.
-            if kind == "tag" {
+            // A flag (starred, pinned, archived) is not a tag a member typed. The
+            // starred one is Agenda's Flag.
+            if kind == "flag" && to == Flag::Starred.id() {
+                decorations.flagged.insert(task);
+            } else if kind == "tag" {
                 let label = text_of(end, "title").unwrap_or_else(|| "?".to_owned());
                 chips.insert(to.clone(), label.clone());
                 decorations.tags.entry(task).or_default().push(TaskTag {

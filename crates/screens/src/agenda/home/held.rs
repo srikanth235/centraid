@@ -48,6 +48,8 @@ pub struct Held {
     pub catch_up: Option<wire::AgendaTaskCatchUp>,
     pub todo: bool,
     pub inbox: Option<wire::AgendaTaskBoard>,
+    /// Every open task: the smart lists' counts and the Flag (#1173).
+    pub all: Option<wire::AgendaTaskBoard>,
     pub projects: Option<wire::AgendaTaskProjects>,
     /// The trimmed term `search` answers.
     pub search_term: Option<String>,
@@ -73,7 +75,12 @@ impl Held {
     /// boards and the hits.
     #[must_use]
     pub fn tasks(&self) -> Vec<&wire::AgendaTask> {
-        let boards = [&self.inbox, &self.today_board, &self.upcoming_board];
+        let boards = [
+            &self.inbox,
+            &self.all,
+            &self.today_board,
+            &self.upcoming_board,
+        ];
         let mut found: Vec<&wire::AgendaTask> = boards
             .into_iter()
             .flatten()
@@ -222,7 +229,20 @@ impl Home {
                 Answer::AgendaTaskProjects(projects) => Some(projects),
                 _ => None,
             }))?;
+            let all = get(read(
+                ctx,
+                query::Board {
+                    limit: BOARD_LIMIT,
+                    view: Some(query::BoardView::All),
+                    project_id: None,
+                },
+                |answer| match answer {
+                    Answer::AgendaTaskBoard(board) => Some(board),
+                    _ => None,
+                },
+            ))?;
             self.today.clone_from(&board.today);
+            self.held.all = Some(all);
             self.held.inbox = Some(board);
             self.held.projects = Some(projects);
             self.held.todo = true;

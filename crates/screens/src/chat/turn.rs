@@ -634,6 +634,7 @@ impl Msg {
                 .map(|step| Step {
                     summary: step.summary.clone(),
                     destructive: step.destructive,
+                    app: super::model::app_of_kind(&step.kind),
                 })
                 .collect(),
             more: parked.more,

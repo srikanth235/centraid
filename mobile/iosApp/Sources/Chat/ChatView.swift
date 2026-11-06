@@ -380,12 +380,16 @@ private struct ChatHeader: View {
                     .truncationMode(.tail)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("chat-title")
-                Text(verbatim: state.subtitle)
-                    .centraidType("mono")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .accessibilityIdentifier("chat-subtitle")
+                // THE ASSISTANT'S AVATAR is the bare app mark (#1173), small, before the line.
+                HStack(spacing: 6) {
+                    CentraidMark(size: 16)
+                    Text(verbatim: state.subtitle)
+                        .centraidType("mono")
+                        .foregroundStyle(Theme.color("textFaint", scheme))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .accessibilityIdentifier("chat-subtitle")
             }
             .frame(maxWidth: .infinity)
             .accessibilityElement(children: .combine)
@@ -686,16 +690,13 @@ private struct ChatMessageRow: View {
                     }
                     Text(verbatim: message.text)
                         .chatType("body")
-                        .foregroundStyle(Theme.color("text", scheme))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        // THE MEMBER'S WORDS ARE AN INK PILL (#1173): ink fill, the page's colour as text.
+                        .foregroundStyle(Color(CentraidAsset.surfacePage))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
                         .background(
-                            RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                                .fill(Theme.color("bgElev", scheme))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                                .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
+                            RoundedRectangle(cornerRadius: CentraidScale.cardRadius * 1.25, style: .continuous)
+                                .fill(Color(CentraidAsset.textInk))
                         )
                 }
                 .accessibilityElement(children: .ignore)
@@ -805,9 +806,10 @@ private struct ChatErrorLine: View {
 
 // MARK: - Result cards
 
-/// ONE ROW THE ANSWER FOUND, drawn compactly: the app's mark, the row's title,
-/// its subtitle and meta, and the trailing arrow that says it opens. Raised
-/// paper, darker than the page in light; the app's hue lives in the mark alone.
+/// ONE ROW THE ANSWER FOUND (#1173), drawn in the colour of the app it is from: a white
+/// card with a bar down its left edge in that app's colour, the row's title in ink, its
+/// subtitle and meta under it, and the app's name in the app's colour at the right. Anything
+/// shown from another app uses that app's colour.
 private struct ChatCardRow: View {
     let card: Centraid_Core_V1_ChatCard
     let state: Centraid_Core_V1_ChatState
@@ -823,40 +825,49 @@ private struct ChatCardRow: View {
     var body: some View {
         Button(action: onOpen) {
             HStack(spacing: 12) {
-                AppMark(appID: card.app, size: 32)
-                VStack(alignment: .leading, spacing: 0) {
+                Capsule()
+                    .fill(AppAccent(card.app).fill)
+                    .frame(width: 4)
+                    .padding(.vertical, 2)
+                VStack(alignment: .leading, spacing: 2) {
                     Text(verbatim: card.title)
-                        .chatType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
+                        .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                        .foregroundStyle(Color(CentraidAsset.textInk))
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     if !card.subtitle.isEmpty {
                         Text(verbatim: card.subtitle)
-                            .chatType("mono")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .font(.system(size: CentraidScale.metaSize))
+                            .foregroundStyle(Color(CentraidAsset.textMeta))
                             .lineLimit(1)
                     }
                     if !card.meta.isEmpty {
                         Text(verbatim: card.meta)
-                            .chatType("mono")
-                            .foregroundStyle(Theme.color("textFaint", scheme))
+                            .font(.system(size: CentraidScale.metaSize))
+                            .foregroundStyle(Color(CentraidAsset.textMeta))
                             .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 8)
-                CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme), size: 16)
+                if !appName.isEmpty {
+                    Text(verbatim: appName)
+                        .font(.system(size: CentraidScale.metaSize, weight: .semibold))
+                        .foregroundStyle(AppAccent(card.app).text)
+                        .lineLimit(1)
+                }
             }
-            .padding(12)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                    .fill(Theme.color("bgElev", scheme))
+                RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
+                    .fill(Color(CentraidAsset.surfaceCard))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                    .strokeBorder(Theme.color("line", scheme), lineWidth: CentraidGeometry.hairline)
+                RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
+                    .strokeBorder(Color(CentraidAsset.surfaceBorder), lineWidth: CentraidGeometry.hairline)
             )
-            .contentShape(RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+            .contentShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
         }
         .buttonStyle(ChatCardPress())
         .accessibilityElement(children: .ignore)
@@ -879,12 +890,14 @@ private struct ChatCardPress: ButtonStyle {
 
 // MARK: - A proposed write
 
-/// A WRITE THE MODEL PROPOSED, as the confirm card under its answer: one line
-/// for each row it changes, in the core's words, then Confirm and Cancel; once
-/// answered, the one clause that says how it ended. Nothing the model wrote
-/// reaches the vault before Confirm. Both buttons are outlined (Send is the
-/// screen's one filled element), and a card that asks twice outlines Confirm in
-/// `net`. There is no toast and no Undo: an applied card says "Done." and stays.
+/// A WRITE THE MODEL PROPOSED (#1173), as the "Proposed change" card under its answer: a badge,
+/// one line for each row it changes in the core's words, then the way to say yes and "Not now";
+/// once answered, the one clause that says how it ended. The card wears the colour of the app
+/// whose row it changes (`pending.app`; the shell's teal when it spans apps). NOTHING the model
+/// wrote reaches the vault before the member confirms: Rust holds the write until
+/// `PendingConfirmed`, and this card only sends the event. A card that asks twice draws its
+/// confirm in the red state colour. There is no toast and no Undo: an applied card says "Done."
+/// and stays.
 private struct ChatPendingCard: View {
     let pending: Centraid_Core_V1_ChatPending
     let onConfirm: () -> Void
@@ -895,54 +908,77 @@ private struct ChatPendingCard: View {
     private var asking: Bool { pending.state == .waiting || pending.state == .working }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(Array(pending.steps.enumerated()), id: \.offset) { _, step in
-                    Text(verbatim: step.summary)
-                        .chatType("smallStrong")
-                        .foregroundStyle(Theme.color(step.destructive ? "net" : "text", scheme))
-                        .multilineTextAlignment(.leading)
+        HStack(alignment: .top, spacing: 12) {
+            Capsule()
+                .fill(AppAccent(pending.app).fill)
+                .frame(width: 4)
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(verbatim: pending.title)
+                        .font(.system(size: CentraidScale.badgeSize, weight: .bold))
+                        .textCase(.uppercase)
+                        .tracking(0.6)
+                        .foregroundStyle(AppAccent(pending.app).text)
+                    ForEach(Array(pending.steps.enumerated()), id: \.offset) { _, step in
+                        Text(verbatim: step.summary)
+                            .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                            .foregroundStyle(step.destructive ? Color(CentraidAsset.stateRedText) : Color(CentraidAsset.textInk))
+                            .multilineTextAlignment(.leading)
+                    }
+                    if !pending.moreLine.isEmpty {
+                        Text(verbatim: pending.moreLine)
+                            .font(.system(size: CentraidScale.metaSize))
+                            .foregroundStyle(Color(CentraidAsset.textMeta))
+                    }
                 }
-                if !pending.moreLine.isEmpty {
-                    Text(verbatim: pending.moreLine)
-                        .chatType("mono")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // ONE ELEMENT FOR THE LINES, read as the core's label. NO IDENTIFIER ON THE CARD
-            // ITSELF: one on a container replaces its children's (#1047), the buttons' included.
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(pending.accessibilityLabel)
-            .accessibilityIdentifier("chat-pending")
-            if asking {
-                HStack(spacing: 8) {
-                    KitOutlineButton(label: pending.cancelLabel, action: onCancel)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // ONE ELEMENT FOR THE LINES, read as the core's label. NO IDENTIFIER ON THE CARD
+                // ITSELF: one on a container replaces its children's (#1047), the buttons' included.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(pending.accessibilityLabel)
+                .accessibilityIdentifier("chat-pending")
+                if asking {
+                    HStack(spacing: 8) {
+                        Button(action: onConfirm) {
+                            Text(verbatim: pending.confirmLabel)
+                                .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                                .foregroundStyle(Color.white)
+                                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+                                .background(
+                                    Capsule().fill(Color(pending.destructive ? CentraidAsset.stateRed : CentraidAsset.shell))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("chat-pending-confirm")
+                        Button(action: onCancel) {
+                            Text(verbatim: pending.cancelLabel)
+                                .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                                .foregroundStyle(Color(CentraidAsset.textInk))
+                                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+                                .overlay(Capsule().strokeBorder(Color(CentraidAsset.surfaceBorder), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
                         .accessibilityIdentifier("chat-pending-cancel")
-                    KitOutlineButton(
-                        label: pending.confirmLabel,
-                        tone: pending.destructive ? "net" : "text",
-                        action: onConfirm
-                    )
-                    .accessibilityIdentifier("chat-pending-confirm")
+                    }
+                    .disabled(pending.state == .working)
+                } else if !pending.settledLine.isEmpty {
+                    Text(verbatim: pending.settledLine)
+                        .font(.system(size: CentraidScale.metaSize))
+                        .foregroundStyle(Color(CentraidAsset.textMeta))
+                        .accessibilityIdentifier("chat-pending-settled")
                 }
-                .disabled(pending.state == .working)
-            } else if !pending.settledLine.isEmpty {
-                Text(verbatim: pending.settledLine)
-                    .chatType("mono")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-                    .accessibilityIdentifier("chat-pending-settled")
             }
         }
-        .padding(12)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                .fill(Theme.color("bgElev", scheme))
+            RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
+                .fill(Color(CentraidAsset.surfaceCard))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                .strokeBorder(Theme.color(pending.destructive ? "net" : "line", scheme), lineWidth: CentraidGeometry.hairline)
+            RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
+                .strokeBorder(Color(CentraidAsset.surfaceBorder), lineWidth: CentraidGeometry.hairline)
         )
     }
 }
@@ -1033,14 +1069,13 @@ private struct ChatComposerCard: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
-                .fill(Theme.color("bgElev", scheme))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
-                .strokeBorder(Theme.color("line", scheme), lineWidth: CentraidGeometry.hairline)
-        )
+        // THE COMPOSER FLOATS (#1173): Liquid Glass on iOS 26, the solid card before it and under
+        // Reduce Transparency or Increase Contrast, by the band's one ground.
+        .modifier(BandGround(
+            shape: RoundedRectangle(cornerRadius: Self.radius, style: .continuous),
+            solid: "bgElev",
+            interactive: false
+        ))
         .animation(reduceMotion ? nil : ChatMotion.state, value: state.pending.count)
         .animation(reduceMotion ? nil : ChatMotion.state, value: state.hasVisionStep)
         .sheet(isPresented: Binding(
@@ -1249,11 +1284,11 @@ private struct ChatSendButton: View {
         Button(action: action) {
             CentraidIconView(
                 iconKey: iconKey,
-                tint: Theme.color(filled ? "onAccent" : "textDisabled", scheme),
+                tint: filled ? Color.white : Theme.color("textDisabled", scheme),
                 size: 20
             )
             .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-            .background(Circle().fill(filled ? Theme.color("accent", scheme) : Color.clear))
+            .background(Circle().fill(filled ? Color(CentraidAsset.shell) : Color.clear))
             .overlay(
                 Circle().strokeBorder(
                     filled ? Color.clear : Theme.color("lineStrong", scheme),

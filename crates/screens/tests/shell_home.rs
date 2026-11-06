@@ -199,16 +199,25 @@ fn a_phone_with_no_vault_opens_onto_the_first_launch_gate_and_its_doors_make_and
         (gate.make_label.as_str(), gate.restore_label.as_str()),
         ("Get started", "Restore backup")
     );
-    // THE HOUSE IS HOME'S ROSTER: every tile's app, in Home's order.
+    // ONE SCREEN, NOT A DECK (#1173): a title and the three claims, in order
+    // (apps, assistant, backups), in the member's words.
+    assert_eq!(gate.title, "Welcome to Centraid");
+    let claims: Vec<&str> = gate.slides.iter().map(|s| s.title.as_str()).collect();
     assert_eq!(
-        gate.apps,
-        shell::policy::ORDER
-            .iter()
-            .map(|a| (*a).to_owned())
-            .collect::<Vec<_>>()
+        claims,
+        [
+            "Apps on this phone",
+            "An assistant on this phone",
+            "Encrypted backups"
+        ]
     );
-    assert_eq!(gate.slides.len(), 3);
-    assert!(!gate.next_label.is_empty() && !gate.skip_label.is_empty());
+    assert!(gate.slides.iter().all(|s| !s.body.is_empty()));
+    assert!(
+        gate.slides
+            .iter()
+            .all(|s| !s.body.to_lowercase().contains("gateway")),
+        "members read backup device, not gateway"
+    );
     for (event, wanted) in [
         (
             H::Make(wire::home_event::MakePressed {}),
