@@ -180,9 +180,34 @@ pub struct Group {
     pub tasks: Vec<Placed>,
 }
 
+/// A MANUAL ORDER (#1173): the tasks dragged into place (a position above
+/// zero) come first, by position; the rest follow in the urgency order. So a list
+/// nobody dragged in is unchanged and a new task lands after the hand-ordered ones.
+fn by_hand(left: &Placed, right: &Placed) -> Ordering {
+    let key = |task: &Placed| match task.task.sort_order {
+        Some(place) if place > 0 => (0, place),
+        _ => (1, 0),
+    };
+    key(left).cmp(&key(right)).then_with(|| by_due(left, right))
+}
+
 impl Group {
-    fn new(kind: GroupKind, key: impl Into<String>, mut tasks: Vec<Placed>) -> Self {
-        tasks.sort_by(by_due);
+    fn new(kind: GroupKind, key: impl Into<String>, tasks: Vec<Placed>) -> Self {
+        Self::sorted(kind, key, tasks, by_due)
+    }
+
+    /// A project's group: in the member's own order where they gave one.
+    fn in_hand(kind: GroupKind, key: impl Into<String>, tasks: Vec<Placed>) -> Self {
+        Self::sorted(kind, key, tasks, by_hand)
+    }
+
+    fn sorted(
+        kind: GroupKind,
+        key: impl Into<String>,
+        mut tasks: Vec<Placed>,
+        order: fn(&Placed, &Placed) -> Ordering,
+    ) -> Self {
+        tasks.sort_by(order);
         Self {
             kind,
             key: key.into(),
@@ -326,17 +351,9 @@ pub fn groups(
                 .collect(),
         )],
         View::Project(project_id) => {
-            let mut mine: Vec<&Placed> = open_of(open)
+            let mine: Vec<&Placed> = open_of(open)
                 .filter(|t| t.task.project_id.as_deref() == Some(project_id.as_str()))
                 .collect();
-            // A MANUAL ORDER (#1173): the tasks dragged into place (a position
-            // above zero) come first, by position; the rest keep the urgency
-            // order after them. The sort is stable, so a list nobody dragged in
-            // is unchanged and a new task lands after the hand-ordered ones.
-            mine.sort_by_key(|t| match t.task.sort_order {
-                Some(place) if place > 0 => (0, place),
-                _ => (1, 0),
-            });
             let mut sections_here: Vec<&SectionRow> = sections
                 .iter()
                 .filter(|section| section.project_id.as_deref() == Some(project_id.as_str()))
@@ -349,7 +366,7 @@ pub fn groups(
             let known = |id: &str| sections_here.iter().any(|s| s.section_id == id);
             let mut out = vec![Group {
                 project_id: Some(project_id.clone()),
-                ..Group::new(
+                ..Group::in_hand(
                     GroupKind::Unsectioned,
                     format!("{project_id}:unsectioned"),
                     mine.iter()
@@ -364,7 +381,7 @@ pub fn groups(
                 Group {
                     project_id: Some(project_id.clone()),
                     section_id: Some(section.section_id.clone()),
-                    ..Group::new(
+                    ..Group::in_hand(
                         GroupKind::Section,
                         section.section_id.clone(),
                         mine.iter()
@@ -575,6 +592,34 @@ mod tests {
         let all = groups(&View::All, &open, &[], &projects, &[]);
         assert_eq!(all.len(), 2);
         assert_eq!(all[0].kind, GroupKind::Dated);
+    }
+
+    #[test]
+    fn a_project_draws_its_hand_ordered_tasks_first_by_position_then_the_rest_by_urgency() {
+        let at = |id: &str, place: Option<i64>| {
+            let mut row = task(id, None, Some("p1"));
+            row.sort_order = place;
+            row
+        };
+        let open = placed(&[
+            at("new", None),
+            at("second", Some(2)),
+            at("first", Some(1)),
+            at("zero", Some(0)),
+        ]);
+        let drawn = groups(&View::Project("p1".to_owned()), &open, &[], &[], &[]);
+        assert_eq!(
+            keys(&drawn),
+            [(
+                "p1:unsectioned".to_owned(),
+                vec![
+                    "first".to_owned(),
+                    "second".to_owned(),
+                    "new".to_owned(),
+                    "zero".to_owned()
+                ]
+            )]
+        );
     }
 
     #[test]

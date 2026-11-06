@@ -321,8 +321,7 @@ pub fn hue_of(project_id: &str, project: Option<&wire::AgendaTaskProject>) -> St
 /// green list, and an imported red list is raspberry (#1173).
 #[must_use]
 pub fn list_color_of(project_id: &str, project: Option<&wire::AgendaTaskProject>) -> String {
-    centraid_design::list_color_key(project_id, project.and_then(|p| p.color.as_deref()))
-        .to_owned()
+    centraid_design::list_color_key(project_id, project.and_then(|p| p.color.as_deref())).to_owned()
 }
 
 /// A wheel key as the theme's colour role: `rose` → `cRose`; empty stays empty.
@@ -526,5 +525,7 @@ pub fn chrome(locale: Locale) -> wire::TodoChrome {
         show_completed_verb: reminders::show_completed(locale),
         hide_completed_verb: reminders::hide_completed(locale),
         clear_completed_verb: reminders::clear_completed(locale),
+        move_up_verb: reminders::move_up(locale),
+        move_down_verb: reminders::move_down(locale),
     }
 }

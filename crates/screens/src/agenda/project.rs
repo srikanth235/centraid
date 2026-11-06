@@ -95,8 +95,12 @@ impl Project {
     /// "Show" draws them. A refused or failed read leaves the summary out, never
     /// a wrong count.
     fn load_completed(&mut self, ctx: &Ctx) {
-        self.completed = match list::board(ctx, load::agenda::BoardView::Logbook, None, rows::MAX_WINDOW)
-        {
+        self.completed = match list::board(
+            ctx,
+            load::agenda::BoardView::Logbook,
+            None,
+            rows::MAX_WINDOW,
+        ) {
             read::Reading::Data(board) => board
                 .groups
                 .iter()
@@ -237,7 +241,13 @@ impl Project {
         wire::TodoQuickAdd {
             title: self.quick_title.clone(),
             can_submit: !self.quick_title.trim().is_empty(),
-            lands_label: format!("{} {}", words::lands_in(locale), self.lands_in()),
+            // THE INLINE ROW (#1173) says "New Reminder"; pointed at a section it
+            // says where the task lands.
+            lands_label: if self.target_section_id.is_empty() {
+                reminders::new_reminder(locale)
+            } else {
+                format!("{} {}", words::lands_in(locale), self.lands_in())
+            },
             shown: found,
             focused: false,
             // A PUSHED PAGE HAS NO PLUS, so its bar stays drawn.

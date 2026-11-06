@@ -46,7 +46,9 @@ mod tests {
     }
 
     fn writes(plan: &[(String, f64)]) -> Vec<(&str, i64)> {
-        plan.iter().map(|(id, at)| (id.as_str(), *at as i64)).collect()
+        plan.iter()
+            .map(|(id, at)| (id.as_str(), *at as i64))
+            .collect()
     }
 
     #[test]

@@ -77,6 +77,7 @@ import dev.centraid.android.screens.agenda.AgendaNoticeView
 import dev.centraid.android.screens.agenda.AgendaTaskActions
 import dev.centraid.android.screens.agenda.AgendaTaskSheet
 import dev.centraid.android.screens.agenda.AgendaTodoPlace
+import dev.centraid.android.screens.agenda.AgendaViewMenu
 import dev.centraid.android.screens.agenda.CATCH_UP
 import dev.centraid.android.screens.agenda.TodoQuickAddBar
 import dev.centraid.android.screens.agenda.TodoRowView
@@ -181,6 +182,11 @@ public fun AgendaHomeScreen(
             },
         ) {
             Column(Modifier.fillMaxSize()) {
+                if (state.calendar_views.isNotEmpty()) {
+                    AgendaViewMenu(state.calendar_views, state.calendar_view_label) { destination ->
+                        onEvent(AgendaHomeEvent(destination = AgendaHomeEvent.DestinationChanged(destination = destination)))
+                    }
+                }
                 val toolbar = state.toolbar
                 if (toolbar != null && toolbar.shown) AgendaToolbarRow(toolbar, chrome, onEvent)
                 Box(Modifier.weight(1f).fillMaxWidth()) {

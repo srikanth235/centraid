@@ -39,10 +39,10 @@ use centraid_apps_kit::page::{MAX_PAGE_ROWS, PageRequest};
 use centraid_apps_kit::reads::{FanOutBound, PageDoor, Read, read_pages};
 use centraid_apps_kit::row::{Cell, Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
+use centraid_vault::model::Flag;
 use centraid_vault::time::recurrence::{
     CollapseInput, RecurrenceAnchor, collapse_missed, is_all_day_anchor,
 };
-use centraid_vault::model::Flag;
 use centraid_vault::time::rrule;
 use centraid_vault::time::zone::FireZone;
 

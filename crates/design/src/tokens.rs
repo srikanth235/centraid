@@ -795,7 +795,7 @@ mod tests {
         assert_eq!(tokens.list.len(), 8);
         assert_eq!(tokens.native.colors.light.len(), 55);
         assert_eq!(tokens.native.colors.dark.len(), 55);
-        assert_eq!(tokens.icons.len(), 140);
+        assert_eq!(tokens.icons.len(), 141);
         assert_eq!(tokens.native.app.len(), 8);
     }
 

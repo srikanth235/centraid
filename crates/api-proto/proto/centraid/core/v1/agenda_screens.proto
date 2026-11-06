@@ -1159,6 +1159,9 @@ message TodoChrome {
   string show_completed_verb = 31;
   string hide_completed_verb = 32;
   string clear_completed_verb = 33;
+  // The non-drag way to reorder (a screen reader's action, a long-press item).
+  string move_up_verb = 34;
+  string move_down_verb = 35;
 }
 
 // A list's completed work (#1173): a one-line summary with Show/Hide and Clear.

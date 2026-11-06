@@ -223,7 +223,7 @@ mod tests {
             due_day: due_day.to_owned(),
             due_time: due_time.to_owned(),
             overdue,
-            lands_today: !due_day.is_empty() && due_day.as_str() <= "2026-11-04",
+            lands_today: !due_day.is_empty() && due_day <= "2026-11-04",
             days_from_today: Some(if overdue { -1 } else { 0 }),
             ..wire::AgendaTask::default()
         }
@@ -356,7 +356,10 @@ mod tests {
             ..Context::default()
         };
         let groups = flagged(Locale::En, &board, &ctx);
-        assert_eq!(shape(&groups), [("Flagged".to_owned(), vec!["keep".to_owned()])]);
+        assert_eq!(
+            shape(&groups),
+            [("Flagged".to_owned(), vec!["keep".to_owned()])]
+        );
         assert!(groups[0].rows[0].flagged);
         let none = super::flagged(
             Locale::En,

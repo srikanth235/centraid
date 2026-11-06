@@ -99,6 +99,15 @@ impl Rig {
         }));
     }
 
+    /// A view of the Calendar tab (its menu sends the destination).
+    fn destination(&mut self, destination: Dest) {
+        self.send(H::Destination(
+            wire::agenda_home_event::DestinationChanged {
+                destination: destination as i32,
+            },
+        ));
+    }
+
     fn step(&mut self, days: i32) {
         self.send(H::DayStepped(wire::agenda_home_event::DayStepped { days }));
     }
@@ -389,7 +398,7 @@ fn opening_lands_on_day_at_the_today_the_core_names() {
             .iter()
             .map(|tab| tab.key.as_str())
             .collect::<Vec<_>>(),
-        ["day", "schedule", "waiting", "todo", "more"]
+        ["calendar", "reminders", "invites", "more"]
     );
     assert_eq!(
         state
@@ -397,7 +406,7 @@ fn opening_lands_on_day_at_the_today_the_core_names() {
             .iter()
             .map(|tab| tab.icon_key.as_str())
             .collect::<Vec<_>>(),
-        ["Clock", "List", "Inbox", "Todo", "MoreHoriz"]
+        ["Calendar", "Todo", "Inbox", "MoreHoriz"]
     );
     assert_eq!(
         state
@@ -444,7 +453,7 @@ fn a_destination_from_the_route_lands_there() {
             .filter(|t| t.current)
             .map(|t| t.key.as_str())
             .collect::<Vec<_>>(),
-        ["schedule"]
+        ["calendar"]
     );
 
     let w = rig(Dest::Waiting);
@@ -598,7 +607,7 @@ fn the_window_is_right_in_any_zone() {
         );
         // Schedule from today draws today and the day after, not the day before.
         r.step(1);
-        r.band("schedule");
+        r.destination(Dest::Schedule);
         assert_eq!(
             mine(r.data(), &names),
             [
@@ -934,12 +943,12 @@ fn waiting_is_your_unanswered_invitations_and_a_birthday_does_not_make_a_day() {
         "a birthday or a task makes no Waiting day"
     );
     // Schedule shows both; moving between them keeps the window.
-    r.band("schedule");
+    r.destination(Dest::Schedule);
     assert_eq!(
         mine(r.data(), &["Zq Offsite", "Zq Gym"]),
         [format!("{day}: Zq Offsite"), format!("{day}: Zq Gym")]
     );
-    r.band("waiting");
+    r.band("invites");
     assert_eq!(
         r.state()
             .band
@@ -947,7 +956,7 @@ fn waiting_is_your_unanswered_invitations_and_a_birthday_does_not_make_a_day() {
             .filter(|t| t.current)
             .map(|t| t.key.as_str())
             .collect::<Vec<_>>(),
-        ["waiting"]
+        ["invites"]
     );
 }
 
@@ -1184,7 +1193,7 @@ fn search_opening_reads_nothing_a_term_finds_over_the_rows_and_closing_clears_it
             .filter(|t| t.current)
             .map(|t| t.key.as_str())
             .collect::<Vec<_>>(),
-        ["schedule"]
+        ["calendar"]
     );
     assert_eq!(r.data().days.len(), held);
     // A BAND KEY THAT IS NO LONGER A TAB opens nothing.
@@ -1295,7 +1304,7 @@ fn search_from_waiting_covers_every_event_not_only_the_ones_waiting_on_you() {
     );
     assert_eq!(r.data().empty, wire::AgendaEmpty::None as i32);
     // Picking a destination leaves search, even the lit tab.
-    r.band("waiting");
+    r.band("invites");
     assert!(!r.state().search_open);
     assert_eq!(r.state().search_term, "");
 }
@@ -1503,7 +1512,7 @@ fn a_failed_read_is_a_failure_and_never_an_empty_agenda_and_refreshed_is_its_ret
     assert_eq!(failure.remedy, "Try again");
     assert_eq!(r.state().chrome.as_ref().unwrap().retry, "Try again");
     // The band stands and the data is not an empty list.
-    assert_eq!(r.state().band.len(), 5);
+    assert_eq!(r.state().band.len(), 4);
     r.in_zone("Europe/London");
     assert!(matches!(r.state().content, Some(Content::Data(_))));
     r.in_zone("Not/AZone");
@@ -1612,11 +1621,11 @@ fn schedule_gives_a_day_of_only_tasks_its_own_section_and_waiting_draws_none() {
         [format!("{a}: Zq Bins"), format!("{b}: Zq Invoice")]
     );
     // WAITING DRAWS NO TASK, and makes no day of one.
-    r.band("waiting");
+    r.band("invites");
     assert!(mine(r.data(), &["Zq Bins", "Zq Invoice"]).is_empty());
     assert!(section(r.data(), &a).is_none());
     // Back on Schedule the tasks draw again.
-    r.band("schedule");
+    r.destination(Dest::Schedule);
     assert_eq!(mine(r.data(), &["Zq Bins", "Zq Invoice"]).len(), 2);
 }
 
@@ -1647,14 +1656,14 @@ fn day_on_today_draws_the_overdue_group_with_its_verb_and_the_notice_an_absence_
     let data = r.data();
     let overdue = data.overdue.as_ref().expect("the Overdue group");
     assert_eq!(overdue.title, "Overdue");
-    assert_eq!(overdue.verb_label, "Reschedule");
+    assert_eq!(overdue.verb_label, "Catch up");
     assert_eq!(overdue.verb_key, "catch_up");
     assert_eq!(overdue.meta, "1");
     assert_eq!(overdue.rows[0].due_label, "16 days ago");
     assert!(overdue.rows[0].overdue);
     let notice = data.notice.as_ref().expect("the absence notice");
     assert_eq!(notice.sentence, "You were away 16 days; 1 task came due");
-    assert_eq!(notice.verb_label, "Reschedule");
+    assert_eq!(notice.verb_label, "Catch up");
     assert_eq!(notice.verb_key, "catch_up");
     // BOTH VERBS OPEN CATCH UP.
     assert_eq!(data.catch_up, Some(agenda::routes::catch_up()));
@@ -1676,7 +1685,7 @@ fn day_on_today_draws_the_overdue_group_with_its_verb_and_the_notice_an_absence_
     r.step(1);
     assert!(r.data().overdue.is_none() && r.data().notice.is_none());
     // SCHEDULE draws neither: the Overdue head is Day's.
-    r.band("schedule");
+    r.destination(Dest::Schedule);
     r.step(-1);
     assert!(r.data().overdue.is_none() && r.data().notice.is_none());
 }
@@ -1878,12 +1887,16 @@ fn the_band_names_to_do_and_the_plus_adds_a_task_there() {
             .filter(|t| t.current)
             .map(|t| t.key.as_str())
             .collect::<Vec<_>>(),
-        ["todo"]
+        ["reminders"]
     );
-    let tab = state.band.iter().find(|tab| tab.key == "todo").unwrap();
+    let tab = state
+        .band
+        .iter()
+        .find(|tab| tab.key == "reminders")
+        .unwrap();
     assert_eq!(
         (tab.label.as_str(), tab.icon_key.as_str()),
-        ("To-do", "Todo")
+        ("Reminders", "Todo")
     );
     assert_eq!(state.add_label, "Add task");
     assert!(state.add_opens_quick_add);
@@ -1897,7 +1910,7 @@ fn the_band_names_to_do_and_the_plus_adds_a_task_there() {
     assert_eq!(tasks.show_more, "Show more");
     assert_eq!(tasks.new_project_title, "New project");
     // OTHER PLACES: the Plus is the add sheet.
-    r.band("day");
+    r.destination(Dest::Day);
     assert_eq!(r.state().add_label, "Add");
     assert!(!r.state().add_opens_quick_add);
     assert!(!r.quick().shown);
@@ -1937,7 +1950,7 @@ fn the_plus_opens_the_quick_add_and_the_keyboard_leaving_an_empty_bar_puts_it_aw
     r.send(H::QuickAddOpened(
         wire::agenda_home_event::QuickAddOpened {},
     ));
-    r.band("schedule");
+    r.destination(Dest::Schedule);
     assert!(!r.quick().drawn);
     // The Plus is To-do's alone.
     r.send(H::QuickAddOpened(
@@ -2285,11 +2298,11 @@ fn to_do_reads_again_after_a_change() {
     r.task("zq-live", "Zq Live", None);
     r.driver.pump(Duration::from_millis(500));
     assert!(inbox_titles(&r).contains(&"Zq Live".to_owned()));
-    r.band("day");
+    r.destination(Dest::Day);
     assert_eq!(r.state().destination, Dest::Day as i32);
     r.task("zq-live-2", "Zq Live 2", Some(&r.today()));
     r.driver.pump(Duration::from_millis(500));
-    r.band("todo");
+    r.band("reminders");
     assert!(
         r.todo()
             .groups

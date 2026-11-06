@@ -14,6 +14,8 @@ catalog! {
     plain flag = ("Flag", "Flag");
     plain flagged_empty = ("Nothing is flagged.", "Nothing is flagged.");
     plain hide_completed = ("Hide", "Hide");
+    plain move_down = ("Move down", "Move down");
+    plain move_up = ("Move up", "Move up");
     plain morning = ("Morning", "Morning");
     plain my_lists = ("My Lists", "My Lists");
     plain new_reminder = ("New Reminder", "New Reminder");

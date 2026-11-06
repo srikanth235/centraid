@@ -12,7 +12,9 @@ use centraid_api_proto::core_v1 as wire;
 use super::held::Held;
 use crate::agenda::routes;
 use crate::agenda::todo::rows;
-use crate::strings::{Locale, agenda_home as sentences, agenda_reminders as reminders, task as words};
+use crate::strings::{
+    Locale, agenda_home as sentences, agenda_reminders as reminders, task as words,
+};
 
 /// To-do's data, or `None` when the Inbox board and the projects are not both
 /// held.

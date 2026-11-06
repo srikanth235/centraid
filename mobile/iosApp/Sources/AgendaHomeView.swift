@@ -67,6 +67,11 @@ struct AgendaHomeView: View {
             )
         } content: {
             VStack(spacing: 0) {
+                if !state.calendarViews.isEmpty {
+                    AgendaViewMenu(views: state.calendarViews, label: state.calendarViewLabel) { destination in
+                        send(AgendaEvents.make { $0.destination = .with { $0.destination = destination } })
+                    }
+                }
                 if state.toolbar.shown {
                     AgendaToolbarView(toolbar: state.toolbar, eventCountText: eventCountText, chrome: state.chrome, send: send)
                 }
@@ -442,7 +447,9 @@ private struct AgendaTaskGroup: View {
             onPick: open,
             fileVerb: chrome.tasks.fileVerb,
             onFile: { id in send(AgendaEvents.make { $0.fileRequested = .with { $0.taskID = id } }) },
-            identifierPrefix: "agenda-task-row"
+            identifierPrefix: "agenda-task-row",
+            chrome: chrome.tasks,
+            onFlag: { id, on in send(AgendaEvents.make { $0.taskFlagged = .with { $0.taskID = id; $0.flagged = on } }) }
         )
     }
 }
@@ -486,6 +493,8 @@ private struct AgendaTodoList: View {
         let chrome = state.chrome
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
+                // THE REMINDERS HOME (#1173): the smart-list cards, then My Lists.
+                AgendaSmartListGrid(lists: todo.smartLists, open: open)
                 TodoCountLine(count: todo.countLabel, window: todo.windowLabel)
                 if !todo.empty.headline.isEmpty {
                     EmptyStateView(todo.empty, onAction: { send(AgendaEvents.make { $0.todoEmptyActed = .init() }) })
@@ -493,22 +502,38 @@ private struct AgendaTodoList: View {
                 ForEach(todo.groups, id: \.key) { group in
                     AgendaTaskGroup(group: group, chrome: chrome, send: send, open: open, catchUp: nil)
                 }
+                if !todo.myListsTitle.isEmpty, !todo.projects.isEmpty {
+                    Text(todo.myListsTitle)
+                        .centraidType("section")
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .padding(.top, 12)
+                        .accessibilityAddTraits(.isHeader)
+                }
                 ForEach(todo.projects, id: \.key) { group in
                     SectionHeader(title: group.title, count: UInt32(group.rows.count))
                     ForEach(group.rows, id: \.row.id) { project in
                         let row = project.row
-                        CentraidRow(
-                            title: row.title,
-                            meta: row.meta,
-                            trailing: row.trailing,
-                            trailingTone: StatusChipView.ink(row.trailingTone, neutral: "text"),
-                            chips: row.chips,
-                            hueKey: row.hueKey.isEmpty ? "" : (KitHue.role(row.hueKey) ?? "cSlate"),
-                            dimmed: row.dimmed,
-                            pending: row.pending,
-                            accessibility: row.accessibilityLabel,
-                            identifier: "agenda-project-\(row.id)"
-                        ) { open(project.route) }
+                        Button { open(project.route) } label: {
+                            HStack(spacing: 12) {
+                                Circle()
+                                    .fill(AgendaPalette.list(project.listColorKey) ?? Theme.color("textFaint", scheme))
+                                    .frame(width: 12, height: 12)
+                                Text(row.title)
+                                    .centraidType("body")
+                                    .foregroundStyle(Theme.color("text", scheme))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Text(project.count)
+                                    .centraidType("body")
+                                    .foregroundStyle(Theme.color("textSoft", scheme))
+                            }
+                            .padding(.horizontal, CentraidGeometry.pageMargin)
+                            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(KitRowPress())
+                        .accessibilityLabel(row.accessibilityLabel)
+                        .accessibilityIdentifier("agenda-project-\(row.id)")
                     }
                 }
                 ShowMoreFooter(visible: todo.canShowMore, label: chrome.tasks.showMore) {
@@ -516,7 +541,7 @@ private struct AgendaTodoList: View {
                 }
                 if !todo.newProjectLabel.isEmpty {
                     HStack {
-                        KitLink(label: todo.newProjectLabel, identifier: "agenda-new-project") {
+                        KitLink(label: todo.addListLabel.isEmpty ? todo.newProjectLabel : todo.addListLabel, identifier: "agenda-new-project") {
                             send(AgendaEvents.make { $0.sheetOpened = .with { $0.sheet = .newProject } })
                         }
                         Spacer(minLength: 0)

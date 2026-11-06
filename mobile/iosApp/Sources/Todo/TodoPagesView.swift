@@ -12,6 +12,7 @@ struct TodoListView: View {
     let send: (Centraid_Core_V1_TodoListEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
+    @Environment(\.colorScheme) private var scheme
 
     private func event(_ build: (inout Centraid_Core_V1_TodoListEvent) -> Void) -> Centraid_Core_V1_TodoListEvent {
         var event = Centraid_Core_V1_TodoListEvent()
@@ -41,6 +42,12 @@ struct TodoListView: View {
                 ) { list in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
+                            if !list.subtitle.isEmpty {
+                                Text(list.subtitle)
+                                    .centraidType("small")
+                                    .foregroundStyle(Theme.color("textSoft", scheme))
+                                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                            }
                             TodoCountLine(count: list.countLabel, window: list.windowLabel)
                             if list.groups.isEmpty, list.hasEmpty, !list.empty.headline.isEmpty {
                                 EmptyStateView(list.empty)
@@ -50,7 +57,10 @@ struct TodoListView: View {
                                     group: group,
                                     onVerb: { _ in },
                                     onCheck: { id in send(event { $0.rowChecked = .with { $0.taskID = id } }) },
-                                    onPick: open
+                                    onPick: open,
+                                    chrome: state.chrome,
+                                    onFlag: { id, on in send(event { $0.rowFlagged = .with { $0.taskID = id; $0.flagged = on } }) },
+                                    onDelete: { id in send(event { $0.rowDeleted = .with { $0.taskID = id } }) }
                                 )
                             }
                             ShowMoreFooter(visible: list.canShowMore, label: state.chrome.showMore) {
@@ -95,6 +105,32 @@ struct TodoProjectView: View {
         }
     }
 
+    /// "2 completed · Show · Clear", and the rows while shown.
+    @ViewBuilder
+    private func completedSummary(_ completed: Centraid_Core_V1_TodoCompleted) -> some View {
+        HStack(spacing: 12) {
+            Text(completed.countLabel)
+                .centraidType("small")
+                .foregroundStyle(Theme.color("textSoft", scheme))
+            Spacer(minLength: 0)
+            KitLink(label: completed.shown ? state.chrome.hideCompletedVerb : state.chrome.showCompletedVerb, identifier: "tasks-completed-toggle") {
+                send(event { $0.completedToggled = .init() })
+            }
+            KitLink(label: state.chrome.clearCompletedVerb, identifier: "tasks-completed-clear") {
+                send(event { $0.completedCleared = .init() })
+            }
+        }
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 12)
+        ForEach(completed.rows, id: \.taskID) { row in
+            TodoRowView(
+                row: row,
+                onCheck: { id in send(event { $0.rowChecked = .with { $0.taskID = id } }) },
+                onPick: open
+            )
+        }
+    }
+
     var body: some View {
         PushedPage(title: state.title, parentTitle: state.chrome.back, onBack: onBack) {
             if case let .data(project) = content, project.found {
@@ -120,6 +156,14 @@ struct TodoProjectView: View {
                 ) { project in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
+                            // THE TITLE IN THE LIST'S COLOUR (#1173).
+                            if let color = AgendaPalette.list(project.listColorKey) {
+                                Text(state.title)
+                                    .centraidType("title")
+                                    .foregroundStyle(color)
+                                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                                    .accessibilityHidden(true)
+                            }
                             TodoCountLine(count: project.countLabel, window: "")
                             if project.groups.isEmpty, project.hasEmpty, !project.empty.headline.isEmpty {
                                 EmptyStateView(project.empty)
@@ -129,8 +173,15 @@ struct TodoProjectView: View {
                                     group: group,
                                     onVerb: { key in send(event { $0.groupVerb = .with { $0.key = key } }) },
                                     onCheck: { id in send(event { $0.rowChecked = .with { $0.taskID = id } }) },
-                                    onPick: open
+                                    onPick: open,
+                                    chrome: state.chrome,
+                                    onFlag: { id, on in send(event { $0.rowFlagged = .with { $0.taskID = id; $0.flagged = on } }) },
+                                    onDelete: { id in send(event { $0.rowDeleted = .with { $0.taskID = id } }) },
+                                    onMove: { moved, before in send(event { $0.rowMoved = .with { $0.taskID = moved; $0.beforeID = before } }) }
                                 )
+                            }
+                            if project.hasCompleted, project.completed.count > 0 {
+                                completedSummary(project.completed)
                             }
                         }
                         .padding(.bottom, 16)
@@ -143,7 +194,7 @@ struct TodoProjectView: View {
                 if !content.isDenied {
                     TodoQuickAddBar(
                         quickAdd: state.quickAdd,
-                        placeholder: state.chrome.quickAddPlaceholder,
+                        placeholder: state.chrome.newReminder,
                         verb: state.chrome.quickAddVerb,
                         onChange: { title in send(event { $0.quickAddChanged = .with { $0.title = title } }) },
                         onSubmit: { send(event { $0.quickAddSubmitted = .init() }) }
