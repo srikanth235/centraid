@@ -155,6 +155,20 @@ const GREY_CHROMA: f64 = 0.03;
 /// a hex colour: such a calendar takes its id's own hue.
 #[must_use]
 pub fn hue_key_of_hex(hex: &str) -> Option<&'static str> {
+    let (_, hue) = oklch_of_hex(hex)?;
+    let apart = |wheel: f64| {
+        let gap = (hue - wheel).abs();
+        gap.min(360.0 - gap)
+    };
+    WHEEL_HUES
+        .iter()
+        .min_by(|left, right| apart(left.1).total_cmp(&apart(right.1)))
+        .map(|(key, _)| *key)
+}
+
+/// The OKLab chroma and OKLCH hue angle of `#RRGGBB`; `None` for a grey (no hue to name) and for a
+/// spelling that is not a hex colour.
+fn oklch_of_hex(hex: &str) -> Option<(f64, f64)> {
     let digits = hex.trim().strip_prefix('#')?;
     if digits.len() != 6 || !digits.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return None;
@@ -174,18 +188,90 @@ pub fn hue_key_of_hex(hex: &str) -> Option<&'static str> {
     let s = (0.088_302_461_9 * r + 0.281_718_837_6 * g + 0.629_978_700_5 * b).cbrt();
     let a = 1.977_998_495_1 * l - 2.428_592_205_0 * m + 0.450_593_709_9 * s;
     let c = 0.025_904_037_1 * l + 0.782_771_766_2 * m - 0.808_675_766_0 * s;
-    if a.hypot(c) < GREY_CHROMA {
+    let chroma = a.hypot(c);
+    if chroma < GREY_CHROMA {
         return None;
     }
-    let hue = c.atan2(a).to_degrees().rem_euclid(360.0);
-    let apart = |wheel: f64| {
-        let gap = (hue - wheel).abs();
-        gap.min(360.0 - gap)
-    };
-    WHEEL_HUES
-        .iter()
-        .min_by(|left, right| apart(left.1).total_cmp(&apart(right.1)))
-        .map(|(key, _)| *key)
+    Some((chroma, c.atan2(a).to_degrees().rem_euclid(360.0)))
+}
+
+/// The eight list colours (`[list]` in `design/tokens.toml`), with the OKLCH hue angle each is
+/// nearest to. Graphite is the grey: it has no angle and takes every colour with no hue.
+const LIST_KEYS: [&str; 8] = [
+    "blue",
+    "mustard",
+    "violet",
+    "petrol",
+    "indigo",
+    "graphite",
+    "raspberry",
+    "orchid",
+];
+
+/// Where a hue angle lands among the coloured list hues. Red (about 29) is nearer raspberry than
+/// anything, and a green (about 145) sits between mustard and petrol, so the angles are placed to
+/// send it to petrol: there are no red, amber or green lists (#1173).
+const LIST_ANGLES: [(&str, f64); 7] = [
+    ("raspberry", 5.0),
+    ("mustard", 70.0),
+    ("petrol", 205.0),
+    ("blue", 250.0),
+    ("indigo", 275.0),
+    ("violet", 305.0),
+    ("orchid", 340.0),
+];
+
+/// A list's colour key (`raspberry`, `blue` ...: the `[list]` names), from the list's id and what
+/// it stored.
+///
+/// There is ONE palette of eight (#1173), so every spelling a list can hold lands on it:
+/// - nothing stored: the id's own place on the palette, stable;
+/// - a list key: itself;
+/// - a wheel `var(--c-<hue>)`: its nearest list colour (rose raspberry, amber and ochre mustard,
+///   forest and teal petrol, slate graphite);
+/// - a `#RRGGBB` from an import: the list colour nearest by hue, a grey going to graphite. So an
+///   imported red list is raspberry and a green one petrol, never red or green;
+/// - anything else: the id's own place.
+#[must_use]
+pub fn list_color_key(list_id: &str, stored: Option<&str>) -> &'static str {
+    let own = || LIST_KEYS[(identity_hash(list_id.trim()) % LIST_KEYS.len() as u64) as usize];
+    let stored = stored.unwrap_or("").trim();
+    if stored.is_empty() {
+        return own();
+    }
+    if let Some(key) = LIST_KEYS.iter().find(|key| **key == stored) {
+        return key;
+    }
+    if let Some(wheel) = stored
+        .strip_prefix(HUE_VAR_OPEN)
+        .and_then(|rest| rest.strip_suffix(')'))
+    {
+        return match wheel {
+            "rose" => "raspberry",
+            "amber" | "ochre" => "mustard",
+            "forest" | "teal" => "petrol",
+            "slate" => "graphite",
+            "indigo" => "indigo",
+            "violet" => "violet",
+            _ => own(),
+        };
+    }
+    if stored.starts_with('#') {
+        return match oklch_of_hex(stored) {
+            None => "graphite",
+            Some((_, hue)) => {
+                let apart = |angle: f64| {
+                    let gap = (hue - angle).abs();
+                    gap.min(360.0 - gap)
+                };
+                LIST_ANGLES
+                    .iter()
+                    .min_by(|left, right| apart(left.1).total_cmp(&apart(right.1)))
+                    .map_or("graphite", |(key, _)| key)
+            }
+        };
+    }
+    own()
 }
 
 /// `identityInitials`, in UTF-16 code units (`identity.ts:22-28`).
@@ -522,5 +608,35 @@ mod tests {
         }
         assert_eq!(figure_tone(-2_147_483_648), FigureTone::Net);
         assert_eq!(figure_tone(0), FigureTone::Settled);
+    }
+
+    /// There are no red, amber or green lists: every spelling lands on the eight.
+    #[test]
+    fn a_list_colour_is_always_one_of_the_eight_and_red_becomes_raspberry() {
+        for (stored, key) in [
+            ("#FF3B30", "raspberry"),
+            ("#D32F2F", "raspberry"),
+            ("#34C759", "petrol"),
+            ("#FF9500", "mustard"),
+            ("#FFCC00", "mustard"),
+            ("#007AFF", "blue"),
+            ("#5856D6", "indigo"),
+            ("#AF52DE", "violet"),
+            ("#FF2D55", "raspberry"),
+            ("#8E8E93", "graphite"),
+            ("var(--c-rose)", "raspberry"),
+            ("var(--c-forest)", "petrol"),
+            ("var(--c-amber)", "mustard"),
+            ("var(--c-slate)", "graphite"),
+            ("orchid", "orchid"),
+        ] {
+            assert_eq!(list_color_key("any-id", Some(stored)), key, "{stored}");
+        }
+        for id in ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"] {
+            let key = list_color_key(id, None);
+            assert!(LIST_KEYS.contains(&key));
+            assert_eq!(list_color_key(id, Some("  ")), key, "stable by id");
+            assert_eq!(list_color_key(id, Some("var(--c-not-a-hue)")), key);
+        }
     }
 }

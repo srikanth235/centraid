@@ -20,7 +20,7 @@ catalog! {
     plain came_due_many = ("tasks came due", "tasks came due");
     plain came_due_one = ("task came due", "task came due");
     plain cancel = ("Cancel", "Cancel");
-    plain catch_up = ("Reschedule", "Reschedule");
+    plain catch_up = ("Catch up", "Catch up");
     plain catch_up_empty = ("Nothing is overdue.", "Nothing is overdue.");
     plain close = ("Close", "Close");
     plain complete_all = ("Complete all", "Complete all");

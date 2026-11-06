@@ -449,6 +449,7 @@ fn task_to_wire(placed: &Placed) -> wire::AgendaTask {
         completed_day: placed.completed_day.clone(),
         age_days: placed.age_days.map(small),
         created_local_day: placed.created_day.clone(),
+        flagged: task.flagged,
         tags: task
             .tags
             .iter()

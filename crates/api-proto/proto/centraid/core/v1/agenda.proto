@@ -550,6 +550,9 @@ message AgendaTask {
   // `created_at`'s civil day (`YYYY-MM-DD`) in the request zone — what
   // "sitting since" names. EMPTY when there is no `created_at`.
   string created_local_day = 39;
+  // The task carries Agenda's Flag (the vault's starred flag, a `tagged` edge):
+  // it is in the Flagged list (#1173).
+  bool flagged = 40;
 }
 
 message AgendaTaskTag {

@@ -326,9 +326,17 @@ pub fn groups(
                 .collect(),
         )],
         View::Project(project_id) => {
-            let mine: Vec<&Placed> = open_of(open)
+            let mut mine: Vec<&Placed> = open_of(open)
                 .filter(|t| t.task.project_id.as_deref() == Some(project_id.as_str()))
                 .collect();
+            // A MANUAL ORDER (#1173): the tasks dragged into place (a position
+            // above zero) come first, by position; the rest keep the urgency
+            // order after them. The sort is stable, so a list nobody dragged in
+            // is unchanged and a new task lands after the hand-ordered ones.
+            mine.sort_by_key(|t| match t.task.sort_order {
+                Some(place) if place > 0 => (0, place),
+                _ => (1, 0),
+            });
             let mut sections_here: Vec<&SectionRow> = sections
                 .iter()
                 .filter(|section| section.project_id.as_deref() == Some(project_id.as_str()))

@@ -12,7 +12,7 @@ use centraid_api_proto::core_v1 as wire;
 use super::held::Held;
 use crate::agenda::routes;
 use crate::agenda::todo::rows;
-use crate::strings::{Locale, agenda_home as sentences, task as words};
+use crate::strings::{Locale, agenda_home as sentences, agenda_reminders as reminders, task as words};
 
 /// To-do's data, or `None` when the Inbox board and the projects are not both
 /// held.
@@ -81,9 +81,106 @@ pub fn fold(locale: Locale, held: &Held, limit: u32) -> Option<wire::AgendaHomeD
             },
             can_show_more: board.truncated && limit < rows::MAX_WINDOW,
             new_project_label: words::new_project_title(locale),
+            smart_lists: smart_lists(locale, held.all.as_ref()),
+            my_lists_title: reminders::my_lists(locale),
+            add_list_label: reminders::add_list(locale),
         }),
         ..wire::AgendaHomeData::default()
     })
+}
+
+/// What the Reminders home counts, over the open ROOTS of the All board.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SmartCounts {
+    pub today: usize,
+    pub scheduled: usize,
+    pub all: usize,
+    pub flagged: usize,
+}
+
+/// The counts of the smart lists. Today is what is due today or before (the
+/// core's `lands_today`), Scheduled is anything with a date, Flagged is the
+/// tasks that carry the Flag.
+#[must_use]
+pub fn smart_counts(board: Option<&wire::AgendaTaskBoard>) -> SmartCounts {
+    let mut counts = SmartCounts::default();
+    for task in board
+        .into_iter()
+        .flat_map(|board| &board.groups)
+        .flat_map(|group| &group.tasks)
+        .filter(|task| rows::is_open(task))
+    {
+        counts.all += 1;
+        counts.today += usize::from(task.lands_today);
+        counts.scheduled += usize::from(!task.due_day.is_empty());
+        counts.flagged += usize::from(task.flagged);
+    }
+    counts
+}
+
+/// The five smart-list cards, in the board's order. Each card's colour is a
+/// token name (`listBlue`, `stateAmber`, ...): Today wears the list blue,
+/// Scheduled raspberry, All the ink, Flagged the state amber, Completed graphite.
+fn smart_lists(locale: Locale, all: Option<&wire::AgendaTaskBoard>) -> Vec<wire::AgendaSmartList> {
+    let counts = smart_counts(all);
+    let card = |key: &str, label: String, icon: &str, color: &str, count: Option<usize>, view| {
+        let count_text = count.map(|n| n.to_string()).unwrap_or_default();
+        wire::AgendaSmartList {
+            key: key.to_owned(),
+            accessibility_label: if count_text.is_empty() {
+                label.clone()
+            } else {
+                format!("{label}, {count_text}")
+            },
+            label,
+            icon_key: icon.to_owned(),
+            color_key: color.to_owned(),
+            count: count_text,
+            route: Some(routes::todo_list(view)),
+        }
+    };
+    vec![
+        card(
+            "today",
+            reminders::smart_today(locale),
+            "Calendar",
+            "listBlue",
+            Some(counts.today),
+            wire::TodoView::Today,
+        ),
+        card(
+            "scheduled",
+            reminders::smart_scheduled(locale),
+            "Clock",
+            "listRaspberry",
+            Some(counts.scheduled),
+            wire::TodoView::Scheduled,
+        ),
+        card(
+            "all",
+            reminders::smart_all(locale),
+            "Inbox",
+            "textInk",
+            Some(counts.all),
+            wire::TodoView::All,
+        ),
+        card(
+            "flagged",
+            reminders::smart_flagged(locale),
+            "Flag",
+            "stateAmber",
+            Some(counts.flagged),
+            wire::TodoView::Flagged,
+        ),
+        card(
+            "completed",
+            reminders::smart_completed(locale),
+            "Check",
+            "listGraphite",
+            None,
+            wire::TodoView::Logbook,
+        ),
+    ]
 }
 
 /// Named areas A→Z, then the projects in none.
@@ -123,6 +220,8 @@ fn project_groups(
                             ..wire::ListRow::default()
                         }),
                         route: Some(routes::project(&project.project_id, &project.name)),
+                        list_color_key: rows::list_color_of(&project.project_id, Some(project)),
+                        count: project.open_count.to_string(),
                     }
                 })
                 .collect(),

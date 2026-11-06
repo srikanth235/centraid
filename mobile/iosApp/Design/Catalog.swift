@@ -260,6 +260,10 @@ public enum CentraidCatalog {
         "Filter": [
             CentraidIconPath(d: "M22 3H2l8 9.46V19l4 2v-8.54z", filled: false, evenOdd: false),
         ],
+        "Flag": [
+            CentraidIconPath(d: "M5 21V4", filled: false, evenOdd: false),
+            CentraidIconPath(d: "M5 4h12l-2.5 4L17 12H5", filled: false, evenOdd: false),
+        ],
         "Folder": [
             CentraidIconPath(d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z", filled: false, evenOdd: false),
         ],

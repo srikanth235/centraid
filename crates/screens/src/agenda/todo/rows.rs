@@ -13,7 +13,7 @@ use wire::AgendaTaskGroupKind as Kind;
 
 use crate::agenda::routes;
 use crate::kit::civil;
-use crate::strings::{Locale, task as words};
+use crate::strings::{Locale, agenda_reminders as reminders, task as words};
 
 pub const STATUS_OPEN: &str = "open";
 pub const STATUS_DONE: &str = "done";
@@ -143,6 +143,12 @@ pub fn row(locale: Locale, task: &wire::AgendaTask, ctx: &Context, subtask: bool
         subtask,
         can_file: open && !subtask,
         route: Some(routes::task(&task.task_id)),
+        flagged: task.flagged,
+        list_color_key: task
+            .project_id
+            .as_deref()
+            .map(|id| list_color_of(id, ctx.projects.get(id).copied()))
+            .unwrap_or_default(),
         title,
     }
 }
@@ -308,6 +314,15 @@ pub fn hue_of(project_id: &str, project: Option<&wire::AgendaTaskProject>) -> St
     let key = centraid_design::party_hue_key(project_id, project.and_then(|p| p.color.as_deref()))
         .unwrap_or_else(|| centraid_design::identity_hue_key(project_id));
     hue_role(key)
+}
+
+/// A list's colour key (the `[list]` names of `design/tokens.toml`): what the
+/// list stored, put on the one palette of eight. There is no red, amber or
+/// green list, and an imported red list is raspberry (#1173).
+#[must_use]
+pub fn list_color_of(project_id: &str, project: Option<&wire::AgendaTaskProject>) -> String {
+    centraid_design::list_color_key(project_id, project.and_then(|p| p.color.as_deref()))
+        .to_owned()
 }
 
 /// A wheel key as the theme's colour role: `rose` → `cRose`; empty stays empty.
@@ -503,5 +518,13 @@ pub fn chrome(locale: Locale) -> wire::TodoChrome {
         add_subtask_verb: words::add(locale),
         add_tag_verb: words::add(locale),
         file_verb: words::file(locale),
+        details_verb: reminders::details(locale),
+        flag_verb: reminders::flag(locale),
+        unflag_verb: reminders::unflag(locale),
+        delete_verb: words::delete(locale),
+        new_reminder: reminders::new_reminder(locale),
+        show_completed_verb: reminders::show_completed(locale),
+        hide_completed_verb: reminders::hide_completed(locale),
+        clear_completed_verb: reminders::clear_completed(locale),
     }
 }

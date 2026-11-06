@@ -12,11 +12,12 @@ use wire::todo_project_state::Sheet;
 
 use super::list::{self, Phase};
 use super::todo::ops::Ops;
+use super::todo::order;
 use super::todo::rows::{self, Context};
 use crate::catalog::{act, load};
 use crate::kit::read;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, agenda_todo, task as words};
+use crate::strings::{Locale, agenda_reminders as reminders, agenda_todo, task as words};
 
 #[must_use]
 pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
@@ -36,6 +37,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         sheet: Sheet::None,
         new_section_name: String::new(),
         rename_name: String::new(),
+        show_completed: false,
+        completed: Vec::new(),
     }))
 }
 
@@ -51,6 +54,10 @@ struct Project {
     sheet: Sheet,
     new_section_name: String,
     rename_name: String,
+    /// The completed rows are drawn ("Show"); they are counted either way.
+    show_completed: bool,
+    /// This list's completed tasks (done, not won't-do), newest first.
+    completed: Vec<wire::AgendaTask>,
 }
 
 impl Project {
@@ -81,6 +88,88 @@ impl Project {
             self.ops
                 .answered(ctx.locale(), &list::open_tasks(board), &board.today);
         }
+        self.load_completed(ctx);
+    }
+
+    /// The Logbook's done tasks filed in this list: the summary counts them and
+    /// "Show" draws them. A refused or failed read leaves the summary out, never
+    /// a wrong count.
+    fn load_completed(&mut self, ctx: &Ctx) {
+        self.completed = match list::board(ctx, load::agenda::BoardView::Logbook, None, rows::MAX_WINDOW)
+        {
+            read::Reading::Data(board) => board
+                .groups
+                .iter()
+                .flat_map(|group| group.tasks.iter())
+                .filter(|task| {
+                    task.status == rows::STATUS_DONE
+                        && task.project_id.as_deref() == Some(self.project_id.as_str())
+                })
+                .cloned()
+                .collect(),
+            _ => Vec::new(),
+        };
+    }
+
+    fn completed_state(
+        &self,
+        locale: Locale,
+        board: &wire::AgendaTaskBoard,
+    ) -> wire::TodoCompleted {
+        let mut row_ctx = Context::of(&board.today, &board.projects, &board.sections);
+        row_ctx.show_project = false;
+        wire::TodoCompleted {
+            count: self.completed.len() as u32,
+            count_label: reminders::completed_count(locale, self.completed.len() as u64),
+            shown: self.show_completed && !self.completed.is_empty(),
+            rows: if self.show_completed {
+                self.completed
+                    .iter()
+                    .map(|task| rows::row(locale, task, &row_ctx, false))
+                    .collect()
+            } else {
+                Vec::new()
+            },
+        }
+    }
+
+    /// DRAG TO REORDER: `task_id` dropped before `before_id` (empty: the end of
+    /// its group). Only a drop inside one group is a reorder; another group's
+    /// neighbour is a move between sections, which the filing sheet owns.
+    fn move_row(&mut self, task_id: &str, before_id: &str, ctx: &Ctx) {
+        let Some(board) = self.phase.data() else {
+            return;
+        };
+        let Some(group) = board
+            .groups
+            .iter()
+            .find(|group| group.tasks.iter().any(|task| task.task_id == task_id))
+        else {
+            return;
+        };
+        if !before_id.is_empty() && !group.tasks.iter().any(|task| task.task_id == before_id) {
+            return;
+        }
+        let ids: Vec<(String, i64)> = group
+            .tasks
+            .iter()
+            .map(|task| (task.task_id.clone(), task.sort_order))
+            .collect();
+        for (id, position) in order::plan(&ids, task_id, before_id) {
+            if !self.ops.reposition(ctx, &id, position) {
+                break;
+            }
+        }
+        self.reload(ctx);
+    }
+
+    /// This list's colour on the one palette of eight.
+    fn color_key(&self, board: &wire::AgendaTaskBoard) -> String {
+        let project = board
+            .projects
+            .iter()
+            .find(|project| project.project_id == self.project_id);
+        rows::list_color_of(&self.project_id, project)
     }
 
     fn found(&self) -> bool {
@@ -137,6 +226,8 @@ impl Project {
             groups,
             add_section_label: words::add_section(locale),
             found: true,
+            list_color_key: self.color_key(board),
+            completed: Some(self.completed_state(locale, board)),
             ..wire::TodoProjectData::default()
         })
     }
@@ -253,6 +344,37 @@ impl Project {
             Some(P::Rename(_)) if self.found() => {
                 self.sheet = Sheet::Rename;
                 self.rename_name.clone_from(&self.name);
+            }
+            Some(P::RowFlagged(flagged)) => {
+                if self
+                    .phase
+                    .data()
+                    .and_then(|board| list::find(board, &flagged.task_id))
+                    .is_some()
+                {
+                    self.ops.flag(ctx, &flagged.task_id, flagged.flagged);
+                    self.reload(ctx);
+                }
+            }
+            Some(P::RowDeleted(deleted)) => {
+                if self
+                    .phase
+                    .data()
+                    .and_then(|board| list::find(board, &deleted.task_id))
+                    .is_some()
+                {
+                    self.ops.delete(ctx, &deleted.task_id);
+                    self.reload(ctx);
+                }
+            }
+            Some(P::RowMoved(moved)) => self.move_row(&moved.task_id, &moved.before_id, ctx),
+            Some(P::CompletedToggled(_)) => self.show_completed = !self.show_completed,
+            Some(P::CompletedCleared(_)) => {
+                let ids: Vec<String> = self.completed.iter().map(|t| t.task_id.clone()).collect();
+                if !ids.is_empty() {
+                    self.ops.clear_completed(ctx, &ids);
+                    self.reload(ctx);
+                }
             }
             Some(P::RenameName(named)) => self.rename_name = named.name,
             Some(P::RenameSubmitted(_)) => self.submit_rename(ctx),
