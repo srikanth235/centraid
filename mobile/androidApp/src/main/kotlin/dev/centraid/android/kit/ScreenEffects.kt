@@ -134,6 +134,9 @@ internal fun HostScreenEffects(
                         docs.follow(answer)
                         null
                     }
+                    effect.share_file != null ->
+                        effectAttempt { dev.centraid.android.screens.docs.performShareFile(context, effect.share_file!!) }
+                            .getOrElse { failed("the file could not be shared") }
                     effect.stop_following != null -> {
                         docs.stop(effect.stop_following!!.origin, answer)
                         null

@@ -101,13 +101,6 @@ pub const REGISTER: &[Entry] = &[
         platform(Shell::Android, DOCS_TRANSPORT),
     ),
     (
-        "ExportOriginals.chooser_title",
-        platform(
-            Shell::Android,
-            "Android titles its share chooser; the iOS share sheet has no title",
-        ),
-    ),
-    (
         "HealthSnapshot.installable",
         platform(
             Shell::Android,

@@ -45,10 +45,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_three_queries_and_eighteen_actions() {
+    fn it_declares_three_queries_and_nineteen_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 3);
-        assert_eq!(manifest.actions.len(), 18);
+        assert_eq!(manifest.actions.len(), 19);
         for name in ["drive", "search", "history"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -122,7 +122,7 @@ mod tests {
         }
     }
 
-    /// TWENTY-THREE SCOPES: seven reads over the vault's own tables, and **sixteen
+    /// TWENTY-FIVE SCOPES: eight reads over the vault's own tables, and **seventeen
     /// `act` scopes, one per distinct command**. `derivative` is the words extracted from
     /// the bytes.
     ///
@@ -131,10 +131,10 @@ mod tests {
     /// the actions: a nineteenth action with no scope is an action the grant does
     /// not cover, and a scope with no action is reach nothing uses.
     #[test]
-    fn it_declares_twenty_three_scopes_with_one_act_scope_per_command() {
+    fn it_declares_twenty_five_scopes_with_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Docs declares its reach");
-        assert_eq!(vault.scopes.len(), 23);
+        assert_eq!(vault.scopes.len(), 25);
 
         let mut declared: Vec<(&str, &str)> = vault
             .scopes
@@ -152,7 +152,7 @@ mod tests {
             .collect();
         declared.sort_unstable();
         assert_eq!(declared, act_scope_tables());
-        assert_eq!(declared.len(), 16);
+        assert_eq!(declared.len(), 17);
 
         let mut reads: Vec<&str> = vault
             .scopes
@@ -168,6 +168,7 @@ mod tests {
             reads,
             [
                 "blob",
+                "concept",
                 "container",
                 "derivative",
                 "document",

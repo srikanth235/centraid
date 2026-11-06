@@ -519,6 +519,12 @@ final class ScreenStore: ObservableObject {
             DocsFiles.shared.pick(pick.kind, core: core) { outcome in
                 Task { @MainActor [weak self] in self?.answer(request, outcome) }
             }
+        case .shareFile(let share)?:
+            if DocsShare.present(share) {
+                answer(request, done)
+            } else {
+                answer(request, .failed(Self.failure("the file could not be read")))
+            }
         case .followFolder?:
             DocsFollow.shared.request { outcome in
                 Task { @MainActor [weak self] in self?.answer(request, outcome) }

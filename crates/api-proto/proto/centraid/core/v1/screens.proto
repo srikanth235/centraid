@@ -489,6 +489,8 @@ message Effect {
     PickFile pick_file = 200;
     FollowFolder follow_folder = 201;
     StopFollowing stop_following = 202;
+    // Hand one document's file to the platform's share sheet.
+    ShareFile share_file = 203;
     // ---- pairing (1340-1349, lane H2): pair_screens.proto ----
     ScanCode scan_code = 1340;
     BrowseGateways browse_gateways = 1341;
@@ -1141,6 +1143,19 @@ message FolderFollowed {
 
 // Stop following the folder whose origin is `origin`: the shell forgets its
 // access and tells the core to forget the folder's links; every document stays.
+// SHARE ONE FILE (Docs' Quick Look bar): copy `path` (a file in the app's
+// store, named by its digest) to a temporary file called `name` and open the
+// platform's share sheet on it. Answers done once the sheet is up, or
+// `EffectFailed` when the file cannot be read.
+message ShareFile {
+  string path = 1;
+  // The file's name as the receiver sees it: the title with its extension.
+  string name = 2;
+  string media_type = 3;
+  // The share sheet's title.
+  string chooser_title = 4;
+}
+
 message StopFollowing {
   string origin = 1;
 }

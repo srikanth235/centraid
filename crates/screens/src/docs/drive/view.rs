@@ -13,20 +13,22 @@ use crate::kit::{menu, read, search as kit_search};
 use crate::screen::Ctx;
 use crate::strings::{Locale, docs as words, shared};
 
-/// The page's title: the folder open, "Recently added", else the app. A pushed
-/// page is named by it.
+/// The page's title: the folder open, else the shelf's own name (Recents,
+/// Browse, Starred, Recently added). A pushed page is named by it.
 pub(super) fn title(drive: &Drive, locale: Locale) -> String {
     use wire::DocsDestination as Dest;
     match drive.destination {
         Dest::Folders if !drive.folder_id.is_empty() => {
             if drive.folder_name.is_empty() {
-                words::band_folders(locale)
+                words::band_browse(locale)
             } else {
                 drive.folder_name.clone()
             }
         }
+        Dest::Folders => words::band_browse(locale),
+        Dest::Starred => words::band_starred(locale),
         Dest::Recent => words::more_recent(locale),
-        _ => words::app_title(locale),
+        _ => words::band_recents(locale),
     }
 }
 
@@ -109,10 +111,10 @@ fn band(drive: &Drive, locale: Locale) -> Vec<wire::DocsBandTab> {
         current: drive.destination == destination,
     };
     vec![
-        tab(BAND_ALL, words::band_all(locale), "FileText", Dest::All),
+        tab(BAND_ALL, words::band_recents(locale), "Clock", Dest::All),
         tab(
             BAND_FOLDERS,
-            words::band_folders(locale),
+            words::band_browse(locale),
             "Folder",
             Dest::Folders,
         ),
@@ -304,7 +306,13 @@ fn data(drive: &Drive, locale: Locale, held: &Held) -> wire::DocsDriveData {
     } else {
         (None, EmptyAction::None)
     };
+    let label_chips = if held.search {
+        Vec::new()
+    } else {
+        label_chips(drive)
+    };
     wire::DocsDriveData {
+        label_chips,
         mode: if held.search {
             Mode::Search
         } else {
@@ -430,6 +438,24 @@ fn empty_of(drive: &Drive, locale: Locale, search: bool) -> (wire::EmptyState, E
     }
 }
 
+/// THE LABEL CHIPS over the shelf: every label in the drive in its colour, the
+/// one filtering the shelf marked. Not on Recently added (a window, no filters).
+fn label_chips(drive: &Drive) -> Vec<wire::DocsLabelChip> {
+    if !drive.filtering() {
+        return Vec::new();
+    }
+    let Some(rail) = &drive.rail else {
+        return Vec::new();
+    };
+    rail.label_entries
+        .iter()
+        .map(|label| wire::DocsLabelChip {
+            selected: drive.query.label == label.label,
+            ..fold::chip(label)
+        })
+        .collect()
+}
+
 fn head_meta(drive: &Drive, locale: Locale) -> String {
     use wire::DocsDestination as Dest;
     let Phase::Ready(held) = &drive.phase else {
@@ -443,5 +469,9 @@ fn head_meta(drive: &Drive, locale: Locale) -> String {
         (Some(rail), Dest::Folders) if drive.folder_id.is_empty() => rail.unfiled_count,
         _ => rows,
     };
+    // RECENTS says what it is: documents changed lately, and how many there are.
+    if drive.destination == Dest::All && drive.folder_id.is_empty() && !held.search {
+        return words::recents_subtitle(locale, u64::from(count));
+    }
     fold::count_label(locale, count)
 }

@@ -1103,11 +1103,39 @@ pub mod act {
             }
         }
 
-        /// Add a free-form label to a document through tag.add — additive and idempotent; the label is minted once and shared by everything wearing it.
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum TagColor {
+            #[default]
+            Blue,
+            Mustard,
+            Violet,
+            Petrol,
+            Indigo,
+            Graphite,
+            Raspberry,
+            Orchid,
+        }
+        impl TagColor {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Blue => "blue",
+                    Self::Mustard => "mustard",
+                    Self::Violet => "violet",
+                    Self::Petrol => "petrol",
+                    Self::Indigo => "indigo",
+                    Self::Graphite => "graphite",
+                    Self::Raspberry => "raspberry",
+                    Self::Orchid => "orchid",
+                }
+            }
+        }
+
+        /// Add a free-form label to a document through tag.add — additive and idempotent; the label is minted once and shared by everything wearing it. A new label wears the colour asked for, else the palette colour fewest labels wear.
         #[derive(Clone, Debug, Default)]
         pub struct Tag {
             pub document_id: String,
             pub label: String,
+            pub color: Option<TagColor>,
         }
         impl Tag {
             pub const NAME: &str = "tag";
@@ -1116,6 +1144,7 @@ pub mod act {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("id".to_owned(), text(self.document_id));
                 map.insert("label".to_owned(), text(self.label));
+                if let Some(it) = self.color { map.insert("color".to_owned(), text(it.wire())); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
@@ -1143,6 +1172,55 @@ pub mod act {
         }
         impl From<Untag> for wire::ActRequest {
             fn from(value: Untag) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum RecolorLabelColor {
+            #[default]
+            Blue,
+            Mustard,
+            Violet,
+            Petrol,
+            Indigo,
+            Graphite,
+            Raspberry,
+            Orchid,
+        }
+        impl RecolorLabelColor {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Blue => "blue",
+                    Self::Mustard => "mustard",
+                    Self::Violet => "violet",
+                    Self::Petrol => "petrol",
+                    Self::Indigo => "indigo",
+                    Self::Graphite => "graphite",
+                    Self::Raspberry => "raspberry",
+                    Self::Orchid => "orchid",
+                }
+            }
+        }
+
+        /// Change the colour a label wears through tag.color. The colour is one key of the design palette; the label is the same everywhere it is used.
+        #[derive(Clone, Debug, Default)]
+        pub struct RecolorLabel {
+            pub color: RecolorLabelColor,
+            pub label: String,
+        }
+        impl RecolorLabel {
+            pub const NAME: &str = "recolor-label";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("color".to_owned(), text(self.color.wire()));
+                map.insert("label".to_owned(), text(self.label));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<RecolorLabel> for wire::ActRequest {
+            fn from(value: RecolorLabel) -> Self {
                 value.request()
             }
         }

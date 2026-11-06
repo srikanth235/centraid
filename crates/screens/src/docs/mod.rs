@@ -4,7 +4,7 @@
 //!
 //! | Screen | Route name | Machine |
 //! |---|---|---|
-//! | All · Folders · Starred · Recently added, a folder's page, Search | [`DRIVE`] | [`drive`] |
+//! | Recents · Browse · Starred · Recently added, a folder's page, Search | [`DRIVE`] | [`drive`] |
 //! | One document | [`DOCUMENT`] | [`document`] |
 //! | A document's version history | [`VERSIONS`] | [`versions`] |
 //! | A text document's editor | [`EDITOR`] | [`editor`] |

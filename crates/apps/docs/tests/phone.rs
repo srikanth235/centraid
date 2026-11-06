@@ -71,12 +71,14 @@ fn the_trash_is_its_own_shelf_and_folders_count_live_rows() {
     filed.tags = vec![LabelEntry {
         tag_id: "t1".to_owned(),
         label: "Tax".to_owned(),
+        color: None,
     }];
     let mut trashed_filed = row("gone", "2099-06-01T00:00:00.000Z", true);
     trashed_filed.folder_id = Some("f1".to_owned());
     trashed_filed.tags = vec![LabelEntry {
         tag_id: "t2".to_owned(),
         label: "Old".to_owned(),
+        color: None,
     }];
     let drive = DriveData {
         folders: vec![FolderRow {

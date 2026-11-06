@@ -12,7 +12,12 @@ catalog! {
     plain action_move = ("Move", "Move");
     plain action_rename = ("Rename", "Rename");
     plain action_restore = ("Restore", "Restore");
+    plain action_share = ("Share", "Share");
     plain action_star = ("Star", "Star");
+    plain share_missing = ("This document isn't on this phone yet.", "This document isn't on this phone yet.");
+    plain share_title = ("Share a copy", "Share a copy");
+    plain subtitle_root = ("Docs", "Docs");
+    plain subtitle_in = ("{root} › {folder}", "{root} › {folder}");
     plain action_trash = ("Move to trash", "Move to trash");
     plain action_unstar = ("Unstar", "Unstar");
     plain add = ("Add", "Add");
@@ -23,8 +28,8 @@ catalog! {
     plain add_title = ("Add to Docs", "Add to Docs");
     plain add_upload = ("Upload a file", "Upload a file");
     plain app_title = ("Docs", "Docs");
-    plain band_all = ("All", "All");
-    plain band_folders = ("Folders", "Folders");
+    plain band_browse = ("Browse", "Browse");
+    plain band_recents = ("Recents", "Recents");
     plain band_home = ("Home", "Home");
     plain band_more = ("More", "More");
     plain band_starred = ("Starred", "Starred");
@@ -153,6 +158,7 @@ catalog! {
     plain view_title = ("View", "View");
     plain where_in = ("In", "In");
     plain where_top = ("At the top level", "At the top level");
+    counted recents_subtitle = ("Changed lately · {n} document in Docs", "Changed lately · {n} documents in Docs");
     counted document_count = ("{n} document", "{n} documents");
     counted version_count = ("{n} version", "{n} versions");
     counted followed_detail = ("{n} document stays in Docs", "{n} documents stay in Docs");

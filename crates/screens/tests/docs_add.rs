@@ -92,7 +92,8 @@ fn upload_picks_then_files_the_staged_bytes_and_opens_the_document() {
         panic!("a document route");
     };
     assert_eq!(args.document_id, row.document_id);
-    assert_eq!(args.parent, "Docs");
+    // The page it was filed from is Recents now, and the back word names it.
+    assert_eq!(args.parent, "Recents");
     // The line never clears itself: the member puts it away.
     drive_send(&mut d, i, D::IngestDismissed(de::IngestDismissed {}));
     assert_eq!(ingest(&d, i).phase, Phase::Idle as i32);
