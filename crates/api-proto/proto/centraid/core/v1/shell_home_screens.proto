@@ -255,6 +255,10 @@ message HomeBackupLine {
   string status = 1;
   HomeTone tone = 2;
   string accessibility_label = 3;
+  // Where a press on the line goes when it is not the Backup place: the pairing
+  // page while no backup device is paired ("Not backed up. Pair a backup
+  // device."). Absent: the Backup place.
+  optional Route route = 4;
 }
 
 // A vault the member is asked to delete or rename: the sheet's second step.

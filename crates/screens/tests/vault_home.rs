@@ -259,7 +259,30 @@ fn the_backup_line_under_the_vault_is_the_backup_lanes_reading_of_it() {
         .bar
         .and_then(|bar| bar.backup)
         .expect("a line under the vault");
-    assert_eq!(line.status, "Not backed up");
+    assert_eq!(line.status, "Not backed up. Pair a backup device.");
+    assert_eq!(
+        line.route.expect("the line leads to pairing").screen,
+        "pair.laptop"
+    );
+    // PRESSING IT LEADS TO PAIRING, not to the Backup place (decided in #1173),
+    // and its spoken label is the line itself, which is the action.
+    let bar = state(&phone).bar.expect("a bar");
+    assert_eq!(
+        bar.backup_open_label,
+        "Not backed up. Pair a backup device."
+    );
+    phone.driver.effects.clear();
+    press(&mut phone, H::Backup(wire::home_event::BackupPressed {}));
+    let opened = phone
+        .driver
+        .effects
+        .iter()
+        .find_map(|e| match e.effect.as_ref().and_then(|e| e.kind.as_ref()) {
+            Some(wire::effect::Kind::OpenRoute(open)) => open.route.clone(),
+            _ => None,
+        })
+        .expect("a page to push");
+    assert_eq!(opened.screen, "pair.laptop");
     // A moved vault says so itself and Home draws no backup line over it.
     let a = phone.holdings().foreground;
     phone.shelf.freeze(&a, "2026-03-14T09:31:00Z", 3);

@@ -244,7 +244,7 @@ impl Home {
     fn on_home(&mut self, event: H, ctx: &Ctx) -> Vec<wire::Effect> {
         let locale = ctx.locale();
         match event {
-            H::Backup(_) => return open_backup(),
+            H::Backup(_) => return self.backup_pressed(),
             H::Status(_) => return self.status_pressed(),
             H::EntryAsked(asked) => return entry_route(asked.entry()),
             H::Appearance(_) => {
@@ -391,6 +391,17 @@ impl Home {
         })
     }
 
+    /// The line under the vault's name: the pairing page while nothing is paired,
+    /// the Backup place otherwise.
+    fn backup_pressed(&self) -> Vec<wire::Effect> {
+        match self.backup.as_ref().and_then(|line| line.route.clone()) {
+            Some(route) => vec![effect(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                route: Some(route),
+            }))],
+            None => open_backup(),
+        }
+    }
+
     fn status_pressed(&self) -> Vec<wire::Effect> {
         use wire::home_status::Destination as D;
         let Some(status) = &self.status else {
@@ -512,7 +523,14 @@ impl Home {
         );
         let backup_open_label = backup
             .as_ref()
-            .map(|line| format!("{}. {}", line.status, words::backup_status_open(locale)))
+            .map(|line| {
+                // A line that leads to pairing is its own action.
+                if line.route.is_some() {
+                    line.status.clone()
+                } else {
+                    format!("{}. {}", line.status, words::backup_status_open(locale))
+                }
+            })
             .unwrap_or_default();
         wire::HomeBar {
             vault: Some(vault),

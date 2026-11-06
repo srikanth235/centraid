@@ -79,7 +79,7 @@ catalog! {
     plain backup_status_frozen = ("Moved to your other phone", "Moved to your other phone");
     plain backup_status_never = ("Not backed up yet", "Not backed up yet");
     plain backup_status_pair_again = ("Pair your backup device again", "Pair your backup device again");
-    plain backup_status_unpaired = ("Not backed up", "Not backed up");
+    plain backup_status_unpaired = ("Not backed up. Pair a backup device.", "Not backed up. Pair a backup device.");
     plain backup_title = ("Backup", "Backup");
     plain backup_unnamed = ("Your backup device", "Your backup device");
     plain backup_wait_ask = ("{count} waiting. Tap Back up now.", "{count} waiting. Tap Back up now.");
