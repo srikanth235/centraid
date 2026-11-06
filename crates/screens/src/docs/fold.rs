@@ -152,7 +152,7 @@ pub fn color_key(stored: &str, tag_id: &str) -> String {
 }
 
 /// The kind badge on a thumbnail: the file's own extension when it has a short
-/// one ("PDF", "MD", "XLSX"), else the kind's name cut to four letters.
+/// one ("PDF", "MD", "XLSX"), else a short mark for its kind.
 #[must_use]
 pub fn badge(row: &wire::DocsDocumentRow) -> String {
     let extension = row
@@ -161,13 +161,20 @@ pub fn badge(row: &wire::DocsDocumentRow) -> String {
         .map(|(_, extension)| extension)
         .filter(|extension| (1..=4).contains(&extension.len()))
         .filter(|extension| extension.chars().all(|c| c.is_ascii_alphanumeric()));
-    let word = extension.map_or_else(|| row.kind_name.clone(), str::to_owned);
-    let word = if word.is_empty() { words_other() } else { word };
-    word.chars().take(4).collect::<String>().to_uppercase()
-}
-
-fn words_other() -> String {
-    "FILE".to_owned()
+    if let Some(extension) = extension {
+        return extension.to_uppercase();
+    }
+    match row.kind() {
+        wire::DocsKind::Pdf => "PDF",
+        wire::DocsKind::Image => "IMG",
+        wire::DocsKind::Video => "VID",
+        wire::DocsKind::Audio => "AUD",
+        wire::DocsKind::Spreadsheet => "XLS",
+        wire::DocsKind::Presentation => "PPT",
+        wire::DocsKind::Document => "DOC",
+        wire::DocsKind::Unspecified | wire::DocsKind::Other => "FILE",
+    }
+    .to_owned()
 }
 
 /// The index's highlight, `⟦`/`⟧` around the matched words, as runs.
