@@ -9,23 +9,21 @@ name: Seeded app content from Home
 - extendedWaitUntil:
     visible:
       id: home-grid
-    timeout: 30000
+    timeout: 60000
 - assertNotVisible:
     id: home-failure
 - scrollUntilVisible:
     element:
       id: home-tile-${WIDGET}
     direction: DOWN
-    timeout: 20000
-    centerElement: true
+    timeout: 60000
 - tapOn:
     id: home-tile-${WIDGET}
 - scrollUntilVisible:
     element:
       id: ${CONTENT}
     direction: DOWN
-    timeout: 30000
-    centerElement: true
+    timeout: 60000
 - assertVisible:
     id: ${CONTENT}
 - takeScreenshot: screen

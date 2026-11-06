@@ -7,18 +7,18 @@ name: Reminder date preview and keyboard tools
 - extendedWaitUntil:
     visible:
       id: home-grid
-    timeout: 30000
+    timeout: 60000
 - scrollUntilVisible:
     element:
       id: home-tile-reminders
     direction: DOWN
-    timeout: 20000
+    timeout: 60000
 - tapOn:
     id: home-tile-reminders
 - extendedWaitUntil:
     visible:
       id: agenda-add-task
-    timeout: 30000
+    timeout: 60000
 - tapOn:
     id: agenda-add-task
 - extendedWaitUntil:

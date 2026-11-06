@@ -80,7 +80,11 @@ internal fun HealthHomeScreen(
         ) { data ->
             val empty = data.empty
             if (empty != null) {
-                EmptyStateView(empty, onAction = { data.connect?.let(onOpen) })
+                EmptyStateView(
+                    empty,
+                    onAction = { data.connect?.let(onOpen) },
+                    actionTag = "health-connect-open",
+                )
             } else {
                 LazyColumn {
                     if (state.segments.isNotEmpty()) {

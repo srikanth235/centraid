@@ -102,37 +102,45 @@ internal fun MoneyFigureRow(figure: MoneyFigure, modifier: Modifier = Modifier) 
 @Composable
 internal fun MoneyHeroView(hero: MoneyHero) {
     Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
-            .testTag("money-hero")
-            .semantics(mergeDescendants = true) { },
+        Modifier.fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+            .clip(moneyRadius("lg"))
+            .background(centraidColor("bgSunken"))
+            .padding(vertical = 8.dp),
     ) {
-        // THE FIGURE AND ITS SENTENCE SHARE A BASELINE: the sentence beside the figure, not under it.
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FitText(
-                money(hero.spent),
-                role = "display",
-                ink = centraidColor(if (hero.over) "net" else "text"),
-                minScale = HERO_MIN_SCALE,
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .alignByBaseline()
-                    .clearAndSetSemantics { contentDescription = spoken(hero.spent_label, hero.spent) },
-            )
-            Text(
-                hero.spent_label,
-                style = centraidType("body"),
-                color = centraidColor("textSoft"),
-                modifier = Modifier.alignByBaseline().clearAndSetSemantics { },
-            )
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
+                .testTag("money-hero")
+                .semantics(mergeDescendants = true) { },
+        ) {
+            // THE FIGURE AND ITS SENTENCE SHARE A BASELINE: the sentence beside the figure, not under it.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FitText(
+                    money(hero.spent),
+                    role = "display",
+                    ink = centraidColor(if (hero.over) "net" else "text"),
+                    minScale = HERO_MIN_SCALE,
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .alignByBaseline()
+                        .clearAndSetSemantics { contentDescription = spoken(hero.spent_label, hero.spent) },
+                )
+                Text(
+                    hero.spent_label,
+                    style = centraidType("body"),
+                    color = centraidColor("textSoft"),
+                    modifier = Modifier.alignByBaseline().clearAndSetSemantics { },
+                )
+            }
+            if (hero.has_bar) {
+                MoneyBar(hero.fill_bp, hero.tick_bp, hero.over, hero.accessibility_label)
+            }
         }
-        if (hero.has_bar) {
-            MoneyBar(hero.fill_bp, hero.tick_bp, hero.over, hero.accessibility_label)
-        }
+        // PLANNED, LEFT (and Refunds) ACROSS THE PAGE, not down it.
+        MoneyFigureColumns(hero.figures)
     }
-    // PLANNED, LEFT (and Refunds) ACROSS THE PAGE, not down it.
-    MoneyFigureColumns(hero.figures)
 }
 
 /** A plan bar from the state's basis points: the fill, and a tick for the day. */

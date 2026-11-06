@@ -383,8 +383,8 @@ private struct ChatHeader: View {
                 Text(verbatim: state.subtitle)
                     .centraidType("mono")
                     .foregroundStyle(Theme.color("textFaint", scheme))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("chat-subtitle")
             }
             .frame(maxWidth: .infinity)

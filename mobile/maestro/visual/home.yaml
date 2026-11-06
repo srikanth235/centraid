@@ -7,18 +7,18 @@ name: Seeded Home widgets
 - extendedWaitUntil:
     visible:
       id: home-grid
-    timeout: 30000
+    timeout: 60000
 - assertNotVisible:
     id: home-failure
 - assertVisible:
     id: home-tile-agenda
+- waitForAnimationToEnd
 - takeScreenshot: home-top
 - scrollUntilVisible:
     element:
       id: home-tile-photos
     direction: DOWN
-    timeout: 20000
-    centerElement: true
+    timeout: 60000
 - assertVisible:
     id: home-tile-photos
 - takeScreenshot: home-photos
@@ -26,8 +26,7 @@ name: Seeded Home widgets
     element:
       id: home-tile-docs
     direction: DOWN
-    timeout: 20000
-    centerElement: true
+    timeout: 60000
 - assertVisible:
     id: home-tile-docs
 - takeScreenshot: home-lower

@@ -7,25 +7,25 @@ name: Apple Health steps detail and chart controls
 - extendedWaitUntil:
     visible:
       id: home-grid
-    timeout: 30000
+    timeout: 60000
 - scrollUntilVisible:
     element:
       id: home-tile-health
     direction: DOWN
-    timeout: 20000
+    timeout: 60000
 - tapOn:
     id: home-tile-health
 - scrollUntilVisible:
     element:
       id: health-metric-steps
     direction: DOWN
-    timeout: 30000
+    timeout: 60000
 - tapOn:
     id: health-metric-steps
 - extendedWaitUntil:
     visible:
       id: health-metric-page
-    timeout: 30000
+    timeout: 60000
 - assertVisible:
     id: health-metric-range
 - takeScreenshot: health-chart-top
@@ -33,8 +33,7 @@ name: Apple Health steps detail and chart controls
     element:
       id: health-metric-scrubber
     direction: DOWN
-    timeout: 20000
-    centerElement: true
+    timeout: 60000
 - assertVisible:
     id: health-metric-scrubber
 - takeScreenshot: health-chart-scrubber

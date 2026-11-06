@@ -1433,6 +1433,22 @@
       "w": 800,
       "x": 0,
       "y": 23040
+    },
+    "CalendarLargeText.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Calendar at largest text",
+      "w": 390,
+      "x": 0,
+      "y": 23880
+    },
+    "CalendarLargeTextDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Calendar at largest text \u00b7 dark",
+      "w": 390,
+      "x": 0,
+      "y": 23880
     }
   },
   "createdOnFiles": {

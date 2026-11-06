@@ -25,6 +25,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.FilterMenuCleared
 import centraid.core.v1.FilterMenuPicked
@@ -198,9 +200,6 @@ private fun LibraryList(
 ) {
     val menuLabel = state.chrome?.row_menu_label.orEmpty()
     LazyColumn(Modifier.testTag("notes-library")) {
-        if (data.count_label.isNotEmpty()) {
-            item(key = "count") { Quiet(data.count_label) }
-        }
         val empty = data.empty
         if (data.sections.all { it.rows.isEmpty() } && empty != null) {
             item(key = "empty") {
@@ -258,6 +257,7 @@ private fun LazyListScope.sections(
 @Composable
 private fun NoteRow(row: NotesNoteRow, menuLabel: String, onOpen: (Route) -> Unit, onEvent: (NotesHomeEvent) -> Unit) {
     val matchInk = centraidColor("text")
+    val summaryLines = if (LocalDensity.current.fontScale > 1.3f) Int.MAX_VALUE else 1
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(
@@ -273,7 +273,14 @@ private fun NoteRow(row: NotesNoteRow, menuLabel: String, onOpen: (Route) -> Uni
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
                     if (row.pinned) CentraidIcon(iconKey = "Pin", tint = centraidColor("notesText"), size = 16.dp)
-                    Text(row.title, style = centraidType("bodyStrong"), color = matchInk, modifier = Modifier.weight(1f))
+                    Text(
+                        row.title,
+                        style = centraidType("bodyStrong"),
+                        color = matchInk,
+                        maxLines = summaryLines,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
                     if (row.check_label.isNotEmpty()) {
                         Text(row.check_label, style = centraidType("smallStrong"), color = centraidColor("notesText"))
                     }
@@ -286,8 +293,12 @@ private fun NoteRow(row: NotesNoteRow, menuLabel: String, onOpen: (Route) -> Uni
                         if (run.highlighted) pop()
                     }
                 }
-                if (snippet.isNotEmpty()) Text(snippet, style = centraidType("small"), color = centraidColor("textSoft"))
-                if (row.meta.isNotEmpty()) Text(row.meta, style = centraidType("annotLabel"), color = centraidColor("textFaint"))
+                if (snippet.isNotEmpty()) {
+                    Text(snippet, style = centraidType("small"), color = centraidColor("textSoft"), maxLines = summaryLines, overflow = TextOverflow.Ellipsis)
+                }
+                if (row.meta.isNotEmpty()) {
+                    Text(row.meta, style = centraidType("annotLabel"), color = centraidColor("textFaint"), maxLines = summaryLines, overflow = TextOverflow.Ellipsis)
+                }
             }
             if (menuLabel.isNotEmpty()) {
                 IconKey(

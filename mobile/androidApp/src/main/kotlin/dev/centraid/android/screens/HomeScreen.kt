@@ -688,7 +688,7 @@ private fun TileCard(tile: HomeTile, modifier: Modifier, loading: String, onOpen
             // WHERE A TAP GOES is the tile's own route; Kotlin names no destination.
             // A TILE WITH NO ROUTE (it is still reading, or could not be) is not a control.
             .combinedClickable(onClick = { tile.route?.let(onOpen) }, onLongClick = { menuOpen = true })
-            .padding(TILE_PAD)
+            .padding(horizontal = if (tile.size == HomeTileSize.HOME_TILE_SIZE_SMALL) 8.dp else TILE_PAD, vertical = TILE_PAD)
             // Keyed on the app id. The label carries the live count, so it
             // changes with the vault; the id does not.
             .testTag("home-tile-${tile.app_id}")

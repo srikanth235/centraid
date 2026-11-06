@@ -38,7 +38,7 @@ struct HomeBand: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        BandItems(spacing: 0) {
+        BandItems(spacing: 0, selectedID: places.first(where: \.selected)?.id) {
             ForEach(places, id: \.id) { place in
                 BandTab(
                     iconKey: place.iconKey,
@@ -49,6 +49,7 @@ struct HomeBand: View {
                     identifier: "home-band-\(place.id)",
                     onPress: { onSelect(place.id) }
                 )
+                .id(place.id)
             }
         }
         .padding(BandMetrics.platePad)
@@ -209,7 +210,7 @@ struct AppBand: View {
             // ONE plate; the gutter between the tabs is the seam. NO PLATE
             // AT ALL with no tabs (a locked Locker, #1047): an empty capsule
             // is a control that does nothing.
-            BandItems(spacing: BandMetrics.groupGutter) {
+            BandItems(spacing: BandMetrics.groupGutter, selectedID: lit) {
                 ForEach(tabs, id: \.self) { tab in
                     AppBandTab(
                         iconKey: tab.iconKey,
@@ -222,6 +223,7 @@ struct AppBand: View {
                             onSelect(tab.event)
                         }
                     )
+                    .id(tab.label)
                 }
                 if let onMore {
                     AppBandTab(
@@ -294,7 +296,7 @@ struct BandSegmented: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        BandItems(spacing: BandMetrics.groupGutter) {
+        BandItems(spacing: BandMetrics.groupGutter, selectedID: segments.first(where: \.selected)?.id) {
             ForEach(segments, id: \.id) { segment in
                 Button { onPick(segment.id) } label: {
                     Text(segment.label)
@@ -311,6 +313,7 @@ struct BandSegmented: View {
                 .accessibilityIdentifier(segment.id)
                 .accessibilityLabel(segment.label)
                 .accessibilityAddTraits(segment.selected ? [.isButton, .isSelected] : [.isButton])
+                .id(segment.id)
             }
         }
         .padding(BandMetrics.platePad)
@@ -323,17 +326,29 @@ struct BandSegmented: View {
 /// Home and search remain outside the app plate and always stay reachable.
 struct BandItems<Content: View>: View {
     let spacing: CGFloat
+    var selectedID: String? = nil
     @ViewBuilder let content: () -> Content
     @Environment(\.dynamicTypeSize) private var textSize
 
     var body: some View {
         if textSize >= .xxLarge {
-            ScrollView(.horizontal) {
-                HStack(spacing: spacing) { content() }
-                    .fixedSize(horizontal: true, vertical: false)
+            ScrollViewReader { reader in
+                ScrollView(.horizontal) {
+                    HStack(spacing: spacing) { content() }
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .scrollIndicators(.hidden)
+                .fixedSize(horizontal: false, vertical: true)
+                .onAppear {
+                    if let selectedID { reader.scrollTo(selectedID, anchor: .center) }
+                }
+                .onChange(of: selectedID) { _, selected in
+                    if let selected { reader.scrollTo(selected, anchor: .center) }
+                }
+                .onChange(of: textSize) { _, _ in
+                    if let selectedID { reader.scrollTo(selectedID, anchor: .center) }
+                }
             }
-            .scrollIndicators(.hidden)
-            .fixedSize(horizontal: false, vertical: true)
         } else {
             HStack(spacing: spacing) { content() }
         }
@@ -407,7 +422,7 @@ private struct AppBandTab: View {
             }
             .padding(.top, BandMetrics.tabTop)
             .padding(.bottom, BandMetrics.tabBottom)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, BandMetrics.platePad)
             .frame(maxWidth: .infinity, minHeight: BandMetrics.tabMinHeight)
             .overlay(alignment: .top) {
                 if selected {

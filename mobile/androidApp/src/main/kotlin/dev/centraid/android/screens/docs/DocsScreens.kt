@@ -566,7 +566,7 @@ private fun Tile(
         Modifier
             .padding(6.dp)
             .clip(RoundedCornerShape(KitGeometry.RADIUS))
-            .border(KitGeometry.HAIRLINE, centraidColor("line"), RoundedCornerShape(KitGeometry.RADIUS))
+            .background(centraidColor("bgSunken"))
             .clickable(onClick = onTap)
             .padding(10.dp)
             .testTag(tag),
@@ -581,8 +581,8 @@ private fun Tile(
             }
         }
         Column(Modifier.clearAndSetSemantics { contentDescription = a11y.ifEmpty { title }; role = Role.Button }) {
-            Text(title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (meta.isNotEmpty()) Text(meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"), maxLines = 1)
+            Text(title, style = centraidType("smallStrong"), color = centraidColor("text"))
+            if (meta.isNotEmpty()) Text(meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
         }
         if (row != null) DocsLabelChips(row.labels)
     }

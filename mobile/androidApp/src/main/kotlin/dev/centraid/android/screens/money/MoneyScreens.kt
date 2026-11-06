@@ -1,6 +1,8 @@
 package dev.centraid.android.screens.money
 
 import dev.centraid.android.kit.SearchAskRow
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,10 +10,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -259,8 +264,21 @@ private fun LazyListScope.activity(
     }
     activity.sections.forEach { section ->
         item(key = "day-${section.day}") { MoneyDayHeader(section.heading, section.total) }
-        items(section.rows, key = { "t-${it.txn_id}" }) { row ->
-            MoneyRowView(row) { row.route?.let(onOpen) }
+        itemsIndexed(section.rows, key = { _, row -> "t-${row.txn_id}" }) { index, row ->
+            val rounded = moneyRadius("lg")
+            val square = CornerSize(0.dp)
+            val shape = rounded.copy(
+                topStart = if (index == 0) rounded.topStart else square,
+                topEnd = if (index == 0) rounded.topEnd else square,
+                bottomStart = if (index == section.rows.lastIndex) rounded.bottomStart else square,
+                bottomEnd = if (index == section.rows.lastIndex) rounded.bottomEnd else square,
+            )
+            Box(Modifier.padding(horizontal = KitGeometry.GUTTER).clip(shape).background(centraidColor("bgSunken"))) {
+                Column {
+                    if (index > 0) MoneyHairline()
+                    MoneyRowView(row) { row.route?.let(onOpen) }
+                }
+            }
         }
     }
     item(key = "window") {

@@ -417,17 +417,17 @@ struct NotesRowView: View {
                             Text(row.title)
                                 .centraidType("bodyStrong")
                                 .foregroundStyle(Theme.color("text", scheme))
-                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                         }
                         snippet
                             .centraidType("small")
                             .foregroundStyle(Theme.color("textSoft", scheme))
-                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                         if !row.meta.isEmpty {
                             Text(row.meta)
                                 .centraidType("annotLabel")
                                 .foregroundStyle(Theme.color("textFaint", scheme))
-                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                         }
                     }
                     Spacer(minLength: 8)

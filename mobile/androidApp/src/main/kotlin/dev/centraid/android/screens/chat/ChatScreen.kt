@@ -272,8 +272,7 @@ private fun ChatHeader(
                     state.subtitle,
                     style = centraidType("mono"),
                     color = centraidColor("textFaint"),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.testTag("chat-subtitle"),
                 )
             }

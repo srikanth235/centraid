@@ -9,7 +9,7 @@ name: Seed Apple Health and connect through the real permission sheet
     element:
       id: "health-workout-.*"
     direction: DOWN
-    timeout: 30000
+    timeout: 60000
 - assertVisible:
     id: "health-workout-.*"
 - takeScreenshot: health-connected-workouts

@@ -841,7 +841,7 @@ private struct AgendaGridView: View {
             LazyVStack(alignment: .leading, spacing: 12) {
                 ForEach(Array(grid.panels.enumerated()), id: \.offset) { _, panel in
                     VStack(alignment: .leading, spacing: 8) {
-                        if !panel.title.isEmpty { Text(panel.title).centraidType("title").accessibilityAddTraits(.isHeader) }
+                        if !panel.title.isEmpty { Text(panel.title).centraidType("title").foregroundStyle(Theme.color("text", scheme)).accessibilityAddTraits(.isHeader) }
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 4) {
                             ForEach(panel.days, id: \.day) { day in
                                 Button {
@@ -850,7 +850,7 @@ private struct AgendaGridView: View {
                                     VStack(spacing: 2) {
                                         Text(day.weekday).centraidType("annotLabel")
                                         Text(day.label).centraidType("bodyStrong")
-                                        Circle().fill(day.hasItems_p ? Theme.color("agendaText", scheme) : .clear).frame(width: 4, height: 4)
+                                        Circle().fill(day.hasItems_p ? Theme.color(day.selected ? "onAccent" : "agendaText", scheme) : .clear).frame(width: 4, height: 4)
                                     }
                                     .frame(maxWidth: .infinity, minHeight: 44)
                                     .foregroundStyle(Theme.color(day.selected ? "onAccent" : (day.inMonth ? "text" : "textFaint"), scheme))
@@ -902,11 +902,12 @@ private struct AgendaGridView: View {
 
     private func hourDay(_ day: Centraid_Core_V1_AgendaHourDay) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(day.heading).centraidType("title").padding(.horizontal, CentraidGeometry.pageMargin)
+            Text(day.heading).centraidType("title").foregroundStyle(Theme.color("text", scheme)).padding(.horizontal, CentraidGeometry.pageMargin)
             ForEach(Array(day.allDay.enumerated()), id: \.offset) { _, item in gridItem(item) }
             ForEach(day.hours, id: \.key) { slot in
                 HStack(alignment: .top, spacing: 8) {
-                    Text(slot.label).centraidType("annotLabel").frame(width: 48, alignment: .trailing)
+                    Text(slot.label).centraidType("annotLabel").foregroundStyle(Theme.color("textSoft", scheme))
+                        .monospacedDigit().fixedSize(horizontal: true, vertical: false).frame(minWidth: 48, alignment: .trailing)
                     VStack(alignment: .leading, spacing: 0) {
                         Divider()
                         ForEach(Array(slot.items.enumerated()), id: \.offset) { _, item in gridItem(item) }
@@ -917,6 +918,7 @@ private struct AgendaGridView: View {
                     .accessibilityAction(named: Text(chrome.newEvent)) { if slot.hasCreateRoute { open(slot.createRoute) } }
                     .accessibilityIdentifier("agenda-slot-\(slot.key)")
                 }
+                .padding(.leading, CentraidGeometry.pageMargin)
             }
         }
     }

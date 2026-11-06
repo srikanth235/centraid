@@ -191,6 +191,7 @@ public fun EmptyStateView(
     empty: EmptyState,
     onAction: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    actionTag: String = "kit-empty-action",
 ) {
     Column(
         modifier.fillMaxSize().padding(24.dp).testTag("kit-empty"),
@@ -208,7 +209,7 @@ public fun EmptyStateView(
         if (empty.action_label.isNotEmpty() && onAction != null) {
             OutlineButton(
                 label = empty.action_label,
-                testTag = "kit-empty-action",
+                testTag = actionTag,
                 modifier = Modifier.padding(top = 16.dp),
                 onPress = onAction,
             )

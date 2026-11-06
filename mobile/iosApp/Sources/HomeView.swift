@@ -430,7 +430,8 @@ private struct TileCard: View {
                     .frame(maxWidth: .infinity, minHeight: tile.size == .large ? 216 : tileMinHeight - tilePad * 2, alignment: .topLeading)
                 }
             }
-            .padding(tilePad)
+            .padding(.horizontal, tile.size == .small ? 8 : tilePad)
+            .padding(.vertical, tilePad)
             .background(Theme.color(tile.backgroundRole, scheme))
             .clipShape(RoundedRectangle(cornerRadius: tileRadius))
         }

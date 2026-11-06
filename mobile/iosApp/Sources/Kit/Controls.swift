@@ -195,9 +195,13 @@ struct KitSegmented<Key: Hashable>: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        BandItems(spacing: BandMetrics.groupGutter) {
-            ForEach(Array(options.enumerated()), id: \.offset) { _, option in
+        BandItems(
+            spacing: BandMetrics.groupGutter,
+            selectedID: options.firstIndex(where: { $0.key == selected }).map { String($0) }
+        ) {
+            ForEach(Array(options.enumerated()), id: \.offset) { index, option in
                 segment(option.key, option.label)
+                    .id(String(index))
             }
         }
         .padding(BandMetrics.platePad)

@@ -225,9 +225,15 @@ struct MoneyHomeView: View {
             }
             ForEach(Array(activity.sections.enumerated()), id: \.offset) { _, section in
                 MoneyDayHeader(title: section.heading, total: section.total)
-                ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
-                    MoneyRowView(row: row) { open(row.route) }
+                VStack(spacing: 0) {
+                    ForEach(Array(section.rows.enumerated()), id: \.offset) { index, row in
+                        if index > 0 { KitHairline().padding(.leading, CentraidGeometry.pageMargin) }
+                        MoneyRowView(row: row) { open(row.route) }
+                    }
                 }
+                .background(Theme.color("bgSunken", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+                .padding(.horizontal, CentraidGeometry.pageMargin)
             }
             MoneyNote(text: activity.window)
             ShowMoreFooter(visible: activity.more) { send(event { $0.showMore = .init() }) }

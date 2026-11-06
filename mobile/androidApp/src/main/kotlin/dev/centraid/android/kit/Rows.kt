@@ -71,6 +71,9 @@ public fun CentraidRow(
     testTag: String = "kit-row",
     onTap: (() -> Unit)? = null,
     metaRuns: androidx.compose.ui.text.AnnotatedString? = null,
+    titleMaxLines: Int = 2,
+    metaMaxLines: Int = 1,
+    chipsBelow: Boolean = false,
     accessory: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val titleInk = if (dimmed) centraidColor("textFaint") else centraidColor("text")
@@ -111,7 +114,7 @@ public fun CentraidRow(
                 title,
                 style = centraidType("body"),
                 color = titleInk,
-                maxLines = 2,
+                maxLines = titleMaxLines,
                 overflow = TextOverflow.Ellipsis,
             )
             // [metaRuns] is the same line with spans a machine marked (a
@@ -121,7 +124,7 @@ public fun CentraidRow(
                     metaRuns,
                     style = centraidType("annotLabel"),
                     color = softInk,
-                    maxLines = 1,
+                    maxLines = metaMaxLines,
                     overflow = TextOverflow.Ellipsis,
                 )
             } else if (meta.isNotEmpty()) {
@@ -129,12 +132,17 @@ public fun CentraidRow(
                     meta,
                     style = centraidType("annotLabel"),
                     color = softInk,
-                    maxLines = 1,
+                    maxLines = metaMaxLines,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            if (chipsBelow) {
+                chips.forEach { chip ->
+                    StatusChipView(chip, Modifier.padding(top = 4.dp), maxLines = Int.MAX_VALUE)
+                }
+            }
         }
-        chips.forEach { chip -> StatusChipView(chip, Modifier.padding(start = 8.dp)) }
+        if (!chipsBelow) chips.forEach { chip -> StatusChipView(chip, Modifier.padding(start = 8.dp)) }
         if (trailing.isNotEmpty() || pending) {
             // THE FIGURE: right-aligned, with its sub-label under it.
             Column(Modifier.padding(start = 8.dp), horizontalAlignment = Alignment.End) {
@@ -177,14 +185,14 @@ public fun CentraidRow(row: ListRow, modifier: Modifier = Modifier, onTap: (() -
  * soft ink. No fill — a chip is read, not pressed.
  */
 @Composable
-public fun StatusChipView(chip: StatusChip, modifier: Modifier = Modifier) {
+public fun StatusChipView(chip: StatusChip, modifier: Modifier = Modifier, maxLines: Int = 1) {
     if (chip.label.isEmpty()) return
     val ink = toneInk(chip.tone, neutral = "textSoft")
     Text(
         chip.label,
         style = centraidType("annotLabel"),
         color = ink,
-        maxLines = 1,
+        maxLines = maxLines,
         modifier = modifier
             .border(KitGeometry.HAIRLINE, ink, RoundedCornerShape(4.dp))
             .padding(horizontal = 6.dp, vertical = 1.dp)

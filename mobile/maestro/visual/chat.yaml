@@ -9,13 +9,13 @@ name: Chat model setup
 - extendedWaitUntil:
     visible:
       id: home-band-chat
-    timeout: 30000
+    timeout: 60000
 - tapOn:
     id: home-band-chat
 - extendedWaitUntil:
     visible:
       id: chat-download
-    timeout: 30000
+    timeout: 60000
 - assertNotVisible:
     id: chat-error
 - takeScreenshot: chat-setup

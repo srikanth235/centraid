@@ -314,6 +314,10 @@ struct MoneyHeroView: View {
             // PLANNED, LEFT (and Refunds) ACROSS THE PAGE, not down it.
             MoneyFigureColumns(figures: hero.figures)
         }
+        .padding(.vertical, 8)
+        .background(Theme.color("bgSunken", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 8)
     }
 }
 

@@ -29,10 +29,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.FilterMenuCleared
 import centraid.core.v1.FilterMenuPicked
@@ -376,6 +379,9 @@ private fun PersonRow(row: PeopleRow, onOpen: (Route) -> Unit, onEvent: (PeopleH
             CentraidRow(
                 title = row.name,
                 meta = listOf(row.role, row.meta).filter { it.isNotEmpty() }.joinToString(" · "),
+                titleMaxLines = Int.MAX_VALUE,
+                metaMaxLines = Int.MAX_VALUE,
+                chipsBelow = true,
                 chips = row.chips.map { chip ->
                     StatusChip(label = chip.label, tone = StatusChip.Tone.fromValue(chip.tone.value) ?: StatusChip.Tone.TONE_UNSPECIFIED)
                 },
@@ -398,14 +404,18 @@ private fun PersonRow(row: PeopleRow, onOpen: (Route) -> Unit, onEvent: (PeopleH
 /** The avatar: initials on the person's hue. Decorative; the row speaks the name. */
 @Composable
 internal fun Avatar(avatar: PeopleAvatar?, size: Int = 32) {
+    val initials = avatar?.initials.orEmpty()
+    val style = centraidType("smallStrong")
+    val textSize = rememberTextMeasurer().measure(AnnotatedString(initials), style, softWrap = false, maxLines = 1).size
+    val measuredSide = with(LocalDensity.current) { maxOf(textSize.width, textSize.height).toDp() + 12.dp }
     Box(
         Modifier
-            .size(size.dp)
+            .size(maxOf(size.dp, measuredSide))
             .clip(CircleShape)
             .background(hueColor(avatar?.hue_key.orEmpty()))
             .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
-        Text(avatar?.initials.orEmpty(), style = centraidType("smallStrong"), color = centraidColor("onAccent"))
+        Text(initials, style = style, color = centraidColor("onAccent"), maxLines = 1, softWrap = false)
     }
 }
