@@ -116,7 +116,7 @@ struct TodoProjectView: View {
             KitLink(label: completed.shown ? state.chrome.hideCompletedVerb : state.chrome.showCompletedVerb, identifier: "tasks-completed-toggle") {
                 send(event { $0.completedToggled = .init() })
             }
-            KitLink(label: state.chrome.clearCompletedVerb, identifier: "tasks-completed-clear") {
+            KitLink(label: state.chrome.clearCompletedVerb_p, identifier: "tasks-completed-clear") {
                 send(event { $0.completedCleared = .init() })
             }
         }
