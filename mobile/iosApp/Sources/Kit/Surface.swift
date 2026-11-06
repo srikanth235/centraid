@@ -179,3 +179,20 @@ struct KitPillButton: View {
         .buttonStyle(.plain)
     }
 }
+
+/// A SMALL GLYPH TILE: a white glyph on a solid fill, the radius a ratio of the side so every
+/// size keeps one shape. The default fill is the app's; a destructive row passes the state's.
+struct KitTile: View {
+    let iconKey: String
+    var size: CGFloat = 32
+    var fill: Color? = nil
+
+    @Environment(\.appAccent) private var accent
+
+    var body: some View {
+        CentraidIconView(iconKey: iconKey, tint: .white, size: (size * 0.5).rounded())
+            .frame(width: size, height: size)
+            .background(fill ?? accent.fill, in: RoundedRectangle(cornerRadius: size * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
+            .accessibilityHidden(true)
+    }
+}

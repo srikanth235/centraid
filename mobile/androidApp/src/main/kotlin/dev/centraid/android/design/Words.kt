@@ -15,8 +15,11 @@ public object KitWords {
     public const val BAND_MORE: String = "More"
     public const val CANCEL: String = "Cancel"
     public const val CLOSE_SEARCH: String = "Close search"
+    public const val DELETE: String = "Delete"
+    public const val DETAILS: String = "Details"
     public const val DISMISS: String = "Dismiss"
     public const val DONE: String = "Done"
+    public const val FLAG: String = "Flag"
     public const val LOADING_MORE: String = "Loading more"
     public const val OPEN: String = "Open"
     public const val OPENING: String = "Opening"
@@ -26,6 +29,7 @@ public object KitWords {
     public const val SEARCH: String = "Search"
     public const val SELECT: String = "Select"
     public const val SHOW_MORE: String = "Show more"
+    public const val UNFLAG: String = "Unflag"
 
     /** A pushed page's back control, spoken: "Back to People"; "Back" with no parent. */
     public fun backTo(parent: String): String =

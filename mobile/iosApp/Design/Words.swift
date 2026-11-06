@@ -15,8 +15,11 @@ public enum KitWords {
     public static let BAND_MORE = "More"
     public static let CANCEL = "Cancel"
     public static let CLOSE_SEARCH = "Close search"
+    public static let DELETE = "Delete"
+    public static let DETAILS = "Details"
     public static let DISMISS = "Dismiss"
     public static let DONE = "Done"
+    public static let FLAG = "Flag"
     public static let LOADING_MORE = "Loading more"
     public static let OPEN = "Open"
     public static let OPENING = "Opening"
@@ -26,6 +29,7 @@ public enum KitWords {
     public static let SEARCH = "Search"
     public static let SELECT = "Select"
     public static let SHOW_MORE = "Show more"
+    public static let UNFLAG = "Unflag"
 
     /// A pushed page's back control, spoken: "Back to People"; "Back" with no parent.
     public static func backTo(parent: String) -> String {

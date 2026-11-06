@@ -30,15 +30,18 @@ pub const OTHER_SOURCES: [(&str, &str); 1] = [("home", "crates/screens/src/strin
 
 /// Member name to the Rust key. Exactly the words a native kit view reads; a
 /// word nothing native draws stays Rust's alone.
-const CONSTANTS: [(&str, &str); 17] = [
+const CONSTANTS: [(&str, &str); 21] = [
     ("BACK", "back"),
     ("BAND_CURRENT", "home::band_current_spoken"),
     ("BAND_HOME", "kit_band_home"),
     ("BAND_MORE", "kit_band_more"),
     ("CANCEL", "kit_cancel"),
     ("CLOSE_SEARCH", "kit_close_search"),
+    ("DELETE", "kit_delete"),
+    ("DETAILS", "kit_details"),
     ("DISMISS", "kit_dismiss"),
     ("DONE", "kit_done"),
+    ("FLAG", "kit_flag"),
     ("LOADING_MORE", "kit_loading_more"),
     ("OPEN", "kit_open"),
     ("OPENING", "kit_opening"),
@@ -48,6 +51,7 @@ const CONSTANTS: [(&str, &str); 17] = [
     ("SEARCH", "kit_search"),
     ("SELECT", "kit_select"),
     ("SHOW_MORE", "kit_show_more"),
+    ("UNFLAG", "kit_unflag"),
 ];
 
 /// The two templates the kit fills, each with its one slot.

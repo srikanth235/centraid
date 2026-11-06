@@ -2,7 +2,19 @@ package dev.centraid.android.kit
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import dev.centraid.design.CentraidGeometry
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,6 +47,8 @@ public object Surface {
     public val card: Color @Composable get() = centraidResource(R.color.centraid_surface_card)
     public val sheet: Color @Composable get() = centraidResource(R.color.centraid_surface_sheet)
     public val sheetCard: Color @Composable get() = centraidResource(R.color.centraid_surface_sheet_card)
+    /** The hairline between rows on a sheet's card. */
+    public val sheetLine: Color @Composable get() = Surface.line
     public val fill: Color @Composable get() = centraidResource(R.color.centraid_surface_fill)
     public val line: Color @Composable get() = centraidResource(R.color.centraid_surface_line)
     public val border: Color @Composable get() = centraidResource(R.color.centraid_surface_border)
@@ -157,10 +171,47 @@ public fun KitBadge(label: String, state: StateColor, modifier: Modifier = Modif
         color = state.text,
         maxLines = 1,
         modifier = modifier
-            .clip(RoundedCornerShape(BADGE_RADIUS.dp))
+            .clip(RoundedCornerShape(KitBadgeRadius))
             .background(state.tint)
             .padding(horizontal = 6.dp, vertical = 3.dp),
     )
 }
 
-private const val BADGE_RADIUS: Int = 6
+/** The badge corner, shared by the state badges and the plain chip. */
+internal val KitBadgeRadius = 6.dp
+
+/**
+ * A SMALL GLYPH TILE: a white glyph on a solid fill, the radius a ratio of the side so every size
+ * keeps one shape. The default fill is the app's; a destructive row passes the state's.
+ */
+@Composable
+public fun KitTile(iconKey: String, modifier: Modifier = Modifier, size: Dp = 32.dp, fill: Color? = null) {
+    val shape = RoundedCornerShape((size.value * CentraidGeometry.ICON_CHIP_RADIUS_RATIO).dp)
+    Box(
+        modifier.size(size).clip(shape).background(fill ?: appAccent().fill).clearAndSetSemantics { },
+        contentAlignment = Alignment.Center,
+    ) {
+        CentraidIcon(iconKey = iconKey, tint = Color.White, size = (size.value * 0.5f).dp)
+    }
+}
+
+/**
+ * A PILL THAT HUGS ITS LABEL, in the app's fill under a white label: an empty state's one action,
+ * a permission's "Allow". The full-width one is [InkButton].
+ */
+@Composable
+public fun KitPillButton(label: String, onPress: () -> Unit, modifier: Modifier = Modifier, testTag: String = "kit-pill") {
+    Box(
+        modifier
+            .heightIn(min = KitGeometry.ROW_MIN)
+            .clip(RoundedCornerShape(percent = 50))
+            .background(appAccent().fill)
+            .clickable(onClick = onPress)
+            .padding(horizontal = 20.dp)
+            .testTag(testTag)
+            .semantics { role = Role.Button },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold), color = Color.White, maxLines = 1)
+    }
+}

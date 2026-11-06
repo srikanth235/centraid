@@ -268,6 +268,8 @@ public fun PushedPage(
     status: String = "",
     statusLine: (@Composable () -> Unit)? = null,
     backSpoken: String? = null,
+    /** A scope line under the title (Trash's "3 items"): the machine's, empty for none. */
+    meta: String = "",
     content: @Composable () -> Unit,
 ) {
     Column(modifier.fillMaxSize().background(Surface.page).testTag("pushed-page")) {
@@ -288,6 +290,9 @@ public fun PushedPage(
             if (trailing != null) HeaderVerb(trailing)
         }
         RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp))
+        if (meta.isNotEmpty()) {
+            KitText(meta, KitType.Meta, Surface.meta, Modifier.padding(horizontal = KitGeometry.GUTTER).testTag("page-meta"))
+        }
         Box(Modifier.weight(1f).fillMaxWidth()) { content() }
         StatusLine(status)
         statusLine?.invoke()
@@ -407,7 +412,7 @@ public fun SheetRoom(
         onDismissRequest = { if (canLeave) onDismiss() },
         sheetState = sheetState,
         sheetGesturesEnabled = swipeable,
-        containerColor = centraidColor("bg"),
+        containerColor = Surface.sheet,
         properties = ModalBottomSheetProperties(
             securePolicy = if (secure) SecureFlagPolicy.SecureOn else SecureFlagPolicy.Inherit,
             shouldDismissOnBackPress = swipeable,

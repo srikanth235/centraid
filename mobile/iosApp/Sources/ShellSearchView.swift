@@ -225,10 +225,7 @@ private struct HitRow: View {
         Button(action: onTap) {
             HStack(spacing: 12) {
                 if let glyph = CentraidCatalog.byID[appId]?.iconKey {
-                    CentraidIconView(iconKey: glyph, tint: .white, size: 15)
-                        .frame(width: 30, height: 30)
-                        .background(accent.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .accessibilityHidden(true)
+                    KitTile(iconKey: glyph, size: 30, fill: accent.fill)
                 }
                 VStack(alignment: .leading, spacing: 0) {
                     Text(row.title)

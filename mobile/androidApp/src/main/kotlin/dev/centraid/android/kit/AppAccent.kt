@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import dev.centraid.android.R
 import dev.centraid.android.theme.centraidDark
+import dev.centraid.design.CentraidGeometry
 
 /**
  * A COLOUR RESOURCE IN THE SCHEME THE MEMBER CHOSE (#1173).
@@ -50,12 +51,17 @@ private fun Context.inScheme(dark: Boolean): Context {
  * Stars use [text], never amber: amber only means a state.
  */
 @Immutable
-public data class AppAccent(val fill: Color, val text: Color, val tile: Color)
+public data class AppAccent(val appId: String, val fill: Color, val text: Color, val tile: Color) {
+    /** The tint behind an app's glyph: the fill at the icon chip's own strength. */
+    public fun wash(dark: Boolean): Color =
+        fill.copy(alpha = (if (dark) CentraidGeometry.ICON_CHIP_TINT_DARK else CentraidGeometry.ICON_CHIP_TINT_LIGHT).toFloat())
+}
 
 @Composable
 public fun appAccent(appId: String): AppAccent {
     val ids = accentResources(appId)
     return AppAccent(
+        appId = appId,
         fill = centraidResource(ids[0]),
         text = centraidResource(ids[1]),
         tile = centraidResource(ids[2]),

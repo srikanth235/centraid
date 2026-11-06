@@ -101,12 +101,7 @@ struct SheetRow: View {
                 if !iconKey.isEmpty {
                     // THE MARK IS A SMALL TILE in the app's fill with a white glyph; a
                     // destructive row's is the state's red.
-                    CentraidIconView(iconKey: iconKey, tint: .white, size: 16)
-                        .frame(width: 32, height: 32)
-                        .background(
-                            destructive ? StateColor.red.fill : accent.fill,
-                            in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        )
+                    KitTile(iconKey: iconKey, size: 32, fill: destructive ? StateColor.red.fill : nil)
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(label)

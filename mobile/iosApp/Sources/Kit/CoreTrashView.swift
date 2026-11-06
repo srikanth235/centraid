@@ -116,10 +116,7 @@ private struct TrashRowView: View {
     var body: some View {
         HStack(spacing: 10) {
             if !row.iconKey.isEmpty {
-                CentraidIconView(iconKey: row.iconKey, tint: .white, size: 16)
-                    .frame(width: 34, height: 34)
-                    .background(accent.fill, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    .accessibilityHidden(true)
+                KitTile(iconKey: row.iconKey, size: 34)
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(row.title)
