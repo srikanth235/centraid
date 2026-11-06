@@ -31,7 +31,9 @@ jobs:
   # UIKit needs a real Apple SDK; Linux's JVM gate cannot compile the shell.
   ios:
     runs-on: macos-26
-    timeout-minutes: 120
+    # Full native rebuild, XCTest and 66 Maestro cases include simulator-driver
+    # startup per case. This is a runner backstop, not an app timing assertion.
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Select pinned Xcode (fail if unavailable)
