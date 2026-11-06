@@ -1,4 +1,4 @@
-//! `cargo xtask design-dark`: THE DARK MOCKUPS, GENERATED FROM THE LIGHT ONES (#1173).
+//! THE DARK MOCKUPS, GENERATED FROM THE LIGHT ONES (#1173), by `cargo xtask design`.
 //!
 //! `design/mockups/` holds one light screen per `X.dc.html` and its dark twin
 //! `XDark.dc.html`. The twin is never edited: this module writes it from the
@@ -36,7 +36,7 @@
 //! design tool in one regular shape, so a tag scanner with an element stack is
 //! enough, and the bytes between tags are copied untouched.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -843,18 +843,6 @@ pub fn dark_board(light_html: &str, map: &DarkMap) -> Result<String> {
 // The whole directory
 // ---------------------------------------------------------------------------
 
-/// What a run found.
-#[derive(Debug, Default)]
-pub struct Report {
-    /// Light boards the canvas places on the light page.
-    pub total: usize,
-    /// Dark boards already byte-identical to the generated ones.
-    pub identical: usize,
-    /// Dark boards written (write mode) or that differ (check mode), each with
-    /// the first difference.
-    pub changed: Vec<(String, String)>,
-}
-
 /// The light boards in `canvas.json`: the names of the screens on the `light`
 /// page.
 fn light_boards(dir: &Path) -> Result<Vec<String>> {
@@ -904,74 +892,25 @@ pub fn first_difference(have: &str, want: &str) -> String {
     )
 }
 
-/// Write every dark board from its light one, or with `check` compare them.
+/// Every dark board, generated from its light one: repository-relative path
+/// (`design/mockups/XDark.dc.html`) to text. `cargo xtask design` writes these
+/// and its `--check` (the gate's `design` step) compares them (#1173).
 ///
 /// # Errors
-/// An unreadable tree, a board that cannot be converted, or (with `check`) any
-/// dark board that is not what the generator writes.
-pub fn generate_all(root: &Path, check: bool) -> Result<Report> {
+/// An unreadable tree, or a board that cannot be converted.
+pub fn dark_boards(root: &Path) -> Result<BTreeMap<String, String>> {
     let dir = root.join(MOCKUPS);
     let lights = light_boards(&dir)?;
     let twins: BTreeSet<String> = lights.iter().cloned().collect();
     let map = DarkMap::load(root)?.with_twins(twins);
-    let mut report = Report {
-        total: lights.len(),
-        ..Report::default()
-    };
+    let mut out = BTreeMap::new();
     for light in &lights {
         let html =
             std::fs::read_to_string(dir.join(light)).with_context(|| format!("read {light}"))?;
         let wanted = dark_board(&html, &map).with_context(|| format!("convert {light}"))?;
-        let name = dark_name(light);
-        let path = dir.join(&name);
-        let have = std::fs::read_to_string(&path).unwrap_or_default();
-        if have == wanted {
-            report.identical += 1;
-            continue;
-        }
-        report
-            .changed
-            .push((name, first_difference(&have, &wanted)));
-        if !check {
-            std::fs::write(&path, wanted).with_context(|| format!("write {}", path.display()))?;
-        }
+        out.insert(format!("{MOCKUPS}/{}", dark_name(light)), wanted);
     }
-    Ok(report)
-}
-
-/// The `cargo xtask design-dark` entry: write, or with `check` fail on drift.
-///
-/// # Errors
-/// As [`generate_all`], plus a stale board under `--check`.
-pub fn run(root: &Path, check: bool) -> Result<()> {
-    let report = generate_all(root, check)?;
-    if check && !report.changed.is_empty() {
-        let mut message = format!(
-            "{} of {} dark boards are not what the generator writes. Edit the light screen \
-             (never a dark one) and run `cargo xtask design-dark`:",
-            report.changed.len(),
-            report.total
-        );
-        for (name, difference) in &report.changed {
-            message.push_str(&format!("\n  {name}: {difference}"));
-        }
-        bail!(message);
-    }
-    println!(
-        "design-dark: {} of {} dark boards {}",
-        if check {
-            report.identical
-        } else {
-            report.total
-        },
-        report.total,
-        if check {
-            "match"
-        } else {
-            "written or already current"
-        }
-    );
-    Ok(())
+    Ok(out)
 }
 
 #[cfg(test)]

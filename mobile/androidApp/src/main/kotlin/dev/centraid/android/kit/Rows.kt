@@ -441,7 +441,7 @@ public fun hueColor(key: String): Color {
     return centraidColor(role)
 }
 
-/** `packages/design`'s eight party hues. */
+/** The eight party hues (`IDENTITY_HUE_KEYS` in `crates/design`). */
 private val PARTY_HUES: Set<String> =
     setOf("rose", "amber", "ochre", "forest", "teal", "slate", "indigo", "violet")
 

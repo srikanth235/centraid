@@ -18,8 +18,11 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 mod artifact;
 mod ci;
+#[cfg(test)]
+mod design_checks;
 mod design_dark;
 mod design_emit;
+mod design_site;
 mod design_words;
 mod doc_links;
 mod gate;
@@ -84,18 +87,13 @@ enum Command {
     },
     /// Generate every design artifact from `design/tokens.toml` (#1173): the
     /// iOS Swift tables and colour sets, the Android Kotlin tables and
-    /// resources, the kit's words, the fonts and the two sites' token sheet.
+    /// resources, the kit's words, the fonts, the two sites' token sheet and
+    /// every dark mockup (`design/mockups/XDark.dc.html`, from its light screen).
     /// With `--check`, regenerate into memory and fail listing every file that
-    /// differs. The gate's `design` step is that check.
+    /// differs, and every authored site file that names a face, theme or
+    /// custom property the sheet does not have. The gate's `design` step is
+    /// that check.
     Design {
-        /// Compare instead of write.
-        #[arg(long)]
-        check: bool,
-    },
-    /// Write every dark mockup (`design/mockups/XDark.dc.html`) from its light
-    /// screen and `design/tokens.toml`, or with `--check` fail when one differs
-    /// (#1173). Edit the light screen, never a dark one.
-    DesignDark {
         /// Compare instead of write.
         #[arg(long)]
         check: bool,
@@ -265,13 +263,6 @@ fn main() -> ExitCode {
             }
         },
         Command::Design { check } => match design_emit::run(&root, check) {
-            Ok(()) => true,
-            Err(error) => {
-                eprintln!("xtask: {error:#}");
-                false
-            }
-        },
-        Command::DesignDark { check } => match design_dark::run(&root, check) {
             Ok(()) => true,
             Err(error) => {
                 eprintln!("xtask: {error:#}");

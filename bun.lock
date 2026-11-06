@@ -15,18 +15,6 @@
         "vitest": "4.1.12",
       },
     },
-    "packages/design": {
-      "name": "@centraid/design",
-      "version": "0.1.0",
-      "dependencies": {
-        "@fontsource/instrument-sans": "5.2.5",
-      },
-      "devDependencies": {
-        "@centraid/test-kit": "workspace:*",
-        "@types/node": "^26.1.2",
-        "typescript": "catalog:",
-      },
-    },
     "packages/test-kit": {
       "name": "@centraid/test-kit",
       "version": "0.1.0",
@@ -113,8 +101,6 @@
     "@bruits/satteri-win32-x64-msvc": ["@bruits/satteri-win32-x64-msvc@0.10.5", "", { "os": "win32", "cpu": "x64" }, "sha512-C3IfPvfvMXmlzBxaMPKFS1XiuV9pu2mC7YqkPk7PSvTgPZ8gbdASIpHpztDLvTTQjqZ0z1Ol8tK5X+V6XXC0wQ=="],
 
     "@capsizecss/unpack": ["@capsizecss/unpack@4.0.1", "", { "dependencies": { "fontkitten": "^1.0.3" } }, "sha512-CuNiSqg7+e1cO/GjffyMOm5Tt2jUF9CWHHnvQ/UkqvtkGfHdgwEC0wpmq7fkN3gxwpRnrAN0WzO3vREKmNolMQ=="],
-
-    "@centraid/design": ["@centraid/design@workspace:packages/design"],
 
     "@centraid/test-kit": ["@centraid/test-kit@workspace:packages/test-kit"],
 
@@ -207,8 +193,6 @@
     "@eslint/plugin-kit": ["@eslint/plugin-kit@0.7.2", "", { "dependencies": { "@eslint/core": "^1.2.1", "levn": "^0.4.1" } }, "sha512-+CNAzxglkrpNf/kKywqQfk74QjtceuOE7Qm+AF8miRvPF/wmmK5+OJOgVh3AVTT3RP2mH3+FOaxlE5v72owk0A=="],
 
     "@exodus/bytes": ["@exodus/bytes@1.15.1", "", { "peerDependencies": { "@noble/hashes": "^1.8.0 || ^2.0.0" }, "optionalPeers": ["@noble/hashes"] }, "sha512-S6mL0yNB/Abt9Ei4tq8gDhcczc4S3+vQ4ra7vxnAf+YHC02srtqxKKZghx2Dq6p0e66THKwR6r8N6P95wEty7Q=="],
-
-    "@fontsource/instrument-sans": ["@fontsource/instrument-sans@5.2.5", "", {}, "sha512-+u6WgD2gZfjEnMKwRZ0D/CizoF0n3sLIT+cQtqJrnmWh2xhcF35xl06vA2uCTBF/CiYKgNmm1AVWBqURY/aJ2w=="],
 
     "@humanfs/core": ["@humanfs/core@0.19.2", "", { "dependencies": { "@humanfs/types": "^0.15.0" } }, "sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA=="],
 
